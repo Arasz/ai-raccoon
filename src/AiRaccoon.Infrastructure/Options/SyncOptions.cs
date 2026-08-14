@@ -1,3 +1,5 @@
+using AiRaccoon.Core.Sync;
+
 namespace AiRaccoon.Infrastructure.Options;
 
 /// <summary>Cloud sync backend selected by the sync.provider setting row (default s3).</summary>
@@ -7,13 +9,41 @@ public enum SyncProvider
     Azure
 }
 
-/// <summary>Parses a sync.provider row; absent or unknown values behave as S3 (docs/plans/azure-blob-sync-plan.md R2).</summary>
+/// <summary>
+///     Parses a sync.provider row. Absent means the documented S3 default
+///     (docs/plans/azure-blob-sync-plan.md R2); a value that was written but is not recognised
+///     throws rather than silently resolving to S3 (architect finding A-F8).
+/// </summary>
 public static class SyncProviderParser
 {
-    public static SyncProvider Parse(string? value) =>
-        Enum.TryParse<SyncProvider>(value, true, out var provider) && Enum.IsDefined(provider)
+    private const string Supported = "s3, azure";
+
+    public static SyncProvider Parse(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return SyncProvider.S3;
+        }
+
+        return TryParse(value, out var provider)
             ? provider
-            : SyncProvider.S3;
+            : throw new SyncProviderUnknownException(value.Trim(), Supported);
+    }
+
+    /// <summary>
+    ///     Non-throwing form for diagnostics. `sync show` must report an unrecognised row rather
+    ///     than crash — it is the command an operator runs *to find* the typo.
+    /// </summary>
+    public static bool TryParse(string? value, out SyncProvider provider)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            provider = SyncProvider.S3;
+            return true;
+        }
+
+        return Enum.TryParse(value.Trim(), true, out provider) && Enum.IsDefined(provider);
+    }
 }
 
 /// <summary>Sync settings resolved per memory_sync call from the sync.* settings rows.</summary>

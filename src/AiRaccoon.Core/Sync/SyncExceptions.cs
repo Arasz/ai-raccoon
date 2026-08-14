@@ -11,3 +11,10 @@ public sealed class SyncCorruptFileException(string message) : InvalidOperationE
 
 /// <summary>Credentials are missing or invalid.</summary>
 public sealed class SyncAuthFailedException(string message, Exception? inner = null) : InvalidOperationException(message, inner);
+
+/// <summary>A sync.provider row was written with a value this build does not recognise.</summary>
+public sealed class SyncProviderUnknownException(string written, string supported)
+    : InvalidOperationException(
+        $"sync.provider is set to '{written}', which is not a supported backend. Supported: {supported}. "
+        + "An S3-compatible backend (MinIO, R2, Wasabi) is 's3' with its own endpoint: "
+        + "'ai-raccoon sync add s3 <endpoint-url> --bucket <name>'. For Azure: 'ai-raccoon sync add azure <container>'.");

@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Sync;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Tests.Unit.Setup;
@@ -205,13 +206,18 @@ public class SyncCloudStoreFactoryTests
     }
 
     [Fact]
-    public async Task ReadOptionsAsync_UnknownProviderValue_DefaultsToS3()
+    public async Task ReadOptionsAsync_UnknownProviderValue_RefusesInsteadOfSilentlyUsingS3()
     {
+        // "minio" is a real intent -- an S3-compatible backend -- but the supported spelling is
+        // "s3" with a custom endpoint. Silently resolving it to S3 was the defect (A-F8): with the
+        // S3 credential rows absent, IsConfigured went false and sync became a silent no-op.
         var store = new FakeConfigStore { Settings = { [SyncSettingsKeys.Provider] = "minio" } };
 
-        var options = await Factory(store).ReadOptionsAsync(TestContext.Current.CancellationToken);
+        var ex = await Should.ThrowAsync<SyncProviderUnknownException>(() =>
+            Factory(store).ReadOptionsAsync(TestContext.Current.CancellationToken));
 
-        options.Provider.ShouldBe(SyncProvider.S3);
+        ex.Message.ShouldContain("minio");
+        ex.Message.ShouldContain("s3", Case.Insensitive);
     }
 
     [Fact]
