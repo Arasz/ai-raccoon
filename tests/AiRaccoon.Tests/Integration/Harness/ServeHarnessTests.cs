@@ -3,13 +3,13 @@ using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.TestHelpers;
+namespace AiRaccoon.Tests.Integration.Harness;
 
 /// <summary>
 ///     Pins the line wait: it scans every captured line, not just the first, and every way it can
 ///     give up names what it waited for and hands back the captured streams.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ServeHarnessTests
 {

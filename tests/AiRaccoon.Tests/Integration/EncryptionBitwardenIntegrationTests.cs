@@ -1,3 +1,4 @@
+using AiRaccoon.Tests.TestHelpers;
 using System.Data;
 using System.Diagnostics;
 using System.Text;
@@ -20,7 +21,7 @@ namespace AiRaccoon.Tests.Integration;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
-[Collection(AiRaccoon.Tests.TestHelpers.BwsAccessTokenCollection.Name)]
+[Collection(BwsAccessTokenCollection.Name)]
 public sealed class EncryptionBitwardenIntegrationTests : IDisposable
 {
     // Pinned vector (docs/plans/encryption-bitwarden-implementation.md §5.1): seed 00 01 … 1e 1f derives to this key; hard-coded, never recomputed.

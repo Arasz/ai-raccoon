@@ -4,7 +4,7 @@ using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 
-namespace AiRaccoon.Tests.Integration.TestHelpers;
+namespace AiRaccoon.Tests.Integration.Harness;
 
 /// <summary>
 ///     Pins the occupied-port leases that stand in for a foreign server: the number stays taken for

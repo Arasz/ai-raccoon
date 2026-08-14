@@ -4,7 +4,7 @@ using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 
-namespace AiRaccoon.Tests.Integration.TestHelpers;
+namespace AiRaccoon.Tests.Integration.Harness;
 
 /// <summary>
 ///     Pins the reservation the old FreePort() shape could not make: while a lease is held the

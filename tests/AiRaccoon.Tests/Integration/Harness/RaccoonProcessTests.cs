@@ -3,7 +3,7 @@ using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 
-namespace AiRaccoon.Tests.Integration.TestHelpers;
+namespace AiRaccoon.Tests.Integration.Harness;
 
 /// <summary>
 ///     Pins the runner's lifetime contract: a run that outlasts its hard cap leaves nothing behind,
