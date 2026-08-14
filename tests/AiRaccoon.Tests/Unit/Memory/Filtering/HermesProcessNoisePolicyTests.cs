@@ -1,6 +1,7 @@
 using System.Threading.Tasks;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering.Policies;
+using Shouldly;
 using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Memory.Filtering;
@@ -40,5 +41,49 @@ Output: ]";
 
         // Assert
         Assert.False(result.IsNoise);
+    }
+
+    /// <summary>
+    ///     A background process that FAILED is exactly as much machine noise as one that succeeded,
+    ///     but the policy required the literal "completed normally". Measured read-only against the
+    ///     live bank: of 29 "[IMPORTANT: Background process" items, only 18 carried that phrase --
+    ///     11 failed-process notifications slipped through.
+    /// </summary>
+    [Theory]
+    [InlineData("[IMPORTANT: Background process bash_7 failed (exit code 1).\nCommand: dotnet test\nOutput: x")]
+    [InlineData("[IMPORTANT: Background process proc_2 was killed (exit code 137).\nCommand: npm run build")]
+    public async Task EvaluateAsync_FailedBackgroundProcess_IsNoiseToo(string content)
+    {
+        var result = await new HermesProcessNoisePolicy()
+            .EvaluateAsync(new MemoryWriteRequest("p", content), TestContext.Current.CancellationToken);
+
+        result.IsNoise.ShouldBeTrue("a failed background process is machine output just as much as a successful one");
+    }
+
+    /// <summary>
+    ///     The second notification shape this harness emits. Measured: 25 occurrences in the live
+    ///     bank, none matched, all graded 2/5 when used as search queries.
+    /// </summary>
+    [Fact]
+    public async Task EvaluateAsync_AsyncDelegationBatch_IsNoise()
+    {
+        const string content = "[ASYNC DELEGATION BATCH COMPLETE - 3 tasks finished]\nResults: ...";
+
+        var result = await new HermesProcessNoisePolicy()
+            .EvaluateAsync(new MemoryWriteRequest("p", content), TestContext.Current.CancellationToken);
+
+        result.IsNoise.ShouldBeTrue();
+    }
+
+    /// <summary>Prose that merely mentions a background process is not noise.</summary>
+    [Theory]
+    [InlineData("The background process kept failing until we raised the timeout; see ADR-0031.")]
+    [InlineData("Command: we agreed the release command should be documented in the runbook.")]
+    public async Task EvaluateAsync_ProseAboutProcesses_StaysClean(string content)
+    {
+        var result = await new HermesProcessNoisePolicy()
+            .EvaluateAsync(new MemoryWriteRequest("p", content), TestContext.Current.CancellationToken);
+
+        result.IsNoise.ShouldBeFalse("widening the policy must not start eating memories that discuss processes");
     }
 }
