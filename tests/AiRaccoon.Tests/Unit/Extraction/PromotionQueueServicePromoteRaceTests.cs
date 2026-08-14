@@ -96,6 +96,70 @@ public sealed class PromotionQueueServicePromoteRaceTests
         outcome.Failures[0].Reason.ShouldBe("share-failed");
     }
 
+    /// <summary>
+    ///     A-F11 (WP5b): PromoteAsync used to claim a row by DELETE, so a transient ShareAsync
+    ///     failure — a locked database, a disk-full write — destroyed the candidate permanently.
+    ///     The RED case named by the acceptance criteria: the row must survive a failure other than
+    ///     UnknownHashException, reclaimable rather than gone.
+    /// </summary>
+    [Fact]
+    public async Task PromoteAsync_TransientShareFailure_LeavesTheRowClaimed_NotDestroyed()
+    {
+        var queue = new RaceyQueueStore();
+        queue.Rows.Add(new PromotionQueueRow("acme", "h1", "h1.md", "fact one", null, 5.0, [], 0, 0));
+
+        var store = new RecordingShareStore();
+        store.FailingHashes["h1"] = new InvalidOperationException("disk full mid-share");
+        var metrics = new SpyMetrics();
+        var service = new PromotionQueueService(queue, store, new UniformCountEvictionPolicy(),
+            metrics, NullLogger<PromotionQueueService>.Instance, new FakeTimeProvider(FixedNow));
+
+        var outcome = await service.PromoteAsync(["acme"], 10, TestContext.Current.CancellationToken);
+
+        outcome.Failures.ShouldHaveSingleItem().Reason.ShouldBe("share-failed");
+        queue.Rows.ShouldContain(r => r.Hash == "h1",
+            "a transient ShareAsync failure must leave the candidate reclaimable, not destroy it");
+        queue.Claimed.ShouldContain(("acme", "h1"), "the row stays claimed until the stale-claim sweep releases it");
+    }
+
+    /// <summary>An UnknownHashException means the backing entry is genuinely gone — retrying can
+    /// never succeed, so this claim is released permanently rather than left for the sweep.</summary>
+    [Fact]
+    public async Task PromoteAsync_UnknownHashException_RemovesTheRowPermanently()
+    {
+        var queue = new RaceyQueueStore();
+        queue.Rows.Add(new PromotionQueueRow("acme", "h1", "h1.md", "fact one", null, 5.0, [], 0, 0));
+
+        var store = new RecordingShareStore();
+        store.FailingHashes["h1"] = new UnknownHashException("h1", "acme");
+        var metrics = new SpyMetrics();
+        var service = new PromotionQueueService(queue, store, new UniformCountEvictionPolicy(),
+            metrics, NullLogger<PromotionQueueService>.Instance, new FakeTimeProvider(FixedNow));
+
+        await service.PromoteAsync(["acme"], 10, TestContext.Current.CancellationToken);
+
+        queue.Rows.ShouldBeEmpty("a genuinely gone backing entry must not be left claimed forever");
+    }
+
+    /// <summary>PromoteAsync sweeps stale claims before draining, so a claim stuck since a prior
+    /// crashed pass is retried rather than skipped forever.</summary>
+    [Fact]
+    public async Task PromoteAsync_ReclaimsStaleClaims_BeforeDraining_SoAnEarlierStuckClaimIsRetried()
+    {
+        var queue = new RaceyQueueStore();
+        queue.Rows.Add(new PromotionQueueRow("acme", "h1", "h1.md", "fact one", null, 5.0, [], 0, 0));
+        queue.Claimed.Add(("acme", "h1")); // simulates a stuck claim from a prior crashed pass
+
+        var store = new RecordingShareStore();
+        var metrics = new SpyMetrics();
+        var service = new PromotionQueueService(queue, store, new UniformCountEvictionPolicy(),
+            metrics, NullLogger<PromotionQueueService>.Instance, new FakeTimeProvider(FixedNow));
+
+        var outcome = await service.PromoteAsync(["acme"], 10, TestContext.Current.CancellationToken);
+
+        outcome.PromotedHashes.ShouldBe(["h1"], "the stale claim must be released before this pass drains the queue");
+    }
+
     [Fact]
     public async Task PromoteAsync_Cancellation_StillPropagates()
     {
@@ -117,6 +181,9 @@ public sealed class PromotionQueueServicePromoteRaceTests
         public List<PromotionQueueRow> Rows { get; } = [];
         public HashSet<string> AlreadyGoneHashes { get; } = new(StringComparer.Ordinal);
 
+        /// <summary>Simulates promotion_queue.claimed_at — (project, hash) pairs currently claimed.</summary>
+        public HashSet<(string ProjectId, string Hash)> Claimed { get; } = [];
+
         public Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
@@ -134,12 +201,43 @@ public sealed class PromotionQueueServicePromoteRaceTests
                 // The concurrent caller's claim already applied to the store — this call gets
                 // nothing back, but the row is genuinely gone by the time GetStatsAsync runs.
                 Rows.RemoveAll(r => r.ProjectId == projectId && r.Hash == hash);
+                Claimed.Remove((projectId, hash));
                 return Task.FromResult<IReadOnlyList<PromotionQueueRow>>([]);
             }
 
             var removed = Rows.Where(r => r.ProjectId == projectId && (hash == null || r.Hash == hash)).ToList();
             Rows.RemoveAll(removed.Contains);
+            foreach (var row in removed)
+            {
+                Claimed.Remove((projectId, row.Hash));
+            }
+
             return Task.FromResult<IReadOnlyList<PromotionQueueRow>>(removed);
+        }
+
+        public Task<PromotionQueueRow?> ClaimAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default)
+        {
+            if (AlreadyGoneHashes.Contains(hash))
+            {
+                Rows.RemoveAll(r => r.ProjectId == projectId && r.Hash == hash);
+                return Task.FromResult<PromotionQueueRow?>(null);
+            }
+
+            if (!Claimed.Add((projectId, hash)))
+            {
+                return Task.FromResult<PromotionQueueRow?>(null);
+            }
+
+            var row = Rows.FirstOrDefault(r => r.ProjectId == projectId && r.Hash == hash);
+            return Task.FromResult(row);
+        }
+
+        public Task<int> ReclaimStaleClaimsAsync(TimeSpan staleAfter, CancellationToken cancellationToken = default)
+        {
+            var released = Claimed.Count;
+            Claimed.Clear();
+            return Task.FromResult(released);
         }
 
         public Task<PromotionQueueStats> GetStatsAsync(CancellationToken cancellationToken = default) =>

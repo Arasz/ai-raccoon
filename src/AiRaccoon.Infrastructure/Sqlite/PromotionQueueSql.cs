@@ -119,4 +119,25 @@ internal static class PromotionQueueSql
                                      DELETE FROM promotion_queue
                                      WHERE project_id = @ProjectId AND scorer_version != @CurrentVersion
                                      """;
+
+    /// <summary>Claims one row by marking it claimed (WP5b/A-F11) rather than deleting it — a
+    /// ShareAsync failure after this leaves the row reclaimable instead of destroying the
+    /// candidate. Affects 0 rows when already claimed or gone.</summary>
+    public const string Claim = """
+                                UPDATE promotion_queue
+                                SET claimed_at = @ClaimedAt
+                                WHERE project_id = @ProjectId AND hash = @Hash AND claimed_at IS NULL
+                                RETURNING project_id AS ProjectId, hash AS Hash, path AS Path, value AS Value,
+                                          source_file AS SourceFile, score AS Score, reasons AS Reasons,
+                                          created_at AS CreatedAt, updated_at AS UpdatedAt, scorer_version AS ScorerVersion
+                                """;
+
+    /// <summary>Releases claims older than the stale threshold back to the queue (WP5b/A-F11): the
+    /// caller that claimed a row and then died or hung mid-ShareAsync never gets to unclaim it
+    /// itself. Returns the count released.</summary>
+    public const string ReclaimStaleClaims = """
+                                             UPDATE promotion_queue
+                                             SET claimed_at = NULL
+                                             WHERE claimed_at IS NOT NULL AND claimed_at < @CutoffAt
+                                             """;
 }
