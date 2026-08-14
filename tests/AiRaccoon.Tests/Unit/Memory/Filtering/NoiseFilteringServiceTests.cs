@@ -1,4 +1,3 @@
-using System;
 using System.Threading;
 using System.Threading.Tasks;
 using AiRaccoon.Core.Memory;
@@ -12,12 +11,11 @@ namespace AiRaccoon.Tests.Unit.Memory.Filtering;
 public class NoiseFilteringServiceTests
 {
     [Fact]
-    public async Task EvaluatePreWriteAsync_WhenPolicyMatches_ReturnsTrueAndRecordsNoise()
+    public async Task EvaluatePreWriteAsync_WhenPolicyMatches_ReturnsNoiseNamingThePolicy()
     {
         // Arrange
-        var fakeStore = new FakeNoiseStore();
         var policies = new INoiseFilterPolicy[] { new HermesProcessNoisePolicy() };
-        var sut = new NoiseFilteringService(policies, fakeStore, TimeProvider.System);
+        var sut = new NoiseFilteringService(policies);
 
         var content = @"[IMPORTANT: Background process proc_qa completed normally (exit code 0).
 Command: cd /tmp && echo test
@@ -30,20 +28,28 @@ Output: test]";
         // Assert
         Assert.True(result.IsNoise);
         Assert.Equal("HermesBackgroundProcessLog", result.PolicyName);
-        Assert.True(fakeStore.RecordCalled);
-        Assert.Equal("HermesBackgroundProcessLog", fakeStore.RecordedPolicyName);
     }
 
-    private class FakeNoiseStore : INoiseStore
+    [Fact]
+    public async Task EvaluatePreWriteAsync_WhenNoPolicyMatches_ReturnsClean()
     {
-        public bool RecordCalled { get; private set; }
-        public string? RecordedPolicyName { get; private set; }
+        var policies = new INoiseFilterPolicy[] { new HermesProcessNoisePolicy() };
+        var sut = new NoiseFilteringService(policies);
+        var request = new MemoryWriteRequest("proj-1", "an ordinary architectural note about the write path");
 
-        public Task RecordNoiseAsync(MemoryWriteRequest request, string policyName, int expiresAtUnixSeconds, CancellationToken cancellationToken = default)
-        {
-            RecordCalled = true;
-            RecordedPolicyName = policyName;
-            return Task.CompletedTask;
-        }
+        var result = await sut.EvaluatePreWriteAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.False(result.IsNoise);
+    }
+
+    [Fact]
+    public async Task EvaluatePreWriteAsync_WithNoPolicies_ReturnsClean()
+    {
+        var sut = new NoiseFilteringService([]);
+        var request = new MemoryWriteRequest("proj-1", "anything at all");
+
+        var result = await sut.EvaluatePreWriteAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.False(result.IsNoise);
     }
 }

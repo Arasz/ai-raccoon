@@ -25,8 +25,7 @@ public sealed partial class SqliteMemoryStore(
     IEntryEmbedder embedder,
     TimeProvider timeProvider,
     ILogger<SqliteMemoryStore> logger,
-    INoiseFilteringService noiseFilteringService,
-    IEnumerable<IAutoTtlPolicy> autoTtlPolicies)
+    INoiseFilteringService noiseFilteringService)
     : IMemoryStore
 {
     private const string SharedScope = "shared";
@@ -50,16 +49,6 @@ public sealed partial class SqliteMemoryStore(
             {
                 return new MemoryEntry(string.Empty, string.Empty, request.Context ?? string.Empty, request.Content,
                     now, Stored: false, Reason: $"rejected by noise policy '{noiseResult.PolicyName}'");
-            }
-        }
-
-        int? resolvedTtlDays = null;
-        foreach (var policy in autoTtlPolicies)
-        {
-            var ttl = policy.EvaluateTtl(request);
-            if (ttl.HasValue)
-            {
-                resolvedTtlDays = resolvedTtlDays.HasValue ? Math.Min(resolvedTtlDays.Value, ttl.Value) : ttl.Value;
             }
         }
 
@@ -108,8 +97,7 @@ public sealed partial class SqliteMemoryStore(
                         agentId = request.AgentId,
                         createdAt = now,
                         updatedAt = now,
-                        sourceId = source.Id,
-                        ttl_days = resolvedTtlDays
+                        sourceId = source.Id
                     },
                     cancellationToken))
             .ConfigureAwait(false);

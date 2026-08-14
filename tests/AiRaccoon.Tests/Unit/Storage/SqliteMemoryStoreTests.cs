@@ -992,13 +992,9 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [Fact]
     public async Task ShortOrganicWrite_IsStoredWithoutTtl()
     {
-        // Reproduces production wiring as it stands pre-WP2 (PromotionScorerTtlPolicy registered):
-        // a sub-8-word organic write must still be stored, and never carries a heuristic TTL.
-        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
-            new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
-            new EmbeddingService(), ttlPolicies: [new PromotionScorerTtlPolicy()]);
-
-        var entry = await store.WriteAsync(new MemoryWriteRequest("acme", "Push after every commit."),
+        // No heuristic TTL policy exists any more (ADR-0034): a sub-8-word organic write is
+        // stored like any other, and never carries a write-time TTL.
+        var entry = await _store.WriteAsync(new MemoryWriteRequest("acme", "Push after every commit."),
             TestContext.Current.CancellationToken);
 
         entry.Stored.ShouldBeTrue();

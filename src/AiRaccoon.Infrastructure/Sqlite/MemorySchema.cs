@@ -193,34 +193,10 @@ internal static class MemorySchema
                                               value TEXT NOT NULL
                                           );
 
-                                          CREATE TABLE IF NOT EXISTS noise_entries (
-                                              id INTEGER PRIMARY KEY,
-                                              request_content TEXT NOT NULL,
-                                              project_id TEXT NOT NULL,
-                                              source_file TEXT NULL,
-                                              detected_by_policy TEXT NOT NULL,
-                                              expires_at INTEGER NOT NULL,
-                                              created_at INTEGER NOT NULL
-                                          );
-
-                                          CREATE TABLE IF NOT EXISTS noise_clusters (
-                                              id                 INTEGER PRIMARY KEY,
-                                              project_id         TEXT NOT NULL,
-                                              user_id            TEXT NULL,
-                                              cluster_label      TEXT NOT NULL,
-                                              sample_content     TEXT NOT NULL,
-                                              frequency          INTEGER NOT NULL DEFAULT 1,
-                                              status             TEXT NOT NULL CHECK(status IN ('candidate','active','suppressed')),
-                                              centroid_embedding BLOB NOT NULL,
-                                              created_at         INTEGER NOT NULL,
-                                              last_seen_at       INTEGER NOT NULL,
-                                              UNIQUE(project_id, cluster_label)
-                                          );
-
-                                          CREATE VIRTUAL TABLE IF NOT EXISTS vec_noise USING vec0(
-                                              ctx TEXT partition key,
-                                              embedding float[384] distance_metric=cosine
-                                          );
+                                          -- noise_entries/noise_clusters/vec_noise removed from the fresh-bank DDL
+                                          -- (ADR-0033): the zero-shot filter and noise-learning subsystem that wrote
+                                          -- them is gone. A legacy bank that already has them keeps them, inert —
+                                          -- see MigrateToV6Async, left as a historical no-op ladder step.
 
                                           CREATE TABLE IF NOT EXISTS sync_tombstones (
                                               hash TEXT NOT NULL,

@@ -5,10 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using AiRaccoon.Core.Memory;
 
-public sealed class NoiseFilteringService(
-    IEnumerable<INoiseFilterPolicy> policies,
-    INoiseStore? noiseStore,
-    TimeProvider timeProvider) : INoiseFilteringService
+public sealed class NoiseFilteringService(IEnumerable<INoiseFilterPolicy> policies) : INoiseFilteringService
 {
     public async Task<NoiseFilterResult> EvaluatePreWriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
     {
@@ -17,11 +14,6 @@ public sealed class NoiseFilteringService(
             var result = await policy.EvaluateAsync(request, cancellationToken).ConfigureAwait(false);
             if (result.IsNoise)
             {
-                if (noiseStore is not null)
-                {
-                    var expiresAt = (int)timeProvider.GetUtcNow().AddDays(14).ToUnixTimeSeconds();
-                    await noiseStore.RecordNoiseAsync(request, result.PolicyName ?? "Unknown", expiresAt, cancellationToken).ConfigureAwait(false);
-                }
                 return result;
             }
         }
