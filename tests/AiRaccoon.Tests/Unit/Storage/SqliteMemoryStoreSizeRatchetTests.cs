@@ -25,6 +25,9 @@ public sealed class SqliteMemoryStoreSizeRatchetTests
     //   1276 / 26  memory_get (ADR-0035) -- closed blocker B2, an agent could find a memory and
     //              had no call returning its content.
     //   1308 / 27  noise shadow-observer wiring (ADR-0039).
+    //   1291 / 27  ADR-0046 threaded the project's context labels into SearchAsync; the lookup
+    //              moved to SearchContexts.ResolveAsync rather than raising the cap, leaving one
+    //              net line for the call itself.
     //   1290 / 27  LOWERED, not raised: the noise_entries write path pushed the file to 1315, and
     //              the note below said the next person should decompose instead of adding a
     //              fourth raise. ISettingsStore/SqliteSettingsStore is WP8's first seam -- the
@@ -36,7 +39,7 @@ public sealed class SqliteMemoryStoreSizeRatchetTests
     // (write, search, delete, ingest, embedding). The next person to hit this cap should take one
     // of them rather than add a raise -- raising is borrowing against a decomposition someone
     // still has to pay for.
-    private const int MaxLines = 1290;
+    private const int MaxLines = 1291;
     private const int MaxMembers = 27;
 
     [Fact]

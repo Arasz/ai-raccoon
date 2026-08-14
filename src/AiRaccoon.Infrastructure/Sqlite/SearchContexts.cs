@@ -1,10 +1,30 @@
 using AiRaccoon.Core.Memory;
+using Dapper;
+using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>The bank contexts a search query reads, per scope (see docs/work/features-agent-memory/spec-issue-1.md §4.1): one memory_search query per in-scope context.</summary>
 internal static class SearchContexts
 {
+    /// <summary>
+    ///     <see cref="For" /> with the project's labels read from the bank — the labels are only
+    ///     needed when no <see cref="SearchQuery.ContextLabel" /> narrows the search, so the read is
+    ///     skipped otherwise.
+    /// </summary>
+    public static async Task<IReadOnlyList<string>> ResolveAsync(SqliteConnection connection,
+        SearchQuery query, CancellationToken cancellationToken)
+    {
+        var needsLabels = query.Scope is SearchScope.All or SearchScope.Project
+                          && string.IsNullOrWhiteSpace(query.ContextLabel);
+        var labels = needsLabels
+            ? (await connection.QueryAsync<string>(new CommandDefinition(MemorySql.CustomContextLabels,
+                new { projectId = query.ProjectId }, cancellationToken: cancellationToken))
+                .ConfigureAwait(false)).ToList()
+            : [];
+        return For(query, labels);
+    }
+
     /// <param name="customLabels">
     ///     The project's custom-context labels. The project is the isolation boundary; a context is
     ///     a label inside it, not a second boundary. No <see cref="SearchQuery.ContextLabel" />

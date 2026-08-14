@@ -44,18 +44,17 @@ internal static class MemorySchema
     internal const int CurrentVersion = 8;
 
     /// <summary>
-    ///     The corrected promotion_queue_entries_ad body (H4/ADR-0023 amendment): `e.scope = 'project'`
-    ///     matches what ShareAsync can actually resolve (MemorySql.SelectSourceByHashAndProject) — a
-    ///     custom- or workspace-scoped sibling cannot back a promotable candidate, so it must not read
-    ///     as "still live" here either.
+    ///     The promotion_queue_entries_ad body (ADR-0023, amended by H4 and again by ADR-0046):
+    ///     "still backed" means a row inside the project, which is <see cref="ProjectRows" /> — the
+    ///     one definition ShareAsync resolves through.
     /// </summary>
-    private const string PromotionQueueTriggerDdl = """
+    private static readonly string PromotionQueueTriggerDdl = $"""
                                                     CREATE TRIGGER IF NOT EXISTS promotion_queue_entries_ad AFTER DELETE ON entries BEGIN
                                                         DELETE FROM promotion_queue
                                                         WHERE project_id = OLD.project_id AND hash = OLD.hash
                                                           AND NOT EXISTS (SELECT 1 FROM entries e
                                                                           WHERE e.project_id = OLD.project_id AND e.hash = OLD.hash
-                                                                            AND e.scope = 'project');
+                                                                            AND {ProjectRows.Scope("e.")});
                                                     END;
                                                     """;
 
@@ -606,7 +605,10 @@ internal static class MemorySchema
                     "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'promotion_queue_entries_ad'",
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
-        if (storedSql is not null && storedSql.Contains("scope", StringComparison.Ordinal))
+        // Compared against the body we intend, not sniffed for a substring: the previous probe
+        // asked whether the stored SQL mentioned "scope" at all, so the ADR-0046 widening would
+        // have left every existing bank on the old body forever while reading as up to date.
+        if (storedSql is not null && Normalize(storedSql) == Normalize(PromotionQueueTriggerDdl))
         {
             return;
         }
@@ -621,6 +623,15 @@ internal static class MemorySchema
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
     }
+
+    /// <summary>
+    ///     Whitespace-insensitive comparison against what sqlite_master actually stores: the body as
+    ///     written, minus the <c>IF NOT EXISTS</c> and minus the statement's trailing semicolon.
+    /// </summary>
+    private static string Normalize(string sql) =>
+        string.Join(' ', sql.Replace("IF NOT EXISTS ", "", StringComparison.Ordinal)
+                .Split((char[])[' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+            .TrimEnd(';', ' ');
 
     private static async Task<long> ReadVersionAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
         await connection.ExecuteScalarAsync<long>(

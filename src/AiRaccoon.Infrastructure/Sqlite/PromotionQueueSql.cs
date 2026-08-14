@@ -79,26 +79,22 @@ internal static class PromotionQueueSql
                                     WHERE (@ProjectId IS NULL OR project_id = @ProjectId)
                                     """;
 
-    // e.scope = 'project' matches what ShareAsync can actually resolve
-    // (MemorySql.SelectSourceByHashAndProject) — the same alignment as the
-    // promotion_queue_entries_ad trigger's guard (H4/H5): a custom- or workspace-scoped sibling
-    // cannot back a promotable candidate, so it must not read as "not an orphan" here either.
-    /// <summary>Orphans pre-dating the promotion_queue_entries_ad trigger (ADR-0023): rows whose (project_id, hash) has no backing project-scope entries row, grouped per project for the dry-run report.</summary>
-    public const string OrphanCountsPerProject = """
+    /// <summary>Orphans pre-dating the promotion_queue_entries_ad trigger (ADR-0023): rows whose (project_id, hash) has no backing entries row inside the project (<see cref="ProjectRows" />, ADR-0046), grouped per project for the dry-run report.</summary>
+    public static readonly string OrphanCountsPerProject = $"""
                                                  SELECT project_id AS ProjectId, count(*) AS Count
                                                  FROM promotion_queue q
                                                  WHERE NOT EXISTS (SELECT 1 FROM entries e
                                                                    WHERE e.project_id = q.project_id AND e.hash = q.hash
-                                                                     AND e.scope = 'project')
+                                                                     AND {ProjectRows.Scope("e.")})
                                                  GROUP BY project_id
                                                  """;
 
-    public const string DeleteOrphans = """
+    public static readonly string DeleteOrphans = $"""
                                         DELETE FROM promotion_queue
                                         WHERE NOT EXISTS (SELECT 1 FROM entries e
                                                           WHERE e.project_id = promotion_queue.project_id
                                                             AND e.hash = promotion_queue.hash
-                                                            AND e.scope = 'project')
+                                                            AND {ProjectRows.Scope("e.")})
                                         """;
 
     public const string EvictVictim = """

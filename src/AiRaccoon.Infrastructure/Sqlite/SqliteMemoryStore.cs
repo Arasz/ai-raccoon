@@ -200,13 +200,8 @@ public sealed partial class SqliteMemoryStore(
 
         var ftsBatches = new List<IReadOnlyList<MemorySearchResult>>();
         var vectorBatches = new List<IReadOnlyList<MemorySearchResult>>();
-        var customLabels = query.Scope is SearchScope.All or SearchScope.Project
-                           && string.IsNullOrWhiteSpace(query.ContextLabel)
-            ? (await connection.QueryAsync<string>(
-                Def(MemorySql.CustomContextLabels, new { projectId = query.ProjectId }, cancellationToken))
-                .ConfigureAwait(false)).ToList()
-            : [];
-        var contexts = SearchContexts.For(query, customLabels).ToList();
+        var contexts = (await SearchContexts.ResolveAsync(connection, query, cancellationToken)
+            .ConfigureAwait(false)).ToList();
         var valueByHash = new Dictionary<string, string>(StringComparer.Ordinal);
         var ftsQueryByHash = new Dictionary<string, string>(StringComparer.Ordinal);
         var idByHash = new Dictionary<string, long>(StringComparer.Ordinal);
