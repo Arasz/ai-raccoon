@@ -1,10 +1,10 @@
 using System.Net;
-using System.Net.Sockets;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Logging;
 using AiRaccoon.Tools;
+using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tests.Unit.Setup.Serve;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -172,7 +172,9 @@ public sealed class QuietLoggingTests : IDisposable
     public async Task QuietProxy_HttpClientRelayLogs_StayOutOfStderr()
     {
         var options = QuietOptions(InstallScope.User);
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
         await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.Unauthorized,
             TestContext.Current.CancellationToken);
 
@@ -192,7 +194,9 @@ public sealed class QuietLoggingTests : IDisposable
     public async Task LoudProxy_HttpClientRelayLogs_ReachStderr()
     {
         var options = LoudOptions(InstallScope.User);
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
         await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.Unauthorized,
             TestContext.Current.CancellationToken);
         // Mint the loopback token so the relay dials the backend: the probe no longer logs (log-leak fix).
@@ -262,14 +266,6 @@ public sealed class QuietLoggingTests : IDisposable
         return (stdout.ToString(), stderr.ToString());
     }
 
-    private static int FreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
-    }
 
     private static List<string> Capture(Action<ILogger> emit, ServerConfig config)
     {
