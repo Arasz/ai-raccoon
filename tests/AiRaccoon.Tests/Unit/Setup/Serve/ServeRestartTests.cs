@@ -1,9 +1,9 @@
 using System.Net;
-using System.Net.Sockets;
 using System.Text;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup.Cli;
+using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 
@@ -19,23 +19,16 @@ namespace AiRaccoon.Tests.Unit.Setup.Serve;
 public sealed class ServeRestartTests : IDisposable
 {
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-serve-restart");
-    private readonly List<TcpListener> _holders = [];
 
-    public void Dispose()
-    {
-        foreach (var holder in _holders)
-        {
-            holder.Stop();
-        }
-
-        Directory.Delete(_dataRoot, true);
-    }
+    public void Dispose() => Directory.Delete(_dataRoot, true);
 
     [Fact]
     public async Task NothingListening_ServesLikePlainServe()
     {
         using var env = await AcquireCleanEnvAsync();
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
         var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
 
         var url = await WaitForUrlAsync(run);
@@ -49,7 +42,9 @@ public sealed class ServeRestartTests : IDisposable
     public async Task AnExistingServer_IsCycled_AndTheRestartOwnsThePort()
     {
         using var env = await AcquireCleanEnvAsync();
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
         var old = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
         await WaitForUrlAsync(old);
 
@@ -70,9 +65,11 @@ public sealed class ServeRestartTests : IDisposable
     public async Task AServerThatRefusesOurToken_ExitsRestartFailed_AndNeverAttaches()
     {
         using var env = await AcquireCleanEnvAsync();
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         // Our data root has a token; the listener rejects it, i.e. it serves a different root.
         (await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
+        lease.ReleaseForBind();
         await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.Unauthorized,
             TestContext.Current.CancellationToken);
         var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
@@ -90,8 +87,10 @@ public sealed class ServeRestartTests : IDisposable
     public async Task AServerTooOldToBeCycled_ExitsRestartFailed()
     {
         using var env = await AcquireCleanEnvAsync();
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         (await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
+        lease.ReleaseForBind();
         await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.NotFound,
             TestContext.Current.CancellationToken);
         var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
@@ -107,7 +106,9 @@ public sealed class ServeRestartTests : IDisposable
     public async Task AServerWeHoldNoTokenFor_ExitsRestartFailed_WithoutAskingItToStop()
     {
         using var env = await AcquireCleanEnvAsync();
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
         await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.Accepted,
             TestContext.Current.CancellationToken);
         var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
@@ -124,9 +125,11 @@ public sealed class ServeRestartTests : IDisposable
     public async Task AListenerThatWillNotIdentify_ReportsPortInUse_WithoutAskingItToStop()
     {
         using var env = await AcquireCleanEnvAsync();
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         (await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
         // Speaks JSON-RPC on /mcp, so the probe recognizes it, but /observability names someone else.
+        lease.ReleaseForBind();
         await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.Accepted,
             TestContext.Current.CancellationToken, name: "not-a-raccoon");
         var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
@@ -145,9 +148,11 @@ public sealed class ServeRestartTests : IDisposable
     public async Task AServerThatReportsNoVersion_IsStillNamedInTheRefusal()
     {
         using var env = await AcquireCleanEnvAsync();
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         (await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
         // A pre-ADR-0022 server: identifies as an ai-raccoon, reports no version, has no /shutdown.
+        lease.ReleaseForBind();
         await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.NotFound,
             TestContext.Current.CancellationToken, version: null);
         var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
@@ -163,8 +168,8 @@ public sealed class ServeRestartTests : IDisposable
     public async Task AForeignListener_StillReportsPortInUse()
     {
         using var env = await AcquireCleanEnvAsync();
-        using var holder = HoldPort(out var port);
-        var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
+        using var holder = LoopbackPort.Occupy();
+        var run = Start(["--data-root", _dataRoot, "serve", "--port", holder.Port.ToString(), "--restart"]);
 
         var exit = await run.Exit.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
 
@@ -177,7 +182,9 @@ public sealed class ServeRestartTests : IDisposable
     public async Task WithoutRestart_AnExistingServerIsStillAttachedTo()
     {
         using var env = await AcquireCleanEnvAsync();
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
         var old = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
         await WaitForUrlAsync(old);
 
@@ -240,56 +247,6 @@ public sealed class ServeRestartTests : IDisposable
         return new EnvRestore(original);
     }
 
-    private TcpListener HoldPort(out int port)
-    {
-        for (var attempt = 0; attempt < 20; attempt++)
-        {
-            var probe = new TcpListener(IPAddress.Loopback, 0);
-            probe.Start();
-            var candidate = ((IPEndPoint)probe.LocalEndpoint).Port;
-            probe.Stop();
-
-            var holder = new TcpListener(IPAddress.Loopback, candidate);
-            try
-            {
-                holder.Start();
-                port = candidate;
-                _holders.Add(holder);
-                _ = Task.Run(AcceptLoop);
-                return holder;
-
-                async Task AcceptLoop()
-                {
-                    while (true)
-                    {
-                        try
-                        {
-                            using var client = await holder.AcceptTcpClientAsync();
-                        }
-                        catch (Exception ex) when (ex is ObjectDisposedException or SocketException)
-                        {
-                            return;
-                        }
-                    }
-                }
-            }
-            catch (SocketException)
-            {
-                holder.Stop();
-            }
-        }
-
-        throw new InvalidOperationException("Could not reserve a loopback port");
-    }
-
-    private static int FreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
-    }
 
     private sealed record ServeRun(Task<int> Exit, LockingWriter Stdout, LockingWriter Stderr, CancellationTokenSource Cts);
 

@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Observability;
+using AiRaccoon.Tests.TestHelpers;
 using ModelContextProtocol.Client;
 using Shouldly;
 using Xunit;
@@ -22,11 +23,13 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly string _dataRoot = TestData.CreateTempRoot("proxy-spawned-backend");
+    private LoopbackPort _lease = null!;
     private int _port;
 
     public ValueTask InitializeAsync()
     {
-        _port = AiRaccoonProcess.FreePort();
+        _lease = LoopbackPort.Reserve();
+        _port = _lease.Port;
         return ValueTask.CompletedTask;
     }
 
@@ -37,6 +40,7 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
     public async ValueTask DisposeAsync()
     {
         await StopSpawnedBackendAsync();
+        _lease.Dispose();
         try
         {
             Directory.Delete(_dataRoot, true);
@@ -54,6 +58,7 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
     [Fact]
     public async Task LegacyProtocolClient_IsRelayed()
     {
+        _lease.ReleaseForBind();
         await using var client = await AiRaccoonProcess.ConnectAsync(
             ["--data-root", _dataRoot, "--port", _port.ToString()],
             new McpClientOptions { ProtocolVersion = "2025-11-25" }, TestContext.Current.CancellationToken);
@@ -68,6 +73,7 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
     {
         // A stock client, tuned for nothing: a cold `serve` may outlast the discover probe and send
         // the SDK down the legacy handshake, which LegacyProtocolClient_IsRelayed proves is carried.
+        _lease.ReleaseForBind();
         await using var client = await AiRaccoonProcess.ConnectAsync(
             ["--data-root", _dataRoot, "--port", _port.ToString()], TestContext.Current.CancellationToken);
 

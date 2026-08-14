@@ -12,6 +12,7 @@ using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.E2E;
 
@@ -32,7 +33,8 @@ public sealed class ProxyWireE2ETests : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        _port = AiRaccoonProcess.FreePort();
+        using var lease = LoopbackPort.Reserve();
+        _port = lease.Port;
         var builder = WebApplication.CreateSlimBuilder();
         builder.Logging.ClearProviders();
         builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, _port));
@@ -55,6 +57,7 @@ public sealed class ProxyWireE2ETests : IAsyncLifetime
             }
         });
         _backend.MapMcp("/mcp");
+        lease.ReleaseForBind();
         await _backend.StartAsync(TestContext.Current.CancellationToken);
         // Ungated on purpose: this fixture records headers, it does not check them. The proxy still
         // reads a token, so mint one the way serve would.

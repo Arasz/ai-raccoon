@@ -1,12 +1,12 @@
 using System.Diagnostics;
 using System.Net;
-using System.Net.Sockets;
 using System.Text;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Render;
+using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
@@ -26,23 +26,16 @@ public sealed class NodeRunnerTests : IDisposable
 {
     private static readonly HttpClient HttpClient = new();
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-serve-runner");
-    private readonly List<TcpListener> _holders = [];
 
-    public void Dispose()
-    {
-        foreach (var holder in _holders)
-        {
-            holder.Stop();
-        }
-
-        Directory.Delete(_dataRoot, true);
-    }
+    public void Dispose() => Directory.Delete(_dataRoot, true);
 
     [Fact]
     public async Task FreePort_PrintsExactUrlLine_AndExitsZeroAfterStop()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
         var run = StartServe(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
 
         var url = await WaitForLineAsync(run, line => line.StartsWith("http://", StringComparison.Ordinal),
@@ -93,8 +86,8 @@ public sealed class NodeRunnerTests : IDisposable
     public async Task BusyPortWithForeignListener_ReturnsPortInUse_WithHintAndNoStackTrace()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
-        using var holder = HoldLoopbackPort(out var port); // held OPEN for the whole test
-        var run = StartServe(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+        using var holder = LoopbackPort.Occupy(); // held OPEN for the whole test
+        var run = StartServe(["--data-root", _dataRoot, "serve", "--port", holder.Port.ToString()]);
 
         var exit = await run.Exit;
 
@@ -109,11 +102,13 @@ public sealed class NodeRunnerTests : IDisposable
     public async Task UnusableTokenPath_ReportsMcpTokenUnavailable_WithThePathAndNoStackTrace()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         // A directory where the token file belongs: unreadable, uncreatable and undeletable.
         var tokenPath = Path.Combine(_dataRoot, McpTokenFile.FileName);
         Directory.CreateDirectory(tokenPath);
 
+        lease.ReleaseForBind();
         var run = StartServe(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
         var exit = await run.Exit;
 
@@ -127,7 +122,9 @@ public sealed class NodeRunnerTests : IDisposable
     public async Task BusyPortWithAiRaccoonServer_Attaches_AndFirstKeepsOwnership()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
         var first = StartServe(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
         var firstUrl = await WaitForLineAsync(first, line => line.StartsWith("http://", StringComparison.Ordinal),
             TestContext.Current.CancellationToken);
@@ -162,13 +159,16 @@ public sealed class NodeRunnerTests : IDisposable
     public async Task ConcurrentStartsOnSamePort_ExactlyOneOwns_TheOtherAttachesOrReturnsPortInUse()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         var secondRoot = TestData.CreateTempRoot("ai-raccoon-serve-race");
         try
         {
             var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var firstTask = StartServeAsync(["--data-root", _dataRoot, "serve", "--port", port.ToString()], gate.Task);
             var secondTask = StartServeAsync(["--data-root", secondRoot, "serve", "--port", port.ToString()], gate.Task);
+            // Both runners bind only once the gate opens: hold the number until then.
+            lease.ReleaseForBind();
             gate.SetResult();
             var first = await firstTask;
             var second = await secondTask;
@@ -212,7 +212,9 @@ public sealed class NodeRunnerTests : IDisposable
     public async Task McpEntryHermes_PrintsTheEntryJson()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
         var run = StartServe(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--mcp-entry"]);
 
         var line = await WaitForLineAsync(run, line => line.StartsWith("{", StringComparison.Ordinal),
@@ -228,7 +230,9 @@ public sealed class NodeRunnerTests : IDisposable
     public async Task McpEntryClaude_PrintsTheEntryJson()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
         var run = StartServe(
             ["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--mcp-entry", "--format", "claude"]);
 
@@ -244,7 +248,9 @@ public sealed class NodeRunnerTests : IDisposable
     public async Task RootPort_IsHonored_WhenServePortAbsent()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
         var run = StartServe(["--data-root", _dataRoot, "--port", port.ToString(), "serve"]);
 
         var url = await WaitForLineAsync(run, line => line.StartsWith("http://", StringComparison.Ordinal),
@@ -259,8 +265,12 @@ public sealed class NodeRunnerTests : IDisposable
     public async Task ServePort_WinsOverRootPort()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
-        var rootPort = FreePort();
-        var servePort = FreePort();
+        using var rootLease = LoopbackPort.Reserve();
+        using var serveLease = LoopbackPort.Reserve();
+        var rootPort = rootLease.Port;
+        var servePort = serveLease.Port;
+        rootLease.ReleaseForBind();
+        serveLease.ReleaseForBind();
         var run = StartServe(["--data-root", _dataRoot, "--port", rootPort.ToString(), "serve", "--port", servePort.ToString()]);
 
         var url = await WaitForLineAsync(run, line => line.StartsWith("http://", StringComparison.Ordinal),
@@ -275,7 +285,9 @@ public sealed class NodeRunnerTests : IDisposable
     public async Task NonHttpTransport_WarnsOnStderr_AndStillServesHttp()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
         var run = StartServe(["--data-root", _dataRoot, "--transport", "stdio", "serve", "--port", port.ToString()]);
 
         var url = await WaitForLineAsync(run, line => line.StartsWith("http://", StringComparison.Ordinal),
@@ -291,8 +303,10 @@ public sealed class NodeRunnerTests : IDisposable
     public async Task DefaultTransport_DoesNotWarnThatServeIgnoresIt()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         // No --transport flag: the default (Proxy, ADR-0020) is not a user choice to ignore.
+        lease.ReleaseForBind();
         var run = StartServe(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
 
         var url = await WaitForLineAsync(run, line => line.StartsWith("http://", StringComparison.Ordinal),
@@ -309,7 +323,9 @@ public sealed class NodeRunnerTests : IDisposable
     public async Task IdleTimeout_ShutsTheHostDown_AfterTheSpanWithoutActivity()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
         var run = StartServe(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--idle-timeout", "5s"]);
 
         var url = await WaitForLineAsync(run, line => line.StartsWith("http://", StringComparison.Ordinal),
@@ -329,7 +345,9 @@ public sealed class NodeRunnerTests : IDisposable
     public async Task IdleTimeoutZero_KeepsServing_AndNeverSelfShutsDown()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
         var run = StartServe(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--idle-timeout", "0"]);
 
         var url = await WaitForLineAsync(run, line => line.StartsWith("http://", StringComparison.Ordinal),
@@ -407,60 +425,6 @@ public sealed class NodeRunnerTests : IDisposable
         var original = Environment.GetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName);
         Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, null);
         return new EnvRestore(original);
-    }
-
-    private TcpListener HoldLoopbackPort(out int port)
-    {
-        for (var attempt = 0; attempt < 20; attempt++)
-        {
-            var probe = new TcpListener(IPAddress.Loopback, 0);
-            probe.Start();
-            var candidate = ((IPEndPoint)probe.LocalEndpoint).Port;
-            probe.Stop();
-
-            var holder = new TcpListener(IPAddress.Loopback, candidate);
-            try
-            {
-                holder.Start();
-                port = candidate;
-                _holders.Add(holder);
-
-                _ = Task.Run(AcceptClientLoop);
-                return holder;
-
-                async Task? AcceptClientLoop()
-                {
-                    // Accept and close so probes fail fast instead of timing out; the
-                    // LISTENER itself stays open for the whole test (no port race).
-                    while (true)
-                    {
-                        try
-                        {
-                            using var client = await holder.AcceptTcpClientAsync();
-                        }
-                        catch (Exception ex) when (ex is ObjectDisposedException or SocketException)
-                        {
-                            return;
-                        }
-                    }
-                }
-            }
-            catch (SocketException)
-            {
-                holder.Stop();
-            }
-        }
-
-        throw new InvalidOperationException("Could not reserve a loopback port");
-    }
-
-    private static int FreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
     }
 
 

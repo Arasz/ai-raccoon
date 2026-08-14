@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Client;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.E2E;
 
@@ -29,9 +30,11 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        _port = AiRaccoonProcess.FreePort();
+        using var lease = LoopbackPort.Reserve();
+        _port = lease.Port;
         _backend = McpServerSetup.CreateServerHost(new ServerConfig(_port, McpTransport.Http,
             new InfrastructureOptions { DataRoot = _backendRoot, Scope = InstallScope.User }));
+        lease.ReleaseForBind();
         await _backend.StartAsync(TestContext.Current.CancellationToken);
         // This fixture's backend is deliberately ungated — the backend is incidental to what these
         // tests measure. The proxy still reads a token, so mint one the way serve would.
@@ -98,7 +101,8 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
     public async Task WhenTheBackendCannotStart_ItFailsLoudly()
     {
         var root = TestData.CreateTempRoot("proxy-no-backend");
-        var port = AiRaccoonProcess.FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         try
         {
             // The spawned `serve` opens this bank and cannot; nothing is listening on the port either.
@@ -107,6 +111,7 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
             await File.WriteAllBytesAsync(bank, RandomNumberGenerator.GetBytes(4096),
                 TestContext.Current.CancellationToken);
 
+            lease.ReleaseForBind();
             var (exit, stderr) = await RunProxyAsync(root, port);
 
             exit.ShouldBe(ExitCode.ProxyBackendUnavailable);

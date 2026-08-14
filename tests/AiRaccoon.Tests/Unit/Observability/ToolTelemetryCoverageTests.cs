@@ -7,6 +7,7 @@ using ModelContextProtocol;
 using ModelContextProtocol.Server;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Unit.Observability;
 
@@ -25,7 +26,8 @@ public sealed class ToolTelemetryCoverageTests
         var dataRoot = TestData.CreateTempRoot("tool-telemetry-coverage");
         try
         {
-            var port = TelemetryServerHost.FreePort();
+            using var lease = LoopbackPort.Reserve();
+            var port = lease.Port;
             var host = TelemetryServerHost.Create(dataRoot, port);
 
             // The list is derived from the container, never hand-kept: a tool added to any
@@ -38,6 +40,7 @@ public sealed class ToolTelemetryCoverageTests
             var metrics = host.Services.GetRequiredService<ToolCallMetrics>();
             using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
 
+            lease.ReleaseForBind();
             await host.StartAsync(TestContext.Current.CancellationToken);
             try
             {
