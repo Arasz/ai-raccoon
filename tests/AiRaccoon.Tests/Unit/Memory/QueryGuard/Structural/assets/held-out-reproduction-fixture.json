@@ -1,0 +1,1653 @@
+{
+  "thresholds": {
+    "0.01": 0.9961473492522555,
+    "0.02": 0.98939822280316,
+    "0.05": 0.9127519488351538
+  },
+  "rows": [
+    {
+      "id": "51062df47ad3fa",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "search quality metric correlation id"
+    },
+    {
+      "id": "55be0053270c8d",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "do the open {path} again"
+    },
+    {
+      "id": "672336b4047eb0",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "f: it was already anserwed and closed"
+    },
+    {
+      "id": "1071d2eb7fb484",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "search_quality table schema ISearchQualityService"
+    },
+    {
+      "id": "ab6bfb0b6e8450",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "hosted service background service wiring entry point production"
+    },
+    {
+      "id": "43122519321686",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "sweep test normalization"
+    },
+    {
+      "id": "7b746c8a281aaa",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "baseline chcek, queue state and what is new in the memory scoring table we added"
+    },
+    {
+      "id": "0b419ec600ed74",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "memory_share idempotent value-addressed per-chunk sharing"
+    },
+    {
+      "id": "8cdfa0d51f079e",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "embedding all-MiniLM-L6-v2 ONNX 384 dimensions"
+    },
+    {
+      "id": "7e0c80427f4b96",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "SKILL.md test structure frontmatter validation tests pytest pattern"
+    },
+    {
+      "id": "b66cdc78bf60b3",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "lets stop"
+    },
+    {
+      "id": "f01eefb76a7ce8",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "code-review-graph install scripts instructions ai-badger"
+    },
+    {
+      "id": "5042bed9f5656a",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "also bump version and update docs"
+    },
+    {
+      "id": "3ace321986b36b",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "f: .venv is a python signal in stack detection - can we improve stack detection:\n- check for .venv\n- check what mcp tools should be installed in the project\n- if there are more dependencies than mcp tools - signal python stack. Else this is only our tools mcp .venv dir, stack is not needed"
+    },
+    {
+      "id": "50d865c592dd6d",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "code-review-graph tree-sitter AST JSON parser tree-sitter-json"
+    },
+    {
+      "id": "a0975b3292d18c",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "file type handler json chunker"
+    },
+    {
+      "id": "97fd898b49cf28",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "IFileTypeMatcher SqliteMemoryStore constructor FileIngestor DI refactor"
+    },
+    {
+      "id": "9bd9fd2d9a2c64",
+      "family": "proc_notif",
+      "cls": 1,
+      "text": "[IMPORTANT: Background process proc_d7cf45a51e69 completed normally (exit code 0).\nCommand: cd /Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/fix-after-refactor && dotnet test --no-build --filter \"FullyQualifiedName~ServeRestartTests|FullyQualifiedName~NodeRunnerTests\" --logger \"console;verbosity=minimal\" > /tmp/group6.log 2>&1; echo \"EXIT: $?\" >> /tmp/group6.log\nOutput:\n]"
+    },
+    {
+      "id": "3225b7e64208f4",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "f: manually test our semantica skill, hook and memory integration, produce a meaningfull graph and then search for memories. Finish with the test report"
+    },
+    {
+      "id": "9523675563a0f9",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "tar2 OR ingest OR alpha OR beta"
+    },
+    {
+      "id": "f6b2ac1260107d",
+      "family": "proc_notif",
+      "cls": 1,
+      "text": "[IMPORTANT: Background process proc_a9d1f56d92eb completed normally (exit code 0).\nCommand: cd /Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/tar2 && dotnet test tests/AiRaccoon.Tests --logger \"console;verbosity=minimal\" > /tmp/tar2_full.log 2>&1; echo \"EXIT: $?\" >> /tmp/tar2_full.log\nOutput:\n]"
+    },
+    {
+      "id": "d2e7a580034acf",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "f: can you check if we couldn extract markdown part from tokenizer chunker? \n- how  F4 (overlayTokens ignored on the JSON structural path) and F9 (SharedExtractionService/Runner living in Core) \u2014 I'd treat F9 as an ADR note, not a move, this wave. F4 and F9 are connected to modified surface?"
+    },
+    {
+      "id": "d5ef4b089fc425",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "F4 architecture review findings ingestion deps refactor"
+    },
+    {
+      "id": "85c48824474e44",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "cron job configuration model override"
+    },
+    {
+      "id": "89498af6339a25",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "README documentation structure tutorial explanation"
+    },
+    {
+      "id": "e05d8ad1140ca2",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "f: https://github.com/semantica-agi/semantica - semantica link is broken"
+    },
+    {
+      "id": "6f9f5b793f6c5b",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "prometheus grading script instructions"
+    },
+    {
+      "id": "828b09ee49a7b5",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "I want both of them, both look useful - 1 is clear now. But for 2 we will start implementation and I want to research what signals can be available for us at this point - can we use scoring as the signal? As for 1 I want to explore what noise policy we can have. Regex is ok but can be fragile. Also we want to ensure our solution works - so lets collect noise to the separate table, that will have 2 weeks default ttl? And we will dump noise there and use it as evaluation data in development. Noise should be separted from the main logic - it will be just a 'trash' used by us"
+    },
+    {
+      "id": "d70af2ee3be3c9",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "start pr, merge when green\n\nalso I want you to continue working until all tasks are completed (create PRs, review them, fix, merge - all by yourself and your subagents)"
+    },
+    {
+      "id": "0a80beb39ee669",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "- focus on the last changes\n- mark a hot spots - 5 things we can fix that will give use the most gain \n- use TDD"
+    },
+    {
+      "id": "21b4a2aa73e0d7",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "commit and push to main"
+    },
+    {
+      "id": "c5ee27a423c7c0",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "continue diagnose"
+    },
+    {
+      "id": "e28737a0847f0a",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "commit and push, add incident to documentation"
+    },
+    {
+      "id": "5cbab1299da646",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "incident diagnosis postmortem docs incident log"
+    },
+    {
+      "id": "4f27b1a3820a53",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "README Whats new release notes"
+    },
+    {
+      "id": "3ec4539eac63f5",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "did you run those test locally?"
+    },
+    {
+      "id": "dc295b10678196",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "ServerProbe BundledModel SqliteMemoryStore FTS batch query timeout HttpRequestException"
+    },
+    {
+      "id": "1aa07cebc620d7",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "v4 zero shot noise filtering plan architecture"
+    },
+    {
+      "id": "0801bbbc271039",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "v4 dynamic noise semantic promotion plan"
+    },
+    {
+      "id": "55a1d2fcb4d156",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "q:\n \ncontext:\n[Pasted text #1: 24 lines \u2192 /Users/arasz/.hermes/pastes/paste_1_183605.txt]\n \n- we can handle latex now\n- lets do a first fix by removing latex syntax\n- in meantime, launch a research that will check how we could add latex handling component"
+    },
+    {
+      "id": "74f92c598eed1a",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "McpTokenFile heal debris racing minters token convergence"
+    },
+    {
+      "id": "d45ba1bce7755b",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "promotion tier config setting dual-classifier engine"
+    },
+    {
+      "id": "e42ad9ceb9fc82",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "1.10.1 version checklist promotion model auto extraction noise filtering"
+    },
+    {
+      "id": "791b4ef7d541d7",
+      "family": "proc_notif",
+      "cls": 1,
+      "text": "[IMPORTANT: Background process proc_6a1fdab7179f completed normally (exit code 0).\nCommand: cd /Users/arasz/RiderProjects/ai-raccoon && dotnet test 2>&1 | tail -5\nOutput:\n  Skipped The memory inspects itself through memory_inspect [1 ms]\n[xUnit.net 00:00:12.82]     The store emits metrics and tracing for its own operations [SKIP]\n  Skipped The store emits metrics and tracing for its own operations [1 ms]\n\nPassed!  - Failed:     0, Passed:  2277, Skipped:     6, Total:  2283, Duration: 4 m 54 s - AiRaccoon.Tests.dll (net10.0)\n]"
+    },
+    {
+      "id": "8822d9dddc15d3",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "bump to 1.11.0, ensure docs and readme are cleaned up - for removal add entry to what is new that will link to the doc with full analyzis and explanation why this was removed"
+    },
+    {
+      "id": "07a5358c5e4fa4",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "SqliteMemoryStore refactor split god class data access"
+    },
+    {
+      "id": "e9b318fd255542",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "ai-raccoon MCP server configuration http transport"
+    },
+    {
+      "id": "bfc5956f7e8b8a",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "OTLP trace verification collector endpoint how to check traces are exported observability otlp verb"
+    },
+    {
+      "id": "d97bbccb45d398",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "AiRaccoon deployment memory bank sqlite install"
+    },
+    {
+      "id": "9711b5488e304d",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "static classes invariant project-local CLAUDE.md ConfigCommands dispatcher"
+    },
+    {
+      "id": "df2ceb06f6caf4",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "1.6.0 release scope what changed since 1.5.1 integration review"
+    },
+    {
+      "id": "5f352b985914d1",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "manual tool sweep local install version test procedure dotnet tool"
+    },
+    {
+      "id": "3fd86a2271e0db",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "local testing procedure manual E2E verification steps"
+    },
+    {
+      "id": "4425f524bc7d82",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "Hermes plugin http transport token header authentication"
+    },
+    {
+      "id": "f5c86510a89625",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "OTLP export observability ADR-0009 service name traces"
+    },
+    {
+      "id": "05183d54cea57c",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "architecture layering Domain Api Infrastructure decisions"
+    },
+    {
+      "id": "c2e69f69dc90e8",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "CLAUDE.md invariant summary truncation ai-badger scaffold compaction"
+    },
+    {
+      "id": "ddf743843d1bca",
+      "family": "sig_real_query",
+      "cls": 0,
+      "text": "repo tooling is TypeScript on Bun ADR-0054 script conversion decision"
+    },
+    {
+      "id": "e18c081ec1997b",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "- i will fill diff now, \n- that is the shape of the options with oauth:   \"MonitorChannels\": {\n    \"Gmail\": {\n      \"Schedule\": \"0 */15 * * * *\",\n      \"UserId\": \"user-1\",\n      \"OAuth\": {\n        \"ClientId\": \"REPLACE_ME-000000000000.apps.googleusercontent.com\",\n        \"RedirectUri\": \"http://localhost:5173/settings/gmail/callback\"\n      },\n      \"Transport\": {\n        \"ClientId\": \"REPLACE_ME-000000000000.apps.googleusercontent.com\"\n      }\n    }\n  },"
+    },
+    {
+      "id": "896ab4c4f83616",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "f: lets bump the version to 1.3.0"
+    },
+    {
+      "id": "12830416ef94e6",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "update PR content in meantime https://github.com/Arasz/job-search-ai-assistant/pull/84"
+    },
+    {
+      "id": "c3bc8edf772ef6",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "when finished with T19, continue with https://github.com/Arasz/job-search-ai-assistant/issues/86 - T19.1"
+    },
+    {
+      "id": "3e62a9b397ffe1",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "continue with phase 3 after 2"
+    },
+    {
+      "id": "dc6063879c91a0",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "research report first, then start on the og:image"
+    },
+    {
+      "id": "a870f94e905cc7",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "update the PR with changes: https://github.com/Arasz/job-search-ai-assistant/pull/103"
+    },
+    {
+      "id": "4a24eec92d50d8",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "remove mcp apps article"
+    },
+    {
+      "id": "34c8e7471df184",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "when copilot returns no more comments, merge the PR"
+    },
+    {
+      "id": "fffae7023d57e0",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "Stop hook feedback:\n2 agent instruction file(s) over the size budget (17000 chars / 170 lines): HERMES.md (11081 chars / 185 lines); .hermes.md (11081 chars / 185 lines). Compact them: drop anything derivable from code/git/docs \u2014 per-task state belongs in .ai-badger/state.json, not here. These files are generated, so edits to them are lost on the next re-scaffold: shorten the source in .ai-badger/, decline catalog items via exclude in config.json, or raise the budget there with \"agentDocs\": {\"maxChars\": N, \"maxLines\": N}."
+    },
+    {
+      "id": "f682fad08ad0f2",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "f: i fixed src/AiRaccoon.Infrastructure/Embedding/OnnxEmbeddingGenerator.cs on main"
+    },
+    {
+      "id": "cefaec7cbdc888",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "- note The \u00a72 caveat is the one I'd most want you to read: the key is verified, but LlmClassificationStage now swallows every exception, so a green orchestration no longer proves the LLM works \u2014 which is why answering your question at all took an AppHost boot and an inference from a stored validation record. it as a bug that needs a design (we dont want to be stuck in infinite loop as before and we dont want ucaught exception but also we want to fail a pipeline - probably we could use context to store failure and act on it) to the .tmp/reports/2026-07-31-what-the-run-taught-us.md"
+    },
+    {
+      "id": "0c5eca960aae15",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "we got new copilot review https://github.com/Arasz/job-search-ai-assistant/pull/93"
+    },
+    {
+      "id": "53b82c589825de",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "continue, restart all agents"
+    },
+    {
+      "id": "49d3a30b4b75c0",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "You were interrupted (likely a usage limit) while working on task aspire via the /task skill. First run `python3 /Users/arasz/RiderProjects/job-search-ai-assistant/.ai-badger/skills/task/scripts/task_tracker.py reattach aspire` so tracking follows this session, then review where the transcript left off and continue the /task workflow. When the task is complete, follow the skill's finish protocol (update .ai-badger/state.json, then `python3 /Users/arasz/RiderProjects/job-search-ai-assistant/.ai-badger/skills/task/scripts/task_tracker.py finish aspire`)."
+    },
+    {
+      "id": "8513666756f0d2",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "f: lets leave it (OTLP), pr merged"
+    },
+    {
+      "id": "11158213f3569a",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "I filled in both secrets, run terraform plan"
+    },
+    {
+      "id": "07cd6830cfccec",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "there should be opus 5 available - i want you to make checkpoint - i need to restart session"
+    },
+    {
+      "id": "96ee3ff5e771d8",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "https://github.com/Arasz/job-search-ai-assistant/pull/104 - merged"
+    },
+    {
+      "id": "60c99091e27992",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "[Image: original 2146x2558, displayed at 1678x2000. Multiply coordinates by 1.28 to map to original image.]"
+    },
+    {
+      "id": "3ebe8019c069ab",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "f: lets start sub agent that will fix issues with skills:\n- align 10/10 skill bar to the left with the rest of it\n- remove ef core (can add databases with the postgres as a focus point into the infra)\n- add react\n- extend dotnet with asp.net\n- CI/CD should meantion GH actions and jenkins"
+    },
+    {
+      "id": "5e44f8c6949f55",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "i also like A, but I would also like the same type of explanation on gross/net select or when setting up the value (monthly/ gross), they dont need to use the same presentation, but we should use the same value (some function that returns string for (gross/net, b2b/uop))?\nalso - we should color code info about compensation in recomendation, it should be the same color style as tags, but i think UI would gain"
+    },
+    {
+      "id": "fd038c17925dd2",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "i want you to use den-refresh skill from .ai-badger, also create issue if this dosent solve the skills visibility problem in claude"
+    },
+    {
+      "id": "7c6c3a1bb2dd20",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "PR merged: https://github.com/Arasz/ai-badger/pulls"
+    },
+    {
+      "id": "e35aee51240807",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "- do claude uses the agetns/*.md ? If yes then lets do that, but start from fixing all issues"
+    },
+    {
+      "id": "bcc1b1063a171a",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "what about current PR?"
+    },
+    {
+      "id": "c427f2ac92c25c",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "continue after limit hit"
+    },
+    {
+      "id": "6dea7549b75a36",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "f: 69 - added to Production enviroment, just update docs and issues that can't be resolved lets mark with label blocked and comment why"
+    },
+    {
+      "id": "16e38fb8e7b8eb",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "Run `python3 /Users/arasz/RiderProjects/job-search-ai-assistant/.ai-badger/skills/task/scripts/task_tracker.py reattach 167` first, then continue the /task workflow."
+    },
+    {
+      "id": "9200274c0d26dd",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "f: also lets do a separate PR with update to RELEASING.md\nREADME.md\nSECURITY.md, especially security"
+    },
+    {
+      "id": "f5d8ff0910299e",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "good call, lets do that"
+    },
+    {
+      "id": "ad559e703834f3",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "Continue working on docs/plans/2026-07-26-remediation-plan.md, WAVE-1 was merged to main"
+    },
+    {
+      "id": "16a75107bf0a85",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "merge those two when they're done"
+    },
+    {
+      "id": "24b2c82aaff970",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "- merge all that are green https://github.com/Arasz/ai-raccoon/pulls"
+    },
+    {
+      "id": "9ee863244f3878",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "start the watch for the review form"
+    },
+    {
+      "id": "b3c429b40807a3",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "analyze feedback from https://github.com/Arasz/job-search-ai-assistant/pull/85#issuecomment-4963364259"
+    },
+    {
+      "id": "63179b786ba524",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "f: integrate changes from #215, if something is for ai-badger - create PR to the upstream, for external - can we remove the guard to not duplicate features?"
+    },
+    {
+      "id": "e2bbe030a74e61",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "f: \n- ts version exists\n- lets run sub agent that will compose and review s0, s1... int one plan"
+    },
+    {
+      "id": "b56acdbf152ddd",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "f: we will make a PR to the ai-badger with the expected adjustemnts, lets take care of that"
+    },
+    {
+      "id": "b790f049dbd617",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "merge it when green, then dispatch wave 0"
+    },
+    {
+      "id": "3ab8cdd004b6a4",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "OR-5: remove monitoring, channels is enough \nOR-7: disposition\nOR-9: its safe, we can do that\n\n- i checked out main, lets start from there, check main state before dispatch, use isolated worktress"
+    },
+    {
+      "id": "5c95ee8d166bf5",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "push both and merge when green"
+    },
+    {
+      "id": "ae9c99afdd513f",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "+ \"AzureWebJobsStorage\"                                        = null\n            # (69 unchanged elements hidden)\n        }\n        id"
+    },
+    {
+      "id": "388251b9b1aa13",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "looks good, I will leave you to delegate and ship everything"
+    },
+    {
+      "id": "35aa922514560d",
+      "family": "sig_user_prompt",
+      "cls": 0,
+      "text": "- lets use artifact with markdown copy (or generated HTML file with the same interface as a fallback), update the skill differentiall to use it, also we could extract it to the new skill - lets do that with the subagent and superpowers write skill - create-refiment-document, it will contain all info needed to create a local HTML that will format the responses to markdown and save next to it, then in skill will be instruction to clear the form. Skill should have template defined for HTML doc and result file, if possible, pre create file, run watch on it so you can auto fetch response)"
+    },
+    {
+      "id": "155577caab9a22",
+      "family": "build_dotnet",
+      "cls": 1,
+      "text": "/Users/arasz/RiderProjects/job-search-ai-assistant/.tmp/wt-evidence/tests/JobSearchAiAssistant.Domain.Tests/ChannelMonitoring/Classification/KnownSourceClassificationStageTests.cs(153,30): error CS9035: Required member 'SourceEnrichment.EvidenceKind' must be set in the object initializer or attribute constructor. [/Users/arasz/RiderProjects/job-search-ai-assistant/.tmp/wt-evidence/tests/JobSearchAiAssistant.Domain.Tests/JobSearchAiAssistant.Domain.Tests.csproj]"
+    },
+    {
+      "id": "6efb93295895ec",
+      "family": "build_dotnet",
+      "cls": 1,
+      "text": "--- remaining builds/nodes ---\n       2\n--- load ---\n14:37  up 19:27, 1 user, load averages: 73.16 75.69 77.99"
+    },
+    {
+      "id": "d1cb56624f14c8",
+      "family": "build_dotnet",
+      "cls": 1,
+      "text": "/Users/arasz/RiderProjects/job-search-ai-assistant/tests/JobSearchAiAssistant.Api.Tests/Applications/Salary/SalaryValidatorTests.cs(58,13): error CS0117: 'ComputeCompensationReque"
+    },
+    {
+      "id": "96d4e9d5d2280d",
+      "family": "build_dotnet",
+      "cls": 1,
+      "text": "Command was manually backgrounded by user with ID: bz8jbbk4x. Output is being written to: /private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/99e91471-e89b-4f30-943b-29bd2e8d0174/tasks/bz8jbbk4x.output"
+    },
+    {
+      "id": "652572cc3592d4",
+      "family": "build_dotnet",
+      "cls": 1,
+      "text": "sticky rule migrated"
+    },
+    {
+      "id": "d90b180531b556",
+      "family": "build_dotnet",
+      "cls": 1,
+      "text": "JobSearchAiAssistant.Testing -> /Users/arasz/RiderProjects/job-search-ai-assistant/tests/JobSearchAiAssistant.Testing/bin/Debug/net10.0/JobSearchAiAssistant.Testing.dll"
+    },
+    {
+      "id": "02edd57457ae5a",
+      "family": "build_dotnet",
+      "cls": 1,
+      "text": "/Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/test-suite-refactor-0814/tests/AiR"
+    },
+    {
+      "id": "5ff600c805412e",
+      "family": "build_dotnet",
+      "cls": 1,
+      "text": "Tests 123 passed (123)"
+    },
+    {
+      "id": "b2d098271d7856",
+      "family": "build_dotnet",
+      "cls": 1,
+      "text": "packing 1.1.3-local.302d67a from main\n  Successfully created package '/Users/arasz/RiderProjects"
+    },
+    {
+      "id": "47ebfe22e2f513",
+      "family": "build_npm",
+      "cls": 1,
+      "text": "[8/8] [chromium] \u203a e2e/section-nav.spec.ts:52:7 \u203a blog contact CTA \u203a lands on the contact section, not part-way down the page"
+    },
+    {
+      "id": "5c01999fe3324b",
+      "family": "build_npm",
+      "cls": 1,
+      "text": "[49/51] [chromium] \u203a e2e/smoke.spec.ts:45:7 \u203a Smoke Tests - Page Rendering \u203a should render footer"
+    },
+    {
+      "id": "9b4554cfa29dc3",
+      "family": "build_npm",
+      "cls": 1,
+      "text": "> ng build\n\n\u276f Building...\n\u2714 Building...\nInitial chunk files   | Names"
+    },
+    {
+      "id": "6e0cab2040031c",
+      "family": "build_npm",
+      "cls": 1,
+      "text": "NODE[color-contrast]: .hero-panel__field.hero-panel__field--visible[_ngcontent-ng-c"
+    },
+    {
+      "id": "9a8e3c7fe232d1",
+      "family": "build_npm",
+      "cls": 1,
+      "text": "initial charts= 0 placeholders= 9\nafter scroll charts= 0 placeholders= 9\napex canvas= 0\n  1 passed (50.3s)\nShell cwd was reset to /Users/arasz/RiderProjects/arasz-home-page"
+    },
+    {
+      "id": "beb55679665607",
+      "family": "build_npm",
+      "cls": 1,
+      "text": "6 passed (34.8s)\nShell cwd was reset to /Users/arasz/RiderProjects/arasz-home-page"
+    },
+    {
+      "id": "fcaf03f60b5d5e",
+      "family": "build_npm",
+      "cls": 1,
+      "text": "Exit code 126"
+    },
+    {
+      "id": "152f15d966ea24",
+      "family": "build_npm",
+      "cls": 1,
+      "text": "npm warn EBADENGINE Unsupported engine {\nnpm warn EBADENGINE   package: 'araszme@0.0.1',\nnpm warn EBADENGINE   requir"
+    },
+    {
+      "id": "3cde05e0e1684f",
+      "family": "build_npm",
+      "cls": 1,
+      "text": "Command running in background with ID: b251bmren. Output is being written to:"
+    },
+    {
+      "id": "5774ae386790f1",
+      "family": "cli_docker",
+      "cls": 1,
+      "text": "storage-hrhbqaxb Up 10 seconds 127.0.0.1:32894->10000/tcp, 127.0.0.1:32895->10001/tcp, 127.0.0.1:32896->10002/tcp"
+    },
+    {
+      "id": "35e1efbb68cff0",
+      "family": "cli_docker",
+      "cls": 1,
+      "text": "Exit code 143\nCommand timed out after 2m 0s\nContinuing poll...\n[15s] docker up, cosmos TLS http=000\n[30s] docker up, cosmos TLS http=000\n[45s] docker up, cosmos TLS"
+    },
+    {
+      "id": "663e95abdff467",
+      "family": "cli_docker",
+      "cls": 1,
+      "text": "REPOSITORY TAG DIGEST IMAGE ID CREATED SIZE"
+    },
+    {
+      "id": "69ed79c1d97a05",
+      "family": "cli_docker",
+      "cls": 1,
+      "text": "5115 gone\n=== any AppHost left ===\n=== dcp procs ===\n5802\n5218\n5211\n5203\n5202\n=== 8081 ===\n=== containers ===\nvibrant_moore\tUp 2 hours\npedantic_ramanujan\tUp 2 hours\nsilly_tharp\tUp 10 hours\nintellige"
+    },
+    {
+      "id": "880048b75af1f4",
+      "family": "cli_docker",
+      "cls": 1,
+      "text": "Exit code 35\n Container scripts-azurite-1 Stopping \n Container scripts-cosmosdb-1 Stopping \n Container scripts-cosmosdb-1 Stopped \n Contai"
+    },
+    {
+      "id": "25172d5923c29d",
+      "family": "cli_docker",
+      "cls": 1,
+      "text": "=== guard exit behavior ==="
+    },
+    {
+      "id": "42e855b2ca368c",
+      "family": "cli_docker",
+      "cls": 1,
+      "text": "Command running in background with ID: bdtm6dywy. Output is being written to: /private/tmp/claude-501/-Users-arasz-RiderProjects-job-search-ai-assistant/c"
+    },
+    {
+      "id": "6fa37c2c61f306",
+      "family": "cli_docker",
+      "cls": 1,
+      "text": "cosmos-qdddxuur Up 13 seconds"
+    },
+    {
+      "id": "9e55f785a56bc2",
+      "family": "cli_docker",
+      "cls": 1,
+      "text": "Container job-search-ai-assistant-cosmosdb-1 Stopping \n Container job-search-ai-assistant-cosmosdb-1 Stopped \n Container job-search-ai-assistan"
+    },
+    {
+      "id": "132fc370e6b6ac",
+      "family": "cli_gh",
+      "cls": 1,
+      "text": "label pass 7s https://github.com/Arasz/job-search-ai-assistant/actions/runs/30675455297/job/91301634217"
+    },
+    {
+      "id": "4d9ae9d45977a8",
+      "family": "cli_gh",
+      "cls": 1,
+      "text": "\u2550\u2550\u2550 275 comments \u2550\u2550\u2550"
+    },
+    {
+      "id": "4d2f554bd8b203",
+      "family": "cli_gh",
+      "cls": 1,
+      "text": "(0 = removed)"
+    },
+    {
+      "id": "b540f187286474",
+      "family": "cli_gh",
+      "cls": 1,
+      "text": "{\"isDraft\":false,\"mergeable\":\"MERGEABLE\",\"state\":\"OPEN\",\"statusCheckRollup\":[{\"__typename\":\"CheckRun\",\"completedAt\":\"2026-07-13T08:53:09Z\",\"conclusion\":\"SUCCESS\",\"detailsUrl\":\"https://github.com/"
+    },
+    {
+      "id": "3be6b3dae88de6",
+      "family": "cli_gh",
+      "cls": 1,
+      "text": "test pass 18s https://github.com/Arasz/job-search-ai-assistant/actions/runs/29236915215/job/86773609921"
+    },
+    {
+      "id": "b16ffb2d032db2",
+      "family": "cli_gh",
+      "cls": 1,
+      "text": "secret scan Run gitleaks/gitleaks-action@v2 2026-07-20T01:32:05.7505924Z event type:"
+    },
+    {
+      "id": "5d670f002a99b1",
+      "family": "cli_gh",
+      "cls": 1,
+      "text": "Command running in background with ID: bxswxpg3f. Output is being written to: /private/tmp/claude-501/-Users-arasz-RiderProjects-job-searc"
+    },
+    {
+      "id": "7f4c631d5fe0df",
+      "family": "cli_gh",
+      "cls": 1,
+      "text": "https://github.com/Arasz/job-search-ai-assistant/issues/230#issuecomment-5019343289\n\u2713 Closed issue Arasz/job-search-ai-assistant#230 (Spike: how should LLM calls carry files (PDF CV"
+    },
+    {
+      "id": "63c134a330666d",
+      "family": "cli_gh",
+      "cls": 1,
+      "text": "https://github.com/Arasz/job-search-ai-assistant/issues/185#issuecomment-5017446899"
+    },
+    {
+      "id": "296423ba65a7cc",
+      "family": "cli_git",
+      "cls": 1,
+      "text": "badger-framework-mascot-and-logo FINISHED started=2026-07-29T05:08:14.731063+00:00 finished=2026-07-29T06:24:38.664612+00:00 tokens=8440464 cacheEff=0.978 grade=-"
+    },
+    {
+      "id": "c4789f79f8cea6",
+      "family": "cli_git",
+      "cls": 1,
+      "text": "branch: task/drop-dead-delegations"
+    },
+    {
+      "id": "a468a3814c9195",
+      "family": "cli_git",
+      "cls": 1,
+      "text": "Saved working directory and index state On chore/state-move-to-saas-continuation-finished: hermes-md-budget-f"
+    },
+    {
+      "id": "a843816dc129dd",
+      "family": "cli_git",
+      "cls": 1,
+      "text": "Command running in background with ID: bb20pl8h7. Output is being written to: /private/tmp/claude-501/-Users-arasz-RiderProjects-job-search-ai-assistant"
+    },
+    {
+      "id": "d07e5daa78054d",
+      "family": "cli_git",
+      "cls": 1,
+      "text": "38325a11 refactor(docs): move the base documents, content unchanged"
+    },
+    {
+      "id": "ff168c13c4aedc",
+      "family": "cli_git",
+      "cls": 1,
+      "text": "work/bdd-flake\n7f2c7aa refactor(store): move the bank's embedding mechanics into EntryEmbedder (WI-8, step 1)\nEve"
+    },
+    {
+      "id": "6d34431f94f232",
+      "family": "cli_git",
+      "cls": 1,
+      "text": "/Users/arasz/RiderProjects/jsaa-worktrees/fix-526-app-transition-meter 8a588205 [fix/526-application-transition-meter-isolation]"
+    },
+    {
+      "id": "675858b34a5eea",
+      "family": "cli_git",
+      "cls": 1,
+      "text": "M  Directory.Packages.props\nA  docs/adr/0011-data-protection-for-user-secrets.md\nM  docs/architecture.md\nM  docs/backlog.md\nM  docs/d"
+    },
+    {
+      "id": "9cbe9e944e21bc",
+      "family": "cli_git",
+      "cls": 1,
+      "text": "=== status ==="
+    },
+    {
+      "id": "77eddd19487c72",
+      "family": "cli_sqlite",
+      "cls": 1,
+      "text": "# Agent plugin instructions"
+    },
+    {
+      "id": "c516beedbd52b5",
+      "family": "cli_sqlite",
+      "cls": 1,
+      "text": "rejected typo (correct): Additional properties are not allowed ('skils' was unexpected)"
+    },
+    {
+      "id": "d5b64eba2390af",
+      "family": "cli_sqlite",
+      "cls": 1,
+      "text": "changelog_entry 39 4.0%"
+    },
+    {
+      "id": "47e601fe1a54d9",
+      "family": "cli_sqlite",
+      "cls": 1,
+      "text": "entries scanned: 15246\nentries with a >=100-char punctuation-and-space-free run: 1\n  7d7ef04fe5  valueLen=  3843  longestRun=123\nShell cwd was reset to /Users/arasz/RiderProjects/ai-raccoon"
+    },
+    {
+      "id": "73be175363b827",
+      "family": "cli_sqlite",
+      "cls": 1,
+      "text": "=== queries that look like process notifications ===\n38\n=== their grades ===\n|25\n2|13\n=== grades of everything else ===\n1|18\n2|127\n3|4"
+    },
+    {
+      "id": "6343bd05e2dea9",
+      "family": "cli_sqlite",
+      "cls": 1,
+      "text": "dated-fact 8 3.094 +0.149"
+    },
+    {
+      "id": "b6620dd371e972",
+      "family": "cli_sqlite",
+      "cls": 1,
+      "text": "schema edit: version-sync index plugin-skills deps docs release paths validate scaffold tdd pytest"
+    },
+    {
+      "id": "b10b0ba7836f22",
+      "family": "cli_sqlite",
+      "cls": 1,
+      "text": "=== which commit introduced version_sync.py / RELEASING.md / manifest provenance ===\n  cache has scripts/version_sync.py"
+    },
+    {
+      "id": "23cae93aa9c4b7",
+      "family": "cli_sqlite",
+      "cls": 1,
+      "text": "=== total ===\n113\n=== event_type distribution ===\nUnknown|53\nMessageNotice|25\nApplicationSent|17\nInterviewInvite|7\nRecruiterMessage|6\nRejection|3\nJobAlert|1\nDataE"
+    },
+    {
+      "id": "a88c30d7b90ea4",
+      "family": "data_json",
+      "cls": 1,
+      "text": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"path\",\n    \"requiredTopics\"\n  ],\n  \"properties\": {\n    \"path\": {"
+    },
+    {
+      "id": "7dd7fabbefa1a2",
+      "family": "data_json",
+      "cls": 1,
+      "text": "\"lines\": 81"
+    },
+    {
+      "id": "05ee1c56b7f4cc",
+      "family": "data_json",
+      "cls": 1,
+      "text": "{\n  \"taskId\": \"analize\",\n  \"title\": \"\",\n  \"branch\": \"\",\n  \"resumeAttempts\": [],\n  \"sessionId\":"
+    },
+    {
+      "id": "0198dc3aae3632",
+      "family": "data_json",
+      "cls": 1,
+      "text": "{\n  \"taskId\": \"T17\",\n  \"state\": \"FINISHED\",\n  \"usage\": {\n    \"inputTokens\": 86,\n    \"outputTokens\": 31604,\n    \"cacheReadTokens\": 13518404,\n    \"cacheCreationTokens\": 48452,\n    \"su"
+    },
+    {
+      "id": "6c2e287ec4614a",
+      "family": "data_json",
+      "cls": 1,
+      "text": "\"mainSessionTotal\": 13598546,"
+    },
+    {
+      "id": "bac7db34e76152",
+      "family": "data_json",
+      "cls": 1,
+      "text": "{\"url\":\"https://api.github.com/repos/Arasz/job-search-ai-assistant/issues/comments/4963364259\",\"html_url\":\"https://github.com/Arasz/job-search-ai-assistant/pull/85#issuecomment-4963364259\",\"issue_url\":\"https:/"
+    },
+    {
+      "id": "d3f9eae7200797",
+      "family": "data_json",
+      "cls": 1,
+      "text": "{\"comments\":[],\"mergeStateStatus\":\"CLEAN\",\"mergeable\":\"MERGEABLE\",\"reviewDecision\":\"\",\"reviews\":[]}"
+    },
+    {
+      "id": "550cd996883b85",
+      "family": "data_json",
+      "cls": 1,
+      "text": "[{\"conclusion\":\"\",\"databaseId\":29308941503,\"headSha\":\"126167b7f65d003354a011c"
+    },
+    {
+      "id": "5fecdfa5eb56d3",
+      "family": "data_json",
+      "cls": 1,
+      "text": "\"contextGrowth\": 315535,"
+    },
+    {
+      "id": "b60fa9869c3443",
+      "family": "data_xml",
+      "cls": 1,
+      "text": "<tool_use_error>Blocked: sleep 120 followed by: tail -10 /private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/6c5c5f76-1503-4fe7-9303-5a81"
+    },
+    {
+      "id": "5d3ddcec1e32e1",
+      "family": "data_xml",
+      "cls": 1,
+      "text": "<tool_use_error>Blocked: sleep 240 followed by: cat /private/tmp/claude-501/-Users-arasz-RiderProjects-job-search-ai-assistant/0f2cbc3e-d127-4268-a67a-f0e8691e9b35/tasks/b3ln6jk"
+    },
+    {
+      "id": "70fae960f4020f",
+      "family": "data_xml",
+      "cls": 1,
+      "text": "<tool_use_error>Blocked: sleep 240 followed by: cat /private/tmp/claude-501/-Users-arasz-RiderProjects-job-search-ai-assistant/0f2cbc3e-d127-4268-a67a-f0e8691e9b35/tasks/b3ln6jkyv.output. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>"
+    },
+    {
+      "id": "df7887ff1b94a4",
+      "family": "data_xml",
+      "cls": 1,
+      "text": "<persisted-output>\nOutput too large (167.7KB). Full output saved to: /Users/arasz/.claude/projects/-Users-arasz-RiderProjects-arasz-home-page/55af2deb-d9b3-4764-bf"
+    },
+    {
+      "id": "3cde03daf44e82",
+      "family": "data_xml",
+      "cls": 1,
+      "text": "<tool_use_error>Blocked: sleep 45 followed by: gh pr checks 110 tail -10. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>"
+    },
+    {
+      "id": "7eed9312a057f0",
+      "family": "data_xml",
+      "cls": 1,
+      "text": "<persisted-output>\nOutput too large (129.8KB). Full output saved to: /Users/arasz/.claude/projects/-Users-arasz-RiderProjects-job-search-ai-assi"
+    },
+    {
+      "id": "82af26e8dc3949",
+      "family": "data_xml",
+      "cls": 1,
+      "text": "<command-message>task</command-message>\n<command-name>/task</command-name>\n<command-args>after-review-w"
+    },
+    {
+      "id": "96e4281e5e839c",
+      "family": "data_xml",
+      "cls": 1,
+      "text": "<tool_use_error>Blocked: sleep 240 followed by: tail -5 /private/tmp/claude-501/-Users-arasz-RiderProjects-ai-badger/793754f7-0b17-409f-b1"
+    },
+    {
+      "id": "8f7848b77be47a",
+      "family": "data_xml",
+      "cls": 1,
+      "text": "<tool_use_error>Blocked: sleep 45 followed by: tail -50 /private/tmp/claude-501/-Users-arasz-RiderProjects-arasz-home-page/f063fe57-b27c-4aaf-969f-9fc0ef3f07ff/tasks/bn4qcls6i.output. To wait for a condition, use M"
+    },
+    {
+      "id": "07520818ff025b",
+      "family": "fs_query",
+      "cls": 1,
+      "text": "1:output \"function_app_name\" {"
+    },
+    {
+      "id": "8fa60ca7b8a71a",
+      "family": "fs_query",
+      "cls": 1,
+      "text": "45: # (state.json freshness), and second-level truncation flips comparisons"
+    },
+    {
+      "id": "f4a9ffbb5bb445",
+      "family": "fs_query",
+      "cls": 1,
+      "text": "142: private async Task SetupWatchWithIngestedAsync(string projectId, string virtualPath"
+    },
+    {
+      "id": "e6dfdc686567ee",
+      "family": "fs_query",
+      "cls": 1,
+      "text": "32:| Vector batch, `project:ai-raccoon`, k=300 | 32.20 ms | **3.05 ms** | KNN + persisted chunk columns, full production column list |\n34:| FTS batch, same conte"
+    },
+    {
+      "id": "1a3324a2b44c6b",
+      "family": "fs_query",
+      "cls": 1,
+      "text": "34:| FTS batch, same context, limit 300 | 41.23 ms | **9.60 ms** | direct join, persisted chunk columns, CTE deleted |"
+    },
+    {
+      "id": "847f8ff243a538",
+      "family": "fs_query",
+      "cls": 1,
+      "text": "tests/JobSearchAiAssistant.Api.Tests/EndToEnd/SignalBodyBindingEndToEndTests.cs"
+    },
+    {
+      "id": "6a667f3e05f1f6",
+      "family": "fs_query",
+      "cls": 1,
+      "text": "pre-push:\n  parallel: true\n  jobs:\n    - name: quality gate\n      tags:\n        - quality\n        - required\n      script: \"verify.ts\"\n      args: pre-push\n      runner: bun\npre-commit"
+    },
+    {
+      "id": "f4bfea1e80250b",
+      "family": "fs_query",
+      "cls": 1,
+      "text": "lib\nverify.ts\n=== verify.ts steps ===\n23:import { frontendE2ePort, logDirFor } from \"./lib/worktree.ts\";\n27:const SELF_ABSOLUTE = import.meta.path;\n29:const TOPLEVEL = captureOrEmpty(["
+    },
+    {
+      "id": "acb7200b2c9823",
+      "family": "fs_query",
+      "cls": 1,
+      "text": "request.ProfileBaseline.Source.ShouldBe(ProfileBaselineSource.ExpectedRangeMid);"
+    },
+    {
+      "id": "96f1300a5b5e5a",
+      "family": "lint",
+      "cls": 1,
+      "text": "Exit code 2\n=== shellcheck (same as CI) ===\n(eval):3: command not found: mapfile\nchecking: \n: : openBinaryFile: does not exist (No suc"
+    },
+    {
+      "id": "f9c733f10dda36",
+      "family": "lint",
+      "cls": 1,
+      "text": ".claude/skills/task/scripts/stop_hook.py:66:23: E1101: Module 'tracker_lib' has no 'over_budget_docs' member (no-member)\nfeatures/common/skills/task/scripts/stop_hook.py:66:23: E1101: Modul"
+    },
+    {
+      "id": "1c0bb863b35dd5",
+      "family": "lint",
+      "cls": 1,
+      "text": "************* Module test_skill_docs\ntests/test_skill_docs.py:109"
+    },
+    {
+      "id": "c3ad03be970d73",
+      "family": "lint",
+      "cls": 1,
+      "text": "Command running in background with ID: bqq3s7xs5. Output is being written to: /private/tmp/claude-501/-Users-arasz-RiderProjects-job-search-ai-assistant/e"
+    },
+    {
+      "id": "5e715efb3d9bc8",
+      "family": "lint",
+      "cls": 1,
+      "text": "Command running in background with ID: bqq3s7xs5. Output is being written to: /private/tmp/claude-501/-Users-arasz-RiderProjects-job-search-ai-assistant/ef1e01f9-5c80-444a-8770-604ef81c6fd5/tasks/bqq3s7xs5.output. You will be notified when it completes. To check interim output, use Read on that file path."
+    },
+    {
+      "id": "45ec53118ec52b",
+      "family": "lint",
+      "cls": 1,
+      "text": "Briefs already generated at .superpowers/sdd/task-{4,5,6}-brief.md.\n- PR3 branches from PR2's merge, NOT from main.\n- 0.2.0 is NOT released until P"
+    },
+    {
+      "id": "4cbc00c09fa4dd",
+      "family": "lint",
+      "cls": 1,
+      "text": "Your code has been rated at 10.00/10 (previous run: 10.00/10, +0.00)\n\nINFO: FTS index rebuilt: 2707 rows indexed\nIncremental: 113 files updated, 0 nodes, 0 edges (postprocess=full)\nAna"
+    },
+    {
+      "id": "00a252ed4d5ab4",
+      "family": "lint",
+      "cls": 1,
+      "text": "remote: \nhttps://github.com/Arasz/ai-badger/pull/123"
+    },
+    {
+      "id": "e4757fddbcdd23",
+      "family": "lint",
+      "cls": 1,
+      "text": "plugin-skills-sync.......................................................Passed"
+    },
+    {
+      "id": "6194f682718969",
+      "family": "net_http",
+      "cls": 1,
+      "text": "READY\n{\"type\":\"https://tools.ietf.org/html/rfc7231#section-6.5.3\",\"title\":\"Forbidden\",\"status\":403,\"detail\":\"The authenticated principal is not the allowed owne"
+    },
+    {
+      "id": "e98bc4dc29303e",
+      "family": "net_http",
+      "cls": 1,
+      "text": "01: HTTP 401\nRECOVERED \u2014 401 means Easy Auth is answering (healthy)"
+    },
+    {
+      "id": "1496f8bbc844fd",
+      "family": "net_http",
+      "cls": 1,
+      "text": "Exit code 143\nCommand timed out after 2m 0s\n[5s] status=running step=tailoring\n[10s] status=running step=tailoring\n[15s] status=running step=tailoring\n[20s] status=running step=tailor"
+    },
+    {
+      "id": "37794eba67cffc",
+      "family": "net_http",
+      "cls": 1,
+      "text": "azurite 127.0.0.1:32903 -> 400\nazurite localhost:32903 -> 400\nlocalhost: CONNECTED\n127.0.0.1: CONNECTED"
+    },
+    {
+      "id": "bb9388874adf96",
+      "family": "net_http",
+      "cls": 1,
+      "text": "- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting"
+    },
+    {
+      "id": "d96849e0832dcd",
+      "family": "net_http",
+      "cls": 1,
+      "text": "=== try SCM deployment log (Kudu may be recycled on Flex) ===\nHTTP 200\n[{\"log_time\":\"2026-07-19T15:54:17.5348776Z\",\"id\":\"62adeeeb-4c8c-4636-8e7a-d6f73a554af5\",\"message\":\"Starting deployment pipeline.\",\"type"
+    },
+    {
+      "id": "a13e19d742734d",
+      "family": "net_http",
+      "cls": 1,
+      "text": "[1] production still on main-UR6HVHLI.js (no analytics yet)\n  [2] production still on main-UR6HVHLI.js (no analytics yet)\n  [3] production still"
+    },
+    {
+      "id": "40961051813934",
+      "family": "net_http",
+      "cls": 1,
+      "text": "8292162944:error:1404B42E:SSL routines:ST_CONNECT:tlsv1 alert protocol version:/AppleInternal/Library/BuildRoots/4~CNqEugB7-7yoTeHDwKLZ0PRIsI79y9XP33qXeIo/Library/Caches/com.apple.xbs/Temporar"
+    },
+    {
+      "id": "3b7564735fec7e",
+      "family": "net_http",
+      "cls": 1,
+      "text": "Compression: NONE"
+    },
+    {
+      "id": "c78b945779d602",
+      "family": "proc_query",
+      "cls": 1,
+      "text": "=== EXIT: 0 ==="
+    },
+    {
+      "id": "70f9dd79f3e66d",
+      "family": "proc_query",
+      "cls": 1,
+      "text": "/Users/arasz/.local/bin/claude\n---\nclaude is /Users/arasz/.local/bin/claude\n---check resume_cron.py's claude invocation---\n71:            [\"claude\", \"-p\", \"Reply with exactly: ok\", \"--model\", PR"
+    },
+    {
+      "id": "2b0e4ff2ebc322",
+      "family": "proc_query",
+      "cls": 1,
+      "text": "2026-07-31T23:23:16Z"
+    },
+    {
+      "id": "11510b8630e8eb",
+      "family": "proc_query",
+      "cls": 1,
+      "text": "Tue Jul 14 09:58:27 CEST 2026"
+    },
+    {
+      "id": "1796b055d0ed10",
+      "family": "proc_query",
+      "cls": 1,
+      "text": "27225 ppid=1 19:59:27 script EXISTS /private/tmp/ai-badger-pr225/features/common/skills/task/scripts/poll_limit.py"
+    },
+    {
+      "id": "7d25155cca9381",
+      "family": "proc_query",
+      "cls": 1,
+      "text": "Tue Jul 14 10:28:15 CEST 2026"
+    },
+    {
+      "id": "d3e40abfb64e44",
+      "family": "proc_query",
+      "cls": 1,
+      "text": "=== remaining listeners on our ports ===\nCOMMAND     PID  USER   FD   TYPE             DEVICE SIZE/OFF"
+    },
+    {
+      "id": "8df9fc73f56338",
+      "family": "proc_query",
+      "cls": 1,
+      "text": "dcp 11519 arasz 32u IPv4 0x1a8155da6f36eda0 0t0 TCP 127.0.0.1:15130 (LISTEN)"
+    },
+    {
+      "id": "f8238b97f6fbc6",
+      "family": "proc_query",
+      "cls": 1,
+      "text": "PID  PPID ELAPSED  %CPU ARGS\n26104     1   32:31   3.6 dotnet dnx Microsoft.AITools.BinlogMcp --yes --prereleas"
+    },
+    {
+      "id": "b5408ec8e5e881",
+      "family": "script_run",
+      "cls": 1,
+      "text": "AWM: forgot /Users/arasz/RiderProjects/ai-badger/fix296.\nrc=0"
+    },
+    {
+      "id": "62ed5edbaba8e7",
+      "family": "script_run",
+      "cls": 1,
+      "text": "{\"ts\": \"2026-08-01T21:21:47+00:00\", \"type\": \"mode_forgotten\", \"detail\": \"project=/Users/arasz/RiderProjects/ai-badger/fix296, forced=False\"}"
+    },
+    {
+      "id": "214f51df2682a6",
+      "family": "script_run",
+      "cls": 1,
+      "text": "Recorded 70412 subagent tokens for T28."
+    },
+    {
+      "id": "551deed19e3dc3",
+      "family": "script_run",
+      "cls": 1,
+      "text": "structure.md subdirectory claim corrected"
+    },
+    {
+      "id": "02fc16cec253ec",
+      "family": "script_run",
+      "cls": 1,
+      "text": "/opt/homebrew/Cellar/python@3.14/3.14.6/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python: can't open file '/Users/arasz/RiderProjects/job-search-ai-assistant/src/frontend/.ai-badger/skills/task/scripts/task_tracker.py': [Errno 2] No such file or directory"
+    },
+    {
+      "id": "e9b59b9e973713",
+      "family": "script_run",
+      "cls": 1,
+      "text": "{\n  \"skill-task-token-usage\": {\n    \"notes\": \"Started as a pure analysis request (grandTotal/cache-read breakdown across T08-T16, correlated against SKILL.md git history) but surfaced 3 real bugs in the /t"
+    },
+    {
+      "id": "3eb3e24c11113c",
+      "family": "script_run",
+      "cls": 1,
+      "text": "REMINDER (SKILL.md Phase 1 step 3): ask the user to run `/rename perf-optimization` now, so this session's label matches the task. Do not skip this silently."
+    },
+    {
+      "id": "26bcd77b51faf9",
+      "family": "script_run",
+      "cls": 1,
+      "text": "wrote /Users/arasz/RiderProjects/ai-badger/.tmp/2026-08-01-session-decisions-review.html\n30222 bytes, 7 decisions"
+    },
+    {
+      "id": "f2c1d02c6964ec",
+      "family": "script_run",
+      "cls": 1,
+      "text": "tests/tooling/cosmos-provisioning.test.ts(22,49): error TS2769: No overload matches this call.\n--- errors: 1 ---\n=== tests still pass? ===\n\n 64"
+    },
+    {
+      "id": "9eea3a55ccfdc4",
+      "family": "test_dotnet",
+      "cls": 1,
+      "text": "https://github.com/Arasz/job-search-ai-assistant/pull/42"
+    },
+    {
+      "id": "857c4b51b32dcb",
+      "family": "test_dotnet",
+      "cls": 1,
+      "text": "Skipped JobSearchAiAssistant.Infrastructure.Tests.CosmosEmulator.CosmosAdjustmentRuleRepositoryContractTests.Data_saved_for_one_user_is_invisible_to_another [1 ms]\n\nPassed!  - Failed:     0, Passed:   410, Skipped:     0"
+    },
+    {
+      "id": "bd51fea84d0b1b",
+      "family": "test_dotnet",
+      "cls": 1,
+      "text": "Failed! - Failed: 10, Passed: 0, Skipped: 0, Total: 10, Duration: 1 s - AiRaccoon.Tests.dll (net10.0)"
+    },
+    {
+      "id": "3bc8a686ae69df",
+      "family": "test_dotnet",
+      "cls": 1,
+      "text": "--- a/tests/JobSearchAiAssistant.Domain.Tests/Ranking/RankersTests.cs"
+    },
+    {
+      "id": "327d9727131c52",
+      "family": "test_dotnet",
+      "cls": 1,
+      "text": "M .github/copilot-instructions.md\n M CLAUDE.md\n M Directory.Packages.props\n M docs/architecture.md\n M docs/data-model.md\n M src/JobSearchAiAssistant.Domain/JobSearchAiAssistant.Domain.csproj\n M tes"
+    },
+    {
+      "id": "ff5169dd8af2b7",
+      "family": "test_dotnet",
+      "cls": 1,
+      "text": "JobSearchAiAssistant.Api.Tests -> /Users/arasz/RiderProjects/job-search-ai-assistant/tests/JobSearchAiAssistant.Api.Tests/bin/Debug/net10.0/JobSearchAiAssistant.Api.Tests.dll"
+    },
+    {
+      "id": "408d80b3034754",
+      "family": "test_dotnet",
+      "cls": 1,
+      "text": "Test run for /Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/ttl-reaper-and-provenance/tests/AiRaccoon.Tests/bin/Debug/net10.0/AiRacc"
+    },
+    {
+      "id": "a3bd1adae96863",
+      "family": "test_dotnet",
+      "cls": 1,
+      "text": "[xUnit.net 00:00:12.01] JobSearchAiAssistant.Infrastructure.Tests.Documents.Pdf.QuestPdfCvRendererVisualTests.Render_SampleCv_WritesPdfToOutputForVisualReview [SKIP]"
+    },
+    {
+      "id": "f23479975ebdb4",
+      "family": "test_dotnet",
+      "cls": 1,
+      "text": "A total of 1 test files matched the specified pattern.\n\nPassed!  - Failed:"
+    },
+    {
+      "id": "b55d8b35585fe2",
+      "family": "test_js",
+      "cls": 1,
+      "text": "spec updated"
+    },
+    {
+      "id": "42998e2a5d14a8",
+      "family": "test_js",
+      "cls": 1,
+      "text": "Command did not complete within its 180s timeout and was moved to the background (ID: bpxigt2v4). Output is being written to: /private/tmp/claude-501/-Users-arasz-RiderProjects-arasz-home-page/55af2deb-d9b3-4764-bfb9-180eb18670e6/tasks/bpxigt2v4.output. You will be notified when it completes. To check interim output, use Read on that file path."
+    },
+    {
+      "id": "22ae0226c87bbb",
+      "family": "test_js",
+      "cls": 1,
+      "text": "-rw-r--r--@ 1 arasz  staff  20289 Jul 27 17:29 app/compensation/compensation-panel.tsx\n=== vitest related --run app/compensation/compensation-panel.tsx ===\n\n RUN  v4.1.10 /Users/arasz/RiderProjects/job-"
+    },
+    {
+      "id": "878d02a6405838",
+      "family": "test_js",
+      "cls": 1,
+      "text": "Command running in background with ID: ba1l1i6n5. Output is being written to: /private/tmp/claude-501/-Users-arasz-RiderProjects-arasz-home-page/c2a7084a-81e7-"
+    },
+    {
+      "id": "3a346f5f3f5444",
+      "family": "test_js",
+      "cls": 1,
+      "text": "Command running in background with ID: ba1l1i6n5. Output is being written to: /private/tmp/claude-501/-Users-arasz-RiderProjects-arasz-home-page/c2a7084a-81e7-4074-8f02-0732081a7da1/tasks/ba1l1i6n5.output. You will be notified when it completes. To check interim output, use Read on that file path."
+    },
+    {
+      "id": "fb8dc491adf1fb",
+      "family": "test_js",
+      "cls": 1,
+      "text": "Recorded 118612 subagent tokens for T21.\nFrom https://github.com/Arasz/job-search-ai-assistant\n *"
+    },
+    {
+      "id": "2979fcf005c1f2",
+      "family": "test_js",
+      "cls": 1,
+      "text": "\u001b[32m\u2713\u001b[39m \u001b[30m\u001b[43m araszme \u001b[49m\u001b[39m src/app/services/github-stats/github-stats.service.spec.ts \u001b[2m(\u001b[22m\u001b[2m6 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 8\u001b[2mms\u001b[2"
+    },
+    {
+      "id": "663201a6080e82",
+      "family": "test_js",
+      "cls": 1,
+      "text": "npm error Missing script: \"test:single\"\nnpm error\nnpm error To see a list of scripts, run:\nnpm error   npm run\nnpm error A complete log of this run can be found in: /Use"
+    },
+    {
+      "id": "a8ae3160e4dd48",
+      "family": "test_js",
+      "cls": 1,
+      "text": "\u2022 GET http://localhost:7071/api/user-configuration/compensation/profile"
+    },
+    {
+      "id": "f0b4e94619b060",
+      "family": "test_pytest",
+      "cls": 1,
+      "text": "=== gates ==="
+    },
+    {
+      "id": "6105ec4a5a5ed3",
+      "family": "test_pytest",
+      "cls": 1,
+      "text": "65 passed in 3.00s"
+    },
+    {
+      "id": "160ae67f5d449b",
+      "family": "test_pytest",
+      "cls": 1,
+      "text": "......................................................................"
+    },
+    {
+      "id": "6c2854b5fc5226",
+      "family": "test_pytest",
+      "cls": 1,
+      "text": "E   AttributeError: module 'ai_raccoon_client_test' has no attribute '_unwrap'\n/Users/arasz/R"
+    },
+    {
+      "id": "bd3e9462485a08",
+      "family": "test_pytest",
+      "cls": 1,
+      "text": "=== restored, re-verify ==="
+    },
+    {
+      "id": "989385b3f1020c",
+      "family": "test_pytest",
+      "cls": 1,
+      "text": "Command was manually backgrounded by user with ID: bnnnxt8u5. Output is being written to: /private/tmp/claude-501/-Users"
+    },
+    {
+      "id": "1603fcc413d3ca",
+      "family": "test_pytest",
+      "cls": 1,
+      "text": "Command was manually backgrounded by user with ID: bnnnxt8u5. Output is being written to: /private/tmp/claude-501/-Users-arasz-RiderProjects-ai-badger/46d88f82-ba5a-4aa8-a962-7e115b65eed4/tasks/bnnnxt8u5.output"
+    },
+    {
+      "id": "35173d74dad9e9",
+      "family": "test_pytest",
+      "cls": 1,
+      "text": "drift containment added\n..........................................."
+    },
+    {
+      "id": "bfc4a11366a50f",
+      "family": "test_pytest",
+      "cls": 1,
+      "text": "8 SUCCESS"
+    },
+    {
+      "id": "02b6098e064a99",
+      "family": "trace_dotnet",
+      "cls": 1,
+      "text": "0 Error(s)\n\nTime Elapsed 00:00:05.38\n     at JobSearchAiAssistant.Domain.Tests.GeneratedCvs.CvPdfBlobPathTests.Language_is_trimm"
+    },
+    {
+      "id": "ee9285bc794857",
+      "family": "trace_dotnet",
+      "cls": 1,
+      "text": "1 Warning(s)\n    0 Error(s)\n\nTime Elapsed 00:00:02.61\nTest run for /Users/arasz/RiderProjects/j"
+    },
+    {
+      "id": "a53b589712a87b",
+      "family": "trace_dotnet",
+      "cls": 1,
+      "text": "at AiRaccoon.Tests.Unit.Embedding.PoolClearingProbe.MemoryOwnerRentalIsZeroed() in /Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/perf-optimization/tests/AiRaccoon.Tests/Unit/Embedding/PoolClearingProbe.cs:line 30"
+    },
+    {
+      "id": "dbbf1b7d6a9420",
+      "family": "trace_dotnet",
+      "cls": 1,
+      "text": "Failed AiRaccoon.Tests.Unit.Mcp.MemoryToolsTests.Get_ReturnsFullValue_ForAKnownHash [1 ms]\n  Error Message:"
+    },
+    {
+      "id": "078d17804cf51e",
+      "family": "trace_dotnet",
+      "cls": 1,
+      "text": "Failed JobSearchAiAssistant.Api.Tests.CvTemplates.Import.CvImportParserTests.Appends_each_supporting_document_as_its_own_labeled_content_part_naming_its_type_in_order [34 ms]"
+    },
+    {
+      "id": "9343fa4176a2be",
+      "family": "trace_dotnet",
+      "cls": 1,
+      "text": "at JobSearchAiAssistant.Infrastructure.Tests.Support.AppHostLocalDevWiringTests.Api_exports_telemetry_to_the_aspire_dashboard() in /Users/arasz/RiderProjects/jsaa-e2e-fe"
+    },
+    {
+      "id": "9553170a3a2ac2",
+      "family": "trace_dotnet",
+      "cls": 1,
+      "text": "--- End of stack trace from previous location ---"
+    },
+    {
+      "id": "19e4a92f6d9e8a",
+      "family": "trace_dotnet",
+      "cls": 1,
+      "text": "Test run for /Users/arasz/RiderProjects/job-search-ai-assistant/tests/JobSearchAiAssistant.Api.Tests/bin/Debug/net10.0/JobSearchAiAssistant.Api.Tests.dll (.NETCoreApp,Version=v10.0)\nA total of 1 test files"
+    },
+    {
+      "id": "49e495ae9a7849",
+      "family": "trace_dotnet",
+      "cls": 1,
+      "text": "Failed! - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 121 ms - JobSearchAiAssistant.Api.Tests.dll (net10.0)"
+    },
+    {
+      "id": "94c9f1108e4973",
+      "family": "trace_node",
+      "cls": 1,
+      "text": "^\n\nlocator.scrollIntoViewIfNeeded: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for loca"
+    },
+    {
+      "id": "396b49da769c8e",
+      "family": "trace_node",
+      "cls": 1,
+      "text": "(fail) a nested docs/ directory is not the docs tree > scripts/docs/changelog.ts is tooling, not a documentation reference [3.97ms]"
+    },
+    {
+      "id": "37f3b1b41dc8d6",
+      "family": "trace_node",
+      "cls": 1,
+      "text": "at <anonymous> (/Users/arasz/RiderProjects/job-search-ai-assistant/.ai-badger/worktrees/fix-backend-auth/tests/tooling/terraform-backend-auth.test.ts:37:22)"
+    },
+    {
+      "id": "9c28dafa299964",
+      "family": "trace_node",
+      "cls": 1,
+      "text": "Received: \"\\n if: vars.TF_AZURE_ENABLED == 'true'\\n run: >-\\n \""
+    },
+    {
+      "id": "07a17f8cee13a1",
+      "family": "trace_node",
+      "cls": 1,
+      "text": "at <anonymous> (/Users/arasz/RiderProjects/job-search-ai-assistant/.tmp/wt-docs/tests/tooling/change-classification.test.ts:154:8)"
+    },
+    {
+      "id": "160bedcf6519e7",
+      "family": "trace_node",
+      "cls": 1,
+      "text": "350 |     const markdown = `---\\nmodality: normative\\n---\\n\\n# ADR-0069: Something\\n\\n${existing}`;\n351 |     expect(codesOf(index"
+    },
+    {
+      "id": "2f678b67c047ad",
+      "family": "trace_node",
+      "cls": 1,
+      "text": "(fail) the drain gate > a processedto target that does not exist blocks the drain [0.76ms]"
+    },
+    {
+      "id": "469f222435914b",
+      "family": "trace_node",
+      "cls": 1,
+      "text": "[WebServer] $ vite --port \"5185\" --strictPort\n\n\nRunning 1 test using 1 worker\n\n[1/1] [chromium] \u203a e2e/compensation.spec.ts:"
+    },
+    {
+      "id": "1808c7826a6b4b",
+      "family": "trace_node",
+      "cls": 1,
+      "text": "at file:///Users/arasz/RiderProjects/job-search-ai-assistant/.claude/worktrees/agent-af5366465354507d6/src/frontend/node_modules/vitest/dist/chunks/cli-api.BK8pd4xc.js:11378:23"
+    },
+    {
+      "id": "eb87d84f504be5",
+      "family": "trace_python",
+      "cls": 1,
+      "text": "config -> 404\nconfiguration -> 404\nuser/config -> 404\nTraceback (most recent"
+    },
+    {
+      "id": "b55126eeec1bd4",
+      "family": "trace_python",
+      "cls": 1,
+      "text": "added 3 combined-flag DENY probes\nTraceback (most recent call last):\n  File \"<stdin>\", line 32, in <module>\nAssertionError: runner call site not found\nPASS  fail-open: cross_worktree_dirty_warning on '[1, 2,"
+    },
+    {
+      "id": "c6dc05c0c35f1c",
+      "family": "trace_python",
+      "cls": 1,
+      "text": "File \"<stdin>\", line 36, in bench"
+    },
+    {
+      "id": "5ca15e36b84a02",
+      "family": "trace_python",
+      "cls": 1,
+      "text": "16- fetch-depth: 0"
+    },
+    {
+      "id": "79f3532f0cbb21",
+      "family": "trace_python",
+      "cls": 1,
+      "text": "Exit code 1\njson.decoder.JSONDecodeError: Expecting property name enclosed in double quotes: line 3 colum"
+    },
+    {
+      "id": "ac8ed12f7c3d93",
+      "family": "trace_python",
+      "cls": 1,
+      "text": "scored rows: 13286"
+    },
+    {
+      "id": "116a3ddcfa9db8",
+      "family": "trace_python",
+      "cls": 1,
+      "text": "Exit code 1\nTraceback (most recent call last):\n  File \"<string>\", line 4, in <module>\n    t=d.get('ta1')\n      ^^^^^\nAttrib"
+    },
+    {
+      "id": "702bd7df52885e",
+      "family": "trace_python",
+      "cls": 1,
+      "text": "Exit code 1\nTraceback (most recent call last):\n  File \"<stdin>\", line 4, in <module>\nFileNotFoundError: [Errno 2] N"
+    },
+    {
+      "id": "b9b16c3eab3895",
+      "family": "trace_python",
+      "cls": 1,
+      "text": "=== uv-tool ===\n \u2713 MCP server started (pid 16564)  0.0s\nTraceback (most recent call last):\n  File \"/Users/arasz/.local/share/uv/tools/semantica/lib/py"
+    }
+  ]
+}
