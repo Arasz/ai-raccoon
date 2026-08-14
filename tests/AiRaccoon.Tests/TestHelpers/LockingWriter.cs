@@ -26,6 +26,15 @@ public sealed class LockingWriter : TextWriter
         }
     }
 
+    /// <summary>Without this the base class falls back to one locked Write(char) per character.</summary>
+    public override void Write(char[] buffer, int index, int count)
+    {
+        lock (_lock)
+        {
+            _buffer.Append(buffer, index, count);
+        }
+    }
+
     public override void WriteLine(string? value)
     {
         lock (_lock)
@@ -33,6 +42,9 @@ public sealed class LockingWriter : TextWriter
             _buffer.AppendLine(value);
         }
     }
+
+    /// <summary>Reads under the write lock; a StringWriter torn by a live writer throws instead.</summary>
+    public string Snapshot() => ToString();
 
     public override string ToString()
     {
