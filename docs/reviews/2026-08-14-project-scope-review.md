@@ -260,5 +260,5 @@ Routed as a decision list; each needs one ruling. Marked ● where work is block
 - **`FilterFor` has four other callers** that were not enumerated for untrusted context strings.
 - **S3 conditional-write support is unverified** — all conflict tests use a fake, and an endpoint that ignores `If-Match` silently degrades CAS to last-writer-wins.
 - **Windows behaviour is untested** anywhere, and `UnixFileMode` is POSIX-only.
-- **Whether the ADR `Status:` staleness extends beyond 0013/0029/0030** — not swept across all 50+.
+- ~~Whether the ADR `Status:` staleness extends beyond 0013/0029/0030~~ — **closed by the orchestrator.** Swept every ADR the index records as superseded or reversed: exactly one (ADR-0002) self-updates correctly; **four** still read `Accepted` — 0013, 0029, 0030 and **0033**, the last of which the lane did not find. Three different Status header formats are in play, which is why no existing check catches it. See the plan's WP17 for the derived gate.
 - **Whether the 2026-08-12 silent nightly failure was ever noticed** — no issue or commit references it.

@@ -333,7 +333,25 @@ measured a 0.070 nDCG spread across host CPUs against a 5e-3 tolerance, and ADR-
 fixture-pinning workaround it forced. Six RIDs ship with no PR gate on four of them. *Owner question 15.*
 
 ### WP17 · Documentation and decision-record truth
-- ADR-0013, ADR-0029, ADR-0030 still say `Status: Accepted` in their own files while the index correctly records them superseded or reversed. A reader who opens them directly sees a live-sounding decision describing code that no longer exists. ADR-0002 already has the right pattern.
+- **Stale `Status:` fields — swept exhaustively by the orchestrator, closing the lane's open item and finding a fourth.** Of every ADR the index records as superseded or reversed, exactly one (**ADR-0002**) self-updates correctly (`Status: **Superseded** — 2026-08-09. Superseded in parts by ADR 0008…`). Four still read `Accepted` in their own files:
+
+  | ADR | What the index says | What the file says |
+  |---|---|---|
+  | 0013 | "supersedes ADR-0013 in full" (via 0016) | `Status: Accepted` |
+  | 0029 | "superseded in part by ADR-0033 and ADR-0039" | `## Status` → `Accepted` |
+  | 0030 | "reversed by ADR-0034, which found the assignment never reached the database" | `## Status` → `Accepted` |
+  | **0033** | "superseded by ADR-0039, which restores the substrate without a scoring model" | `## Status` → `Accepted` — **the lane did not find this one** |
+
+  A reader who opens 0029 or 0030 directly sees a live-sounding decision describing a filter and a TTL
+  policy that no longer exist in `src/`, with no forward pointer at all — and `docs/adr/README.md:3-4`
+  calls ADRs "immutable, frozen", so the index is not where a reader is taught to look.
+
+  **Gate — and this one is mechanizable.** `tests/AiRaccoon.Tests/Unit/Docs/AdrIndexTests.cs` is already
+  a derived guard comparing disk against the index. Extend it: any ADR whose index row contains
+  "supersed" or "revers" must not read `Accepted` in its own Status. Break it by reverting ADR-0002's
+  Status line and watch it go red. Note the three header formats in play (`## Status\nAccepted`,
+  `Status: Accepted`, `Status: **Superseded** — …`) — the check must tolerate all three or the
+  normalisation becomes a fourth source of drift.
 - `SECURITY.md`: correct the tool count, correct "`ro` mode allows only reads" (search writes `access_count`, `last_accessed_at` and `rating`, including on shared rows), and add exception messages and stack traces to the "what leaves the process" table — OTLP export ships absolute filesystem paths today.
 - ADR-0043's "Known gap" describes a defect that `ServerRestart.cs:160` has since closed.
 - ADR-0048 claims "a chunk is a well-formed markdown fragment"; what it delivers is fence balance. A 200-row table splits with 33 of 34 chunks carrying orphaned body rows. Narrow the claim or widen the guarantee.
