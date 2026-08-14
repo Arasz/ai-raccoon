@@ -150,7 +150,11 @@ public sealed class RrfParameterSweepTests : IDisposable
         // marginal rank has far more same-topic competing chunks. A1/A6/A7/S2 shifted; A4/C1/C5
         // held at their prior ranks.
         chosen.A1FileRank.ShouldNotBeNull("A1 expected file must appear in the top 10");
-        chosen.A1FileRank!.Value.ShouldBeLessThanOrEqualTo(2, "A1 file rank must stay <= 2 (re-pinned; was exactly 1 on the smaller corpus)");
+        // Re-pinned to 3 when the section FTS weight dropped to 16 -> 4 (docs/adr/0044): A1's
+        // expected file now sits behind frontend-architecture.md's "gluestack -> shadcn/ui pivot"
+        // section, which answers A1's question directly. The catalog admits one expectedSource per
+        // query, so the better answer scores as a miss.
+        chosen.A1FileRank!.Value.ShouldBeLessThanOrEqualTo(3, "A1 file rank must stay <= 3 (docs/adr/0044)");
         chosen.A4FileRank.ShouldBe(1, "A4 file rank must stay 1");
         chosen.A6FileRank.ShouldNotBeNull("A6 expected file must appear in the top 10");
         chosen.A6FileRank!.Value.ShouldBeLessThanOrEqualTo(8, "A6 file rank must stay <= 8 (cross-platform envelope, ADR-0015)");
@@ -172,8 +176,10 @@ public sealed class RrfParameterSweepTests : IDisposable
         // every ADR nDCG@5 query now competes against many more same-topic sibling chunks — a
         // genuinely harder retrieval task, not a fusion regression (criterion 3 in the WP4 report
         // shows the structure modality is doing real work on this corpus).
-        chosen.AdrNdcg5.ShouldBeGreaterThanOrEqualTo(0.532 - GoldenFile.RankingTolerance,
-            $"ADR nDCG@5 must hold at the re-pinned baseline 0.532 within the cross-platform band; got {chosen.AdrNdcg5:F4}");
+        // Re-pinned 0.532 -> 0.526 with the section FTS weight (docs/adr/0044); the 0.006 is A1's
+        // one-expectedSource-per-query labelling limit, not a ranking loss.
+        chosen.AdrNdcg5.ShouldBeGreaterThanOrEqualTo(0.526 - GoldenFile.RankingTolerance,
+            $"ADR nDCG@5 must hold at the re-pinned baseline 0.526 within the cross-platform band; got {chosen.AdrNdcg5:F4}");
 
         var holders = rows.Where(HoldsAllGates).ToList();
         holders.Count.ShouldBeGreaterThanOrEqualTo(1, "the chosen point itself must hold every gate");
@@ -371,7 +377,7 @@ public sealed class RrfParameterSweepTests : IDisposable
             violations.Add($"C5 {row.C5ExactRank?.ToString() ?? "-"}");
         }
 
-        if (row.A1FileRank is null or > 2)
+        if (row.A1FileRank is null or > 3)
         {
             violations.Add($"A1 file {row.A1FileRank?.ToString() ?? "-"}");
         }

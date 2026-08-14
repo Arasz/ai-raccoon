@@ -246,9 +246,18 @@ public sealed class QueryConstructionTests : IDisposable
         };
 
         // Known-regressed ids (WP3b, 2026-08-14): exact observed rank on the denser corpus,
-        // replacing the wave0 ceiling for these two ids only.
+        // replacing the wave0 ceiling for these ids only.
+        //
+        // A1 joined them when the section column's FTS weight dropped to 4 (docs/adr/0044).
+        // Its expected file now ranks 3 behind chunks of docs/explanation/frontend-architecture.md,
+        // one of which is the section "3. The gluestack -> shadcn/ui pivot" whose text reads
+        // "gluestack.io ... was evaluated and rejected. This section states the evidence plainly."
+        // That is a correct answer to A1's question. The pin records the measured rank; the real
+        // defect is that scripts/baseline-queries.json admits one expectedSource per query, so a
+        // question with two right answers must score one of them as a miss (ADR-0044 Consequences).
         var knownRegressed = new Dictionary<string, int>(StringComparer.Ordinal)
         {
+            ["A1"] = 3,
             ["A3"] = 3,
             ["A7"] = 3
         };

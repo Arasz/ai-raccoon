@@ -142,17 +142,26 @@ public sealed class SourceAffinitySweepTests : IDisposable
         // configuration at k=60, 1:1, λ=0.1, threshold=0.1, Max): the corpus grew 761 -> 2518 rows
         // on the same 196 source files, so every ADR query competes against far more same-topic
         // sibling chunks — a genuinely harder task, not a regression.
-        chosen.AdrNdcg5.ShouldBeGreaterThanOrEqualTo(0.532 - GoldenFile.RankingTolerance,
-            $"ADR nDCG@5 must hold at the re-pinned baseline 0.532 within the cross-platform band; got {chosen.AdrNdcg5:F4}");
+        // Re-pinned 0.532 -> 0.526 when the section FTS weight dropped 16 -> 4 (docs/adr/0044).
+        // The whole 0.006 is A1: the weight change moves its expected file to rank 3 behind
+        // frontend-architecture.md's "gluestack -> shadcn/ui pivot" section, which answers A1's
+        // question directly, and the catalog admits one expectedSource per query. Overall retrieval
+        // improved on the same measurement run (file-level nDCG@5 0.5733 -> 0.5846, recall@5
+        // 0.3315 -> 0.3381) — this number falls because of a labelling limit, not a ranking loss.
+        chosen.AdrNdcg5.ShouldBeGreaterThanOrEqualTo(0.526 - GoldenFile.RankingTolerance,
+            $"ADR nDCG@5 must hold at the re-pinned baseline 0.526 within the cross-platform band; got {chosen.AdrNdcg5:F4}");
 
         // known regression (WP3b): the gate below used to require staying within 0.001 of the
         // λ=0 baseline (chosen.AdrNdcg5 >= baseline.AdrNdcg5 - 0.001). On the denser corpus the
         // gap is pinned at exactly ~0.0756 -- see docs/work/2026-08-14-retrieval-rank-regressions.md.
+        // The gap collapsed 0.0756 -> 0.0039 when the section FTS weight dropped 16 -> 4
+        // (docs/adr/0044) — most of what WP3b was going to have to fix here fixed itself, and the
+        // λ=0.1 point is now within 0.004 of the λ=0 baseline instead of 0.076. Still short of the
+        // original <= 0.001 contract, so this stays a pinned value rather than a restored gate.
         var gapVsBaseline = baseline.AdrNdcg5 - chosen.AdrNdcg5;
-        gapVsBaseline.ShouldBeInRange(0.0756 - GoldenFile.RankingTolerance, 0.0756 + GoldenFile.RankingTolerance,
-            $"known regression (WP3b): chosen vs baseline ADR nDCG@5 gap is pinned at exactly ~0.0756 " +
-            $"(previously required <= 0.001); got {gapVsBaseline:F4} (chosen {chosen.AdrNdcg5:F4}, baseline {baseline.AdrNdcg5:F4}); " +
-            "invert to the 0.001 tolerance check when WP3b lands");
+        gapVsBaseline.ShouldBeInRange(0.0039 - GoldenFile.RankingTolerance, 0.0039 + GoldenFile.RankingTolerance,
+            $"chosen vs baseline ADR nDCG@5 gap is pinned at ~0.0039 (was 0.0756 before docs/adr/0044, " +
+            $"originally required <= 0.001); got {gapVsBaseline:F4} (chosen {chosen.AdrNdcg5:F4}, baseline {baseline.AdrNdcg5:F4})");
 
         // Gate (d): C1 holds hybrid rank 1; C5 holds rank <= 5 (secrets/config ADRs outrank it).
         // C2's hybrid rank collapsed on the re-pinned corpus — its FTS-only rank-1 gate lives in
@@ -163,7 +172,7 @@ public sealed class SourceAffinitySweepTests : IDisposable
 
         // Gate (e): the documented same-knowledge-alternative trade does not worsen.
         chosen.A1FileRank.ShouldNotBeNull("A1 expected file must appear in the top 10");
-        chosen.A1FileRank!.Value.ShouldBeLessThanOrEqualTo(2, "A1 file rank must stay <= 2");
+        chosen.A1FileRank!.Value.ShouldBeLessThanOrEqualTo(3, "A1 file rank must stay <= 3 (docs/adr/0044)");
         chosen.A4FileRank.ShouldNotBeNull("A4 expected file must appear in the top 10");
         chosen.A4FileRank!.Value.ShouldBeLessThanOrEqualTo(2, "A4 file rank must stay <= 2");
 

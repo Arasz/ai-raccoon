@@ -97,21 +97,23 @@ internal static class MemorySql
                                                            LIMIT 1
                                                            """;
 
-    // bm25(entries_fts, 1.0, 8.0, 16.0) weights source_file/section matches 8x/16x a body-text
+    // bm25(entries_fts, 1.0, 8.0, 4.0) weights source_file/section matches 8x/4x a body-text
     // match, so identifier and section tokens outrank cross-referencing prose
-    // (docs/plans/retrieval-improvement-c.md §3 2c). ChunkIndex/TotalChunks are persisted columns,
+    // (docs/plans/retrieval-improvement-c.md §3 2c). The section weight was 16 while the column
+    // was empty for every ingested chunk; measured against a populated one, 4 beats both 16 and
+    // NULL on exact-chunk retrieval (docs/adr/0044-section-weight.md). ChunkIndex/TotalChunks are persisted columns,
     // not a per-query window function (docs/plans/2026-08-08-search-knn-perf.md §3.2/§3.3).
     // snippet() is deferred to ranking survivors (docs/plans/2026-08-08-search-knn-perf.md §WP7) —
     // FtsSnippetsForSurvivors resolves it there instead.
     public const string SearchByFilter = """
-                                         SELECT e.hash AS Hash, bm25(entries_fts, 1.0, 8.0, 16.0) AS Ranking,
+                                         SELECT e.hash AS Hash, bm25(entries_fts, 1.0, 8.0, 4.0) AS Ranking,
                                                 e.path AS Path, e.value AS Value, e.source_file AS SourceFile,
                                                 e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks,
                                                 e.id AS Id
                                          FROM entries_fts
                                          JOIN entries e ON e.id = entries_fts.rowid
                                          WHERE entries_fts MATCH @query AND {filter}
-                                         ORDER BY bm25(entries_fts, 1.0, 8.0, 16.0)
+                                         ORDER BY bm25(entries_fts, 1.0, 8.0, 4.0)
                                          LIMIT @limit
                                          """;
 
