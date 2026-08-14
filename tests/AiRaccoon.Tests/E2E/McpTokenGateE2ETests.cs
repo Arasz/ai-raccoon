@@ -129,7 +129,7 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
         private readonly LockingWriter _stdout = new();
         private readonly TimeProvider _timeProvider = TimeProvider.System;
 
-        private string? _originalPassphrase;
+        private EnvScope _env = null!;
         private Task<int> _serve = Task.FromResult(0);
         public HttpClient HttpClient { get; } = new();
 
@@ -139,26 +139,40 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
 
         public async ValueTask InitializeAsync()
         {
-            await TestData.EnvVarGate.WaitAsync(TestContext.Current.CancellationToken);
-            _originalPassphrase = Environment.GetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName);
-            Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, null);
-
-            using var lease = LoopbackPort.Reserve();
-            Port = lease.Port;
-            CliArgs.TryParse(["--data-root", DataRoot, "serve", "--port", Port.ToString()], out var parsed);
-            parsed!.Errors.ShouldBeEmpty();
-            lease.ReleaseForBind();
-            _serve = TestData.CreateNodeRunner(parsed.ServerConfig.Options).RunAsync(parsed, new StandardStreams(TextReader.Null, _stdout, _stderr), _cts.Token);
-            await WaitForListeningAsync();
+            _env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+                (EnvEncryptionKeyProvider.EnvVarName, null));
+            try
+            {
+                // Measured on xunit.v3 3.2.2: DisposeAsync does NOT run when InitializeAsync
+                // throws, so a boot that never reports a URL has to release the gate itself.
+                using var lease = LoopbackPort.Reserve();
+                Port = lease.Port;
+                CliArgs.TryParse(["--data-root", DataRoot, "serve", "--port", Port.ToString()], out var parsed);
+                parsed!.Errors.ShouldBeEmpty();
+                lease.ReleaseForBind();
+                _serve = TestData.CreateNodeRunner(parsed.ServerConfig.Options).RunAsync(parsed, new StandardStreams(TextReader.Null, _stdout, _stderr), _cts.Token);
+                await WaitForListeningAsync();
+            }
+            catch
+            {
+                await _env.DisposeAsync();
+                throw;
+            }
         }
 
         public async ValueTask DisposeAsync()
         {
-            await _cts.CancelAsync();
-            await _serve;
-            _cts.Dispose();
-            Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, _originalPassphrase);
-            TestData.EnvVarGate.Release();
+            try
+            {
+                await _cts.CancelAsync();
+                await _serve;
+                _cts.Dispose();
+            }
+            finally
+            {
+                await _env.DisposeAsync();
+            }
+
             Directory.Delete(DataRoot, true);
             HttpClient.Dispose();
         }
