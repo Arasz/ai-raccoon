@@ -13,20 +13,13 @@ public sealed class EmbeddingServiceLocalGuardTests : IDisposable
 
     public void Dispose()
     {
-        try
-        {
-            Directory.Delete(_root, true);
-        }
-        catch (IOException)
-        {
-            // Best-effort cleanup; the OS temp dir is scanned periodically anyway.
-        }
+        TestData.DeleteTempRoot(_root);
     }
 
     [Fact]
     public void CreateGenerator_MissingSettingsModelPath_Throws()
     {
-        var service = new EmbeddingService();
+        var service = TestData.CreateEmbeddingService();
 
         var ex = Should.Throw<InvalidOperationException>(() =>
             service.CreateGenerator(new EmbeddingSettings("local", Path.Combine(_root, "missing.onnx"), null, null)));
@@ -36,7 +29,7 @@ public sealed class EmbeddingServiceLocalGuardTests : IDisposable
     [Fact]
     public void CreateGenerator_ModelNameInSettings_ThrowsActionableError()
     {
-        var service = new EmbeddingService();
+        var service = TestData.CreateEmbeddingService();
 
         // A model NAME (not a path) must fail fast with the resolved path and both remediation commands.
         var ex = Should.Throw<InvalidOperationException>(() =>

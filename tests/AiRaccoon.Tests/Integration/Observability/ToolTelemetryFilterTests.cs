@@ -56,7 +56,7 @@ public sealed class ToolTelemetryFilterTests : IAsyncLifetime
 
     public ValueTask DisposeAsync()
     {
-        Directory.Delete(_dataRoot, true);
+        TestData.DeleteTempRoot(_dataRoot);
         return ValueTask.CompletedTask;
     }
 

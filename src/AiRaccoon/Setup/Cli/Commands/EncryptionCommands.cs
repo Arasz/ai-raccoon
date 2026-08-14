@@ -71,13 +71,13 @@ public sealed partial class EncryptionCommands
     {
         try
         {
-            _bws.Run(["--version"], null, PresenceTimeout);
+            await _bws.RunAsync(["--version"], null, PresenceTimeout, ctx);
         }
         catch (BwsInvocationException ex)
         {
             Log.BwsInvocationFailed(_logger, ex);
             await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}");
-            return 1;
+            return ExitCode.FailedToResolveEncryptionKey;
         }
 
         var projectId = await PromptAsync(streams, $"project id [{DefaultProjectId}]", DefaultProjectId, ctx);
@@ -87,13 +87,13 @@ public sealed partial class EncryptionCommands
         BwsResult fetched;
         try
         {
-            fetched = _bws.Run(["secret", "get", secretId], token, FetchTimeout);
+            fetched = await _bws.RunAsync(["secret", "get", secretId], token, FetchTimeout, ctx);
         }
         catch (BwsInvocationException ex)
         {
             Log.BwsInvocationFailed(_logger, ex);
             await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}");
-            return 1;
+            return ExitCode.FailedToResolveEncryptionKey;
         }
 
         if (fetched.ExitCode != 0)
@@ -101,7 +101,7 @@ public sealed partial class EncryptionCommands
             var errorLine = fetched.FirstErrorLine;
             Log.BwsCommandFailed(_logger, fetched.ExitCode, errorLine);
             await streams.WriteErrorLineAsync($"ai-raccoon: bws failed (exit {fetched.ExitCode}): {errorLine}");
-            return 1;
+            return ExitCode.FailedToResolveEncryptionKey;
         }
 
         byte[] seed;
@@ -112,7 +112,7 @@ public sealed partial class EncryptionCommands
         catch (EncryptionKeyException ex)
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}");
-            return 1;
+            return ExitCode.FailedToResolveEncryptionKey;
         }
 
         var derived = DeriveAndZeroSeed(seed);
@@ -146,7 +146,7 @@ public sealed partial class EncryptionCommands
             }
             else
             {
-                var envPassphrase = _env.GetPassphrase(new EncryptionData(EnvEncryptionKeyProvider.EncryptionSource)).Value;
+                var envPassphrase = (await _env.GetPassphraseAsync(new EncryptionData(EnvEncryptionKeyProvider.EncryptionSource), ctx)).Value;
                 if (File.Exists(EncryptionSourceSidecar.PathFor(bankPath)) && !string.IsNullOrEmpty(envPassphrase) &&
                     await IsCorrectKey(envPassphrase, ctx))
                 {
@@ -156,7 +156,7 @@ public sealed partial class EncryptionCommands
                 }
 
                 await streams.WriteErrorLineAsync(MismatchText);
-                return 1;
+                return ExitCode.FailedToResolveEncryptionKey;
             }
         }
 
@@ -194,7 +194,7 @@ public sealed partial class EncryptionCommands
         {
             Log.MigrationRefused(_logger, _bankConnectionFactory.BankPath, ex);
             await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}");
-            return 1;
+            return ExitCode.FailedToResolveEncryptionKey;
         }
 
         if (rekeyed)
@@ -243,7 +243,7 @@ public sealed partial class EncryptionCommands
             {
             }
 
-            var envPassphrase = _env.GetPassphrase(new EncryptionData(EnvEncryptionKeyProvider.EncryptionSource)).Value;
+            var envPassphrase = (await _env.GetPassphraseAsync(new EncryptionData(EnvEncryptionKeyProvider.EncryptionSource), cancellationToken)).Value;
             if (!string.IsNullOrEmpty(envPassphrase))
             {
                 await store.DeleteSettingAsync(EncryptionSettingsKeys.Source, cancellationToken);
@@ -260,7 +260,7 @@ public sealed partial class EncryptionCommands
                 Log.UnsetSkippedRekey(_logger);
                 await streams.WriteErrorLineAsync(
                     "ai-raccoon: warning: no AIRACCOON_DB_PASSPHRASE set — the bank stays keyed to the bitwarden secret; set AIRACCOON_DB_PASSPHRASE and re-run 'ai-raccoon encryption unset' to rekey it back to the env passphrase (automatic decryption without an env passphrase is not supported)");
-                return 1;
+                return ExitCode.FailedToResolveEncryptionKey;
             }
         }
         else
@@ -304,13 +304,18 @@ public sealed partial class EncryptionCommands
         [LoggerMessage(EventId = 801, Level = LogLevel.Information, Message = "Bank rekeyed to the {Source} encryption key")]
         public static partial void BankRekeyed(ILogger logger, string source);
 
-        [LoggerMessage(EventId = 802, Level = LogLevel.Error, Message = "bws invocation failed")]
+        // 802/803/804/807 log at Debug, not Error/Warning: each one fires alongside a manual
+        // WriteErrorLineAsync carrying the same message on the CLI's own stream (UX-F8) -- at
+        // Error/Warning, the default (non-quiet) console's AddConsole also prints them, so the
+        // failure appears twice: once as the clean CLI line, once as "fail: ...EncryptionCommands[NNN] ...".
+        // --quiet mode is unaffected (QuietLogging sets its minimum level to Trace).
+        [LoggerMessage(EventId = 802, Level = LogLevel.Debug, Message = "bws invocation failed")]
         public static partial void BwsInvocationFailed(ILogger logger, Exception exception);
 
-        [LoggerMessage(EventId = 803, Level = LogLevel.Warning, Message = "Bank stays keyed to the bitwarden secret: AIRACCOON_DB_PASSPHRASE is not set")]
+        [LoggerMessage(EventId = 803, Level = LogLevel.Debug, Message = "Bank stays keyed to the bitwarden secret: AIRACCOON_DB_PASSPHRASE is not set")]
         public static partial void UnsetSkippedRekey(ILogger logger);
 
-        [LoggerMessage(EventId = 804, Level = LogLevel.Error, Message = "bws failed (exit {ExitCode}): {Error}")]
+        [LoggerMessage(EventId = 804, Level = LogLevel.Debug, Message = "bws failed (exit {ExitCode}): {Error}")]
         public static partial void BwsCommandFailed(ILogger logger, int exitCode, string error);
 
         // The migration records nothing in the bank or the sidecar
@@ -321,7 +326,7 @@ public sealed partial class EncryptionCommands
         [LoggerMessage(EventId = 806, Level = LogLevel.Information, Message = "Bank at {BankPath} rekeyed to the current key derivation")]
         public static partial void BankMigrated(ILogger logger, string bankPath);
 
-        [LoggerMessage(EventId = 807, Level = LogLevel.Error, Message = "Refused to rekey the bank at {BankPath}: it was left unmodified")]
+        [LoggerMessage(EventId = 807, Level = LogLevel.Debug, Message = "Refused to rekey the bank at {BankPath}: it was left unmodified")]
         public static partial void MigrationRefused(ILogger logger, string bankPath, Exception exception);
     }
 }

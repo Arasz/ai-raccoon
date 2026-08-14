@@ -28,7 +28,7 @@ public class AzureBlobCloudStoreTests
     {
         var options = new SyncOptions { ConnectionString = "not a connection string", Container = "memories" };
 
-        Should.Throw<SyncNotConfiguredException>(() => new AzureBlobCloudStore(options));
+        Should.Throw<SyncNotConfiguredException>(() => new AzureBlobCloudStore(options, NullLogger<AzureBlobCloudStore>.Instance));
     }
 
     [Fact]
@@ -36,7 +36,7 @@ public class AzureBlobCloudStoreTests
     {
         var options = new SyncOptions { ConnectionString = FakeConnectionString };
 
-        Should.Throw<ArgumentException>(() => new AzureBlobCloudStore(options));
+        Should.Throw<ArgumentException>(() => new AzureBlobCloudStore(options, NullLogger<AzureBlobCloudStore>.Instance));
     }
 
     [Fact]
@@ -44,7 +44,7 @@ public class AzureBlobCloudStoreTests
     {
         var options = new SyncOptions { Container = "memories" };
 
-        Should.Throw<ArgumentException>(() => new AzureBlobCloudStore(options));
+        Should.Throw<ArgumentException>(() => new AzureBlobCloudStore(options, NullLogger<AzureBlobCloudStore>.Instance));
     }
 
     [Fact]
@@ -52,7 +52,7 @@ public class AzureBlobCloudStoreTests
     {
         var options = new SyncOptions { Account = "bad name!", Container = "memories" };
 
-        Should.Throw<SyncNotConfiguredException>(() => new AzureBlobCloudStore(options));
+        Should.Throw<SyncNotConfiguredException>(() => new AzureBlobCloudStore(options, NullLogger<AzureBlobCloudStore>.Instance));
     }
 
     [Fact]

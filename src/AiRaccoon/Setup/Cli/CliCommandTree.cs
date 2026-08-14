@@ -17,7 +17,7 @@ internal static class CliCommandTree
     private static readonly string TransportHelpName =
         string.Join('|', Enum.GetNames<McpTransport>().Select(name => name.ToLowerInvariant()));
 
-    internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "sync", "ingest", "watch", "encryption", "extract", "maintenance", "serve"];
+    internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "noise", "queryguard", "sync", "ingest", "watch", "encryption", "extract", "maintenance", "serve"];
 
     /// <summary>
     ///     The root launch --port (shared with the bare launch root); serve reads it instance-based
@@ -68,6 +68,8 @@ internal static class CliCommandTree
         root.Add(ModelCommand());
         root.Add(RetrievalCommand());
         root.Add(SweepCommand());
+        root.Add(NoiseCommand());
+        root.Add(QueryGuardCommand());
         root.Add(SyncCommand());
         root.Add(IngestCommand());
         root.Add(WatchCommand());
@@ -117,7 +119,9 @@ internal static class CliCommandTree
         access.Add(new Command("set", "Sets a per-project override; '*' targets the global default")
             { new Argument<string>("project-id") { HelpName = "project-id|*" }, new Argument<string>("mode") { HelpName = "ro|rw|full" } });
         access.Add(new Command("unset", "Drops a per-project override (falls back to the default)") { new Argument<string>("project-id") { HelpName = "project-id|*" } });
-        access.Add(new Command("list", "Lists the default and every override"));
+        var accessList = new Command("list", "Lists the default and every override");
+        accessList.Aliases.Add("show");
+        access.Add(accessList);
         return access;
     }
 
@@ -134,8 +138,13 @@ internal static class CliCommandTree
             }
         };
         model.Add(set);
-        model.Add(new Command("reset", "Back to default: no engine (FTS5-only search)"));
-        model.Add(new Command("show", "Shows the configured provider/model/baseUrl/engine"));
+        var reset = new Command("reset", "Back to default: no engine (FTS5-only search)");
+        reset.Aliases.Add("unset");
+        reset.Aliases.Add("remove");
+        model.Add(reset);
+        var show = new Command("show", "Shows the configured provider/model/baseUrl/engine");
+        show.Aliases.Add("list");
+        model.Add(show);
         return model;
     }
 
@@ -166,8 +175,58 @@ internal static class CliCommandTree
             new Command("set", "Sets sweep.threshold (0..1, default 0.3)") { new Argument<string>("threshold") { HelpName = "0..1" } }
         };
         sweep.Add(threshold);
-        sweep.Add(new Command("show", "Shows the whole policy: enabled, interval hours and threshold (row values, else the defaults)"));
+        var show = new Command("show", "Shows the whole policy: enabled, interval hours and threshold (row values, else the defaults)");
+        show.Aliases.Add("list");
+        sweep.Add(show);
         return sweep;
+    }
+
+    private static Command NoiseCommand()
+    {
+        var noise = new Command("noise",
+            "Pre-write noise rejection: the kill switch for the deterministic Hermes background-process-log filter. Rejection is ON by default — 'noise disable' is how you disarm it.")
+        {
+            new Command("enable", "Arms pre-write noise rejection (the default)"),
+            new Command("disable", "Disarms pre-write noise rejection — every write is stored, even ones a policy would otherwise refuse")
+        };
+        var show = new Command("show", "Shows whether pre-write noise rejection is enabled");
+        show.Aliases.Add("list");
+        noise.Add(show);
+        noise.Add(new Command("entries", "Summarizes noise_entries — the training-data source for a future noise learner (ADR-0029/ADR-0039)"));
+        return noise;
+    }
+
+    private static Command QueryGuardCommand()
+    {
+        var queryGuard = new Command("queryguard",
+            "Read-path query guard (docs/adr/0040): refuses a memory_search query that is itself machine output (e.g. a pasted background-process notification) and annotates one that merely contains log-like content. Armed by default — 'queryguard disable' is how you disarm it.")
+        {
+            new Command("enable", "Arms the read-path query guard (the default)"),
+            new Command("disable", "Disarms the read-path query guard — every query runs untouched, even ones a policy would otherwise refuse or annotate")
+        };
+        var shadow = new Command("shadow",
+            "Shadow mode: records what the guard would have done without refusing or annotating anything — measure real traffic before enabling")
+        {
+            new Command("enable", "Arms shadow mode (off by default)"),
+            new Command("disable", "Disarms shadow mode (the default): the guard acts on its verdicts")
+        };
+        queryGuard.Add(shadow);
+        var structural = new Command("structural",
+            "Structural detector (docs/adr/0041): a learned, vocabulary-free third input to the warn tier. Off by default — it only ever adds an annotation, never a refusal.")
+        {
+            new Command("enable", "Arms the structural detector"),
+            new Command("disable", "Disarms the structural detector (the default)"),
+            new Command("threshold", "Score a query must clear before the detector annotates it")
+            {
+                new Command("set", "Sets queryGuard.structural.threshold (0..1)")
+                    { new Argument<string>("threshold") { HelpName = "0..1" } }
+            }
+        };
+        queryGuard.Add(structural);
+        var show = new Command("show", "Shows whether the guard, shadow mode and the structural detector are enabled");
+        show.Aliases.Add("list");
+        queryGuard.Add(show);
+        return queryGuard;
     }
 
     private static Command SyncCommand()
@@ -192,8 +251,13 @@ internal static class CliCommandTree
         };
         add.Add(azure);
         sync.Add(add);
-        sync.Add(new Command("remove", "Back to default: sync off"));
-        sync.Add(new Command("show", "Shows the sync configuration (keys redacted)"));
+        var remove = new Command("remove", "Back to default: sync off");
+        remove.Aliases.Add("reset");
+        remove.Aliases.Add("unset");
+        sync.Add(remove);
+        var show = new Command("show", "Shows the sync configuration (keys redacted)");
+        show.Aliases.Add("list");
+        sync.Add(show);
         return sync;
     }
 
@@ -206,8 +270,13 @@ internal static class CliCommandTree
             new Option<string>("-t") { Description = "access token for this run only — never persisted; defaults to BWS_ACCESS_TOKEN", HelpName = "token" }
         };
         encryption.Add(bitwarden);
-        encryption.Add(new Command("show", "Shows the current encryption source"));
-        encryption.Add(new Command("unset", "Returns to the env default (rekeys the bank when AIRACCOON_DB_PASSPHRASE is set)"));
+        var show = new Command("show", "Shows the current encryption source");
+        show.Aliases.Add("list");
+        encryption.Add(show);
+        var unset = new Command("unset", "Returns to the env default (rekeys the bank when AIRACCOON_DB_PASSPHRASE is set)");
+        unset.Aliases.Add("reset");
+        unset.Aliases.Add("remove");
+        encryption.Add(unset);
         encryption.Add(new Command("migrate", "Rekeys a bank still encrypted under the pre-ADR-0012 key derivation (ADR-0012)"));
         return encryption;
     }
@@ -244,12 +313,14 @@ internal static class CliCommandTree
             ScopeCommand("Deprecated alias for 'ingest scope' — the allowlist bounds all ingestion, not just watching"),
             new Command("concurrency", "Sets the watcher concurrency (1..16, default 4)")
                 { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<int>("value") { HelpName = "1..16" } },
-            new Command("list", "Lists each target's watch CONFIGURATION (enabled, concurrency, scope) — not registered watches; use 'watch registered' for those"),
             new Command("registered",
                     "Lists every REGISTERED watch (project, path, registered at, last change) from the watches table. Registrations are created via memory_watch_add; live state (scanning/healthy/…) is reported by memory_watch_status, not the CLI.")
                 { new Argument<string?>("project-id") { HelpName = "project-id", Arity = ArgumentArity.ZeroOrOne } },
             new Command("remove", "Removes all watch config rows for a target") { new Argument<string>("target") { HelpName = "project-id|*" } }
         };
+        var list = new Command("list", "Lists each target's watch CONFIGURATION (enabled, concurrency, scope) — not registered watches; use 'watch registered' for those");
+        list.Aliases.Add("show");
+        watch.Add(list);
         return watch;
     }
 
@@ -274,11 +345,13 @@ internal static class CliCommandTree
                     { new Argument<string>("prefix") { HelpName = "prefix" } },
                 new Command("list", "Lists the excluded source_file prefixes")
             },
-            new Command("list", "Shows the extraction configuration (enabled, mode, interval minutes)"),
             new Command("prune",
                     "Reports promotion_queue rows orphaned before the entries-delete trigger existed (ADR-0023) — a candidate whose backing entry is gone. Reports per-project counts by default; --apply removes them. Idempotent.")
                 { new Option<bool>("--apply") { Description = "Removes the orphaned rows instead of only reporting them" } }
         };
+        var list = new Command("list", "Shows the extraction configuration (enabled, mode, interval minutes)");
+        list.Aliases.Add("show");
+        extract.Add(list);
         return extract;
     }
 
@@ -327,9 +400,11 @@ internal static class CliCommandTree
             new Command("interval", "Sets the WAL checkpoint interval in minutes (positive integer; default 60)")
                 { new Argument<string>("minutes") { HelpName = "minutes" } },
             new Command("vacuum-interval", "Sets the VACUUM + ANALYZE interval in days (positive integer; default 7)")
-                { new Argument<string>("days") { HelpName = "days" } },
-            new Command("list", "Shows the bank maintenance configuration (checkpoint interval, vacuum interval)")
+                { new Argument<string>("days") { HelpName = "days" } }
         };
+        var list = new Command("list", "Shows the bank maintenance configuration (checkpoint interval, vacuum interval)");
+        list.Aliases.Add("show");
+        maintenance.Add(list);
         return maintenance;
     }
 

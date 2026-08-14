@@ -19,11 +19,12 @@ public sealed class BitwardenEncryptionKeyProvider(ICliSecretManager cliSecretMa
 
     public bool IsForSource(string source) => Source.Equals(source, StringComparison.Ordinal);
 
-    public Passphrase GetPassphrase(EncryptionData encryptionData)
+    public async Task<Passphrase> GetPassphraseAsync(EncryptionData encryptionData, CancellationToken cancellationToken = default)
     {
         Guard.IsNotNullOrWhiteSpace(encryptionData.SecretId);
 
-        var result = cliSecretManager.Run(["secret", "get", encryptionData.SecretId], null, FetchTimeout);
+        var result = await cliSecretManager.RunAsync(["secret", "get", encryptionData.SecretId], null, FetchTimeout,
+            cancellationToken).ConfigureAwait(false);
 
         if (result.ExitCode != 0)
         {

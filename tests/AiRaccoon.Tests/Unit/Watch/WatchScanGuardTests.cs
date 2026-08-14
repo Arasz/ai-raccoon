@@ -161,4 +161,73 @@ public sealed class WatchScanGuardTests
         gateB.SetResult();
         await scanB;
     }
+
+    /// <summary>
+    ///     D21 gap 2: <see cref="WatchScanGuard.StartedScans" />/<see cref="WatchScanGuard.SkippedScans" />
+    ///     are plain <c>int</c> auto-properties with no <c>volatile</c>/<c>Interlocked</c> of their own —
+    ///     they are safe only because every increment happens inside <c>lock (_gate)</c>. This hammers
+    ///     that claim: many distinct keys (forcing StartedScans) and many racers per key (forcing
+    ///     SkippedScans), all released from one <see cref="Barrier" /> so the lock is genuinely
+    ///     contended, not just theoretically shared. If the increments ever moved outside the lock,
+    ///     concurrent writers would lose updates and the totals below would come up short.
+    /// </summary>
+    [Fact]
+    public async Task Run_HighContentionAcrossManyKeysAndRacers_CountersReconcileExactly()
+    {
+        const int keyCount = 10;
+        const int racersPerKey = 3;
+        const int totalRacers = keyCount * racersPerKey;
+        var dirs = Enumerable.Range(0, keyCount).Select(i => TempDir.New($"scanguard-hammer-{i}")).ToArray();
+        try
+        {
+            var guard = new WatchScanGuard();
+            var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var scansStarted = 0;
+
+            Task Scan(CancellationToken ct)
+            {
+                Interlocked.Increment(ref scansStarted);
+                return gate.Task.WaitAsync(ct);
+            }
+
+            using var start = new Barrier(totalRacers);
+            var joined = new Task[totalRacers];
+            var threads = new Thread[totalRacers];
+            var slot = 0;
+            foreach (var dir in dirs)
+            {
+                var path = dir.Path;
+                for (var r = 0; r < racersPerKey; r++)
+                {
+                    var mySlot = slot++;
+                    threads[mySlot] = new Thread(() =>
+                    {
+                        start.SignalAndWait(Patience);
+                        joined[mySlot] = guard.Run(Project, path, Scan, TestContext.Current.CancellationToken);
+                    });
+                    threads[mySlot].Start();
+                }
+            }
+
+            foreach (var thread in threads)
+            {
+                thread.Join(Patience).ShouldBeTrue("every racer thread must finish dispatching Run within the patience window");
+            }
+
+            gate.SetResult();
+            await Task.WhenAll(joined).WaitAsync(Patience, TestContext.Current.CancellationToken);
+
+            guard.StartedScans.ShouldBe(keyCount, "exactly one starter per distinct key");
+            guard.SkippedScans.ShouldBe(totalRacers - keyCount, "every non-starting racer for a contended key must be counted as skipped");
+            (guard.StartedScans + guard.SkippedScans).ShouldBe(totalRacers, "no increment may be lost under contention");
+            scansStarted.ShouldBe(keyCount, "the scan body itself must run exactly once per key, regardless of how many racers joined it");
+        }
+        finally
+        {
+            foreach (var dir in dirs)
+            {
+                dir.Dispose();
+            }
+        }
+    }
 }

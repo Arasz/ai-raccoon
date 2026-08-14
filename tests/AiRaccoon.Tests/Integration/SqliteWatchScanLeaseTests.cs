@@ -31,7 +31,7 @@ public sealed class SqliteWatchScanLeaseTests : IDisposable
         _store = new WatchStore(_factory);
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private SqliteWatchScanLease NewLease() => new(_factory, _time);
 

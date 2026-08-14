@@ -26,31 +26,35 @@ internal static class MemorySchema
                                           CREATE UNIQUE INDEX IF NOT EXISTS uq_entries_committed_bucket
                                               ON entries(path, hash, project_id, scope, COALESCE(context_label, ''))
                                               WHERE scope IN ('project', 'custom');
+
+                                          CREATE UNIQUE INDEX IF NOT EXISTS uq_entries_workspace_bucket
+                                              ON entries(path, hash, workspace_id)
+                                              WHERE workspace_id IS NOT NULL;
                                           """;
 
     /// <summary>
     ///     The schema shape this build creates. Bumped by one per shipped schema change, with a
     ///     matching ladder step in <see cref="MigrateToV1Async" />/<see cref="MigrateToV2Async" />/
-    ///     <see cref="MigrateToV3Async" />/<see cref="MigrateToV4Async" />/<see cref="MigrateToV5Async" />/<see cref="MigrateToV6Async" /> (ADR-0011). Not every schema
+    ///     <see cref="MigrateToV3Async" />/<see cref="MigrateToV4Async" />/<see cref="MigrateToV5Async" />/<see cref="MigrateToV6Async" />/
+    ///     <see cref="MigrateToV7Async" />/<see cref="MigrateToV8Async" /> (ADR-0011). Not every schema
     ///     change needs a ladder step: a trigger body replacement that is safely re-runnable on every
     ///     open belongs in the unconditional <see cref="Ddl" /> instead (ADR-0023 amendment) — the
     ///     ladder is for changes that need guarded, one-time work.
     /// </summary>
-    internal const int CurrentVersion = 6;
+    internal const int CurrentVersion = 8;
 
     /// <summary>
-    ///     The corrected promotion_queue_entries_ad body (H4/ADR-0023 amendment): `e.scope = 'project'`
-    ///     matches what ShareAsync can actually resolve (MemorySql.SelectSourceByHashAndProject) — a
-    ///     custom- or workspace-scoped sibling cannot back a promotable candidate, so it must not read
-    ///     as "still live" here either.
+    ///     The promotion_queue_entries_ad body (ADR-0023, amended by H4 and again by ADR-0046):
+    ///     "still backed" means a row inside the project, which is <see cref="ProjectRows" /> — the
+    ///     one definition ShareAsync resolves through.
     /// </summary>
-    private const string PromotionQueueTriggerDdl = """
+    private static readonly string PromotionQueueTriggerDdl = $"""
                                                     CREATE TRIGGER IF NOT EXISTS promotion_queue_entries_ad AFTER DELETE ON entries BEGIN
                                                         DELETE FROM promotion_queue
                                                         WHERE project_id = OLD.project_id AND hash = OLD.hash
                                                           AND NOT EXISTS (SELECT 1 FROM entries e
                                                                           WHERE e.project_id = OLD.project_id AND e.hash = OLD.hash
-                                                                            AND e.scope = 'project');
+                                                                            AND {ProjectRows.Scope("e.")});
                                                     END;
                                                     """;
 
@@ -193,34 +197,30 @@ internal static class MemorySchema
                                               value TEXT NOT NULL
                                           );
 
+                                          -- noise_clusters/vec_noise (ADR-0039's centroid-clustering store) are
+                                          -- removed from the fresh-bank DDL (this task, amending ADR-0039): dead by
+                                          -- evidence — leader-follower produced 1,583 clusters from 1,940 items (93%
+                                          -- singletons) on real traffic, and noise silhouette (0.047-0.142) is no
+                                          -- better than signal (0.045-0.075). MigrateToV6Async is left unchanged as a
+                                          -- historical no-op ladder step, so a legacy bank stamped &lt;v6 still gets
+                                          -- these tables (inert) on upgrade; only a fresh bank now skips them.
+                                          --
+                                          -- noise_entries (ADR-0029) is restored: the write-time reject log is the
+                                          -- noise-learning training-data source (ADR-0039) — shadow mode plus this
+                                          -- table is how a deployment produces the labelled set the research named as
+                                          -- missing. expires_at is computed at insert time from the
+                                          -- noise.retention-days.global setting (default 14, ADR-0029).
                                           CREATE TABLE IF NOT EXISTS noise_entries (
-                                              id INTEGER PRIMARY KEY,
-                                              request_content TEXT NOT NULL,
-                                              project_id TEXT NOT NULL,
-                                              source_file TEXT NULL,
-                                              detected_by_policy TEXT NOT NULL,
-                                              expires_at INTEGER NOT NULL,
-                                              created_at INTEGER NOT NULL
-                                          );
-
-                                          CREATE TABLE IF NOT EXISTS noise_clusters (
                                               id                 INTEGER PRIMARY KEY,
+                                              request_content    TEXT NOT NULL,
                                               project_id         TEXT NOT NULL,
-                                              user_id            TEXT NULL,
-                                              cluster_label      TEXT NOT NULL,
-                                              sample_content     TEXT NOT NULL,
-                                              frequency          INTEGER NOT NULL DEFAULT 1,
-                                              status             TEXT NOT NULL CHECK(status IN ('candidate','active','suppressed')),
-                                              centroid_embedding BLOB NOT NULL,
-                                              created_at         INTEGER NOT NULL,
-                                              last_seen_at       INTEGER NOT NULL,
-                                              UNIQUE(project_id, cluster_label)
+                                              source_file        TEXT NULL,
+                                              detected_by_policy TEXT NOT NULL,
+                                              expires_at         INTEGER NOT NULL,
+                                              created_at         INTEGER NOT NULL
                                           );
 
-                                          CREATE VIRTUAL TABLE IF NOT EXISTS vec_noise USING vec0(
-                                              ctx TEXT partition key,
-                                              embedding float[384] distance_metric=cosine
-                                          );
+                                          CREATE INDEX IF NOT EXISTS idx_noise_entries_expires_at ON noise_entries(expires_at);
 
                                           CREATE TABLE IF NOT EXISTS sync_tombstones (
                                               hash TEXT NOT NULL,
@@ -262,6 +262,7 @@ internal static class MemorySchema
                                               score       REAL NOT NULL,
                                               reasons     TEXT NOT NULL DEFAULT '[]',
                                               scorer_version INTEGER NOT NULL DEFAULT 0,
+                                              claimed_at  INTEGER NULL,
                                               created_at  INTEGER NOT NULL,
                                               updated_at  INTEGER NOT NULL,
                                               UNIQUE (project_id, hash)
@@ -417,6 +418,18 @@ internal static class MemorySchema
             await MigrateToV6Async(connection, cancellationToken).ConfigureAwait(false);
         }
 
+        if (healthy && storedVersion < 7)
+        {
+            // Soft, like the v1 step: a dedupe failure leaves the bank open, degraded, retried
+            // on the next open, rather than refusing to open at all.
+            healthy = await MigrateToV7Async(connection, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (healthy && storedVersion < 8)
+        {
+            await MigrateToV8Async(connection, cancellationToken).ConfigureAwait(false);
+        }
+
         if (healthy)
         {
             await StampAsync(connection, CurrentVersion, cancellationToken).ConfigureAwait(false);
@@ -446,6 +459,96 @@ internal static class MemorySchema
                            );
                            """;
         await connection.ExecuteAsync(new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Ladder step 7 (WP5b/DA-F1): <see cref="BucketIndexDdl" />'s two partial indexes are
+    ///     declared <c>WHERE scope = 'shared'</c> / <c>WHERE scope IN ('project','custom')</c>, but
+    ///     a workspace row's CHECK constraint forces <c>scope IS NULL</c> — neither index can ever
+    ///     match a workspace row, so a retried workspace write silently duplicated. Dedupes existing
+    ///     workspace-scope duplicates first (survivor = earliest row; same shape as
+    ///     <see cref="MigrateToV1Async" />'s bucket dedupe, GROUP BY mirroring the index expression
+    ///     exactly) so index creation can never fail on a real bank, then creates the index. Soft
+    ///     like the v1 step: a dedupe failure leaves the bank open, degraded, retried next open.
+    /// </summary>
+    private static async Task<bool> MigrateToV7Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var hasWorkspaceIndex = await connection.ExecuteScalarAsync<long?>(
+                new CommandDefinition(
+                    "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'uq_entries_workspace_bucket'",
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false) is not null;
+        if (hasWorkspaceIndex)
+        {
+            return true;
+        }
+
+        try
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            try
+            {
+                await connection.ExecuteAsync(
+                        new CommandDefinition(
+                            """
+                            DELETE FROM entries
+                            WHERE workspace_id IS NOT NULL
+                              AND path IS NOT NULL AND hash IS NOT NULL
+                              AND id NOT IN (SELECT MIN(id) FROM entries
+                                             WHERE workspace_id IS NOT NULL
+                                             GROUP BY path, hash, workspace_id);
+
+                            CREATE UNIQUE INDEX IF NOT EXISTS uq_entries_workspace_bucket
+                                ON entries(path, hash, workspace_id)
+                                WHERE workspace_id IS NOT NULL;
+                            """,
+                            cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                await connection.ExecuteAsync(
+                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+            }
+            catch
+            {
+                await connection.ExecuteAsync(
+                        new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                throw;
+            }
+        }
+        catch
+        {
+            // Degraded but open; the next open retries the dedupe + index creation.
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    ///     Ladder step 8 (WP5b/A-F11): promotion_queue.claimed_at backs the claim-by-update pattern
+    ///     PromotionQueueService.PromoteAsync uses instead of claim-by-delete, so a ShareAsync
+    ///     failure mid-promotion leaves the candidate reclaimable instead of destroying it. DEFAULT
+    ///     covers a fresh bank; existing rows backfill to NULL (unclaimed) by SQLite's own ADD
+    ///     COLUMN default — none of them were ever claimed by a versioned claim mechanism.
+    /// </summary>
+    private static async Task MigrateToV8Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var columns = (await connection.QueryAsync<string>(
+                new CommandDefinition(
+                    "SELECT name FROM pragma_table_info('promotion_queue')",
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false)).ToHashSet(StringComparer.Ordinal);
+        if (!columns.Contains("claimed_at"))
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "ALTER TABLE promotion_queue ADD COLUMN claimed_at INTEGER NULL",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -502,7 +605,10 @@ internal static class MemorySchema
                     "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'promotion_queue_entries_ad'",
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
-        if (storedSql is not null && storedSql.Contains("scope", StringComparison.Ordinal))
+        // Compared against the body we intend, not sniffed for a substring: the previous probe
+        // asked whether the stored SQL mentioned "scope" at all, so the ADR-0046 widening would
+        // have left every existing bank on the old body forever while reading as up to date.
+        if (storedSql is not null && Normalize(storedSql) == Normalize(PromotionQueueTriggerDdl))
         {
             return;
         }
@@ -517,6 +623,15 @@ internal static class MemorySchema
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
     }
+
+    /// <summary>
+    ///     Whitespace-insensitive comparison against what sqlite_master actually stores: the body as
+    ///     written, minus the <c>IF NOT EXISTS</c> and minus the statement's trailing semicolon.
+    /// </summary>
+    private static string Normalize(string sql) =>
+        string.Join(' ', sql.Replace("IF NOT EXISTS ", "", StringComparison.Ordinal)
+                .Split((char[])[' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+            .TrimEnd(';', ' ');
 
     private static async Task<long> ReadVersionAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
         await connection.ExecuteScalarAsync<long>(

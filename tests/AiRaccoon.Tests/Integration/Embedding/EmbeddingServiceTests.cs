@@ -33,7 +33,7 @@ public sealed class EmbeddingServiceTests : IAsyncLifetime
     [Fact]
     public async Task Local_EmbedsTextInProcess_With384Dims_UnitNorm()
     {
-        using var generator = new EmbeddingService().CreateGenerator(
+        using var generator = TestData.CreateEmbeddingService().CreateGenerator(
             new EmbeddingSettings("local", null, null, null));
 
         var result = await generator.GenerateAsync(["the quick brown fox jumps over the lazy dog"],
@@ -48,7 +48,7 @@ public sealed class EmbeddingServiceTests : IAsyncLifetime
     [Fact]
     public async Task Local_SimilarSentences_AreCloserThanUnrelatedOnes()
     {
-        using var generator = new EmbeddingService().CreateGenerator(
+        using var generator = TestData.CreateEmbeddingService().CreateGenerator(
             new EmbeddingSettings("local", null, null, null));
 
         var result = await generator.GenerateAsync(
@@ -76,7 +76,7 @@ public sealed class EmbeddingServiceTests : IAsyncLifetime
 
         try
         {
-            using var generator = new EmbeddingService().CreateGenerator(
+            using var generator = TestData.CreateEmbeddingService().CreateGenerator(
                 new EmbeddingSettings("local", custom, null, null));
 
             var result = await generator.GenerateAsync(["custom path embedding"],
@@ -86,14 +86,14 @@ public sealed class EmbeddingServiceTests : IAsyncLifetime
         }
         finally
         {
-            Directory.Delete(Path.GetDirectoryName(custom)!, true);
+            TestData.DeleteTempRoot(Path.GetDirectoryName(custom)!);
         }
     }
 
     [Fact]
     public async Task OpenAi_RoutesThroughBaseUrl_WithModelAndApiKey()
     {
-        using var generator = new EmbeddingService().CreateGenerator(
+        using var generator = TestData.CreateEmbeddingService().CreateGenerator(
             new EmbeddingSettings("openai", "nomic-embed-text", _openAi!.BaseUrl,
                 "test-key-123"));
 
@@ -111,7 +111,7 @@ public sealed class EmbeddingServiceTests : IAsyncLifetime
     [Fact]
     public void OpenAi_WithoutApiKey_Throws()
     {
-        var service = new EmbeddingService();
+        var service = TestData.CreateEmbeddingService();
 
         Should.Throw<InvalidOperationException>(() => service.CreateGenerator(
             new EmbeddingSettings("openai", "nomic-embed-text", _openAi!.BaseUrl, null)));

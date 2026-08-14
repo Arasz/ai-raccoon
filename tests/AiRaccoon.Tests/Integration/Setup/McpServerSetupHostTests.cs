@@ -33,7 +33,7 @@ public class McpServerSetupHostTests : IDisposable
 {
     private readonly string _dataRoot = TestData.CreateTempRoot("mcp-host-tests");
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public async Task StdioOnlyHost_HasNoWebServer_AndStartsWithTheDefaultPortHeld()
@@ -239,7 +239,7 @@ public class McpServerSetupHostTests : IDisposable
         var toolNames = (options.ToolCollection ?? throw new InvalidOperationException("ToolCollection not configured"))
             .Select(t => t.ProtocolTool.Name).ToList();
 
-        toolNames.Count.ShouldBe(25);
+        toolNames.Count.ShouldBe(26);
         toolNames.ShouldContain("memory_share_extract");
         toolNames.ShouldContain("memory_watch_add");
         toolNames.ShouldContain("memory_watch_status");

@@ -8,35 +8,13 @@ namespace AiRaccoon.Tests.Integration.Retrieval;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class GoldenFileTests
 {
-    public const string RegenerateEnvVar = "AIRACCOON_HARNESS_REGENERATE_GOLDEN";
-
-    /// <summary>
-    ///     Gate: a fresh reference run must reproduce the committed golden top-k within the
-    ///     portable band (ADR-0015). Set AIRACCOON_HARNESS_REGENERATE_GOLDEN=1 (or run
-    ///     scripts/regenerate-retrieval-golden.py) to rewrite the golden file.
-    /// </summary>
-    [Fact]
-    public async Task GoldenFile_MatchesFreshReferenceRun()
-    {
-        var run = await ReferenceRunCache.GetAsync();
-        var goldenPath = Path.Combine(ReferenceAssets.AssetsDirectory, GoldenFile.FileName);
-        var regenerate = Environment.GetEnvironmentVariable(RegenerateEnvVar) == "1";
-
-        if (regenerate)
-        {
-            var regenerated = GoldenFile.FromRun(run) with { Path = goldenPath };
-            regenerated.Save();
-            return; // regeneration run itself was validated by the runner + smoke gates
-        }
-
-        var golden = GoldenFile.Load(goldenPath);
-        golden.SchemaVersion.ShouldBe(GoldenFile.CurrentSchemaVersion);
-        golden.Queries.Count.ShouldBe(run.ResultsByQuery.Count);
-
-        var differences = golden.Differences(run);
-        differences.ShouldBeEmpty(
-            "the committed golden reference is stale; regenerate with scripts/regenerate-retrieval-golden.py");
-    }
+    // GoldenFile_MatchesFreshReferenceRun deleted (docs/plans/2026-08-14-code-quality-improvement-plan.md
+    // WP4; docs/reviews/2026-08-14-moe-codebase-review.md RAG-F9): ReferenceRunner drives the vendored,
+    // pinned sqlite-memory 1.3.5 native extension against RealWorldCorpus in its own temp db — a fixed
+    // engine + a fixed corpus, entirely independent of src/AiRaccoon.Infrastructure/Sqlite. It cannot go
+    // red on any AiRaccoon retrieval change, and it held a Speed=Slow CI slot on every PR for that.
+    // CommittedGoldenFile_EveryHitCarriesHashRankingPathAndSnippet below is kept — it is cheap and does
+    // guard the golden file's shape.
 
     [Fact]
     public void CommittedGoldenFile_EveryHitCarriesHashRankingPathAndSnippet()

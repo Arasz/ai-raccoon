@@ -107,7 +107,7 @@ Feature: Native memory store (ai-raccoon MCP server)
         Scenario: Search returns ranked results with the preserved contract
             Given project "acme-web" contains "project knowledge about the codebase"
             When I search for "project knowledge" in project "acme-web"
-            Then results carry hash, seq, ranking, path and snippet
+            Then results carry hash, ranking, path and snippet
             And ranking is normalized into 0..1
         Scenario: A keyword-only query with no vector hits still returns keyword results
             Given content that only matches the keyword query exists in project "acme-web"
@@ -225,6 +225,10 @@ Feature: Native memory store (ai-raccoon MCP server)
             Given a note containing a fenced code block
             When I ingest it
             Then no chunk boundary falls inside the fence
+        Scenario: An over-budget fence is re-fenced into bounded pieces
+            Given a note containing a fenced code block
+            When I ingest it with a budget smaller than the fence
+            Then the fence is re-fenced into bounded pieces that respect max_tokens
 
     # File watching is its own shipped feature: docs/features/file-watcher/file-watcher.feature
     # (memory_watch_add / memory_watch_status / memory_watch_remove, persisted watches table).

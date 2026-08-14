@@ -24,6 +24,15 @@ public class FakeMemoryStore : IMemoryStore
         CancellationToken cancellationToken = default) =>
         throw NotOverridden(nameof(DeleteAsync));
 
+    /// <summary>
+    ///     Declared virtual here rather than left to IMemoryStore's default implementation: a
+    ///     derived fake's own GetAsync would not take part in interface dispatch, so it would
+    ///     silently return "not found" (ADR-0035).
+    /// </summary>
+    public virtual Task<MemoryEntry?> GetAsync(string projectId, string hash,
+        CancellationToken cancellationToken = default) =>
+        throw NotOverridden(nameof(GetAsync));
+
     public virtual Task<int> DeleteContextAsync(string projectId, string context,
         CancellationToken cancellationToken = default) =>
         throw NotOverridden(nameof(DeleteContextAsync));

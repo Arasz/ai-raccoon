@@ -40,10 +40,10 @@ internal partial class NodeRunner(
         };
         WarnOnNonHttpTransport(cliInput.ServerConfig, cliInput.Options.IsTransportExplicit, streams);
 
-        var result = await RestartServer(descriptor, streams, ctx);
-        if (!result.IsSuccess)
+        var preBind = await RestartServer(descriptor, streams, ctx);
+        if (preBind.ExitNow is { } exitNow)
         {
-            return result.Code;
+            return exitNow;
         }
 
         var tokenFile = descriptor.TokenFile;
@@ -56,38 +56,49 @@ internal partial class NodeRunner(
 
         Log.McpTokenReady(logger, tokenFile.Path);
 
-        return await StartHttpMcpServer(descriptor with { Token = mcpToken }, streams, ctx);
+        return await StartHttpMcpServer(descriptor with { Token = mcpToken }, preBind.Believed, streams, ctx);
     }
 
-    private async Task<ServerRestartResult> RestartServer(NodeLaunchDescriptor descriptor, StandardStreams streams, CancellationToken ctx)
+    /// <summary>
+    ///     The pre-bind state: an exit code to stop on, or what the probe and any restart established
+    ///     about the port — which the bind is then judged against (ADR-0043).
+    /// </summary>
+    private async Task<PreBind> RestartServer(NodeLaunchDescriptor descriptor, StandardStreams streams, CancellationToken ctx)
     {
-        if (!await serverProbe.RespondsAsync(descriptor.Port, ctx))
+        var verdict = await serverProbe.ProbeAsync(descriptor.Port, ctx);
+        if (RestartTransition.FromProbe(verdict) is { } settled)
         {
-            return ServerRestartResult.Success;
+            if (settled is RestartOutcome.Unknown)
+            {
+                Log.ProbeUnanswered(logger, descriptor.Port);
+            }
+
+            return PreBind.Bind(settled);
         }
 
         if (!descriptor.Restarting)
         {
-            return ServerRestartResult.Failure(await ReportAttachedAsync(descriptor, streams));
+            return PreBind.ExitWith(await ReportAttachedAsync(descriptor, streams));
         }
 
         var restartResult = await serverRestart.CycleAsync(descriptor.Port, descriptor.TokenFile, ctx);
-        if (RestartRefusal(descriptor, restartResult) is { } refusal)
+        if (RestartTransition.MayBind(restartResult.Outcome))
         {
-            await streams.WriteErrorLineAsync(refusal.Message);
-            return ServerRestartResult.Failure(refusal.Code);
+            return PreBind.Bind(restartResult.Outcome);
         }
 
-        return ServerRestartResult.Success;
+        var refusal = RestartRefusal(descriptor, restartResult);
+        await streams.WriteErrorLineAsync(refusal.Message);
+        return PreBind.ExitWith(refusal.Code);
     }
 
 
-    private async Task<int> StartHttpMcpServer(NodeLaunchDescriptor descriptor, StandardStreams streams, CancellationToken ctx)
+    private async Task<int> StartHttpMcpServer(NodeLaunchDescriptor descriptor, RestartOutcome believed, StandardStreams streams, CancellationToken ctx)
     {
         var serverHost = McpServerSetup.CreateWebHost(descriptor.ToServerConfig());
         try
         {
-            var probeResolvingEncryptionKey = encryptionKeyResolver.ProbeResolvingEncryptionKey();
+            var probeResolvingEncryptionKey = await encryptionKeyResolver.ProbeResolvingEncryptionKeyAsync(ctx);
             if (!probeResolvingEncryptionKey.IsSuccess)
             {
                 return ExitCode.FailedToOpenEncryptedBank;
@@ -107,24 +118,7 @@ internal partial class NodeRunner(
         }
         catch (Exception ex) when (IsAddressInUse(ex))
         {
-            var port = descriptor.Port;
-
-            if (await serverProbe.RespondsAsync(port, ctx))
-            {
-                if (!descriptor.Restarting)
-                {
-                    return await ReportAttachedAsync(descriptor, streams);
-                }
-
-                Log.RestartLostThePort(logger, port);
-                await streams.WriteErrorLineAsync(
-                    $"ai-raccoon: restart on port {port} did not take — another server took the port while this one was starting; check it with 'ai-raccoon serve observability pid --port {port}'");
-                return ExitCode.RestartLostThePort;
-            }
-
-            Log.PortInUse(logger, port);
-            await streams.WriteErrorLineAsync($"ai-raccoon: port {port} is in use — pass --port 0 for a random port, or free the port");
-            return ExitCode.PortInUse;
+            return await ReportBindRefusedAsync(descriptor, believed, await serverProbe.ProbeAsync(descriptor.Port, ctx), streams);
         }
         finally
         {
@@ -180,13 +174,40 @@ internal partial class NodeRunner(
     }
 
     /// <summary>
-    ///     The operator line and exit code for a restart that cannot go ahead, or null when
-    ///     `serve` may bind: nothing was listening, or the server stopped and freed the port.
+    ///     What a refused bind is reported as. The bind failure is proof the port is held, so a
+    ///     pre-check that believed otherwise is refuted here rather than repeated (ADR-0043).
     /// </summary>
-    private static (string Message, int Code)? RestartRefusal(NodeLaunchDescriptor descriptor, RestartResult result) =>
+    private async Task<int> ReportBindRefusedAsync(NodeLaunchDescriptor descriptor, RestartOutcome believed, ProbeVerdict afterBind, StandardStreams streams)
+    {
+        var port = descriptor.Port;
+        switch (RestartTransition.AfterBindRefused(believed, afterBind, descriptor.Restarting))
+        {
+            case BindRefusal.Attach:
+                return await ReportAttachedAsync(descriptor, streams);
+            case BindRefusal.LostThePort:
+                Log.RestartLostThePort(logger, port);
+                await streams.WriteErrorLineAsync(
+                    $"ai-raccoon: restart on port {port} did not take — another server took the port while this one was starting; check it with 'ai-raccoon serve observability pid --port {port}'");
+                return ExitCode.RestartLostThePort;
+            case BindRefusal.HeldUnidentified:
+                Log.RestartProbeUnanswered(logger, port);
+                await streams.WriteErrorLineAsync(
+                    $"ai-raccoon: cannot restart the server on port {port}: it is in use but gave the probe no answer, so nothing was asked to stop — try again, stop the listener yourself, or serve on another port");
+                return ExitCode.RestartProbeUnanswered;
+            default:
+                Log.PortInUse(logger, port);
+                await streams.WriteErrorLineAsync($"ai-raccoon: port {port} is in use — pass --port 0 for a random port, or free the port");
+                return ExitCode.PortInUse;
+        }
+    }
+
+    /// <summary>
+    ///     The operator line and exit code for a restart that cannot go ahead. Only outcomes
+    ///     <see cref="RestartTransition.MayBind" /> rejects reach it.
+    /// </summary>
+    private static (string Message, int Code) RestartRefusal(NodeLaunchDescriptor descriptor, RestartResult result) =>
         result.Outcome switch
         {
-            RestartOutcome.Nothing or RestartOutcome.Stopped => null,
             RestartOutcome.Foreign => (
                 $"ai-raccoon: port {descriptor.Port} is held by a listener that does not identify as an ai-raccoon server — stop it yourself, or serve on another port",
                 ExitCode.PortInUse),
@@ -202,24 +223,35 @@ internal partial class NodeRunner(
             RestartOutcome.Unsupported => (
                 $"ai-raccoon: cannot restart the server on port {descriptor.Port}: the ai-raccoon {result.Version ?? ServerRestart.UnknownVersion} serving it (pid {result.Pid}) is too old to be asked to stop — stop it yourself, then run serve again",
                 ExitCode.RestartUnsupportedServer),
-            _ => (
+            RestartOutcome.TimedOut => (
                 $"ai-raccoon: restart on port {descriptor.Port} timed out: the server (pid {result.Pid}) accepted the shutdown but still held the port {ServerRestart.PortFreeWithin.TotalSeconds:0}s later — stop it yourself, then run serve again",
-                ExitCode.RestartTimedOut)
+                ExitCode.RestartTimedOut),
+            _ => ThrowHelper.ThrowArgumentOutOfRangeException<(string, int)>(nameof(result),
+                $"{result.Outcome} lets serve bind, so it has no refusal line")
         };
 
     private async Task<int> ReportAttachedAsync(NodeLaunchDescriptor descriptor, StandardStreams streams)
     {
-        Log.AttachedToExistingServer(logger, descriptor.Url);
-        await streams.WriteErrorLineAsync($"ai-raccoon: attached to the server already listening on {descriptor.Url}");
+        // UX-F10: this process never opens the owning server's bank, so it cannot confirm the
+        // two match -- naming the bank *this* invocation asked for at least makes a
+        // --data-root mismatch visible instead of a silent takeover.
+        var requestedBankPath = SqliteConnectionFactory.BankPathFor(descriptor.LaunchConfig.Options);
+        Log.AttachedToExistingServer(logger, descriptor.Url, requestedBankPath);
+        await streams.WriteErrorLineAsync(
+            $"ai-raccoon: attached to the server already listening on {descriptor.Url} — it may not be serving {requestedBankPath}; this process never opened that bank to check. To serve it here, stop the other server first or free the port (--port 0)");
         await streams.RenderUrlForInput(descriptor.Url, descriptor.Port, descriptor.Source.McpEntry, descriptor.Source.Format);
         return ExitCode.Success;
     }
 
-    private sealed record ServerRestartResult(bool IsSuccess, int Code)
+    /// <summary>
+    ///     Either an exit code to stop on, or what the pre-check established about the port —
+    ///     <see cref="RestartOutcome.Unknown" /> whenever nothing was established at all.
+    /// </summary>
+    private sealed record PreBind(int? ExitNow, RestartOutcome Believed)
     {
-        public static readonly ServerRestartResult Success = new(true, 200);
+        public static PreBind Bind(RestartOutcome believed) => new(null, believed);
 
-        public static ServerRestartResult Failure(int code) => new(false, code);
+        public static PreBind ExitWith(int code) => new(code, RestartOutcome.Unknown);
     }
 
     private sealed record NodeLaunchDescriptor(ServerConfig LaunchConfig)
@@ -252,8 +284,16 @@ internal partial class NodeRunner(
         [LoggerMessage(EventId = 603, Level = LogLevel.Error, Message = "ai-raccoon: port {Port} is in use — pass --port 0 for a random port, or free the port")]
         public static partial void PortInUse(ILogger logger, int port);
 
-        [LoggerMessage(EventId = 605, Level = LogLevel.Information, Message = "ai-raccoon: attached to the server already listening on {Url}")]
-        public static partial void AttachedToExistingServer(ILogger logger, string url);
+        [LoggerMessage(EventId = 604, Level = LogLevel.Debug,
+            Message = "ai-raccoon: port {Port} gave the probe no answer; whether anything holds it is unknown")]
+        public static partial void ProbeUnanswered(ILogger logger, int port);
+
+        [LoggerMessage(EventId = 609, Level = LogLevel.Error,
+            Message = "ai-raccoon: port {Port} is in use but gave the probe no answer; nothing was asked to stop")]
+        public static partial void RestartProbeUnanswered(ILogger logger, int port);
+
+        [LoggerMessage(EventId = 605, Level = LogLevel.Information, Message = "ai-raccoon: attached to the server already listening on {Url} — this process asked for {RequestedBankPath}")]
+        public static partial void AttachedToExistingServer(ILogger logger, string url, string requestedBankPath);
 
         [LoggerMessage(EventId = 606, Level = LogLevel.Debug, Message = "ai-raccoon: /mcp is guarded by the token in {TokenPath}")]
         public static partial void McpTokenReady(ILogger logger, string tokenPath);

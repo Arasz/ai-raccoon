@@ -11,13 +11,13 @@ public class SearchQueryTests
     [Fact]
     public void Constructor_WithValidValues_KeepsThem()
     {
-        var query = new SearchQuery("acme", "vector search", WorkspaceId: "ws-1", Limit: 5, MinScore: 0.9);
+        var query = new SearchQuery("acme", "vector search", WorkspaceId: "ws-1", Limit: 5, MinRelativeScore: 0.9);
 
         query.ProjectId.ShouldBe("acme");
         query.Query.ShouldBe("vector search");
         query.WorkspaceId.ShouldBe("ws-1");
         query.Limit.ShouldBe(5);
-        query.MinScore.ShouldBe(0.9);
+        query.MinRelativeScore.ShouldBe(0.9);
     }
 
     [Fact]
@@ -27,7 +27,7 @@ public class SearchQueryTests
 
         query.WorkspaceId.ShouldBeNull();
         query.Limit.ShouldBe(20);
-        query.MinScore.ShouldBe(0.7);
+        query.MinRelativeScore.ShouldBe(0.0);
         query.Scope.ShouldBe(SearchScope.All);
         query.RrfK.ShouldBe(60);
         query.FtsWeight.ShouldBe(1);
@@ -107,12 +107,12 @@ public class SearchQueryTests
     [Theory]
     [InlineData(-0.1)]
     [InlineData(1.1)]
-    public void Validator_WithMinScoreOutsideUnitInterval_ReportsCamelCaseProperty(double minScore)
+    public void Validator_WithMinRelativeScoreOutsideUnitInterval_ReportsCamelCaseProperty(double minRelativeScore)
     {
-        var result = new SearchQuery.Validator().Validate(new SearchQuery("acme", "query", MinScore: minScore));
+        var result = new SearchQuery.Validator().Validate(new SearchQuery("acme", "query", MinRelativeScore: minRelativeScore));
 
         result.IsValid.ShouldBeFalse();
-        result.Errors.ShouldContain(e => e.PropertyName == "minScore");
+        result.Errors.ShouldContain(e => e.PropertyName == "minRelativeScore");
     }
 
     [Theory]
@@ -141,7 +141,7 @@ public class SearchQueryTests
     [Fact]
     public void Validator_WithValidValues_Passes()
     {
-        var result = new SearchQuery.Validator().Validate(new SearchQuery("acme", "query", Limit: 5, MinScore: 0.9));
+        var result = new SearchQuery.Validator().Validate(new SearchQuery("acme", "query", Limit: 5, MinRelativeScore: 0.9));
 
         result.IsValid.ShouldBeTrue();
     }

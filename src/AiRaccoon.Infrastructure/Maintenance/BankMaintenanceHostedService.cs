@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Observability;
 using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Data.Sqlite;
@@ -9,13 +10,16 @@ namespace AiRaccoon.Infrastructure.Maintenance;
 
 /// <summary>
 ///     Bank maintenance loop: WAL checkpoint (TRUNCATE) at startup, shutdown and on the
-///     checkpoint cadence; VACUUM + ANALYZE on the vacuum cadence (ADR-0010).
+///     checkpoint cadence; VACUUM + ANALYZE on the vacuum cadence (ADR-0010); noise_entries
+///     retention purge on every pass (ADR-0029's TTL, never built until this task).
 /// </summary>
 public sealed partial class BankMaintenanceHostedService(
     ISqliteConnectionFactory factory,
     TimeProvider timeProvider,
     IOperationTelemetry telemetry,
-    ILogger<BankMaintenanceHostedService> logger)
+    ILogger<BankMaintenanceHostedService> logger,
+    IMemoryStore store,
+    INoiseEntryStore noiseEntryStore)
     : BackgroundService
 {
     /// <summary>Contended checkpoints defer quickly instead of blocking the maintenance connection.</summary>
@@ -135,6 +139,8 @@ public sealed partial class BankMaintenanceHostedService(
         try
         {
             await RunCheckpointAsync(connection, cancellationToken).ConfigureAwait(false);
+            await RetryPendingEmbedsAsync(cancellationToken).ConfigureAwait(false);
+            await PurgeExpiredNoiseEntriesAsync(cancellationToken).ConfigureAwait(false);
 
             var now = timeProvider.GetUtcNow();
             if (_lastVacuumUtc is null)
@@ -215,6 +221,81 @@ public sealed partial class BankMaintenanceHostedService(
         else
         {
             Log.Checkpoint(logger);
+        }
+    }
+
+    /// <summary>
+    ///     Retries embedding for every project reporting a nonzero pending count (.NET-F1): a
+    ///     watch-triggered embed failure leaves a row `embed_state='pending'` forever with nothing
+    ///     else retrying it, so this pass is the only recovery besides another file change or a
+    ///     manual `memory_embed_pending` call. One project's failure is logged and never blocks the
+    ///     rest of the sweep or the checkpoint/vacuum pass.
+    /// </summary>
+    private async Task RetryPendingEmbedsAsync(CancellationToken cancellationToken)
+    {
+        IReadOnlyList<string> projectIds;
+        try
+        {
+            projectIds = await store.GetProjectIdsAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Log.PendingEmbedSweepFailed(logger, ex);
+            return;
+        }
+
+        foreach (var projectId in projectIds)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                var stats = await store.GetStatsAsync(projectId, cancellationToken).ConfigureAwait(false);
+                if (stats.PendingCount == 0)
+                {
+                    continue;
+                }
+
+                var result = await store.EmbedPendingAsync(projectId, null, cancellationToken).ConfigureAwait(false);
+                Log.PendingEmbedsRetried(logger, projectId, result.Processed, result.Pending);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                Log.PendingEmbedRetryFailed(logger, projectId, ex);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     ADR-0029's retention TTL, never built until this task: noise_entries would otherwise
+    ///     accumulate forever. A failure logs and never blocks the checkpoint/vacuum pass — same
+    ///     silent-failure discipline as the pending-embed retry sweep above.
+    /// </summary>
+    private async Task PurgeExpiredNoiseEntriesAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
+            var purged = await noiseEntryStore.PurgeExpiredAsync(now, cancellationToken).ConfigureAwait(false);
+            if (purged > 0)
+            {
+                Log.NoiseEntriesPurged(logger, purged);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Log.NoiseEntryPurgeFailed(logger, ex);
         }
     }
 
@@ -300,5 +381,23 @@ public sealed partial class BankMaintenanceHostedService(
 
         [LoggerMessage(EventId = 515, Level = LogLevel.Warning, Message = "Shutdown checkpoint failed")]
         public static partial void ShutdownCheckpointFailed(ILogger logger, Exception exception);
+
+        [LoggerMessage(EventId = 517, Level = LogLevel.Warning,
+            Message = "Pending-embed retry sweep could not list project ids; retried on the next tick")]
+        public static partial void PendingEmbedSweepFailed(ILogger logger, Exception exception);
+
+        [LoggerMessage(EventId = 518, Level = LogLevel.Information,
+            Message = "Pending-embed retry for {ProjectId}: {Processed} processed, {Pending} still pending")]
+        public static partial void PendingEmbedsRetried(ILogger logger, string projectId, int processed, int pending);
+
+        [LoggerMessage(EventId = 519, Level = LogLevel.Warning,
+            Message = "Pending-embed retry failed for {ProjectId}; row(s) stay pending, retried on the next tick")]
+        public static partial void PendingEmbedRetryFailed(ILogger logger, string projectId, Exception exception);
+
+        [LoggerMessage(EventId = 520, Level = LogLevel.Information, Message = "Noise entry retention purge removed {Count} expired row(s)")]
+        public static partial void NoiseEntriesPurged(ILogger logger, int count);
+
+        [LoggerMessage(EventId = 521, Level = LogLevel.Warning, Message = "Noise entry retention purge failed; retried on the next tick")]
+        public static partial void NoiseEntryPurgeFailed(ILogger logger, Exception exception);
     }
 }

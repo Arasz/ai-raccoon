@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -33,15 +34,12 @@ public sealed class SqliteMemoryStoreDegradationTests : IDisposable
             DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User
         };
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
-        _store = TestData.CreateMemoryStore(_factory, _logger, new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow), new EmbeddingService());
+        _store = TestData.CreateMemoryStore(_factory, _logger, new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService());
     }
 
     public void Dispose()
     {
-        if (Directory.Exists(_dataRoot))
-        {
-            Directory.Delete(_dataRoot, true);
-        }
+        TestData.DeleteTempRoot(_dataRoot);
     }
 
     /// <summary>
@@ -75,8 +73,4 @@ public sealed class SqliteMemoryStoreDegradationTests : IDisposable
         _logger.Collector.GetSnapshot().ShouldNotContain(r => r.Level == LogLevel.Warning);
     }
 
-    private sealed class StubChunker : IMarkdownChunker
-    {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
-    }
 }

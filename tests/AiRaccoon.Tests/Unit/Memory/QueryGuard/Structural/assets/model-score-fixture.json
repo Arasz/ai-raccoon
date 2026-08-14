@@ -1,0 +1,310 @@
+[
+  {
+    "id": "4c2e13b25afe53",
+    "family": "build_dotnet",
+    "cls": 1,
+    "text": "/Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/lease-impl/tests/AiRaccoon.Tests/Integration/SqliteWatchScanLeaseTests.cs(36,13): error CS0246: The type or namespace name 'SqliteWatchScanLease' could not be found (are you missing a using directive or an assembly reference?) [/Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/lease-impl/tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj]",
+    "score": 0.9925829308526953
+  },
+  {
+    "id": "f910a137ecea59",
+    "family": "build_dotnet",
+    "cls": 1,
+    "text": "Restored /Users/arasz/RiderProjects/job-search-ai-assistant/.claude/worktrees/task+T15.3-reverse-pipeline-gate/src/JobSearchAiAssistant.Domain/JobSearchAiAssistant.Domain.csproj (in 175 ms).",
+    "score": 0.9990642782462462
+  },
+  {
+    "id": "3ea8e8e5c34b99",
+    "family": "build_npm",
+    "cls": 1,
+    "text": "All files pass linting.\n\nPrerendered 6 static routes.\n=== rss order ===\n/blog/code-review-graph-review</link>\n/blog/agent-cost-comparis",
+    "score": 0.9982837381769901
+  },
+  {
+    "id": "ff9b914504ed1f",
+    "family": "build_npm",
+    "cls": 1,
+    "text": "hermes-agent-review \u2192 hermes-agent-review.data.ts\n  introducing-ai-badger \u2192 introducing-ai-badger.data.ts\n  job-search-ai-beta \u2192 job-search-ai-beta.data.ts\n\nGenerating articles index.js",
+    "score": 0.9989939552449661
+  },
+  {
+    "id": "701ae90b8a0b4e",
+    "family": "cli_docker",
+    "cls": 1,
+    "text": "dotnet 127.0.0.1:47100\ndotnet 127.0.0.1:64775\ndotnet 127.0.0.1:64776\ndotnet 127.0.0.1:64777\ndotnet [::1]:47100\ndotnet [::1]:64775\ndotnet [::1]:64776\ndotnet [::1]:64777\nfunc 127.0.0.1:64838\nnode [::1]:5173",
+    "score": 0.9991417308914499
+  },
+  {
+    "id": "f07b4324c2e134",
+    "family": "cli_docker",
+    "cls": 1,
+    "text": "scripts_cosmosdb-data",
+    "score": 0.9212919819546859
+  },
+  {
+    "id": "48f68afb0e8c9b",
+    "family": "cli_gh",
+    "cls": 1,
+    "text": "https://github.com/Arasz/job-search-ai-assistant/issues/185#issuecomment-5017446899\nhttps://github.com/Arasz/job-search-ai-assistant/",
+    "score": 0.9997096427035794
+  },
+  {
+    "id": "c81c121e52c326",
+    "family": "cli_gh",
+    "cls": 1,
+    "text": "605dcc7f .NET pull_request completed",
+    "score": 0.9013230663406092
+  },
+  {
+    "id": "a468a3814c9195",
+    "family": "cli_git",
+    "cls": 1,
+    "text": "Saved working directory and index state On chore/state-move-to-saas-continuation-finished: hermes-md-budget-f",
+    "score": 0.8325348945121113
+  },
+  {
+    "id": "5eb02991a63740",
+    "family": "cli_git",
+    "cls": 1,
+    "text": "state updated; stillTrue entries: 8",
+    "score": 0.895314839314369
+  },
+  {
+    "id": "3b9f4a69a999d1",
+    "family": "cli_sqlite",
+    "cls": 1,
+    "text": "SNIPPET ~200 chars (what production sees) fires on 8 of 113 {'AutoResponseReceived': 7, 'Failed': 1}",
+    "score": 0.9998588243822348
+  },
+  {
+    "id": "b763836a964210",
+    "family": "cli_sqlite",
+    "cls": 1,
+    "text": "0|id|INTEGER|0||1\n1|hash|TEXT|0||0\n2|path|TEXT|0||0\n3|value|TEXT|0||0\n4|scope|TEXT|0||0\n5|project_id|TEXT|0||0\n6|context_label|TEXT|0||0\n7|workspace_id|TEXT|0||0\n8|agent_id|TEXT|0||0\n9|created_at|INTEGER|1||0\n10|updat",
+    "score": 0.9997797232377518
+  },
+  {
+    "id": "cd8406286fc295",
+    "family": "data_json",
+    "cls": 1,
+    "text": "\"type\": \"string\"",
+    "score": 0.9902327862892187
+  },
+  {
+    "id": "7dd7fabbefa1a2",
+    "family": "data_json",
+    "cls": 1,
+    "text": "\"lines\": 81",
+    "score": 0.9884908351013102
+  },
+  {
+    "id": "45a73646edb0ba",
+    "family": "data_xml",
+    "cls": 1,
+    "text": "structure is canonical: 17 directories inspected.",
+    "score": 0.9099132072852684
+  },
+  {
+    "id": "e8c4229d6db7e8",
+    "family": "data_xml",
+    "cls": 1,
+    "text": "<tool_use_error>Blocked: sleep 120 followed by: tail -5 /private/tmp/claude-501/-Users-arasz-RiderProjects-ai-badger/c1655289-2e3a",
+    "score": 0.9992342569610024
+  },
+  {
+    "id": "07520818ff025b",
+    "family": "fs_query",
+    "cls": 1,
+    "text": "1:output \"function_app_name\" {",
+    "score": 0.9951423866537434
+  },
+  {
+    "id": "632901c33245a1",
+    "family": "fs_query",
+    "cls": 1,
+    "text": "/**\n * Wire types for `CvInstance` (`GET /cvs/generic`'s `instance` field) \u2014\n * verified d",
+    "score": 0.9988775857334613
+  },
+  {
+    "id": "8caeeb400d51df",
+    "family": "lint",
+    "cls": 1,
+    "text": "branch 'fix/py38-floor-import' set up to track 'origin/fix/py38-floor-import'.\nhttps://github.com/Arasz/ai-badger/pull/198",
+    "score": 0.9766695125636312
+  },
+  {
+    "id": "bb4ff64fd36a75",
+    "family": "lint",
+    "cls": 1,
+    "text": "tests/test_claude_md_compact.py:110:0: C0103: Function name \"test_a_cli_budget_beats_the_projects_agentDocs_override\" doesn't conform to snake_case naming style (invalid-name)",
+    "score": 0.9562786472233065
+  },
+  {
+    "id": "7eee4791e04723",
+    "family": "net_http",
+    "cls": 1,
+    "text": "main bundle: main-UR6HVHLI.js\n0\n\u2192 NOT present (deploy may predate #",
+    "score": 0.9970163914980402
+  },
+  {
+    "id": "1a747f2e00f313",
+    "family": "net_http",
+    "cls": 1,
+    "text": "/api/offers -> 403",
+    "score": 0.9995419257364978
+  },
+  {
+    "id": "65ac3050c78eb7",
+    "family": "proc_notif",
+    "cls": 1,
+    "text": "[IMPORTANT: Background process proc_6fc93d5eed25 completed normally (exit code 0).\nCommand: cd /Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/fix-after-refactor && dotnet test --no-build --logger \"console;verbosity=minimal\" > /tmp/full_run2.log 2>&1; echo \"EXIT: $?\" >> /tmp/full_run2.log\nOutput:\n]",
+    "score": 0.9993606463931318
+  },
+  {
+    "id": "8c8bb1bec94da7",
+    "family": "proc_notif",
+    "cls": 1,
+    "text": "[IMPORTANT: Background process proc_74af2deb49a7 completed normally (exit code 0).\nCommand: cd /Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/fix-after-refactor && dotnet test --no-build --logger \"console;verbosity=minimal\" > /tmp/full_run3.log 2>&1; echo \"EXIT: $?\" >> /tmp/full_run3.log\nOutput:\n]",
+    "score": 0.9990428340144761
+  },
+  {
+    "id": "c7ee1e38a59713",
+    "family": "proc_query",
+    "cls": 1,
+    "text": "Mon Jul 13 17:08:08 UTC 2026",
+    "score": 0.9932413588585981
+  },
+  {
+    "id": "2b0e4ff2ebc322",
+    "family": "proc_query",
+    "cls": 1,
+    "text": "2026-07-31T23:23:16Z",
+    "score": 0.9994100569752622
+  },
+  {
+    "id": "1ee28bd72a414f",
+    "family": "script_run",
+    "cls": 1,
+    "text": "25: var store = new FakeExtractionStore();",
+    "score": 0.9997479975597976
+  },
+  {
+    "id": "e267c7956499a3",
+    "family": "script_run",
+    "cls": 1,
+    "text": "Recorded 125504 subagent tokens for ensure-ai-badger-sync.\n=== actual crontab ===\n*/3",
+    "score": 0.996927162000999
+  },
+  {
+    "id": "e12911e137aed8",
+    "family": "sig_real_query",
+    "cls": 0,
+    "text": "- include all ai-badger included tools in the new aproach",
+    "score": 0.0030196088195302492
+  },
+  {
+    "id": "e16ac301076846",
+    "family": "sig_real_query",
+    "cls": 0,
+    "text": "f: I want you to create PR for those changes",
+    "score": 0.0026276039090098453
+  },
+  {
+    "id": "07041864fab5eb",
+    "family": "sig_user_prompt",
+    "cls": 0,
+    "text": "f: https://github.com/Arasz/ai-badger/pull/370 - conflicts, lint failure",
+    "score": 0.026979021542122075
+  },
+  {
+    "id": "83ae76b481a551",
+    "family": "sig_user_prompt",
+    "cls": 0,
+    "text": "wait for the agent, ensure PR is merged, clean up the tasks",
+    "score": 0.01522013506933502
+  },
+  {
+    "id": "7c25f7280fd863",
+    "family": "test_dotnet",
+    "cls": 1,
+    "text": "Passed! - Failed: 0, Passed: 1949, Skipped: 1, Total: 1950, Duration: 23 s - JobSearchAiAssistant.Api.Tests.dll (net10.0)",
+    "score": 0.9998522988835126
+  },
+  {
+    "id": "9f45fdd802f20e",
+    "family": "test_dotnet",
+    "cls": 1,
+    "text": "Passed! - Failed: 0, Passed: 18, Skipped: 0, Total: 18, Duration: 1 s - JobSearchAiAssistant.Api.Tests.dll (net10.0)",
+    "score": 0.9995565303486557
+  },
+  {
+    "id": "878d02a6405838",
+    "family": "test_js",
+    "cls": 1,
+    "text": "Command running in background with ID: ba1l1i6n5. Output is being written to: /private/tmp/claude-501/-Users-arasz-RiderProjects-arasz-home-page/c2a7084a-81e7-",
+    "score": 0.9357363740758814
+  },
+  {
+    "id": "663201a6080e82",
+    "family": "test_js",
+    "cls": 1,
+    "text": "npm error Missing script: \"test:single\"\nnpm error\nnpm error To see a list of scripts, run:\nnpm error   npm run\nnpm error A complete log of this run can be found in: /Use",
+    "score": 0.10189189879929594
+  },
+  {
+    "id": "b6ad06fcf1e46a",
+    "family": "test_pytest",
+    "cls": 1,
+    "text": ". [100%]",
+    "score": 0.9959323537807129
+  },
+  {
+    "id": "49ee21eadae293",
+    "family": "test_pytest",
+    "cls": 1,
+    "text": "synced version 0.43.0 into plugin.json, marketplace.json, index.json",
+    "score": 0.9499073650625188
+  },
+  {
+    "id": "1ad36246210abc",
+    "family": "trace_dotnet",
+    "cls": 1,
+    "text": "Error Message:\n   AiRaccoon.Core.Watch.PathOutsideScopeException : Path '/var/folders/k9/gxjyv0q50tn0_sngj8zg30140000gn/T/aira",
+    "score": 0.9997536050967536
+  },
+  {
+    "id": "b8d2f3f0c44407",
+    "family": "trace_dotnet",
+    "cls": 1,
+    "text": "],\n    \"keywords\": [\n      \".NET Core\",\n      \"Docker\",\n      \"Kubernetes\",",
+    "score": 0.9999909133891018
+  },
+  {
+    "id": "62d5b3ce6467a3",
+    "family": "trace_node",
+    "cls": 1,
+    "text": "Error: locator.fill: Test timeout of 30000ms exceeded.\n    Call log:\n      - waiting for getByRole('dialog').getByTest",
+    "score": 0.9991149790071843
+  },
+  {
+    "id": "9db356650fefee",
+    "family": "trace_node",
+    "cls": 1,
+    "text": "+ Received + 3",
+    "score": 0.9999583183559596
+  },
+  {
+    "id": "a1d2aa50822c65",
+    "family": "trace_python",
+    "cls": 1,
+    "text": "Exit code 1\nentries=4422 vec_entries=4422 vec_structure=0\nTraceback (most recent call last):\n  File \"<stdin>\", line 43, in <module>\n  File \"<stdin>\", line 36, in bench\nsqlite3.OperationalError: no s",
+    "score": 0.9997845210778201
+  },
+  {
+    "id": "6a485e4308e18f",
+    "family": "trace_python",
+    "cls": 1,
+    "text": "Traceback (most recent call last):\n  File \"<string>\", line 4,",
+    "score": 0.9999558492540155
+  }
+]

@@ -15,7 +15,8 @@ internal sealed class ConfigCommands(
     EncryptionCommands encryptionCommands,
     ExtractCommands extract,
     MaintenanceCommands maintenance,
-    ServeCommands serve)
+    ServeCommands serve,
+    NoiseEntriesCommands noiseEntries)
 {
     public async Task<int> RunAsync(CliInput cliInput,
         StandardStreams streams,
@@ -23,6 +24,14 @@ internal sealed class ConfigCommands(
     {
         var commandPath = cliInput.CommandPath;
         var parsedCliArgs = cliInput.ParsedCliArgs;
+
+        // CliRendering already printed the parse error(s) before this ran (AppRunner.GetCliInput);
+        // dispatching anyway would throw reading an argument System.CommandLine never bound,
+        // landing in the catch below and reformatting the same message a second time.
+        if (cliInput.Errors.Count > 0)
+        {
+            return ExitCode.InvalidArgument;
+        }
 
         try
         {
@@ -48,6 +57,19 @@ internal sealed class ConfigCommands(
                 ["sweep", "interval-hours"] => await settings.SweepIntervalHoursSetAsync(parsedCliArgs, store, streams, ctx),
                 ["sweep", "threshold", "set"] => await settings.SweepThresholdSetAsync(parsedCliArgs, store, streams, ctx),
                 ["sweep", "show"] => await settings.SweepShowAsync(store, streams, ctx),
+                ["noise", "enable"] => await settings.NoiseEnabledSetAsync(true, store, streams, ctx),
+                ["noise", "disable"] => await settings.NoiseEnabledSetAsync(false, store, streams, ctx),
+                ["noise", "show"] => await settings.NoiseShowAsync(store, streams, ctx),
+                ["noise", "entries"] => await noiseEntries.SummarizeAsync(streams, ctx),
+                ["queryguard", "enable"] => await settings.QueryGuardEnabledSetAsync(true, store, streams, ctx),
+                ["queryguard", "disable"] => await settings.QueryGuardEnabledSetAsync(false, store, streams, ctx),
+                ["queryguard", "shadow", "enable"] => await settings.QueryGuardShadowSetAsync(true, store, streams, ctx),
+                ["queryguard", "shadow", "disable"] => await settings.QueryGuardShadowSetAsync(false, store, streams, ctx),
+                ["queryguard", "structural", "enable"] => await settings.QueryGuardStructuralSetAsync(true, store, streams, ctx),
+                ["queryguard", "structural", "disable"] => await settings.QueryGuardStructuralSetAsync(false, store, streams, ctx),
+                ["queryguard", "structural", "threshold", "set"] =>
+                    await settings.QueryGuardStructuralThresholdSetAsync(parsedCliArgs, store, streams, ctx),
+                ["queryguard", "show"] => await settings.QueryGuardShowAsync(store, streams, ctx),
                 ["sync", "add", "s3"] => await sync.AddS3Async(parsedCliArgs, store, streams, ctx),
                 ["sync", "add", "azure"] => await sync.AddAzureAsync(parsedCliArgs, store, streams,
                     ctx),
@@ -99,8 +121,8 @@ internal sealed class ConfigCommands(
         }
         catch (Exception ex)
         {
-            await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}");
-            return 1;
+            await streams.WriteErrorLineAsync(CliFailureFormatting.Format(ex, cliInput.ServerConfig.Options.DataRoot));
+            return ExitCode.InvalidArgument;
         }
     }
 }

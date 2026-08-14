@@ -18,7 +18,7 @@ namespace AiRaccoon.Tests.Integration;
 
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
-public class WritePerformanceBenchmarkTests
+public class WritePerformanceBenchmarkTests(ITestOutputHelper output)
 {
     [Fact]
     public async Task WriteAsync_PerformanceMeasurement_BaselineVsZeroShotFiltering()
@@ -68,7 +68,7 @@ public class WritePerformanceBenchmarkTests
             {
                 var noiseContent = $"[IMPORTANT: Background process proc_{i} completed normally (exit code 0).\nCommand: cd /tmp && dotnet test\nOutput: test]";
                 var entry = await memoryStore.WriteAsync(new MemoryWriteRequest(projectId, noiseContent), TestContext.Current.CancellationToken);
-                if (entry.Hash == "noise_hash")
+                if (!entry.Stored)
                 {
                     interceptedCount++;
                 }
@@ -100,6 +100,8 @@ Iterations: {iterations}
 - Rejection Accuracy: {interceptedCount}/{iterations} ({interceptedCount * 100.0 / iterations}%)
 ";
 
+            output.WriteLine(report);
+
             // Overwriting a tracked file on every run dirties the tree and would land benchmark
             // noise in CI, so publishing into docs/work is opt-in via AIRACCOON_BENCH_REPORT=1.
             // The rejection-accuracy assertion above is what makes this test worth running anyway.
@@ -113,10 +115,7 @@ Iterations: {iterations}
         }
         finally
         {
-            if (Directory.Exists(dataRoot))
-            {
-                try { Directory.Delete(dataRoot, true); } catch { }
-            }
+            TestData.DeleteTempRoot(dataRoot);
         }
     }
 

@@ -11,8 +11,6 @@ JSAA_PINNED_COMMIT = "9397bbef504b5b30a31003c84e8c5c316641adb6"
 # Port 5000 is taken by macOS ControlCenter; override via MCP_URL env var.
 MCP_BASE = os.environ.get("MCP_URL", "http://localhost:5000/mcp")
 PROJECT_ID = "job-search-ai-assistant"
-# src/ is one level below scripts/; the map itself stays at scripts/chunk-hash-map.json (C# contract).
-HASH_MAP_PATH = Path(__file__).resolve().parent.parent / "chunk-hash-map.json"
 BATCH_SIZE = 50
 
 INCLUDE_GLOBS: list[str] = [

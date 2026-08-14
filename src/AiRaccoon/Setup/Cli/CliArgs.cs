@@ -19,13 +19,13 @@ internal static class CliArgs
     internal static bool TryParse(string[] args, out CliInput? result)
     {
         var parseResult = CliCommandTree.BuildFullRootCommand().Parse(args, ParserConfiguration);
-        var errors = parseResult.Errors.Select(e => e.Message).ToList();
+        var errors = DistinctErrors(parseResult);
         var showHelp = parseResult.Action is HelpAction;
         var showVersion = parseResult.Action?.GetType().Name == VersionOptionAction;
         if (!showHelp && !showVersion && errors.Count > 0 && !ContainsVerb(args))
         {
             parseResult = CliCommandTree.BuildLaunchRootCommand().Parse(args, ParserConfiguration);
-            errors = [.. parseResult.Errors.Select(e => e.Message)];
+            errors = DistinctErrors(parseResult);
         }
 
         var commandPath = CommandPathOf(parseResult);
@@ -39,6 +39,12 @@ internal static class CliArgs
         result = new CliInput(RootCliOptions.Null, commandPath, showHelp, showVersion, [.. errors.Union(optionReadResult.Errors)], parseResult);
         return false;
     }
+
+    /// <summary>System.CommandLine 2.0.10 reports some parse errors (e.g. a missing required
+    /// argument) twice in one ParseResult.Errors — collapse to one message per distinct text
+    /// so nothing downstream has to.</summary>
+    private static List<string> DistinctErrors(ParseResult parseResult) =>
+        [.. parseResult.Errors.Select(e => e.Message).Distinct(StringComparer.Ordinal)];
 
     /// <summary>True when the args name one of the config verbs (skipping options and their values).</summary>
     private static bool ContainsVerb(string[] args)

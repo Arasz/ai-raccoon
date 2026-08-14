@@ -18,14 +18,17 @@ public sealed class CliCommandRunnerTests : IDisposable
 {
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-config-verb-runner");
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    private async Task<(int Exit, string Out, string Err, ServerConfig Config)> Run(string[] args)
+    private async Task<(int Exit, string Out, string Err, ServerConfig Config)> Run(string[] args, bool expectParseErrors = false)
     {
         CliArgs.TryParse(args, out var parsed);
-        parsed!.Errors.ShouldBeEmpty();
+        if (!expectParseErrors)
+        {
+            parsed!.Errors.ShouldBeEmpty();
+        }
 
-        var config = parsed.Options.ToServerConfig();
+        var config = parsed!.Options.ToServerConfig();
 
         // Serialized with the encryption tests: AIRACCOON_DB_PASSPHRASE is process-global and
         // must be cleared during a run so a dev machine's value cannot poison a fresh-bank test.
@@ -49,11 +52,12 @@ public sealed class CliCommandRunnerTests : IDisposable
     }
 
     [Fact]
-    public async Task VerbError_ReturnsNonZeroAndWritesStderr()
+    public async Task VerbError_ReturnsInvalidArgument_NotTheEncryptionKeyExitCode()
     {
         var (exit, _, stderr, _) = await Run(["--data-root", _dataRoot, "access", "default", "set", "bogus"]);
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldNotBe(ExitCode.FailedToResolveEncryptionKey);
         stderr.ShouldContain("invalid access mode");
     }
 
@@ -76,6 +80,30 @@ public sealed class CliCommandRunnerTests : IDisposable
         exit.ShouldBe(0);
         config.Options.Scope.ShouldBe(InstallScope.Project);
         File.Exists(Path.Combine(_dataRoot, ".ai-raccoon", "memory.db")).ShouldBeTrue();
+    }
+
+    /// <summary>UX-F4: a missing required argument must be reported once — not once from
+    /// System.CommandLine's own error rendering, once from CliRendering's own loop, and once
+    /// more from ConfigCommands reformatting the exception thrown when it dispatches anyway.</summary>
+    [Fact]
+    public async Task MissingArgument_PrintsTheErrorExactlyOnce()
+    {
+        var (exit, _, stderr, _) = await Run(["--data-root", _dataRoot, "access", "set"], expectParseErrors: true);
+
+        exit.ShouldBe(ExitCode.InvalidArgument);
+        CountOccurrences(stderr, "Required argument missing for command: 'set'.").ShouldBe(1);
+    }
+
+    private static int CountOccurrences(string haystack, string needle)
+    {
+        var count = 0;
+        for (var index = haystack.IndexOf(needle, StringComparison.Ordinal); index >= 0;
+             index = haystack.IndexOf(needle, index + needle.Length, StringComparison.Ordinal))
+        {
+            count++;
+        }
+
+        return count;
     }
 
     [Fact]
@@ -112,7 +140,7 @@ public sealed class CliCommandRunnerTests : IDisposable
     /// documented warning path; the DI-composed command must not hand the Bitwarden provider
     /// an env-source EncryptionData (Guard: "encryptionData.SecretId must not be null").</summary>
     [Fact]
-    public async Task EncryptionUnset_EnvKeyedBankNoPassphrase_WarnsAndExitsOne()
+    public async Task EncryptionUnset_EnvKeyedBankNoPassphrase_WarnsAndExitsKeyResolutionFailure()
     {
         // Create the bank first: on a missing bank, unset takes the clean-reset path (exit 0).
         var (seedExit, _, _, _) = await Run(["--data-root", _dataRoot, "access", "default", "show"]);
@@ -120,7 +148,7 @@ public sealed class CliCommandRunnerTests : IDisposable
 
         var (exit, _, stderr, _) = await Run(["--data-root", _dataRoot, "encryption", "unset"]);
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.FailedToResolveEncryptionKey);
         stderr.ShouldContain("no AIRACCOON_DB_PASSPHRASE set");
         stderr.ShouldNotContain("must not be null");
     }

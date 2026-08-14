@@ -57,9 +57,14 @@ public sealed partial class ServerRestart : IServerRestart
     {
         Guard.IsNotNull(tokenFile);
 
-        if (!await _probe.RespondsAsync(port, ctx))
+        if (RestartTransition.FromProbe(await _probe.ProbeAsync(port, ctx)) is { } settled)
         {
-            return new RestartResult(RestartOutcome.Nothing);
+            if (settled is RestartOutcome.Unknown)
+            {
+                Log.ProbeUnanswered(_logger, port);
+            }
+
+            return new RestartResult(settled);
         }
 
         if (await IdentifyAsync(port, ctx) is not { Name: ServerInfo.ServerName } info)
@@ -147,7 +152,12 @@ public sealed partial class ServerRestart : IServerRestart
         {
             do
             {
-                if (await _probe.RespondsAsync(port, waiting.Token))
+                // Only a refused connection proves the port is free (docs/adr/0043). Treating any
+                // non-answer as "freed" is the same conflation the pre-check had: a server that
+                // accepts the shutdown, stops answering and keeps the socket open would be reported
+                // as stopped, and the bind that follows would then blame a nonexistent second server
+                // for taking the port.
+                if (await _probe.ProbeAsync(port, waiting.Token) is not ProbeVerdict.NotListening)
                 {
                     continue;
                 }
@@ -189,5 +199,9 @@ public sealed partial class ServerRestart : IServerRestart
         [LoggerMessage(EventId = 655, Level = LogLevel.Error,
             Message = "ai-raccoon: the listener on port {Port} does not identify as an ai-raccoon server")]
         public static partial void Foreign(ILogger logger, int port);
+
+        [LoggerMessage(EventId = 656, Level = LogLevel.Warning,
+            Message = "ai-raccoon: port {Port} gave the probe no answer; nothing is asked to stop")]
+        public static partial void ProbeUnanswered(ILogger logger, int port);
     }
 }

@@ -35,7 +35,7 @@ public sealed class BundledModelLoggingTests
         }
         finally
         {
-            Directory.Delete(tempRoot, true);
+            TestData.DeleteTempRoot(tempRoot);
         }
     }
 

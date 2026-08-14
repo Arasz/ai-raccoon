@@ -2,6 +2,8 @@ using System.ComponentModel;
 using System.Text.Json.Nodes;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.QueryGuard;
+using AiRaccoon.Core.Memory.QueryGuard.Structural;
 using AiRaccoon.Core.SearchQuality;
 using FluentValidation;
 using JetBrains.Annotations;
@@ -13,13 +15,14 @@ using ModelContextProtocol.Server;
 namespace AiRaccoon.Tools;
 
 /// <summary>Thin MCP tools over IMemoryStore — no business logic here (see docs/work/features-agent-memory/spec-issue-1.md §6.1).</summary>
-public sealed class MemoryTools(
+public sealed partial class MemoryTools(
     IMemoryStore store,
     ToolGate gate,
     ISearchQualityService qualityService,
     ILogger<MemoryTools> logger)
 {
     private const string TnMemoryWrite = "memory_write";
+    private const string TnMemoryGet = "memory_get";
     private const string TnMemorySearch = "memory_search";
     private const string TnMemoryList = "memory_list";
     private const string TnMemoryStats = "memory_stats";
@@ -34,7 +37,7 @@ public sealed class MemoryTools(
 
     [McpServerTool(Name = TnMemoryWrite)]
     [Description(
-        "Writes content into memory. Writes land in the project's committed context by default; naming a workspace_id routes them into that isolated workspace. Returns the stored entry.")]
+        "Writes content into memory. Writes land in the project's committed context by default; naming a workspace_id routes them into that isolated workspace. A write may be refused (e.g. it matched a noise policy) — check stored: a refused write has stored=false and a reason naming what rejected it, and hash is empty.")]
     public async Task<ApiEnvelope<WriteResult>> Write(
         [Description("The project id; every memory operation is scoped to a project.")]
         string projectId,
@@ -44,7 +47,7 @@ public sealed class MemoryTools(
         string? workspaceId = null,
         [Description("Provenance only: which agent wrote this.")]
         string? agentId = null,
-        [Description("Optional custom context label instead of the default project/workspace context.")]
+        [Description("Optional context label for this entry, instead of the default project/workspace context. A context organises entries inside the project; it does not hide them — a plain project search still finds them.")]
         string? context = null,
         [Description("Optional original file path the content came from; chunks of one file share it.")]
         string? sourceFile = null,
@@ -58,14 +61,34 @@ public sealed class MemoryTools(
         await MemoryWriteRequestValidator.ValidateAndThrowAsync(request, cancellationToken);
 
         var entry = await store.WriteAsync(request, cancellationToken);
-        var result = new WriteResult(entry.Hash, entry.Path, entry.Context, entry.CreatedAt);
+        var result = new WriteResult(entry.Hash, entry.Path, entry.Context, entry.CreatedAt, entry.Stored, entry.Reason);
+        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        return envelope;
+    }
+
+    [McpServerTool(Name = TnMemoryGet)]
+    [Description(
+        "Reads one entry's full content by its content hash, as returned by memory_write or memory_search. An unknown hash is refused as unknown-hash.")]
+    public async Task<ApiEnvelope<GetResult>> Get(
+        [Description("The project id; every memory operation is scoped to a project.")]
+        string projectId,
+        [Description("The content hash to read.")]
+        string hash,
+        CancellationToken cancellationToken = default)
+    {
+        await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryGet, cancellationToken);
+        ArgumentException.ThrowIfNullOrWhiteSpace(hash);
+
+        var entry = await store.GetAsync(projectId, hash, cancellationToken)
+                    ?? throw new UnknownHashException(hash, projectId);
+        var result = new GetResult(entry.Hash, entry.Value, entry.Path, entry.Context, entry.CreatedAt);
         var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
         return envelope;
     }
 
     [McpServerTool(Name = TnMemorySearch)]
     [Description(
-        "Hybrid semantic search over the bank. scope=all (default) searches shared + project (+ workspace when named); scope=project searches the project only; scope=shared searches the shared promotion tier only.")]
+        "Hybrid semantic search over the bank. scope=all (default) searches shared + project (+ workspace when named); scope=project searches the project only; scope=shared searches the shared promotion tier only. A project scope covers every context in the project unless contextLabel narrows it to one.")]
     public async Task<ApiEnvelope<SearchResultList>> Search(
         [Description("The project id.")] string projectId,
         [Description("The search query.")] string query,
@@ -76,15 +99,19 @@ public sealed class MemoryTools(
         [Description("Maximum results (default 20).")]
         int limit = 20,
         [Description(
-            "Floor on the normalized 0..1 ranking (default 0.7). Scores are normalized so the top result is always 1.0, so at default limit this rarely filters anything — see ADR-0006.")]
-        double minScore = 0.7,
+            "Relative floor: keeps results scoring at least this fraction of THIS response's top hit (default 0, off). " +
+            "Ranking is normalized per response, so rank 1 always scores 1.0 even when nothing in the bank answers the " +
+            "query — a high score is not evidence of a good match, and this is not an absolute quality bar. Use it to " +
+            "keep only hits in the same league as the best one; see ADR-0047.")]
+        double minRelativeScore = 0.0,
         [Description("RRF cutoff for the hybrid fusion (default 60); a result scores weight / (k + rank) per modality list.")]
         int rrfK = SearchQuery.DefaultRrfK,
         [Description("Weight of the keyword (FTS5) list in the RRF fusion (default 1).")]
         int ftsWeight = 1,
         [Description("Weight of the semantic (vector) list in the RRF fusion (default 1).")]
         int vectorWeight = 1,
-        [Description("When set, the project scope also searches custom-scoped rows under this context label.")]
+        [Description("Narrows the project scope to one context. Omit it to search every context in " +
+                     "the project (the default); memory_stats lists the labels in use.")]
         string? contextLabel = null,
         CancellationToken cancellationToken = default)
     {
@@ -98,10 +125,16 @@ public sealed class MemoryTools(
             _ => throw new McpException($"invalid-params: Invalid scope '{scope}': expected all, project, or shared.")
         };
 
-        var searchQuery = new SearchQuery(projectId, query, parsedScope, workspaceId, limit, minScore,
+        var searchQuery = new SearchQuery(projectId, query, parsedScope, workspaceId, limit, minRelativeScore,
             rrfK, ftsWeight, vectorWeight, contextLabel);
 
         await SearchQueryValidator.ValidateAndThrowAsync(searchQuery, cancellationToken);
+
+        var guardVerdict = await EvaluateQueryGuardAsync(projectId, query, cancellationToken);
+        if (guardVerdict.Tier == QueryGuardTier.Refuse)
+        {
+            throw new McpException($"invalid-params: {guardVerdict.Guidance}");
+        }
 
         var results = await store.SearchAsync(searchQuery, cancellationToken);
 
@@ -119,9 +152,73 @@ public sealed class MemoryTools(
             logger.LogWarning(ex, "Failed to record search quality for correlation {CorrelationId}", correlationId);
         }
 
-        var result = new SearchResultList(results);
+        var warning = guardVerdict.Tier == QueryGuardTier.Warn ? guardVerdict.Guidance : null;
+        var result = new SearchResultList(results, warning);
         var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
         return envelope with { Meta = envelope.Meta with { CorrelationId = correlationId } };
+    }
+
+    /// <summary>
+    ///     The read-path query guard (docs/adr/0040, docs/adr/0041): disabled reads one setting and
+    ///     returns Clean untouched (byte-identical to no guard at all). Shadow mode logs a
+    ///     non-Clean verdict and still returns Clean, so the caller's behavior is unaffected while
+    ///     an operator measures their own traffic. Live mode returns the verdict as evaluated. The
+    ///     structural detector (ADR-0041) only ever runs when the regex tiers found nothing —
+    ///     it is strictly a third input to the warn tier, never able to override a regex Refuse or
+    ///     Warn, and gated by its own default-off setting.
+    /// </summary>
+    private async Task<QueryGuardVerdict> EvaluateQueryGuardAsync(string projectId, string query,
+        CancellationToken cancellationToken)
+    {
+        var enabled = QueryGuardConfigKeys.ParseEnabled(
+            await store.GetSettingAsync(QueryGuardConfigKeys.EnabledGlobal, cancellationToken));
+        if (!enabled)
+        {
+            return QueryGuardVerdict.Clean;
+        }
+
+        var verdict = QueryGuardPolicy.Evaluate(query);
+        if (verdict.Tier == QueryGuardTier.Clean)
+        {
+            verdict = await EvaluateStructuralQueryGuardAsync(query, cancellationToken) ?? verdict;
+        }
+
+        if (verdict.Tier == QueryGuardTier.Clean)
+        {
+            return verdict;
+        }
+
+        var shadow = QueryGuardConfigKeys.ParseShadow(
+            await store.GetSettingAsync(QueryGuardConfigKeys.ShadowGlobal, cancellationToken));
+        if (!shadow)
+        {
+            return verdict;
+        }
+
+        Log.QueryGuardShadowVerdict(logger, verdict.Tier.ToString(), projectId, verdict.PolicyName ?? string.Empty);
+        return QueryGuardVerdict.Clean;
+    }
+
+    /// <summary>
+    ///     Structural detector (docs/adr/0041): default off (<see cref="QueryGuardConfigKeys.DefaultStructuralEnabled" />),
+    ///     so the settings read below only happens when an operator has explicitly opted in.
+    ///     Returns null (defer to the regex verdict) unless the score clears the calibrated
+    ///     threshold; never returns Refuse (see <see cref="StructuralQueryGuardPolicy" />).
+    /// </summary>
+    private async Task<QueryGuardVerdict?> EvaluateStructuralQueryGuardAsync(string query, CancellationToken cancellationToken)
+    {
+        var structuralEnabled = QueryGuardConfigKeys.ParseStructuralEnabled(
+            await store.GetSettingAsync(QueryGuardConfigKeys.StructuralEnabledGlobal, cancellationToken));
+        if (!structuralEnabled)
+        {
+            return null;
+        }
+
+        var threshold = QueryGuardConfigKeys.ParseStructuralThreshold(
+            await store.GetSettingAsync(QueryGuardConfigKeys.StructuralThresholdGlobal, cancellationToken));
+
+        var verdict = StructuralQueryGuardPolicy.Evaluate(query, threshold);
+        return verdict.Tier == QueryGuardTier.Warn ? verdict : null;
     }
 
     [McpServerTool(Name = TnMemoryList)]
@@ -242,10 +339,14 @@ public sealed class MemoryTools(
     }
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
-    public sealed record WriteResult(string Hash, string Path, string Context, long CreatedAt);
+    public sealed record WriteResult(string Hash, string Path, string Context, long CreatedAt, bool Stored = true, string? Reason = null);
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
-    public sealed record SearchResultList(IReadOnlyList<MemorySearchResult> Results);
+    public sealed record GetResult(string Hash, string Value, string Path, string Context, long CreatedAt);
+
+    /// <summary>Warning is set only by the query guard's annotate tier (docs/adr/0040): a non-null value never changes Results.</summary>
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
+    public sealed record SearchResultList(IReadOnlyList<MemorySearchResult> Results, string? Warning = null);
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record ListResult(JsonNode Files);
@@ -267,4 +368,11 @@ public sealed class MemoryTools(
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record EmbedResult(int Processed, int Pending);
+
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 920, Level = LogLevel.Information,
+            Message = "query guard shadow mode: would {Tier} search for project {ProjectId} (policy {PolicyName})")]
+        public static partial void QueryGuardShadowVerdict(ILogger logger, string tier, string projectId, string policyName);
+    }
 }

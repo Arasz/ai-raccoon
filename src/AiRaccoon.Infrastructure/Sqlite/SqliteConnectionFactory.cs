@@ -22,7 +22,8 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
     public string BankPath => BankPathFor(options);
 
     public async Task<SqliteConnection> OpenBankAsync(CancellationToken cancellationToken = default) =>
-        await OpenBankWithResolvedKeyAsync(keyResolver.Resolve(), cancellationToken).ConfigureAwait(false);
+        await OpenBankWithResolvedKeyAsync(
+            await keyResolver.ResolveAsync(cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
 
     /// <summary>
     ///     Rekeys a bank still encrypted under the pre-ADR-0012 derivation to the HKDF key (ADR-0012).
@@ -32,7 +33,7 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
     /// <returns>True when the bank was rekeyed; false when it already opened under the current key.</returns>
     public async Task<bool> MigrateLegacyKeyAsync(CancellationToken cancellationToken = default)
     {
-        var resolvedKey = keyResolver.Resolve();
+        var resolvedKey = await keyResolver.ResolveAsync(cancellationToken).ConfigureAwait(false);
 
         SqliteConnection connection;
         try
@@ -95,7 +96,11 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
     ///     (docs/plans/encryption-bitwarden-implementation.md) — then verifies by reopening. The
     ///     current-key pool is drained first; callers must not hold an open bank connection.
     /// </summary>
-    public Task RekeyBankAsync(string newKey, CancellationToken cancellationToken = default) => RekeyBankAsync(newKey, keyResolver.Resolve().Passphrase, cancellationToken);
+    public async Task RekeyBankAsync(string newKey, CancellationToken cancellationToken = default)
+    {
+        var resolvedKey = await keyResolver.ResolveAsync(cancellationToken).ConfigureAwait(false);
+        await RekeyBankAsync(newKey, resolvedKey.Passphrase, cancellationToken).ConfigureAwait(false);
+    }
 
     /// <summary>
     ///     As <see cref="RekeyBankAsync(string,CancellationToken)" />, but with the bank's current

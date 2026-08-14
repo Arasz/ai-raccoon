@@ -35,17 +35,14 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
-            new EmbeddingService());
+            TestData.CreateEmbeddingService());
         _openAi = await FakeEmbeddingEndpoint.StartAsync(TestContext.Current.CancellationToken);
     }
 
     public async ValueTask DisposeAsync()
     {
         await _openAi.DisposeAsync();
-        if (Directory.Exists(_dataRoot))
-        {
-            Directory.Delete(_dataRoot, true);
-        }
+        TestData.DeleteTempRoot(_dataRoot);
     }
 
     [Fact]
@@ -92,7 +89,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         }
         finally
         {
-            Directory.Delete(Path.GetDirectoryName(custom)!, true);
+            TestData.DeleteTempRoot(Path.GetDirectoryName(custom)!);
         }
     }
 

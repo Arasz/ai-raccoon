@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Integration.Sweep;
 
@@ -40,17 +41,14 @@ public sealed class SweepHostedServiceTests : IDisposable
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _time = new FakeTimeProvider(FixedNow);
         _store = TestData.CreateMemoryStore(factory,
-            new FakeLogger<SqliteMemoryStore>(), new SqliteMemorySourceStore(factory), new StubChunker(), _time, new EmbeddingService());
+            new FakeLogger<SqliteMemoryStore>(), new SqliteMemorySourceStore(factory), new SingleChunkChunker(), _time, TestData.CreateEmbeddingService());
         _service = new SweepHostedService(_store, new SweepService(_store, _time), _time,
             TestTelemetry.None, new FakeLogger<SweepHostedService>());
     }
 
     public void Dispose()
     {
-        if (Directory.Exists(_dataRoot))
-        {
-            Directory.Delete(_dataRoot, true);
-        }
+        TestData.DeleteTempRoot(_dataRoot);
     }
 
     [Fact]
@@ -117,8 +115,4 @@ public sealed class SweepHostedServiceTests : IDisposable
         return [.. entries.Select(e => e.Hash)];
     }
 
-    private sealed class StubChunker : IMarkdownChunker
-    {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => [text];
-    }
 }

@@ -32,17 +32,17 @@ public class SearchLatencyBenchmark
     [Benchmark(Baseline = true)]
     public Task<IReadOnlyList<MemorySearchResult>> SearchAll_Limit10() =>
         _bank.Store.SearchAsync(new SearchQuery(SearchFixtureBank.ProjectId, Query,
-            Limit: 10, MinScore: 0.0));
+            Limit: 10, MinRelativeScore: 0.0));
 
     /// <summary>Vector-only (FtsWeight=0): isolates vec0 KNN + fusion + deferred-snippet cost.</summary>
     [Benchmark]
     public Task<IReadOnlyList<MemorySearchResult>> SearchAll_VectorOnly_Limit10() =>
         _bank.Store.SearchAsync(new SearchQuery(SearchFixtureBank.ProjectId, Query,
-            Limit: 10, MinScore: 0.0, FtsWeight: 0, VectorWeight: 1));
+            Limit: 10, MinRelativeScore: 0.0, FtsWeight: 0, VectorWeight: 1));
 
     /// <summary>FTS-only (VectorWeight=0): isolates the FTS5 bm25 + snippet() cost.</summary>
     [Benchmark]
     public Task<IReadOnlyList<MemorySearchResult>> SearchAll_FtsOnly_Limit10() =>
         _bank.Store.SearchAsync(new SearchQuery(SearchFixtureBank.ProjectId, Query,
-            Limit: 10, MinScore: 0.0, FtsWeight: 1, VectorWeight: 0));
+            Limit: 10, MinRelativeScore: 0.0, FtsWeight: 1, VectorWeight: 0));
 }

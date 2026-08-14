@@ -33,17 +33,14 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
-            new EmbeddingService());
+            TestData.CreateEmbeddingService());
         _openAi = await FakeEmbeddingEndpoint.StartAsync(TestContext.Current.CancellationToken);
     }
 
     public async ValueTask DisposeAsync()
     {
         await _openAi.DisposeAsync();
-        if (Directory.Exists(_dataRoot))
-        {
-            Directory.Delete(_dataRoot, true);
-        }
+        TestData.DeleteTempRoot(_dataRoot);
     }
 
     [Fact]
@@ -91,6 +88,38 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         hit.Snippet.ShouldBe(SnippetFallback.From(longValue, hit.Hash));
     }
 
+    /// <summary>
+    ///     WP3a/ADR-0035: SnippetFallback's window used to open at a hash-seeded offset entirely
+    ///     unrelated to the query — for a long entry the agent would see ~7% of it, chosen
+    ///     arbitrarily, and could easily miss the very term that made this a hit.
+    /// </summary>
+    [Fact]
+    public async Task Search_VectorOnlyHit_SnippetIsQueryRelevant_EvenWhenTheMatchIsLateInALongEntry()
+    {
+        await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
+        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
+
+        var filler = string.Join(" ", Enumerable.Range(1, 60).Select(i =>
+            $"sentence number {i} with enough prose to push the target term well past the two hundred character window"));
+        var longValue = filler + " the target term giraffemigrationprotocol appears only here near the very end.";
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", longValue), TestContext.Current.CancellationToken);
+
+        // FtsWeight: 0 forces a genuinely vector-only path — the fallback snippet is the only
+        // snippet source, regardless of whether the term would also FTS-match.
+        var results = await _store.SearchAsync(
+            new SearchQuery("acme", "giraffemigrationprotocol", SearchScope.Project, Limit: 5, MinRelativeScore: 0.0,
+                RrfK: 60, FtsWeight: 0, VectorWeight: 1),
+            TestContext.Current.CancellationToken);
+
+        var hit = results.ShouldHaveSingleItem();
+        hit.Hash.ShouldBe(entry.Hash);
+        SnippetFallback.From(longValue, hit.Hash).ShouldNotContain("giraffemigrationprotocol",
+            customMessage: "sanity check: today's hash-seeded window for this fixture must not accidentally cover the term");
+        hit.Snippet.ShouldContain("giraffemigrationprotocol",
+            customMessage: "the snippet must be centered on the query match, not an arbitrary hash-seeded window");
+    }
+
     [Fact]
     public async Task Search_VectorOnly_ReturnsExactlyLimitResults_WithCorrectSnippets_OutOfALargerCandidateSet()
     {
@@ -109,7 +138,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         }
 
         var results = await _store.SearchAsync(
-            new SearchQuery("acme", "fast canine", SearchScope.Project, Limit: 3, MinScore: 0.0,
+            new SearchQuery("acme", "fast canine", SearchScope.Project, Limit: 3, MinRelativeScore: 0.0,
                 RrfK: 60, FtsWeight: 0, VectorWeight: 1),
             TestContext.Current.CancellationToken);
 
@@ -137,7 +166,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         }
 
         var results = await _store.SearchAsync(
-            new SearchQuery("acme", "zebra", SearchScope.Project, Limit: 3, MinScore: 0.0,
+            new SearchQuery("acme", "zebra", SearchScope.Project, Limit: 3, MinRelativeScore: 0.0,
                 RrfK: 60, FtsWeight: 1, VectorWeight: 0),
             TestContext.Current.CancellationToken);
 
@@ -163,7 +192,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         // A single embedded doc is always vector-rank-1 for any query; "zebra" also gives it an
         // FTS match, so it is retrieved by both modalities.
         var results = await _store.SearchAsync(
-            new SearchQuery("acme", "zebra", SearchScope.Project, Limit: 5, MinScore: 0.0,
+            new SearchQuery("acme", "zebra", SearchScope.Project, Limit: 5, MinRelativeScore: 0.0,
                 RrfK: 60, FtsWeight: 1, VectorWeight: 1),
             TestContext.Current.CancellationToken);
 
@@ -190,7 +219,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
 
         var results = await _store.SearchAsync(
             new SearchQuery("acme", "semantic memory retrieval system", SearchScope.Project,
-                Limit: 10, MinScore: 0.0, RrfK: 60, FtsWeight: 0, VectorWeight: 1),
+                Limit: 10, MinRelativeScore: 0.0, RrfK: 60, FtsWeight: 0, VectorWeight: 1),
             TestContext.Current.CancellationToken);
 
         // distance 0 (identical text) must rank first; the distance value never becomes a score.
@@ -220,7 +249,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
 
         var results = await _store.SearchAsync(
             new SearchQuery("acme", "the quick brown fox jumps over the lazy dog", SearchScope.Project,
-                Limit: 1, MinScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 1),
+                Limit: 1, MinRelativeScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 1),
             TestContext.Current.CancellationToken);
 
         // x is rank 2 in both lists: with K = max(1*3, 100) = 100 both lists carry it and
@@ -250,7 +279,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
 
         // weights (2,1): the keyword list's rank-1 result scores 2/(k+1) > 1/(k+1).
         var keywordFirst = await _store.SearchAsync(
-            new SearchQuery("acme", "api contract design", Limit: 10, MinScore: 0.0,
+            new SearchQuery("acme", "api contract design", Limit: 10, MinRelativeScore: 0.0,
                 RrfK: 60, FtsWeight: 2, VectorWeight: 1),
             TestContext.Current.CancellationToken);
 
@@ -258,7 +287,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
 
         // weights (1,2): the vector list's rank-1 result scores 2/(k+1) > 1/(k+1).
         var vectorFirst = await _store.SearchAsync(
-            new SearchQuery("acme", "api contract design", Limit: 10, MinScore: 0.0,
+            new SearchQuery("acme", "api contract design", Limit: 10, MinRelativeScore: 0.0,
                 RrfK: 60, FtsWeight: 1, VectorWeight: 2),
             TestContext.Current.CancellationToken);
 
@@ -287,8 +316,4 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
 
     private static string CreateTempRoot() => TestData.CreateTempRoot("airaccoon-store-tests");
 
-    private sealed class StubChunker : IMarkdownChunker
-    {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
-    }
 }

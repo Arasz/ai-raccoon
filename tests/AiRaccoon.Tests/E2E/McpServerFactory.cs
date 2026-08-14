@@ -62,7 +62,7 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
         var factory = new SqliteConnectionFactory(options,
             new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
                 [new EnvEncryptionKeyProvider()]));
-        var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), TimeProvider.System, new EmbeddingService());
+        var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), TimeProvider.System, TestData.CreateEmbeddingService());
         await store.SetSettingAsync(AccessModePolicy.GlobalSettingKey, AccessModePolicy.Serialize(AccessMode.Full));
 
         // Ingest is contained by the declared scope, so the E2E server is configured with one
@@ -99,14 +99,7 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
 
         _disposed = true;
         base.Dispose(disposing);
-        try
-        {
-            Directory.Delete(DataRoot, true);
-        }
-        catch (IOException)
-        {
-            // Best-effort cleanup; the OS temp dir is scanned periodically anyway.
-        }
+        TestData.DeleteTempRoot(DataRoot);
     }
 
     private static string CreateTempRoot() => TestData.CreateTempRoot();

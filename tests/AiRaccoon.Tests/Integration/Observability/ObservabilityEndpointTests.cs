@@ -30,7 +30,7 @@ public sealed class ObservabilityEndpointTests : IDisposable
 
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-observability-endpoint");
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public async Task Get_ReturnsThisProcessPidAndTheServerName()

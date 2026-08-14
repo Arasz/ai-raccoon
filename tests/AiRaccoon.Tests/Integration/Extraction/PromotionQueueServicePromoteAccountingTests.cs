@@ -43,14 +43,14 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _clock = new FakeTimeProvider(FixedNow);
         var store = TestData.CreateMemoryStore(_factory,
-            NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, new EmbeddingService());
+            NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, TestData.CreateEmbeddingService());
         var queueStore = new SqlitePromotionQueueStore(_factory, _clock);
         _metrics = new RecordingMetrics();
         _service = new PromotionQueueService(queueStore, store, new UniformCountEvictionPolicy(),
             _metrics, NullLogger<PromotionQueueService>.Instance, _clock);
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     /// <summary>Seeds a project-scoped row with a REAL file path (the ingest shape: one row per
     /// chunk, path = source path, distinct values/hashes). Raw insert, because the shared-tier
@@ -161,7 +161,7 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
         var service = new PromotionQueueService(
             new SqlitePromotionQueueStore(_factory, _clock),
             TestData.CreateMemoryStore(_factory,
-                NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, new EmbeddingService()),
+                NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, TestData.CreateEmbeddingService()),
             new UniformCountEvictionPolicy(), new SpyMetrics(), logger, _clock);
         await SeedChunkAsync("acme", "h1", "docs/a.md", "chunk one", TestContext.Current.CancellationToken);
         await SeedChunkAsync("acme", "h2", "docs/a.md", "chunk two", TestContext.Current.CancellationToken);
@@ -279,11 +279,6 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
         public void RecordPruned(string projectId, int count) { }
         public void RecordFailed(string projectId, int count) { }
         public void RecordSnapshot(PromotionQueueStats stats, int capacity) => Snapshots.Add((stats, capacity));
-    }
-
-    private sealed class StubChunker : IMarkdownChunker
-    {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
     }
 
     private sealed class ListLogger : ILogger<PromotionQueueService>

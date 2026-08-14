@@ -52,7 +52,7 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
         // Before the port check below can mean anything, this test's own reservation has to be gone.
         _lease.Dispose();
         await StopSpawnedBackendAsync();
-        Directory.Delete(_dataRoot, true);
+        TestData.DeleteTempRoot(_dataRoot);
     }
 
     /// <summary>

@@ -132,26 +132,6 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings) : IEntryEmbedder
         return EmbeddingBlob.ToBytes(embedding[0].Vector);
     }
 
-    public async Task<float[]?> EmbedContentAsync(string content, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var modelPath = AiRaccoon.Infrastructure.Embedding.BundledModel.ResolveModelPath();
-            if (string.IsNullOrWhiteSpace(modelPath) || !File.Exists(modelPath))
-            {
-                return null;
-            }
-
-            var generator = embeddings.CreateGenerator(new EmbeddingSettings("local", modelPath, null, null));
-            var result = await generator.GenerateAsync([content], cancellationToken: cancellationToken).ConfigureAwait(false);
-            return result.Count > 0 ? result[0].Vector.ToArray() : null;
-        }
-        catch (InvalidOperationException)
-        {
-            return null;
-        }
-    }
-
     public async Task<EmbeddingSettings> ReadSettingsAsync(SqliteConnection connection,
         CancellationToken cancellationToken) =>
         new(await ReadSettingAsync(connection, EmbeddingSettingsKeys.Provider, cancellationToken)

@@ -126,6 +126,68 @@ curl -X POST http://127.0.0.1:7721/mcp \
 
 ---
 
+## Tune what gets stored and what gets searched
+
+Four settings families gate the write path, the read path and the reaper. All are bank-global
+and all are stored in the `settings` table, so they survive restarts and apply to every project.
+
+### Write-path noise filtering
+
+Rejects machine-generated content before it reaches the bank; the rejected text is kept in the
+noise store rather than discarded ([ADR-0039](../adr/0039-noise-learning-substrate-and-shadow-mode.md)).
+
+```bash
+ai-raccoon noise show        # enabled: True
+ai-raccoon noise disable     # accept every write, even ones a policy would reject
+ai-raccoon noise enable      # the default
+ai-raccoon noise entries     # summarize what has been rejected
+```
+
+### Read-path query guard
+
+Refuses a `memory_search` query that is itself machine output, and annotates one that merely
+contains log-like content ([ADR-0040](../adr/0040-read-path-query-guard.md)). Armed by default.
+
+```bash
+ai-raccoon queryguard show             # enabled: True  shadow: False  structural: False  threshold: 0.98939822280316
+ai-raccoon queryguard disable          # every query runs untouched
+ai-raccoon queryguard shadow enable    # record what the guard would have done, without acting on it
+```
+
+Shadow mode is the safe way to measure your own traffic before arming anything: verdicts are
+logged and then discarded, so no caller sees a refusal or an annotation.
+
+The structural detector ([ADR-0041](../adr/0041-structural-noise-detector.md)) is a third input
+to the *warn* tier only — pure shape statistics, no embedding, and never able to refuse. It ships
+off:
+
+```bash
+ai-raccoon queryguard structural enable
+ai-raccoon queryguard structural threshold set 0.95   # 0..1; lower annotates more
+ai-raccoon queryguard structural disable
+```
+
+### The sweep reaper
+
+Deletes low-rated, aged project entries on a cadence ([ADR-0025](../adr/0025-the-sweep-reaper.md)).
+On by default; shared-tier entries are exempt, and a project not in `full` access mode is skipped.
+
+```bash
+ai-raccoon sweep show                  # enabled: True  interval: 24 h  threshold: 0.3
+ai-raccoon sweep disable               # the kill switch
+ai-raccoon sweep interval-hours 168
+ai-raccoon sweep threshold set 0.55
+```
+
+### Retrieval fusion
+
+```bash
+ai-raccoon retrieval alpha show        # 0.5
+ai-raccoon retrieval alpha set 0.7     # 0..1; weights the structure vector against the content vector
+```
+
+---
+
 ## Related documentation
 
 - [ADR-0020: Always-on HTTP stdio proxy](../adr/0020-always-on-http-stdio-proxy.md)

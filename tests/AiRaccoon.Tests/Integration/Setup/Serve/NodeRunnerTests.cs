@@ -26,7 +26,7 @@ public sealed class NodeRunnerTests : IDisposable
     private static readonly HttpClient HttpClient = new();
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-serve-runner");
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public async Task FreePort_PrintsExactUrlLine_AndExitsZeroAfterStop()
@@ -137,6 +137,9 @@ public sealed class NodeRunnerTests : IDisposable
             second.Stdout.ShouldBe($"{McpEntryRenderer.RenderHermes(port)}{Environment.NewLine}");
             second.Stderr.ShouldContain("attached");
             second.Stderr.ShouldNotContain("   at ");
+            // UX-F10: attaching silently to another server's bank must not go unremarked --
+            // name the bank this invocation asked for so a --data-root mismatch is visible.
+            second.Stderr.ShouldContain(Path.Combine(secondRoot, "memory.db"));
 
 
             // The OWNER's token: /mcp is gated, so an unauthorized GET would 401 before routing.
@@ -145,7 +148,7 @@ public sealed class NodeRunnerTests : IDisposable
         }
         finally
         {
-            Directory.Delete(secondRoot, true);
+            TestData.DeleteTempRoot(secondRoot);
         }
 
         var firstExit = await first.StopAsync();
@@ -201,7 +204,7 @@ public sealed class NodeRunnerTests : IDisposable
         }
         finally
         {
-            Directory.Delete(secondRoot, true);
+            TestData.DeleteTempRoot(secondRoot);
         }
     }
 

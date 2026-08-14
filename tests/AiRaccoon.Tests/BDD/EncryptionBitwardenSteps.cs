@@ -140,12 +140,12 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
     public void WhenRawKeyDerived() => _derivedKey = SshKeyDerivation.DeriveRawKey(OpenSshPrivateKeyParser.ParseSeed(_pendingPem!));
 
     [When("^the provider reads the secret$")]
-    public void WhenProviderReadsTheSecret()
+    public async Task WhenProviderReadsTheSecret()
     {
         var provider = new BitwardenEncryptionKeyProvider(Ctx.NewRunner());
         try
         {
-            provider.GetPassphrase(new EncryptionData("bitwarden") { SecretId = _fixtureSecretId });
+            await provider.GetPassphraseAsync(new EncryptionData("bitwarden") { SecretId = _fixtureSecretId });
         }
         catch (Exception ex)
         {
@@ -350,7 +350,7 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
     private async Task<IReadOnlyDictionary<string, string>> ReadEncryptionRowsAsync()
     {
         var candidates = new List<string?> { EncryptionBitwardenFeatureContext.DerivedRawKey };
-        var ambient = new EnvEncryptionKeyProvider().GetPassphrase(new EncryptionData("env")).Value;
+        var ambient = (await new EnvEncryptionKeyProvider().GetPassphraseAsync(new EncryptionData("env"))).Value;
         if (!string.IsNullOrEmpty(ambient))
         {
             candidates.Add(ambient);

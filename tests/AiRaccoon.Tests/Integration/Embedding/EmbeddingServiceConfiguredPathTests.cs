@@ -13,14 +13,7 @@ public sealed class EmbeddingServiceConfiguredPathTests : IDisposable
 
     public void Dispose()
     {
-        try
-        {
-            Directory.Delete(_root, true);
-        }
-        catch (IOException)
-        {
-            // Best-effort cleanup; the OS temp dir is scanned periodically anyway.
-        }
+        TestData.DeleteTempRoot(_root);
     }
 
     [Fact]
@@ -29,7 +22,7 @@ public sealed class EmbeddingServiceConfiguredPathTests : IDisposable
         var custom = Path.Combine(_root, "custom.onnx");
         File.Copy(BundledModel.ResolveModelPath(), custom);
 
-        var service = new EmbeddingService();
+        var service = TestData.CreateEmbeddingService();
 
         using var generator = service.CreateGenerator(new EmbeddingSettings("local", custom, null, null));
         generator.ShouldNotBeNull();

@@ -55,7 +55,7 @@ public sealed class ManagedHarness
             new InfrastructureOptions { DataRoot = dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(),
-            new FakeTimeProvider(new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero)), new EmbeddingService());
+            new FakeTimeProvider(new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero)), TestData.CreateEmbeddingService());
 
         await store.ConfigureEmbeddingAsync("local", null, null, cancellationToken)
             .ConfigureAwait(false);
@@ -63,8 +63,14 @@ public sealed class ManagedHarness
         foreach (var doc in RealWorldCorpus.Documents)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            // sourceFile: each corpus document is inserted as exactly one row (AddContentAsync
+            // does not chunk), so no two rows can ever be true chunk-siblings regardless of the
+            // value chosen here — but the doc's own id at least stops SourceFile from being
+            // uniformly null, which previously excluded every candidate from
+            // SourceAffinityRanker's per-source grouping/consolidation logic entirely
+            // (docs/reviews/2026-08-14-moe-codebase-review.md RAG-F8).
             await store.AddContentAsync(ProjectId, doc.Id, doc.Text, ContextNaming.ProjectContext(ProjectId),
-                cancellationToken: cancellationToken).ConfigureAwait(false);
+                sourceFile: doc.Id, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
         var harness = new ManagedHarness(dataRoot, store)
@@ -87,7 +93,7 @@ public sealed class ManagedHarness
                 query.Text,
                 SearchScope.Project,
                 Limit: MaxRankedK,
-                MinScore: 0.0,
+                MinRelativeScore: 0.0,
                 RrfK: point.K,
                 FtsWeight: point.FtsWeight,
                 VectorWeight: point.VectorWeight), cancellationToken).ConfigureAwait(false);
@@ -105,10 +111,7 @@ public sealed class ManagedHarness
 
     public ValueTask DisposeAsync()
     {
-        if (Directory.Exists(_dataRoot))
-        {
-            Directory.Delete(_dataRoot, true);
-        }
+        TestData.DeleteTempRoot(_dataRoot);
 
         return ValueTask.CompletedTask;
     }

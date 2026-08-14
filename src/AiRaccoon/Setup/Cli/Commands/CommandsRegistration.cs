@@ -20,6 +20,7 @@ public static class CommandsRegistration
             serviceCollection.AddSingleton<ExtractCommands>();
             serviceCollection.AddSingleton<MaintenanceCommands>();
             serviceCollection.AddSingleton<ServeCommands>();
+            serviceCollection.AddSingleton<NoiseEntriesCommands>();
             serviceCollection.AddSingleton(sp => new EncryptionCommands(
                 sp.GetRequiredService<ISqliteConnectionFactory>(),
                 sp.GetRequiredService<ICliSecretManager>(),

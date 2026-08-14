@@ -7,6 +7,7 @@ using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Sync;
+using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Promotion;
@@ -454,14 +455,13 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
             new SearchQuery(projectId, query, SearchScope.All, wsId),
             CancellationToken.None);
 
-    [Then("results carry hash, seq, ranking, path and snippet")]
+    [Then("results carry hash, ranking, path and snippet")]
     public void ThenResultsCarryContractFields()
     {
         _lastSearch.ShouldNotBeNull();
         LastSearch.Count.ShouldBeGreaterThan(0);
         var r = _lastSearch[0];
         r.Hash.ShouldNotBeNullOrWhiteSpace();
-        r.Seq.ShouldBeGreaterThanOrEqualTo(0);
         r.Path.ShouldNotBeNullOrWhiteSpace();
         r.Snippet.ShouldNotBeNullOrWhiteSpace();
         r.Ranking.ShouldBeInRange(0.0, 1.0);
@@ -1236,7 +1236,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     {
         _lastSearch.ShouldNotBeNull();
         LastSearch.Count.ShouldBeGreaterThan(0);
-        // 0.7 is SearchQuery.MinScore's default, used by WhenISearchExactPhrase below.
+        // 0.7 is SearchQuery.MinRelativeScore's default, used by WhenISearchExactPhrase below.
         _lastSearch.ShouldAllBe(r => r.Ranking >= 0.7);
     }
 
@@ -1259,6 +1259,32 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         fenceChunk.ShouldContain("var sum = 1 + 2;");
         fenceChunk.ShouldContain("Console.WriteLine(result);");
     }
+
+    [Then("the fence is re-fenced into bounded pieces that respect max_tokens")]
+    public void ThenTheFenceIsRefencedIntoBoundedPieces()
+    {
+        var chunks = (IReadOnlyList<string>)scenarioContext["ChunksTightBudget"];
+        var tokenizer = new O200kTokenizer();
+        chunks.ShouldAllBe(chunk => tokenizer.CountTokens(chunk) <= 8,
+            "an over-budget fence must not be emitted whole (docs/adr/0036)");
+
+        // ADR-0048: the pieces are re-fenced rather than de-fenced, so each carries its own
+        // delimiters and a long line may gain the newline its closer needs. The payload is what
+        // must survive byte-for-byte, not the concatenation.
+        foreach (var chunk in chunks.Where(c => c.Contains("```", StringComparison.Ordinal)))
+        {
+            (FenceDelimiters(chunk) % 2).ShouldBe(0,
+                $"every chunk must be fence-balanced, got: {chunk}");
+        }
+
+        var payload = string.Concat(chunks.SelectMany(c => c.Split('\n'))
+            .Where(line => !line.TrimStart().StartsWith("```", StringComparison.Ordinal)));
+        payload.ShouldContain("var sum = 1 + 2;");
+        payload.ShouldContain("Console.WriteLine(result);");
+    }
+
+    private static int FenceDelimiters(string text) =>
+        text.Split('\n').Count(line => line.TrimStart().StartsWith("```", StringComparison.Ordinal));
 
     [Then("no error is raised")]
     public void ThenNoErrorRaised() => _lastSearch.ShouldNotBeNull();
@@ -1472,9 +1498,17 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public void WhenIIngestIt()
     {
         var text = (string)scenarioContext["FencedNote"];
-        // A budget smaller than the fence's own token count: a fence-unaware chunker would be
-        // forced to split it.
-        scenarioContext["Chunks"] = RealChunker.Chunk(text, 8);
+        // A budget the fence comfortably fits under: it stays one atomic chunk.
+        scenarioContext["Chunks"] = RealChunker.Chunk(text, ChunkSmallMaxTokens);
+    }
+
+    [When("I ingest it with a budget smaller than the fence")]
+    public void WhenIIngestItWithATightBudget()
+    {
+        var text = (string)scenarioContext["FencedNote"];
+        // Smaller than the fence's own token count (docs/adr/0036): an over-budget fence is already
+        // a broken chunk, so it falls back to token-bounded splitting instead of staying atomic.
+        scenarioContext["ChunksTightBudget"] = RealChunker.Chunk(text, 8);
     }
 
     [Given(@"workspace ""(.*)"" contains entries ""(.*)"" and ""(.*)""")]

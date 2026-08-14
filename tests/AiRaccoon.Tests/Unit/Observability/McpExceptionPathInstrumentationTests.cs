@@ -30,7 +30,7 @@ public class McpExceptionPathInstrumentationTests
     {
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
-        var tools = new WatchTools(new FakeWatchService(), new ToolGate(new AllowAllGuard(), new FakePromotionQueue()));
+        var tools = new WatchTools(new NoOpWatchService(), new ToolGate(new AllowAllGuard(), new FakePromotionQueue()));
 
         await Should.ThrowAsync<McpException>(() =>
             ThroughFilterAsync(metrics, "memory_watch_add", "", token => tools.Add("", "/repo", token)));
@@ -46,7 +46,7 @@ public class McpExceptionPathInstrumentationTests
     {
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
-        var tools = new WatchTools(new FakeWatchService(), new ToolGate(new AllowAllGuard(), new FakePromotionQueue()));
+        var tools = new WatchTools(new NoOpWatchService(), new ToolGate(new AllowAllGuard(), new FakePromotionQueue()));
 
         await Should.ThrowAsync<McpException>(() =>
             ThroughFilterAsync(metrics, "memory_watch_status", "", token => tools.Status("", token)));
@@ -62,7 +62,7 @@ public class McpExceptionPathInstrumentationTests
     {
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
-        var tools = new WatchTools(new FakeWatchService(), new ToolGate(new AllowAllGuard(), new FakePromotionQueue()));
+        var tools = new WatchTools(new NoOpWatchService(), new ToolGate(new AllowAllGuard(), new FakePromotionQueue()));
 
         await Should.ThrowAsync<McpException>(() =>
             ThroughFilterAsync(metrics, "memory_watch_remove", "", token => tools.Remove("", "/repo", token)));
@@ -78,7 +78,7 @@ public class McpExceptionPathInstrumentationTests
     {
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
-        var tools = new WatchTools(new FakeWatchService(), new ToolGate(new DenyWriteGuard(), new FakePromotionQueue()));
+        var tools = new WatchTools(new NoOpWatchService(), new ToolGate(new DenyWriteGuard(), new FakePromotionQueue()));
 
         await Should.ThrowAsync<McpException>(() =>
             ThroughFilterAsync(metrics, "memory_watch_add", "proj-a", token => tools.Add("proj-a", "/repo", token)));
@@ -248,18 +248,4 @@ public class McpExceptionPathInstrumentationTests
         public Task<string> PushAsync(string objectKey, byte[] data, string? etag, CancellationToken cancellationToken = default) => Task.FromResult("fake-etag");
     }
 
-    private sealed class FakeWatchService : IWatchService
-    {
-        public Task AddAsync(string projectId, string path, CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public Task RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public Task<IReadOnlyList<WatchStatus>> StatusAsync(string projectId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<WatchStatus>>([]);
-
-        public Task<bool> IsEnabledAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(true);
-
-        public Task<bool> IsPathAllowedAsync(string projectId, string path, CancellationToken cancellationToken = default) => Task.FromResult(true);
-    }
 }

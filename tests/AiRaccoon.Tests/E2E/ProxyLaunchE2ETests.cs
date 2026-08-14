@@ -144,13 +144,6 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
 
     private static void Delete(string root)
     {
-        try
-        {
-            Directory.Delete(root, true);
-        }
-        catch (IOException)
-        {
-            // Best-effort cleanup; the OS temp dir is scanned periodically anyway.
-        }
+        TestData.DeleteTempRoot(root);
     }
 }

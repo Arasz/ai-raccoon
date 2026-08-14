@@ -2,15 +2,19 @@ using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Filtering;
+using AiRaccoon.Core.Memory.Filtering.Policies;
 using AiRaccoon.Core.Rating;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -30,10 +34,10 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
-            new EmbeddingService());
+            TestData.CreateEmbeddingService());
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private async Task EnsureWorkspaceAsync(string workspaceId, string projectId = "acme")
     {
@@ -180,7 +184,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             TestContext.Current.CancellationToken);
 
         var results = await _store.SearchAsync(
-            new SearchQuery("acme", "ziggurat", MinScore: 0.7),
+            new SearchQuery("acme", "ziggurat", MinRelativeScore: 0.7),
             TestContext.Current.CancellationToken);
 
         var hit = results.ShouldHaveSingleItem();
@@ -189,7 +193,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task Search_ProjectScope_ExcludesOtherProjectsAndCustomContexts()
+    public async Task Search_ProjectScope_ExcludesOtherProjects_ButCoversItsOwnContexts()
     {
         var acmeEntry = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "acme project fact"), TestContext.Current.CancellationToken);
@@ -205,7 +209,8 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
         results.Select(r => r.Hash).ShouldContain(acmeEntry.Hash);
         results.ShouldNotContain(r => r.Hash == otherEntry.Hash);
-        results.ShouldNotContain(r => r.Hash == customEntry.Hash);
+        results.Select(r => r.Hash).ShouldContain(customEntry.Hash,
+            "the project is the isolation boundary; a context inside it is in scope (ADR-0045)");
     }
 
     [Fact]
@@ -270,6 +275,29 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             .ShouldContain(e => e.Value == "cross project convention");
     }
 
+    /// <summary>
+    ///     WP3a/ADR-0035: a promoted shared copy gets a different row hash than its project
+    ///     original (ContentHash.Of(path, value) vs. shared/&lt;sha256(value)&gt;.md), so scope=all
+    ///     used to return both. Dedup is on content, preferring the project-scoped copy.
+    /// </summary>
+    [Fact]
+    public async Task Search_ScopeAll_DedupesAPromotedSharedCopy_AgainstItsProjectOriginal()
+    {
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "container registries need image scanning before publish"),
+            TestContext.Current.CancellationToken);
+        var shared = await _store.ShareAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
+        shared.Entry.Hash.ShouldNotBe(entry.Hash, "the shared copy must carry a different row hash for this to be a real dedup test");
+
+        var results = await _store.SearchAsync(
+            new SearchQuery("acme", "container registries image scanning", MinRelativeScore: 0.0),
+            TestContext.Current.CancellationToken);
+
+        results.Count.ShouldBe(1,
+            "the promoted shared copy and its project original are the same text and must not double-count");
+        results[0].Hash.ShouldBe(entry.Hash, "the project-scoped copy is preferred over the shared duplicate");
+    }
+
     [Fact]
     public async Task Share_Twice_IsIdempotent()
     {
@@ -295,6 +323,60 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task GetAsync_ReturnsFullValue_ForAKnownHash()
+    {
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "the full content memory_get must return"),
+            TestContext.Current.CancellationToken);
+
+        var fetched = await _store.GetAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
+
+        fetched.ShouldNotBeNull();
+        fetched.Value.ShouldBe("the full content memory_get must return");
+        fetched.Hash.ShouldBe(entry.Hash);
+        fetched.Path.ShouldBe(entry.Path);
+        fetched.Context.ShouldBe("project:acme");
+    }
+
+    [Fact]
+    public async Task GetAsync_WithUnknownHash_ReturnsNull()
+    {
+        var fetched = await _store.GetAsync("acme",
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd",
+            TestContext.Current.CancellationToken);
+
+        fetched.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task GetAsync_ResolvesASharedTierHash_RegardlessOfTheOwningProject()
+    {
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "cross-project shared convention"),
+            TestContext.Current.CancellationToken);
+        var shared = await _store.ShareAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
+
+        var fetched = await _store.GetAsync("someone-elses-project", shared.Entry.Hash,
+            TestContext.Current.CancellationToken);
+
+        fetched.ShouldNotBeNull();
+        fetched.Value.ShouldBe("cross-project shared convention");
+    }
+
+    [Fact]
+    public async Task GetAsync_DoesNotResolveAnotherProjectsPrivateRow()
+    {
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "acme-only private note"),
+            TestContext.Current.CancellationToken);
+
+        var fetched = await _store.GetAsync("someone-elses-project", entry.Hash,
+            TestContext.Current.CancellationToken);
+
+        fetched.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task Delete_RemovesTheRows_AndTheFtsIndexEntry()
     {
         var entry = await _store.WriteAsync(
@@ -305,7 +387,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         deleted.ShouldBeTrue();
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(0);
         (await _store.SearchAsync(
-                new SearchQuery("acme", "deleted", MinScore: 0),
+                new SearchQuery("acme", "deleted", MinRelativeScore: 0),
                 TestContext.Current.CancellationToken))
             .ShouldBeEmpty();
     }
@@ -320,6 +402,40 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
         deleted.ShouldBeFalse();
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Delete_WhenTombstoneInsertFails_RollsBackTheEntryDeleteToo()
+    {
+        // WP5a (ADR-0035): DeleteCoreAsync must not leave the entry gone with no tombstone — a
+        // crash between the two statements resurrects "deleted" content on the next sync. A
+        // persisted trigger simulates that mid-delete failure deterministically.
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "protected by the delete transaction"),
+            TestContext.Current.CancellationToken);
+
+        await using (var ddl = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await ddl.ExecuteAsync(new CommandDefinition(
+                """
+                CREATE TRIGGER block_tombstone_insert BEFORE INSERT ON sync_tombstones
+                BEGIN
+                    SELECT RAISE(ABORT, 'forced failure for test');
+                END
+                """, cancellationToken: TestContext.Current.CancellationToken));
+        }
+
+        await Should.ThrowAsync<SqliteException>(() =>
+            _store.DeleteAsync("acme", entry.Hash, TestContext.Current.CancellationToken));
+
+        (await ReadRowAsync(entry.Hash)).ShouldNotBeNull(
+            "a mid-delete failure must not leave the entry gone with no tombstone");
+
+        await using var check = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var tombstones = await check.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT count(*) FROM sync_tombstones WHERE hash = @hash",
+            new { hash = entry.Hash }, cancellationToken: TestContext.Current.CancellationToken));
+        tombstones.ShouldBe(0);
     }
 
     [Fact]
@@ -568,13 +684,26 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         SearchContexts.For(query).ShouldBe([ContextNaming.SharedContext]);
     }
 
+    /// <summary>A named context narrows to that context; it does not add to the unlabelled rows (ADR-0045).</summary>
     [Fact]
-    public void SearchContexts_ProjectScope_WithContextLabel_AddsTheLabelContext()
+    public void SearchContexts_ProjectScope_WithContextLabel_IsThatContextOnly()
     {
         var query = new SearchQuery("acme", "q", SearchScope.Project, ContextLabel: "docs:adr");
 
-        SearchContexts.For(query).ShouldBe(
-            [ContextNaming.ProjectContext("acme"), ContextNaming.LabelContext("acme", "docs:adr")]);
+        SearchContexts.For(query, ["other"]).ShouldBe([ContextNaming.LabelContext("acme", "docs:adr")]);
+    }
+
+    /// <summary>No context named means every context in the project, not just the unlabelled ones.</summary>
+    [Fact]
+    public void SearchContexts_ProjectScope_WithoutContextLabel_CoversEveryContextInTheProject()
+    {
+        var query = new SearchQuery("acme", "q", SearchScope.Project);
+
+        SearchContexts.For(query, ["adr", "notes"]).ShouldBe([
+            ContextNaming.ProjectContext("acme"),
+            ContextNaming.LabelContext("acme", "adr"),
+            ContextNaming.LabelContext("acme", "notes")
+        ]);
     }
 
     [Fact]
@@ -586,7 +715,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             TestContext.Current.CancellationToken);
 
         var results = await _store.SearchAsync(
-            new SearchQuery("acme", "documentation placement", SearchScope.Project, Limit: 5, MinScore: 0.0),
+            new SearchQuery("acme", "documentation placement", SearchScope.Project, Limit: 5, MinRelativeScore: 0.0),
             TestContext.Current.CancellationToken);
 
         var hit = results.ShouldHaveSingleItem();
@@ -605,27 +734,29 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
         var results = await _store.SearchAsync(
             new SearchQuery("acme", "docs/adr/0099-widget-renderer.md#decision",
-                SearchScope.Project, Limit: 5, MinScore: 0.0),
+                SearchScope.Project, Limit: 5, MinRelativeScore: 0.0),
             TestContext.Current.CancellationToken);
 
         results.ShouldHaveSingleItem();
     }
 
+    /// <summary>Inverted by ADR-0045: a context is a label inside the project, not a wall around it.</summary>
     [Fact]
-    public async Task Search_WithoutContextLabel_ExcludesCustomScopedRows()
+    public async Task Search_WithoutContextLabel_IncludesEveryContextInTheProject()
     {
         await _store.WriteAsync(new MemoryWriteRequest("acme", "docs only fact", "docs:adr"),
             TestContext.Current.CancellationToken);
 
         var results = await _store.SearchAsync(
-            new SearchQuery("acme", "docs only fact", SearchScope.Project, Limit: 5, MinScore: 0.0),
+            new SearchQuery("acme", "docs only fact", SearchScope.Project, Limit: 5, MinRelativeScore: 0.0),
             TestContext.Current.CancellationToken);
 
-        results.ShouldBeEmpty("scope='custom' rows are invisible to the plain project scope");
+        results.ShouldHaveSingleItem();
     }
 
+    /// <summary>Narrowing, not augmenting (ADR-0045): naming a context excludes the other contexts.</summary>
     [Fact]
-    public async Task Search_WithContextLabel_IncludesCustomScopedRows_AlongsideProjectRows()
+    public async Task Search_WithContextLabel_ReturnsThatContextOnly()
     {
         await _store.WriteAsync(new MemoryWriteRequest("acme", "custom labeled fact", "docs:adr"),
             TestContext.Current.CancellationToken);
@@ -633,13 +764,13 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             TestContext.Current.CancellationToken);
 
         var results = await _store.SearchAsync(
-            new SearchQuery("acme", "fact", SearchScope.Project, Limit: 5, MinScore: 0.0,
+            new SearchQuery("acme", "fact", SearchScope.Project, Limit: 5, MinRelativeScore: 0.0,
                 ContextLabel: "docs:adr"),
             TestContext.Current.CancellationToken);
 
         results.Select(r => r.Snippet).ShouldContain(s => s.Contains("custom labeled fact", StringComparison.Ordinal));
-        results.Select(r => r.Snippet).ShouldContain(s => s.Contains("plain project fact", StringComparison.Ordinal),
-            "the context label filter augments the project scope, it does not replace it");
+        results.Select(r => r.Snippet).ShouldNotContain(s => s.Contains("plain project fact", StringComparison.Ordinal),
+            "asking for one context means that context, not that context plus the unlabelled rows");
     }
 
     /// <summary>
@@ -683,14 +814,15 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             await _store.WriteAsync(new MemoryWriteRequest("acme", content), TestContext.Current.CancellationToken);
         }
 
-        var offTopic = await _store.WriteAsync(
-            new MemoryWriteRequest("acme",
-                "sqlite schema write guards reject any bank whose version exceeds what the pipeline validator supports"),
-            TestContext.Current.CancellationToken);
-        var shared = await _store.ShareAsync("acme", offTopic.Hash, TestContext.Current.CancellationToken);
+        // A standalone shared-tier row (not promoted from a project original) — WP3a's dedup
+        // fix collapses a promoted copy against its project original by content, so a promoted
+        // duplicate of a row already asserted on above would no longer prove this regression.
+        var shared = await _store.AddContentAsync("acme", "shared/off-topic-schema-note.md",
+            "sqlite schema write guards reject any bank whose version exceeds what the pipeline validator supports",
+            ContextNaming.SharedContext, cancellationToken: TestContext.Current.CancellationToken);
 
         var results = await _store.SearchAsync(
-            new SearchQuery("acme", query, Limit: 25, MinScore: 0.0),
+            new SearchQuery("acme", query, Limit: 25, MinRelativeScore: 0.0),
             TestContext.Current.CancellationToken);
 
         results[0].Path.ShouldBe(bestMatch.Entry.Path,
@@ -705,8 +837,8 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [Fact]
     public void Merge_RrfAcrossContextBatches_PromotesDualRetrievedDocs_AndNormalizesToMax()
     {
-        var shared = new[] { Hit("h1", 1, "a.md"), Hit("h2", 2, "b.md") };
-        var project = new[] { Hit("h2", 1, "b.md"), Hit("h3", 2, "c.md") };
+        var shared = new[] { Hit("h1", "a.md"), Hit("h2", "b.md") };
+        var project = new[] { Hit("h2", "b.md"), Hit("h3", "c.md") };
 
         var merged = SearchResultMerger.Merge([shared, project], 10, rrfK: 60);
 
@@ -719,7 +851,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [Fact]
     public void Merge_SingleContextBatch_KeepsItsOrderAndNormalizesTopToOne()
     {
-        var results = new[] { Hit("h1", 1, "a.md"), Hit("h2", 2, "b.md"), Hit("h3", 3, "c.md") };
+        var results = new[] { Hit("h1", "a.md"), Hit("h2", "b.md"), Hit("h3", "c.md") };
 
         var merged = SearchResultMerger.Merge([results], 10);
 
@@ -730,7 +862,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [Fact]
     public void Merge_AppliesMinScoreAfterNormalization()
     {
-        var results = new[] { Hit("h1", 1, "a.md"), Hit("h2", 2, "b.md"), Hit("h3", 3, "c.md") };
+        var results = new[] { Hit("h1", "a.md"), Hit("h2", "b.md"), Hit("h3", "c.md") };
 
         var merged = SearchResultMerger.Merge([results], 10, 0.9, 10);
 
@@ -743,9 +875,9 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     {
         var results = new[]
         {
-            new MemorySearchResult("h1", 1, 0.4, "a.md", "s"),
-            new MemorySearchResult("h2", 2, 0.9, "b.md", "s"),
-            new MemorySearchResult("h3", 3, 0.7, "c.md", "s")
+            new MemorySearchResult("h1", 0.4, "a.md", "s"),
+            new MemorySearchResult("h2", 0.9, "b.md", "s"),
+            new MemorySearchResult("h3", 0.7, "c.md", "s")
         };
 
         var merged = SearchResultMerger.Merge([results], 2);
@@ -759,7 +891,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         SearchResultMerger.Merge([[], []], 10)
             .ShouldBeEmpty();
 
-    private static MemorySearchResult Hit(string hash, int seq, string path) => new(hash, seq, 0, path, "s");
+    private static MemorySearchResult Hit(string hash, string path) => new(hash, 0, path, "s");
 
     private async Task<EntryRow?> ReadRowAsync(string hash)
     {
@@ -946,6 +1078,61 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         count.ShouldBe(3, "one ingest's chunk set, not two");
     }
 
+    // ── WP1/WP2: honest write outcome (ADR-0032/0033/0034) ──
+
+    private const string HermesNoiseContent =
+        "[IMPORTANT: Background process proc_1 completed normally (exit code 0).\nCommand: cd /tmp && echo test\nOutput: test]";
+
+    [Fact]
+    public async Task RejectedWrite_ReportsNotStored()
+    {
+        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
+            new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
+            TestData.CreateEmbeddingService(), noisePolicies: [new HermesProcessNoisePolicy()]);
+
+        var entry = await store.WriteAsync(new MemoryWriteRequest("acme", HermesNoiseContent),
+            TestContext.Current.CancellationToken);
+
+        entry.Stored.ShouldBeFalse();
+        entry.Reason.ShouldNotBeNullOrWhiteSpace();
+        entry.Reason.ShouldContain("HermesBackgroundProcessLog");
+        entry.Hash.ShouldBeNullOrEmpty("a refused write must never carry a fabricated hash");
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var count = await connection.ExecuteScalarAsync<long>(
+            "SELECT count(*) FROM entries WHERE project_id = 'acme'");
+        count.ShouldBe(0, "a rejected write must never land a row in entries");
+    }
+
+    [Fact]
+    public async Task NoiseDisabled_StoresContentThatWouldOtherwiseBeRejected()
+    {
+        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
+            new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
+            TestData.CreateEmbeddingService(), noisePolicies: [new HermesProcessNoisePolicy()]);
+        await store.SetSettingAsync(NoiseConfigKeys.EnabledGlobal, "false", TestContext.Current.CancellationToken);
+
+        var entry = await store.WriteAsync(new MemoryWriteRequest("acme", HermesNoiseContent),
+            TestContext.Current.CancellationToken);
+
+        entry.Stored.ShouldBeTrue();
+        entry.Hash.ShouldNotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task ShortOrganicWrite_IsStoredWithoutTtl()
+    {
+        // No heuristic TTL policy exists any more (ADR-0034): a sub-8-word organic write is
+        // stored like any other, and never carries a write-time TTL.
+        var entry = await _store.WriteAsync(new MemoryWriteRequest("acme", "Push after every commit."),
+            TestContext.Current.CancellationToken);
+
+        entry.Stored.ShouldBeTrue();
+        var row = await ReadRowAsync(entry.Hash);
+        row.ShouldNotBeNull();
+        row.TtlDays.ShouldBeNull("an explicit TTL is authoritative — no heuristic assigns one at write time (ADR-0034)");
+    }
+
     // ── WP2: source_id on write path ──
 
     [Fact]
@@ -1086,8 +1273,4 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     }
 
     /// <summary>Deterministic test chunker: splits on blank lines.</summary>
-    private sealed class StubChunker : IMarkdownChunker
-    {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
-    }
 }

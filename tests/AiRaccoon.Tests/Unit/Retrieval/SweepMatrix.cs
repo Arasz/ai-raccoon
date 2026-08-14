@@ -4,14 +4,14 @@ namespace AiRaccoon.Tests.Unit.Retrieval;
 
 /// <summary>
 ///     One RRF fusion parameter point: cutoff k, the (fts, vector) weight pair, the
-///     minScore filter, and the candidate-window policy. MinScore and Window default to
+///     minScore filter, and the candidate-window policy. MinRelativeScore and Window default to
 ///     the pre-sweep values so the FR-NM-4 (see docs/work/features-native-memory/native-memory.feature) grid points keep their original meaning.
 /// </summary>
 public sealed record SweepPoint(
     int K,
     int FtsWeight,
     int VectorWeight,
-    double MinScore = 0.0,
+    double MinRelativeScore = 0.0,
     CandidateWindowMode Window = CandidateWindowMode.Max3X100)
 {
     public string Id => $"k{K}-w{FtsWeight}{VectorWeight}";

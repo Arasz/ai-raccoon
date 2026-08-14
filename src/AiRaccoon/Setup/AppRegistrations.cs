@@ -79,9 +79,9 @@ public static partial class AppRegistrations
                 sp.GetRequiredService<ILoggerFactory>().CreateLogger<SyncService>()));
             return;
 
-            static string SnapshotConnectionString(IServiceProvider sp, string path, bool readOnly)
+            static async Task<string> SnapshotConnectionString(IServiceProvider sp, string path, bool readOnly, CancellationToken ct)
             {
-                var key = sp.GetRequiredService<IEncryptionKeyResolver>().Resolve().Passphrase;
+                var key = (await sp.GetRequiredService<IEncryptionKeyResolver>().ResolveAsync(ct)).Passphrase;
                 var csb = new SqliteConnectionStringBuilder
                 {
                     DataSource = path,
@@ -97,7 +97,7 @@ public static partial class AppRegistrations
 
             static async Task<SqliteConnection> OpenSnapshotWithKey(IServiceProvider sp, string path, CancellationToken ct)
             {
-                var conn = new SqliteConnection(SnapshotConnectionString(sp, path, false));
+                var conn = new SqliteConnection(await SnapshotConnectionString(sp, path, false, ct));
                 await conn.OpenAsync(ct);
                 conn.EnableExtensions();
                 conn.LoadVector();
@@ -106,7 +106,7 @@ public static partial class AppRegistrations
 
             static async Task<SqliteConnection> OpenSnapshotReadOnly(IServiceProvider sp, string path, CancellationToken ct)
             {
-                var conn = new SqliteConnection(SnapshotConnectionString(sp, path, true));
+                var conn = new SqliteConnection(await SnapshotConnectionString(sp, path, true, ct));
                 await conn.OpenAsync(ct);
                 conn.EnableExtensions();
                 conn.LoadVector();
@@ -164,18 +164,24 @@ public static partial class AppRegistrations
                 sp.GetRequiredService<IEncryptionKeyResolver>()));
             services.AddSingleton<ISqliteConnectionFactory>(sp => sp.GetRequiredService<SqliteConnectionFactory>());
             services.AddRequiredSingleton<IWatchStore, WatchStore>();
-            services.AddRequiredSingleton<IMemoryStore, SqliteMemoryStore>();
-            services.AddRequiredSingleton<INoiseStore, SqliteNoiseStore>();
             services.AddRequiredSingleton<INoiseFilteringService, NoiseFilteringService>();
-            services.AddRequiredSingleton<INoiseVectorProvider, BundledNoiseVectorProvider>();
 
-            // Register default noise filter policies
+            // Register default noise filter policies (deterministic only — see ADR-0033).
             services.AddSingleton<INoiseFilterPolicy, HermesProcessNoisePolicy>();
-            services.AddSingleton<INoiseFilterPolicy, ZeroShotEmbeddingNoisePolicy>();
 
-            // Register default TTL policies
-            services.AddSingleton<IAutoTtlPolicy, PromotionScorerTtlPolicy>();
+            // noise_entries (ADR-0029/ADR-0039): the training-data source — every rejected write,
+            // TTL-purged by BankMaintenanceHostedService.
+            services.AddRequiredSingleton<INoiseEntryStore, SqliteNoiseEntryStore>();
+
+            // Self-learning noise substrate seam (ADR-0039, amended): no scoring model registered.
+            // INoiseDetector -> NoOpNoiseDetector is what a future structural/lexical detector
+            // plugs into once one is validated on held-out data.
+            services.AddSingleton<INoiseDetector, NoOpNoiseDetector>();
+            services.AddRequiredSingleton<INoiseShadowObserver, NoiseShadowObserver>();
+
+            services.AddRequiredSingleton<IMemoryStore, SqliteMemoryStore>();
             services.AddRequiredSingleton<IMemorySourceStore, SqliteMemorySourceStore>();
+            services.AddRequiredSingleton<ISettingsStore, SqliteSettingsStore>();
             services.AddRequiredSingleton<IWorkspaceStore, SqliteWorkspaceStore>();
             services.AddRequiredSingleton<IPromotionQueueStore, SqlitePromotionQueueStore>();
         }
@@ -185,7 +191,6 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<IBundledModel, BundledModel>();
             services.AddRequiredSingleton<IEmbeddingService, EmbeddingService>();
             services.AddRequiredSingleton<IEntryEmbedder, EntryEmbedder>();
-            services.AddSingleton<IContentEmbedder>(sp => sp.GetRequiredService<IEntryEmbedder>());
             services.AddRequiredSingleton<IEmbeddingAvailability, EmbeddingAvailability>();
         }
 

@@ -40,7 +40,7 @@ public sealed class DependenciesEncryptionSmokeTests
         }
         finally
         {
-            Directory.Delete(tempRoot, true);
+            TestData.DeleteTempRoot(tempRoot);
         }
     }
 
@@ -58,11 +58,12 @@ public sealed class DependenciesEncryptionSmokeTests
 
             using var provider = services.BuildServiceProvider();
 
-            provider.GetRequiredService<IEncryptionKeyResolver>().Resolve().Passphrase.ShouldBe("smoke-pass");
+            (await provider.GetRequiredService<IEncryptionKeyResolver>()
+                .ResolveAsync(TestContext.Current.CancellationToken)).Passphrase.ShouldBe("smoke-pass");
         }
         finally
         {
-            Directory.Delete(tempRoot, true);
+            TestData.DeleteTempRoot(tempRoot);
         }
     }
 }

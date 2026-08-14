@@ -30,7 +30,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
 
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-observability-runner");
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public async Task LiveServer_PrintsTheCountersCommand_WithTheServerPid()
@@ -208,7 +208,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
         }
         finally
         {
-            Directory.Delete(secondRoot, true);
+            TestData.DeleteTempRoot(secondRoot);
         }
 
         var firstExit = await first.StopAsync();

@@ -1,3 +1,4 @@
+using System.Linq;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -36,7 +37,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
         _store = new SqlitePromotionQueueStore(_factory, _clock);
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private static QueueCandidate Candidate(string hash, string value, double score,
         string? sourceFile = null, params string[] reasons) =>
@@ -155,6 +156,52 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
             TestContext.Current.CancellationToken);
 
         (await _store.ListAsync("acme", TestContext.Current.CancellationToken)).Single().ScorerVersion.ShouldBe(1);
+    }
+
+    // ------------------------------------------------------------------ remember discards
+    /// <summary>
+    ///     WP5b: RememberDiscardsAsync looped per-hash with no transaction, unlike its sibling
+    ///     UpsertAsync in this file, which wraps its loop correctly — a mid-loop failure left a
+    ///     partial set of discards persisted instead of none.
+    /// </summary>
+    [Fact]
+    public async Task RememberDiscardsAsync_MidBatchFailure_RollsBackTheWholeBatch()
+    {
+        // A temporary trigger stands in for a mid-batch failure (INSERT OR IGNORE swallows
+        // ordinary constraint violations, so a NULL/duplicate hash can't force one) —
+        // matching WP10b's named forced-failure mechanism.
+        await using (var setup = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await setup.ExecuteAsync(
+                """
+                CREATE TRIGGER force_fail_on_discard
+                AFTER INSERT ON promotion_discards
+                WHEN NEW.hash = 'FORCE_FAIL'
+                BEGIN
+                    SELECT RAISE(ABORT, 'forced failure for test');
+                END;
+                """);
+        }
+
+        var ex = await Should.ThrowAsync<SqliteException>(() =>
+            _store.RememberDiscardsAsync("acme", ["h1", "FORCE_FAIL", "h3"], TestContext.Current.CancellationToken));
+        ex.Message.ShouldContain("forced failure for test");
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var count = await connection.ExecuteScalarAsync<long>(
+            "SELECT count(*) FROM promotion_discards WHERE project_id = 'acme'");
+        count.ShouldBe(0L, "a mid-batch failure must roll back h1 too, not leave a partial set of discards persisted");
+    }
+
+    [Fact]
+    public async Task RememberDiscardsAsync_PersistsEveryHash_WhenNoneFail()
+    {
+        await _store.RememberDiscardsAsync("acme", ["h1", "h2"], TestContext.Current.CancellationToken);
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var count = await connection.ExecuteScalarAsync<long>(
+            "SELECT count(*) FROM promotion_discards WHERE project_id = 'acme'");
+        count.ShouldBe(2L);
     }
 
     // ------------------------------------------------------------------ clear stale
@@ -392,5 +439,95 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
         applied.TotalOrphans.ShouldBe(before - after,
             "the reported total must be the DELETE's own affected-row count, not an earlier count snapshot");
         applied.TotalOrphans.ShouldBe(3);
+    }
+
+    // ------------------------------------------------------------------ claim (WP5b/A-F11)
+    /// <summary>
+    ///     A-F11: PromotionQueueService used to claim a row by DELETE, so a ShareAsync failure
+    ///     between the claim and the share destroyed the candidate permanently. ClaimAsync marks a
+    ///     row claimed instead of removing it — the row stays reclaimable through a failure.
+    /// </summary>
+    [Fact]
+    public async Task ClaimAsync_MarksTheRowClaimed_ButDoesNotRemoveIt()
+    {
+        await _store.UpsertAsync("acme", [Candidate("h1", "fact one", 1.0)], TestContext.Current.CancellationToken);
+
+        var claimed = await _store.ClaimAsync("acme", "h1", TestContext.Current.CancellationToken);
+
+        claimed.ShouldNotBeNull();
+        claimed.Hash.ShouldBe("h1");
+        (await _store.ListAsync("acme", TestContext.Current.CancellationToken)).ShouldContain(r => r.Hash == "h1",
+            "claiming must not remove the row — only a subsequent discard/finalize does");
+    }
+
+    [Fact]
+    public async Task ClaimAsync_AnAlreadyClaimedRow_ReturnsNull()
+    {
+        await _store.UpsertAsync("acme", [Candidate("h1", "fact one", 1.0)], TestContext.Current.CancellationToken);
+        await _store.ClaimAsync("acme", "h1", TestContext.Current.CancellationToken);
+
+        var secondClaim = await _store.ClaimAsync("acme", "h1", TestContext.Current.CancellationToken);
+
+        secondClaim.ShouldBeNull(
+            "a row already claimed must not be claimable again — the same exclusivity DiscardAsync's DELETE gave, without destroying the row");
+    }
+
+    [Fact]
+    public async Task ClaimAsync_ANonExistentRow_ReturnsNull()
+    {
+        var claimed = await _store.ClaimAsync("acme", "ghost", TestContext.Current.CancellationToken);
+
+        claimed.ShouldBeNull();
+    }
+
+    /// <summary>The RED case named by the acceptance criteria: two callers racing to claim the same
+    /// row concurrently, not just sequentially — exactly one must win.</summary>
+    [Fact]
+    public async Task ClaimAsync_ConcurrentClaims_OnlyOneSucceeds()
+    {
+        await _store.UpsertAsync("acme", [Candidate("h1", "fact one", 1.0)], TestContext.Current.CancellationToken);
+
+        var results = await Task.WhenAll(
+            _store.ClaimAsync("acme", "h1", TestContext.Current.CancellationToken),
+            _store.ClaimAsync("acme", "h1", TestContext.Current.CancellationToken));
+
+        results.Count(r => r is not null).ShouldBe(1, "exactly one concurrent claim must win");
+    }
+
+    // ------------------------------------------------------------------ reclaim stale claims
+    [Fact]
+    public async Task ReclaimStaleClaimsAsync_ReleasesClaimsOlderThanTheThreshold()
+    {
+        await _store.UpsertAsync("acme", [Candidate("h1", "fact one", 1.0)], TestContext.Current.CancellationToken);
+        await _store.ClaimAsync("acme", "h1", TestContext.Current.CancellationToken);
+        _clock.Advance(TimeSpan.FromMinutes(6));
+
+        var released = await _store.ReclaimStaleClaimsAsync(TimeSpan.FromMinutes(5), TestContext.Current.CancellationToken);
+
+        released.ShouldBe(1);
+        (await _store.ClaimAsync("acme", "h1", TestContext.Current.CancellationToken)).ShouldNotBeNull(
+            "a released claim must be claimable again");
+    }
+
+    [Fact]
+    public async Task ReclaimStaleClaimsAsync_LeavesFreshClaimsAlone()
+    {
+        await _store.UpsertAsync("acme", [Candidate("h1", "fact one", 1.0)], TestContext.Current.CancellationToken);
+        await _store.ClaimAsync("acme", "h1", TestContext.Current.CancellationToken);
+        _clock.Advance(TimeSpan.FromMinutes(1));
+
+        var released = await _store.ReclaimStaleClaimsAsync(TimeSpan.FromMinutes(5), TestContext.Current.CancellationToken);
+
+        released.ShouldBe(0);
+        (await _store.ClaimAsync("acme", "h1", TestContext.Current.CancellationToken)).ShouldBeNull(
+            "still claimed — the fresh claim must not be released");
+    }
+
+    [Fact]
+    public async Task ReclaimStaleClaimsAsync_EmptyQueue_ReturnsZero()
+    {
+        var released = await _store.ReclaimStaleClaimsAsync(TimeSpan.FromMinutes(5), TestContext.Current.CancellationToken);
+
+        released.ShouldBe(0);
     }
 }

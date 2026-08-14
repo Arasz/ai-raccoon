@@ -29,9 +29,9 @@ public sealed class QuietLoggingTests : IDisposable
 
     public void Dispose()
     {
-        foreach (var root in _dataRoots.Where(Directory.Exists))
+        foreach (var root in _dataRoots)
         {
-            Directory.Delete(root, true);
+            TestData.DeleteTempRoot(root);
         }
     }
 

@@ -24,7 +24,7 @@ public sealed class EncryptionKeyResolverTests : IDisposable
 
     private readonly string _dataRoot = TestData.CreateTempRoot();
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private InfrastructureOptions Options() => new() { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
 
@@ -37,40 +37,40 @@ public sealed class EncryptionKeyResolverTests : IDisposable
     private void WriteSidecar(string json) => File.WriteAllText(SidecarPath(), json);
 
     [Fact]
-    public void Resolve_NoSidecar_ReturnsEnvValue()
+    public async Task ResolveAsync_NoSidecar_ReturnsEnvValue()
     {
         var resolver = Resolver(new StubEnvProvider("env-pass"), new FakeBwsRunner(new BwsResult(0, "", "")));
 
-        resolver.Resolve().Passphrase.ShouldBe("env-pass");
+        (await resolver.ResolveAsync(TestContext.Current.CancellationToken)).Passphrase.ShouldBe("env-pass");
     }
 
     [Fact]
-    public void Resolve_NoSidecar_EnvNull_ReturnsNull()
+    public async Task ResolveAsync_NoSidecar_EnvNull_ReturnsNull()
     {
         var resolver = Resolver(new StubEnvProvider(null), new FakeBwsRunner(new BwsResult(0, "", "")));
 
-        resolver.Resolve().Passphrase.ShouldBeNull();
+        (await resolver.ResolveAsync(TestContext.Current.CancellationToken)).Passphrase.ShouldBeNull();
     }
 
     [Fact]
-    public void Resolve_SidecarEnv_ReturnsEnvValueAndNeverTouchesBws()
+    public async Task ResolveAsync_SidecarEnv_ReturnsEnvValueAndNeverTouchesBws()
     {
         WriteSidecar("""{"source":"env"}""");
         var runner = new FakeBwsRunner(new BwsInvocationException("bws must not run"));
         var resolver = Resolver(new StubEnvProvider("env-pass"), runner);
 
-        resolver.Resolve().Passphrase.ShouldBe("env-pass");
+        (await resolver.ResolveAsync(TestContext.Current.CancellationToken)).Passphrase.ShouldBe("env-pass");
         runner.Args.ShouldBeNull();
     }
 
     [Fact]
-    public void Resolve_SidecarBitwarden_FetchesSecretAndDerives()
+    public async Task ResolveAsync_SidecarBitwarden_FetchesSecretAndDerives()
     {
         WriteSidecar("""{"source":"bitwarden","projectId":"p-1","secretId":"s-1"}""");
         var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
         var resolver = Resolver(new StubEnvProvider("env-pass"), runner);
 
-        var passphrase = resolver.Resolve().Passphrase;
+        var passphrase = (await resolver.ResolveAsync(TestContext.Current.CancellationToken)).Passphrase;
 
         passphrase.ShouldBe(DerivedRawKey);
         runner.Args.ShouldBe(["secret", "get", "s-1"]);
@@ -78,63 +78,99 @@ public sealed class EncryptionKeyResolverTests : IDisposable
     }
 
     [Fact]
-    public void Resolve_SidecarCorrupt_ThrowsLoudNamingThePath()
+    public async Task ResolveAsync_SidecarCorrupt_ThrowsLoudNamingThePath()
     {
         WriteSidecar("{not json");
         var resolver = Resolver(new StubEnvProvider("env-pass"), new FakeBwsRunner(new BwsResult(0, "", "")));
 
-        var ex = Should.Throw<EncryptionSourceException>(() => resolver.Resolve());
+        var ex = await Should.ThrowAsync<EncryptionSourceException>(() => resolver.ResolveAsync(TestContext.Current.CancellationToken));
 
         ex.Message.ShouldContain(SidecarPath());
         ex.Message.ShouldContain("corrupt");
     }
 
     [Fact]
-    public void Resolve_SidecarBitwardenWithoutSecretId_ThrowsArgumentException()
+    public async Task ResolveAsync_SidecarBitwardenWithoutSecretId_ThrowsArgumentException()
     {
         WriteSidecar("""{"source":"bitwarden"}""");
         var resolver = Resolver(new StubEnvProvider("env-pass"), new FakeBwsRunner(new BwsResult(0, "", "")));
 
-        var ex = Should.Throw<ArgumentException>(() => resolver.Resolve());
+        var ex = await Should.ThrowAsync<ArgumentException>(() => resolver.ResolveAsync(TestContext.Current.CancellationToken));
 
         ex.ParamName.ShouldBe("encryptionData.SecretId");
     }
 
     [Fact]
-    public void Resolve_ReadsSidecarFreshOnEveryCall()
+    public async Task ResolveAsync_ReadsSidecarFreshOnEveryCall()
     {
         var resolver = Resolver(new StubEnvProvider("env-pass"),
             new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), "")));
 
-        resolver.Resolve().Passphrase.ShouldBe("env-pass");
+        (await resolver.ResolveAsync(TestContext.Current.CancellationToken)).Passphrase.ShouldBe("env-pass");
 
         WriteSidecar("""{"source":"bitwarden","projectId":"p-1","secretId":"s-1"}""");
 
-        resolver.Resolve().Passphrase.ShouldBe(DerivedRawKey);
+        (await resolver.ResolveAsync(TestContext.Current.CancellationToken)).Passphrase.ShouldBe(DerivedRawKey);
     }
 
     [Fact]
-    public void Resolve_NoSidecar_ReportsEnvSourceAndEnvPassphrase()
+    public async Task ResolveAsync_NoSidecar_ReportsEnvSourceAndEnvPassphrase()
     {
         var resolver = Resolver(new StubEnvProvider("env-pass"), new FakeBwsRunner(new BwsResult(0, "", "")));
 
-        var resolved = resolver.Resolve();
+        var resolved = await resolver.ResolveAsync(TestContext.Current.CancellationToken);
 
         resolved.SourceName.ShouldBe("env");
         resolved.Passphrase.ShouldBe("env-pass");
     }
 
     [Fact]
-    public void Resolve_SidecarBitwarden_ReportsBitwardenSourceAndDerivedKey()
+    public async Task ResolveAsync_SidecarBitwarden_ReportsBitwardenSourceAndDerivedKey()
     {
         WriteSidecar("""{"source":"bitwarden","projectId":"p-1","secretId":"s-1"}""");
         var resolver = Resolver(new StubEnvProvider("env-pass"),
             new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), "")));
 
-        var resolved = resolver.Resolve();
+        var resolved = await resolver.ResolveAsync(TestContext.Current.CancellationToken);
 
         resolved.SourceName.ShouldBe("bitwarden");
         resolved.Passphrase.ShouldBe(DerivedRawKey);
+    }
+
+    /// <summary>
+    ///     .NET-F2: a Bitwarden install must not shell out to bws on every bank open. The resolved
+    ///     key is cached per encryption-source-config fingerprint (sidecar unchanged between calls),
+    ///     so N resolves against the same sidecar make exactly one bws invocation.
+    /// </summary>
+    [Fact]
+    public async Task ResolveAsync_CalledRepeatedlyWithUnchangedSidecar_InvokesBwsExactlyOnce()
+    {
+        WriteSidecar("""{"source":"bitwarden","projectId":"p-1","secretId":"s-1"}""");
+        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+        var resolver = Resolver(new StubEnvProvider("env-pass"), runner);
+
+        for (var i = 0; i < 5; i++)
+        {
+            (await resolver.ResolveAsync(TestContext.Current.CancellationToken)).Passphrase.ShouldBe(DerivedRawKey);
+        }
+
+        runner.CallCount.ShouldBe(1);
+    }
+
+    /// <summary>A sidecar change (config verb ran) must invalidate the cache — the fingerprint changed.</summary>
+    [Fact]
+    public async Task ResolveAsync_SidecarSecretIdChanges_InvokesBwsAgain()
+    {
+        WriteSidecar("""{"source":"bitwarden","projectId":"p-1","secretId":"s-1"}""");
+        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+        var resolver = Resolver(new StubEnvProvider("env-pass"), runner);
+
+        await resolver.ResolveAsync(TestContext.Current.CancellationToken);
+
+        WriteSidecar("""{"source":"bitwarden","projectId":"p-1","secretId":"s-2"}""");
+        await resolver.ResolveAsync(TestContext.Current.CancellationToken);
+
+        runner.CallCount.ShouldBe(2);
     }
 
     /// <summary>A bank key in a log line is the leak this guards: no call site interpolates the record today, but the compiler-generated ToString would print it.</summary>
@@ -175,7 +211,8 @@ public sealed class EncryptionKeyResolverTests : IDisposable
 
         public bool IsForSource(string source) => Source.Equals(source, StringComparison.Ordinal);
 
-        public Passphrase GetPassphrase(EncryptionData encryptionData) => new(Source) { Value = passphrase };
+        public Task<Passphrase> GetPassphraseAsync(EncryptionData encryptionData, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new Passphrase(Source) { Value = passphrase });
     }
 
     private sealed class FakeBwsRunner : ICliSecretManager
@@ -195,17 +232,20 @@ public sealed class EncryptionKeyResolverTests : IDisposable
 
         public IReadOnlyList<string>? Args { get; private set; }
         public string? Token { get; private set; }
+        public int CallCount { get; private set; }
 
-        public BwsResult Run(IReadOnlyList<string> args, string? token, TimeSpan timeout)
+        public Task<BwsResult> RunAsync(IReadOnlyList<string> args, string? token, TimeSpan timeout,
+            CancellationToken cancellationToken = default)
         {
             Args = args;
             Token = token;
+            CallCount++;
             if (_exception is not null)
             {
                 throw _exception;
             }
 
-            return _result!;
+            return Task.FromResult(_result!);
         }
     }
 }

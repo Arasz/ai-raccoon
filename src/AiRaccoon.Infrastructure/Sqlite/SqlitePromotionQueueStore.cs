@@ -190,15 +190,19 @@ public sealed class SqlitePromotionQueueStore(
 
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         foreach (var hash in hashes.Distinct(StringComparer.Ordinal))
         {
             await connection.ExecuteAsync(
                     new CommandDefinition(
                         PromotionQueueSql.RememberDiscard,
                         new { ProjectId = projectId, Hash = hash, DiscardedAt = now },
+                        transaction,
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
         }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<int> PruneRejectedAsync(string projectId,
@@ -251,6 +255,34 @@ public sealed class SqlitePromotionQueueStore(
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return new PromotionQueueOrphanReport(removed, perProject);
+    }
+
+    /// <summary>The real claim (WP5b/A-F11): conditional on claimed_at still being NULL, so a
+    /// concurrent claim of the same row can never both succeed.</summary>
+    public async Task<PromotionQueueRow?> ClaimAsync(string projectId, string hash,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        var claimedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds();
+        var row = await connection.QuerySingleOrDefaultAsync<PromotionQueueRowRow>(
+                new CommandDefinition(
+                    PromotionQueueSql.Claim,
+                    new { ProjectId = projectId, Hash = hash, ClaimedAt = claimedAt },
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        return row is null ? null : ToRow(row);
+    }
+
+    public async Task<int> ReclaimStaleClaimsAsync(TimeSpan staleAfter, CancellationToken cancellationToken = default)
+    {
+        var cutoffAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() - (long)staleAfter.TotalSeconds;
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        return await connection.ExecuteAsync(
+                new CommandDefinition(
+                    PromotionQueueSql.ReclaimStaleClaims,
+                    new { CutoffAt = cutoffAt },
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
     }
 
     private static PromotionQueueRow ToRow(PromotionQueueRowRow row) =>

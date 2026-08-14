@@ -50,7 +50,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
     private FakeLogger<EncryptionCommands>? _lastLogger;
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private InfrastructureOptions Options() => new() { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
 
@@ -157,7 +157,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
         var (exit, _, err, _) = await Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n"));
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.FailedToResolveEncryptionKey);
         err.ShouldContain("bws not found");
         err.ShouldContain("https://bitwarden.com/help/cli/");
         store.Settings.ShouldBeEmpty();
@@ -255,12 +255,16 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
         var (exit, _, err, _) = await Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n"));
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.FailedToResolveEncryptionKey);
         err.ShouldContain("bws failed (exit 1)");
         err.ShouldContain("secret not found (code: 404)");
         err.ShouldNotContain("PRAGMA rekey");
         store.Settings.ShouldBeEmpty();
         File.Exists(SidecarPath()).ShouldBeFalse();
+        // UX-F8: the default (non-quiet) console logs Information and above, so an Error/Warning
+        // log here would double-print the same failure as "fail: ...EncryptionCommands[804] ..."
+        // right after the clean "err" line above -- this event must sit below that threshold.
+        _lastLogger!.Collector.GetSnapshot().ShouldContain(r => r.Id.Id == 804 && r.Level == LogLevel.Debug);
     }
 
     [Fact]
@@ -271,7 +275,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
         var (exit, _, err, _) = await Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n"));
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.FailedToResolveEncryptionKey);
         err.ShouldContain("malformed OpenSSH private key");
         store.Settings.ShouldBeEmpty();
         File.Exists(SidecarPath()).ShouldBeFalse();
@@ -379,7 +383,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var (exit, _, err, _) = await WithEnvPassphrase(null, () =>
             Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n")));
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.FailedToResolveEncryptionKey);
         err.ShouldContain("encryption mismatch");
         File.Exists(SidecarPath()).ShouldBeTrue();
         store.Settings.ShouldBeEmpty();
@@ -525,13 +529,16 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
         var (exit, _, err, _) = await Run(["encryption", "unset"], store, runner);
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.FailedToResolveEncryptionKey);
         err.ShouldContain("stays keyed to the bitwarden secret");
         err.ShouldContain("set AIRACCOON_DB_PASSPHRASE and re-run");
         var logRecord = _lastLogger!.Collector.LatestRecord;
         logRecord.ShouldNotBeNull();
         logRecord.Id.Id.ShouldBe(803);
-        logRecord.Level.ShouldBe(LogLevel.Warning);
+        // UX-F8: below the default console's Information threshold -- "err" above already
+        // carries this message; a Warning/Error here would print it a second time as
+        // "warn: ...EncryptionCommands[803] ...".
+        logRecord.Level.ShouldBe(LogLevel.Debug);
         // The sidecar + rows stay (source remains bitwarden) so the documented retry works.
         store.Settings[EncryptionSettingsKeys.Source].ShouldBe("bitwarden");
         File.Exists(SidecarPath()).ShouldBeTrue();
@@ -709,7 +716,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
         var (exit, _, err, _) = await Run(["encryption", "migrate"], store, runner);
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.FailedToResolveEncryptionKey);
         err.ShouldContain("opens under neither");
         (await File.ReadAllBytesAsync(BankPath(), TestContext.Current.CancellationToken)).ShouldBe(before);
     }
@@ -722,7 +729,8 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
         public bool IsForSource(string source) => Source.Equals(source, StringComparison.Ordinal);
 
-        public Passphrase GetPassphrase(EncryptionData encryptionData) => new(Source) { Value = passphrase };
+        public Task<Passphrase> GetPassphraseAsync(EncryptionData encryptionData, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new Passphrase(Source) { Value = passphrase });
     }
 
     private sealed class FakeBwsRunner : ICliSecretManager
@@ -742,7 +750,8 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
         public List<(IReadOnlyList<string> Args, string? Token)> Calls { get; } = [];
 
-        public BwsResult Run(IReadOnlyList<string> args, string? token, TimeSpan timeout)
+        public Task<BwsResult> RunAsync(IReadOnlyList<string> args, string? token, TimeSpan timeout,
+            CancellationToken cancellationToken = default)
         {
             Calls.Add(([.. args], token));
             if (_exception is not null)
@@ -750,7 +759,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
                 throw _exception;
             }
 
-            return _result!;
+            return Task.FromResult(_result!);
         }
     }
 }

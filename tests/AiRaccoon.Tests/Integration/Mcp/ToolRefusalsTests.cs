@@ -129,7 +129,7 @@ public sealed class ToolRefusalsTests : IDisposable
             }
         };
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public Task IngestFile_OutsideScope_ReturnsRefusal_WithoutAnSdkErrorLog() =>
@@ -188,7 +188,7 @@ public sealed class ToolRefusalsTests : IDisposable
         }
         finally
         {
-            Directory.Delete(dataRoot, true);
+            TestData.DeleteTempRoot(dataRoot);
         }
     }
 
@@ -211,7 +211,7 @@ public sealed class ToolRefusalsTests : IDisposable
         }
         finally
         {
-            Directory.Delete(dataRoot, true);
+            TestData.DeleteTempRoot(dataRoot);
         }
     }
 
@@ -269,7 +269,7 @@ public sealed class ToolRefusalsTests : IDisposable
             new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
                 [new EnvEncryptionKeyProvider()]));
         var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), TimeProvider.System,
-            new EmbeddingService());
+            TestData.CreateEmbeddingService());
         await store.SetSettingAsync(AccessModePolicy.ProjectSettingKey(projectId), mode, cancellationToken);
     }
 
@@ -355,7 +355,7 @@ public sealed class ToolRefusalsTests : IDisposable
         }
         finally
         {
-            Directory.Delete(dataRoot, true);
+            TestData.DeleteTempRoot(dataRoot);
         }
     }
 

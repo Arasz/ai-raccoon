@@ -58,10 +58,10 @@ public sealed class RetrievalBaselineTests : IDisposable
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
-            new EmbeddingService());
+            TestData.CreateEmbeddingService());
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public async Task RunAllBaselineQueries_ReportsMatchStatistics()
@@ -69,8 +69,7 @@ public sealed class RetrievalBaselineTests : IDisposable
         var queries = LoadQueries();
         queries.ShouldNotBeEmpty("baseline-queries.json should contain queries");
 
-        var hashMap = LoadChunkHashMap();
-        var fileHashes = GroupByFile(hashMap);
+        var (hashMap, fileHashes) = LoadDerivedHashMap(queries);
 
         _output.WriteLine(
             $"Loaded {queries.Length} baseline queries, {hashMap.Count} hash-map chunks across {fileHashes.Count} files");
@@ -87,7 +86,7 @@ public sealed class RetrievalBaselineTests : IDisposable
         foreach (var query in queries)
         {
             var searchQuery = new SearchQuery(ProjectId, query.Query, SearchScope.Project,
-                Limit: query.SearchLimit, MinScore: 0.0);
+                Limit: query.SearchLimit, MinRelativeScore: 0.0);
             var results = await _store.SearchAsync(searchQuery, TestContext.Current.CancellationToken);
 
             var (exactMatch, fileMatch, firstExactRank, firstFileRank) =
@@ -176,20 +175,21 @@ public sealed class RetrievalBaselineTests : IDisposable
         _output.WriteLine($"Corpus: {stats.EntryCount} entries, {stats.PendingCount} pending");
     }
 
+    /// <summary>
+    ///     Derivation guarantees resolution for every expectedSource — LoadDerivedHashMap throws if
+    ///     any baseline-queries.json expectedSource can't be resolved against the live corpus, so this
+    ///     asserts the DB-level (source_file) presence that derivation alone doesn't check.
+    /// </summary>
     [Fact]
     public async Task CorpusIntegrity_ExpectedSourcesPresent()
     {
-        var hashMap = LoadChunkHashMap();
         var queries = LoadQueries();
         var expected = queries.Where(q => !string.IsNullOrWhiteSpace(q.ExpectedSource)).ToArray();
         expected.Length.ShouldBeGreaterThanOrEqualTo(1,
             "baseline-queries.json should carry expectedSource entries");
 
-        foreach (var query in expected)
-        {
-            hashMap.ContainsKey(query.ExpectedSource!).ShouldBeTrue(
-                $"{query.Id}: expectedSource '{query.ExpectedSource}' is missing from scripts/chunk-hash-map.json");
-        }
+        // Throws (failing the test) if any expectedSource has no resolvable chunk in the corpus.
+        LoadDerivedHashMap(queries);
 
         // The regenerated corpus stores provenance in the source_file column (docs/plans/retrieval-improvement-c.md §3),
         // so each expected source's file must appear as a source_file in at least one entry.
@@ -202,21 +202,24 @@ public sealed class RetrievalBaselineTests : IDisposable
         }
     }
 
+    /// <summary>
+    ///     WP4b (docs/plans/2026-08-14-code-quality-improvement-plan.md): the retired
+    ///     CorpusIntegrity_HashMapMatchesDatabaseCounts asserted the committed scripts/chunk-hash-map.json
+    ///     — a full structured-path -&gt; hash enumeration of every chunk produced by the old Python
+    ///     re-chunker — stayed in 1:1 parity with the DB. That artifact and the pipeline that produced
+    ///     it are retired; the production FileIngestor doesn't emit an equivalent full-corpus map, and
+    ///     the "one hash per structured path" bijection it relied on isn't well-defined under the new
+    ///     chunker (WP7's token-budget splitting produces 215 (source_file, heading_path) groups with
+    ///     more than one distinct-hash chunk in this corpus, measured via direct query). The one
+    ///     surviving, still-meaningful assertion is kept here.
+    /// </summary>
     [Fact]
-    public async Task CorpusIntegrity_HashMapMatchesDatabaseCounts()
+    public async Task CorpusIntegrity_StoreReportedCountMatchesEntriesTable()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var rows = await ReadEntryRowsAsync(connection, TestContext.Current.CancellationToken);
         var stats = await _store.GetStatsAsync(ProjectId, TestContext.Current.CancellationToken);
-        var hashMap = LoadChunkHashMap();
 
-        // The map is keyed by structured path; CLAUDE.md/HERMES.md share 10 identical section
-        // chunks, so 762 keys alias to 752 distinct hashes — the count invariant is over hashes.
-        var mapHashes = hashMap.Values.ToHashSet(StringComparer.Ordinal);
-        mapHashes.Count.ShouldBe(rows.Count,
-            "hash-map distinct hashes must equal the committed DB entry count (Wave 5a)");
-        rows.Select(r => r.Hash).ToHashSet(StringComparer.Ordinal).SetEquals(mapHashes).ShouldBeTrue(
-            "DB entry hashes and hash-map values must be the same set — drift means a stale map or corpus (Wave 5a)");
         stats.EntryCount.ShouldBe(rows.Count, "store-reported entry count must match the entries table");
     }
 
@@ -235,30 +238,26 @@ public sealed class RetrievalBaselineTests : IDisposable
         mismatches.ShouldBeEmpty($"every stored entry hash must satisfy ContentHash.Of(path, value); {string.Join("; ", mismatches.Take(3))}");
     }
 
+    /// <summary>
+    ///     WP4b (docs/plans/2026-08-14-code-quality-improvement-plan.md): the retired half of this
+    ///     test compared the legacy `section` column against scripts/chunk-hash-map.json's '#section'
+    ///     structured-path part. The production FileIngestor never writes `section` (verified: 0/2518
+    ///     rows populated in the regenerated corpus) — `heading_path` is its replacement — so that
+    ///     comparison was comparing "always false" to "always false" via a stale artifact; it could not
+    ///     fail on any real regression. Dropped rather than nursed; the source_file assertion below is
+    ///     still real and is kept.
+    /// </summary>
     [Fact]
-    public async Task CorpusIntegrity_SourceFileAndSectionPopulated()
+    public async Task CorpusIntegrity_SourceFilePopulated()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var rows = await ReadEntryRowsAsync(connection, TestContext.Current.CancellationToken);
-        var hashMap = LoadChunkHashMap();
 
         rows.Count(r => string.IsNullOrWhiteSpace(r.SourceFile)).ShouldBe(0,
             "every entry must carry source_file provenance (Wave 2)");
-        var withSection = rows.Count(r => !string.IsNullOrWhiteSpace(r.Section));
+        var withHeadingPath = rows.Count(r => !string.IsNullOrWhiteSpace(r.Section));
         _output.WriteLine(
-            $"Source identity: {rows.Count} entries, {withSection} with section, {rows.Count - withSection} without, {rows.Select(r => r.SourceFile).Distinct().Count()} distinct files");
-
-        // section populated ⟺ the entry's hash maps to a structured path with a '#section' part.
-        var keysByHash = hashMap
-            .GroupBy(kv => kv.Value, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.Select(kv => kv.Key).ToArray(), StringComparer.Ordinal);
-        var mismatches = rows.Count(r =>
-        {
-            var hasSectionKey = keysByHash.TryGetValue(r.Hash, out var keys)
-                                && keys.Any(k => k.Contains('#'));
-            return hasSectionKey != !string.IsNullOrWhiteSpace(r.Section);
-        });
-        mismatches.ShouldBe(0, "section column must mirror the hash-map '#section' structured-path part");
+            $"Source identity: {rows.Count} entries, {rows.Select(r => r.SourceFile).Distinct().Count()} distinct files, {withHeadingPath} with a legacy `section` value");
     }
 
     [Fact]
@@ -308,7 +307,7 @@ public sealed class RetrievalBaselineTests : IDisposable
         }
 
         var results = await _store.SearchAsync(
-            new SearchQuery(ProjectId, "memory", SearchScope.Project, Limit: 5, MinScore: 0.0),
+            new SearchQuery(ProjectId, "memory", SearchScope.Project, Limit: 5, MinRelativeScore: 0.0),
             TestContext.Current.CancellationToken);
         results.ShouldNotBeEmpty("FTS bm25 search must still return results after source normalization");
         results.Any(r => r.SourceFile is not null).ShouldBeTrue(
@@ -362,25 +361,6 @@ public sealed class RetrievalBaselineTests : IDisposable
         return (exactMatch, fileMatch, firstExactRank, firstFileRank);
     }
 
-    /// <summary>Groups chunk hashes by the path before '#': 'docs:adr:0011-....md#decision' → its file's hash set.</summary>
-    private static Dictionary<string, HashSet<string>> GroupByFile(Dictionary<string, string> hashMap)
-    {
-        var fileHashes = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
-        foreach (var (structuredPath, hash) in hashMap)
-        {
-            var fileKey = FileKey(structuredPath);
-            if (!fileHashes.TryGetValue(fileKey, out var hashes))
-            {
-                hashes = [];
-                fileHashes[fileKey] = hashes;
-            }
-
-            hashes.Add(hash);
-        }
-
-        return fileHashes;
-    }
-
     /// <summary>'docs:adr:0011-frontend-chassis-stack.md#decision' → 'docs:adr:0011-frontend-chassis-stack.md'.</summary>
     private static string FileKey(string structuredPath) => structuredPath.Split('#')[0];
 
@@ -414,20 +394,16 @@ public sealed class RetrievalBaselineTests : IDisposable
         return rows;
     }
 
-    private static Dictionary<string, string> LoadChunkHashMap()
-    {
-        var projectRoot = FindProjectRoot();
-        var hashMapPath = Path.Combine(projectRoot, "scripts", "chunk-hash-map.json");
-        if (!File.Exists(hashMapPath))
-        {
-            throw new InvalidOperationException(
-                $"scripts/chunk-hash-map.json not found under {projectRoot}; Wave 0 requires it committed so expected-source detection can be honest (plan C step 1).");
-        }
-
-        var json = File.ReadAllText(hashMapPath);
-        return JsonSerializer.Deserialize<Dictionary<string, string>>(json,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
-    }
+    /// <summary>
+    ///     Derives the expected-source hash map and per-file hash sets directly from the regenerated
+    ///     corpus (WP4b, docs/plans/2026-08-14-code-quality-improvement-plan.md), instead of the
+    ///     retired scripts/chunk-hash-map.json. See <see cref="CorpusHashMap" />.
+    /// </summary>
+    private (Dictionary<string, string> HashMap, Dictionary<string, HashSet<string>> FileHashes) LoadDerivedHashMap(
+        IReadOnlyList<BaselineQuery> queries) =>
+        CorpusHashMap.Build(
+            Path.Combine(_dataRoot, "memory.db"),
+            queries.Where(q => q.ExpectedSource is not null).Select(q => q.ExpectedSource!));
 
     private static string ResolveBundledDbPath()
     {

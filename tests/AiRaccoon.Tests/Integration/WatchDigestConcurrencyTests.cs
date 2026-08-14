@@ -105,13 +105,7 @@ public sealed class WatchDigestConcurrencyTests
 
         public void Dispose()
         {
-            try
-            {
-                Directory.Delete(DataRoot, true);
-            }
-            catch (IOException)
-            {
-            }
+            TestData.DeleteTempRoot(DataRoot);
         }
 
         public Process TestProcess()
@@ -182,7 +176,7 @@ public sealed class WatchDigestConcurrencyTests
             Factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
             var time = new FakeTimeProvider(FixedNow);
             Memory = TestData.CreateMemoryStore(Factory,
-                NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(Factory), Gate, time, new EmbeddingService());
+                NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(Factory), Gate, time, TestData.CreateEmbeddingService());
             WatchStore = new WatchStore(Factory);
             Executor = new WatchDigestExecutor(Memory, WatchStore, time,
                 NullLogger<WatchDigestExecutor>.Instance);
@@ -221,7 +215,7 @@ public sealed class WatchDigestConcurrencyTests
 
         public Task Entered => _entered.Task;
 
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0)
+        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null)
         {
             if (!_armed)
             {

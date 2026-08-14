@@ -27,6 +27,7 @@ public sealed class McpToolContractTests : IDisposable
                                             memory_delete(projectId:string!, hash:string!)
                                             memory_delete_context(projectId:string!, context:string!)
                                             memory_embed_pending(projectId:string!, limit:integer|null?)
+                                            memory_get(projectId:string!, hash:string!)
                                             memory_ingest_directory(projectId:string!, path:string!, context:string|null?)
                                             memory_ingest_file(projectId:string!, path:string!, context:string|null?)
                                             memory_list(projectId:string!)
@@ -34,7 +35,7 @@ public sealed class McpToolContractTests : IDisposable
                                             memory_promotion_list(projectId:string|null?, limit:integer?, includeFullValue:boolean?)
                                             memory_record_followthrough(projectId:string!, correlationId:string!, filePath:string!)
                                             memory_record_grade(projectId:string!, correlationId:string!, grade:integer!, note:string|null?)
-                                            memory_search(projectId:string!, query:string!, scope:string?, workspaceId:string|null?, limit:integer?, minScore:number?, rrfK:integer?, ftsWeight:integer?, vectorWeight:integer?, contextLabel:string|null?)
+                                            memory_search(projectId:string!, query:string!, scope:string?, workspaceId:string|null?, limit:integer?, minRelativeScore:number?, rrfK:integer?, ftsWeight:integer?, vectorWeight:integer?, contextLabel:string|null?)
                                             memory_set_ttl(projectId:string!, hash:string!, ttlDays:integer|null?)
                                             memory_share(projectId:string!, hash:string!)
                                             memory_share_extract(projectIds:array!, mode:string?, limit:integer|null?, includeTtlRows:boolean?, autoPromote:boolean?, confirm:boolean?)
@@ -53,7 +54,7 @@ public sealed class McpToolContractTests : IDisposable
 
     private readonly string _dataRoot = TestData.CreateTempRoot("mcp-contract-tests");
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public void InputSchemas_MatchTheDeclaredContract()

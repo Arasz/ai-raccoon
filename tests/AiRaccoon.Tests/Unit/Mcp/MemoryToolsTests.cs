@@ -5,6 +5,7 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Sync;
@@ -13,6 +14,7 @@ using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using ModelContextProtocol;
 using Shouldly;
@@ -61,6 +63,32 @@ public class MemoryToolsTests
         {
             _store.Settings[SyncSettingsKeys.ObjectKey] = objectKey;
         }
+    }
+
+    [Fact]
+    public async Task Get_ReturnsFullValue_ForAKnownHash()
+    {
+        _store.GetEntry = new MemoryEntry("h1", "p.md", "project:acme", "the full remembered content", 5);
+
+        var result = await _tools.Get("acme", "h1", TestContext.Current.CancellationToken);
+
+        result.Data!.Hash.ShouldBe("h1");
+        result.Data!.Value.ShouldBe("the full remembered content");
+        result.Data!.Path.ShouldBe("p.md");
+        result.Data!.Context.ShouldBe("project:acme");
+        result.Data!.CreatedAt.ShouldBe(5);
+    }
+
+    [Fact]
+    public async Task Get_WithUnknownHash_ThrowsUnknownHashException()
+    {
+        _store.GetEntry = null;
+
+        var ex = await Should.ThrowAsync<UnknownHashException>(() =>
+            _tools.Get("acme", "deadbeef", TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldContain("deadbeef");
+        ex.Message.ShouldContain("acme");
     }
 
     [Fact]
@@ -232,8 +260,25 @@ public class MemoryToolsTests
 
         result.Data!.Hash.ShouldBe("h1");
         result.Data!.Context.ShouldBe("project:acme");
+        result.Data!.Stored.ShouldBeTrue();
+        result.Data!.Reason.ShouldBeNull();
         _store.LastRequest!.ProjectId.ShouldBe("acme");
         _store.LastRequest.AgentId.ShouldBe("agent-a");
+    }
+
+    /// <summary>ADR-0032: a refused write's Stored/Reason must reach the MCP caller unchanged.</summary>
+    [Fact]
+    public async Task Write_WhenStoreReportsRejection_MapsStoredAndReasonThrough()
+    {
+        _store.Entry = new MemoryEntry("", "", "project:acme", "content", 5,
+            Stored: false, Reason: "rejected by noise policy 'HermesBackgroundProcessLog'");
+
+        var result = await _tools.Write("acme", "content",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Data!.Stored.ShouldBeFalse();
+        result.Data!.Reason.ShouldBe("rejected by noise policy 'HermesBackgroundProcessLog'");
+        result.Data!.Hash.ShouldBeNullOrEmpty();
     }
 
     [Fact]
@@ -292,6 +337,176 @@ public class MemoryToolsTests
             cancellationToken: TestContext.Current.CancellationToken);
 
         _store.LastQuery!.ContextLabel.ShouldBe("docs:adr");
+    }
+
+    // search_quality id 173 (project ai-raccoon): one of 12 graded queries matching this shape,
+    // all scored 2/5, never higher — see docs/adr/0040.
+    private const string RealHermesProcessNotification =
+        """
+        [IMPORTANT: Background process proc_97aa3ea5eb50 completed normally (exit code 0).
+        Command: cd /Users/arasz/RiderProjects/ai-raccoon && dotnet test --no-build
+        Output:
+        ]
+        """;
+
+    [Fact]
+    public async Task Search_WithAMachineOutputQuery_RefusesWithoutCallingTheStore()
+    {
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.Search("acme", RealHermesProcessNotification, cancellationToken: TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldStartWith("invalid-params: ");
+        ex.Message.ShouldContain("tool output");
+        _store.LastQuery.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Search_WithALogLikeQuery_ReturnsResultsWithAWarning()
+    {
+        var result = await _tools.Search("acme", "info: something happened\n at System.Foo.Bar(baz)",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        _store.LastQuery.ShouldNotBeNull();
+        result.Data!.Warning.ShouldNotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task Search_WithAnOrdinaryQuery_HasNoWarning()
+    {
+        var result = await _tools.Search("acme", "why did the auth build start failing",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Data!.Warning.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Search_WithTheGuardDisabled_LetsAMachineOutputQueryThrough()
+    {
+        _store.Settings[QueryGuardConfigKeys.EnabledGlobal] = "false";
+
+        var result = await _tools.Search("acme", RealHermesProcessNotification,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        _store.LastQuery.ShouldNotBeNull();
+        result.Data!.Warning.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Search_InShadowMode_RecordsTheRefuseVerdict_ButStillReturnsResults()
+    {
+        var logger = new FakeLogger<MemoryTools>();
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+            new NoOpSearchQualityService(), logger);
+        _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
+
+        var result = await tools.Search("acme", RealHermesProcessNotification,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        _store.LastQuery.ShouldNotBeNull();
+        result.Data!.Warning.ShouldBeNull();
+        logger.Collector.LatestRecord.Message.ShouldContain("Refuse");
+    }
+
+    [Fact]
+    public async Task Search_InShadowMode_WithAnOrdinaryQuery_RecordsNothing()
+    {
+        var logger = new FakeLogger<MemoryTools>();
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+            new NoOpSearchQualityService(), logger);
+        _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
+
+        await tools.Search("acme", "why did the auth build start failing",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        logger.Collector.Count.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Search_WithTheGuardDisabled_RecordsNothing_EvenInShadowMode()
+    {
+        var logger = new FakeLogger<MemoryTools>();
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+            new NoOpSearchQualityService(), logger);
+        _store.Settings[QueryGuardConfigKeys.EnabledGlobal] = "false";
+        _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
+
+        await tools.Search("acme", RealHermesProcessNotification, cancellationToken: TestContext.Current.CancellationToken);
+
+        logger.Collector.Count.ShouldBe(0);
+    }
+
+    // Structural detector (docs/adr/0041): default off, wired as a third input to the warn tier.
+    // queryGuard.structural.threshold.global is overridden to a value every real score satisfies
+    // (0.0) or none can satisfy (1.1) so these tests don't depend on the exact trained score of
+    // any particular string.
+
+    [Fact]
+    public async Task Search_WithStructuralDetectorDisabled_IgnoresAHighScoringQuery()
+    {
+        // Default: queryGuard.structural.enabled.global is unset (off). Even with a threshold that
+        // every query would satisfy, nothing should fire — proving criterion 4 (byte-identical
+        // to today when off).
+        _store.Settings[QueryGuardConfigKeys.StructuralThresholdGlobal] = "0.0";
+
+        var result = await _tools.Search("acme", "why did the auth build start failing",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Data!.Warning.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Search_WithStructuralDetectorEnabled_AndAScoreAboveThreshold_WarnsCleanRegexQuery()
+    {
+        _store.Settings[QueryGuardConfigKeys.StructuralEnabledGlobal] = "true";
+        _store.Settings[QueryGuardConfigKeys.StructuralThresholdGlobal] = "0.0"; // every score satisfies this
+
+        var result = await _tools.Search("acme", "why did the auth build start failing",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        _store.LastQuery.ShouldNotBeNull(); // never refuses
+        result.Data!.Warning.ShouldNotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task Search_WithStructuralDetectorEnabled_AndAScoreBelowThreshold_IsClean()
+    {
+        _store.Settings[QueryGuardConfigKeys.StructuralEnabledGlobal] = "true";
+        _store.Settings[QueryGuardConfigKeys.StructuralThresholdGlobal] = "1.1"; // no score can satisfy this
+
+        var result = await _tools.Search("acme", "why did the auth build start failing",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Data!.Warning.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Search_WithStructuralDetectorEnabled_NeverOverridesARegexRefuse()
+    {
+        _store.Settings[QueryGuardConfigKeys.StructuralEnabledGlobal] = "true";
+        _store.Settings[QueryGuardConfigKeys.StructuralThresholdGlobal] = "0.0";
+
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.Search("acme", RealHermesProcessNotification, cancellationToken: TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldStartWith("invalid-params: ");
+        _store.LastQuery.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Search_InShadowMode_WithAStructuralWarn_RecordsButDoesNotSurfaceIt()
+    {
+        var logger = new FakeLogger<MemoryTools>();
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+            new NoOpSearchQualityService(), logger);
+        _store.Settings[QueryGuardConfigKeys.StructuralEnabledGlobal] = "true";
+        _store.Settings[QueryGuardConfigKeys.StructuralThresholdGlobal] = "0.0";
+        _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
+
+        var result = await tools.Search("acme", "why did the auth build start failing",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Data!.Warning.ShouldBeNull();
+        logger.Collector.LatestRecord.Message.ShouldContain("Warn");
     }
 
     [Fact]
@@ -488,6 +703,8 @@ public class MemoryToolsTests
 
         public MemoryEntry? SharedEntry { get; set; }
 
+        public MemoryEntry? GetEntry { get; set; }
+
         public MemoryStats Stats { get; set; } = new(0, 0, []);
 
         public double Rating { get; set; } = 0.9;
@@ -531,6 +748,9 @@ public class MemoryToolsTests
         public override Task<bool> DeleteAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(true);
+
+        public override Task<MemoryEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
+            Task.FromResult(GetEntry);
 
         public override Task<int> DeleteContextAsync(string projectId, string context,
             CancellationToken cancellationToken = default) =>

@@ -16,21 +16,26 @@ watches, watch_files, FTS5, vec0, sync_meta, and sync_tombstones — live in
 starts clean with the new native schema. A re-hash + re-embed migration path is
 deferred to a deployment that needs it (D11).
 
-## Tools (25)
+## Tools (26)
 
 Every tool requires `projectId` (camelCase — all parameters are camelCase), except
 `memory_promotion_list` where it is optional. Writes land in `project:<id>` by
 default; naming a `workspaceId` routes them into that workspace's isolated context.
 
-9 memory tools, 4 workspace tools, 3 watch tools, 2 promotion tools, 2 share tools,
-1 sweep tool, 1 sync tool. `memory_configure` and `memory_set_structure_alpha` were
-removed by the CLI-config refactor: configuration is no longer an MCP tool — the CLI
-verbs are the single config channel (see [Command-line options](#command-line-options)).
+10 memory tools (including `memory_get`, ADR-0035), 4 workspace tools, 3 watch tools,
+2 promotion tools, 2 share tools, 2 sweep tools (`memory_sweep`, `memory_set_ttl`),
+2 search-feedback tools (`memory_record_followthrough`, `memory_record_grade`),
+1 sync tool. `memory_configure` and `memory_set_structure_alpha` were removed by the
+CLI-config refactor: configuration is no longer an MCP tool — the CLI verbs are the
+single config channel (see [Command-line options](#command-line-options)).
 
 | Tool                           | Parameters                                                                                                                                                  | Returns                                                                                            |
 |--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
 | `memory_write`                 | `projectId`, `content`, `workspaceId?`, `agentId?`, `context?`, `sourceFile?`, `section?`                                                                   | `{hash, path, context, createdAt}`                                                                 |
-| `memory_search`                | `projectId`, `query`, `scope=all\|project\|shared`, `workspaceId?`, `limit=20`, `minScore=0.7`, `rrfK=60`, `ftsWeight=1`, `vectorWeight=1`, `contextLabel?` | `{results:[{hash, seq, ranking, path, snippet, sourceFile?, chunkIndex, totalChunks}], projectId}` |
+| `memory_get`                   | `projectId`, `hash`                                                                                                                                         | `{hash, value, path, context, createdAt}`                                                          |
+| `memory_search`                | `projectId`, `query`, `scope=all\|project\|shared`, `workspaceId?`, `limit=20`, `minRelativeScore=0`, `rrfK=60`, `ftsWeight=1`, `vectorWeight=1`, `contextLabel?` | `{results:[{hash, ranking, path, snippet, sourceFile?, chunkIndex, totalChunks}], projectId}`      |
+| `memory_record_followthrough`  | `projectId`, `correlationId`, `filePath`                                                                                                                    | `{recorded: true}`                                                                                 |
+| `memory_record_grade`          | `projectId`, `correlationId`, `grade`, `note?`                                                                                                              | `{recorded: true}`                                                                                 |
 | `memory_list`                  | `projectId`                                                                                                                                                 | `{files: <json tree>}`                                                                             |
 | `memory_stats`                 | `projectId`                                                                                                                                                 | `{entries, pending, contexts}`                                                                     |
 | `memory_share`                 | `projectId`, `hash`                                                                                                                                         | `{shared: true, context: "shared"}`                                                                |
@@ -838,3 +843,13 @@ the passphrase the bank is plaintext (backward compatible).
 - No un-share tool exists; see `memory_share` notes above.
 - No existing-bank migration (P11): a fresh bank is created; migrating an older
   sqlite-memory format bank is deferred (D11).
+- **Ranking is not identical across CPU architectures.** The bundled model is u8s8-quantized, and
+  ONNX Runtime evaluates that with different instructions on AVX512-VNNI hosts, on other x64 hosts,
+  and on arm64 — different arithmetic, not different rounding. Query embeddings differ in the third
+  decimal place, so `memory_search` can order results differently on different machines. A bank
+  embedded and queried on one machine is self-consistent; the case to know about is a bank moved
+  between machines by `memory_sync`, where stored vectors and query vectors come from two
+  implementations of the same model. Content remains reachable — the keyword leg is unaffected and
+  hybrid fusion usually rescues a reordering — but exact rank is not portable. Measured and
+  accepted, with the rejected remedies costed, in
+  [ADR-0049](../adr/0049-embeddings-depend-on-the-host-cpu.md).

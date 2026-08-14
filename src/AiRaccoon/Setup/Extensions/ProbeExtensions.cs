@@ -23,11 +23,12 @@ public static class ProbeExtensions
 
     extension(IEncryptionKeyResolver encryptionKeyResolver)
     {
-        public EncryptionKeyProbeResult ProbeResolvingEncryptionKey()
+        public async Task<EncryptionKeyProbeResult> ProbeResolvingEncryptionKeyAsync(CancellationToken cancellationToken)
         {
             try
             {
-                return EncryptionKeyProbeResult.Success(encryptionKeyResolver.Resolve());
+                return EncryptionKeyProbeResult.Success(
+                    await encryptionKeyResolver.ResolveAsync(cancellationToken).ConfigureAwait(false));
             }
             catch (Exception ex)
             {

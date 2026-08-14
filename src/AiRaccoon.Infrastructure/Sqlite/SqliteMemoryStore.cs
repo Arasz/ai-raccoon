@@ -25,31 +25,63 @@ public sealed partial class SqliteMemoryStore(
     IEntryEmbedder embedder,
     TimeProvider timeProvider,
     ILogger<SqliteMemoryStore> logger,
-    INoiseFilteringService noiseFilteringService,
-    IEnumerable<IAutoTtlPolicy> autoTtlPolicies)
+    INoiseFilteringService noiseFilteringService)
     : IMemoryStore
 {
     private const string SharedScope = "shared";
     private readonly IEntryEmbedder _embedder = embedder;
+    private readonly ISettingsStore _settings = new SqliteSettingsStore(factory);
+
+    // Both default to a Null Object, not a nullable parameter: TestData.CreateMemoryStore (out of
+    // this lane's ownership) constructs SqliteMemoryStore via the 7-arg primary constructor above,
+    // so production DI resolves the 9-arg constructor below instead — see NoOpNoiseShadowObserver
+    // and NoOpNoiseEntryStore.
+    private readonly INoiseShadowObserver _noiseShadowObserver = NoOpNoiseShadowObserver.Instance;
+    private readonly INoiseEntryStore _noiseEntryStore = NoOpNoiseEntryStore.Instance;
+
+    public SqliteMemoryStore(
+        ISqliteConnectionFactory factory,
+        IMemorySourceStore sourceStore,
+        IFileIngestor fileIngestor,
+        IEntryEmbedder embedder,
+        TimeProvider timeProvider,
+        ILogger<SqliteMemoryStore> logger,
+        INoiseFilteringService noiseFilteringService,
+        INoiseShadowObserver noiseShadowObserver,
+        INoiseEntryStore noiseEntryStore)
+        : this(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService)
+    {
+        _noiseShadowObserver = noiseShadowObserver;
+        _noiseEntryStore = noiseEntryStore;
+    }
 
     public async Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var isNoise = await noiseFilteringService.EvaluatePreWriteAsync(request, cancellationToken).ConfigureAwait(false);
-        if (isNoise)
-        {
-            // Dummy entry. In C# 10+, MemoryEntry record has 5 properties: Hash, Path, Context, Value, CreatedAt
-            return new MemoryEntry("noise_hash", "noise_path", request.Context ?? string.Empty, request.Content, timeProvider.GetUtcNow().ToUnixTimeSeconds());
-        }
+        var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
 
-        int? resolvedTtlDays = null;
-        foreach (var policy in autoTtlPolicies)
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+
+        var noiseEnabled = NoiseConfigKeys.ParseEnabled(
+            await ReadSettingAsync(connection, NoiseConfigKeys.EnabledGlobal, cancellationToken).ConfigureAwait(false));
+        if (noiseEnabled)
         {
-            var ttl = policy.EvaluateTtl(request);
-            if (ttl.HasValue)
+            var noiseResult = await noiseFilteringService.EvaluatePreWriteAsync(request, cancellationToken)
+                .ConfigureAwait(false);
+            if (noiseResult.IsNoise)
             {
-                resolvedTtlDays = resolvedTtlDays.HasValue ? Math.Min(resolvedTtlDays.Value, ttl.Value) : ttl.Value;
+                // ADR-0029/ADR-0039: the training-data source — unconditional on noise.enabled,
+                // independent of the learner/shadow switch below (that switch gates the *detector*
+                // seam, not the reject log).
+                var retentionDays = NoiseConfigKeys.ParseRetentionDays(
+                    await ReadSettingAsync(connection, NoiseConfigKeys.RetentionDaysGlobal, cancellationToken).ConfigureAwait(false));
+                var expiresAt = timeProvider.GetUtcNow().AddDays(retentionDays).ToUnixTimeSeconds();
+                await _noiseEntryStore.RecordAsync(request, noiseResult.PolicyName!, expiresAt, now, cancellationToken)
+                    .ConfigureAwait(false);
+
+                return new MemoryEntry(string.Empty, string.Empty, request.Context ?? string.Empty, request.Content,
+                    now, Stored: false, Reason: $"rejected by noise policy '{noiseResult.PolicyName}'");
             }
         }
 
@@ -60,9 +92,6 @@ public sealed partial class SqliteMemoryStore(
         // identical content maps to the same slot, then scope the identity hash to it (FR-NM-7; see docs/work/features-native-memory/native-memory.feature).
         var path = WritePathFor(request.Content);
         var hash = ContentHash.Of(path, request.Content);
-        var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
-
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
 
         if (bucket.WorkspaceId is not null)
         {
@@ -101,8 +130,7 @@ public sealed partial class SqliteMemoryStore(
                         agentId = request.AgentId,
                         createdAt = now,
                         updatedAt = now,
-                        sourceId = source.Id,
-                        ttl_days = resolvedTtlDays
+                        sourceId = source.Id
                     },
                     cancellationToken))
             .ConfigureAwait(false);
@@ -136,6 +164,13 @@ public sealed partial class SqliteMemoryStore(
         }
 
         await _embedder.EmbedIfConfiguredAsync(connection, row.Id, request.Content, cancellationToken).ConfigureAwait(false);
+
+        // Shadow mode (ADR-0039, amended): hands the stored content straight to the detector seam
+        // to record what it would have flagged (currently a no-op: no scoring model is shipped).
+        // Never affects Stored/Reason; a no-op entirely unless noise.learner.shadow.enabled.global is on.
+        await _noiseShadowObserver.ObserveStoredWriteAsync(connection, bucket.ProjectId, request.AgentId,
+            request.Content, hash, cancellationToken).ConfigureAwait(false);
+
         return ToEntry(row);
     }
 
@@ -165,7 +200,8 @@ public sealed partial class SqliteMemoryStore(
 
         var ftsBatches = new List<IReadOnlyList<MemorySearchResult>>();
         var vectorBatches = new List<IReadOnlyList<MemorySearchResult>>();
-        var contexts = SearchContexts.For(query).ToList();
+        var contexts = (await SearchContexts.ResolveAsync(connection, query, cancellationToken)
+            .ConfigureAwait(false)).ToList();
         var valueByHash = new Dictionary<string, string>(StringComparer.Ordinal);
         var ftsQueryByHash = new Dictionary<string, string>(StringComparer.Ordinal);
         var idByHash = new Dictionary<string, long>(StringComparer.Ordinal);
@@ -229,16 +265,29 @@ public sealed partial class SqliteMemoryStore(
 
         var fused = ReciprocalRankFusion.Fuse(
             [
-                (ModalityCandidates.ByBm25(ftsBatches), query.FtsWeight),
-                (ModalityCandidates.ByCosine(vectorBatches), query.VectorWeight)
+                (ModalityCandidates.ByBm25(ftsBatches, valueByHash), query.FtsWeight),
+                (ModalityCandidates.ByCosine(vectorBatches, valueByHash), query.VectorWeight)
             ],
             query.RrfK, 0, int.MaxValue);
-        var merged = SearchResultMerger.Merge([fused], query.Limit, query.MinScore, query.RrfK,
+        var merged = SearchResultMerger.Merge([fused], query.Limit, query.MinRelativeScore, query.RrfK,
             isPathQuery ? 0.0 : query.SourceLambda, query.ConsolidationThreshold, query.DocScoreFormula);
         merged = await ResolveDeferredSnippetsAsync(connection, merged, valueByHash, ftsQueryByHash, idByHash,
-            cancellationToken).ConfigureAwait(false);
+            query.Query, cancellationToken).ConfigureAwait(false);
         await BumpAccessAsync(connection, merged, query.ProjectId, cancellationToken).ConfigureAwait(false);
         return merged;
+    }
+
+    /// <summary>memory_get (ADR-0035): the caller's own rows plus the cross-project shared tier; null when no such hash is reachable.</summary>
+    public async Task<MemoryEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(hash);
+
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        var row = await connection.QueryFirstOrDefaultAsync<EntryRow>(
+                Def(MemorySql.SelectEntryByHashForRead, new { hash, projectId }, cancellationToken))
+            .ConfigureAwait(false);
+        return row is null ? null : ToEntry(row);
     }
 
     public async Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
@@ -666,45 +715,20 @@ public sealed partial class SqliteMemoryStore(
         return row is null ? null : new EntryMetadata(row.Rating, row.TtlDays);
     }
 
-    public async Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+    // The settings surface lives in SqliteSettingsStore (WP8); IMemoryStore keeps the members
+    // because ~40 call sites reach settings through the store they already hold.
+    public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
+        _settings.GetSettingAsync(key, cancellationToken);
 
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        return await ReadSettingAsync(connection, key, cancellationToken).ConfigureAwait(false);
-    }
+    public Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default) =>
+        _settings.SetSettingAsync(key, value, cancellationToken);
 
-    public async Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(key);
-        ArgumentNullException.ThrowIfNull(value);
+    public Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
+        CancellationToken cancellationToken = default) =>
+        _settings.GetSettingsByPrefixAsync(prefix, cancellationToken);
 
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        await connection.ExecuteAsync(
-                Def(MemorySql.UpsertSetting, new { key, value }, cancellationToken))
-            .ConfigureAwait(false);
-    }
-
-    public async Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(prefix);
-
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        var rows = await connection.QueryAsync<SettingRow>(
-                Def(MemorySql.SelectSettingsByPrefix, new { prefix }, cancellationToken))
-            .ConfigureAwait(false);
-        return rows.ToDictionary(row => row.Key, row => row.Value, StringComparer.Ordinal);
-    }
-
-    public async Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(key);
-
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        await connection.ExecuteAsync(Def(MemorySql.DeleteSetting, new { key }, cancellationToken))
-            .ConfigureAwait(false);
-    }
+    public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) =>
+        _settings.DeleteSettingAsync(key, cancellationToken);
 
     public async Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
         CancellationToken cancellationToken = default)
@@ -719,39 +743,61 @@ public sealed partial class SqliteMemoryStore(
         return affected > 0;
     }
 
+    /// <summary>
+    ///     Entry-delete and sync tombstone in one transaction (ADR-0035/WP5a): a crash between the
+    ///     two used to leave the content deleted locally with no tombstone, resurrecting it on the
+    ///     next sync. Same BEGIN IMMEDIATE/COMMIT/ROLLBACK shape as <see cref="DeleteSourcePathAsync" />
+    ///     and <see cref="ReplaceFileAsync" />; both callers are top-level, so there is no nested-transaction hazard.
+    /// </summary>
     private async Task<bool> DeleteCoreAsync(SqliteConnection connection, string projectId, string hash,
         string? scope, CancellationToken cancellationToken)
     {
-        var rowScope = await connection.QueryFirstOrDefaultAsync<string?>(
-                Def(MemorySql.SelectScopeByHashAndProject, new { hash, projectId, scope }, cancellationToken))
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
             .ConfigureAwait(false);
+        try
+        {
+            var rowScope = await connection.QueryFirstOrDefaultAsync<string?>(
+                    Def(MemorySql.SelectScopeByHashAndProject, new { hash, projectId, scope }, cancellationToken))
+                .ConfigureAwait(false);
 
-        var recomputeContext = await connection.QueryFirstOrDefaultAsync<DeleteRecomputeRow>(
-                Def(MemorySql.SelectDeleteRecomputeContext, new { hash, projectId, scope }, cancellationToken))
-            .ConfigureAwait(false);
+            var recomputeContext = await connection.QueryFirstOrDefaultAsync<DeleteRecomputeRow>(
+                    Def(MemorySql.SelectDeleteRecomputeContext, new { hash, projectId, scope }, cancellationToken))
+                .ConfigureAwait(false);
 
-        var deleted = await connection.ExecuteAsync(
-                Def(MemorySql.DeleteByHashAndProject, new { hash, projectId, scope }, cancellationToken))
-            .ConfigureAwait(false);
+            var deleted = await connection.ExecuteAsync(
+                    Def(MemorySql.DeleteByHashAndProject, new { hash, projectId, scope }, cancellationToken))
+                .ConfigureAwait(false);
 
-        if (deleted > 0 && rowScope is not null)
+            if (deleted > 0 && rowScope is not null)
+            {
+                await connection.ExecuteAsync(
+                        Def(MemorySql.UpsertTombstone,
+                            new { hash, scope = rowScope, deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
+                            cancellationToken))
+                    .ConfigureAwait(false);
+            }
+
+            if (deleted > 0 && recomputeContext?.SourceFile is not null)
+            {
+                var context = ContextStringOf(recomputeContext.Scope, recomputeContext.ContextLabel,
+                    recomputeContext.WorkspaceId, projectId);
+                await RecomputeChunkColumnsAsync(connection, context, projectId, recomputeContext.SourceFile,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            return deleted > 0;
+        }
+        catch
         {
             await connection.ExecuteAsync(
-                    Def(MemorySql.UpsertTombstone,
-                        new { hash, scope = rowScope, deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
-                        cancellationToken))
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
+            throw;
         }
-
-        if (deleted > 0 && recomputeContext?.SourceFile is not null)
-        {
-            var context = ContextStringOf(recomputeContext.Scope, recomputeContext.ContextLabel,
-                recomputeContext.WorkspaceId, projectId);
-            await RecomputeChunkColumnsAsync(connection, context, projectId, recomputeContext.SourceFile,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        return deleted > 0;
     }
 
     private static async Task<string?> ReadSettingAsync(SqliteConnection connection, string key,
@@ -813,7 +859,7 @@ public sealed partial class SqliteMemoryStore(
     internal static IReadOnlyList<MemorySearchResult> BuildFtsResults(IReadOnlyList<SearchRow> rows) =>
     [
         .. rows.Select(row => new MemorySearchResult(
-            row.Hash, row.Seq, row.Ranking, row.Path, string.Empty,
+            row.Hash, row.Ranking, row.Path, string.Empty,
             row.SourceFile, row.ChunkIndex, row.TotalChunks))
     ];
 
@@ -880,7 +926,7 @@ public sealed partial class SqliteMemoryStore(
         IReadOnlyList<(VectorRow Row, double Score)> ranked) =>
     [
         .. ranked.Select(item => new MemorySearchResult(
-            item.Row.Hash, item.Row.Seq, item.Score, item.Row.Path, string.Empty,
+            item.Row.Hash, item.Score, item.Row.Path, string.Empty,
             item.Row.SourceFile, item.Row.ChunkIndex, item.Row.TotalChunks))
     ];
 
@@ -892,7 +938,7 @@ public sealed partial class SqliteMemoryStore(
     private static async Task<IReadOnlyList<MemorySearchResult>> ResolveDeferredSnippetsAsync(
         SqliteConnection connection, IReadOnlyList<MemorySearchResult> results,
         IReadOnlyDictionary<string, string> valueByHash, IReadOnlyDictionary<string, string> ftsQueryByHash,
-        IReadOnlyDictionary<string, long> idByHash, CancellationToken cancellationToken)
+        IReadOnlyDictionary<string, long> idByHash, string queryText, CancellationToken cancellationToken)
     {
         var deferred = results.Where(result => result.Snippet.Length == 0).ToList();
         if (deferred.Count == 0)
@@ -918,7 +964,7 @@ public sealed partial class SqliteMemoryStore(
                 }
 
                 return valueByHash.TryGetValue(result.Hash, out var value)
-                    ? result with { Snippet = SnippetFallback.From(value, result.Hash) }
+                    ? result with { Snippet = SnippetFallback.From(value, result.Hash, queryText) }
                     : result;
             })
         ];
@@ -1165,8 +1211,6 @@ public sealed partial class SqliteMemoryStore(
     {
         public string Hash { get; set; } = "";
 
-        public int Seq { get; set; }
-
         public double Ranking { get; set; }
 
         public string Path { get; set; } = "";
@@ -1194,8 +1238,6 @@ public sealed partial class SqliteMemoryStore(
     internal sealed class VectorRow
     {
         public string Hash { get; set; } = "";
-
-        public int Seq { get; set; }
 
         public string Path { get; set; } = "";
 
@@ -1232,7 +1274,6 @@ public sealed partial class SqliteMemoryStore(
                 DateTimeOffset.FromUnixTimeSeconds(CreatedAt), (int?)TtlDays, SourceType);
     }
 
-    private sealed record SettingRow(string Key, string Value);
 
     private sealed class RatingRow
     {

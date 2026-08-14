@@ -22,7 +22,7 @@ public sealed class MaintenanceCommands(ISqliteConnectionFactory factory)
         if (!int.TryParse(minutes, out var parsed) || parsed <= 0)
         {
             await streams.WriteErrorLineAsync("ai-raccoon: checkpoint interval must be a positive number of minutes");
-            return 1;
+            return ExitCode.InvalidArgument;
         }
 
         await store.SetSettingAsync(BankMaintenanceConfigKeys.CheckpointIntervalMinutesGlobal, parsed.ToString(),
@@ -38,14 +38,14 @@ public sealed class MaintenanceCommands(ISqliteConnectionFactory factory)
         if (!int.TryParse(days, out var parsed) || parsed <= 0)
         {
             await streams.WriteErrorLineAsync("ai-raccoon: vacuum interval must be a positive number of days");
-            return 1;
+            return ExitCode.InvalidArgument;
         }
 
         if (parsed > BankMaintenanceConfigKeys.MaxVacuumIntervalDays)
         {
             await streams.WriteErrorLineAsync(
                 $"ai-raccoon: vacuum interval must be at most {BankMaintenanceConfigKeys.MaxVacuumIntervalDays} days");
-            return 1;
+            return ExitCode.InvalidArgument;
         }
 
         await store.SetSettingAsync(BankMaintenanceConfigKeys.VacuumIntervalDaysGlobal, parsed.ToString(),

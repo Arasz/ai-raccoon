@@ -29,7 +29,7 @@ public sealed class SyncCommands
             if (string.IsNullOrEmpty(accessKey))
             {
                 await streams.WriteErrorLineAsync("ai-raccoon: access key required — sync not configured");
-                return 1;
+                return ExitCode.InvalidArgument;
             }
 
             await streams.WriteErrorAsync("S3 secret key (empty aborts): ");
@@ -37,7 +37,7 @@ public sealed class SyncCommands
             if (string.IsNullOrEmpty(secretKey))
             {
                 await streams.WriteErrorLineAsync("ai-raccoon: secret key required — sync not configured");
-                return 1;
+                return ExitCode.InvalidArgument;
             }
         }
 
@@ -103,7 +103,7 @@ public sealed class SyncCommands
             if (account is null)
             {
                 await streams.WriteErrorLineAsync("ai-raccoon: --account is required with --cli");
-                return 1;
+                return ExitCode.InvalidArgument;
             }
         }
         else
@@ -116,7 +116,7 @@ public sealed class SyncCommands
             if (string.IsNullOrEmpty(connectionString))
             {
                 await streams.WriteErrorLineAsync("ai-raccoon: connection string required — sync not configured");
-                return 1;
+                return ExitCode.InvalidArgument;
             }
         }
 
@@ -186,10 +186,14 @@ public sealed class SyncCommands
             return 0;
         }
 
-        // Unknown values route as s3 (docs/plans/azure-blob-sync-plan.md R2); the raw row is printed so a typo is diagnosable.
+        // This is the command an operator runs to FIND a typo, so it reports an unrecognised row
+        // rather than throwing the way the factory does (A-F8).
         var rawProvider = rows.GetValueOrDefault(SyncSettingsKeys.Provider) ?? "s3";
-        await streams.WriteOutputLineAsync($"provider: {rawProvider}");
-        if (SyncProviderParser.Parse(rawProvider) == SyncProvider.Azure)
+        var recognised = SyncProviderParser.TryParse(rawProvider, out var shownProvider);
+        await streams.WriteOutputLineAsync(recognised
+            ? $"provider: {rawProvider}"
+            : $"provider: {rawProvider}  (not a supported backend — sync will refuse; expected s3 or azure)");
+        if (recognised && shownProvider == SyncProvider.Azure)
         {
             await streams.WriteOutputLineAsync($"container: {rows.GetValueOrDefault(SyncSettingsKeys.Container) ?? "(unset)"}");
             await streams.WriteOutputLineAsync($"objectKey: {rows.GetValueOrDefault(SyncSettingsKeys.ObjectKey) ?? "(unset)"}");

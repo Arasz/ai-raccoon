@@ -24,23 +24,24 @@ internal static class MemorySql
                                           WHERE id = @id
                                           """;
 
-    public const string SelectSourceByHashAndProject = """"""
+    public static readonly string SelectSourceByHashAndProject = $""""""
                                                         SELECT e.path AS Path, e.value AS Value, e.source_file AS SourceFile, e.section AS Section,
                                                                ms.source_type AS SourceType, ms.heading_path AS HeadingPath
                                                        FROM entries e
                                                        LEFT JOIN memory_source ms ON ms.id = e.source_id
-                                                       WHERE e.hash = @hash AND e.scope = 'project' AND e.project_id = @projectId
+                                                       WHERE e.hash = @hash AND {ProjectRows.Of("e.")}
+                                                       ORDER BY {ProjectRows.CommittedFirst("e.")}
                                                        LIMIT 1
                                                        """""";
 
-    public const string SelectExtractionCandidates = """"""
+    public static readonly string SelectExtractionCandidates = $""""""
                                                      SELECT e.hash AS Hash, e.path AS Path, e.value AS Value, e.source_file AS SourceFile,
                                                             ms.source_type AS SourceType,
                                                             e.rating AS Rating, e.access_count AS AccessCount, e.created_at AS CreatedAt,
                                                             e.ttl_days AS TtlDays
                                                      FROM entries e
                                                      LEFT JOIN memory_source ms ON ms.id = e.source_id
-                                                     WHERE e.scope = 'project' AND e.project_id = @projectId AND e.embed_state = 'embedded'
+                                                     WHERE {ProjectRows.Of("e.")} AND e.embed_state = 'embedded'
                                                        AND (@includeTtlRows = 1 OR e.ttl_days IS NULL)
                                                      """""";
 
@@ -50,10 +51,10 @@ internal static class MemorySql
                                             WHERE scope = 'shared'
                                             """";
 
-    public const string SelectProjectIds = """"
+    public static readonly string SelectProjectIds = $""""
                                            SELECT DISTINCT project_id AS ProjectId
                                            FROM entries
-                                           WHERE scope = 'project'
+                                           WHERE {ProjectRows.Scope()}
                                            ORDER BY project_id
                                            """";
 
@@ -68,13 +69,6 @@ internal static class MemorySql
                                                  ORDER BY id
                                                  LIMIT 1
                                                  """;
-
-    public const string EntryExistsByPathInBucket = """
-                                                    SELECT 1 FROM entries
-                                                    WHERE path = @path AND scope IS @scope AND project_id = @projectId
-                                                      AND context_label IS @contextLabel AND workspace_id IS @workspaceId
-                                                    LIMIT 1
-                                                    """;
 
     // The shared tier is cross-project (uq_entries_shared_bucket is global): the loser of a
     // concurrent cross-project promote must find the winner's row without a project filter.
@@ -104,21 +98,23 @@ internal static class MemorySql
                                                            LIMIT 1
                                                            """;
 
-    // bm25(entries_fts, 1.0, 8.0, 16.0) weights source_file/section matches 8x/16x a body-text
+    // bm25(entries_fts, 1.0, 8.0, 4.0) weights source_file/section matches 8x/4x a body-text
     // match, so identifier and section tokens outrank cross-referencing prose
-    // (docs/plans/retrieval-improvement-c.md §3 2c). ChunkIndex/TotalChunks are persisted columns,
+    // (docs/plans/retrieval-improvement-c.md §3 2c). The section weight was 16 while the column
+    // was empty for every ingested chunk; measured against a populated one, 4 beats both 16 and
+    // NULL on exact-chunk retrieval (docs/adr/0044-section-weight.md). ChunkIndex/TotalChunks are persisted columns,
     // not a per-query window function (docs/plans/2026-08-08-search-knn-perf.md §3.2/§3.3).
     // snippet() is deferred to ranking survivors (docs/plans/2026-08-08-search-knn-perf.md §WP7) —
     // FtsSnippetsForSurvivors resolves it there instead.
     public const string SearchByFilter = """
-                                         SELECT e.hash AS Hash, 0 AS Seq, bm25(entries_fts, 1.0, 8.0, 16.0) AS Ranking,
+                                         SELECT e.hash AS Hash, bm25(entries_fts, 1.0, 8.0, 4.0) AS Ranking,
                                                 e.path AS Path, e.value AS Value, e.source_file AS SourceFile,
                                                 e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks,
                                                 e.id AS Id
                                          FROM entries_fts
                                          JOIN entries e ON e.id = entries_fts.rowid
                                          WHERE entries_fts MATCH @query AND {filter}
-                                         ORDER BY bm25(entries_fts, 1.0, 8.0, 16.0)
+                                         ORDER BY bm25(entries_fts, 1.0, 8.0, 4.0)
                                          LIMIT @limit
                                          """;
 
@@ -139,7 +135,7 @@ internal static class MemorySql
     // v.distance, e.path` preserves the existing distance-tie break. Vector hits carry a fallback
     // snippet built in C# (the FTS list's snippet() wins for docs both modalities retrieve).
     public const string VectorSearchByFilter = """
-                                               SELECT e.hash AS Hash, 0 AS Seq, e.path AS Path, e.value AS Value,
+                                               SELECT e.hash AS Hash, e.path AS Path, e.value AS Value,
                                                       v.distance AS Distance, e.source_file AS SourceFile,
                                                       e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks
                                                FROM vec_entries v
@@ -152,7 +148,7 @@ internal static class MemorySql
     // same shape as the content query (source identity included) so both lists fuse in C# by
     // entry hash.
     public const string StructureVectorSearchByFilter = """
-                                                        SELECT e.hash AS Hash, 0 AS Seq, e.path AS Path, e.value AS Value,
+                                                        SELECT e.hash AS Hash, e.path AS Path, e.value AS Value,
                                                                v.distance AS Distance, e.source_file AS SourceFile,
                                                                e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks
                                                         FROM vec_structure v
@@ -209,27 +205,26 @@ internal static class MemorySql
                                                   DELETE FROM queue_restore;
                                                   """;
 
-    // e.scope = 'project' matches what ShareAsync can actually resolve
-    // (SelectSourceByHashAndProject); a custom- or workspace-scoped row backing this hash cannot
-    // promote it, so it must not count as "still backed" here either (H4).
-    public const string CaptureQueueRowsForSourcePath = """
+    // "Backed" means the same rows ShareAsync can resolve — ProjectRows is the one definition
+    // (ADR-0046); this used to be a hand-copied `e.scope = 'project'` in six places.
+    public static readonly string CaptureQueueRowsForSourcePath = $"""
                                                         INSERT INTO queue_restore (project_id, hash, path, value, source_file, score, reasons, created_at, updated_at)
                                                         SELECT q.project_id, q.hash, q.path, q.value, q.source_file, q.score, q.reasons, q.created_at, q.updated_at
                                                         FROM promotion_queue q
                                                         WHERE q.project_id = @projectId
                                                           AND EXISTS (SELECT 1 FROM entries e
                                                                       WHERE e.project_id = q.project_id AND e.hash = q.hash
-                                                                        AND e.scope = 'project'
+                                                                        AND {ProjectRows.Scope("e.")}
                                                                         AND (e.path = @path OR e.path LIKE @pathPrefix ESCAPE '\'))
                                                         """;
 
-    public const string RestoreQueueRowsStillBacked = """
+    public static readonly string RestoreQueueRowsStillBacked = $"""
                                                       INSERT INTO promotion_queue (project_id, hash, path, value, source_file, score, reasons, created_at, updated_at)
                                                       SELECT r.project_id, r.hash, r.path, r.value, r.source_file, r.score, r.reasons, r.created_at, r.updated_at
                                                       FROM queue_restore r
                                                       WHERE EXISTS (SELECT 1 FROM entries e
                                                                     WHERE e.project_id = r.project_id AND e.hash = r.hash
-                                                                      AND e.scope = 'project')
+                                                                      AND {ProjectRows.Scope("e.")})
                                                         AND NOT EXISTS (SELECT 1 FROM promotion_discards d
                                                                         WHERE d.project_id = r.project_id AND d.hash = r.hash)
                                                       ON CONFLICT(project_id, hash) DO NOTHING;
@@ -305,8 +300,11 @@ internal static class MemorySql
     public const string SelectWatchFilesByProject =
         "SELECT path FROM watch_files WHERE project_id = @projectId";
 
+    // Counts the project's contexts, labelled or not (ADR-0045) — PendingCount has always counted
+    // every row carrying the project id, and a bank holding one context-labelled entry reported
+    // `entries: 0, pending: 1` while the two disagreed about what "this project" meant.
     public const string CountProjectEntries =
-        "SELECT count(*) FROM entries WHERE scope = 'project' AND project_id = @projectId";
+        "SELECT count(*) FROM entries WHERE scope IN ('project', 'custom') AND project_id = @projectId";
 
     public const string PendingCount =
         "SELECT count(*) FROM entries WHERE embed_state = 'pending' AND project_id = @projectId";
@@ -343,11 +341,28 @@ internal static class MemorySql
     public const string SelectAllEmbedded =
         "SELECT id AS Id, value AS Value FROM entries WHERE embed_state = 'embedded' ORDER BY id";
 
-    public const string CommittedContexts = """
-                                            SELECT DISTINCT CASE WHEN scope = 'shared' THEN 'shared' ELSE 'project:' || project_id END AS context
+    // Custom contexts are listed alongside shared/project because their label is the only key that
+    // reaches their rows through memory_search (SearchContexts.For), and this is the only place a
+    // caller can read it back. Omitting them made a context-scoped write unreachable by any means
+    // except a hash the caller had to have kept.
+    /// <summary>The custom-context labels a project has rows under; the project scope reads them all.</summary>
+    public const string CustomContextLabels = """
+                                              SELECT DISTINCT context_label
+                                              FROM entries
+                                              WHERE scope = 'custom' AND project_id = @projectId
+                                                AND context_label IS NOT NULL
+                                              ORDER BY context_label
+                                              """;
+
+    public static readonly string CommittedContexts = $"""
+                                            SELECT DISTINCT CASE
+                                                     WHEN scope = 'shared' THEN 'shared'
+                                                     WHEN scope = 'custom' THEN 'custom:' || context_label
+                                                     ELSE 'project:' || project_id
+                                                   END AS context
                                             FROM entries
-                                            WHERE scope = 'shared' OR (scope = 'project' AND project_id = @projectId)
-                                            ORDER BY CASE WHEN scope = 'shared' THEN 0 ELSE 1 END, context
+                                            WHERE scope = 'shared' OR ({ProjectRows.Of()})
+                                            ORDER BY CASE WHEN scope = 'shared' THEN 0 WHEN scope = 'project' THEN 1 ELSE 2 END, context
                                             """;
 
     public const string DistinctFilePaths = """
@@ -358,6 +373,18 @@ internal static class MemorySql
                                               AND path IS NOT NULL
                                             ORDER BY path
                                             """;
+
+    // memory_get read path (ADR-0035): a hash addressable within the caller's own project rows
+    // plus the cross-project shared tier — the same reach SelectRatingForBump/BumpAccess already
+    // grant search hits.
+    public const string SelectEntryByHashForRead = """
+                                                   SELECT hash AS Hash, path AS Path, value AS Value, scope AS Scope,
+                                                          project_id AS ProjectId, context_label AS ContextLabel,
+                                                          workspace_id AS WorkspaceId, created_at AS CreatedAt
+                                                   FROM entries
+                                                   WHERE hash = @hash AND (project_id = @projectId OR scope = 'shared')
+                                                   LIMIT 1
+                                                   """;
 
     public const string SelectRatingForBump =
         "SELECT created_at AS CreatedAt, access_count AS AccessCount FROM entries " +
@@ -404,25 +431,28 @@ internal static class MemorySql
         DELETE FROM settings WHERE key = @key
         """;
 
-    // Scoped to the committed project row (H2): hash alone is not a unique row — a workspace or
-    // custom-context write of identical content shares it — and only the project-scope row is
-    // ever read by the sweep's degradation check, so a TTL on any other scope's sibling is inert.
-    public const string UpdateEntryTtl =
-        """
+    // Hash alone is not a unique row — identical content under a different label shares one — so
+    // the committed row wins when both exist (ProjectRows.CommittedFirst). It used to be restricted
+    // to scope='project', which turned that tie-break into an existence test: an entry that lived
+    // only in a context was reported unknown-hash (ADR-0046).
+    public static readonly string UpdateEntryTtl =
+        $"""
         UPDATE entries
         SET ttl_days = @ttlDays
-        WHERE project_id = @projectId AND hash = @hash AND scope = 'project'
+        WHERE id = (SELECT id FROM entries
+                    WHERE hash = @hash AND {ProjectRows.Of()}
+                    ORDER BY {ProjectRows.CommittedFirst()}, id
+                    LIMIT 1)
         """;
 
-    // Scoped to the committed project row (H2), matching UpdateEntryTtl: both callers (the sweep's
-    // degradation check, memory_set_ttl's response) mean the project row specifically, and without
-    // this a same-hash sibling in another scope could supply the rating/ttl instead (LIMIT 1, no
-    // ORDER BY, picks whichever row SQLite returns first).
-    public const string SelectEntryMetadata =
-        """
+    // Reads the same row UpdateEntryTtl writes — the explicit ORDER BY is what makes "the entry
+    // for this hash" deterministic when a labelled sibling shares it (ADR-0046).
+    public static readonly string SelectEntryMetadata =
+        $"""
         SELECT rating AS Rating, ttl_days AS TtlDays
         FROM entries
-        WHERE project_id = @projectId AND hash = @hash AND scope = 'project'
+        WHERE hash = @hash AND {ProjectRows.Of()}
+        ORDER BY {ProjectRows.CommittedFirst()}, id
         LIMIT 1
         """;
 

@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -40,7 +41,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
         };
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _clock = new FakeTimeProvider(FixedNow);
-        _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, new EmbeddingService());
+        _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, TestData.CreateEmbeddingService());
         _queueStore = new SqlitePromotionQueueStore(_factory, _clock);
     }
 
@@ -48,10 +49,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
     {
         foreach (var root in new[] { _dataRoot, _contentRoot })
         {
-            if (Directory.Exists(root))
-            {
-                Directory.Delete(root, true);
-            }
+            TestData.DeleteTempRoot(root);
         }
     }
 
@@ -127,14 +125,13 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
     }
 
     /// <summary>
-    ///     H4: ShareAsync resolves candidates with `scope = 'project'`
-    ///     (MemorySql.SelectSourceByHashAndProject), so a queue row whose hash survives only as a
-    ///     custom-scope sibling is unpromotable — the trigger's NOT EXISTS guard must not treat it
-    ///     as "still live" the way DeletingOneOfTwoEntriesSharingAHash_KeepsTheQueuedCandidate does
-    ///     for two committed siblings of the same scope.
+    ///     Inverted by ADR-0046. H4 asserted the opposite on the premise that "ShareAsync resolves
+    ///     candidates with `scope = 'project'`", so a hash surviving only as a custom-scope sibling
+    ///     was unpromotable and its queue row was an orphan. ShareAsync now resolves any row inside
+    ///     the project (ProjectRows), so that sibling is a live backer and the candidate stands.
     /// </summary>
     [Fact]
-    public async Task DeletingTheProjectEntry_WithOnlyACustomScopeSiblingSurviving_DropsTheQueuedCandidate()
+    public async Task DeletingTheProjectEntry_WithACustomScopeSiblingSurviving_KeepsTheQueuedCandidate()
     {
         await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
         {
@@ -156,9 +153,9 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
         }
 
         (await _queueStore.ListAsync("acme", TestContext.Current.CancellationToken))
-            .Select(r => r.Hash).ShouldNotContain("shared-hash",
-                "only a custom-scope sibling backs this hash now; ShareAsync can never resolve it, " +
-                "so the guard must not keep the candidate alive on its account");
+            .Select(r => r.Hash).ShouldContain("shared-hash",
+                "a custom-scope sibling is inside the project, so it still backs this hash and " +
+                "ShareAsync can resolve it (ADR-0046)");
     }
 
     /// <summary>
@@ -212,12 +209,14 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
     }
 
     /// <summary>
-    ///     H5: the orphan definition must match what ShareAsync can resolve ("no project-scope
-    ///     entry backs this hash"), not "no entries row at all" — otherwise `extract prune` is
-    ///     blind to exactly the orphan class the H4 trigger fix creates.
+    ///     The orphan definition must match what ShareAsync can resolve. H5 read that as
+    ///     "no project-scope entry backs this hash"; ADR-0046 makes it "no row inside the project"
+    ///     (<see cref="ProjectRows" />), so a custom-scope row is a live backer and only a queue row
+    ///     with no entry at all is an orphan. Both survivors are asserted so the prune cannot pass
+    ///     by removing everything.
     /// </summary>
     [Fact]
-    public async Task Prune_TreatsACustomScopeSiblingAsAnOrphan_ButNotALiveProjectScopeEntry()
+    public async Task Prune_RemovesOnlyQueueRowsNothingInTheProjectBacks()
     {
         var live = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "still project-scoped"),
@@ -236,16 +235,19 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
 
         await _queueStore.UpsertAsync("acme", [Candidate("custom-only-hash", "v", 1.0)],
             TestContext.Current.CancellationToken);
+        // No entries row at all: the one genuine orphan.
+        await _queueStore.UpsertAsync("acme", [Candidate("unbacked-hash", "v", 0.5)],
+            TestContext.Current.CancellationToken);
 
         var dryRun = await _queueStore.PruneOrphansAsync(apply: false, TestContext.Current.CancellationToken);
         dryRun.PerProject.ShouldBe(new Dictionary<string, int> { ["acme"] = 1 },
-            "the custom-scope sibling is the only hash ShareAsync could never resolve; " +
-            "the live project-scope row must not be reported");
+            "only the unbacked hash is an orphan; the project-scope and custom-scope rows both back theirs");
 
         var applied = await _queueStore.PruneOrphansAsync(apply: true, TestContext.Current.CancellationToken);
         applied.TotalOrphans.ShouldBe(1);
         (await _queueStore.ListAsync("acme", TestContext.Current.CancellationToken))
-            .Select(r => r.Hash).ShouldBe([live.Hash], "the live project-scope candidate must survive prune");
+            .Select(r => r.Hash).Order().ShouldBe(new[] { live.Hash, "custom-only-hash" }.Order(),
+                "both backed candidates must survive prune");
 
         var rerun = await _queueStore.PruneOrphansAsync(apply: true, TestContext.Current.CancellationToken);
         rerun.TotalOrphans.ShouldBe(0, "idempotent — nothing left to remove on a second pass");
@@ -356,8 +358,4 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
         _store.SetSettingAsync(IngestScopeKeys.ScopeProject(projectId), IngestScopeKeys.Serialize([_contentRoot]),
             TestContext.Current.CancellationToken);
 
-    private sealed class StubChunker : IMarkdownChunker
-    {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
-    }
 }

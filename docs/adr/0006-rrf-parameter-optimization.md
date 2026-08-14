@@ -2,8 +2,13 @@
 
 Date: 2026-08-04
 
-Status: Accepted. Amended 2026-08-09 — the parameters below stand unchanged; the second,
+Status: Accepted. The "minScore semantics" section is superseded by
+[ADR-0047](0047-relative-score-floor.md); the chosen fusion parameters are unaffected.
+Amended 2026-08-09 — the parameters below stand unchanged; the second,
 cross-context RRF pass they were measured through is removed (see the amendment at the end).
+Amended 2026-08-14 — the gate corpus was regenerated (WP4); the chosen parameters are
+unchanged, but every measured number moved and the 0.722 baseline is permanently retired
+(see the amendment at the end).
 
 ## Context
 
@@ -150,7 +155,16 @@ still re-scores its single batch by position, so `SourceAffinityRanker` continue
 the two RRF passes into one would have changed that scale and moved the baselines; it was
 deliberately not done.
 
-### minScore semantics — unchanged
+### minScore semantics — superseded by ADR-0047
+
+> **Superseded 2026-08-14 by [ADR-0047](0047-relative-score-floor.md).** This section held
+> that the shipped tool default of 0.7 "keeps the meaning it was audited under". The
+> equivalence it claimed between the swept 0.0 and the shipped 0.7 was measured at this
+> sweep's `limit=10` and does not hold at the `limit=20` the product ships: 10 of the 44
+> baseline queries came back short at limit 20, and all 44 at limit 50. The parameter is
+> now `minRelativeScore`, defaults to 0, and is documented as relative to the response's
+> own top hit. The chosen fusion point below (k=60, 1:1, minScore 0.0, Max3X100) is
+> unaffected — the sweep already ran at 0.0.
 
 minScore still filters a single max-normalized fused list, exactly as swept above. The
 "measured inert at the chosen point" observation stands, and the shipped tool default of
@@ -212,3 +226,69 @@ improvement to it — it claims a defect removed, single-context parity preserve
 now-well-defined semantics "`scope=all` ranks the union as if it were one bank". Deciding
 whether to add a cross-context stratum to the graded catalogue (and a shared-tier fixture to
 the harness) is a corpus-scope call for the owner, not something this change settles.
+
+## Amendment — 2026-08-14: gate corpus regenerated through the production FileIngestor
+
+### What changed
+
+WP4 (`docs/plans/2026-08-14-code-quality-improvement-plan.md`) regenerated
+`tests/AiRaccoon.Tests/Resources/jsaa-memory.db` through the production
+`AiRaccoon.Infrastructure.Ingestion.FileIngestor` against the same pinned
+job-search-ai-assistant commit (`9397bbef504b5b30a31003c84e8c5c316641adb6`, same 196 curated
+files), replacing a fixture built by `scripts/src/chunking.py` — a Python re-implementation of
+chunking, independent of and by-then divergent from the real chunker (WP7's engine-aware
+token budget, `docs/adr/0036`). The old fixture predated `chunk_index`/`total_chunks`/`source_id`
+(schema v0, no ladder steps applied) and carried **zero** structure vectors (`structure_embedding`
+NULL on 761/761 rows, `vec_structure` empty) — ADR-0004's dual-vector structure modality was
+exercised by no gate at all. The regenerated corpus is on the current schema (v6) and carries
+871/2518 real structure vectors (any chunk containing an H1/H2 heading gets one).
+
+**Verified the corpus can now fail on a broken fusion** (the acceptance test for the whole
+package): `StructureFusionGateTests.VectorOnlySearch_GenericDecisionQuery_RanksStructureMatchedChunkFirst`
+pins a generic "What is the decision?" query's vector-only top-1 to the ADR-0068 Decision-section
+chunk. Forcing `StructureFusion.Fused` to ignore the structure term (`return contentSim;`)
+changes the top-1 hash and fails the test; restoring `Fused` passes it again. A corpus with no
+structure vectors could not have done this — every prior gate run against the old fixture was
+provably incapable of catching a structure-fusion regression.
+
+### The 0.722 baseline is permanently retired
+
+The regenerated corpus is **not** re-derivable from the old one — it is a different, larger
+chunking of the same source documents (2518 rows vs 761, ~3.3x more and smaller chunks). Every
+number this ADR has ever cited against the old corpus (0.722, and the 2026-08-06 re-pin's 0.674)
+is a comparand for a fixture that no longer exists in this repository's history in committed
+form. This is a genuine, irreversible loss of a baseline, not a formality — re-running the same
+sweep can never reproduce those numbers again, because the underlying retrieval unit (a "chunk")
+now means something different.
+
+### Re-pinned numbers, chosen point (k=60, weights 1:1, minScore=0.0, window=Max3X100)
+
+| gate | before (0.674 re-pin) | after (2518-row corpus) | why it moved |
+|---|---|---|---|
+| ADR nDCG@5 | 0.674 | **0.532** | Same 196 source files, but ~3.3x more, smaller chunks means every ADR retrieval query now competes against far more same-topic sibling chunks — a genuinely harder task. Not a fusion regression: criterion 3 above shows the structure modality is doing real, verified work on this corpus. |
+| ADR MRR | 0.881 | 0.631 | Same cause. |
+| ADR recall@5 | 0.564 | 0.301 | Same cause; a fixed-size top-5 window now covers a smaller fraction of a corpus with 3.3x more competing chunks. |
+| A1 file rank | 1 | ≤ 2 (measured 2) | Corpus-growth rank drift, same shape as the 2026-08-06 re-pin's A6/A7/C5 shifts. |
+| A4 file rank, C1 exact, C5 exact ≤ 5 | 1 / 1 / ≤5 | unchanged (1 / 1 / 1) | Held. |
+| A6/A7 exact-chunk rank | ≤ 8 / ≤ 7 | **dropped from the top-10 window entirely** (not re-pinned to a wider window; ungated) | Both were already the most marginal ranks in the 2026-08-06 re-pin (A6 exact 6, A7 exact 7, out of 11 gate queries); the corpus tripling in size pushed them out of the measured window rather than to a new, stable rank — there is no honest ceiling to pin here without exercising a much wider (and untested) top-k. |
+| exact-chunk @3 | ≥ 4/11 | unchanged (8/11 measured, gate still ≥ 4/11) | Held, with margin. |
+
+### FINDING (not re-pinned): the chosen point is no longer the grid optimum
+
+On the regenerated corpus, k=60/1:1/Max3X100 (nDCG@5 0.532) is no longer the best gate-holding
+point in the 96-point grid — e.g. k=120, weights 2:1, window Max5X50 measures nDCG@5 0.775 while
+holding every gate above. **This is not re-pinned to a new "chosen" configuration.** WP4's
+mandate is regenerating the corpus, not re-tuning RRF parameters; that is WP3b's mandate
+("measured on WP4's corpus" per the improvement plan). Re-picking new defaults here would be a
+ranking decision this package has no basis to make — the gate now reports the gap
+(`RrfParameterSweepTests` prints a `grid-optimality FINDING (WP3b handoff)` line and the
+regenerated `docs/work/2026-08-04-wave4-rrf-sweep.md` records it) instead of asserting a claim
+that no longer holds. WP3b should re-run the full grid sweep as part of its ranking-fix work.
+
+### RAG-F14 — the ADR and the gate now agree
+
+The 2026-08-06 nDCG@5 re-pin (0.722 → 0.674) already had its reason recorded at
+`RrfParameterSweepTests.cs` (corpus re-pin + ADR-0015 cross-platform rank tolerance) before this
+amendment — there was no lost 0.048 to hunt for, only a stale number in this ADR's original
+Decision section. This amendment supersedes it with the WP4 numbers above; the ADR and the gate
+now cite the same baseline.

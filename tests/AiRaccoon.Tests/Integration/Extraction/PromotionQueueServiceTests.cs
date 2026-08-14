@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Integration.Extraction;
 
@@ -41,14 +42,14 @@ public sealed class PromotionQueueServiceTests : IDisposable
         };
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _clock = new FakeTimeProvider(FixedNow);
-        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, new EmbeddingService());
+        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, TestData.CreateEmbeddingService());
         var queueStore = new SqlitePromotionQueueStore(_factory, _clock);
         _metrics = new RecordingMetrics();
         _service = new PromotionQueueService(queueStore, store, new UniformCountEvictionPolicy(),
             _metrics, NullLogger<PromotionQueueService>.Instance, _clock);
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private static QueueCandidate Candidate(string hash, string value, double score) => new(hash, $"{hash}.md", value, null, score, ["organic-write"]);
 
@@ -176,7 +177,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
     [Fact]
     public async Task Promote_SharesTopNFromTheQueue_AndDrains()
     {
-        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, new EmbeddingService());
+        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, TestData.CreateEmbeddingService());
         // Queue candidates are committed entries by construction (propose extracts from the
         // project context), so the hashes must exist there for ShareAsync.
         var low = await store.WriteAsync(new MemoryWriteRequest("acme", "low fact"),
@@ -207,7 +208,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
     [Fact]
     public async Task Promote_SkipsAlreadySharedValues_AndDrainsThemToo()
     {
-        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, new EmbeddingService());
+        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, TestData.CreateEmbeddingService());
         var dup = await store.WriteAsync(new MemoryWriteRequest("acme", "shared  fact"),
             TestContext.Current.CancellationToken);
         var fresh = await store.WriteAsync(new MemoryWriteRequest("acme", "fresh fact"),
@@ -421,7 +422,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
     [Fact]
     public async Task Sweep_DropsQueueRowsForTheEntriesItDeleted_AndLeavesTheRest()
     {
-        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, new EmbeddingService());
+        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, TestData.CreateEmbeddingService());
         var doomed = await store.WriteAsync(
             new MemoryWriteRequest("acme", "doomed entry"),
             TestContext.Current.CancellationToken);
@@ -464,8 +465,4 @@ public sealed class PromotionQueueServiceTests : IDisposable
         public void RecordSnapshot(PromotionQueueStats stats, int capacity) => Snapshots.Add((stats, capacity));
     }
 
-    private sealed class StubChunker : IMarkdownChunker
-    {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
-    }
 }

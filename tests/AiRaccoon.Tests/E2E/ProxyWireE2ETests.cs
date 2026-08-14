@@ -68,14 +68,7 @@ public sealed class ProxyWireE2ETests : IAsyncLifetime
     {
         await _backend.StopAsync(CancellationToken.None);
         await _backend.DisposeAsync();
-        try
-        {
-            Directory.Delete(_dataRoot, true);
-        }
-        catch (IOException)
-        {
-            // Best-effort cleanup; the OS temp dir is scanned periodically anyway.
-        }
+        TestData.DeleteTempRoot(_dataRoot);
     }
 
     /// <summary>

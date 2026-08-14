@@ -1,6 +1,10 @@
 using System.Globalization;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Degradation;
+using AiRaccoon;
+using AiRaccoon.Core.Memory.Filtering;
+using AiRaccoon.Core.Memory.QueryGuard;
+using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
@@ -35,6 +39,18 @@ public class SettingsCommandsTests
                 ["sweep", "interval-hours"] => commands.SweepIntervalHoursSetAsync(parsed.ParsedCliArgs, store, streams, ct),
                 ["sweep", "threshold", "set"] => commands.SweepThresholdSetAsync(parsed.ParsedCliArgs, store, streams, ct),
                 ["sweep", "show"] => commands.SweepShowAsync(store, streams, ct),
+                ["noise", "enable"] => commands.NoiseEnabledSetAsync(true, store, streams, ct),
+                ["noise", "disable"] => commands.NoiseEnabledSetAsync(false, store, streams, ct),
+                ["noise", "show"] => commands.NoiseShowAsync(store, streams, ct),
+                ["queryguard", "enable"] => commands.QueryGuardEnabledSetAsync(true, store, streams, ct),
+                ["queryguard", "disable"] => commands.QueryGuardEnabledSetAsync(false, store, streams, ct),
+                ["queryguard", "shadow", "enable"] => commands.QueryGuardShadowSetAsync(true, store, streams, ct),
+                ["queryguard", "shadow", "disable"] => commands.QueryGuardShadowSetAsync(false, store, streams, ct),
+                ["queryguard", "show"] => commands.QueryGuardShowAsync(store, streams, ct),
+                ["queryguard", "structural", "enable"] => commands.QueryGuardStructuralSetAsync(true, store, streams, ct),
+                ["queryguard", "structural", "disable"] => commands.QueryGuardStructuralSetAsync(false, store, streams, ct),
+                ["queryguard", "structural", "threshold", "set"] =>
+                    commands.QueryGuardStructuralThresholdSetAsync(parsed.ParsedCliArgs, store, streams, ct),
                 _ => throw new InvalidOperationException($"unhandled: {string.Join(' ', parsed.CommandPath)}")
             };
         });
@@ -75,7 +91,9 @@ public class SettingsCommandsTests
     {
         var (exit, _, err) = await Run(["retrieval", "alpha", "set", "bogus"], new FakeConfigStore());
 
-        exit.ShouldBe(1);
+        // WP11: validation failures return a named code, so a script can tell a typo from a
+        // broken bank key (which is ExitCode.FailedToResolveEncryptionKey = 1).
+        exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("invalid alpha");
     }
 
@@ -155,5 +173,145 @@ public class SettingsCommandsTests
         setExit.ShouldBe(0);
         showOut.ShouldContain("interval: 8760 h");
         SweepConfigKeys.ParseIntervalHours(store.Settings[SweepConfigKeys.IntervalHoursGlobal]).ShouldBe(8760);
+    }
+
+    [Fact]
+    public async Task NoiseShow_NoRow_PrintsEnabledByDefault()
+    {
+        var (exit, stdout, _) = await Run(["noise", "show"], new FakeConfigStore());
+
+        exit.ShouldBe(0);
+        stdout.Trim().ShouldBe("enabled: True");
+    }
+
+    /// <summary>The kill switch round-trips through the same parse SqliteMemoryStore.WriteAsync reads it with.</summary>
+    [Fact]
+    public async Task NoiseDisableThenEnable_RoundTripsThroughCliShowAndNoiseConfigKeys()
+    {
+        var store = new FakeConfigStore();
+
+        var (disableExit, _, _) = await Run(["noise", "disable"], store);
+        var (_, disabledOut, _) = await Run(["noise", "show"], store);
+
+        disableExit.ShouldBe(0);
+        disabledOut.ShouldContain("enabled: False");
+        NoiseConfigKeys.ParseEnabled(store.Settings[NoiseConfigKeys.EnabledGlobal]).ShouldBeFalse();
+
+        var (enableExit, _, _) = await Run(["noise", "enable"], store);
+        var (_, enabledOut, _) = await Run(["noise", "show"], store);
+
+        enableExit.ShouldBe(0);
+        enabledOut.ShouldContain("enabled: True");
+        NoiseConfigKeys.ParseEnabled(store.Settings[NoiseConfigKeys.EnabledGlobal]).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task QueryGuardShow_NoRow_PrintsEnabledByDefault_ShadowOffByDefault()
+    {
+        var (exit, stdout, _) = await Run(["queryguard", "show"], new FakeConfigStore());
+
+        exit.ShouldBe(0);
+        stdout.Trim().ShouldBe("enabled: True  shadow: False  structural: False  " +
+                               $"threshold: {QueryGuardConfigKeys.DefaultStructuralThreshold.ToString(CultureInfo.InvariantCulture)}");
+    }
+
+    /// <summary>The kill switch round-trips through the same parse MemoryTools.Search reads it with.</summary>
+    [Fact]
+    public async Task QueryGuardDisableThenEnable_RoundTripsThroughCliShowAndQueryGuardConfigKeys()
+    {
+        var store = new FakeConfigStore();
+
+        var (disableExit, _, _) = await Run(["queryguard", "disable"], store);
+        var (_, disabledOut, _) = await Run(["queryguard", "show"], store);
+
+        disableExit.ShouldBe(0);
+        disabledOut.ShouldContain("enabled: False");
+        QueryGuardConfigKeys.ParseEnabled(store.Settings[QueryGuardConfigKeys.EnabledGlobal]).ShouldBeFalse();
+
+        var (enableExit, _, _) = await Run(["queryguard", "enable"], store);
+        var (_, enabledOut, _) = await Run(["queryguard", "show"], store);
+
+        enableExit.ShouldBe(0);
+        enabledOut.ShouldContain("enabled: True");
+        QueryGuardConfigKeys.ParseEnabled(store.Settings[QueryGuardConfigKeys.EnabledGlobal]).ShouldBeTrue();
+    }
+
+    /// <summary>
+    ///     ADR-0041 ships the structural detector default-off. Without a verb to arm it the setting
+    ///     is unreachable through any supported path, so the feature ships dark.
+    /// </summary>
+    [Fact]
+    public async Task QueryGuardStructuralEnableThenDisable_RoundTripsThroughCliShowAndQueryGuardConfigKeys()
+    {
+        var store = new FakeConfigStore();
+
+        var (enableExit, _, _) = await Run(["queryguard", "structural", "enable"], store);
+        var (_, enabledOut, _) = await Run(["queryguard", "show"], store);
+
+        enableExit.ShouldBe(0);
+        enabledOut.ShouldContain("structural: True");
+        QueryGuardConfigKeys.ParseStructuralEnabled(store.Settings[QueryGuardConfigKeys.StructuralEnabledGlobal])
+            .ShouldBeTrue();
+
+        var (disableExit, _, _) = await Run(["queryguard", "structural", "disable"], store);
+        var (_, disabledOut, _) = await Run(["queryguard", "show"], store);
+
+        disableExit.ShouldBe(0);
+        disabledOut.ShouldContain("structural: False");
+        QueryGuardConfigKeys.ParseStructuralEnabled(store.Settings[QueryGuardConfigKeys.StructuralEnabledGlobal])
+            .ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task QueryGuardStructuralThresholdSet_RoundTripsThroughCliShowAndQueryGuardConfigKeys()
+    {
+        var store = new FakeConfigStore();
+
+        var (setExit, _, _) = await Run(["queryguard", "structural", "threshold", "set", "0.75"], store);
+        var (_, showOut, _) = await Run(["queryguard", "show"], store);
+
+        setExit.ShouldBe(0);
+        showOut.ShouldContain("threshold: 0.75");
+        QueryGuardConfigKeys.ParseStructuralThreshold(store.Settings[QueryGuardConfigKeys.StructuralThresholdGlobal])
+            .ShouldBe(0.75);
+    }
+
+    [Fact]
+    public async Task QueryGuardStructuralThresholdSet_OutOfRange_ReturnsInvalidArgument()
+    {
+        var (exit, _, err) = await Run(["queryguard", "structural", "threshold", "set", "1.5"], new FakeConfigStore());
+
+        exit.ShouldBe(ExitCode.InvalidArgument);
+        err.ShouldContain("invalid threshold");
+    }
+
+    [Fact]
+    public async Task QueryGuardShow_NoRow_PrintsStructuralDefaults()
+    {
+        var (exit, stdout, _) = await Run(["queryguard", "show"], new FakeConfigStore());
+
+        exit.ShouldBe(0);
+        stdout.ShouldContain("structural: False");
+        stdout.ShouldContain($"threshold: {QueryGuardConfigKeys.DefaultStructuralThreshold.ToString(CultureInfo.InvariantCulture)}");
+    }
+
+    [Fact]
+    public async Task QueryGuardShadowEnableThenDisable_RoundTripsThroughCliShowAndQueryGuardConfigKeys()
+    {
+        var store = new FakeConfigStore();
+
+        var (enableExit, _, _) = await Run(["queryguard", "shadow", "enable"], store);
+        var (_, enabledOut, _) = await Run(["queryguard", "show"], store);
+
+        enableExit.ShouldBe(0);
+        enabledOut.ShouldContain("shadow: True");
+        QueryGuardConfigKeys.ParseShadow(store.Settings[QueryGuardConfigKeys.ShadowGlobal]).ShouldBeTrue();
+
+        var (disableExit, _, _) = await Run(["queryguard", "shadow", "disable"], store);
+        var (_, disabledOut, _) = await Run(["queryguard", "show"], store);
+
+        disableExit.ShouldBe(0);
+        disabledOut.ShouldContain("shadow: False");
+        QueryGuardConfigKeys.ParseShadow(store.Settings[QueryGuardConfigKeys.ShadowGlobal]).ShouldBeFalse();
     }
 }

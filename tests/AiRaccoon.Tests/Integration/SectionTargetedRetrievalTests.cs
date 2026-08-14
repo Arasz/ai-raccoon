@@ -42,6 +42,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     private readonly string _dataRoot;
     private readonly SqliteConnectionFactory _factory;
     private readonly Dictionary<string, string> _hashMap;
+    private readonly Dictionary<string, HashSet<string>> _fileHashes;
     private readonly ITestOutputHelper _output;
     private readonly SqliteMemoryStore _store;
 
@@ -65,23 +66,29 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
-            new EmbeddingService());
-        _hashMap = LoadChunkHashMap();
+            TestData.CreateEmbeddingService());
+        (_hashMap, _fileHashes) = LoadDerivedHashMap();
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    /// <summary>Wave 6 gate S4 (docs/plans/retrieval-improvement-c.md §3 Wave 6): "Consequences of ADR-0011?" finds the Consequences chunk at rank ≤ 3.</summary>
+    /// <summary>
+    ///     Wave 6 gate S4: restored to the production SearchLimit=10 window and rank &lt;= 3 once
+    ///     FileIngestor populated section from the heading leaf.
+    /// </summary>
     [Fact]
     public async Task S4_ConsequencesOfAdr0011_ConsequencesChunkAtRankAtMost3()
     {
-        var rank = await SectionRankAsync("Consequences of ADR-0011?",
-            "docs:adr:0011-frontend-chassis-stack.md#consequences", TestContext.Current.CancellationToken);
+        var expectedHash = _hashMap["docs:adr:0011-frontend-chassis-stack.md#consequences"];
+        var results = await _store.SearchAsync(new SearchQuery(
+            ProjectId, "Consequences of ADR-0011?", SearchScope.Project,
+            Limit: 10, MinRelativeScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 1), TestContext.Current.CancellationToken);
+        var rank = results.ToList().FindIndex(r => r.Hash == expectedHash) + 1;
 
-        _output.WriteLine($"S4 section rank: {rank?.ToString() ?? "not found"}");
-        rank.ShouldNotBeNull("S4: the ADR-0011 Consequences chunk must appear in the results.");
-        rank.Value.ShouldBeLessThanOrEqualTo(3,
-            "S4: the ADR-0011 Consequences chunk must rank <= 3 (dual-vector structure signal).");
+        _output.WriteLine($"S4 section rank: {rank}");
+        rank.ShouldBeGreaterThan(0, "S4: the ADR-0011 Consequences chunk must appear in the top 10.");
+        rank.ShouldBeLessThanOrEqualTo(3,
+            "S4: the ADR-0011 Consequences chunk must rank <= 3 (section-targeted structure signal).");
     }
 
     /// <summary>Wave 5b gate S1 (docs/plans/retrieval-improvement-c.md §3 Wave 5b): ADR-0011's Context section target finds the Context chunk at rank ≤ 3.</summary>
@@ -150,11 +157,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     {
         var query = "What does ADR-0011 decide?";
         var decisionSource = "docs:adr:0011-frontend-chassis-stack.md#decision";
-        var filePart = decisionSource.Split('#')[0];
-        var fileHashes = _hashMap
-            .Where(pair => pair.Key.StartsWith(filePart, StringComparison.Ordinal))
-            .Select(pair => pair.Value)
-            .ToHashSet(StringComparer.Ordinal);
+        var fileHashes = _fileHashes[CorpusHashMap.FileKey(decisionSource)];
 
         var results = await TopResultsAsync(query, TestContext.Current.CancellationToken);
         var fileRank = results.FindIndex(r => fileHashes.Contains(r.Hash)) + 1;
@@ -277,11 +280,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
         var ranks = new Dictionary<string, int?>(StringComparer.Ordinal);
         foreach (var query in queries)
         {
-            var filePart = query.ExpectedSource!.Split('#')[0];
-            var fileHashes = _hashMap
-                .Where(pair => pair.Key.StartsWith(filePart, StringComparison.Ordinal))
-                .Select(pair => pair.Value)
-                .ToHashSet(StringComparer.Ordinal);
+            var fileHashes = _fileHashes[CorpusHashMap.FileKey(query.ExpectedSource!)];
             var results = await TopResultsAsync(query.Query, cancellationToken);
             var rank = results.FindIndex(r => fileHashes.Contains(r.Hash)) + 1;
             ranks[query.Id] = rank == 0 ? null : rank;
@@ -294,7 +293,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     {
         var results = await _store.SearchAsync(new SearchQuery(
             ProjectId, text, SearchScope.Project,
-            Limit: SearchLimit, MinScore: 0.0, RrfK: 60,
+            Limit: SearchLimit, MinRelativeScore: 0.0, RrfK: 60,
             FtsWeight: 1, VectorWeight: 1), cancellationToken);
         return [.. results];
     }
@@ -327,13 +326,15 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
         return columns;
     }
 
-    private Dictionary<string, string> LoadChunkHashMap()
-    {
-        var projectRoot = FindProjectRoot();
-        var mapPath = Path.Combine(projectRoot, "scripts", "chunk-hash-map.json");
-        var json = File.ReadAllText(mapPath);
-        return JsonSerializer.Deserialize<Dictionary<string, string>>(json, JsonOptions) ?? [];
-    }
+    /// <summary>
+    ///     Derives the expected-source hash map and per-file hash sets directly from the regenerated
+    ///     corpus (WP4b, docs/plans/2026-08-14-code-quality-improvement-plan.md), instead of the
+    ///     retired scripts/chunk-hash-map.json. See <see cref="CorpusHashMap" />.
+    /// </summary>
+    private (Dictionary<string, string> HashMap, Dictionary<string, HashSet<string>> FileHashes) LoadDerivedHashMap() =>
+        CorpusHashMap.Build(
+            Path.Combine(_dataRoot, "memory.db"),
+            LoadQueries().Where(q => q.ExpectedSource is not null).Select(q => q.ExpectedSource!));
 
     private BaselineQuery[] LoadQueries()
     {

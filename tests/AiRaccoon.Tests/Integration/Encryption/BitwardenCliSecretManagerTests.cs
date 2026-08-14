@@ -15,7 +15,7 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
 
     private readonly string _dataRoot = TestData.CreateTempRoot();
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private string FakeBwsPath(string scriptBody)
     {
@@ -30,11 +30,11 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
     }
 
     [Fact]
-    public void Run_ExitZero_ReturnsStdout()
+    public async Task RunAsync_ExitZero_ReturnsStdout()
     {
         var runner = new BitwardenCliSecretManager(FakeBwsPath("echo hello"));
 
-        var result = runner.Run([], null, TimeSpan.FromSeconds(15));
+        var result = await runner.RunAsync([], null, TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken);
 
         result.ExitCode.ShouldBe(0);
         result.Stdout.ShouldBe("hello\n");
@@ -42,11 +42,11 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
     }
 
     [Fact]
-    public void Run_NonZeroExit_ReturnsExitCodeAndStderr()
+    public async Task RunAsync_NonZeroExit_ReturnsExitCodeAndStderr()
     {
         var runner = new BitwardenCliSecretManager(FakeBwsPath("echo boom >&2\nexit 3"));
 
-        var result = runner.Run([], null, TimeSpan.FromSeconds(15));
+        var result = await runner.RunAsync([], null, TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken);
 
         result.ExitCode.ShouldBe(3);
         result.Stdout.ShouldBeEmpty();
@@ -59,11 +59,11 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
     ///     stand-in bws with a token captured straight out of `ps aux`.
     /// </summary>
     [Fact]
-    public void Run_WithToken_NeverPlacesTokenInArgv()
+    public async Task RunAsync_WithToken_NeverPlacesTokenInArgv()
     {
         var runner = new BitwardenCliSecretManager(FakeBwsPath("echo \"$*\""));
 
-        var result = runner.Run(["secret", "get", "secret-1"], "tok-9", TimeSpan.FromSeconds(15));
+        var result = await runner.RunAsync(["secret", "get", "secret-1"], "tok-9", TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken);
 
         result.Stdout.Trim().ShouldBe("secret get secret-1");
         result.Stdout.ShouldNotContain("tok-9");
@@ -71,24 +71,24 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
     }
 
     [Fact]
-    public void Run_WithToken_SetsBwsAccessTokenEnvironmentVariable()
+    public async Task RunAsync_WithToken_SetsBwsAccessTokenEnvironmentVariable()
     {
         var runner = new BitwardenCliSecretManager(FakeBwsPath("echo \"$BWS_ACCESS_TOKEN\""));
 
-        var result = runner.Run(["secret", "get", "secret-1"], "tok-9", TimeSpan.FromSeconds(15));
+        var result = await runner.RunAsync(["secret", "get", "secret-1"], "tok-9", TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken);
 
         result.Stdout.Trim().ShouldBe("tok-9");
     }
 
     [Fact]
-    public void Run_WithToken_OverridesAnInheritedBwsAccessTokenEnvironmentVariable()
+    public async Task RunAsync_WithToken_OverridesAnInheritedBwsAccessTokenEnvironmentVariable()
     {
         var runner = new BitwardenCliSecretManager(FakeBwsPath("echo \"$BWS_ACCESS_TOKEN\""));
         var previous = Environment.GetEnvironmentVariable("BWS_ACCESS_TOKEN");
         Environment.SetEnvironmentVariable("BWS_ACCESS_TOKEN", "stale-inherited-tok");
         try
         {
-            var result = runner.Run([], "fresh-per-run-tok", TimeSpan.FromSeconds(15));
+            var result = await runner.RunAsync([], "fresh-per-run-tok", TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken);
 
             result.Stdout.Trim().ShouldBe("fresh-per-run-tok");
         }
@@ -99,24 +99,24 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
     }
 
     [Fact]
-    public void Run_WithoutToken_DoesNotAppendDashT()
+    public async Task RunAsync_WithoutToken_DoesNotAppendDashT()
     {
         var runner = new BitwardenCliSecretManager(FakeBwsPath("echo \"$*\""));
 
-        var result = runner.Run(["secret", "get", "secret-1"], null, TimeSpan.FromSeconds(15));
+        var result = await runner.RunAsync(["secret", "get", "secret-1"], null, TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken);
 
         result.Stdout.Trim().ShouldBe("secret get secret-1");
     }
 
     [Fact]
-    public void Run_InheritsBwsAccessTokenFromEnvironment()
+    public async Task RunAsync_InheritsBwsAccessTokenFromEnvironment()
     {
         var runner = new BitwardenCliSecretManager(FakeBwsPath("echo \"$BWS_ACCESS_TOKEN\""));
         var previous = Environment.GetEnvironmentVariable("BWS_ACCESS_TOKEN");
         Environment.SetEnvironmentVariable("BWS_ACCESS_TOKEN", "env-tok-42");
         try
         {
-            var result = runner.Run([], null, TimeSpan.FromSeconds(15));
+            var result = await runner.RunAsync([], null, TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken);
 
             result.Stdout.Trim().ShouldBe("env-tok-42");
         }
@@ -127,62 +127,83 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
     }
 
     [Fact]
-    public void Run_NonexistentExecutable_ThrowsBwsNotFoundText()
+    public async Task RunAsync_NonexistentExecutable_ThrowsBwsNotFoundText()
     {
         var runner = new BitwardenCliSecretManager(Path.Combine(_dataRoot, "does-not-exist"));
 
-        var ex = Should.Throw<BwsInvocationException>(() => runner.Run([], null, TimeSpan.FromSeconds(15)));
+        var ex = await Should.ThrowAsync<BwsInvocationException>(() => runner.RunAsync([], null, TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken));
 
         ex.Message.ShouldBe(NotFoundText);
     }
 
     [Fact]
-    public void Run_Timeout_KillsProcessAndThrowsTimeoutText()
+    public async Task RunAsync_Timeout_KillsProcessAndThrowsTimeoutText()
     {
         var runner = new BitwardenCliSecretManager(FakeBwsPath("sleep 30"));
 
-        var ex = Should.Throw<BwsInvocationException>(() => runner.Run([], null, TimeSpan.FromSeconds(1)));
+        var ex = await Should.ThrowAsync<BwsInvocationException>(() => runner.RunAsync([], null, TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken));
 
         ex.Message.ShouldBe("bws timed out after 1s");
     }
 
     [Fact]
-    public void Run_Timeout_WithToken_ExceptionDoesNotContainToken()
+    public async Task RunAsync_Timeout_WithToken_ExceptionDoesNotContainToken()
     {
         var runner = new BitwardenCliSecretManager(FakeBwsPath("sleep 30"));
 
-        var ex = Should.Throw<BwsInvocationException>(() => runner.Run([], "secret-tok-should-not-leak", TimeSpan.FromSeconds(1)));
+        var ex = await Should.ThrowAsync<BwsInvocationException>(() => runner.RunAsync([], "secret-tok-should-not-leak", TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken));
 
         ex.Message.ShouldNotContain("secret-tok-should-not-leak");
     }
 
     [Fact]
-    public void Run_ExitZeroWithEmptyStdout_Throws()
+    public async Task RunAsync_ExitZeroWithEmptyStdout_Throws()
     {
         var runner = new BitwardenCliSecretManager(FakeBwsPath("exit 0"));
 
-        var ex = Should.Throw<BwsInvocationException>(() => runner.Run([], null, TimeSpan.FromSeconds(15)));
+        var ex = await Should.ThrowAsync<BwsInvocationException>(() => runner.RunAsync([], null, TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken));
 
         ex.Message.ShouldBe("bws returned no output");
     }
 
     [Fact]
-    public void Run_ExitZeroWithEmptyStdout_WithToken_ExceptionDoesNotContainToken()
+    public async Task RunAsync_ExitZeroWithEmptyStdout_WithToken_ExceptionDoesNotContainToken()
     {
         var runner = new BitwardenCliSecretManager(FakeBwsPath("exit 0"));
 
-        var ex = Should.Throw<BwsInvocationException>(() => runner.Run([], "secret-tok-should-not-leak", TimeSpan.FromSeconds(15)));
+        var ex = await Should.ThrowAsync<BwsInvocationException>(() => runner.RunAsync([], "secret-tok-should-not-leak", TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken));
 
         ex.Message.ShouldNotContain("secret-tok-should-not-leak");
     }
 
     [Fact]
-    public void Run_NonexistentExecutable_WithToken_ExceptionDoesNotContainToken()
+    public async Task RunAsync_NonexistentExecutable_WithToken_ExceptionDoesNotContainToken()
     {
         var runner = new BitwardenCliSecretManager(Path.Combine(_dataRoot, "does-not-exist"));
 
-        var ex = Should.Throw<BwsInvocationException>(() => runner.Run([], "secret-tok-should-not-leak", TimeSpan.FromSeconds(15)));
+        var ex = await Should.ThrowAsync<BwsInvocationException>(() => runner.RunAsync([], "secret-tok-should-not-leak", TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken));
 
         ex.Message.ShouldNotContain("secret-tok-should-not-leak");
+    }
+
+    /// <summary>
+    ///     .NET-F2: the blocking .GetAwaiter().GetResult() calls that used to sit behind this sync
+    ///     interface are gone — RunAsync must not park a thread-pool thread on the child's I/O.
+    ///     Running several invocations concurrently on a single-threaded SynchronizationContext-free
+    ///     pool proves the awaits are real: a blocking implementation would serialize on the
+    ///     thread-pool's available worker count and this would time out well under load.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_ManyConcurrentInvocations_AllCompleteWithoutThreadStarvation()
+    {
+        var runner = new BitwardenCliSecretManager(FakeBwsPath("sleep 0.2; echo hello"));
+
+        var tasks = Enumerable.Range(0, 32)
+            .Select(_ => runner.RunAsync([], null, TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken))
+            .ToArray();
+
+        var results = await Task.WhenAll(tasks).WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        results.ShouldAllBe(r => r.Stdout == "hello\n");
     }
 }

@@ -325,6 +325,18 @@ internal sealed class FakeWatchMemoryStore : FakeMemoryStore
         return Task.CompletedTask;
     }
 
+    /// <summary>Projects the maintenance embed-retry sweep should walk (WP9).</summary>
+    public List<string> ProjectIds { get; } = [];
+
+    /// <summary>Pending-embed counts the sweep reads to decide whether to retry a project (WP9).</summary>
+    public Dictionary<string, int> PendingCounts { get; } = [];
+
+    public override Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new MemoryStats(0, PendingCounts.GetValueOrDefault(projectId), []));
+
+    public override Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<string>>(ProjectIds);
+
     public override Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
         CancellationToken cancellationToken = default)
     {

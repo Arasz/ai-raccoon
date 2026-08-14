@@ -46,7 +46,7 @@ public sealed class BackendLauncherTests : IDisposable
             listener.Stop();
         }
 
-        Directory.Delete(_dataRoot, true);
+        TestData.DeleteTempRoot(_dataRoot);
     }
 
     [Fact]

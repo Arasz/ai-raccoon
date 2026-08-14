@@ -10,7 +10,7 @@ public sealed class SqliteVectorTests : IDisposable
 {
     private readonly string _dataRoot = CreateTempRoot();
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public async Task LoadVector_LoadsVec0_AndCreatesVec0VirtualTable()

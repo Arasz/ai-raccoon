@@ -27,10 +27,7 @@ public sealed class SyncReindexStructureClearTests : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(_dataRoot))
-        {
-            Directory.Delete(_dataRoot, true);
-        }
+        TestData.DeleteTempRoot(_dataRoot);
     }
 
     [Fact]

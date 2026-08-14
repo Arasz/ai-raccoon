@@ -34,15 +34,16 @@ public static class TestData
         IMarkdownChunker markdownChunker,
         TimeProvider timeProvider,
         IEmbeddingService embeddings,
-        IJsonChunker? jsonChunker = null)
+        IJsonChunker? jsonChunker = null,
+        IEnumerable<INoiseFilterPolicy>? noisePolicies = null)
     {
         jsonChunker ??= RealJsonChunker(markdownChunker);
         var embedder = new EntryEmbedder(embeddings);
         var matcher = new FileTypeMatcher(
             [new MarkdownFileTypeHandler(markdownChunker), new JsonFileTypeHandler(jsonChunker)]);
         var fileIngestor = new FileIngestor(matcher, embedder, sourceStore, timeProvider);
-        var noiseFilteringService = new NoiseFilteringService(Array.Empty<INoiseFilterPolicy>(), null, timeProvider);
-        return new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService, Array.Empty<IAutoTtlPolicy>());
+        var noiseFilteringService = new NoiseFilteringService(noisePolicies ?? Array.Empty<INoiseFilterPolicy>());
+        return new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService);
     }
 
     /// <summary>Real o200k-backed markdown chunker for tests that exercise token bounds, not just structure.</summary>
@@ -70,8 +71,9 @@ public static class TestData
         EncryptionCommands? encryptionCommands = null,
         ExtractCommands? extract = null,
         MaintenanceCommands? maintenance = null,
-        ServeCommands? serve = null) =>
-        new(store, settings!, sync!, watch!, encryptionCommands!, extract!, maintenance!, serve!);
+        ServeCommands? serve = null,
+        NoiseEntriesCommands? noiseEntries = null) =>
+        new(store, settings!, sync!, watch!, encryptionCommands!, extract!, maintenance!, serve!, noiseEntries!);
 
     /// <summary>A <see cref="ServerProbe"/> backed by a plain loopback HttpClient (the pre-DI-refactor ForLoopback shape).</summary>
     public static ServerProbe CreateServerProbe() => new(new LoopbackHttpClientFactory());
@@ -114,10 +116,43 @@ public static class TestData
         return root;
     }
 
+    private const int DeleteTempRootMaxAttempts = 5;
+    private static readonly TimeSpan DeleteTempRootFirstDelay = TimeSpan.FromMilliseconds(20);
+
+    /// <summary>Idempotent, retry-tolerant teardown for a <see cref="CreateTempRoot"/> directory: a
+    /// directory already gone is success (not a spurious Dispose failure), a transient lock — a
+    /// handle not yet closed, a scan racing teardown — gets a few short retries. A lock that never
+    /// clears still throws after the bound: swallowing it would hide a real leak behind a green test.</summary>
+    public static void DeleteTempRoot(string path)
+    {
+        var delay = DeleteTempRootFirstDelay;
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                Directory.Delete(path, true);
+                return;
+            }
+            catch (DirectoryNotFoundException)
+            {
+                return;
+            }
+            catch (Exception ex) when (attempt < DeleteTempRootMaxAttempts &&
+                                        ex is IOException or UnauthorizedAccessException)
+            {
+                Thread.Sleep(delay);
+                delay += delay;
+            }
+        }
+    }
+
     public static InfrastructureOptions CreateInfrastructureOptions(string dataRoot, string rid = "osx-arm64") => new() { DataRoot = dataRoot, Rid = rid, Scope = InstallScope.User };
 
     /// <summary>BundledModel with a null logger and a factory that never opens real connections; the model copy beside the test host makes EnsureAsync return all-present.</summary>
     public static BundledModel CreateBundledModel() => new(NullLogger<BundledModel>.Instance, new NoopHttpClientFactory());
+
+    /// <summary>EmbeddingService with a null logger — the constructor requires a real <see cref="ILogger{TCategoryName}"/> now that it is DI-registered, so tests that don't care about logging use this.</summary>
+    public static EmbeddingService CreateEmbeddingService() => new(NullLogger<EmbeddingService>.Instance);
 
     /// <summary>Returns the p-th percentile (0–1) of the samples.</summary>
     public static double Percentile(IReadOnlyList<double> samples, double quantile)

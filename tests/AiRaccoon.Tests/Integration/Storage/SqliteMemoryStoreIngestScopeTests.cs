@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -37,17 +38,14 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
         };
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
-            new EmbeddingService());
+            TestData.CreateEmbeddingService());
     }
 
     public void Dispose()
     {
         foreach (var root in new[] { _dataRoot, _contentRoot, _outsideRoot })
         {
-            if (Directory.Exists(root))
-            {
-                Directory.Delete(root, true);
-            }
+            TestData.DeleteTempRoot(root);
         }
     }
 
@@ -178,7 +176,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
             TestContext.Current.CancellationToken);
 
         indexed.ShouldBe(0);
-        var results = await _store.SearchAsync(new SearchQuery("acme", "confidential badger stash", MinScore: 0),
+        var results = await _store.SearchAsync(new SearchQuery("acme", "confidential badger stash", MinRelativeScore: 0),
             TestContext.Current.CancellationToken);
         results.ShouldBeEmpty();
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(0);
@@ -239,8 +237,4 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
         _store.SetSettingAsync(key, IngestScopeKeys.Serialize([directory]),
             TestContext.Current.CancellationToken);
 
-    private sealed class StubChunker : IMarkdownChunker
-    {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
-    }
 }

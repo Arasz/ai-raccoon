@@ -41,7 +41,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
 
             var (exit, _, err) = await Run(["retrieval", "alpha", "set", value], store);
 
-            exit.ShouldBe(1);
+            exit.ShouldBe(ExitCode.InvalidArgument);
             err.ShouldContain("0..1");
             store.Settings.ShouldNotContainKey("retrieval.structureAlpha");
         }
@@ -52,7 +52,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
     {
         var (exit, _, err) = await Run(["retrieval", "alpha", "set", "abc"], new FakeConfigStore());
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldNotBeEmpty();
     }
 
@@ -163,7 +163,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
 
             var (exit, _, err) = await Run(["sweep", "interval-hours", value], store);
 
-            exit.ShouldBe(1);
+            exit.ShouldBe(ExitCode.InvalidArgument);
             err.ShouldContain("1..8760");
             store.Settings.ShouldNotContainKey("sweep.interval-hours.global");
         }
@@ -174,7 +174,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
     {
         var (exit, _, err) = await Run(["sweep", "interval-hours", "soon"], new FakeConfigStore());
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("invalid interval");
     }
 
@@ -196,7 +196,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
     {
         var (exit, _, err) = await Run(["sweep", "threshold", "set", "1.5"], new FakeConfigStore());
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("0..1");
     }
 
@@ -205,7 +205,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
     {
         var (exit, _, err) = await Run(["sweep", "threshold", "set", "bogus"], new FakeConfigStore());
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("invalid threshold");
     }
 
@@ -300,7 +300,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
             ["sync", "add", "s3", "http://s3.example.com", "--bucket", "memories"], store,
             new StringReader(""));
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.InvalidArgument);
         stderr.ShouldContain("key required");
         store.Settings.ShouldNotContainKey("sync.endpoint");
         store.Settings.ShouldNotContainKey("sync.accessKey");
@@ -377,7 +377,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
 
         var (exit, _, stderr) = await Run(["sync", "add", "azure", "memories"], store, new StringReader(""));
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.InvalidArgument);
         stderr.ShouldContain("connection string required");
         // Nothing written or deleted: the s3 install stays untouched (no provider flip).
         store.Settings.ShouldNotContainKey("sync.provider");
@@ -578,7 +578,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
 
         var (exit, _, stderr) = await Run(["sync", "add", "azure", "memories", "--cli"], store);
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.InvalidArgument);
         stderr.ShouldContain("--account is required with --cli");
         store.Settings.ShouldBeEmpty();
     }

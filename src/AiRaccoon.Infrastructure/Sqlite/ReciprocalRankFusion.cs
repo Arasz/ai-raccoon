@@ -11,7 +11,7 @@ internal static class ReciprocalRankFusion
     public static IReadOnlyList<MemorySearchResult> Fuse(
         IReadOnlyList<(IReadOnlyList<MemorySearchResult> List, double Weight)> lists,
         int k,
-        double minScore,
+        double minRelativeScore,
         int limit)
     {
         ArgumentNullException.ThrowIfNull(lists);
@@ -48,7 +48,7 @@ internal static class ReciprocalRankFusion
         [
             .. scores
                 .Select(pair => payloads[pair.Key] with { Ranking = pair.Value / max })
-                .Where(result => result.Ranking >= minScore)
+                .Where(result => result.Ranking >= minRelativeScore)
                 .OrderByDescending(result => result.Ranking)
                 .ThenBy(result => result.Path, StringComparer.Ordinal)
                 .Take(limit)

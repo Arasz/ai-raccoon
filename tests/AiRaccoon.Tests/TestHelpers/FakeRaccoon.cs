@@ -56,6 +56,43 @@ internal sealed class FakeRaccoon : IAsyncDisposable
         });
 
         await app.StartAsync(cancellationToken);
+
+        // Kestrel's StartAsync returns once the socket is bound, not once it can serve. The first
+        // request still pays pipeline warm-up, and ServerProbe gives a listener ~1s to answer — on
+        // a loaded runner that warm-up has exceeded the budget, so the probe recorded "no answer"
+        // and the test under it saw the unanswered path instead of the one it was written for.
+        // Answering our own /observability once removes that race for every caller.
+        await WaitUntilAnsweringAsync(port, cancellationToken);
         return fake;
+    }
+
+    private static async Task WaitUntilAnsweringAsync(int port, CancellationToken cancellationToken)
+    {
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(30);
+        while (true)
+        {
+            try
+            {
+                using var response = await client.GetAsync($"http://127.0.0.1:{port}/observability", cancellationToken);
+                if (response.IsSuccessStatusCode)
+                {
+                    return;
+                }
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException
+                                           && !cancellationToken.IsCancellationRequested)
+            {
+                // Not serving yet.
+            }
+
+            if (DateTimeOffset.UtcNow > deadline)
+            {
+                throw new InvalidOperationException(
+                    $"FakeRaccoon on port {port} never answered /observability within 30s");
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(25), cancellationToken);
+        }
     }
 }

@@ -36,8 +36,9 @@ public class ToolInventoryTests
             .Select(x => x.Attr.Name)
             .ToList();
 
-        tools.Count.ShouldBe(25);
+        tools.Count.ShouldBe(26);
         tools.ShouldContain("memory_write");
+        tools.ShouldContain("memory_get");
         tools.ShouldContain("memory_search");
         tools.ShouldContain("memory_list");
         tools.ShouldContain("memory_stats");
@@ -127,6 +128,24 @@ public class ToolInventoryTests
 
         match.Success.ShouldBeTrue("Could not find the '## Tools (N)' heading in docs/reference/agent-memory-server.md.");
         int.Parse(match.Groups[1].Value).ShouldBe(ToolMethods().Count());
+    }
+
+    /// <summary>The doc's tools table must list exactly the registered tools — not just the right count.</summary>
+    [Fact]
+    public void PackagedReadme_ToolsTable_ListsExactlyTheRegisteredTools()
+    {
+        var readme = File.ReadAllText(RepoFile("docs/reference/agent-memory-server.md"));
+        var documentedTools = Regex.Matches(readme, @"^\|\s*`(memory_\w+)`", RegexOptions.Multiline)
+            .Select(m => m.Groups[1].Value)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+
+        var registeredTools = ToolMethods()
+            .Select(x => x.Attr.Name!)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+
+        documentedTools.ShouldBe(registeredTools);
     }
 
     private static string RepoFile(string relative)

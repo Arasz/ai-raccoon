@@ -65,7 +65,7 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public async Task OpenBank_OnLegacySchema_AddsSourceFileColumn_AndRebuildsWeightedFts()
@@ -103,12 +103,12 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
         await CreateLegacyBankAsync();
 
         var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
-            new EmbeddingService());
+            TestData.CreateEmbeddingService());
         await store.WriteAsync(new MemoryWriteRequest("acme", "fresh wave two content",
             SourceFile: "docs/adr/0001-legacy-migrated.md"), TestContext.Current.CancellationToken);
 
         var results = await store.SearchAsync(new SearchQuery("acme", "wave two",
-            SearchScope.Project, Limit: 5, MinScore: 0.0), TestContext.Current.CancellationToken);
+            SearchScope.Project, Limit: 5, MinRelativeScore: 0.0), TestContext.Current.CancellationToken);
         var hit = results.ShouldHaveSingleItem();
         hit.SourceFile.ShouldBe("docs/adr/0001-legacy-migrated.md");
         hit.TotalChunks.ShouldBe(1);
@@ -137,7 +137,7 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
         // A crash between the migration's DROP/CREATE and its repopulate leaves a
         // new-shape FTS table with no rows and no triggers — it must heal on reopen.
         var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
-            new EmbeddingService());
+            TestData.CreateEmbeddingService());
         await store.WriteAsync(new MemoryWriteRequest("acme", "shell crash recovery content"),
             TestContext.Current.CancellationToken);
 
@@ -208,18 +208,24 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
         count.ShouldBe(1);
     }
 
+    /// <summary>
+    ///     WP5b/DA-F1: a workspace bucket dedupes the same way the shared/project buckets already
+    ///     do — byte-identical content under the same path/hash/workspace has no legitimate reason
+    ///     to exist twice, and doing so pays a second embedding and returns a duplicate hit.
+    /// </summary>
     [Fact]
-    public async Task OpenBank_MigrationLeavesWorkspaceRowsUntouched()
+    public async Task OpenBank_MigrationCollapsesWorkspaceDuplicates_KeepingEarliestRow()
     {
         await SeedDuplicateBucketsAsync(("w1", "ws.md", null, "acme", "ws-1"),
             ("w1", "ws.md", null, "acme", "ws-1"));
 
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
 
-        var count = await connection.ExecuteScalarAsync<long>(
-            "SELECT count(*) FROM entries WHERE workspace_id IS NOT NULL",
-            TestContext.Current.CancellationToken);
-        count.ShouldBe(2); // workspace scope is unconstrained by design
+        var rows = (await connection.QueryAsync<long>(
+                "SELECT id FROM entries WHERE workspace_id IS NOT NULL",
+                TestContext.Current.CancellationToken))
+            .ToList();
+        rows.ShouldHaveSingleItem(); // MIN(id) survivor, same dedup rule as the shared/project buckets
     }
 
     [Fact]
@@ -240,7 +246,7 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
     }
 
     [Fact]
-    public async Task UniqueIndex_AllowsSamePathDifferentHash_AndWorkspaceDuplicates()
+    public async Task UniqueIndex_AllowsSamePathDifferentHash()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
 
@@ -254,7 +260,21 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
             "VALUES ('h2', 'doc.md', 'chunk two', 'project', 'acme', 1, 1)",
             TestContext.Current.CancellationToken);
 
-        // Workspace rows: same bucket key twice stays legal (scope NULL escapes the partials).
+        var count = await connection.ExecuteScalarAsync<long>(
+            "SELECT count(*) FROM entries", TestContext.Current.CancellationToken);
+        count.ShouldBe(2);
+    }
+
+    /// <summary>
+    ///     WP5b/DA-F1: a workspace write has no logical reason to store byte-identical content
+    ///     twice under the same path/hash/workspace — doing so silently duplicates on retry, pays
+    ///     a second embedding, and returns a duplicate search hit.
+    /// </summary>
+    [Fact]
+    public async Task UniqueIndex_RejectsWorkspaceDuplicateBucket()
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+
         await connection.ExecuteAsync(
             "INSERT INTO workspaces (id, project_id, status, created_at) VALUES ('ws-1', 'acme', 'Active', 1)",
             TestContext.Current.CancellationToken);
@@ -262,14 +282,13 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
             "INSERT INTO entries (hash, path, value, scope, project_id, workspace_id, created_at, updated_at) " +
             "VALUES ('w1', 'ws.md', 'x', NULL, 'acme', 'ws-1', 1, 1)",
             TestContext.Current.CancellationToken);
-        await connection.ExecuteAsync(
+
+        var ex = await Should.ThrowAsync<SqliteException>(() => connection.ExecuteAsync(
             "INSERT INTO entries (hash, path, value, scope, project_id, workspace_id, created_at, updated_at) " +
             "VALUES ('w1', 'ws.md', 'x', NULL, 'acme', 'ws-1', 1, 1)",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken));
 
-        var count = await connection.ExecuteScalarAsync<long>(
-            "SELECT count(*) FROM entries", TestContext.Current.CancellationToken);
-        count.ShouldBe(4);
+        ex.SqliteErrorCode.ShouldBe(19); // SQLITE_CONSTRAINT
     }
 
     [Fact]
@@ -300,7 +319,8 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
         await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
         {
             await connection.ExecuteAsync(
-                "DROP INDEX IF EXISTS uq_entries_shared_bucket; DROP INDEX IF EXISTS uq_entries_committed_bucket;",
+                "DROP INDEX IF EXISTS uq_entries_shared_bucket; DROP INDEX IF EXISTS uq_entries_committed_bucket; "
+                + "DROP INDEX IF EXISTS uq_entries_workspace_bucket;",
                 TestContext.Current.CancellationToken);
             foreach (var (hash, path, scope, projectId, workspaceId) in rows)
             {

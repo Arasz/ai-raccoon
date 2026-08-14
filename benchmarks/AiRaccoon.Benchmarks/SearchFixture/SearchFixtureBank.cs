@@ -89,7 +89,7 @@ public sealed class SearchFixtureBank : IAsyncDisposable
         var options = new InfrastructureOptions { DataRoot = dataRoot, Scope = InstallScope.User };
         var factory = new SqliteConnectionFactory(options, new NoopEncryptionKeyResolver());
         var sourceStore = new SqliteMemorySourceStore(factory);
-        var embeddingService = new EmbeddingService();
+        var embeddingService = new EmbeddingService(NullLogger<EmbeddingService>.Instance);
         var countTokens = new TokenCount(new O200kTokenizer().CountTokens);
         var markdownChunker = new MarkdownChunker(countTokens);
         var fileTypeMatcher = new FileTypeMatcher([
@@ -98,9 +98,9 @@ public sealed class SearchFixtureBank : IAsyncDisposable
         ]);
         var embedder = new EntryEmbedder(embeddingService);
         var fileIngestor = new FileIngestor(fileTypeMatcher, embedder, sourceStore, TimeProvider.System);
-        var noiseFilteringService = new NoiseFilteringService(Array.Empty<INoiseFilterPolicy>(), null, TimeProvider.System);
+        var noiseFilteringService = new NoiseFilteringService(Array.Empty<INoiseFilterPolicy>());
         var store = new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, TimeProvider.System,
-            NullLogger<SqliteMemoryStore>.Instance, noiseFilteringService, Array.Empty<IAutoTtlPolicy>());
+            NullLogger<SqliteMemoryStore>.Instance, noiseFilteringService);
 
         // Rows land pending (no engine configured yet) so the fixture write loop pays for one
         // round trip per row, not one HTTP call per row; embedding happens once, batched, below.
@@ -160,7 +160,7 @@ public sealed class SearchFixtureBank : IAsyncDisposable
             $"({(double)structuredEntries / totalEntries:P1})");
 
         var probe = await Store.SearchAsync(
-                new SearchQuery(ProjectId, Queries[0], Limit: 10, MinScore: 0.0),
+                new SearchQuery(ProjectId, Queries[0], Limit: 10, MinRelativeScore: 0.0),
                 cancellationToken)
             .ConfigureAwait(false);
         if (probe.Count == 0)
@@ -244,6 +244,6 @@ public sealed class SearchFixtureBank : IAsyncDisposable
 
     private sealed class NoopEncryptionKeyResolver : IEncryptionKeyResolver
     {
-        public ResolvedKey Resolve() => ResolvedKey.None;
+        public Task<ResolvedKey> ResolveAsync(CancellationToken cancellationToken = default) => Task.FromResult(ResolvedKey.None);
     }
 }

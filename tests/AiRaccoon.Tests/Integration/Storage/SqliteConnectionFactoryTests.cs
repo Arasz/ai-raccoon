@@ -15,7 +15,7 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
 {
     private readonly string _dataRoot = CreateTempRoot();
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private SqliteConnectionFactory Factory(InstallScope scope = InstallScope.User) =>
         new(

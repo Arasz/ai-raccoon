@@ -3,6 +3,8 @@ using System.Globalization;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Filtering;
+using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Infrastructure.Embedding;
 
 namespace AiRaccoon.Setup.Cli.Commands;
@@ -17,7 +19,7 @@ public sealed class SettingsCommands
         if (AccessModePolicy.Parse(mode) is not { } parsed)
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: invalid access mode '{mode}' (expected ro, rw or full)");
-            return 1;
+            return ExitCode.InvalidArgument;
         }
 
         await store.SetSettingAsync(AccessModePolicy.GlobalSettingKey, AccessModePolicy.Serialize(parsed), cancellationToken);
@@ -41,7 +43,7 @@ public sealed class SettingsCommands
         if (AccessModePolicy.Parse(mode) is not { } parsed)
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: invalid access mode '{mode}' (expected ro, rw or full)");
-            return 1;
+            return ExitCode.InvalidArgument;
         }
 
         // The global row IS the wildcard for access (findings): `access set *` is spelled
@@ -169,7 +171,7 @@ public sealed class SettingsCommands
             alpha is < 0.0 or > 1.0)
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: invalid alpha '{raw}' (expected a number in 0..1)");
-            return 1;
+            return ExitCode.InvalidArgument;
         }
 
         await store.SetSettingAsync(StructureFusion.AlphaSettingKey,
@@ -197,7 +199,7 @@ public sealed class SettingsCommands
             !SweepThreshold.IsValid(threshold))
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: invalid threshold '{raw}' (expected a number in 0..1)");
-            return 1;
+            return ExitCode.InvalidArgument;
         }
 
         await store.SetSettingAsync(SweepThreshold.SettingKey, SweepThreshold.Format(threshold), cancellationToken);
@@ -223,7 +225,7 @@ public sealed class SettingsCommands
         {
             await streams.WriteErrorLineAsync(
                 $"ai-raccoon: invalid interval '{raw}' (expected a whole number of hours in {SweepConfigKeys.MinIntervalHours}..{SweepConfigKeys.MaxIntervalHours})");
-            return 1;
+            return ExitCode.InvalidArgument;
         }
 
         await store.SetSettingAsync(SweepConfigKeys.IntervalHoursGlobal,
@@ -244,6 +246,87 @@ public sealed class SettingsCommands
             await store.GetSettingAsync(SweepThreshold.SettingKey, cancellationToken));
         await streams.WriteOutputLineAsync(
             $"enabled: {enabled}  interval: {hours} h  threshold: {SweepThreshold.Format(threshold)}");
+        return 0;
+    }
+
+    /// <summary>The kill switch for pre-write noise rejection; `disable` is the only way to disarm a default-on filter.</summary>
+    public async Task<int> NoiseEnabledSetAsync(bool enabled, IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken)
+    {
+        await store.SetSettingAsync(NoiseConfigKeys.EnabledGlobal, enabled ? "true" : "false", cancellationToken);
+        await streams.WriteOutputLineAsync($"noise rejection {(enabled ? "enabled" : "disabled")}");
+        return 0;
+    }
+
+    public async Task<int> NoiseShowAsync(IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken)
+    {
+        var enabled = NoiseConfigKeys.ParseEnabled(
+            await store.GetSettingAsync(NoiseConfigKeys.EnabledGlobal, cancellationToken));
+        await streams.WriteOutputLineAsync($"enabled: {enabled}");
+        return 0;
+    }
+
+    /// <summary>The kill switch for the read-path query guard (docs/adr/0040); `disable` is the only way to disarm a default-on guard.</summary>
+    public async Task<int> QueryGuardEnabledSetAsync(bool enabled, IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken)
+    {
+        await store.SetSettingAsync(QueryGuardConfigKeys.EnabledGlobal, enabled ? "true" : "false", cancellationToken);
+        await streams.WriteOutputLineAsync($"query guard {(enabled ? "enabled" : "disabled")}");
+        return 0;
+    }
+
+    /// <summary>Shadow mode: records what the guard would have done without refusing or annotating anything.</summary>
+    public async Task<int> QueryGuardShadowSetAsync(bool shadow, IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken)
+    {
+        await store.SetSettingAsync(QueryGuardConfigKeys.ShadowGlobal, shadow ? "true" : "false", cancellationToken);
+        await streams.WriteOutputLineAsync($"query guard shadow mode {(shadow ? "enabled" : "disabled")}");
+        return 0;
+    }
+
+    /// <summary>The structural detector (docs/adr/0041) ships off; this is the only way to arm it.</summary>
+    public async Task<int> QueryGuardStructuralSetAsync(bool enabled, IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken)
+    {
+        await store.SetSettingAsync(QueryGuardConfigKeys.StructuralEnabledGlobal, enabled ? "true" : "false",
+            cancellationToken);
+        await streams.WriteOutputLineAsync($"query guard structural detector {(enabled ? "enabled" : "disabled")}");
+        return 0;
+    }
+
+    /// <summary>The score a query must clear before the structural detector annotates it.</summary>
+    public async Task<int> QueryGuardStructuralThresholdSetAsync(ParseResult parseResult, IMemoryStore store,
+        StandardStreams streams, CancellationToken cancellationToken)
+    {
+        var raw = parseResult.GetValue<string>("threshold")!;
+        if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var threshold) ||
+            threshold is < 0.0 or > 1.0)
+        {
+            await streams.WriteErrorLineAsync($"ai-raccoon: invalid threshold '{raw}' (expected a number in 0..1)");
+            return ExitCode.InvalidArgument;
+        }
+
+        await store.SetSettingAsync(QueryGuardConfigKeys.StructuralThresholdGlobal,
+            threshold.ToString(CultureInfo.InvariantCulture), cancellationToken);
+        await streams.WriteOutputLineAsync(
+            $"query guard structural threshold set to {threshold.ToString(CultureInfo.InvariantCulture)}");
+        return 0;
+    }
+
+    public async Task<int> QueryGuardShowAsync(IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken)
+    {
+        var enabled = QueryGuardConfigKeys.ParseEnabled(
+            await store.GetSettingAsync(QueryGuardConfigKeys.EnabledGlobal, cancellationToken));
+        var shadow = QueryGuardConfigKeys.ParseShadow(
+            await store.GetSettingAsync(QueryGuardConfigKeys.ShadowGlobal, cancellationToken));
+        var structural = QueryGuardConfigKeys.ParseStructuralEnabled(
+            await store.GetSettingAsync(QueryGuardConfigKeys.StructuralEnabledGlobal, cancellationToken));
+        var threshold = QueryGuardConfigKeys.ParseStructuralThreshold(
+            await store.GetSettingAsync(QueryGuardConfigKeys.StructuralThresholdGlobal, cancellationToken));
+        await streams.WriteOutputLineAsync($"enabled: {enabled}  shadow: {shadow}  " +
+                                           $"structural: {structural}  threshold: {threshold.ToString(CultureInfo.InvariantCulture)}");
         return 0;
     }
 
