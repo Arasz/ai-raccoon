@@ -149,7 +149,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
         var (exit, _, err, _) = await Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n"));
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("bws not found");
         err.ShouldContain("https://bitwarden.com/help/cli/");
         store.Settings.ShouldBeEmpty();
@@ -247,7 +247,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
         var (exit, _, err, _) = await Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n"));
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("bws failed (exit 1)");
         err.ShouldContain("secret not found (code: 404)");
         err.ShouldNotContain("PRAGMA rekey");
@@ -263,7 +263,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
         var (exit, _, err, _) = await Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n"));
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("malformed OpenSSH private key");
         store.Settings.ShouldBeEmpty();
         File.Exists(SidecarPath()).ShouldBeFalse();
@@ -371,7 +371,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var (exit, _, err, _) = await WithEnvPassphrase(null, () =>
             Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n")));
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("encryption mismatch");
         File.Exists(SidecarPath()).ShouldBeTrue();
         store.Settings.ShouldBeEmpty();
@@ -517,7 +517,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
         var (exit, _, err, _) = await Run(["encryption", "unset"], store, runner);
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("stays keyed to the bitwarden secret");
         err.ShouldContain("set AIRACCOON_DB_PASSPHRASE and re-run");
         var logRecord = _lastLogger!.Collector.LatestRecord;
@@ -701,7 +701,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
         var (exit, _, err, _) = await Run(["encryption", "migrate"], store, runner);
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("opens under neither");
         (await File.ReadAllBytesAsync(BankPath(), TestContext.Current.CancellationToken)).ShouldBe(before);
     }

@@ -24,6 +24,14 @@ internal sealed class ConfigCommands(
         var commandPath = cliInput.CommandPath;
         var parsedCliArgs = cliInput.ParsedCliArgs;
 
+        // CliRendering already printed the parse error(s) before this ran (AppRunner.GetCliInput);
+        // dispatching anyway would throw reading an argument System.CommandLine never bound,
+        // landing in the catch below and reformatting the same message a second time.
+        if (cliInput.Errors.Count > 0)
+        {
+            return ExitCode.InvalidArgument;
+        }
+
         try
         {
             return commandPath switch
@@ -103,7 +111,7 @@ internal sealed class ConfigCommands(
         catch (Exception ex)
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}");
-            return 1;
+            return ExitCode.InvalidArgument;
         }
     }
 }

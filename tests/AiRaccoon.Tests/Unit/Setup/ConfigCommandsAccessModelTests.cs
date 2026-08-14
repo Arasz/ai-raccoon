@@ -58,7 +58,7 @@ public class ConfigCommandsAccessModelTests
 
         var (exit, _, err) = await Run(["access", "default", "set", "bogus"], store);
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("bogus");
         store.Settings.ShouldNotContainKey("access.mode.global");
     }
@@ -346,7 +346,7 @@ public class ConfigCommandsAccessModelTests
         var exit = await TestData.CreateConfigCommands(store)
             .RunAsync(parsed!, new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.InvalidArgument);
         stderr.ToString().ShouldContain("unhandled command");
     }
 }

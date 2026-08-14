@@ -10,19 +10,25 @@ namespace AiRaccoon.Setup.Cli.Render;
 internal static class CliRendering
 {
     /// <summary>
-    ///     Renders help, version, or parse errors to the given writer and returns the exit
-    ///     code (0 help/version, 1 parse errors); a shell-expanded '*' target appends a quoting
-    ///     hint. The optional <paramref name="cwdEntries" /> overrides the real current-directory listing (tests only).
+    ///     Renders help, version, or parse errors to the given writer; a shell-expanded '*'
+    ///     target appends a quoting hint. Help/version defer to System.CommandLine's own
+    ///     renderer via Invoke; parse errors are rendered here instead — System.CommandLine's
+    ///     own Invoke()-driven error rendering double-prints some parse errors (e.g. a missing
+    ///     required argument), so this is the one place that prints an error line, each message
+    ///     exactly once. The optional <paramref name="cwdEntries" /> overrides the real
+    ///     current-directory listing (tests only).
     /// </summary>
     internal static void Render(CliInput cliInput, StandardStreams streams, IReadOnlySet<string>? cwdEntries = null)
     {
-        var exit = cliInput.ParsedCliArgs.Invoke(new InvocationConfiguration { Output = streams.Error, Error = streams.Error });
-        if (exit == 0 && cliInput.Errors.Count > 0)
+        if (cliInput.ShowHelp || cliInput.ShowVersion)
         {
-            foreach (var message in cliInput.Errors)
-            {
-                streams.WriteErrorLine(message);
-            }
+            cliInput.ParsedCliArgs.Invoke(new InvocationConfiguration { Output = streams.Error, Error = streams.Error });
+            return;
+        }
+
+        foreach (var message in cliInput.Errors)
+        {
+            streams.WriteErrorLine(message);
         }
 
         if (cliInput.Errors.Count > 0 && GlobExpansionHint(cliInput, cwdEntries) is { } hint)

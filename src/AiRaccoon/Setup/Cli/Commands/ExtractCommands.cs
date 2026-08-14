@@ -37,7 +37,7 @@ public sealed class ExtractCommands(IPromotionQueueStore promotionQueueStore)
         if (mode is not ("propose" or "promote"))
         {
             await streams.WriteErrorLineAsync("ai-raccoon: mode must be 'propose' or 'promote'");
-            return 1;
+            return ExitCode.InvalidArgument;
         }
 
         await store.SetSettingAsync(ExtractionConfigKeys.ModeGlobal, mode, cancellationToken);
@@ -52,7 +52,7 @@ public sealed class ExtractCommands(IPromotionQueueStore promotionQueueStore)
         if (!int.TryParse(minutes, out var parsed) || parsed <= 0)
         {
             await streams.WriteErrorLineAsync("ai-raccoon: interval must be a positive number of minutes");
-            return 1;
+            return ExitCode.InvalidArgument;
         }
 
         await store.SetSettingAsync(ExtractionConfigKeys.IntervalMinutesGlobal, parsed.ToString(),
@@ -67,7 +67,7 @@ public sealed class ExtractCommands(IPromotionQueueStore promotionQueueStore)
         if (!int.TryParse(capacity, out var parsed) || parsed <= 0)
         {
             await streams.WriteErrorLineAsync("ai-raccoon: capacity must be a positive number of queued candidates");
-            return 1;
+            return ExitCode.InvalidArgument;
         }
 
         await store.SetSettingAsync(ExtractionConfigKeys.QueueCapacityGlobal, parsed.ToString(),

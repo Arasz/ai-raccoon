@@ -78,7 +78,7 @@ public class ConfigCommandsExtractTests
 
         var (exit, _, err) = await Run(["extract", "mode", "auto"], store);
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("mode must be 'propose' or 'promote'");
         store.Settings.ShouldNotContainKey(ExtractionConfigKeys.ModeGlobal);
     }
@@ -102,7 +102,7 @@ public class ConfigCommandsExtractTests
 
         var (exit, _, err) = await Run(["extract", "interval", "0"], store);
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("interval must be a positive number of minutes");
         store.Settings.ShouldNotContainKey(ExtractionConfigKeys.IntervalMinutesGlobal);
     }
@@ -114,7 +114,7 @@ public class ConfigCommandsExtractTests
 
         var (exit, _, err) = await Run(["extract", "interval", "often"], store);
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("interval must be a positive number of minutes");
         store.Settings.ShouldNotContainKey(ExtractionConfigKeys.IntervalMinutesGlobal);
     }
@@ -138,7 +138,7 @@ public class ConfigCommandsExtractTests
 
         var (exit, _, err) = await Run(["extract", "capacity", "0"], store);
 
-        exit.ShouldBe(1);
+        exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("capacity must be a positive number");
         store.Settings.ShouldNotContainKey(ExtractionConfigKeys.QueueCapacityGlobal);
     }

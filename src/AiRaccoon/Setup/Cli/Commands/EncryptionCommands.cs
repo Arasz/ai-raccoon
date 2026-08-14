@@ -77,7 +77,7 @@ public sealed partial class EncryptionCommands
         {
             Log.BwsInvocationFailed(_logger, ex);
             await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}");
-            return 1;
+            return ExitCode.InvalidArgument;
         }
 
         var projectId = await PromptAsync(streams, $"project id [{DefaultProjectId}]", DefaultProjectId, ctx);
@@ -93,7 +93,7 @@ public sealed partial class EncryptionCommands
         {
             Log.BwsInvocationFailed(_logger, ex);
             await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}");
-            return 1;
+            return ExitCode.InvalidArgument;
         }
 
         if (fetched.ExitCode != 0)
@@ -101,7 +101,7 @@ public sealed partial class EncryptionCommands
             var errorLine = fetched.FirstErrorLine;
             Log.BwsCommandFailed(_logger, fetched.ExitCode, errorLine);
             await streams.WriteErrorLineAsync($"ai-raccoon: bws failed (exit {fetched.ExitCode}): {errorLine}");
-            return 1;
+            return ExitCode.InvalidArgument;
         }
 
         byte[] seed;
@@ -112,7 +112,7 @@ public sealed partial class EncryptionCommands
         catch (EncryptionKeyException ex)
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}");
-            return 1;
+            return ExitCode.InvalidArgument;
         }
 
         var derived = DeriveAndZeroSeed(seed);
@@ -156,7 +156,7 @@ public sealed partial class EncryptionCommands
                 }
 
                 await streams.WriteErrorLineAsync(MismatchText);
-                return 1;
+                return ExitCode.InvalidArgument;
             }
         }
 
@@ -194,7 +194,7 @@ public sealed partial class EncryptionCommands
         {
             Log.MigrationRefused(_logger, _bankConnectionFactory.BankPath, ex);
             await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}");
-            return 1;
+            return ExitCode.InvalidArgument;
         }
 
         if (rekeyed)
@@ -260,7 +260,7 @@ public sealed partial class EncryptionCommands
                 Log.UnsetSkippedRekey(_logger);
                 await streams.WriteErrorLineAsync(
                     "ai-raccoon: warning: no AIRACCOON_DB_PASSPHRASE set — the bank stays keyed to the bitwarden secret; set AIRACCOON_DB_PASSPHRASE and re-run 'ai-raccoon encryption unset' to rekey it back to the env passphrase (automatic decryption without an env passphrase is not supported)");
-                return 1;
+                return ExitCode.InvalidArgument;
             }
         }
         else
