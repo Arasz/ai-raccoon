@@ -4,6 +4,7 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
+using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Infrastructure.Embedding;
 
 namespace AiRaccoon.Setup.Cli.Commands;
@@ -263,6 +264,35 @@ public sealed class SettingsCommands
         var enabled = NoiseConfigKeys.ParseEnabled(
             await store.GetSettingAsync(NoiseConfigKeys.EnabledGlobal, cancellationToken));
         await streams.WriteOutputLineAsync($"enabled: {enabled}");
+        return 0;
+    }
+
+    /// <summary>The kill switch for the read-path query guard (docs/adr/0040); `disable` is the only way to disarm a default-on guard.</summary>
+    public async Task<int> QueryGuardEnabledSetAsync(bool enabled, IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken)
+    {
+        await store.SetSettingAsync(QueryGuardConfigKeys.EnabledGlobal, enabled ? "true" : "false", cancellationToken);
+        await streams.WriteOutputLineAsync($"query guard {(enabled ? "enabled" : "disabled")}");
+        return 0;
+    }
+
+    /// <summary>Shadow mode: records what the guard would have done without refusing or annotating anything.</summary>
+    public async Task<int> QueryGuardShadowSetAsync(bool shadow, IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken)
+    {
+        await store.SetSettingAsync(QueryGuardConfigKeys.ShadowGlobal, shadow ? "true" : "false", cancellationToken);
+        await streams.WriteOutputLineAsync($"query guard shadow mode {(shadow ? "enabled" : "disabled")}");
+        return 0;
+    }
+
+    public async Task<int> QueryGuardShowAsync(IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken)
+    {
+        var enabled = QueryGuardConfigKeys.ParseEnabled(
+            await store.GetSettingAsync(QueryGuardConfigKeys.EnabledGlobal, cancellationToken));
+        var shadow = QueryGuardConfigKeys.ParseShadow(
+            await store.GetSettingAsync(QueryGuardConfigKeys.ShadowGlobal, cancellationToken));
+        await streams.WriteOutputLineAsync($"enabled: {enabled}  shadow: {shadow}");
         return 0;
     }
 

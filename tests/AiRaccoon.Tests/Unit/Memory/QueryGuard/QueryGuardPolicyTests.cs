@@ -140,4 +140,32 @@ public class QueryGuardPolicyTests
     {
         Should.Throw<ArgumentNullException>(() => QueryGuardPolicy.Evaluate(null!));
     }
+
+    /// <summary>
+    ///     Zero embedding cost is guaranteed by construction (QueryGuardPolicy takes no dependencies
+    ///     — it cannot call an embedder). This measures the string/regex cost directly: ADR-0029
+    ///     measured real embedding at 14.6-26.5 ms; this must land far below 1 ms per call.
+    /// </summary>
+    [Fact]
+    public void Evaluate_RunsInSubMillisecondTime()
+    {
+        const int iterations = 10_000;
+        var queries = new[] { RealHermesProcessNotification, RealStackTracePaste, "why did the auth build start failing" };
+
+        // Warm up JIT before measuring.
+        foreach (var q in queries)
+        {
+            QueryGuardPolicy.Evaluate(q);
+        }
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        for (var i = 0; i < iterations; i++)
+        {
+            QueryGuardPolicy.Evaluate(queries[i % queries.Length]);
+        }
+
+        stopwatch.Stop();
+        var averageMs = stopwatch.Elapsed.TotalMilliseconds / iterations;
+        averageMs.ShouldBeLessThan(1.0);
+    }
 }

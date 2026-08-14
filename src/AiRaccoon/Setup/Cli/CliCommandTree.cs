@@ -17,7 +17,7 @@ internal static class CliCommandTree
     private static readonly string TransportHelpName =
         string.Join('|', Enum.GetNames<McpTransport>().Select(name => name.ToLowerInvariant()));
 
-    internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "noise", "sync", "ingest", "watch", "encryption", "extract", "maintenance", "serve"];
+    internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "noise", "queryguard", "sync", "ingest", "watch", "encryption", "extract", "maintenance", "serve"];
 
     /// <summary>
     ///     The root launch --port (shared with the bare launch root); serve reads it instance-based
@@ -69,6 +69,7 @@ internal static class CliCommandTree
         root.Add(RetrievalCommand());
         root.Add(SweepCommand());
         root.Add(NoiseCommand());
+        root.Add(QueryGuardCommand());
         root.Add(SyncCommand());
         root.Add(IngestCommand());
         root.Add(WatchCommand());
@@ -192,6 +193,27 @@ internal static class CliCommandTree
         show.Aliases.Add("list");
         noise.Add(show);
         return noise;
+    }
+
+    private static Command QueryGuardCommand()
+    {
+        var queryGuard = new Command("queryguard",
+            "Read-path query guard (docs/adr/0040): refuses a memory_search query that is itself machine output (e.g. a pasted background-process notification) and annotates one that merely contains log-like content. Armed by default — 'queryguard disable' is how you disarm it.")
+        {
+            new Command("enable", "Arms the read-path query guard (the default)"),
+            new Command("disable", "Disarms the read-path query guard — every query runs untouched, even ones a policy would otherwise refuse or annotate")
+        };
+        var shadow = new Command("shadow",
+            "Shadow mode: records what the guard would have done without refusing or annotating anything — measure real traffic before enabling")
+        {
+            new Command("enable", "Arms shadow mode (off by default)"),
+            new Command("disable", "Disarms shadow mode (the default): the guard acts on its verdicts")
+        };
+        queryGuard.Add(shadow);
+        var show = new Command("show", "Shows whether the guard and shadow mode are enabled");
+        show.Aliases.Add("list");
+        queryGuard.Add(show);
+        return queryGuard;
     }
 
     private static Command SyncCommand()
