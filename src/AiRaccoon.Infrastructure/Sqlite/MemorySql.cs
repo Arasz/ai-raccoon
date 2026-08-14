@@ -300,8 +300,11 @@ internal static class MemorySql
     public const string SelectWatchFilesByProject =
         "SELECT path FROM watch_files WHERE project_id = @projectId";
 
+    // Counts the project's contexts, labelled or not (ADR-0045) — PendingCount has always counted
+    // every row carrying the project id, and a bank holding one context-labelled entry reported
+    // `entries: 0, pending: 1` while the two disagreed about what "this project" meant.
     public const string CountProjectEntries =
-        "SELECT count(*) FROM entries WHERE scope = 'project' AND project_id = @projectId";
+        "SELECT count(*) FROM entries WHERE scope IN ('project', 'custom') AND project_id = @projectId";
 
     public const string PendingCount =
         "SELECT count(*) FROM entries WHERE embed_state = 'pending' AND project_id = @projectId";

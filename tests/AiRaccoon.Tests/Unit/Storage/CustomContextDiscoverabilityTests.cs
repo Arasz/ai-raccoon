@@ -100,6 +100,26 @@ public sealed class CustomContextDiscoverabilityTests : IDisposable
         results.ShouldBeEmpty("the project is the isolation boundary and must still hold");
     }
 
+    /// <summary>
+    ///     The two counters must mean the same "this project". CountProjectEntries counted
+    ///     scope='project' only while PendingCount counted every row carrying the project id, so a
+    ///     bank holding one context-labelled entry reported `entries: 0, pending: 1` — measured on
+    ///     a live server.
+    /// </summary>
+    [Fact]
+    public async Task Stats_CountsContextLabelledEntries_InTheProjectTotal()
+    {
+        var store = CreateStore();
+        var ct = TestContext.Current.CancellationToken;
+
+        await store.WriteAsync(new MemoryWriteRequest("proj-1", "plain project fact"), ct);
+        await store.WriteAsync(new MemoryWriteRequest("proj-1", "labelled fact", Context: "adr"), ct);
+
+        var stats = await store.GetStatsAsync("proj-1", ct);
+
+        stats.EntryCount.ShouldBe(2, "a context-labelled entry belongs to its project and counts in it");
+    }
+
     /// <summary>The label recovered from stats must be the one search accepts, not a display form.</summary>
     [Fact]
     public async Task ACustomContextReportedByStats_IsSearchableUnderThatLabel()
