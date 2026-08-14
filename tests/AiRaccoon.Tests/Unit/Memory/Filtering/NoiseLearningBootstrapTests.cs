@@ -40,7 +40,7 @@ public sealed class NoiseLearningBootstrapTests : IDisposable
     public async Task HermesHit_FeedsTheCollector_AndASampleAppearsInTheRealStore()
     {
         var ct = TestContext.Current.CancellationToken;
-        var entryEmbedder = new EntryEmbedder(new EmbeddingService());
+        var entryEmbedder = new EntryEmbedder(TestData.CreateEmbeddingService());
         await using (var connection = await _factory.OpenBankAsync(ct))
         {
             await entryEmbedder.ConfigureAsync(connection, "local", BundledModel.ResolveModelPath(), null, ct);
@@ -68,7 +68,7 @@ public sealed class NoiseLearningBootstrapTests : IDisposable
     public async Task TwoHermesHits_AppendTwoSeparateSamples_NoMerging()
     {
         var ct = TestContext.Current.CancellationToken;
-        var entryEmbedder = new EntryEmbedder(new EmbeddingService());
+        var entryEmbedder = new EntryEmbedder(TestData.CreateEmbeddingService());
         await using (var connection = await _factory.OpenBankAsync(ct))
         {
             await entryEmbedder.ConfigureAsync(connection, "local", BundledModel.ResolveModelPath(), null, ct);

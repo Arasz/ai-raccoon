@@ -18,7 +18,7 @@ public sealed class SqliteContentEmbedderTests : IDisposable
 {
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-content-embedder");
     private readonly SqliteConnectionFactory _factory;
-    private readonly EntryEmbedder _entryEmbedder = new(new EmbeddingService());
+    private readonly EntryEmbedder _entryEmbedder = new(TestData.CreateEmbeddingService());
 
     public SqliteContentEmbedderTests()
     {

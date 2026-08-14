@@ -24,7 +24,7 @@ public sealed class NoiseShadowObserverTests : IDisposable
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-noise-shadow");
     private readonly SqliteConnectionFactory _factory;
     private readonly SqliteNoiseClusterStore _store;
-    private readonly EntryEmbedder _entryEmbedder = new(new EmbeddingService());
+    private readonly EntryEmbedder _entryEmbedder = new(TestData.CreateEmbeddingService());
 
     public NoiseShadowObserverTests()
     {

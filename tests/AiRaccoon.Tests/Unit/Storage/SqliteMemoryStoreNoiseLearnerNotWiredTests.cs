@@ -45,7 +45,7 @@ public sealed class SqliteMemoryStoreNoiseLearnerNotWiredTests : IDisposable
     {
         var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
-            new EmbeddingService(), noisePolicies: [new HermesProcessNoisePolicy()]);
+            TestData.CreateEmbeddingService(), noisePolicies: [new HermesProcessNoisePolicy()]);
 
         var entry = await store.WriteAsync(new MemoryWriteRequest("proj-1", RejectedContent), TestContext.Current.CancellationToken);
 
@@ -61,7 +61,7 @@ public sealed class SqliteMemoryStoreNoiseLearnerNotWiredTests : IDisposable
     public async Task RealShadowObserver_ShadowSwitchLeftAtItsDefault_RejectedWrite_NeverTouchesNoiseClusters()
     {
         var clusterStore = new SqliteNoiseClusterStore(_factory, NullLogger<SqliteNoiseClusterStore>.Instance);
-        var entryEmbedder = new EntryEmbedder(new EmbeddingService());
+        var entryEmbedder = new EntryEmbedder(TestData.CreateEmbeddingService());
         var contentEmbedder = new SqliteContentEmbedder(_factory, entryEmbedder);
         var feedbackCollector = new NoiseFeedbackCollector(clusterStore, contentEmbedder);
         var shadowObserver = new NoiseShadowObserver(clusterStore, new NoOpNoiseDetector(), feedbackCollector,

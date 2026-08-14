@@ -20,12 +20,20 @@ public sealed class SqliteMemoryStoreSizeRatchetTests
     // Measured on work/wave2c-gates at commit 4cedd158 (2026-08-14): wc -l SqliteMemoryStore.cs
     // and grep -cE "^\s+Task" IMemoryStore.cs. WP8 is the fix; raise these only alongside a
     // conscious decision to accept more growth, never to make a failing build pass.
-    // Re-pinned 2026-08-14 from 1245/25 to 1276/26 for memory_get (ADR-0035), which closed
-    // blocker B2 -- an agent could find a memory and had no call returning its content. The
-    // ratchet did its job here: it forced this to be a decision rather than drift. Raise these
-    // only for a reviewed addition, and record it on this line; the alternative is WP8.
-    private const int MaxLines = 1276;
-    private const int MaxMembers = 26;
+    // RAISE HISTORY -- read this before adding a third entry.
+    //   1245 / 25  original pin, 2026-08-14, measured after Wave 1's deletions.
+    //   1276 / 26  memory_get (ADR-0035) -- closed blocker B2, an agent could find a memory and
+    //              had no call returning its content.
+    //   1308 / 27  noise shadow-observer wiring (ADR-0039).
+    //
+    // That is two raises in a single day of work, which is the signal this ratchet exists to
+    // send. It was added because the file grew 1111 -> 1250 in eight days while its
+    // decomposition item sat open; it has now grown a further 58 lines while that item still
+    // sits open. The next person to hit this should do WP8 (extract ISettingsStore, split the
+    // store along its six seams) rather than add a fourth line above. Raising the cap is not
+    // free -- it is borrowing against a decomposition someone still has to pay for.
+    private const int MaxLines = 1308;
+    private const int MaxMembers = 27;
 
     [Fact]
     public void SqliteMemoryStore_DoesNotExceedItsMeasuredLineCap()
