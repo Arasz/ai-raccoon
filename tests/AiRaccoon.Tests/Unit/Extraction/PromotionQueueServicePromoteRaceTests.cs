@@ -1,6 +1,7 @@
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Promotion;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -175,16 +176,17 @@ public sealed class PromotionQueueServicePromoteRaceTests
             Task.FromResult(new PromotionQueueOrphanReport(0, new Dictionary<string, int>()));
     }
 
-    private sealed class RecordingShareStore : IMemoryStore
+    private sealed class RecordingShareStore : FakeMemoryStore
     {
         public List<string> SharedHashes { get; } = [];
 
         /// <summary>Hash -> exception ShareAsync throws for that hash instead of sharing it.</summary>
         public Dictionary<string, Exception> FailingHashes { get; } = new(StringComparer.Ordinal);
 
-        public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) => Task.FromResult(new SharedIndex([], []));
+        public override Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(new SharedIndex([], []));
 
-        public Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
+        public override Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
             CancellationToken cancellationToken = default)
         {
             if (FailingHashes.TryGetValue(hash, out var exception))
@@ -196,81 +198,8 @@ public sealed class PromotionQueueServicePromoteRaceTests
             return Task.FromResult(new MemoryEntryResult(new MemoryEntry(hash, $"{hash}.md", "shared", "value", 0), true));
         }
 
-        public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
-
-        public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<bool> DeleteAsync(string projectId, string hash,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<int> DeleteContextAsync(string projectId, string context,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-        public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
-            bool includeTtlRows, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-        public Task<int> IngestFileAsync(string projectId, string path, string? context,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string provider, string? model, string? baseUrl,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<MemoryEntryResult> AddContentAsync(string projectId, string path, string content, string? context,
-            string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-        public Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-        public Task<bool> ReplaceFileAsync(string projectId, string path, string fileHash,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<int> DeleteSourcePathAsync(string projectId, string path,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+        public override Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
+            Task.FromResult<string?>(null);
     }
 
     private sealed class SpyMetrics : IPromotionQueueMetrics

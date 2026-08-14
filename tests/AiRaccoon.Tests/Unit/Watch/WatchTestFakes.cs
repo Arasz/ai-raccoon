@@ -2,6 +2,7 @@ using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Watch;
+using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 
@@ -31,7 +32,7 @@ internal sealed class WatchTestStack
 
     public FakeTimeProvider Time { get; } = new(FixedNow);
 
-    public FakeMemoryStore Memory { get; } = new();
+    public FakeWatchMemoryStore Memory { get; } = new();
 
     public FakeWatchStore Store { get; } = new();
 
@@ -220,7 +221,7 @@ internal sealed class FakeWatchScanLease : IWatchScanLease
 }
 
 /// <summary>IMemoryStore fake: settings + the watch-used slice; the rest is unsupported.</summary>
-internal sealed class FakeMemoryStore : IMemoryStore
+internal sealed class FakeWatchMemoryStore : FakeMemoryStore
 {
     private readonly object _sync = new();
     public Dictionary<string, string?> Settings { get; } = new(StringComparer.Ordinal);
@@ -253,7 +254,7 @@ internal sealed class FakeMemoryStore : IMemoryStore
 
     public Action<string, string, string>? WriteFingerprint { get; set; }
 
-    public async Task<int> IngestFileAsync(string projectId, string path, string? context,
+    public override async Task<int> IngestFileAsync(string projectId, string path, string? context,
         CancellationToken cancellationToken = default)
     {
         if (IngestError is not null)
@@ -277,7 +278,7 @@ internal sealed class FakeMemoryStore : IMemoryStore
     }
 
     /// <summary>Mirrors the real transaction: re-check the fingerprint, then delete, ingest and store it.</summary>
-    public async Task<bool> ReplaceFileAsync(string projectId, string path, string fileHash,
+    public override async Task<bool> ReplaceFileAsync(string projectId, string path, string fileHash,
         CancellationToken cancellationToken = default)
     {
         if (string.Equals(ReadFingerprint?.Invoke(projectId, path), fileHash, StringComparison.Ordinal))
@@ -291,7 +292,7 @@ internal sealed class FakeMemoryStore : IMemoryStore
         return true;
     }
 
-    public Task<int> DeleteSourcePathAsync(string projectId, string path,
+    public override Task<int> DeleteSourcePathAsync(string projectId, string path,
         CancellationToken cancellationToken = default)
     {
         lock (_sync)
@@ -303,64 +304,28 @@ internal sealed class FakeMemoryStore : IMemoryStore
         return Task.FromResult(0);
     }
 
-    public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) => Task.FromResult(Settings.GetValueOrDefault(key));
+    public override Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Settings.GetValueOrDefault(key));
 
-    public Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default)
+    public override Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default)
     {
         Settings[key] = value;
         return Task.CompletedTask;
     }
 
-    public Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
+    public override Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyDictionary<string, string>>(Settings
             .Where(kv => kv.Key.StartsWith(prefix, StringComparison.Ordinal) && kv.Value is not null)
             .ToDictionary(kv => kv.Key, kv => kv.Value!));
 
-    public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default)
+    public override Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default)
     {
         Settings.Remove(key);
         return Task.CompletedTask;
     }
 
-    public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-
-    public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
-        CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
-
-    public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-
-    public Task<int> DeleteContextAsync(string projectId, string context,
-        CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
-
-    public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-
-
-    public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
-
-    public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
-        bool includeTtlRows, CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
-
-    public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
-
-    public Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
-        CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
-
-    public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-
-    public Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
-        CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
-
-    public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string provider, string? model, string? baseUrl,
-        CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
-
-    public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
+    public override Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
         CancellationToken cancellationToken = default)
     {
         lock (_sync)
@@ -375,20 +340,4 @@ internal sealed class FakeMemoryStore : IMemoryStore
 
         return Task.FromResult(new EmbedPendingResult(0, 0));
     }
-
-    public Task<MemoryEntryResult> AddContentAsync(string projectId, string path, string content, string? context,
-        string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
-
-    public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
-        CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
-
-    public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
-        CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
-
-    public Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
-        CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException();
 }
