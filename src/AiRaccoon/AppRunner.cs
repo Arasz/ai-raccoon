@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -19,7 +20,10 @@ public sealed partial class AppRunner
     private readonly CancellationTokenSource _cts = new();
     private readonly StandardStreams _streams = new(Console.In, Console.Out, Console.Error);
 
-    private CancellationToken Token => _cts.Token;
+    internal CancellationToken Token => _cts.Token;
+
+    /// <summary>Test seam: counts how many times a one-shot path wired shutdown-signal cancellation.</summary>
+    internal int ShutdownCancellationRegistrations { get; private set; }
 
     public async Task<int> Run(string[] args)
     {
@@ -56,7 +60,8 @@ public sealed partial class AppRunner
 
         LogSqliteEngine(logger);
 
-        if (!TryResolveEncryptionKey(logger, resolver, out var encryptionKey))
+        var (resolvedEncryptionKey, encryptionKey) = await TryResolveEncryptionKeyAsync(logger, resolver, Token);
+        if (!resolvedEncryptionKey)
         {
             return ExitCode.FailedToResolveEncryptionKey;
         }
@@ -98,18 +103,17 @@ public sealed partial class AppRunner
             return false;
         }
 
-        static bool TryResolveEncryptionKey(ILogger logger, IEncryptionKeyResolver encryptionKeyResolver, out ResolvedKey resolvedKey)
+        static async Task<(bool Success, ResolvedKey Key)> TryResolveEncryptionKeyAsync(ILogger logger,
+            IEncryptionKeyResolver encryptionKeyResolver, CancellationToken cancellationToken)
         {
-            var probeResolvingEncryptionKey = encryptionKeyResolver.ProbeResolvingEncryptionKey();
+            var probeResolvingEncryptionKey = await encryptionKeyResolver.ProbeResolvingEncryptionKeyAsync(cancellationToken);
             if (probeResolvingEncryptionKey.IsSuccess)
             {
-                resolvedKey = probeResolvingEncryptionKey.Key;
-                return true;
+                return (true, probeResolvingEncryptionKey.Key);
             }
 
             Log.FailedToResolveEncryptionKey(logger, probeResolvingEncryptionKey.Exception);
-            resolvedKey = ResolvedKey.None;
-            return false;
+            return (false, ResolvedKey.None);
         }
     }
 
@@ -125,8 +129,38 @@ public sealed partial class AppRunner
         return cliInput;
     }
 
+    /// <summary>
+    ///     Wires SIGINT/SIGTERM to Token cancellation for a one-shot path (.NET-F3) — the CLI-command
+    ///     and proxy paths get no host shutdown pipeline, so without this a signal just kills the
+    ///     process outright instead of letting Token cancellation drive a graceful unwind.
+    /// </summary>
+    private IDisposable RegisterShutdownCancellation()
+    {
+        ShutdownCancellationRegistrations++;
+        return new ShutdownSignalRegistration(
+            PosixSignalRegistration.Create(PosixSignal.SIGINT, OnPosixSignal),
+            PosixSignalRegistration.Create(PosixSignal.SIGTERM, OnPosixSignal));
+    }
+
+    /// <summary>Cancels Token instead of letting the runtime terminate the process outright.</summary>
+    internal void OnPosixSignal(PosixSignalContext context)
+    {
+        context.Cancel = true;
+        _cts.Cancel();
+    }
+
+    private sealed class ShutdownSignalRegistration(PosixSignalRegistration first, PosixSignalRegistration second) : IDisposable
+    {
+        public void Dispose()
+        {
+            first.Dispose();
+            second.Dispose();
+        }
+    }
+
     private async Task<int> RunCliCommand(CliInput cliInput)
     {
+        using var shutdown = RegisterShutdownCancellation();
         var services = new ServiceCollection();
         ConfigureConsoleLogging(services, cliInput.ServerConfig.Options);
         services.RegisterCoreMemoryServices(cliInput.ServerConfig.Options);
@@ -138,6 +172,7 @@ public sealed partial class AppRunner
 
     private async Task<int> RunProxy(CliInput cliInput)
     {
+        using var shutdown = RegisterShutdownCancellation();
         var services = new ServiceCollection();
         ConfigureConsoleLogging(services, cliInput.ServerConfig.Options);
         services.RegisterCoreMemoryServices(cliInput.ServerConfig.Options);
