@@ -26,11 +26,7 @@
       ]
     },
     "semantica": {
-      "command": "${HOME}/.local/bin/semantica",
-      "args": [
-        "mcp",
-        "start"
-      ],
+      "command": "${HOME}/.local/bin/semantica-mcp",
       "tools": [
         "*"
       ]
