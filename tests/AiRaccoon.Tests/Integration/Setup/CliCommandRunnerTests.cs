@@ -6,13 +6,13 @@ using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.Setup;
+namespace AiRaccoon.Tests.Integration.Setup;
 
 /// <summary>
 ///     AppRunner: the one-shot config-verb path shares the server's bank resolution
 ///     (--data-root/--install-scope) and wires the real bank, watch store, and encryption resolver.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class CliCommandRunnerTests : IDisposable
 {

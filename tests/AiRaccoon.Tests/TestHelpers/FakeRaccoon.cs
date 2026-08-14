@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
-namespace AiRaccoon.Tests.Unit.Setup.Serve;
+namespace AiRaccoon.Tests.TestHelpers;
 
 /// <summary>
 ///     A listener that looks like an ai-raccoon server to the probe and to /observability, but

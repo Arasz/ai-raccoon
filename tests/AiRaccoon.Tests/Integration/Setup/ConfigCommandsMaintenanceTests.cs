@@ -3,18 +3,19 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
+using AiRaccoon.Tests.Unit.Setup;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.Setup;
+namespace AiRaccoon.Tests.Integration.Setup;
 
 /// <summary>
 ///     Maintenance-config commands pin the settings-key contract the bank-maintenance hosted
 ///     service reads (checkpoint interval, vacuum interval); the list verb also reports live
 ///     bank disk stats with delta-vs-previous via the maintenance-stats.json sidecar.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public class ConfigCommandsMaintenanceTests : IDisposable
 {

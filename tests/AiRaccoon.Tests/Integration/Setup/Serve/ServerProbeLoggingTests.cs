@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 using Shouldly;
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.Setup.Serve;
+namespace AiRaccoon.Tests.Integration.Setup.Serve;
 
 /// <summary>
 ///     The probe is an internal mechanism: its expected connection-refused polling must not
@@ -14,7 +14,7 @@ namespace AiRaccoon.Tests.Unit.Setup.Serve;
 ///     handlers are removed from the probe client; outcomes are logged by the launcher/restart
 ///     runners through [LoggerMessage] lines.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ServerProbeLoggingTests
 {

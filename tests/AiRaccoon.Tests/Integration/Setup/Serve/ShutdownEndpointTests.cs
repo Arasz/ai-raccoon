@@ -9,13 +9,13 @@ using Microsoft.Extensions.Hosting;
 using Shouldly;
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.Setup.Serve;
+namespace AiRaccoon.Tests.Integration.Setup.Serve;
 
 /// <summary>
 ///     POST /shutdown (ADR-0022): token-gated, POST-only, and mapped only on a gated host —
 ///     an unauthenticated caller is refused with the same answer a wrong token gets.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ShutdownEndpointTests : IDisposable
 {

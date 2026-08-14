@@ -7,20 +7,21 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
+using AiRaccoon.Tests.Unit.Setup;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.Setup;
+namespace AiRaccoon.Tests.Integration.Setup;
 
 /// <summary>
 ///     encryption bitwarden/show/unset (docs/plans/encryption-bitwarden-implementation.md §S3): bws
 ///     presence with install guidance, interactive id collection, per-run-only token, reachability
 ///     validation, rotation warning, rekey→sidecar→settings persist order, and unset rekey-back/recovery.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ConfigCommandsEncryptionTests : IDisposable
 {

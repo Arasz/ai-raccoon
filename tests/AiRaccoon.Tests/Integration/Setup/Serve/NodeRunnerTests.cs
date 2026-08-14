@@ -12,14 +12,14 @@ using ModelContextProtocol.Protocol;
 using Shouldly;
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.Setup.Serve;
+namespace AiRaccoon.Tests.Integration.Setup.Serve;
 
 /// <summary>
 ///     ServeRunner acceptance: stdout URL reporting, foreign-listener PortInUse, idempotent
 ///     attach to an existing ai-raccoon server, bind-race recovery, and the --mcp-entry /
 ///     port-fallback / transport-warning surfaces.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class NodeRunnerTests : IDisposable
 {

@@ -3,14 +3,14 @@ using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.Setup.Serve;
+namespace AiRaccoon.Tests.Integration.Setup.Serve;
 
 /// <summary>
 ///     Token-file acceptance (docs/plans/2026-08-09-mcp-loopback-token-flow.md): exclusive 0600
 ///     mint, reuse across restarts, convergence when two mints race, a reader that treats a
 ///     missing, empty or unreadable file as absent, and the self-heal for debris left by a crash.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class McpTokenFileTests : IDisposable
 {

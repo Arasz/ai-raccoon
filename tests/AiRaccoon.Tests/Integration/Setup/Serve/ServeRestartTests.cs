@@ -6,14 +6,14 @@ using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.Setup.Serve;
+namespace AiRaccoon.Tests.Integration.Setup.Serve;
 
 /// <summary>
 ///     `serve --restart` acceptance (ADR-0022): plain-serve behaviour when nothing is listening,
 ///     a real cycle when a server is, and a loud non-zero exit for every way the cycle can fail —
 ///     never a silent attach to the server it was asked to replace.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ServeRestartTests : IDisposable
 {

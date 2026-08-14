@@ -6,13 +6,13 @@ using AiRaccoon.Tests.E2E;
 using Shouldly;
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.Setup.Serve;
+namespace AiRaccoon.Tests.Integration.Setup.Serve;
 
 /// <summary>
 ///     ServerProbe acceptance: a foreign listener on the port is not an ai-raccoon server, and a
 ///     real ai-raccoon MCP endpoint is recognized (ADR-0020, R14 probe).
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ServerProbeTests : IDisposable
 {

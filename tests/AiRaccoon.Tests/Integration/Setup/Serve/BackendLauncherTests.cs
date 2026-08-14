@@ -14,14 +14,14 @@ using Shouldly;
 using Xunit;
 using BackendLauncher = AiRaccoon.Hosting.Proxy.BackendLauncher;
 
-namespace AiRaccoon.Tests.Unit.Setup.Serve;
+namespace AiRaccoon.Tests.Integration.Setup.Serve;
 
 /// <summary>
 ///     BackendLauncher acceptance (ADR-0020): the proxy's stdout stays clean, a missing backend is
 ///     started and polled until it answers, an existing one is attached to without a spawn, and a
 ///     backend that cannot start fails inside the budget instead of hanging.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class BackendLauncherTests : IDisposable
 {

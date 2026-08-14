@@ -1,6 +1,6 @@
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.Setup;
+namespace AiRaccoon.Tests.Integration.Setup;
 
 /// <summary>
 ///     Serializes tests that redirect the process-global Console.Out/Console.Error to prove

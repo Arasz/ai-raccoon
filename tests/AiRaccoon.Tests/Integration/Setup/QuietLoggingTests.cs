@@ -5,13 +5,12 @@ using AiRaccoon.Setup;
 using AiRaccoon.Setup.Logging;
 using AiRaccoon.Tools;
 using AiRaccoon.Tests.TestHelpers;
-using AiRaccoon.Tests.Unit.Setup.Serve;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Shouldly;
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.Setup;
+namespace AiRaccoon.Tests.Integration.Setup;
 
 /// <summary>
 ///     Pins the owner's quiet-mode ruling (2026-08-09): every level reaches a file, nothing
@@ -21,7 +20,7 @@ namespace AiRaccoon.Tests.Unit.Setup;
 ///     (QuietLoggingCollection) — it cannot rule out interference from unrelated tests that
 ///     write to Console concurrently in a different collection.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 [Collection(QuietLoggingCollection.Name)]
 public sealed class QuietLoggingTests : IDisposable

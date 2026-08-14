@@ -20,14 +20,14 @@ using Shouldly;
 using Xunit;
 using IdleWatchdog = AiRaccoon.Hosting.Watchdog.IdleWatchdog;
 
-namespace AiRaccoon.Tests.Unit.Setup;
+namespace AiRaccoon.Tests.Integration.Setup;
 
 /// <summary>
 ///     Host-shape contract: stdio-only launches run with no web server; HTTP/S launches bind
 ///     the configured port (never the ASP.NET default 5000); a combined stdio+http set keeps
 ///     the web host with stdio attached.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public class McpServerSetupHostTests : IDisposable
 {
