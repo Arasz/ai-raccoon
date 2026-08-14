@@ -1,23 +1,21 @@
 #!/usr/bin/env python3
 """Live manual testing checklist runner for AiRaccoon 1.10.1.
 
-Adapted from run_1_9_1_live_checklist.py for the 1.10.1 release, which adds the
-opt-in ONNX instruct promotion classifier (wired into the propose path) on top of
-the 1.9.x noise-filtering + Polly work.
+Adapted from run_1_9_1_live_checklist.py for the 1.10.1 release, which adds
+auto-extraction on top of the 1.9.x noise-filtering + Polly work.
 
 Executes the full checklist:
 1.  Version verification (1.10.1)
-2.  Promotion model toggle (enable -> show enabled)
-3.  Auto-extraction enabled
-4.  HermesProcessNoisePolicy process noise interception
-5.  ZeroShotEmbeddingNoisePolicy semantic noise filtering
-6.  Clean domain memory write & search ranking
-7.  Promotion quality: high-value entry ranks as a propose candidate
-8.  Promotion quality: promote flow shares the queued candidate
-9.  Server restart & HTTP endpoint probe
-10. Full 25-tool MCP surface
-11. MCP prompts retrieval
-12. Observability ([LoggerMessage] events + sqlite3mc engine)
+2.  Auto-extraction enabled
+3.  HermesProcessNoisePolicy process noise interception
+4.  ZeroShotEmbeddingNoisePolicy semantic noise filtering
+5.  Clean domain memory write & search ranking
+6.  Promotion quality: high-value entry ranks as a propose candidate
+7.  Promotion quality: promote flow shares the queued candidate
+8.  Server restart & HTTP endpoint probe
+9.  Full 25-tool MCP surface
+10. MCP prompts retrieval
+11. Observability ([LoggerMessage] events + sqlite3mc engine)
 
 Generates:
 - .ai-raccoon/state-checklist-1.10.1-<timestamp>.json
@@ -187,20 +185,7 @@ def main():
     run_command([tool_bin, "--data-root", dataroot, "model", "set", "local"])
     run_command([tool_bin, "--data-root", dataroot, "access", "default", "set", "full"])
 
-    # Item 2: promotion-model-toggle — enable then show.
-    run_command([tool_bin, "--data-root", dataroot, "promotion", "model", "enable"])
-    pm_show = run_command([tool_bin, "--data-root", dataroot, "promotion", "model", "show"])
-    pm_enabled = "enabled" in (pm_show.stdout or pm_show.stderr).strip().lower() and "disabled" not in (pm_show.stdout or pm_show.stderr).strip().lower()
-    checklist.append({
-        "item": "promotion-model-toggle",
-        "expected-result": "ai-raccoon promotion model enable persists promotion.model.enabled=true; promotion model show reports enabled",
-        "observed-result": f"promotion model show: {(pm_show.stdout or pm_show.stderr).strip()}",
-        "checked": True,
-        "accepted": pm_enabled,
-        "acceptation-reason": "Promotion model enabled and persisted" if pm_enabled else "Promotion model toggle failed"
-    })
-
-    # Item 3: auto-extraction-enabled.
+    # Item 2: auto-extraction-enabled.
     run_command([tool_bin, "--data-root", dataroot, "extract", "enable", "true"])
     ex_list = run_command([tool_bin, "--data-root", dataroot, "extract", "list"])
     ex_enabled = "enabled: True" in (ex_list.stdout or ex_list.stderr)
@@ -424,7 +409,7 @@ def main():
     except Exception as e:
         http_detail = f"HTTP probe error: {e}"
     # Leave the restarted server running: it is the live 1.10.1 server now serving the bank
-    # with the promotion model + auto-extraction settings applied. Do not kill it.
+    # with auto-extraction settings applied. Do not kill it.
 
     checklist.append({
         "item": "server-restart-and-http-probe",

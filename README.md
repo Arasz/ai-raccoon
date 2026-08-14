@@ -31,9 +31,9 @@ flowchart LR
 
 ## What's new
 
-- **Auto-Improving Dynamic Noise Vectors & Dual-Classifier Promotion (1.10.0)** — [Plan](docs/plans/2026-08-13-v4-dynamic-noise-and-semantic-promotion-plan.md) and [Research](docs/plans/2026-08-13-dynamic-noise-vector-learning-research.md)
+- **Semantic promotion classifier removed (1.11.0).** [Why it was removed](docs/work/2026-08-13-fixing-zero-shot-promotion-classifier.md)
+- **Auto-Improving Dynamic Noise Vectors (1.10.0)** — [Plan](docs/plans/2026-08-13-v4-dynamic-noise-and-semantic-promotion-plan.md) and [Research](docs/plans/2026-08-13-dynamic-noise-vector-learning-research.md)
   * **Leader-Follower Centroid Clustering**: Automatically learns user-specific noise vectors over `sqlite-vec` (`vec_noise`) from 4 feedback channels (search quality, discards, unread TTL expirations, process log intercepts) with 5 mandatory safety bounds ($\cos(\mu_{noise}, \mu_{core}) \le 0.75$).
-  * **Dual-Classifier Semantic Promotion Engine**: Replaces structural heuristic scoring for candidate promotion to `shared` with semantic vector classification (Approach A default, opt-in local ONNX instruct model Approach B & C).
 - **Semantic Noise Filtering & Real-time TTLs (1.9.0)** — [ADR-0029](docs/adr/0029-pre-write-noise-filtering.md) and [ADR-0030](docs/adr/0030-realtime-heuristic-ttl.md)
   * **Write Performance Benchmarks** (`baseline -> change -> effect`): Measured in `WritePerformanceBenchmarkTests` (`tests/AiRaccoon.Tests/Integration/WritePerformanceBenchmarkTests.cs`) and documented in `docs/work/2026-08-13-v4-write-performance-benchmark-report.md`:
     | Metric | Valid Memory Write (Baseline) | Noise Interception (Zero-Shot) | Effect / Expected Return |
