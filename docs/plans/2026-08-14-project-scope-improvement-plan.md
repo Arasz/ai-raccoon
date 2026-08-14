@@ -38,10 +38,14 @@ independent the packages read:**
    re-introduces oversized chunks behind the backfill. And any ranking number taken before the
    backfill is measured on a different corpus than the one taken after. Order: **restart → backfill →
    measure**.
-3. **WP1 and WP2 ship as one change.** Splitting them leaves the project-confinement concept enforced
-   in one of its two copies again — which is exactly how the delete-path hole survived commit
-   `7698dc63`'s fix to the write path. Landing only one is not half a fix; it is the same defect with
-   a different address.
+3. **WP1 extracts the shared confinement helper; WP2 then only wires one more branch into it.**
+   *(Corrected in rev 2 — rev 1 said these must ship as one change, and on re-examination that is
+   wrong.)* They sit on different axes: WP1 is `project:` confinement plus refusing `shared` **on the
+   delete path**; WP2 is refusing `shared` **on the write path**, which is an owner decision (question
+   2). What must not happen is a patch to `FilterFor` alone — that would leave the concept split across
+   two functions again, which is exactly how the delete-path hole survived commit `7698dc63`'s fix to
+   the write path. So WP1 lands the **one shared helper both call sites use**, and WP2 becomes a
+   one-branch addition to it rather than a second implementation. WP1 is unblocked and can ship alone.
 
 **What is *not* a serialisation point:** WP11's held-out gate is built from the committed test corpus,
 not the live bank, so it can be built in parallel with WP3's backfill.
