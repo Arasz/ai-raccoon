@@ -1260,16 +1260,31 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         fenceChunk.ShouldContain("Console.WriteLine(result);");
     }
 
-    [Then("the fence falls back to token-bounded chunks that respect max_tokens")]
-    public void ThenTheFenceFallsBackToTokenBoundedChunks()
+    [Then("the fence is re-fenced into bounded pieces that respect max_tokens")]
+    public void ThenTheFenceIsRefencedIntoBoundedPieces()
     {
         var chunks = (IReadOnlyList<string>)scenarioContext["ChunksTightBudget"];
         var tokenizer = new O200kTokenizer();
         chunks.ShouldAllBe(chunk => tokenizer.CountTokens(chunk) <= 8,
             "an over-budget fence must not be emitted whole (docs/adr/0036)");
-        string.Concat(chunks).ShouldContain("var sum = 1 + 2;");
-        string.Concat(chunks).ShouldContain("Console.WriteLine(result);");
+
+        // ADR-0048: the pieces are re-fenced rather than de-fenced, so each carries its own
+        // delimiters and a long line may gain the newline its closer needs. The payload is what
+        // must survive byte-for-byte, not the concatenation.
+        foreach (var chunk in chunks.Where(c => c.Contains("```", StringComparison.Ordinal)))
+        {
+            (FenceDelimiters(chunk) % 2).ShouldBe(0,
+                $"every chunk must be fence-balanced, got: {chunk}");
+        }
+
+        var payload = string.Concat(chunks.SelectMany(c => c.Split('\n'))
+            .Where(line => !line.TrimStart().StartsWith("```", StringComparison.Ordinal)));
+        payload.ShouldContain("var sum = 1 + 2;");
+        payload.ShouldContain("Console.WriteLine(result);");
     }
+
+    private static int FenceDelimiters(string text) =>
+        text.Split('\n').Count(line => line.TrimStart().StartsWith("```", StringComparison.Ordinal));
 
     [Then("no error is raised")]
     public void ThenNoErrorRaised() => _lastSearch.ShouldNotBeNull();

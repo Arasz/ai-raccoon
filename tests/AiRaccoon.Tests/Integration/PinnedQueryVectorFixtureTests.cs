@@ -10,6 +10,7 @@ namespace AiRaccoon.Tests.Integration;
 ///     the query catalog, and must carry the shas of the model that produced it.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class PinnedQueryVectorFixtureTests
 {
     [Fact]
