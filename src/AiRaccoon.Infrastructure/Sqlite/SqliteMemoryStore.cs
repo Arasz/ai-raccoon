@@ -236,6 +236,19 @@ public sealed partial class SqliteMemoryStore(
         return merged;
     }
 
+    /// <summary>memory_get (ADR-0035): the caller's own rows plus the cross-project shared tier; null when no such hash is reachable.</summary>
+    public async Task<MemoryEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(hash);
+
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        var row = await connection.QueryFirstOrDefaultAsync<EntryRow>(
+                Def(MemorySql.SelectEntryByHashForRead, new { hash, projectId }, cancellationToken))
+            .ConfigureAwait(false);
+        return row is null ? null : ToEntry(row);
+    }
+
     public async Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
         CancellationToken cancellationToken = default)
     {

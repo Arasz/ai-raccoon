@@ -63,6 +63,32 @@ public class MemoryToolsTests
     }
 
     [Fact]
+    public async Task Get_ReturnsFullValue_ForAKnownHash()
+    {
+        _store.GetEntry = new MemoryEntry("h1", "p.md", "project:acme", "the full remembered content", 5);
+
+        var result = await _tools.Get("acme", "h1", TestContext.Current.CancellationToken);
+
+        result.Data!.Hash.ShouldBe("h1");
+        result.Data!.Value.ShouldBe("the full remembered content");
+        result.Data!.Path.ShouldBe("p.md");
+        result.Data!.Context.ShouldBe("project:acme");
+        result.Data!.CreatedAt.ShouldBe(5);
+    }
+
+    [Fact]
+    public async Task Get_WithUnknownHash_ThrowsUnknownHashException()
+    {
+        _store.GetEntry = null;
+
+        var ex = await Should.ThrowAsync<UnknownHashException>(() =>
+            _tools.Get("acme", "deadbeef", TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldContain("deadbeef");
+        ex.Message.ShouldContain("acme");
+    }
+
+    [Fact]
     public async Task Write_WithoutProjectId_ThrowsMcpException()
     {
         var ex = await Should.ThrowAsync<McpException>(() =>
@@ -504,6 +530,8 @@ public class MemoryToolsTests
 
         public MemoryEntry? SharedEntry { get; set; }
 
+        public MemoryEntry? GetEntry { get; set; }
+
         public MemoryStats Stats { get; set; } = new(0, 0, []);
 
         public double Rating { get; set; } = 0.9;
@@ -544,6 +572,9 @@ public class MemoryToolsTests
         }
 
         public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) => Task.FromResult(true);
+
+        public Task<MemoryEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
+            Task.FromResult(GetEntry);
 
         public Task<int> DeleteContextAsync(string projectId, string context,
             CancellationToken cancellationToken = default) =>

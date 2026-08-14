@@ -352,6 +352,18 @@ internal static class MemorySql
                                             ORDER BY path
                                             """;
 
+    // memory_get read path (ADR-0035): a hash addressable within the caller's own project rows
+    // plus the cross-project shared tier — the same reach SelectRatingForBump/BumpAccess already
+    // grant search hits.
+    public const string SelectEntryByHashForRead = """
+                                                   SELECT hash AS Hash, path AS Path, value AS Value, scope AS Scope,
+                                                          project_id AS ProjectId, context_label AS ContextLabel,
+                                                          workspace_id AS WorkspaceId, created_at AS CreatedAt
+                                                   FROM entries
+                                                   WHERE hash = @hash AND (project_id = @projectId OR scope = 'shared')
+                                                   LIMIT 1
+                                                   """;
+
     public const string SelectRatingForBump =
         "SELECT created_at AS CreatedAt, access_count AS AccessCount FROM entries " +
         "WHERE hash = @hash AND (project_id = @projectId OR scope = 'shared') LIMIT 1";

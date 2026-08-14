@@ -228,7 +228,7 @@ public class McpServerSetupHostTests : IDisposable
         var toolNames = (options.ToolCollection ?? throw new InvalidOperationException("ToolCollection not configured"))
             .Select(t => t.ProtocolTool.Name).ToList();
 
-        toolNames.Count.ShouldBe(25);
+        toolNames.Count.ShouldBe(26);
         toolNames.ShouldContain("memory_share_extract");
         toolNames.ShouldContain("memory_watch_add");
         toolNames.ShouldContain("memory_watch_status");

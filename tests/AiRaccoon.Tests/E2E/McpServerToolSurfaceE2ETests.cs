@@ -32,6 +32,7 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
     private static readonly string[] ExpectedToolNames =
     [
         "memory_write",
+        "memory_get",
         "memory_search",
         "memory_list",
         "memory_stats",

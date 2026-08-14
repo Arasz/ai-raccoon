@@ -321,6 +321,60 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task GetAsync_ReturnsFullValue_ForAKnownHash()
+    {
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "the full content memory_get must return"),
+            TestContext.Current.CancellationToken);
+
+        var fetched = await _store.GetAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
+
+        fetched.ShouldNotBeNull();
+        fetched.Value.ShouldBe("the full content memory_get must return");
+        fetched.Hash.ShouldBe(entry.Hash);
+        fetched.Path.ShouldBe(entry.Path);
+        fetched.Context.ShouldBe("project:acme");
+    }
+
+    [Fact]
+    public async Task GetAsync_WithUnknownHash_ReturnsNull()
+    {
+        var fetched = await _store.GetAsync("acme",
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd",
+            TestContext.Current.CancellationToken);
+
+        fetched.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task GetAsync_ResolvesASharedTierHash_RegardlessOfTheOwningProject()
+    {
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "cross-project shared convention"),
+            TestContext.Current.CancellationToken);
+        var shared = await _store.ShareAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
+
+        var fetched = await _store.GetAsync("someone-elses-project", shared.Entry.Hash,
+            TestContext.Current.CancellationToken);
+
+        fetched.ShouldNotBeNull();
+        fetched.Value.ShouldBe("cross-project shared convention");
+    }
+
+    [Fact]
+    public async Task GetAsync_DoesNotResolveAnotherProjectsPrivateRow()
+    {
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "acme-only private note"),
+            TestContext.Current.CancellationToken);
+
+        var fetched = await _store.GetAsync("someone-elses-project", entry.Hash,
+            TestContext.Current.CancellationToken);
+
+        fetched.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task Delete_RemovesTheRows_AndTheFtsIndexEntry()
     {
         var entry = await _store.WriteAsync(

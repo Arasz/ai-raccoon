@@ -27,6 +27,7 @@ public sealed class McpToolContractTests : IDisposable
                                             memory_delete(projectId:string!, hash:string!)
                                             memory_delete_context(projectId:string!, context:string!)
                                             memory_embed_pending(projectId:string!, limit:integer|null?)
+                                            memory_get(projectId:string!, hash:string!)
                                             memory_ingest_directory(projectId:string!, path:string!, context:string|null?)
                                             memory_ingest_file(projectId:string!, path:string!, context:string|null?)
                                             memory_list(projectId:string!)
