@@ -211,7 +211,19 @@ internal static class CliCommandTree
             new Command("disable", "Disarms shadow mode (the default): the guard acts on its verdicts")
         };
         queryGuard.Add(shadow);
-        var show = new Command("show", "Shows whether the guard and shadow mode are enabled");
+        var structural = new Command("structural",
+            "Structural detector (docs/adr/0041): a learned, vocabulary-free third input to the warn tier. Off by default — it only ever adds an annotation, never a refusal.")
+        {
+            new Command("enable", "Arms the structural detector"),
+            new Command("disable", "Disarms the structural detector (the default)"),
+            new Command("threshold", "Score a query must clear before the detector annotates it")
+            {
+                new Command("set", "Sets queryGuard.structural.threshold (0..1)")
+                    { new Argument<string>("threshold") { HelpName = "0..1" } }
+            }
+        };
+        queryGuard.Add(structural);
+        var show = new Command("show", "Shows whether the guard, shadow mode and the structural detector are enabled");
         show.Aliases.Add("list");
         queryGuard.Add(show);
         return queryGuard;

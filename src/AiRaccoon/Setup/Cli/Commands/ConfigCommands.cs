@@ -65,6 +65,10 @@ internal sealed class ConfigCommands(
                 ["queryguard", "disable"] => await settings.QueryGuardEnabledSetAsync(false, store, streams, ctx),
                 ["queryguard", "shadow", "enable"] => await settings.QueryGuardShadowSetAsync(true, store, streams, ctx),
                 ["queryguard", "shadow", "disable"] => await settings.QueryGuardShadowSetAsync(false, store, streams, ctx),
+                ["queryguard", "structural", "enable"] => await settings.QueryGuardStructuralSetAsync(true, store, streams, ctx),
+                ["queryguard", "structural", "disable"] => await settings.QueryGuardStructuralSetAsync(false, store, streams, ctx),
+                ["queryguard", "structural", "threshold", "set"] =>
+                    await settings.QueryGuardStructuralThresholdSetAsync(parsedCliArgs, store, streams, ctx),
                 ["queryguard", "show"] => await settings.QueryGuardShowAsync(store, streams, ctx),
                 ["sync", "add", "s3"] => await sync.AddS3Async(parsedCliArgs, store, streams, ctx),
                 ["sync", "add", "azure"] => await sync.AddAzureAsync(parsedCliArgs, store, streams,

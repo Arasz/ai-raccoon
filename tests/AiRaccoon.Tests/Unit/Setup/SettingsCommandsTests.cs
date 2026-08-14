@@ -47,6 +47,10 @@ public class SettingsCommandsTests
                 ["queryguard", "shadow", "enable"] => commands.QueryGuardShadowSetAsync(true, store, streams, ct),
                 ["queryguard", "shadow", "disable"] => commands.QueryGuardShadowSetAsync(false, store, streams, ct),
                 ["queryguard", "show"] => commands.QueryGuardShowAsync(store, streams, ct),
+                ["queryguard", "structural", "enable"] => commands.QueryGuardStructuralSetAsync(true, store, streams, ct),
+                ["queryguard", "structural", "disable"] => commands.QueryGuardStructuralSetAsync(false, store, streams, ct),
+                ["queryguard", "structural", "threshold", "set"] =>
+                    commands.QueryGuardStructuralThresholdSetAsync(parsed.ParsedCliArgs, store, streams, ct),
                 _ => throw new InvalidOperationException($"unhandled: {string.Join(' ', parsed.CommandPath)}")
             };
         });
@@ -207,7 +211,8 @@ public class SettingsCommandsTests
         var (exit, stdout, _) = await Run(["queryguard", "show"], new FakeConfigStore());
 
         exit.ShouldBe(0);
-        stdout.Trim().ShouldBe("enabled: True  shadow: False");
+        stdout.Trim().ShouldBe("enabled: True  shadow: False  structural: False  " +
+                               $"threshold: {QueryGuardConfigKeys.DefaultStructuralThreshold.ToString(CultureInfo.InvariantCulture)}");
     }
 
     /// <summary>The kill switch round-trips through the same parse MemoryTools.Search reads it with.</summary>
@@ -229,6 +234,65 @@ public class SettingsCommandsTests
         enableExit.ShouldBe(0);
         enabledOut.ShouldContain("enabled: True");
         QueryGuardConfigKeys.ParseEnabled(store.Settings[QueryGuardConfigKeys.EnabledGlobal]).ShouldBeTrue();
+    }
+
+    /// <summary>
+    ///     ADR-0041 ships the structural detector default-off. Without a verb to arm it the setting
+    ///     is unreachable through any supported path, so the feature ships dark.
+    /// </summary>
+    [Fact]
+    public async Task QueryGuardStructuralEnableThenDisable_RoundTripsThroughCliShowAndQueryGuardConfigKeys()
+    {
+        var store = new FakeConfigStore();
+
+        var (enableExit, _, _) = await Run(["queryguard", "structural", "enable"], store);
+        var (_, enabledOut, _) = await Run(["queryguard", "show"], store);
+
+        enableExit.ShouldBe(0);
+        enabledOut.ShouldContain("structural: True");
+        QueryGuardConfigKeys.ParseStructuralEnabled(store.Settings[QueryGuardConfigKeys.StructuralEnabledGlobal])
+            .ShouldBeTrue();
+
+        var (disableExit, _, _) = await Run(["queryguard", "structural", "disable"], store);
+        var (_, disabledOut, _) = await Run(["queryguard", "show"], store);
+
+        disableExit.ShouldBe(0);
+        disabledOut.ShouldContain("structural: False");
+        QueryGuardConfigKeys.ParseStructuralEnabled(store.Settings[QueryGuardConfigKeys.StructuralEnabledGlobal])
+            .ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task QueryGuardStructuralThresholdSet_RoundTripsThroughCliShowAndQueryGuardConfigKeys()
+    {
+        var store = new FakeConfigStore();
+
+        var (setExit, _, _) = await Run(["queryguard", "structural", "threshold", "set", "0.75"], store);
+        var (_, showOut, _) = await Run(["queryguard", "show"], store);
+
+        setExit.ShouldBe(0);
+        showOut.ShouldContain("threshold: 0.75");
+        QueryGuardConfigKeys.ParseStructuralThreshold(store.Settings[QueryGuardConfigKeys.StructuralThresholdGlobal])
+            .ShouldBe(0.75);
+    }
+
+    [Fact]
+    public async Task QueryGuardStructuralThresholdSet_OutOfRange_ReturnsInvalidArgument()
+    {
+        var (exit, _, err) = await Run(["queryguard", "structural", "threshold", "set", "1.5"], new FakeConfigStore());
+
+        exit.ShouldBe(ExitCode.InvalidArgument);
+        err.ShouldContain("invalid threshold");
+    }
+
+    [Fact]
+    public async Task QueryGuardShow_NoRow_PrintsStructuralDefaults()
+    {
+        var (exit, stdout, _) = await Run(["queryguard", "show"], new FakeConfigStore());
+
+        exit.ShouldBe(0);
+        stdout.ShouldContain("structural: False");
+        stdout.ShouldContain($"threshold: {QueryGuardConfigKeys.DefaultStructuralThreshold.ToString(CultureInfo.InvariantCulture)}");
     }
 
     [Fact]

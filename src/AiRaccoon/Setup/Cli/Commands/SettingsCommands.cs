@@ -285,6 +285,35 @@ public sealed class SettingsCommands
         return 0;
     }
 
+    /// <summary>The structural detector (docs/adr/0041) ships off; this is the only way to arm it.</summary>
+    public async Task<int> QueryGuardStructuralSetAsync(bool enabled, IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken)
+    {
+        await store.SetSettingAsync(QueryGuardConfigKeys.StructuralEnabledGlobal, enabled ? "true" : "false",
+            cancellationToken);
+        await streams.WriteOutputLineAsync($"query guard structural detector {(enabled ? "enabled" : "disabled")}");
+        return 0;
+    }
+
+    /// <summary>The score a query must clear before the structural detector annotates it.</summary>
+    public async Task<int> QueryGuardStructuralThresholdSetAsync(ParseResult parseResult, IMemoryStore store,
+        StandardStreams streams, CancellationToken cancellationToken)
+    {
+        var raw = parseResult.GetValue<string>("threshold")!;
+        if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var threshold) ||
+            threshold is < 0.0 or > 1.0)
+        {
+            await streams.WriteErrorLineAsync($"ai-raccoon: invalid threshold '{raw}' (expected a number in 0..1)");
+            return ExitCode.InvalidArgument;
+        }
+
+        await store.SetSettingAsync(QueryGuardConfigKeys.StructuralThresholdGlobal,
+            threshold.ToString(CultureInfo.InvariantCulture), cancellationToken);
+        await streams.WriteOutputLineAsync(
+            $"query guard structural threshold set to {threshold.ToString(CultureInfo.InvariantCulture)}");
+        return 0;
+    }
+
     public async Task<int> QueryGuardShowAsync(IMemoryStore store, StandardStreams streams,
         CancellationToken cancellationToken)
     {
@@ -292,7 +321,12 @@ public sealed class SettingsCommands
             await store.GetSettingAsync(QueryGuardConfigKeys.EnabledGlobal, cancellationToken));
         var shadow = QueryGuardConfigKeys.ParseShadow(
             await store.GetSettingAsync(QueryGuardConfigKeys.ShadowGlobal, cancellationToken));
-        await streams.WriteOutputLineAsync($"enabled: {enabled}  shadow: {shadow}");
+        var structural = QueryGuardConfigKeys.ParseStructuralEnabled(
+            await store.GetSettingAsync(QueryGuardConfigKeys.StructuralEnabledGlobal, cancellationToken));
+        var threshold = QueryGuardConfigKeys.ParseStructuralThreshold(
+            await store.GetSettingAsync(QueryGuardConfigKeys.StructuralThresholdGlobal, cancellationToken));
+        await streams.WriteOutputLineAsync($"enabled: {enabled}  shadow: {shadow}  " +
+                                           $"structural: {structural}  threshold: {threshold.ToString(CultureInfo.InvariantCulture)}");
         return 0;
     }
 
