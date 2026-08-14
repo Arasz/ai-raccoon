@@ -843,3 +843,13 @@ the passphrase the bank is plaintext (backward compatible).
 - No un-share tool exists; see `memory_share` notes above.
 - No existing-bank migration (P11): a fresh bank is created; migrating an older
   sqlite-memory format bank is deferred (D11).
+- **Ranking is not identical across CPU architectures.** The bundled model is u8s8-quantized, and
+  ONNX Runtime evaluates that with different instructions on AVX512-VNNI hosts, on other x64 hosts,
+  and on arm64 — different arithmetic, not different rounding. Query embeddings differ in the third
+  decimal place, so `memory_search` can order results differently on different machines. A bank
+  embedded and queried on one machine is self-consistent; the case to know about is a bank moved
+  between machines by `memory_sync`, where stored vectors and query vectors come from two
+  implementations of the same model. Content remains reachable — the keyword leg is unaffected and
+  hybrid fusion usually rescues a reordering — but exact rank is not portable. Measured and
+  accepted, with the rejected remedies costed, in
+  [ADR-0049](../adr/0049-embeddings-depend-on-the-host-cpu.md).

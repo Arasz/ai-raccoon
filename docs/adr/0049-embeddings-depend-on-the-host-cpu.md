@@ -112,8 +112,34 @@ them taken in this ADR because each is a product decision with its own re-pinnin
    is ~1e-7, which the perturbation measurement above shows this pipeline is insensitive to. Cost:
    ~90 MB instead of 23 MB, and slower CPU inference.
 
-Until one is chosen, a green Linux run of these two gates means the job landed on a non-VNNI
-runner, not that ranking is correct.
+### Chosen: none of the three — the property is accepted and documented (2026-08-14)
+
+The owner's call, taken with the costs above in hand.
+
+The gate half of the problem is already solved elsewhere: ADR-0050 gives the two sweeps committed
+query vectors, so they measure ranking configuration rather than the host, and a green Linux run of
+them now means what it says. What remains is the product property, and it is accepted rather than
+fixed:
+
+- **Re-quantizing with `reduce_range` was rejected** because it fixes only one of the two splits.
+  Both x64 paths would agree, but arm64 and x64 would not — and that is the split between this
+  project's development machine and both its CI and its likely deployment target. It costs a new
+  model, a new pinned sha256 and a re-measurement of every retrieval golden to close half the gap.
+- **Shipping fp32 was rejected on cost, not on effectiveness.** It would work: residual cross-ISA
+  difference is ~1e-7, four orders below the 5e-2 perturbation this pipeline was measured
+  insensitive to. But the model ships *inside* the NuGet package (`Pack="true"` in
+  `src/AiRaccoon/AiRaccoon.csproj`), not downloaded at first run, so it is 22 MB → ~90 MB on every
+  `dotnet tool install`, plus slower CPU inference on the write path.
+
+What makes the accepted risk bounded: a bank embedded and queried on one machine is
+self-consistent, the variance is in ranking *order* rather than in whether content is reachable,
+and the FTS leg is unaffected — so hybrid fusion often rescues a vector-leg reordering.
+
+**Revisit when cross-machine use becomes real.** The defect only bites when a bank's document
+vectors were embedded on one host and queried from another, which is precisely what cloud sync
+(`memory_sync`) exists to do. If sync moves from available to used, fp32 becomes worth its 90 MB
+and this decision should be re-taken. The cheap first step then is a benchmark of fp32 inference
+cost on the write path, since package size would be its only remaining objection.
 
 `tests/AiRaccoon.Tests/Integration/PlatformNumericsProbe.cs` reproduces the table above; it is
 env-gated on `AIRACCOON_PLATFORM_PROBE` and skips by default.
