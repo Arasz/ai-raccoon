@@ -1,8 +1,8 @@
 using System.Text.Json;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
-using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
+using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tests.Unit.Watch;
 using Shouldly;
 using Xunit;
@@ -18,18 +18,10 @@ namespace AiRaccoon.Tests.Unit.Setup;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public class ConfigCommandsWatchTests
 {
-    private static async Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store, FakeWatchStore? watchStore = null)
-    {
-        CliArgs.TryParse(args, out var parsed);
-        parsed!.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldNotBeEmpty();
-
-        var stdout = new StringWriter();
-        var stderr = new StringWriter();
-        var exit = await TestData.CreateConfigCommands(store, watch: new WatchCommands(watchStore ?? new FakeWatchStore()))
-            .RunAsync(parsed, new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
-        return (exit, stdout.ToString(), stderr.ToString());
-    }
+    private static Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store,
+        FakeWatchStore? watchStore = null) =>
+        CliRun.RunAsync(args,
+            TestData.CreateConfigCommands(store, watch: new WatchCommands(watchStore ?? new FakeWatchStore())));
 
 
     [Fact]
