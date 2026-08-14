@@ -46,3 +46,9 @@ time, which is what the interval between those two changes would otherwise produ
 - **Positive:** No new return type — `IMemoryStore.WriteAsync` and its 16 test fakes are untouched.
 - **Negative:** `WriteResult`/`MemoryEntry` grow two members every caller must now consider,
   even ones that never see a rejected write.
+- **Negative, not fixed here:** the kill switch (`noise.enabled`) has to be read from somewhere, so
+  `WriteAsync` now issues one extra settings read (`ReadSettingAsync(NoiseConfigKeys.EnabledGlobal)`)
+  on every `memory_write` — there is no settings cache anywhere in this codebase today. That is one
+  more round trip on the operation this server exists to make fast. Deliberately not addressed in
+  this wave; WP6 is already targeting per-write round trips and should fold this read into whatever
+  batching or caching it lands there rather than this wave reinventing it in isolation.

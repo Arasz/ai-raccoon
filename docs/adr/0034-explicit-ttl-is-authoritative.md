@@ -28,32 +28,41 @@ change, so the gap predates it. It also explains, independently of the review's 
 write path could not have set it even for a one-word note.
 
 The heuristic's *intent* — described in ADR-0030 and pinned by `PromotionScorerTtlPolicyTests` — is
-real and reproducible at the policy layer. Its *effect* on the database was already zero before
-this change. Removing the whole subsystem is correct either way: as designed, it silently
-overrode agent intent on every short write; as actually wired, it was dead code spending CPU on
-every write for no persisted effect.
+real and reproducible at the policy layer. Its *effect* on the database was always zero: this was
+never a live behaviour that later broke, or a data-loss risk that this ADR closes. ADR-0030 shipped
+with a benchmark and green tests, and described behaviour the system never actually had — the
+`ttl_days` column was never in `InsertEntry`'s column list at any point after auto-TTL was added
+(`git log -S"ttl_days" -- src/AiRaccoon.Infrastructure/Sqlite/MemorySql.cs` shows the auto-TTL
+commit itself never added it). Deleting `PromotionScorerTtlPolicy` here is dead-code removal, not
+a fix for a live defect — there is no "before" state in which this subsystem ever assigned a TTL
+that reached a row.
 
 ## Decision
 No heuristic assigns a TTL at write time. `PromotionScorerTtlPolicy` and its `IAutoTtlPolicy`
-abstraction (verified: the TTL policy was its only implementer) are deleted.
-`SqliteMemoryStore`'s constructor drops the `IEnumerable<IAutoTtlPolicy> autoTtlPolicies`
-parameter, and `WriteAsync` drops the per-policy TTL-evaluation loop entirely — including the now
-provably-dead `ttl_days` insert parameter.
+abstraction (verified: the TTL policy was its only implementer) are deleted as dead code —
+they described and tested behaviour (`PromotionScorerTtlPolicyTests`) that never reached the
+database. `SqliteMemoryStore`'s constructor drops the `IEnumerable<IAutoTtlPolicy>
+autoTtlPolicies` parameter, and `WriteAsync` drops the per-policy TTL-evaluation loop entirely —
+including the now provably-dead `ttl_days` insert parameter.
 
-**The motivation behind ADR-0030 is relocated, not abandoned.** `memory_set_ttl` already provides
-the explicit path an agent (or operator) can use to mark content transient — the one this ADR
-prefers over a heuristic guessing from word count and provenance archetype. The reaper
-(ADR-0025) still degrades anything an agent or operator explicitly TTLs; it simply no longer
-degrades things a heuristic guessed about without being asked.
+**The one TTL path this project keeps is `memory_set_ttl`, and it is load-bearing, not aspirational:**
+`SqliteMemoryStore.SetEntryTtlAsync` issues `MemorySql.UpdateEntryTtl` — `UPDATE entries SET
+ttl_days = @ttlDays WHERE project_id = @projectId AND hash = @hash` — a real, parameter-matched
+write that persists. Unlike the deleted write-time heuristic, this is a verified, functioning
+path today; ADR-0034's "explicit TTL is authoritative" rests on it actually working, not on intent.
+The reaper (ADR-0025) still degrades anything an agent or operator explicitly TTLs through it.
 
 Supersedes ADR-0030. Restores ADR-0025's "Fact 1" (an explicit TTL is the only source of one).
 
 ## Consequences
-- **Positive:** A write's TTL is never a surprise — it is either absent (permanent, the default)
-  or exactly what `memory_set_ttl` set.
-- **Positive:** Removes CPU spent scoring every write's promotion-worthiness for an effect that,
-  per the `MemorySql.InsertEntry` finding above, was already discarded.
+- **Positive:** Removes dead code — a subsystem, its DI wiring and its dedicated test file — that
+  described behaviour (a write-time heuristic TTL) the system never actually exhibited, plus the
+  CPU it spent scoring every write's promotion-worthiness for that non-existent effect.
+- **Positive:** `memory_set_ttl` is now unambiguously the one TTL-setting path, and it is confirmed
+  functioning (see `SqliteMemoryStore.SetEntryTtlAsync` above), so ADR-0034 does not trade a real
+  capability away.
 - **Neutral:** No live-bank data is affected — `ttl_days` was already NULL on every row before this
-  change, for a different reason than assumed.
-- **Negative:** An agent that wants short-lived notes to self-expire must now call `memory_set_ttl`
-  explicitly; there is no more heuristic safety net for a rushed, un-set TTL.
+  change, and stays that way for writes; nothing regresses.
+- **Negative:** An agent that wants short-lived notes to self-expire must call `memory_set_ttl`
+  explicitly; there was never a working heuristic safety net for a rushed, un-set TTL, but an agent
+  reading ADR-0030 could have believed there was one.
