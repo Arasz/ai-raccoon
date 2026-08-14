@@ -1,8 +1,8 @@
 using System.Text.RegularExpressions;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
+using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
@@ -29,18 +29,8 @@ public class ConfigCommandsMaintenanceTests : IDisposable
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
-    private async Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store)
-    {
-        CliArgs.TryParse(args, out var parsed);
-        parsed!.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldNotBeEmpty();
-
-        var stdout = new StringWriter();
-        var stderr = new StringWriter();
-        var exit = await TestData.CreateConfigCommands(store, maintenance: new MaintenanceCommands(_factory))
-            .RunAsync(parsed, new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
-        return (exit, stdout.ToString(), stderr.ToString());
-    }
+    private Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store) =>
+        CliRun.RunAsync(args, TestData.CreateConfigCommands(store, maintenance: new MaintenanceCommands(_factory)));
 
     /// <summary>Writes then deletes rows so the bank's freelist grows.</summary>
     private async Task SeedFreelistAsync()

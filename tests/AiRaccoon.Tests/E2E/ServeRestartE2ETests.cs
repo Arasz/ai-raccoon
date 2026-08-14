@@ -65,7 +65,7 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
         using var before = await WaitForServerAsync(port);
         before.RootElement.GetProperty("pid").GetInt32().ShouldBe(_old.Id);
 
-        var run = StartRestartInProcess(port);
+        await using var run = StartRestartInProcess(port);
         var url = await WaitForUrlAsync(run);
 
         // The old process is gone, not merely bypassed.
@@ -82,8 +82,7 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
         after.RootElement.GetProperty("version").GetString().ShouldBe(typeof(ServerInfo).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion);
 
-        await run.Cts.CancelAsync();
-        (await run.Exit).ShouldBe(ExitCode.Success);
+        (await run.StopAsync()).ShouldBe(ExitCode.Success);
     }
 
     [Fact]
@@ -98,7 +97,7 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
         lease.ReleaseForBind();
         await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.Accepted,
             TestContext.Current.CancellationToken);
-        var run = StartRestartInProcess(port);
+        await using var run = StartRestartInProcess(port);
 
         var stopwatch = Stopwatch.StartNew();
         var exit = await run.Exit.WaitAsync(TimeSpan.FromSeconds(90), TestContext.Current.CancellationToken);
@@ -106,9 +105,9 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
 
         exit.ShouldBe(ExitCode.RestartFailed);
         stopwatch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(60));
-        run.Stdout.ToString().ShouldBeEmpty();
-        run.Stderr.ToString().ShouldContain(port.ToString());
-        run.Stderr.ToString().ShouldNotContain("   at ");
+        run.Stdout.ShouldBeEmpty();
+        run.Stderr.ShouldContain(port.ToString());
+        run.Stderr.ShouldNotContain("   at ");
     }
 
     private Process StartServeProcess(int port)
@@ -130,16 +129,9 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
         return process;
     }
 
-    private ServeRun StartRestartInProcess(int port)
-    {
-        CliArgs.TryParse(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"], out var parsed);
-        parsed!.Errors.ShouldBeEmpty();
-        var stdout = new LockingWriter();
-        var stderr = new LockingWriter();
-        var cts = new CancellationTokenSource(TimeSpan.FromSeconds(180));
-        return new ServeRun(TestData.CreateNodeRunner(parsed.ServerConfig.Options).RunAsync(parsed, new StandardStreams(TextReader.Null, stdout, stderr), cts.Token),
-            stdout, stderr, cts);
-    }
+    private ServeHarness StartRestartInProcess(int port) =>
+        ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"],
+            TimeSpan.FromSeconds(180));
 
     private static async Task<JsonDocument> WaitForServerAsync(int port)
     {
@@ -169,67 +161,6 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
         throw new TimeoutException($"no ai-raccoon server answered /observability on port {port}");
     }
 
-    private static async Task<string> WaitForUrlAsync(ServeRun run)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(120);
-        while (DateTime.UtcNow < deadline)
-        {
-            var line = run.Stdout.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-            if (line is not null && line.StartsWith("http://", StringComparison.Ordinal))
-            {
-                return line.TrimEnd('\r');
-            }
-
-            if (run.Exit.IsCompleted)
-            {
-                throw new InvalidOperationException($"serve --restart exited {await run.Exit}; stderr: {run.Stderr}");
-            }
-
-            await Task.Delay(50, TestContext.Current.CancellationToken);
-        }
-
-        throw new TimeoutException($"timed out waiting for serve --restart; stderr: {run.Stderr}");
-    }
-
-    private sealed record ServeRun(Task<int> Exit, LockingWriter Stdout, LockingWriter Stderr, CancellationTokenSource Cts);
-
-    private sealed class LockingWriter : TextWriter
-    {
-        private readonly StringBuilder _buffer = new();
-        private readonly Lock _lock = new();
-
-        public override Encoding Encoding => Encoding.UTF8;
-
-        public override void Write(char value)
-        {
-            lock (_lock)
-            {
-                _buffer.Append(value);
-            }
-        }
-
-        public override void Write(string? value)
-        {
-            lock (_lock)
-            {
-                _buffer.Append(value);
-            }
-        }
-
-        public override void WriteLine(string? value)
-        {
-            lock (_lock)
-            {
-                _buffer.AppendLine(value);
-            }
-        }
-
-        public override string ToString()
-        {
-            lock (_lock)
-            {
-                return _buffer.ToString();
-            }
-        }
-    }
+    private static Task<string> WaitForUrlAsync(ServeHarness run) =>
+        run.WaitForUrlAsync(TestContext.Current.CancellationToken);
 }

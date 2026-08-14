@@ -96,8 +96,8 @@ public sealed class ShutdownEndpointTests : IDisposable
 
             // Answered before it stops: the caller learns the request landed.
             response.StatusCode.ShouldBe(HttpStatusCode.Accepted);
-            await WaitForStoppingAsync(lifetime);
-            lifetime.ApplicationStopping.IsCancellationRequested.ShouldBeTrue();
+            (await WaitForStoppingAsync(lifetime))
+                .ShouldBeTrue("the host never signalled stopping after an accepted shutdown");
         }
         finally
         {
@@ -150,14 +150,12 @@ public sealed class ShutdownEndpointTests : IDisposable
         }
     }
 
-    private static async Task WaitForStoppingAsync(IHostApplicationLifetime lifetime)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(10);
-        while (DateTime.UtcNow < deadline && !lifetime.ApplicationStopping.IsCancellationRequested)
-        {
-            await Task.Delay(25, TestContext.Current.CancellationToken);
-        }
-    }
+    /// <summary>False when the host never signalled stopping, so the caller can say so.</summary>
+    private static ValueTask<bool> WaitForStoppingAsync(IHostApplicationLifetime lifetime) =>
+        WaitByPolling.WaitForAsync(
+            () => ValueTask.FromResult(lifetime.ApplicationStopping.IsCancellationRequested),
+            WaitByPolling.DefaultFirstTick, WaitByPolling.DefaultMaxTick, TimeSpan.FromSeconds(10),
+            TimeProvider.System, TestContext.Current.CancellationToken);
 
     private static async Task<HttpResponseMessage> PostShutdownAsync(int port, string? token)
     {

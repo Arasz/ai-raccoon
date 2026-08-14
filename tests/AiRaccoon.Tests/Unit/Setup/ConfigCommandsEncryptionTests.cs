@@ -44,7 +44,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         "bws not found — install the Bitwarden CLI (bws) and configure BWS_ACCESS_TOKEN (https://bitwarden.com/help/cli/)";
 
     // Tests that set/clear AIRACCOON_DB_PASSPHRASE are serialized with CliCommandRunnerTests
-    // via TestData.EnvVarGate (the env var is process-global).
+    // via EnvScope, which takes TestData.EnvVarGate (the env var is process-global).
     private readonly string _dataRoot = TestData.CreateTempRoot();
 
     private FakeLogger<EncryptionCommands>? _lastLogger;
@@ -81,53 +81,58 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         return new RunResult(exit, stdout.ToString(), stderr.ToString(), bank);
     }
 
-    private static T WithEnvPassphrase<T>(string? value, Func<T> action)
+    private static async Task<T> WithEnvPassphrase<T>(string? value, Func<Task<T>> action)
     {
-        TestData.EnvVarGate.Wait();
-        try
-        {
-            var original = Environment.GetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName);
-            try
-            {
-                Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, value);
-                return action();
-            }
-            finally
-            {
-                Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, original);
-            }
-        }
-        finally
-        {
-            TestData.EnvVarGate.Release();
-        }
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EnvEncryptionKeyProvider.EnvVarName, value));
+        return await action();
     }
 
     private static async Task<T> WithBitwardenIdEnvVars<T>(string? projectId, string? secretId, Func<Task<T>> action)
     {
-        TestData.EnvVarGate.Wait();
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EncryptionCommands.ProjectIdEnvVar, projectId), (EncryptionCommands.SecretIdEnvVar, secretId));
+        return await action();
+    }
+
+
+    /// <summary>
+    ///     A Func&lt;T&gt; wrapper around an async body infers T = Task and releases the gate at the
+    ///     first await, letting a second holder in while the override is still in force.
+    /// </summary>
+    [Fact]
+    public async Task WithEnvPassphrase_HoldsTheGateUntilTheAwaitedBodyCompletes()
+    {
+        var bodyStarted = new TaskCompletionSource();
+        var letBodyFinish = new TaskCompletionSource();
+
+        var outer = WithEnvPassphrase("probe", async () =>
+        {
+            bodyStarted.SetResult();
+            await letBodyFinish.Task;
+            return 0;
+        });
+
+        await bodyStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        // Bounded on purpose: the body is still running, so this acquire must lose.
+        var stolen = await TestData.EnvVarGate.WaitAsync(TimeSpan.FromMilliseconds(500),
+            TestContext.Current.CancellationToken);
         try
         {
-            var originalProjectId = Environment.GetEnvironmentVariable(EncryptionCommands.ProjectIdEnvVar);
-            var originalSecretId = Environment.GetEnvironmentVariable(EncryptionCommands.SecretIdEnvVar);
-            try
-            {
-                Environment.SetEnvironmentVariable(EncryptionCommands.ProjectIdEnvVar, projectId);
-                Environment.SetEnvironmentVariable(EncryptionCommands.SecretIdEnvVar, secretId);
-                return await action();
-            }
-            finally
-            {
-                Environment.SetEnvironmentVariable(EncryptionCommands.ProjectIdEnvVar, originalProjectId);
-                Environment.SetEnvironmentVariable(EncryptionCommands.SecretIdEnvVar, originalSecretId);
-            }
+            stolen.ShouldBeFalse("the gate was released while the protected body was still running");
         }
         finally
         {
-            TestData.EnvVarGate.Release();
+            if (stolen)
+            {
+                TestData.EnvVarGate.Release();
+            }
+
+            letBodyFinish.SetResult();
+            await outer.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         }
     }
-
 
     /// <summary>The seed is a byte[] local to the command; DeriveAndZeroSeed is the one call site free to clear it.</summary>
     [Fact]
