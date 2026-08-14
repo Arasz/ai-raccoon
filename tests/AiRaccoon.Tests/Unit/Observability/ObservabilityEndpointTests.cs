@@ -35,7 +35,7 @@ public sealed class ObservabilityEndpointTests : IDisposable
     [Fact]
     public async Task Get_ReturnsThisProcessPidAndTheServerName()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await AcquireCleanEnvAsync();
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, port));
@@ -60,7 +60,7 @@ public sealed class ObservabilityEndpointTests : IDisposable
     {
         // The discriminator `serve --restart` needs (ADR-0022): without it nothing on the wire
         // says which binary answers, which is exactly the mixed-binary lockout ADR-0019 names.
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await AcquireCleanEnvAsync();
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, port));
@@ -84,7 +84,7 @@ public sealed class ObservabilityEndpointTests : IDisposable
     [Fact]
     public async Task Get_ReportsOtlpDisabled_WhenNoEndpointIsSet()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await AcquireCleanEnvAsync();
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, port));
@@ -109,9 +109,7 @@ public sealed class ObservabilityEndpointTests : IDisposable
     [Fact]
     public async Task Get_ReportsOtlpEndpointAndProtocol_WhenSet()
     {
-        using var env = await AcquireCleanEnvAsync();
-        Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
-        Environment.SetEnvironmentVariable(ProtocolVar, "grpc");
+        await using var env = await AcquireCleanEnvAsync("http://127.0.0.1:4317", "grpc");
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, port));
@@ -198,23 +196,8 @@ public sealed class ObservabilityEndpointTests : IDisposable
         new(port, transport, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User }, idleTimeout);
 
 
-    private static async Task<IDisposable> AcquireCleanEnvAsync()
-    {
-        await TestData.EnvVarGate.WaitAsync();
-        var originalEndpoint = Environment.GetEnvironmentVariable(EndpointVar);
-        var originalProtocol = Environment.GetEnvironmentVariable(ProtocolVar);
-        Environment.SetEnvironmentVariable(EndpointVar, null);
-        Environment.SetEnvironmentVariable(ProtocolVar, null);
-        return new EnvRestore(originalEndpoint, originalProtocol);
-    }
-
-    private sealed class EnvRestore(string? originalEndpoint, string? originalProtocol) : IDisposable
-    {
-        public void Dispose()
-        {
-            Environment.SetEnvironmentVariable(EndpointVar, originalEndpoint);
-            Environment.SetEnvironmentVariable(ProtocolVar, originalProtocol);
-            TestData.EnvVarGate.Release();
-        }
-    }
+    // Serialized with the other env-var tests via EnvScope, which takes TestData.EnvVarGate
+    // (the OTEL_* vars are process-global).
+    private static ValueTask<EnvScope> AcquireCleanEnvAsync(string? endpoint = null, string? protocol = null) =>
+        EnvScope.AcquireAsync(TestContext.Current.CancellationToken, (EndpointVar, endpoint), (ProtocolVar, protocol));
 }

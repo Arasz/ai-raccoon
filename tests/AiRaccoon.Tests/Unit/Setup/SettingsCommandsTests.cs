@@ -1,9 +1,10 @@
 using System.Globalization;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Degradation;
+using AiRaccoon;
 using AiRaccoon.Core.Memory.Filtering;
-using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
+using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 
@@ -18,35 +19,30 @@ namespace AiRaccoon.Tests.Unit.Setup;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public class SettingsCommandsTests
 {
-    private static async Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store)
-    {
-        CliArgs.TryParse(args, out var parsed);
-        parsed!.Errors.ShouldBeEmpty();
-
-        var stdout = new StringWriter();
-        var stderr = new StringWriter();
-        var streams = new StandardStreams(TextReader.Null, stdout, stderr);
-        var commands = new SettingsCommands();
-        var exit = parsed.CommandPath switch
+    /// <summary>Calls the component method directly — no dispatcher, that is the seam under test.</summary>
+    private static Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store) =>
+        CliRun.RunAsync(args, (parsed, streams, ct) =>
         {
-            ["access", "default", "show"] => await commands.AccessDefaultShowAsync(store, streams, TestContext.Current.CancellationToken),
-            ["access", "list"] => await commands.AccessListAsync(store, streams, TestContext.Current.CancellationToken),
-            ["model", "set", "local"] => await commands.ModelSetLocalAsync(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
-            ["model", "show"] => await commands.ModelShowAsync(store, streams, TestContext.Current.CancellationToken),
-            ["retrieval", "alpha", "set"] => await commands.RetrievalAlphaSetAsync(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
-            ["retrieval", "alpha", "show"] => await commands.RetrievalAlphaShowAsync(store, streams, TestContext.Current.CancellationToken),
-            ["sweep", "enable"] => await commands.SweepEnabledSetAsync(true, store, streams, TestContext.Current.CancellationToken),
-            ["sweep", "disable"] => await commands.SweepEnabledSetAsync(false, store, streams, TestContext.Current.CancellationToken),
-            ["sweep", "interval-hours"] => await commands.SweepIntervalHoursSetAsync(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
-            ["sweep", "threshold", "set"] => await commands.SweepThresholdSetAsync(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
-            ["sweep", "show"] => await commands.SweepShowAsync(store, streams, TestContext.Current.CancellationToken),
-            ["noise", "enable"] => await commands.NoiseEnabledSetAsync(true, store, streams, TestContext.Current.CancellationToken),
-            ["noise", "disable"] => await commands.NoiseEnabledSetAsync(false, store, streams, TestContext.Current.CancellationToken),
-            ["noise", "show"] => await commands.NoiseShowAsync(store, streams, TestContext.Current.CancellationToken),
-            _ => throw new InvalidOperationException($"unhandled: {string.Join(' ', parsed.CommandPath)}")
-        };
-        return (exit, stdout.ToString(), stderr.ToString());
-    }
+            var commands = new SettingsCommands();
+            return parsed.CommandPath switch
+            {
+                ["access", "default", "show"] => commands.AccessDefaultShowAsync(store, streams, ct),
+                ["access", "list"] => commands.AccessListAsync(store, streams, ct),
+                ["model", "set", "local"] => commands.ModelSetLocalAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["model", "show"] => commands.ModelShowAsync(store, streams, ct),
+                ["retrieval", "alpha", "set"] => commands.RetrievalAlphaSetAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["retrieval", "alpha", "show"] => commands.RetrievalAlphaShowAsync(store, streams, ct),
+                ["sweep", "enable"] => commands.SweepEnabledSetAsync(true, store, streams, ct),
+                ["sweep", "disable"] => commands.SweepEnabledSetAsync(false, store, streams, ct),
+                ["sweep", "interval-hours"] => commands.SweepIntervalHoursSetAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["sweep", "threshold", "set"] => commands.SweepThresholdSetAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["sweep", "show"] => commands.SweepShowAsync(store, streams, ct),
+                ["noise", "enable"] => commands.NoiseEnabledSetAsync(true, store, streams, ct),
+                ["noise", "disable"] => commands.NoiseEnabledSetAsync(false, store, streams, ct),
+                ["noise", "show"] => commands.NoiseShowAsync(store, streams, ct),
+                _ => throw new InvalidOperationException($"unhandled: {string.Join(' ', parsed.CommandPath)}")
+            };
+        });
 
     [Fact]
     public async Task AccessDefaultShow_NoRow_PrintsRw()
@@ -84,6 +80,8 @@ public class SettingsCommandsTests
     {
         var (exit, _, err) = await Run(["retrieval", "alpha", "set", "bogus"], new FakeConfigStore());
 
+        // WP11: validation failures return a named code, so a script can tell a typo from a
+        // broken bank key (which is ExitCode.FailedToResolveEncryptionKey = 1).
         exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("invalid alpha");
     }
@@ -154,6 +152,19 @@ public class SettingsCommandsTests
     }
 
     [Fact]
+    public async Task SweepIntervalHours_RoundTripsThroughCliShowAndSweepConfigKeys()
+    {
+        var store = new FakeConfigStore();
+
+        var (setExit, _, _) = await Run(["sweep", "interval-hours", "8760"], store);
+        var (_, showOut, _) = await Run(["sweep", "show"], store);
+
+        setExit.ShouldBe(0);
+        showOut.ShouldContain("interval: 8760 h");
+        SweepConfigKeys.ParseIntervalHours(store.Settings[SweepConfigKeys.IntervalHoursGlobal]).ShouldBe(8760);
+    }
+
+    [Fact]
     public async Task NoiseShow_NoRow_PrintsEnabledByDefault()
     {
         var (exit, stdout, _) = await Run(["noise", "show"], new FakeConfigStore());
@@ -181,18 +192,5 @@ public class SettingsCommandsTests
         enableExit.ShouldBe(0);
         enabledOut.ShouldContain("enabled: True");
         NoiseConfigKeys.ParseEnabled(store.Settings[NoiseConfigKeys.EnabledGlobal]).ShouldBeTrue();
-    }
-
-    [Fact]
-    public async Task SweepIntervalHours_RoundTripsThroughCliShowAndSweepConfigKeys()
-    {
-        var store = new FakeConfigStore();
-
-        var (setExit, _, _) = await Run(["sweep", "interval-hours", "8760"], store);
-        var (_, showOut, _) = await Run(["sweep", "show"], store);
-
-        setExit.ShouldBe(0);
-        showOut.ShouldContain("interval: 8760 h");
-        SweepConfigKeys.ParseIntervalHours(store.Settings[SweepConfigKeys.IntervalHoursGlobal]).ShouldBe(8760);
     }
 }

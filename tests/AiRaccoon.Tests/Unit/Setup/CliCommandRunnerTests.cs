@@ -2,6 +2,7 @@ using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup.Cli;
+using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 
@@ -31,35 +32,14 @@ public sealed class CliCommandRunnerTests : IDisposable
 
         // Serialized with the encryption tests: AIRACCOON_DB_PASSPHRASE is process-global and
         // must be cleared during a run so a dev machine's value cannot poison a fresh-bank test.
-        // The Console redirect lives inside the gate too: a prior holder's restore must not run
+        // The Console redirect stays inside the gate: a prior holder's restore must not run
         // between our SetOut and the AppRunner's stream capture.
-        await TestData.EnvVarGate.WaitAsync();
-        try
-        {
-            var originalOut = Console.Out;
-            var originalError = Console.Error;
-            var stdout = new StringWriter();
-            var stderr = new StringWriter();
-            Console.SetOut(stdout);
-            Console.SetError(stderr);
-            var original = Environment.GetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName);
-            try
-            {
-                Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, null);
-                var exit = await new AppRunner().Run(args);
-                return (exit, stdout.ToString(), stderr.ToString(), config);
-            }
-            finally
-            {
-                Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, original);
-                Console.SetOut(originalOut);
-                Console.SetError(originalError);
-            }
-        }
-        finally
-        {
-            TestData.EnvVarGate.Release();
-        }
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EnvEncryptionKeyProvider.EnvVarName, null));
+
+        var exit = 0;
+        var (stdout, stderr) = await ConsoleCapture.RunAsync(async () => exit = await new AppRunner().Run(args));
+        return (exit, stdout, stderr, config);
     }
 
     [Fact]

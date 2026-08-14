@@ -68,7 +68,7 @@ public sealed class OtlpExportTests : IDisposable
     [Fact]
     public async Task MalformedEndpoint_MissingScheme_ServerStartsWithExportDisabled()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         Environment.SetEnvironmentVariable(EndpointVar, "127.0.0.1:4317");
 
         using var lease = LoopbackPort.Reserve();
@@ -93,7 +93,7 @@ public sealed class OtlpExportTests : IDisposable
     [Fact]
     public async Task MalformedEndpoint_NonHttpScheme_ServerStartsWithExportDisabled()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         Environment.SetEnvironmentVariable(EndpointVar, "localhost:4318");
 
         using var lease = LoopbackPort.Reserve();
@@ -116,7 +116,7 @@ public sealed class OtlpExportTests : IDisposable
     [Fact]
     public async Task MalformedEndpoint_ServerStillServesAToolCall()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         Environment.SetEnvironmentVariable(EndpointVar, "127.0.0.1:4317");
 
         using var lease = LoopbackPort.Reserve();
@@ -143,25 +143,18 @@ public sealed class OtlpExportTests : IDisposable
     [Fact]
     public async Task MalformedEndpoint_Quiet_WarningReachesTheLogFile_AndStderrStaysEmpty()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         Environment.SetEnvironmentVariable(EndpointVar, "127.0.0.1:4317");
         var options = new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User, Quiet = true };
         using var lease = LoopbackPort.Reserve();
         var config = new ServerConfig(lease.Port, McpTransport.Http, options);
 
-        var originalError = Console.Error;
-        var stderr = new StringWriter();
-        Console.SetError(stderr);
-        try
+        var (_, stderr) = ConsoleCapture.Run(() =>
         {
             using var host = McpServerSetup.CreateServerHost(config);
-        }
-        finally
-        {
-            Console.SetError(originalError);
-        }
+        });
 
-        stderr.ToString().ShouldBeEmpty();
+        stderr.ShouldBeEmpty();
         File.ReadAllText(QuietLogging.LogFilePath(options)).ShouldContain("ai-raccoon: OTLP export disabled");
     }
 
@@ -284,7 +277,7 @@ public sealed class OtlpExportTests : IDisposable
     {
         // Stdio hosts recycle too fast to pay the exporter's batch delay / shutdown grace —
         // CreateWebHost only (ADR-0009, "Which host paths get the exporter").
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
 
         var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio));
@@ -304,7 +297,7 @@ public sealed class OtlpExportTests : IDisposable
     [Fact]
     public async Task StdioHost_ToolCallMetric_HasNoListener_SoInvocationsAreNeverExported()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
         using var probeMetrics = new ToolCallMetrics();
         var enabledBefore = probeMetrics.Meter.CreateCounter<long>("probe_stdio_before_call").Enabled;
@@ -329,26 +322,17 @@ public sealed class OtlpExportTests : IDisposable
         // services, never the OTLP exporter, so this asserts a delta: running a one-shot verb must
         // not add a NEW listener, robust to listeners other concurrent tests already attached
         // (Enabled/HasListeners() reflect process-wide state, not per-test).
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
         using var toolMetrics = new ToolCallMetrics();
         var enabledBefore = toolMetrics.Meter.CreateCounter<long>("probe_cli_never_wires").Enabled;
         var hasListenersBefore = toolMetrics.ActivitySource.HasListeners();
 
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        Console.SetOut(new StringWriter());
-        Console.SetError(new StringWriter());
-        try
+        await ConsoleCapture.RunAsync(async () =>
         {
             var exit = await new AppRunner().Run(["--data-root", _dataRoot, "access", "default", "show"]);
             exit.ShouldBe(0);
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-        }
+        });
 
         toolMetrics.Meter.CreateCounter<long>("probe_cli_never_wires_after").Enabled.ShouldBe(enabledBefore);
         toolMetrics.ActivitySource.HasListeners().ShouldBe(hasListenersBefore);
@@ -466,7 +450,7 @@ public sealed class OtlpExportTests : IDisposable
     [Fact]
     public async Task HttpHost_MetricExportInterval_IsAppliedToThePeriodicReader_WhenSet()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
         Environment.SetEnvironmentVariable(IntervalVar, "1234");
 
@@ -480,7 +464,7 @@ public sealed class OtlpExportTests : IDisposable
     [Fact]
     public async Task HttpHost_MetricExportInterval_LeavesSdkDefault_WhenUnset()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
 
         using var lease = LoopbackPort.Reserve();
@@ -493,7 +477,7 @@ public sealed class OtlpExportTests : IDisposable
     [Fact]
     public async Task HttpHost_MetricExportTimeout_IsAppliedToThePeriodicReader_WhenSet()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
         Environment.SetEnvironmentVariable(TimeoutVar, "9876");
 
@@ -507,7 +491,7 @@ public sealed class OtlpExportTests : IDisposable
     [Fact]
     public async Task HttpHost_MetricExportTimeout_LeavesSdkDefault_WhenUnset()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
 
         using var lease = LoopbackPort.Reserve();
@@ -524,7 +508,7 @@ public sealed class OtlpExportTests : IDisposable
     [Fact]
     public async Task HttpHost_ServiceName_StaysAiRaccoon_EvenWhenOtelServiceNameIsSet()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
         Environment.SetEnvironmentVariable(ServiceNameVar, "probe-service");
 
@@ -537,7 +521,7 @@ public sealed class OtlpExportTests : IDisposable
     [Fact]
     public async Task HttpHost_ServiceName_DefaultsToTheProductName_NotUnknownService()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
 
         using var lease = LoopbackPort.Reserve();
@@ -551,7 +535,7 @@ public sealed class OtlpExportTests : IDisposable
     [Fact]
     public async Task HttpHost_ServiceName_IsTheSameOnMetricsAndTraces()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
 
         using var lease = LoopbackPort.Reserve();
@@ -566,7 +550,7 @@ public sealed class OtlpExportTests : IDisposable
     [Fact]
     public async Task HttpHost_ResourceCarriesTheAssemblyServiceVersion()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
 
         using var lease = LoopbackPort.Reserve();
@@ -596,7 +580,7 @@ public sealed class OtlpExportTests : IDisposable
     [Fact]
     public async Task HttpHost_ResourceAttributesEnvVar_ReachesTheProvidersResource()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
         Environment.SetEnvironmentVariable(ResourceAttributesVar, "deployment.environment=probe-env");
 
@@ -613,7 +597,7 @@ public sealed class OtlpExportTests : IDisposable
     [Fact]
     public async Task StartedHttpHost_AttachesATraceListener_SoToolCallsProduceSpans()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
 
         using var lease = LoopbackPort.Reserve();
@@ -681,47 +665,13 @@ public sealed class OtlpExportTests : IDisposable
     private ServerConfig Config(McpTransport transport, int port = 0, TimeSpan idleTimeout = default) =>
         new(port, transport, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User }, idleTimeout);
 
-    private static async Task<IDisposable> AcquireCleanEnvAsync()
-    {
-        await TestData.EnvVarGate.WaitAsync();
-        var originalEndpoint = Environment.GetEnvironmentVariable(EndpointVar);
-        var originalProtocol = Environment.GetEnvironmentVariable(ProtocolVar);
-        var originalInterval = Environment.GetEnvironmentVariable(IntervalVar);
-        var originalTimeout = Environment.GetEnvironmentVariable(TimeoutVar);
-        var originalServiceName = Environment.GetEnvironmentVariable(ServiceNameVar);
-        var originalResourceAttributes = Environment.GetEnvironmentVariable(ResourceAttributesVar);
-        var originalPassphrase = Environment.GetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName);
-        Environment.SetEnvironmentVariable(EndpointVar, null);
-        Environment.SetEnvironmentVariable(ProtocolVar, null);
-        Environment.SetEnvironmentVariable(IntervalVar, null);
-        Environment.SetEnvironmentVariable(TimeoutVar, null);
-        Environment.SetEnvironmentVariable(ServiceNameVar, null);
-        Environment.SetEnvironmentVariable(ResourceAttributesVar, null);
-        Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, null);
-        return new EnvRestore(originalEndpoint, originalProtocol, originalInterval, originalTimeout,
-            originalServiceName, originalResourceAttributes, originalPassphrase);
-    }
-
-    private sealed class EnvRestore(
-        string? originalEndpoint,
-        string? originalProtocol,
-        string? originalInterval,
-        string? originalTimeout,
-        string? originalServiceName,
-        string? originalResourceAttributes,
-        string? originalPassphrase)
-        : IDisposable
-    {
-        public void Dispose()
-        {
-            Environment.SetEnvironmentVariable(EndpointVar, originalEndpoint);
-            Environment.SetEnvironmentVariable(ProtocolVar, originalProtocol);
-            Environment.SetEnvironmentVariable(IntervalVar, originalInterval);
-            Environment.SetEnvironmentVariable(TimeoutVar, originalTimeout);
-            Environment.SetEnvironmentVariable(ServiceNameVar, originalServiceName);
-            Environment.SetEnvironmentVariable(ResourceAttributesVar, originalResourceAttributes);
-            Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, originalPassphrase);
-            TestData.EnvVarGate.Release();
-        }
-    }
+    private static ValueTask<EnvScope> AcquireCleanEnvAsync(CancellationToken cancellationToken) =>
+        EnvScope.AcquireAsync(cancellationToken,
+            (EndpointVar, null),
+            (ProtocolVar, null),
+            (IntervalVar, null),
+            (TimeoutVar, null),
+            (ServiceNameVar, null),
+            (ResourceAttributesVar, null),
+            (EnvEncryptionKeyProvider.EnvVarName, null));
 }

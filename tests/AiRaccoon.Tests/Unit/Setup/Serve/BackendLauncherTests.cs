@@ -57,30 +57,30 @@ public sealed class BackendLauncherTests : IDisposable
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         var capturePath = Path.Combine(_dataRoot, "stdout-capture.txt");
-        var managedStdout = new StringWriter();
-        var originalStdout = Console.Out;
-        BackendResult result;
+        var result = default(BackendResult);
+        string managedStdout;
 
         await using (var capture = new FileStream(capturePath, FileMode.Create, FileAccess.Write))
         {
-            Console.SetOut(managedStdout);
-            var savedStdout = Dup(StdoutFd);
-            Dup2(capture.SafeFileHandle.DangerousGetHandle().ToInt32(), StdoutFd);
-            try
+            (managedStdout, _) = await ConsoleCapture.RunAsync(async () =>
             {
-                lease.ReleaseForBind();
-                result = await Launcher().AcquireAsync(port, ServeExecutable, ServeArguments(port),
-                    TestContext.Current.CancellationToken);
-                // The backend prints its bound URL right after binding; hold the capture open long
-                // enough that an unredirected child would certainly have written it.
-                await Task.Delay(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
-            }
-            finally
-            {
-                Dup2(savedStdout, StdoutFd);
-                CloseFd(savedStdout);
-                Console.SetOut(originalStdout);
-            }
+                var savedStdout = Dup(StdoutFd);
+                Dup2(capture.SafeFileHandle.DangerousGetHandle().ToInt32(), StdoutFd);
+                try
+                {
+                    lease.ReleaseForBind();
+                    result = await Launcher().AcquireAsync(port, ServeExecutable, ServeArguments(port),
+                        TestContext.Current.CancellationToken);
+                    // The backend prints its bound URL right after binding; hold the capture open long
+                    // enough that an unredirected child would certainly have written it.
+                    await Task.Delay(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+                }
+                finally
+                {
+                    Dup2(savedStdout, StdoutFd);
+                    CloseFd(savedStdout);
+                }
+            });
         }
 
         result.Url.ShouldBe(UrlFor(port));
@@ -88,7 +88,7 @@ public sealed class BackendLauncherTests : IDisposable
         captured.ShouldNotContain(UrlFor(port));
         // Console.Out is process-global, so a test running in parallel can land text in this
         // capture too. Assert what only the launcher could have written, not that it is empty.
-        managedStdout.ToString().ShouldNotContain(UrlFor(port));
+        managedStdout.ShouldNotContain(UrlFor(port));
     }
 
     [Fact]
@@ -144,14 +144,17 @@ public sealed class BackendLauncherTests : IDisposable
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         var clock = new FakeTimeProvider();
+        var timers = new TimerRegistrations(clock);
         var launcher = new BackendLauncher(TestData.CreateServerProbe(), BackendLauncher.DefaultBudget,
-            clock, NullLogger<BackendLauncher>.Instance);
+            timers, NullLogger<BackendLauncher>.Instance);
         var stopwatch = Stopwatch.StartNew();
 
         // A process that starts, never listens and outlives the budget.
         lease.ReleaseForBind();
         var acquire = launcher.AcquireAsync(port, "sleep", ["10"], TestContext.Current.CancellationToken);
-        await Task.Delay(200, TestContext.Current.CancellationToken); // timer registers
+        // Advancing before the budget and poll timers exist would silently do nothing.
+        (await timers.WaitForAsync(2, TestContext.Current.CancellationToken))
+            .ShouldBeTrue("the launcher never registered its timers");
         acquire.IsCompleted.ShouldBeFalse();
 
         clock.Advance(BackendLauncher.DefaultBudget);
@@ -197,13 +200,16 @@ public sealed class BackendLauncherTests : IDisposable
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         var clock = new FakeTimeProvider();
+        var timers = new TimerRegistrations(clock);
         var launcher = new BackendLauncher(TestData.CreateServerProbe(), BackendLauncher.DefaultBudget,
-            clock, NullLogger<BackendLauncher>.Instance);
+            timers, NullLogger<BackendLauncher>.Instance);
         using var caller = new CancellationTokenSource();
 
         lease.ReleaseForBind();
         var acquire = launcher.AcquireAsync(port, "sleep", ["10"], caller.Token);
-        await Task.Delay(200, TestContext.Current.CancellationToken); // timer registers
+        // Cancel only once the acquire is genuinely in flight, not merely scheduled.
+        (await timers.WaitForAsync(2, TestContext.Current.CancellationToken))
+            .ShouldBeTrue("the launcher never registered its timers");
         await caller.CancelAsync();
 
         await Should.ThrowAsync<OperationCanceledException>(() => acquire.WaitAsync(TimeSpan.FromSeconds(10),

@@ -30,14 +30,23 @@ DEFAULT_DURATION = "4h"
 DURATION_RE = re.compile(r"^(?:(\d+)h)?(?:(\d+)m)?$")
 MAX_DURATION_SECONDS = 24 * 3600
 
+# Durations that mean "until switched off by hand".
+FOREVER_WORDS = frozenset({"forever", "never", "always"})
+
 # The component this tool logs its own lifecycle under. Those records are bookkeeping,
 # never evidence about a hook.
 TOOL_COMPONENT = "call-behaviorist"
 
 
-def parse_duration(text: str) -> int:
-    """'4h', '90m', '1h30m', or a bare number of hours -> seconds."""
+def parse_duration(text: str):
+    """'4h', '90m', '1h30m', or a bare number of hours -> seconds.
+
+    'forever' / 'never' -> None, meaning no expiry: logging stays on until `off`.
+    The MAX_AUDIT_LINES cap still bounds the log, so this costs disk but does not grow it.
+    """
     text = text.strip().lower()
+    if text in FOREVER_WORDS:
+        return None
     if text.isdigit():
         seconds = int(text) * 3600
     else:
@@ -52,13 +61,13 @@ def parse_duration(text: str) -> int:
 
 def cmd_on(duration: str, project_scoped: bool) -> int:
     seconds = parse_duration(duration)
-    expires = dl.now() + timedelta(seconds=seconds)
+    expires = None if seconds is None else dl.now() + timedelta(seconds=seconds)
     state = {
         "enabled": True,
         "scope": dl.SCOPE_PROJECT if project_scoped else dl.SCOPE_USER,
         "project": str(Path.cwd()) if project_scoped else None,
         "enabled_at": dl.iso(dl.now()),
-        "expires_at": dl.iso(expires),
+        "expires_at": None if expires is None else dl.iso(expires),
     }
     dl.DEBUG_DIR.mkdir(parents=True, exist_ok=True)
     dl.STATE_FILE.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
@@ -66,7 +75,8 @@ def cmd_on(duration: str, project_scoped: bool) -> int:
     dl._own_only(dl.DEBUG_DIR)
     dl._own_only(dl.STATE_FILE)
     where = state["project"] if project_scoped else "every project"
-    print(f"debug logging ON for {where}, expires {state['expires_at']}")
+    expiry = state["expires_at"] or "never — switch it off with `behaviorist.py off`"
+    print(f"debug logging ON for {where}, expires {expiry}")
     print(f"records: {dl.AUDIT_FILE}")
     dl.log_event(TOOL_COMPONENT, "enabled", project=state["project"], scope=state["scope"])
     return 0
@@ -97,7 +107,7 @@ def cmd_status() -> int:
         scope = state.get("scope", dl.SCOPE_USER)
         target = state.get("project") or "every project"
         print(f"debug logging: ON ({scope} — {target})")
-        print(f"expires: {state.get('expires_at', 'never')}")
+        print(f"expires: {state.get('expires_at') or 'never'}")
     print(f"records: {_line_count()} in {dl.AUDIT_FILE}")
     return 0
 

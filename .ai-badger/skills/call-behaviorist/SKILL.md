@@ -30,7 +30,7 @@ All via `python3 .ai-badger/skills/call-behaviorist/scripts/behaviorist.py`:
 
 | Command | Effect |
 |---|---|
-| `on [DURATION]` | Enable for **every project** (default 4h). Grammar: `4h`, `90m`, `1h30m`, or a bare number of hours. Capped at 24h. |
+| `on [DURATION]` | Enable for **every project** (default 4h). Grammar: `4h`, `90m`, `1h30m`, or a bare number of hours — capped at 24h. `forever` (or `never`/`always`) means no expiry: on until `off`. |
 | `on [DURATION] --project` | Enable for the current directory only |
 | `off` | Disable |
 | `status` | Mode, scope, expiry, record count |
@@ -174,13 +174,26 @@ No environment-specific gotchas known.
 
 ## Turn it off when you are done
 
-The window expires on wall-clock time, checked on every event — no timer and no cron. Debug
-logging that never switches itself off is a slow disk leak and a standing privacy exposure,
-which is why `on` always takes an expiry and caps it at 24 hours.
+A bounded window expires on wall-clock time, checked on every event — no timer and no cron.
+Durations are capped at 24 hours, so a window opened for an investigation closes itself.
+
+`forever` opts out of that, for standing instrumentation: drift that only shows over weeks
+cannot be caught by a window that closes overnight. What you give up is the automatic close,
+so two things are worth knowing before choosing it:
+
+- **It is a standing privacy exposure.** The log records where you work, which hooks ran and
+  the MCP retrieval `q` field. Set `AI_BADGER_DEBUG_REDACT` to drop `q`, and remember the log
+  spans every project on the machine, not just this one.
+- **Disk is bounded, not unbounded.** `MAX_AUDIT_LINES` (5000, oldest trimmed first) caps the
+  file whatever the duration — so `forever` costs a fixed slice of disk rather than a growing
+  one. The real cost is that a busy component evicts a quiet one's evidence, which is why a
+  hook that logs on every tool call is a bug rather than a preference.
+
+Switch it off with `off` when the question is answered.
 
 ## Verification Checklist
 
-- [ ] `status` shows logging enabled with an expiry
+- [ ] `status` shows logging enabled, with an expiry or `never`
 - [ ] `tail` renders records one line each
 - [ ] `analyze --json` exits 0 and names findings
 - [ ] Report leads with what is wrong, includes the window and record count

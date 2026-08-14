@@ -1,5 +1,6 @@
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
+using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tests.Unit.Watch;
 using Shouldly;
 using Xunit;
@@ -15,30 +16,25 @@ namespace AiRaccoon.Tests.Unit.Setup;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public class WatchCommandsTests
 {
-    private static async Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store,
-        FakeWatchStore? watchStore = null)
-    {
-        CliArgs.TryParse(args, out var parsed);
-        parsed!.Errors.ShouldBeEmpty();
-
-        var stdout = new StringWriter();
-        var stderr = new StringWriter();
-        var streams = new StandardStreams(TextReader.Null, stdout, stderr);
-        var commands = new WatchCommands(watchStore ?? new FakeWatchStore());
-        var exit = parsed.CommandPath switch
+    /// <summary>Calls the component method directly — no dispatcher, that is the seam under test.</summary>
+    private static Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store,
+        FakeWatchStore? watchStore = null) =>
+        CliRun.RunAsync(args, (parsed, streams, ct) =>
         {
-            ["watch", "enable"] or ["watch", "disable"] => await commands.SetEnabledAsync(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
-            ["watch", "scope", "add"] => await commands.ScopeAddAsync(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
-            ["watch", "scope", "remove"] => await commands.ScopeRemoveAsync(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
-            ["watch", "scope", "list"] => await commands.ScopeListAsync(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
-            ["watch", "concurrency"] => await commands.ConcurrencyAsync(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
-            ["watch", "list"] => await commands.ListAsync(store, streams, TestContext.Current.CancellationToken),
-            ["watch", "registered"] => await commands.RegisteredAsync(parsed.ParsedCliArgs, streams, TestContext.Current.CancellationToken),
-            ["watch", "remove"] => await commands.RemoveAsync(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
-            _ => throw new InvalidOperationException($"unhandled: {string.Join(' ', parsed.CommandPath)}")
-        };
-        return (exit, stdout.ToString(), stderr.ToString());
-    }
+            var commands = new WatchCommands(watchStore ?? new FakeWatchStore());
+            return parsed.CommandPath switch
+            {
+                ["watch", "enable"] or ["watch", "disable"] => commands.SetEnabledAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["watch", "scope", "add"] => commands.ScopeAddAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["watch", "scope", "remove"] => commands.ScopeRemoveAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["watch", "scope", "list"] => commands.ScopeListAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["watch", "concurrency"] => commands.ConcurrencyAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["watch", "list"] => commands.ListAsync(store, streams, ct),
+                ["watch", "registered"] => commands.RegisteredAsync(parsed.ParsedCliArgs, streams, ct),
+                ["watch", "remove"] => commands.RemoveAsync(parsed.ParsedCliArgs, store, streams, ct),
+                _ => throw new InvalidOperationException($"unhandled: {string.Join(' ', parsed.CommandPath)}")
+            };
+        });
 
     [Fact]
     public async Task Registered_ListsSorted_WithCtorWatchStore()

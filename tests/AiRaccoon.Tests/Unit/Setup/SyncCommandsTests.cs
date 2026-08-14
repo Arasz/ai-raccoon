@@ -1,5 +1,5 @@
-using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
+using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 
@@ -14,26 +14,21 @@ namespace AiRaccoon.Tests.Unit.Setup;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public class SyncCommandsTests
 {
-    private static async Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store,
-        TextReader? stdin = null)
-    {
-        CliArgs.TryParse(args, out var parsed);
-        parsed!.Errors.ShouldBeEmpty();
-
-        var stdout = new StringWriter();
-        var stderr = new StringWriter();
-        var streams = new StandardStreams(stdin ?? TextReader.Null, stdout, stderr);
-        var commands = new SyncCommands();
-        var exit = parsed.CommandPath switch
+    /// <summary>Calls the component method directly — no dispatcher, that is the seam under test.</summary>
+    private static Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store,
+        TextReader? stdin = null) =>
+        CliRun.RunAsync(args, (parsed, streams, ct) =>
         {
-            ["sync", "add", "s3"] => await commands.AddS3Async(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
-            ["sync", "add", "azure"] => await commands.AddAzureAsync(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
-            ["sync", "remove"] => await commands.RemoveAsync(store, streams, TestContext.Current.CancellationToken),
-            ["sync", "show"] => await commands.ShowAsync(store, streams, TestContext.Current.CancellationToken),
-            _ => throw new InvalidOperationException($"unhandled: {string.Join(' ', parsed.CommandPath)}")
-        };
-        return (exit, stdout.ToString(), stderr.ToString());
-    }
+            var commands = new SyncCommands();
+            return parsed.CommandPath switch
+            {
+                ["sync", "add", "s3"] => commands.AddS3Async(parsed.ParsedCliArgs, store, streams, ct),
+                ["sync", "add", "azure"] => commands.AddAzureAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["sync", "remove"] => commands.RemoveAsync(store, streams, ct),
+                ["sync", "show"] => commands.ShowAsync(store, streams, ct),
+                _ => throw new InvalidOperationException($"unhandled: {string.Join(' ', parsed.CommandPath)}")
+            };
+        }, stdin);
 
     [Fact]
     public async Task AddS3_PromptsOnStderr_WritesSecrets()
