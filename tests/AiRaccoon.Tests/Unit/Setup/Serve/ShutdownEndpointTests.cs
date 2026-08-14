@@ -1,9 +1,9 @@
 using System.Net;
-using System.Net.Sockets;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
+using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Shouldly;
@@ -29,8 +29,10 @@ public sealed class ShutdownEndpointTests : IDisposable
     [Fact]
     public async Task Post_WithoutTheToken_Is401_AndTheServerKeepsServing()
     {
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         var host = McpServerSetup.CreateServerHost(GatedConfig(port));
+        lease.ReleaseForBind();
         await host.StartAsync(TestContext.Current.CancellationToken);
         try
         {
@@ -52,8 +54,10 @@ public sealed class ShutdownEndpointTests : IDisposable
     [Fact]
     public async Task Post_WithTheWrongToken_AnswersExactlyAsAMissingOne()
     {
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         var host = McpServerSetup.CreateServerHost(GatedConfig(port));
+        lease.ReleaseForBind();
         await host.StartAsync(TestContext.Current.CancellationToken);
         try
         {
@@ -80,9 +84,11 @@ public sealed class ShutdownEndpointTests : IDisposable
     [Fact]
     public async Task Post_WithTheToken_IsAccepted_AndStopsTheHost()
     {
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         var host = McpServerSetup.CreateServerHost(GatedConfig(port));
         var lifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
+        lease.ReleaseForBind();
         await host.StartAsync(TestContext.Current.CancellationToken);
         try
         {
@@ -102,8 +108,10 @@ public sealed class ShutdownEndpointTests : IDisposable
     [Fact]
     public async Task Get_IsNotAllowed()
     {
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         var host = McpServerSetup.CreateServerHost(GatedConfig(port));
+        lease.ReleaseForBind();
         await host.StartAsync(TestContext.Current.CancellationToken);
         try
         {
@@ -125,8 +133,10 @@ public sealed class ShutdownEndpointTests : IDisposable
     {
         // A direct `--transport http` launch mints no token (ADR-0020 non-goal), so it must not
         // expose an unauthenticated shutdown either.
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         var host = McpServerSetup.CreateServerHost(UngatedConfig(port));
+        lease.ReleaseForBind();
         await host.StartAsync(TestContext.Current.CancellationToken);
         try
         {
@@ -163,13 +173,4 @@ public sealed class ShutdownEndpointTests : IDisposable
     private ServerConfig GatedConfig(int port) => UngatedConfig(port) with { McpToken = Token };
 
     private ServerConfig UngatedConfig(int port) => new(port, McpTransport.Http, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
-
-    private static int FreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
-    }
 }

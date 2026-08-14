@@ -1,7 +1,6 @@
-using System.Net;
-using System.Net.Sockets;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
+using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Shouldly;
@@ -22,6 +21,7 @@ public sealed class ServerProbeLoggingTests
     [Fact]
     public async Task Probe_ConnectionRefused_EmitsNoHttpClientLogs()
     {
+        using var lease = LoopbackPort.Reserve();
         var recorder = new RecordingLoggerProvider();
         var services = new ServiceCollection();
         services.AddLogging(builder => builder.AddProvider(recorder));
@@ -29,21 +29,15 @@ public sealed class ServerProbeLoggingTests
         using var provider = services.BuildServiceProvider();
         var probe = provider.GetRequiredService<IServerProbe>();
 
-        await probe.RespondsAsync(FreePort(), TestContext.Current.CancellationToken);
+        // Connection refused needs the number empty: give the reservation up only now.
+        lease.ReleaseForBind();
+        await probe.RespondsAsync(lease.Port, TestContext.Current.CancellationToken);
 
         recorder.Entries
             .Where(e => e.Category.StartsWith("System.Net.Http.HttpClient.ServerProbe", StringComparison.Ordinal))
             .ShouldBeEmpty();
     }
 
-    private static int FreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
-    }
 
     private sealed class RecordingLoggerProvider : ILoggerProvider
     {
