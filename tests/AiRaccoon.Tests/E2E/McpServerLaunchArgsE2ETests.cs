@@ -3,6 +3,7 @@ using AiRaccoon.Infrastructure.Options;
 using ModelContextProtocol.Client;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.E2E;
 
@@ -51,9 +52,11 @@ public class McpServerLaunchArgsE2ETests : IAsyncLifetime
     public async Task ExplicitStdio_StillServesTheFullToolSurfaceInProcess()
     {
         var dataRoot = TestData.CreateTempRoot("explicit-stdio");
-        var port = AiRaccoonProcess.FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         try
         {
+            lease.ReleaseForBind();
             await using var client = await AiRaccoonProcess.ConnectAsync(
                 ["--transport", "stdio", "--data-root", dataRoot, "--port", port.ToString()],
                 TestContext.Current.CancellationToken);

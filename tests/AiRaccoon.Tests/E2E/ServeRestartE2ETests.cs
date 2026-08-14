@@ -10,6 +10,7 @@ using AiRaccoon.Setup.Cli;
 using AiRaccoon.Tests.Unit.Setup.Serve;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.E2E;
 
@@ -56,7 +57,9 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
     public async Task ARunningServer_IsCycled_AndADifferentProcessAnswersOnThisBuild()
     {
         using var env = await AcquireCleanEnvAsync();
-        var port = AiRaccoonProcess.FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
         _old = StartServeProcess(port);
         using var before = await WaitForServerAsync(port);
         before.RootElement.GetProperty("pid").GetInt32().ShouldBe(_old.Id);
@@ -86,9 +89,11 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
     public async Task AServerThatNeverStops_ExitsNonZeroWithinTheBound_RatherThanHanging()
     {
         using var env = await AcquireCleanEnvAsync();
-        var port = AiRaccoonProcess.FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         (await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
         // Accepts the shutdown and keeps listening: the port never frees.
+        lease.ReleaseForBind();
         await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.Accepted,
             TestContext.Current.CancellationToken);
         var run = StartRestartInProcess(port);
