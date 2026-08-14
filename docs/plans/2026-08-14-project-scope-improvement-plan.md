@@ -54,8 +54,13 @@ not the live bank, so it can be built in parallel with WP3's backfill.
 
 ## Wave 1 — The delete path · one PR · release as 1.13.0
 
-### WP1 · Confine `memory_delete_context` to the caller's project — **BLOCKER B1**
+### WP1 · Confine `memory_delete_context` to the caller's project — **BLOCKER B1** — ✅ **LANDED**
 **Effort:** SMALL · **Surface:** `SqliteMemoryStore.FilterFor`, `EntryBucket.For`
+**Landed** on `work/wp1-delete-confinement`, merged into the campaign branch. ADR-0051.
+Both negative gates were watched go red ("should throw `ContextOutsideProjectException` but did not")
+with the positive case passing throughout. The size ratchet caught the guard at 1298 against a 1291
+cap and, per its own note, the **delete seam came out** rather than the cap going up — `FilterFor`
+moved to `ContextFilter.cs` beside `EntryBucket`, and the cap was **lowered to 1251**.
 
 `FilterFor`'s `project:` branch binds `["projectId"] = context["project:".Length..]`, discarding the
 caller's `projectId`; its `shared` branch returns `scope = 'shared'` with no project predicate and an
@@ -356,6 +361,14 @@ condition CI never creates. **The adversarial pass corrects that:** it failed on
 `Speed=Fast` run *and* on an unfiltered full run (`Failed: 1, Passed: 2860, Skipped: 9`), then passed
 clean on an immediate rerun with no code change. It is flaky in isolation, not only under contention,
 and `Speed=Fast` is the PR gate.
+
+**A third independent observation, from WP1's own verification run.** Two `Speed=Fast` failures
+appeared on one run and a different single failure on the next, with all 52 passing in isolation —
+`ServeRestartTests.AnExistingServer_IsCycled_AndTheRestartOwnsThePort` joins `ToolRefusalsTests` and
+`BackendLauncherTests` in the same family. All three bind real loopback ports through
+`LoopbackPort.BindWithRetryAsync`, which retries only on `SocketError.AddressAlreadyInUse`. **The
+varying failure set across runs is what makes this flakiness rather than regression** — but it also
+means a real regression in these files would be indistinguishable from noise, which is the actual cost.
 
 **Why this matters more than one test.** This repo has already been bitten by a gate nobody trusted:
 `build.yml:85-90` documents four red tests merged through a green PR, and `nightly.yml:5-7` documents a
