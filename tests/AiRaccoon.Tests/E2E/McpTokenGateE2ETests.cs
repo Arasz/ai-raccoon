@@ -7,6 +7,7 @@ using AiRaccoon.Hosting.Node;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Tests.TestHelpers;
+using JetBrains.Annotations;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Client;
 using Shouldly;
@@ -22,12 +23,8 @@ namespace AiRaccoon.Tests.E2E;
 [Trait(TestCategories.Category, TestCategories.E2E)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 [Collection(E2ETestCollection.Name)]
-public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve)
-    : IClassFixture<McpTokenGateE2ETests.ServeFixture>
+public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve) : IClassFixture<McpTokenGateE2ETests.ServeFixture>
 {
-    private static readonly HttpClient HttpClient = new();
-    private static readonly TimeProvider TimeProvider = TimeProvider.System;
-
     private int Port => serve.Port;
 
     private string Url => $"http://127.0.0.1:{Port}/mcp";
@@ -98,7 +95,7 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
     public async Task Observability_NeedsNoToken()
     {
         // ADR-0008 discovery: `serve observability` finds a live server without knowing its data root.
-        using var response = await HttpClient.GetAsync($"http://127.0.0.1:{Port}/observability",
+        using var response = await serve.HttpClient.GetAsync($"http://127.0.0.1:{Port}/observability",
             TestContext.Current.CancellationToken);
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
@@ -115,19 +112,22 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
             request.Headers.Add(McpTokenGate.HeaderName, token);
         }
 
-        return await HttpClient.SendAsync(request, TestContext.Current.CancellationToken);
+        return await serve.HttpClient.SendAsync(request, TestContext.Current.CancellationToken);
     }
 
     /// <summary>One real token-guarded `serve` for the whole class: a boot per test would hold the
     /// process-global passphrase gate six times over.</summary>
+    [UsedImplicitly]
     public sealed class ServeFixture : IAsyncLifetime
     {
         private readonly CancellationTokenSource _cts = new(TimeSpan.FromSeconds(120));
         private readonly LockingWriter _stderr = new();
         private readonly LockingWriter _stdout = new();
+        private readonly TimeProvider _timeProvider = TimeProvider.System;
 
         private string? _originalPassphrase;
         private Task<int> _serve = Task.FromResult(0);
+        public HttpClient HttpClient { get; } = new();
 
         public string DataRoot { get; } = TestData.CreateTempRoot("ai-raccoon-mcp-token-gate");
 
@@ -154,12 +154,13 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
             Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, _originalPassphrase);
             TestData.EnvVarGate.Release();
             Directory.Delete(DataRoot, true);
+            HttpClient.Dispose();
         }
 
         private async Task WaitForListeningAsync()
         {
             var success = await WaitByPooling
-                .WaitForAsync(() => ValueTask.FromResult(_stdout.ToString().Contains("http://", StringComparison.Ordinal)), TimeProvider, TestContext.Current.CancellationToken)
+                .WaitForAsync(() => ValueTask.FromResult(_stdout.ToString().Contains("http://", StringComparison.Ordinal)), _timeProvider, TestContext.Current.CancellationToken)
                 .ConfigureAwait(false);
 
             if (!success)

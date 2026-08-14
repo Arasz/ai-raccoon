@@ -1,6 +1,5 @@
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
-using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Sync;
@@ -207,7 +206,7 @@ public class McpExceptionPathInstrumentationTests
         TimeProvider.System,
         null!)
     {
-        public override Task<SyncResult> MemorySyncAsync(string projectId, string? objectKey,
+        public override Task<SyncResult> MemorySyncAsync(string projectId, string? objectKey = null,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new SyncResult(0, 0, 0));
     }
@@ -217,21 +216,6 @@ public class McpExceptionPathInstrumentationTests
         public Task<CloudObject?> PullAsync(string objectKey, CancellationToken cancellationToken = default) => Task.FromResult<CloudObject?>(null);
 
         public Task<string> PushAsync(string objectKey, byte[] data, string? etag, CancellationToken cancellationToken = default) => Task.FromResult("fake-etag");
-    }
-
-    private sealed class FakeWorkspaceStore : IWorkspaceStore
-    {
-        public Task BeginAsync(Workspace workspace, DateTimeOffset startedAt,
-            CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
-
-        public Task CloseAsync(string projectId, string workspaceId, WorkspaceStatus status, DateTimeOffset closedAt,
-            CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
-
-        public Task<Workspace> RequireActiveAsync(string projectId, string workspaceId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new Workspace(workspaceId, projectId));
     }
 
     private sealed class FakeWatchService : IWatchService
