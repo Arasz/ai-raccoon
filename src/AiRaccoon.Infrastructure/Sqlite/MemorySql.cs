@@ -69,13 +69,6 @@ internal static class MemorySql
                                                  LIMIT 1
                                                  """;
 
-    public const string EntryExistsByPathInBucket = """
-                                                    SELECT 1 FROM entries
-                                                    WHERE path = @path AND scope IS @scope AND project_id = @projectId
-                                                      AND context_label IS @contextLabel AND workspace_id IS @workspaceId
-                                                    LIMIT 1
-                                                    """;
-
     // The shared tier is cross-project (uq_entries_shared_bucket is global): the loser of a
     // concurrent cross-project promote must find the winner's row without a project filter.
     public const string SelectSharedEntryByPathAndHash = """
@@ -111,7 +104,7 @@ internal static class MemorySql
     // snippet() is deferred to ranking survivors (docs/plans/2026-08-08-search-knn-perf.md §WP7) —
     // FtsSnippetsForSurvivors resolves it there instead.
     public const string SearchByFilter = """
-                                         SELECT e.hash AS Hash, 0 AS Seq, bm25(entries_fts, 1.0, 8.0, 16.0) AS Ranking,
+                                         SELECT e.hash AS Hash, bm25(entries_fts, 1.0, 8.0, 16.0) AS Ranking,
                                                 e.path AS Path, e.value AS Value, e.source_file AS SourceFile,
                                                 e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks,
                                                 e.id AS Id
@@ -139,7 +132,7 @@ internal static class MemorySql
     // v.distance, e.path` preserves the existing distance-tie break. Vector hits carry a fallback
     // snippet built in C# (the FTS list's snippet() wins for docs both modalities retrieve).
     public const string VectorSearchByFilter = """
-                                               SELECT e.hash AS Hash, 0 AS Seq, e.path AS Path, e.value AS Value,
+                                               SELECT e.hash AS Hash, e.path AS Path, e.value AS Value,
                                                       v.distance AS Distance, e.source_file AS SourceFile,
                                                       e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks
                                                FROM vec_entries v
@@ -152,7 +145,7 @@ internal static class MemorySql
     // same shape as the content query (source identity included) so both lists fuse in C# by
     // entry hash.
     public const string StructureVectorSearchByFilter = """
-                                                        SELECT e.hash AS Hash, 0 AS Seq, e.path AS Path, e.value AS Value,
+                                                        SELECT e.hash AS Hash, e.path AS Path, e.value AS Value,
                                                                v.distance AS Distance, e.source_file AS SourceFile,
                                                                e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks
                                                         FROM vec_structure v
@@ -358,6 +351,18 @@ internal static class MemorySql
                                               AND path IS NOT NULL
                                             ORDER BY path
                                             """;
+
+    // memory_get read path (ADR-0035): a hash addressable within the caller's own project rows
+    // plus the cross-project shared tier — the same reach SelectRatingForBump/BumpAccess already
+    // grant search hits.
+    public const string SelectEntryByHashForRead = """
+                                                   SELECT hash AS Hash, path AS Path, value AS Value, scope AS Scope,
+                                                          project_id AS ProjectId, context_label AS ContextLabel,
+                                                          workspace_id AS WorkspaceId, created_at AS CreatedAt
+                                                   FROM entries
+                                                   WHERE hash = @hash AND (project_id = @projectId OR scope = 'shared')
+                                                   LIMIT 1
+                                                   """;
 
     public const string SelectRatingForBump =
         "SELECT created_at AS CreatedAt, access_count AS AccessCount FROM entries " +

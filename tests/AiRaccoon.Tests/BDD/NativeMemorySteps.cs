@@ -455,14 +455,13 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
             new SearchQuery(projectId, query, SearchScope.All, wsId),
             CancellationToken.None);
 
-    [Then("results carry hash, seq, ranking, path and snippet")]
+    [Then("results carry hash, ranking, path and snippet")]
     public void ThenResultsCarryContractFields()
     {
         _lastSearch.ShouldNotBeNull();
         LastSearch.Count.ShouldBeGreaterThan(0);
         var r = _lastSearch[0];
         r.Hash.ShouldNotBeNullOrWhiteSpace();
-        r.Seq.ShouldBeGreaterThanOrEqualTo(0);
         r.Path.ShouldNotBeNullOrWhiteSpace();
         r.Snippet.ShouldNotBeNullOrWhiteSpace();
         r.Ranking.ShouldBeInRange(0.0, 1.0);

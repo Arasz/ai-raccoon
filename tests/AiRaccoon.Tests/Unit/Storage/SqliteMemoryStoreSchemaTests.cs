@@ -208,18 +208,24 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
         count.ShouldBe(1);
     }
 
+    /// <summary>
+    ///     WP5b/DA-F1: a workspace bucket dedupes the same way the shared/project buckets already
+    ///     do — byte-identical content under the same path/hash/workspace has no legitimate reason
+    ///     to exist twice, and doing so pays a second embedding and returns a duplicate hit.
+    /// </summary>
     [Fact]
-    public async Task OpenBank_MigrationLeavesWorkspaceRowsUntouched()
+    public async Task OpenBank_MigrationCollapsesWorkspaceDuplicates_KeepingEarliestRow()
     {
         await SeedDuplicateBucketsAsync(("w1", "ws.md", null, "acme", "ws-1"),
             ("w1", "ws.md", null, "acme", "ws-1"));
 
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
 
-        var count = await connection.ExecuteScalarAsync<long>(
-            "SELECT count(*) FROM entries WHERE workspace_id IS NOT NULL",
-            TestContext.Current.CancellationToken);
-        count.ShouldBe(2); // workspace scope is unconstrained by design
+        var rows = (await connection.QueryAsync<long>(
+                "SELECT id FROM entries WHERE workspace_id IS NOT NULL",
+                TestContext.Current.CancellationToken))
+            .ToList();
+        rows.ShouldHaveSingleItem(); // MIN(id) survivor, same dedup rule as the shared/project buckets
     }
 
     [Fact]
@@ -240,7 +246,7 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
     }
 
     [Fact]
-    public async Task UniqueIndex_AllowsSamePathDifferentHash_AndWorkspaceDuplicates()
+    public async Task UniqueIndex_AllowsSamePathDifferentHash()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
 
@@ -254,7 +260,21 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
             "VALUES ('h2', 'doc.md', 'chunk two', 'project', 'acme', 1, 1)",
             TestContext.Current.CancellationToken);
 
-        // Workspace rows: same bucket key twice stays legal (scope NULL escapes the partials).
+        var count = await connection.ExecuteScalarAsync<long>(
+            "SELECT count(*) FROM entries", TestContext.Current.CancellationToken);
+        count.ShouldBe(2);
+    }
+
+    /// <summary>
+    ///     WP5b/DA-F1: a workspace write has no logical reason to store byte-identical content
+    ///     twice under the same path/hash/workspace — doing so silently duplicates on retry, pays
+    ///     a second embedding, and returns a duplicate search hit.
+    /// </summary>
+    [Fact]
+    public async Task UniqueIndex_RejectsWorkspaceDuplicateBucket()
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+
         await connection.ExecuteAsync(
             "INSERT INTO workspaces (id, project_id, status, created_at) VALUES ('ws-1', 'acme', 'Active', 1)",
             TestContext.Current.CancellationToken);
@@ -262,14 +282,13 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
             "INSERT INTO entries (hash, path, value, scope, project_id, workspace_id, created_at, updated_at) " +
             "VALUES ('w1', 'ws.md', 'x', NULL, 'acme', 'ws-1', 1, 1)",
             TestContext.Current.CancellationToken);
-        await connection.ExecuteAsync(
+
+        var ex = await Should.ThrowAsync<SqliteException>(() => connection.ExecuteAsync(
             "INSERT INTO entries (hash, path, value, scope, project_id, workspace_id, created_at, updated_at) " +
             "VALUES ('w1', 'ws.md', 'x', NULL, 'acme', 'ws-1', 1, 1)",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken));
 
-        var count = await connection.ExecuteScalarAsync<long>(
-            "SELECT count(*) FROM entries", TestContext.Current.CancellationToken);
-        count.ShouldBe(4);
+        ex.SqliteErrorCode.ShouldBe(19); // SQLITE_CONSTRAINT
     }
 
     [Fact]

@@ -224,16 +224,29 @@ public sealed partial class SqliteMemoryStore(
 
         var fused = ReciprocalRankFusion.Fuse(
             [
-                (ModalityCandidates.ByBm25(ftsBatches), query.FtsWeight),
-                (ModalityCandidates.ByCosine(vectorBatches), query.VectorWeight)
+                (ModalityCandidates.ByBm25(ftsBatches, valueByHash), query.FtsWeight),
+                (ModalityCandidates.ByCosine(vectorBatches, valueByHash), query.VectorWeight)
             ],
             query.RrfK, 0, int.MaxValue);
         var merged = SearchResultMerger.Merge([fused], query.Limit, query.MinScore, query.RrfK,
             isPathQuery ? 0.0 : query.SourceLambda, query.ConsolidationThreshold, query.DocScoreFormula);
         merged = await ResolveDeferredSnippetsAsync(connection, merged, valueByHash, ftsQueryByHash, idByHash,
-            cancellationToken).ConfigureAwait(false);
+            query.Query, cancellationToken).ConfigureAwait(false);
         await BumpAccessAsync(connection, merged, query.ProjectId, cancellationToken).ConfigureAwait(false);
         return merged;
+    }
+
+    /// <summary>memory_get (ADR-0035): the caller's own rows plus the cross-project shared tier; null when no such hash is reachable.</summary>
+    public async Task<MemoryEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(hash);
+
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        var row = await connection.QueryFirstOrDefaultAsync<EntryRow>(
+                Def(MemorySql.SelectEntryByHashForRead, new { hash, projectId }, cancellationToken))
+            .ConfigureAwait(false);
+        return row is null ? null : ToEntry(row);
     }
 
     public async Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
@@ -714,39 +727,61 @@ public sealed partial class SqliteMemoryStore(
         return affected > 0;
     }
 
+    /// <summary>
+    ///     Entry-delete and sync tombstone in one transaction (ADR-0035/WP5a): a crash between the
+    ///     two used to leave the content deleted locally with no tombstone, resurrecting it on the
+    ///     next sync. Same BEGIN IMMEDIATE/COMMIT/ROLLBACK shape as <see cref="DeleteSourcePathAsync" />
+    ///     and <see cref="ReplaceFileAsync" />; both callers are top-level, so there is no nested-transaction hazard.
+    /// </summary>
     private async Task<bool> DeleteCoreAsync(SqliteConnection connection, string projectId, string hash,
         string? scope, CancellationToken cancellationToken)
     {
-        var rowScope = await connection.QueryFirstOrDefaultAsync<string?>(
-                Def(MemorySql.SelectScopeByHashAndProject, new { hash, projectId, scope }, cancellationToken))
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
             .ConfigureAwait(false);
+        try
+        {
+            var rowScope = await connection.QueryFirstOrDefaultAsync<string?>(
+                    Def(MemorySql.SelectScopeByHashAndProject, new { hash, projectId, scope }, cancellationToken))
+                .ConfigureAwait(false);
 
-        var recomputeContext = await connection.QueryFirstOrDefaultAsync<DeleteRecomputeRow>(
-                Def(MemorySql.SelectDeleteRecomputeContext, new { hash, projectId, scope }, cancellationToken))
-            .ConfigureAwait(false);
+            var recomputeContext = await connection.QueryFirstOrDefaultAsync<DeleteRecomputeRow>(
+                    Def(MemorySql.SelectDeleteRecomputeContext, new { hash, projectId, scope }, cancellationToken))
+                .ConfigureAwait(false);
 
-        var deleted = await connection.ExecuteAsync(
-                Def(MemorySql.DeleteByHashAndProject, new { hash, projectId, scope }, cancellationToken))
-            .ConfigureAwait(false);
+            var deleted = await connection.ExecuteAsync(
+                    Def(MemorySql.DeleteByHashAndProject, new { hash, projectId, scope }, cancellationToken))
+                .ConfigureAwait(false);
 
-        if (deleted > 0 && rowScope is not null)
+            if (deleted > 0 && rowScope is not null)
+            {
+                await connection.ExecuteAsync(
+                        Def(MemorySql.UpsertTombstone,
+                            new { hash, scope = rowScope, deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
+                            cancellationToken))
+                    .ConfigureAwait(false);
+            }
+
+            if (deleted > 0 && recomputeContext?.SourceFile is not null)
+            {
+                var context = ContextStringOf(recomputeContext.Scope, recomputeContext.ContextLabel,
+                    recomputeContext.WorkspaceId, projectId);
+                await RecomputeChunkColumnsAsync(connection, context, projectId, recomputeContext.SourceFile,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            return deleted > 0;
+        }
+        catch
         {
             await connection.ExecuteAsync(
-                    Def(MemorySql.UpsertTombstone,
-                        new { hash, scope = rowScope, deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
-                        cancellationToken))
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
+            throw;
         }
-
-        if (deleted > 0 && recomputeContext?.SourceFile is not null)
-        {
-            var context = ContextStringOf(recomputeContext.Scope, recomputeContext.ContextLabel,
-                recomputeContext.WorkspaceId, projectId);
-            await RecomputeChunkColumnsAsync(connection, context, projectId, recomputeContext.SourceFile,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        return deleted > 0;
     }
 
     private static async Task<string?> ReadSettingAsync(SqliteConnection connection, string key,
@@ -808,7 +843,7 @@ public sealed partial class SqliteMemoryStore(
     internal static IReadOnlyList<MemorySearchResult> BuildFtsResults(IReadOnlyList<SearchRow> rows) =>
     [
         .. rows.Select(row => new MemorySearchResult(
-            row.Hash, row.Seq, row.Ranking, row.Path, string.Empty,
+            row.Hash, row.Ranking, row.Path, string.Empty,
             row.SourceFile, row.ChunkIndex, row.TotalChunks))
     ];
 
@@ -875,7 +910,7 @@ public sealed partial class SqliteMemoryStore(
         IReadOnlyList<(VectorRow Row, double Score)> ranked) =>
     [
         .. ranked.Select(item => new MemorySearchResult(
-            item.Row.Hash, item.Row.Seq, item.Score, item.Row.Path, string.Empty,
+            item.Row.Hash, item.Score, item.Row.Path, string.Empty,
             item.Row.SourceFile, item.Row.ChunkIndex, item.Row.TotalChunks))
     ];
 
@@ -887,7 +922,7 @@ public sealed partial class SqliteMemoryStore(
     private static async Task<IReadOnlyList<MemorySearchResult>> ResolveDeferredSnippetsAsync(
         SqliteConnection connection, IReadOnlyList<MemorySearchResult> results,
         IReadOnlyDictionary<string, string> valueByHash, IReadOnlyDictionary<string, string> ftsQueryByHash,
-        IReadOnlyDictionary<string, long> idByHash, CancellationToken cancellationToken)
+        IReadOnlyDictionary<string, long> idByHash, string queryText, CancellationToken cancellationToken)
     {
         var deferred = results.Where(result => result.Snippet.Length == 0).ToList();
         if (deferred.Count == 0)
@@ -913,7 +948,7 @@ public sealed partial class SqliteMemoryStore(
                 }
 
                 return valueByHash.TryGetValue(result.Hash, out var value)
-                    ? result with { Snippet = SnippetFallback.From(value, result.Hash) }
+                    ? result with { Snippet = SnippetFallback.From(value, result.Hash, queryText) }
                     : result;
             })
         ];
@@ -1160,8 +1195,6 @@ public sealed partial class SqliteMemoryStore(
     {
         public string Hash { get; set; } = "";
 
-        public int Seq { get; set; }
-
         public double Ranking { get; set; }
 
         public string Path { get; set; } = "";
@@ -1189,8 +1222,6 @@ public sealed partial class SqliteMemoryStore(
     internal sealed class VectorRow
     {
         public string Hash { get; set; } = "";
-
-        public int Seq { get; set; }
 
         public string Path { get; set; } = "";
 

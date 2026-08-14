@@ -20,6 +20,7 @@ public sealed class MemoryTools(
     ILogger<MemoryTools> logger)
 {
     private const string TnMemoryWrite = "memory_write";
+    private const string TnMemoryGet = "memory_get";
     private const string TnMemorySearch = "memory_search";
     private const string TnMemoryList = "memory_list";
     private const string TnMemoryStats = "memory_stats";
@@ -59,6 +60,26 @@ public sealed class MemoryTools(
 
         var entry = await store.WriteAsync(request, cancellationToken);
         var result = new WriteResult(entry.Hash, entry.Path, entry.Context, entry.CreatedAt, entry.Stored, entry.Reason);
+        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        return envelope;
+    }
+
+    [McpServerTool(Name = TnMemoryGet)]
+    [Description(
+        "Reads one entry's full content by its content hash, as returned by memory_write or memory_search. An unknown hash is refused as unknown-hash.")]
+    public async Task<ApiEnvelope<GetResult>> Get(
+        [Description("The project id; every memory operation is scoped to a project.")]
+        string projectId,
+        [Description("The content hash to read.")]
+        string hash,
+        CancellationToken cancellationToken = default)
+    {
+        await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryGet, cancellationToken);
+        ArgumentException.ThrowIfNullOrWhiteSpace(hash);
+
+        var entry = await store.GetAsync(projectId, hash, cancellationToken)
+                    ?? throw new UnknownHashException(hash, projectId);
+        var result = new GetResult(entry.Hash, entry.Value, entry.Path, entry.Context, entry.CreatedAt);
         var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
         return envelope;
     }
@@ -243,6 +264,9 @@ public sealed class MemoryTools(
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record WriteResult(string Hash, string Path, string Context, long CreatedAt, bool Stored = true, string? Reason = null);
+
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
+    public sealed record GetResult(string Hash, string Value, string Path, string Context, long CreatedAt);
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record SearchResultList(IReadOnlyList<MemorySearchResult> Results);

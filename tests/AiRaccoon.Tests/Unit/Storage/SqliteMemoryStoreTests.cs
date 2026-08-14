@@ -9,6 +9,7 @@ using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -272,6 +273,29 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             .ShouldContain(e => e.Value == "cross project convention");
     }
 
+    /// <summary>
+    ///     WP3a/ADR-0035: a promoted shared copy gets a different row hash than its project
+    ///     original (ContentHash.Of(path, value) vs. shared/&lt;sha256(value)&gt;.md), so scope=all
+    ///     used to return both. Dedup is on content, preferring the project-scoped copy.
+    /// </summary>
+    [Fact]
+    public async Task Search_ScopeAll_DedupesAPromotedSharedCopy_AgainstItsProjectOriginal()
+    {
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "container registries need image scanning before publish"),
+            TestContext.Current.CancellationToken);
+        var shared = await _store.ShareAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
+        shared.Entry.Hash.ShouldNotBe(entry.Hash, "the shared copy must carry a different row hash for this to be a real dedup test");
+
+        var results = await _store.SearchAsync(
+            new SearchQuery("acme", "container registries image scanning", MinScore: 0.0),
+            TestContext.Current.CancellationToken);
+
+        results.Count.ShouldBe(1,
+            "the promoted shared copy and its project original are the same text and must not double-count");
+        results[0].Hash.ShouldBe(entry.Hash, "the project-scoped copy is preferred over the shared duplicate");
+    }
+
     [Fact]
     public async Task Share_Twice_IsIdempotent()
     {
@@ -294,6 +318,60 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
         ex.Message.ShouldContain("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd");
         ex.Message.ShouldContain("acme");
+    }
+
+    [Fact]
+    public async Task GetAsync_ReturnsFullValue_ForAKnownHash()
+    {
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "the full content memory_get must return"),
+            TestContext.Current.CancellationToken);
+
+        var fetched = await _store.GetAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
+
+        fetched.ShouldNotBeNull();
+        fetched.Value.ShouldBe("the full content memory_get must return");
+        fetched.Hash.ShouldBe(entry.Hash);
+        fetched.Path.ShouldBe(entry.Path);
+        fetched.Context.ShouldBe("project:acme");
+    }
+
+    [Fact]
+    public async Task GetAsync_WithUnknownHash_ReturnsNull()
+    {
+        var fetched = await _store.GetAsync("acme",
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd",
+            TestContext.Current.CancellationToken);
+
+        fetched.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task GetAsync_ResolvesASharedTierHash_RegardlessOfTheOwningProject()
+    {
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "cross-project shared convention"),
+            TestContext.Current.CancellationToken);
+        var shared = await _store.ShareAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
+
+        var fetched = await _store.GetAsync("someone-elses-project", shared.Entry.Hash,
+            TestContext.Current.CancellationToken);
+
+        fetched.ShouldNotBeNull();
+        fetched.Value.ShouldBe("cross-project shared convention");
+    }
+
+    [Fact]
+    public async Task GetAsync_DoesNotResolveAnotherProjectsPrivateRow()
+    {
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "acme-only private note"),
+            TestContext.Current.CancellationToken);
+
+        var fetched = await _store.GetAsync("someone-elses-project", entry.Hash,
+            TestContext.Current.CancellationToken);
+
+        fetched.ShouldBeNull();
     }
 
     [Fact]
@@ -322,6 +400,40 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
         deleted.ShouldBeFalse();
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Delete_WhenTombstoneInsertFails_RollsBackTheEntryDeleteToo()
+    {
+        // WP5a (ADR-0035): DeleteCoreAsync must not leave the entry gone with no tombstone — a
+        // crash between the two statements resurrects "deleted" content on the next sync. A
+        // persisted trigger simulates that mid-delete failure deterministically.
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "protected by the delete transaction"),
+            TestContext.Current.CancellationToken);
+
+        await using (var ddl = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await ddl.ExecuteAsync(new CommandDefinition(
+                """
+                CREATE TRIGGER block_tombstone_insert BEFORE INSERT ON sync_tombstones
+                BEGIN
+                    SELECT RAISE(ABORT, 'forced failure for test');
+                END
+                """, cancellationToken: TestContext.Current.CancellationToken));
+        }
+
+        await Should.ThrowAsync<SqliteException>(() =>
+            _store.DeleteAsync("acme", entry.Hash, TestContext.Current.CancellationToken));
+
+        (await ReadRowAsync(entry.Hash)).ShouldNotBeNull(
+            "a mid-delete failure must not leave the entry gone with no tombstone");
+
+        await using var check = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var tombstones = await check.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT count(*) FROM sync_tombstones WHERE hash = @hash",
+            new { hash = entry.Hash }, cancellationToken: TestContext.Current.CancellationToken));
+        tombstones.ShouldBe(0);
     }
 
     [Fact]
@@ -685,11 +797,12 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             await _store.WriteAsync(new MemoryWriteRequest("acme", content), TestContext.Current.CancellationToken);
         }
 
-        var offTopic = await _store.WriteAsync(
-            new MemoryWriteRequest("acme",
-                "sqlite schema write guards reject any bank whose version exceeds what the pipeline validator supports"),
-            TestContext.Current.CancellationToken);
-        var shared = await _store.ShareAsync("acme", offTopic.Hash, TestContext.Current.CancellationToken);
+        // A standalone shared-tier row (not promoted from a project original) — WP3a's dedup
+        // fix collapses a promoted copy against its project original by content, so a promoted
+        // duplicate of a row already asserted on above would no longer prove this regression.
+        var shared = await _store.AddContentAsync("acme", "shared/off-topic-schema-note.md",
+            "sqlite schema write guards reject any bank whose version exceeds what the pipeline validator supports",
+            ContextNaming.SharedContext, cancellationToken: TestContext.Current.CancellationToken);
 
         var results = await _store.SearchAsync(
             new SearchQuery("acme", query, Limit: 25, MinScore: 0.0),
@@ -707,8 +820,8 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [Fact]
     public void Merge_RrfAcrossContextBatches_PromotesDualRetrievedDocs_AndNormalizesToMax()
     {
-        var shared = new[] { Hit("h1", 1, "a.md"), Hit("h2", 2, "b.md") };
-        var project = new[] { Hit("h2", 1, "b.md"), Hit("h3", 2, "c.md") };
+        var shared = new[] { Hit("h1", "a.md"), Hit("h2", "b.md") };
+        var project = new[] { Hit("h2", "b.md"), Hit("h3", "c.md") };
 
         var merged = SearchResultMerger.Merge([shared, project], 10, rrfK: 60);
 
@@ -721,7 +834,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [Fact]
     public void Merge_SingleContextBatch_KeepsItsOrderAndNormalizesTopToOne()
     {
-        var results = new[] { Hit("h1", 1, "a.md"), Hit("h2", 2, "b.md"), Hit("h3", 3, "c.md") };
+        var results = new[] { Hit("h1", "a.md"), Hit("h2", "b.md"), Hit("h3", "c.md") };
 
         var merged = SearchResultMerger.Merge([results], 10);
 
@@ -732,7 +845,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [Fact]
     public void Merge_AppliesMinScoreAfterNormalization()
     {
-        var results = new[] { Hit("h1", 1, "a.md"), Hit("h2", 2, "b.md"), Hit("h3", 3, "c.md") };
+        var results = new[] { Hit("h1", "a.md"), Hit("h2", "b.md"), Hit("h3", "c.md") };
 
         var merged = SearchResultMerger.Merge([results], 10, 0.9, 10);
 
@@ -745,9 +858,9 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     {
         var results = new[]
         {
-            new MemorySearchResult("h1", 1, 0.4, "a.md", "s"),
-            new MemorySearchResult("h2", 2, 0.9, "b.md", "s"),
-            new MemorySearchResult("h3", 3, 0.7, "c.md", "s")
+            new MemorySearchResult("h1", 0.4, "a.md", "s"),
+            new MemorySearchResult("h2", 0.9, "b.md", "s"),
+            new MemorySearchResult("h3", 0.7, "c.md", "s")
         };
 
         var merged = SearchResultMerger.Merge([results], 2);
@@ -761,7 +874,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         SearchResultMerger.Merge([[], []], 10)
             .ShouldBeEmpty();
 
-    private static MemorySearchResult Hit(string hash, int seq, string path) => new(hash, seq, 0, path, "s");
+    private static MemorySearchResult Hit(string hash, string path) => new(hash, 0, path, "s");
 
     private async Task<EntryRow?> ReadRowAsync(string hash)
     {

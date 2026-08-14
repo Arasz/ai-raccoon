@@ -107,7 +107,7 @@ Feature: Native memory store (ai-raccoon MCP server)
         Scenario: Search returns ranked results with the preserved contract
             Given project "acme-web" contains "project knowledge about the codebase"
             When I search for "project knowledge" in project "acme-web"
-            Then results carry hash, seq, ranking, path and snippet
+            Then results carry hash, ranking, path and snippet
             And ranking is normalized into 0..1
         Scenario: A keyword-only query with no vector hits still returns keyword results
             Given content that only matches the keyword query exists in project "acme-web"

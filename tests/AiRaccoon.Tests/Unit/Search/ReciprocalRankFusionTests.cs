@@ -9,7 +9,7 @@ namespace AiRaccoon.Tests.Unit.Search;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ReciprocalRankFusionTests
 {
-    private static MemorySearchResult Hit(string hash, string path = "") => new(hash, 0, 0, string.IsNullOrEmpty(path) ? hash : path, "snippet");
+    private static MemorySearchResult Hit(string hash, string path = "") => new(hash, 0, string.IsNullOrEmpty(path) ? hash : path, "snippet");
 
     [Fact]
     public void Fuse_Weights2To1_FavoursTheKeywordRankedList()
@@ -99,8 +99,8 @@ public sealed class ReciprocalRankFusionTests
     [Fact]
     public void Fuse_PrefersTheFirstListsPayload_ForASharedHash()
     {
-        var fts = new[] { new MemorySearchResult("a", 0, 0, "a.md", "keyword snippet") };
-        var vec = new[] { new MemorySearchResult("a", 0, 0, "a.md", "vector teaser") };
+        var fts = new[] { new MemorySearchResult("a", 0, "a.md", "keyword snippet") };
+        var vec = new[] { new MemorySearchResult("a", 0, "a.md", "vector teaser") };
 
         var fused = ReciprocalRankFusion.Fuse([(fts, 1), (vec, 1)], 60, 0, 10);
 

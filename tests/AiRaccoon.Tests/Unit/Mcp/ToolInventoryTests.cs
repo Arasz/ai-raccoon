@@ -36,8 +36,9 @@ public class ToolInventoryTests
             .Select(x => x.Attr.Name)
             .ToList();
 
-        tools.Count.ShouldBe(25);
+        tools.Count.ShouldBe(26);
         tools.ShouldContain("memory_write");
+        tools.ShouldContain("memory_get");
         tools.ShouldContain("memory_search");
         tools.ShouldContain("memory_list");
         tools.ShouldContain("memory_stats");

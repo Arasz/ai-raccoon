@@ -80,7 +80,7 @@ public sealed class MemoryToolsAccessModeTests
     public async Task RoMode_WriteIsDenied_AndSearchStillWorks()
     {
         SetMode(perProject: "ro");
-        _store.SearchResults = [new MemorySearchResult("h1", 1, 0.9, "p.md", "content")];
+        _store.SearchResults = [new MemorySearchResult("h1", 0.9, "p.md", "content")];
 
         var writeEx = await Should.ThrowAsync<AccessDeniedException>(() =>
             _tools.Write("acme-web", "content", cancellationToken: TestContext.Current.CancellationToken));

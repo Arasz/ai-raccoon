@@ -24,7 +24,6 @@ public sealed class SnippetLazinessTests
             .Select(i => new SqliteMemoryStore.VectorRow
             {
                 Hash = $"hash-{i}",
-                Seq = i,
                 Path = $"p{i}.md",
                 Value = LongValue,
                 SourceFile = null,
@@ -52,7 +51,6 @@ public sealed class SnippetLazinessTests
             .Select(i => new SqliteMemoryStore.SearchRow
             {
                 Hash = $"hash-{i}",
-                Seq = i,
                 Ranking = 1.0 - i * 0.01,
                 Path = $"p{i}.md",
                 Value = LongValue,
