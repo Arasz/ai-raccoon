@@ -57,9 +57,14 @@ public sealed partial class ServerRestart : IServerRestart
     {
         Guard.IsNotNull(tokenFile);
 
-        if (!await _probe.RespondsAsync(port, ctx))
+        if (RestartTransition.FromProbe(await _probe.ProbeAsync(port, ctx)) is { } settled)
         {
-            return new RestartResult(RestartOutcome.Nothing);
+            if (settled is RestartOutcome.Unknown)
+            {
+                Log.ProbeUnanswered(_logger, port);
+            }
+
+            return new RestartResult(settled);
         }
 
         if (await IdentifyAsync(port, ctx) is not { Name: ServerInfo.ServerName } info)
@@ -189,5 +194,9 @@ public sealed partial class ServerRestart : IServerRestart
         [LoggerMessage(EventId = 655, Level = LogLevel.Error,
             Message = "ai-raccoon: the listener on port {Port} does not identify as an ai-raccoon server")]
         public static partial void Foreign(ILogger logger, int port);
+
+        [LoggerMessage(EventId = 656, Level = LogLevel.Warning,
+            Message = "ai-raccoon: port {Port} gave the probe no answer; nothing is asked to stop")]
+        public static partial void ProbeUnanswered(ILogger logger, int port);
     }
 }

@@ -50,6 +50,7 @@ new number. Add an ADR for any architecture-level decision via `create-task-spec
 | [0040 — Read-path query guard](0040-read-path-query-guard.md) | `memory_search` gets a two-tier guard evaluated on the raw query before any other work: refuse a query that is itself machine output, annotate one that merely contains log-like content |
 | [0041 — Structural/lexical noise detector](0041-structural-noise-detector.md) | A pure shape-statistics detector (no embedding) joins the read-path warn tier as a third input, default off; it can add an annotation but never a refusal |
 | [0042 — Fixtures are built by the product, not beside it](0042-fixtures-are-built-by-the-product-not-beside-it.md) | Deletes the parallel Python chunker that populated a `section` column the product never wrote, and routes the corpus scripts through `memory_ingest_file`; a fixture built by a second implementation hides the first one's defects |
+| [0043 — A probe with no answer is not an empty port](0043-a-probe-with-no-answer-is-not-an-empty-port.md) | `ProbeVerdict` splits a refused connection (proof the port is free) from a probe that got no answer at all; `serve --restart` may still bind on the unknown, but a refused bind now refutes the pre-check instead of reporting a lost port nothing ever took |
 
 ## Numbers never used
 

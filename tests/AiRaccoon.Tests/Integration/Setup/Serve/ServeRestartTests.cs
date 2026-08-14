@@ -197,8 +197,41 @@ public sealed class ServeRestartTests : IDisposable
         run.Stderr.ShouldNotContain("the ai-raccoon  ");
     }
 
+    /// <summary>
+    ///     A listener that holds the port and never reads the connection: the probe can only time
+    ///     out, deterministically, on any machine. `serve --restart` must not read that silence as
+    ///     an empty port, and — once the bind refutes it — must not claim a restart it never
+    ///     attempted (ADR-0043).
+    /// </summary>
     [Fact]
-    public async Task AForeignListener_StillReportsPortInUse()
+    public async Task AListenerThatNeverAnswersTheProbe_SaysNothingWasAskedToStop()
+    {
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EnvEncryptionKeyProvider.EnvVarName, null));
+        // Reserved and never released: connections queue in the backlog and are never answered.
+        using var silent = LoopbackPort.Reserve();
+        await using var run = Start(["--data-root", _dataRoot, "serve", "--port", silent.Port.ToString(), "--restart"]);
+
+        var exit = await run.Exit.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+
+        exit.ShouldBe(ExitCode.RestartProbeUnanswered);
+        run.Stderr.ShouldContain("in use");
+        run.Stderr.ShouldContain("no answer");
+        run.Stderr.ShouldContain("nothing was asked to stop");
+        // Nothing was restarted, so nothing can have been taken from this run.
+        run.Stderr.ShouldNotContain("took the port");
+        run.Stdout.ShouldBeEmpty();
+        run.Stderr.ShouldNotContain("   at ");
+    }
+
+    /// <summary>
+    ///     A raw listener that accepts the connection and hangs up answers no probe, so `serve`
+    ///     cannot say what holds the port — only that the bind proved something does. Before
+    ///     ADR-0043 that was the plain in-use line and <see cref="ExitCode.PortInUse" />, which
+    ///     hid that the restart never happened; now the code says so and stays retryable.
+    /// </summary>
+    [Fact]
+    public async Task AForeignListener_ReportsAPortInUseThatNothingWasAskedToStop()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
             (EnvEncryptionKeyProvider.EnvVarName, null));
@@ -207,9 +240,9 @@ public sealed class ServeRestartTests : IDisposable
 
         var exit = await run.Exit.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
 
-        // Not an ai-raccoon, so it is never asked to stop; the unchanged in-use line is the answer.
-        exit.ShouldBe(ExitCode.PortInUse);
+        exit.ShouldBe(ExitCode.RestartProbeUnanswered);
         run.Stderr.ShouldContain("in use");
+        run.Stderr.ShouldContain("nothing was asked to stop");
     }
 
     [Fact]

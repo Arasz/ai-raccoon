@@ -1,7 +1,9 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Text;
 using AiRaccoon.Resilience;
+using CommunityToolkit.Diagnostics;
 using Polly;
 
 namespace AiRaccoon.Hosting.Common;
@@ -14,17 +16,20 @@ namespace AiRaccoon.Hosting.Common;
 public sealed class ServerProbe : IServerProbe
 {
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly TimeSpan _requestTimeout;
     private readonly ResiliencePipeline _resiliencePipeline;
 
-    public ServerProbe(IHttpClientFactory httpClientFactory, ResiliencePipeline? resiliencePipeline = null)
+    public ServerProbe(IHttpClientFactory httpClientFactory, ResiliencePipeline? resiliencePipeline = null, TimeSpan? requestTimeout = null)
     {
         _httpClientFactory = httpClientFactory;
         _resiliencePipeline = resiliencePipeline ?? ResiliencePipelineFactory.CreateProbePipeline();
+        _requestTimeout = requestTimeout ?? RequestTimeout;
+        Guard.IsGreaterThan(_requestTimeout, TimeSpan.Zero);
     }
 
     /// <summary>Probe over one pre-configured client (tests route it to an in-memory host).</summary>
-    public ServerProbe(HttpClient httpClient, ResiliencePipeline? resiliencePipeline = null)
-        : this(new SingleClientFactory(httpClient), resiliencePipeline)
+    public ServerProbe(HttpClient httpClient, ResiliencePipeline? resiliencePipeline = null, TimeSpan? requestTimeout = null)
+        : this(new SingleClientFactory(httpClient), resiliencePipeline, requestTimeout)
     {
     }
 
@@ -32,14 +37,19 @@ public sealed class ServerProbe : IServerProbe
 
     public Task<bool> RespondsAsync(int port, CancellationToken ctx) => RespondsAsync(EndpointFor(port), ctx);
 
-    public async Task<bool> RespondsAsync(Uri endpoint, CancellationToken ctx)
+    public async Task<bool> RespondsAsync(Uri endpoint, CancellationToken ctx) =>
+        await ProbeAsync(endpoint, ctx) is ProbeVerdict.Answered;
+
+    public Task<ProbeVerdict> ProbeAsync(int port, CancellationToken ctx) => ProbeAsync(EndpointFor(port), ctx);
+
+    public async Task<ProbeVerdict> ProbeAsync(Uri endpoint, CancellationToken ctx)
     {
         try
         {
             return await _resiliencePipeline.ExecuteAsync(async attemptToken =>
             {
                 using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(ctx, attemptToken);
-                attemptCts.CancelAfter(RequestTimeout);
+                attemptCts.CancelAfter(_requestTimeout);
 
                 using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
                 request.Content = new StringContent("x", Encoding.UTF8, new MediaTypeHeaderValue("application/json"));
@@ -53,17 +63,36 @@ public sealed class ServerProbe : IServerProbe
                 }
 
                 var body = await response.Content.ReadAsStringAsync(attemptCts.Token);
-                return body.Contains("jsonrpc", StringComparison.Ordinal);
+                // A reply that is not ai-raccoon's still proves a listener, so it is never NotListening.
+                return body.Contains("jsonrpc", StringComparison.Ordinal) ? ProbeVerdict.Answered : ProbeVerdict.Unanswered;
             }, ctx);
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
-            return false;
+            return WasRefused(ex) ? ProbeVerdict.NotListening : ProbeVerdict.Unanswered;
         }
         catch (OperationCanceledException) when (!ctx.IsCancellationRequested)
         {
-            return false;
+            // The attempt bound expired: the port took the connection and said nothing.
+            return ProbeVerdict.Unanswered;
         }
+    }
+
+    /// <summary>
+    ///     True when the connection was refused — the one failure that proves nothing holds the
+    ///     port. A reset, a hang-up or a timeout all leave a listener possible.
+    /// </summary>
+    private static bool WasRefused(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is SocketException { SocketErrorCode: SocketError.ConnectionRefused })
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public static Uri EndpointFor(int port) => new($"http://127.0.0.1:{port}/mcp");
