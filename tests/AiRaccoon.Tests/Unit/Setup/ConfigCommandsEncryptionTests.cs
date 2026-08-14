@@ -44,7 +44,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         "bws not found — install the Bitwarden CLI (bws) and configure BWS_ACCESS_TOKEN (https://bitwarden.com/help/cli/)";
 
     // Tests that set/clear AIRACCOON_DB_PASSPHRASE are serialized with CliCommandRunnerTests
-    // via TestData.EnvVarGate (the env var is process-global).
+    // via EnvScope, which takes TestData.EnvVarGate (the env var is process-global).
     private readonly string _dataRoot = TestData.CreateTempRoot();
 
     private FakeLogger<EncryptionCommands>? _lastLogger;
@@ -81,88 +81,27 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         return new RunResult(exit, stdout.ToString(), stderr.ToString(), bank);
     }
 
-    private static T WithEnvPassphrase<T>(string? value, Func<T> action)
+    private static async Task<T> WithEnvPassphrase<T>(string? value, Func<Task<T>> action)
     {
-        TestData.EnvVarGate.Wait();
-        try
-        {
-            var original = Environment.GetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName);
-            try
-            {
-                Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, value);
-                return action();
-            }
-            finally
-            {
-                Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, original);
-            }
-        }
-        finally
-        {
-            TestData.EnvVarGate.Release();
-        }
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EnvEncryptionKeyProvider.EnvVarName, value));
+        return await action();
     }
 
     private static async Task<T> WithBitwardenIdEnvVars<T>(string? projectId, string? secretId, Func<Task<T>> action)
     {
-        TestData.EnvVarGate.Wait();
-        try
-        {
-            var originalProjectId = Environment.GetEnvironmentVariable(EncryptionCommands.ProjectIdEnvVar);
-            var originalSecretId = Environment.GetEnvironmentVariable(EncryptionCommands.SecretIdEnvVar);
-            try
-            {
-                Environment.SetEnvironmentVariable(EncryptionCommands.ProjectIdEnvVar, projectId);
-                Environment.SetEnvironmentVariable(EncryptionCommands.SecretIdEnvVar, secretId);
-                return await action();
-            }
-            finally
-            {
-                Environment.SetEnvironmentVariable(EncryptionCommands.ProjectIdEnvVar, originalProjectId);
-                Environment.SetEnvironmentVariable(EncryptionCommands.SecretIdEnvVar, originalSecretId);
-            }
-        }
-        finally
-        {
-            TestData.EnvVarGate.Release();
-        }
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EncryptionCommands.ProjectIdEnvVar, projectId), (EncryptionCommands.SecretIdEnvVar, secretId));
+        return await action();
     }
 
 
-    // STRAND PROBE 1 (temporary): a holder that never releases must not wedge the next acquire
-    // forever. WithEnvPassphrase takes the gate with Wait() — no token, no timeout.
+    /// <summary>
+    ///     A Func&lt;T&gt; wrapper around an async body infers T = Task and releases the gate at the
+    ///     first await, letting a second holder in while the override is still in force.
+    /// </summary>
     [Fact]
-    public async Task StrandProbe_AcquireHonoursTheCallersToken_RatherThanBlockingForever()
-    {
-        await TestData.EnvVarGate.WaitAsync(TestContext.Current.CancellationToken);
-        Task? probe = null;
-        try
-        {
-            using var caller = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
-            var token = caller.Token;
-            probe = Task.Run(() => WithEnvPassphrase("probe", () => { token.ThrowIfCancellationRequested(); return 0; }),
-                CancellationToken.None);
-
-            await Should.ThrowAsync<OperationCanceledException>(() =>
-                probe.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken));
-        }
-        finally
-        {
-            // Whatever the probe did, the permit we took goes back; the probe's own acquire
-            // (once it wins) is released by WithEnvPassphrase's own finally.
-            TestData.EnvVarGate.Release();
-            if (probe is not null)
-            {
-                await probe.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken)
-                    .ContinueWith(static _ => { }, TaskScheduler.Default);
-            }
-        }
-    }
-
-    // STRAND PROBE 2 (temporary): the gate must stay held for the whole awaited body.
-    // WithEnvPassphrase is Func<T>, so with T = Task<...> it releases at the first await.
-    [Fact]
-    public async Task StrandProbe_TheGateStaysHeldUntilTheAwaitedBodyCompletes()
+    public async Task WithEnvPassphrase_HoldsTheGateUntilTheAwaitedBodyCompletes()
     {
         var bodyStarted = new TaskCompletionSource();
         var letBodyFinish = new TaskCompletionSource();
@@ -176,7 +115,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
         await bodyStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
-        // The body is still running, so the gate must still be held and this must NOT succeed.
+        // Bounded on purpose: the body is still running, so this acquire must lose.
         var stolen = await TestData.EnvVarGate.WaitAsync(TimeSpan.FromMilliseconds(500),
             TestContext.Current.CancellationToken);
         try
