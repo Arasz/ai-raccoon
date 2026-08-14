@@ -90,6 +90,34 @@ active ongoing loss:
 one. No filter-recall work before WP1. This is a further argument for WP2 (deleting the filter)
 over repairing it.
 
+**Both defects are in shipped releases.** `v1.10.0` (2026-08-13) and `v1.11.0` (2026-08-14) each
+contain the noise filter and the auto-TTL, and `git diff v1.11.0..HEAD -- src/` is **empty** —
+HEAD's production code is byte-identical to the published tag. Anyone who installed the tool has
+them. That is the argument for shipping Wave 1 as its own release rather than accumulating waves.
+
+### Review integrity — what an adversarial pass changed
+
+The findings above were re-attacked by an independent reviewer instructed to falsify them, which
+**refuted or corrected six claims**. They are marked inline; summarised here because a reader
+should know which way the errors ran:
+
+| Claim | Outcome |
+|---|---|
+| B1 "the content is destroyed / nothing is persisted" | **Refuted** — `noise_entries` retains it; correct word is *unreachable* |
+| B2 "no tool returns a memory's content" | **Refuted as an absolute** — `memory_promotion_list(includeFullValue:true)` does, for queue rows only |
+| Noise filter costs "~6.9 ms" per valid write | **Corrected** — 1.9–5.2 ms, length-dependent |
+| "Rename `proc_98765` → `bash_7` escapes rejection" | **Refuted** — still rejected; row withdrawn |
+| "Citing a README halves the score" | **Refuted, and the truth is worse** — it drives the score to 0.000 |
+| Proposed index gives 2.3–2.8× | **Refuted on an ANALYZE'd bank** (~1.0×); a better index gives 11.3 ms → 0.007 ms |
+| ML-F5 "gates derive their own thresholds" | **Softened** — those tests are documented gate-machinery tests, not a defect |
+| RAG-F14 "floor lowered with no recorded reason" | **Refuted** — the reason is recorded in the test file |
+| RAG-F8 "corpus has no `sourceFile`" | **Partially correct** — 761/761 rows have it; the gap is in a different harness |
+
+**Every core conclusion survived**: both blockers, the 0/50 recall, the near-orthogonal anchors,
+the sub-8-word TTL, the day-22.2 arithmetic, and the dual-vector ranking defect were each
+independently reproduced. What failed were supporting numbers — which is why they were attacked
+before anyone implemented against them.
+
 ## The two blockers
 
 ### B1 — `memory_write` reports a fabricated success for content it discarded
@@ -109,17 +137,31 @@ if (isNoise)
 }
 ```
 
-Nothing is persisted. `MemoryTools.cs:60-63` maps that fabricated entry straight into a success
-envelope, under a tool description that reads *"Returns the stored entry."*
+**No row is written to `entries`.** `MemoryTools.cs:60-63` maps that fabricated entry straight
+into a success envelope, under a tool description that reads *"Returns the stored entry."*
 
 Every rejected write returns **the same** hash and path, so an agent cannot distinguish two
 dropped writes from each other or from a real one. `memory_delete("noise_hash")` reports
-`deleted=0` — indistinguishable from an idempotent no-op. The content goes to a `noise_entries`
-table that **no tool, CLI verb, or SELECT anywhere in `src/` can read** (verified: the only
-references are one INSERT and one CREATE TABLE). ADR-0029 §Decision 2 ratifies this explicitly
-("we return a dummy success entry") and claims the table builds "a high-quality dataset of true
-negatives" — it cannot, because nothing reads it. There is no kill switch: `grep -rn -iE
-'noise.*enabled' src/` returns nothing, and both policies are registered unconditionally.
+`deleted=0` — indistinguishable from an idempotent no-op.
+
+> **Correction (adversarial review, reproduced).** An earlier revision of this document said the
+> content is *destroyed* and that *nothing is persisted*. **That is wrong.**
+> `SqliteNoiseStore.RecordNoiseAsync` does persist it — `INSERT INTO noise_entries
+> (request_content, project_id, source_file, detected_by_policy, expires_at, created_at)`. The
+> accurate claim is that the content becomes **unreachable, not destroyed**: no tool, CLI verb or
+> SELECT anywhere in `src/` reads `noise_entries` (the only references are that INSERT and the
+> CREATE TABLE), and ML-F8 shows the promised 14-day purge was never implemented, so the copies
+> accumulate forever. The severity is unchanged — an agent still cannot retrieve, verify or act
+> on its own write — but "destroyed" overstated it and the distinction matters for the fix.
+
+ADR-0029 §Decision 2 ratifies this explicitly ("we return a dummy success entry") and claims the
+table builds "a high-quality dataset of true negatives" — it cannot serve that purpose while
+nothing reads it. There is no kill switch: `grep -rn -iE 'noise.*enabled' src/` returns nothing,
+and both policies are registered unconditionally.
+
+**One caller does inspect the sentinel:** `WritePerformanceBenchmarkTests.cs:70` branches on
+`entry.Hash == "noise_hash"`. Removing the sentinel breaks that test, so the fix must land with
+it — see the plan's WP1.
 
 **Why it outranks everything else:** this is the one path in a memory server that destroys an
 agent's memory and tells it the opposite.
@@ -135,9 +177,19 @@ matched.
 **Severity:** BLOCKER · **Effort:** QUICK · **Surface:** `src/AiRaccoon/Tools/`, `SnippetFallback`
 *Found by: RAG (F5); tool inventory verified by orchestrator (O13).*
 
-The complete `[McpServerTool]` inventory is 25 tools. **None of them reads an entry.** There is
-no `memory_get`, no `memory_read`. The only content an agent ever receives is `memory_search`'s
-snippet, and for a vector hit — i.e. every semantic-search win — that snippet comes from
+The complete `[McpServerTool]` inventory is 25 tools. **None of them reads an entry by hash.**
+There is no `memory_get`, no `memory_read`.
+
+> **Correction (adversarial review).** An earlier revision said "no tool returns a memory's
+> content", which is false as an absolute: `memory_promotion_list(includeFullValue: true)`
+> returns `row.Value` in full (`PromotionTools.cs:29,43,48-49`). But it reads only the
+> *promotion queue* — candidates awaiting shared-tier review — and is not hash-addressable, so it
+> is no route to an arbitrary memory. The precise claim, which stands: **no tool retrieves a
+> given entry's content by its hash.** `memory_list` returns a file tree and `memory_stats`
+> returns counts, as originally characterised.
+
+The only content an agent receives for an ordinary search hit is `memory_search`'s snippet, and
+for a vector hit — i.e. every semantic-search win — that snippet comes from
 `SnippetFallback.From`:
 
 ```csharp
@@ -169,14 +221,28 @@ the tests and the benchmark could not catch what was wrong.
 **The zero-shot noise filter does not work, and the number that justified it measures something
 else.** [MEASURED, ML lane F3]
 
-| Measurement | Result |
-|---|---|
-| Recall on the 50 noise strings ADR-0029 credits it with | **0/50** |
-| Recall on 12 realistic tool-noise strings at the shipped `t=0.20` | **2/12** |
-| …of which already caught free by the deterministic Hermes policy | 1 of the 2 |
-| Cost added to every **valid** write | **~6.9 ms** (vs 0.014 ms for Hermes alone) |
-| Rename `proc_98765` → `bash_7` | distance 0.155 → **0.425**, no longer rejected |
-| Mutual distance between the three hardcoded "noise" anchors | 0.757 / 0.821 / 0.881 |
+Two independent lanes measured this against the real bundled MiniLM model. Rows marked
+**reproduced** were confirmed by the adversarial reviewer running its own harness; rows marked
+**corrected** are where that reviewer's measurement disagreed with the first lane's and the
+reviewer's figure is used.
+
+| Measurement | Result | Status |
+|---|---|---|
+| Recall on the 50 noise strings ADR-0029 credits it with | **0/50** (min distance 0.244 vs threshold 0.20) | **reproduced exactly** |
+| Recall of the deterministic Hermes policy on the same 50 | **50/50** | reproduced |
+| Mutual distance between the three hardcoded "noise" anchors | **0.757 / 0.821 / 0.881** | **reproduced to 3 decimals** |
+| Cost added to every **valid** write | **1.9 ms** (benchmark's own note) to **5.2 ms** (~65-word note) — length-dependent | **corrected** from "~6.9 ms constant" |
+| Cost of the deterministic Hermes policy | **0.0001 ms** — a ~17,000× ratio | reproduced |
+| Recall on 12 realistic tool-noise strings at `t=0.20` | 2/12 | not re-run |
+
+**Two claims from the first lane did not reproduce and are withdrawn:** the "~6.9 ms" figure
+(it is length-dependent, 1.9–5.2 ms) and the "rename `proc_98765` → `bash_7` moves distance
+0.155 → 0.425 and escapes rejection" row — the reviewer measured 0.014 → 0.145, **still below
+the threshold and still rejected**. The case for deletion does not need either: 0/50 recall
+against a free regex that scores 50/50, at ~17,000× the cost, carries it alone.
+
+The three anchors are near-orthogonal, so "noise" is not one region of embedding space and no
+single global threshold can cover it — there is nothing here to tune.
 
 The three anchors are near-orthogonal, so "noise" is not one region of embedding space and no
 single global threshold can cover it. ADR-0029's table attributes "100% rejection recall (50/50)"
@@ -193,16 +259,25 @@ transient with a 3-day TTL. **Every memory under 8 words therefore gets a deleti
 unconditionally** — verified constants, verified threshold. Measured: `"Push after every
 commit."` → score 0.500 → `ttl=3`.
 
+Independently reproduced by the adversarial reviewer: 5/6/7-word writes → score 0.500 → `ttl=3`;
+an 8-word write → 1.070 → no TTL. The only escape is an exact-duplicate write, which
+short-circuits earlier at `SqliteMemoryStore.cs:75-81`.
+
 It is worse than word count. The policy passes `Path: request.SourceFile ?? "memory_write"`,
 which defeats the classifier's own documented rule that a hex path means "organic write, not
-document chunk". Measured on identical 55-word text, varying only `sourceFile`:
+document chunk" (`ProvenanceArchetype.cs:129`). Measured on identical 55-word text, varying only
+`sourceFile` — **the adversarial reviewer's figures, which supersede the first lane's**:
 
 | `sourceFile` | score | ttl |
 |---|---|---|
-| *(none)* | 1.529 | none |
-| `docs/adr/0025-the-sweep-reaper.md` | 1.025 | none |
-| `docs/README.md` | 0.452 | **3 days** |
-| `README.md` | 0.452 | **3 days** |
+| *(none)* | **1.934** | none |
+| `docs/adr/0025-the-sweep-reaper.md` | **0.254** | **3 days** |
+| `README.md` | **0.000** | **3 days** |
+
+The first lane reported 1.529 / 1.025 / 0.452 and concluded "citing a README halves the score".
+That did not reproduce, and **the real behaviour is worse than it claimed**: citing a `README.md`
+drives the score to zero, and even citing an ADR — the most durable content the project has —
+lands under the threshold and arms the reaper.
 
 CLAUDE.md instructs agents to "write the finding back with `memory_write` including the source
 path". **Following the project's own documented practice arms the reaper on the memory.**
@@ -299,8 +374,8 @@ bank, not the mixed bank the product actually produces.
 | # | Finding | Sev | Effort |
 |---|---|---|---|
 | RAG-F2 | **0 of 761 rows** in the gate corpus have a structure vector; `vec_structure` is empty. No gate exercises the structure modality at all | HIGH | MEDIUM |
-| RAG-F8 | Corpus is ingested without `sourceFile`, so source-affinity ranking is structurally a no-op in the parity gate | MEDIUM | SMALL |
-| RAG-F14 | nDCG floor was ratcheted down from ADR-0006's measured 0.722 to 0.674 with no recorded reason | LOW | QUICK |
+| RAG-F8 | **PARTIALLY CORRECT:** `jsaa-memory.db` has `source_file` on **761/761** rows, so affinity is *not* a no-op there. It is a no-op only in the `RealWorldCorpus` harness, which calls `AddContentAsync` without `sourceFile` (`ManagedHarness.cs:66`). A better argument for regeneration: the fixture is on an older schema, missing `chunk_index`/`total_chunks`/`source_id` | MEDIUM | SMALL |
+| RAG-F14 | **REFUTED as stated.** The nDCG re-pin's reason *is* recorded, at `RrfParameterSweepTests.cs:161-166` (corpus re-pin + ADR-0015 cross-platform rank tolerance). Do **not** hunt for a lost 0.048; the residual action is only to amend ADR-0006 so the ADR and the gate agree | LOW | QUICK |
 | RAG-F9 | `GoldenFile_MatchesFreshReferenceRun` tests a vendored legacy extension, not AiRaccoon's search path — cannot fail on any retrieval change, and burns a Speed=Slow CI slot | MEDIUM | QUICK |
 
 **This is the prerequisite for proving WP3 red.** Until it lands, every retrieval number this
@@ -324,7 +399,23 @@ project quotes describes a pipeline it does not ship.
 
 | # | Finding | Sev | Effort |
 |---|---|---|---|
-| DA-F4 | **MEASURED:** no index supports the `memory_write` dedup check or the watch replace-by-path delete. Adding `idx_entries_project_committed` took 200 calls from 5.19→1.88 ms and 5.78→2.46 ms (**2.3–2.8×**) at only 20K rows, and the gap widens with bank size | HIGH | SMALL |
+| DA-F4 | **MEASURED, then CORRECTED:** the `memory_write` dedup check and the watch replace-by-path delete are unindexed for their filter shape. **But the originally proposed index is near-worthless** — see below | HIGH | SMALL |
+
+> **DA-F4 correction (adversarial review, re-measured).** The first lane proposed
+> `idx_entries_project_committed ON entries(project_id, workspace_id) WHERE workspace_id IS NULL`
+> and measured 2.3–2.8×. Re-measured against the **real** index set with `ANALYZE` run — which is
+> the state this project's own `BankMaintenanceHostedService` produces — the payoff collapses:
+>
+> | Bank state | Result |
+> |---|---|
+> | 1 project + ANALYZE | index **not chosen at all**; 11.32 → 11.23 ms (**1.0×**) |
+> | 10 projects + ANALYZE | 1.75 → 1.75 ms (**~1.0×**) |
+> | 10 projects, no ANALYZE | 11.67 → 1.35 ms (8.7×) |
+>
+> The existing `idx_entries_embed_state(embed_state, project_id)` already skip-scans `project_id`.
+> **The right index is `ON entries(project_id, value) WHERE workspace_id IS NULL`**, which turns
+> the `value = ?` scan into a seek: measured **11.3 ms → 0.007 ms**. Keep a `(project_id, path)`
+> variant for `DeleteBySourcePath`. The "2.3–2.8×" figure is withdrawn.
 | DA-F5 / RAG-F10 / UX-F5 | `BumpAccessAsync` issues a SELECT + UPDATE **per result** on every search — up to 40 extra statements on a read, which also takes a write lock | MEDIUM | SMALL |
 | UX-F5 | `ToolGate.WrapAsync` runs an unconditional promotion-queue query on **all 25 tools**, including `memory_delete` and `memory_stats` | MEDIUM | SMALL |
 | DA-F3 | Ingestion does 3+ round trips per chunk with no batching and no transaction; the EXISTS pre-check duplicates the `ON CONFLICT DO NOTHING` already in the INSERT | HIGH | SMALL |
@@ -375,7 +466,7 @@ dominated by fixed overhead, not the vector scan. The budget is spent before the
 | # | Finding | Sev | Effort |
 |---|---|---|---|
 | **O2** | **6 tests are skipped**, including `PromotionScoringRealDataTests.ScoresCorrelateWithHandLabeledUsefulness` — the scorer's only real-data correlation check — and `All 17 tools are still listed`, a contract test on a tool count that is now 25 | HIGH | SMALL |
-| ML-F5 | The promotion scorer's running gates derive their own thresholds from the code's output at test time (`minSpearman = measured + 0.10`). Zeroing every prior leaves all six green. ADR-0018's headline Spearman figures are unverifiable on `main` by anyone | HIGH | SMALL |
+| ML-F5 | **SOFTENED.** ADR-0018's headline Spearman figures are unverifiable on `main` because the fixture is deliberately uncommittable (it quotes private documents). **But the `measured ± 0.10` tests are not a defect** — `PromotionScoringRealDataTests.cs:71-75` states in-file that they are *gate-machinery* tests for the no-fixture path, and `:84-101` is a deliberate watch-it-go-red proof, i.e. the project's own invariant done correctly. The real gap is only the absent committed fixture | MEDIUM | SMALL |
 | **O7** | The write-performance benchmark writes 50 valid notes and **discards every return value** — a filter rejecting 100% of input passes unchanged — while reporting "Rejection Accuracy: 100%" | HIGH | QUICK |
 | **O8** | That test writes into tracked `docs/` on every run (observed dirtying a concurrent session's worktree), and publishes `Allocated Memory per Write: -549,67 KB` — a negative allocation, because `GC.GetAllocatedBytesForCurrentThread()` is read across `await` boundaries | MEDIUM | QUICK |
 | ML-F13 | Same test carries `Speed=Slow`, so CI runs it on every PR | MEDIUM | SMALL |
@@ -434,8 +525,15 @@ scenario diff it declined to shortcut) F12's four watch happy-paths. That is noi
 1. QA-F5 does **not** contradict O9. CI filters on `Speed=Fast|Slow` and `Category=bdd`, and the
    nine files all carry a `Speed` trait — so CI runs them and the partition really is exact
    (1658+142+483 = 2283). The gap is only for a developer filtering on `Category=Unit` locally.
-2. **8 of those 9 files are the noise-filter and zero-shot tests.** WP2 deletes them, so QA-F5
-   shrinks to a one-file fix once WP2 lands. Sequence WP2 first and do not spend a sweep on it.
+2. **6 of those 9 files are deleted by WP2** (`ZeroShotEmbeddingFilterTests`,
+   `ZeroShotEmbeddingNoisePolicyTests`, `ZeroShotNoiseFixtureTests`,
+   `OnlineNoiseClusteringServiceTests`, `NoiseFeedbackCollectorTests`,
+   `PromotionScorerTtlPolicyTests`). **Three remain** —
+   `HermesProcessNoisePolicyTests`, `NoiseFilteringServiceTests`, and
+   `WritePerformanceBenchmarkTests`. Sequence WP2 first, then fix those three; do not spend a
+   nine-file sweep on it.
+   *(Corrected: an earlier revision of this document said "8 of 9, leaving one." Enumerated
+   against the deletion inventory, it is 6 of 9, leaving three.)*
 
 ### WP11 · CLI and agent-surface polish
 *Surface: `Setup/Cli/`, tool descriptions, docs*
