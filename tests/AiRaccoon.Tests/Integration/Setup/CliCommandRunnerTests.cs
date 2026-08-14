@@ -140,7 +140,7 @@ public sealed class CliCommandRunnerTests : IDisposable
     /// documented warning path; the DI-composed command must not hand the Bitwarden provider
     /// an env-source EncryptionData (Guard: "encryptionData.SecretId must not be null").</summary>
     [Fact]
-    public async Task EncryptionUnset_EnvKeyedBankNoPassphrase_WarnsAndExitsInvalidArgument()
+    public async Task EncryptionUnset_EnvKeyedBankNoPassphrase_WarnsAndExitsKeyResolutionFailure()
     {
         // Create the bank first: on a missing bank, unset takes the clean-reset path (exit 0).
         var (seedExit, _, _, _) = await Run(["--data-root", _dataRoot, "access", "default", "show"]);
@@ -148,7 +148,7 @@ public sealed class CliCommandRunnerTests : IDisposable
 
         var (exit, _, stderr, _) = await Run(["--data-root", _dataRoot, "encryption", "unset"]);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ExitCode.FailedToResolveEncryptionKey);
         stderr.ShouldContain("no AIRACCOON_DB_PASSPHRASE set");
         stderr.ShouldNotContain("must not be null");
     }
