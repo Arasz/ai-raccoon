@@ -215,7 +215,11 @@ public sealed class WatchEventSourceTests
         WaitFor(() => events.Any(e => e.Kind == WatchEventKind.Changed && e.Path == file), "changed event for target");
 
         File.WriteAllText(dir.File("sibling.md"), "noise");
-        Thread.Sleep(300);
+
+        // Sentinel: the target's first Deleted is queued after the sibling write, so its arrival
+        // proves the watcher drained past that write. Absence only means anything after it.
+        File.Delete(file);
+        WaitFor(() => events.Any(e => e.Kind == WatchEventKind.Deleted && e.Path == file), "sentinel delete for target");
         events.ShouldNotContain(e => e.Path == dir.File("sibling.md"));
     }
 
