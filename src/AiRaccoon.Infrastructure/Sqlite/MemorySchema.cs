@@ -26,17 +26,22 @@ internal static class MemorySchema
                                           CREATE UNIQUE INDEX IF NOT EXISTS uq_entries_committed_bucket
                                               ON entries(path, hash, project_id, scope, COALESCE(context_label, ''))
                                               WHERE scope IN ('project', 'custom');
+
+                                          CREATE UNIQUE INDEX IF NOT EXISTS uq_entries_workspace_bucket
+                                              ON entries(path, hash, workspace_id)
+                                              WHERE workspace_id IS NOT NULL;
                                           """;
 
     /// <summary>
     ///     The schema shape this build creates. Bumped by one per shipped schema change, with a
     ///     matching ladder step in <see cref="MigrateToV1Async" />/<see cref="MigrateToV2Async" />/
-    ///     <see cref="MigrateToV3Async" />/<see cref="MigrateToV4Async" />/<see cref="MigrateToV5Async" />/<see cref="MigrateToV6Async" /> (ADR-0011). Not every schema
+    ///     <see cref="MigrateToV3Async" />/<see cref="MigrateToV4Async" />/<see cref="MigrateToV5Async" />/<see cref="MigrateToV6Async" />/
+    ///     <see cref="MigrateToV7Async" />/<see cref="MigrateToV8Async" /> (ADR-0011). Not every schema
     ///     change needs a ladder step: a trigger body replacement that is safely re-runnable on every
     ///     open belongs in the unconditional <see cref="Ddl" /> instead (ADR-0023 amendment) — the
     ///     ladder is for changes that need guarded, one-time work.
     /// </summary>
-    internal const int CurrentVersion = 6;
+    internal const int CurrentVersion = 8;
 
     /// <summary>
     ///     The corrected promotion_queue_entries_ad body (H4/ADR-0023 amendment): `e.scope = 'project'`
@@ -238,6 +243,7 @@ internal static class MemorySchema
                                               score       REAL NOT NULL,
                                               reasons     TEXT NOT NULL DEFAULT '[]',
                                               scorer_version INTEGER NOT NULL DEFAULT 0,
+                                              claimed_at  INTEGER NULL,
                                               created_at  INTEGER NOT NULL,
                                               updated_at  INTEGER NOT NULL,
                                               UNIQUE (project_id, hash)
@@ -393,6 +399,18 @@ internal static class MemorySchema
             await MigrateToV6Async(connection, cancellationToken).ConfigureAwait(false);
         }
 
+        if (healthy && storedVersion < 7)
+        {
+            // Soft, like the v1 step: a dedupe failure leaves the bank open, degraded, retried
+            // on the next open, rather than refusing to open at all.
+            healthy = await MigrateToV7Async(connection, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (healthy && storedVersion < 8)
+        {
+            await MigrateToV8Async(connection, cancellationToken).ConfigureAwait(false);
+        }
+
         if (healthy)
         {
             await StampAsync(connection, CurrentVersion, cancellationToken).ConfigureAwait(false);
@@ -422,6 +440,96 @@ internal static class MemorySchema
                            );
                            """;
         await connection.ExecuteAsync(new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Ladder step 7 (WP5b/DA-F1): <see cref="BucketIndexDdl" />'s two partial indexes are
+    ///     declared <c>WHERE scope = 'shared'</c> / <c>WHERE scope IN ('project','custom')</c>, but
+    ///     a workspace row's CHECK constraint forces <c>scope IS NULL</c> — neither index can ever
+    ///     match a workspace row, so a retried workspace write silently duplicated. Dedupes existing
+    ///     workspace-scope duplicates first (survivor = earliest row; same shape as
+    ///     <see cref="MigrateToV1Async" />'s bucket dedupe, GROUP BY mirroring the index expression
+    ///     exactly) so index creation can never fail on a real bank, then creates the index. Soft
+    ///     like the v1 step: a dedupe failure leaves the bank open, degraded, retried next open.
+    /// </summary>
+    private static async Task<bool> MigrateToV7Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var hasWorkspaceIndex = await connection.ExecuteScalarAsync<long?>(
+                new CommandDefinition(
+                    "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'uq_entries_workspace_bucket'",
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false) is not null;
+        if (hasWorkspaceIndex)
+        {
+            return true;
+        }
+
+        try
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            try
+            {
+                await connection.ExecuteAsync(
+                        new CommandDefinition(
+                            """
+                            DELETE FROM entries
+                            WHERE workspace_id IS NOT NULL
+                              AND path IS NOT NULL AND hash IS NOT NULL
+                              AND id NOT IN (SELECT MIN(id) FROM entries
+                                             WHERE workspace_id IS NOT NULL
+                                             GROUP BY path, hash, workspace_id);
+
+                            CREATE UNIQUE INDEX IF NOT EXISTS uq_entries_workspace_bucket
+                                ON entries(path, hash, workspace_id)
+                                WHERE workspace_id IS NOT NULL;
+                            """,
+                            cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                await connection.ExecuteAsync(
+                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+            }
+            catch
+            {
+                await connection.ExecuteAsync(
+                        new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                throw;
+            }
+        }
+        catch
+        {
+            // Degraded but open; the next open retries the dedupe + index creation.
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    ///     Ladder step 8 (WP5b/A-F11): promotion_queue.claimed_at backs the claim-by-update pattern
+    ///     PromotionQueueService.PromoteAsync uses instead of claim-by-delete, so a ShareAsync
+    ///     failure mid-promotion leaves the candidate reclaimable instead of destroying it. DEFAULT
+    ///     covers a fresh bank; existing rows backfill to NULL (unclaimed) by SQLite's own ADD
+    ///     COLUMN default — none of them were ever claimed by a versioned claim mechanism.
+    /// </summary>
+    private static async Task MigrateToV8Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var columns = (await connection.QueryAsync<string>(
+                new CommandDefinition(
+                    "SELECT name FROM pragma_table_info('promotion_queue')",
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false)).ToHashSet(StringComparer.Ordinal);
+        if (!columns.Contains("claimed_at"))
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "ALTER TABLE promotion_queue ADD COLUMN claimed_at INTEGER NULL",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
     }
 
     /// <summary>
