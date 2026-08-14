@@ -4,7 +4,8 @@ namespace AiRaccoon.Core.Chunking;
 
 /// <summary>
 ///     Line-granular markdown splitter: deterministic, token-bounded and code-fence-aware.
-///     Fences (``` and ~~~) are atomic units — a boundary never falls inside one, even past maxTokens.
+///     A closed fence (``` or ~~~) that fits within maxTokens is one atomic unit; an oversized or
+///     never-closed fence falls back to line-granular units instead (docs/adr/0036).
 /// </summary>
 public sealed class MarkdownChunker : IMarkdownChunker
 {
@@ -26,7 +27,7 @@ public sealed class MarkdownChunker : IMarkdownChunker
         Guard.IsGreaterThanOrEqualTo(overlayTokens, 0);
         Guard.IsLessThan(overlayTokens, maxTokens);
 
-        var units = BuildUnits(SplitLines(NormalizeLineEndings(text)), countTokens);
+        var units = BuildUnits(SplitLines(NormalizeLineEndings(text)), countTokens, maxTokens);
         List<string> chunks = [];
         List<Unit>? previousUnits = null;
         var cursor = 0;
@@ -79,41 +80,79 @@ public sealed class MarkdownChunker : IMarkdownChunker
         return overlay;
     }
 
-    private static List<Unit> BuildUnits(List<string> lines, TokenCount countTokens)
+    /// <summary>
+    ///     Groups lines into units, keeping a closed fence atomic only while it fits maxTokens.
+    ///     An oversized fence (open-but-never-closed, or closed but over budget) falls back to one
+    ///     unit per line for that region instead of gluing it into a single unbounded unit — see
+    ///     docs/adr/0036.
+    /// </summary>
+    private static List<Unit> BuildUnits(List<string> lines, TokenCount countTokens, int maxTokens)
     {
         List<Unit> units = [];
         List<string>? fenceLines = null;
+        var fenceTokens = 0;
         foreach (var line in lines)
         {
-            if (IsFenceDelimiter(line))
+            if (fenceLines is null)
             {
-                if (fenceLines is null)
+                if (IsFenceDelimiter(line))
                 {
                     fenceLines = [line];
+                    fenceTokens = countTokens(line);
                 }
                 else
                 {
-                    fenceLines.Add(line);
-                    units.Add(new Unit(fenceLines, countTokens(string.Concat(fenceLines))));
-                    fenceLines = null;
+                    units.Add(new Unit([line], countTokens(line)));
                 }
+
+                continue;
             }
-            else if (fenceLines is not null)
+
+            fenceLines.Add(line);
+            fenceTokens += countTokens(line);
+            if (IsFenceDelimiter(line))
             {
-                fenceLines.Add(line);
+                FlushFence(units, fenceLines, fenceTokens, maxTokens, countTokens);
+                fenceLines = null;
+                fenceTokens = 0;
             }
-            else
+            else if (fenceTokens > maxTokens)
             {
-                units.Add(new Unit([line], countTokens(line)));
+                // Already broken; keeping it atomic buys nothing, so stop treating it as fenced.
+                FlushAsLines(units, fenceLines, countTokens);
+                fenceLines = null;
+                fenceTokens = 0;
             }
         }
 
         if (fenceLines is not null)
         {
-            units.Add(new Unit(fenceLines, countTokens(string.Concat(fenceLines))));
+            // Never closed: not a well-formed fence, so it must not glue the rest of the note together.
+            FlushAsLines(units, fenceLines, countTokens);
         }
 
         return units;
+    }
+
+    private static void FlushFence(List<Unit> units, List<string> fenceLines, int fenceTokens, int maxTokens,
+        TokenCount countTokens)
+    {
+        if (fenceTokens <= maxTokens)
+        {
+            units.Add(new Unit(fenceLines, countTokens(string.Concat(fenceLines))));
+        }
+        else
+        {
+            FlushAsLines(units, fenceLines, countTokens);
+        }
+    }
+
+    private static void FlushAsLines(List<Unit> units, List<string> lines, TokenCount countTokens)
+    {
+        foreach (var line in lines)
+        {
+            units.Add(new Unit([line], countTokens(line)));
+        }
     }
 
     private static bool IsFenceDelimiter(string line)

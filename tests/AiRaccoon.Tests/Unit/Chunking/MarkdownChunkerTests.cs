@@ -35,49 +35,84 @@ public class MarkdownChunkerTests
     }
 
     [Fact]
-    public void Split_FencedCodeBlock_IsNeverSplit()
+    public void Split_FencedCodeBlockWithinBudget_IsNeverSplit()
     {
         var text = "# Title\n\n```csharp\nvar x = 1;\nvar y = 2;\n```\n\nTail.\n";
 
-        var chunks = new MarkdownChunker(CharCount).Chunk(text, 12);
+        var chunks = new MarkdownChunker(CharCount).Chunk(text, 40);
 
-        chunks.ShouldBe(["# Title\n\n", "```csharp\nvar x = 1;\nvar y = 2;\n```\n", "\nTail.\n"]);
+        var fenceChunk = chunks.Single(chunk => chunk.Contains("```", StringComparison.Ordinal));
+        fenceChunk.ShouldContain("```csharp\nvar x = 1;\nvar y = 2;\n```\n");
+        chunks.ShouldAllBe(chunk => CharCount(chunk) <= 40);
     }
 
     [Fact]
-    public void Split_FenceLargerThanMaxTokens_IsEmittedWhole()
+    public void Split_FenceLargerThanMaxTokens_FallsBackToLineGranularSplitting()
     {
         var fence = "```\nvar x = 1;\nvar y = 2;\n```\n";
 
-        var chunks = new MarkdownChunker(CharCount).Chunk(fence, 5);
+        var chunks = new MarkdownChunker(CharCount).Chunk(fence, 15);
 
-        chunks.ShouldBe([fence]);
+        // An over-budget fence is already a broken chunk (docs/adr/0036) — no chunk exceeds maxTokens,
+        // and the fence content is preserved (just no longer atomic).
+        chunks.ShouldAllBe(chunk => CharCount(chunk) <= 15);
+        string.Concat(chunks).ShouldBe(fence);
     }
 
     [Fact]
-    public void Split_TildeFence_IsNeverSplit()
+    public void Split_TildeFenceWithinBudget_IsNeverSplit()
     {
-        var chunks = new MarkdownChunker(CharCount).Chunk("~~~\ncode\n~~~\n", 5);
+        var chunks = new MarkdownChunker(CharCount).Chunk("~~~\ncode\n~~~\n", 20);
 
         chunks.ShouldBe(["~~~\ncode\n~~~\n"]);
     }
 
     [Fact]
-    public void Split_UnclosedFence_KeepsRestOfNoteInOneChunk()
+    public void Split_TildeFenceLargerThanMaxTokens_FallsBackToLineGranularSplitting()
     {
-        var chunks = new MarkdownChunker(CharCount).Chunk("```\ncode\nmore\n", 5);
+        var chunks = new MarkdownChunker(CharCount).Chunk("~~~\ncode\n~~~\n", 5);
 
-        chunks.ShouldBe(["```\ncode\nmore\n"]);
+        chunks.ShouldAllBe(chunk => CharCount(chunk) <= 5);
+        string.Concat(chunks).ShouldBe("~~~\ncode\n~~~\n");
     }
 
     [Fact]
-    public void Split_MultipleFences_EachFenceStaysIntact()
+    public void Split_UnclosedFence_FallsBackToLineGranularSplitting()
+    {
+        var chunks = new MarkdownChunker(CharCount).Chunk("```\ncode\nmore\n", 5);
+
+        // A never-closed fence is not well-formed — it must not glue the rest of the note into one
+        // unbounded chunk (docs/adr/0036).
+        chunks.ShouldAllBe(chunk => CharCount(chunk) <= 5);
+        string.Concat(chunks).ShouldBe("```\ncode\nmore\n");
+    }
+
+    [Fact]
+    public void Split_MultipleFencesWithinBudget_EachFenceStaysIntact()
     {
         var text = "a\n\n```\nx\n```\n\nb\n\n```\ny\n```\n";
 
-        var chunks = new MarkdownChunker(CharCount).Chunk(text, 3);
+        var chunks = new MarkdownChunker(CharCount).Chunk(text, 10);
 
-        chunks.ShouldBe(["a\n\n", "```\nx\n```\n", "\nb\n", "\n", "```\ny\n```\n"]);
+        chunks.Count(chunk => chunk.Contains("```", StringComparison.Ordinal)).ShouldBe(2);
+        chunks.ShouldContain("```\nx\n```\n");
+        chunks.ShouldContain("```\ny\n```\n");
+        string.Concat(chunks).ShouldBe(text);
+    }
+
+    [Fact]
+    public void Split_UnbalancedFence_NoChunkExceedsMaxTokens()
+    {
+        // Mirrors the review's measured shape: a stray, never-closed fence followed by a long
+        // document body. Before the fix, this glues everything past the fence into one unbounded
+        // chunk (RED); after, no chunk exceeds maxTokens (docs/adr/0036).
+        var body = string.Join("\n", Enumerable.Range(1, 30).Select(i => $"Paragraph {i} with several words of prose."));
+        var text = $"# Notes\n\nSee the fence marker below.\n\n```\n{body}\n";
+
+        var chunks = new MarkdownChunker(CharCount).Chunk(text, 60);
+
+        chunks.ShouldAllBe(chunk => CharCount(chunk) <= 60);
+        string.Concat(chunks).ShouldBe(text);
     }
 
     [Fact]
