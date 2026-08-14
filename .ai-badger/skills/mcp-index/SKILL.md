@@ -87,8 +87,8 @@ python3 .ai-badger/skills/mcp-index/scripts/mcp_index.py init --target <project-
 python3 .ai-badger/skills/mcp-index/scripts/mcp_index.py init --target <project-root> --host hermes
 ```
 
-Asks the host CLIs for their MCP servers (see *Where the server list comes from* below), describes
-each tool from the catalog where it can and by name heuristics otherwise, records each server's
+Asks the host CLIs for their MCP servers (see *Where the server list comes from* below), describes each tool from the catalog where it can and by name heuristics otherwise, seeds a server the listing named without tool detail from the
+catalog (see `update`), records each server's
 `status`, and writes `.ai-badger/mcp-tools.json`. Prints which listing answered and which sources
 were skipped, then how many tools were tagged as `general` and which servers reported no tools.
 
@@ -109,6 +109,9 @@ A listing that carries **no tool detail at all** (every source but `hermes mcp l
 tell "this server is gone" from "this is another host's listing", so a source it does not name is
 **left untouched** — same status, same tools — and named in the output. Only a listing that carries
 tools can move a source to `absent` and its tools to `removed`.
+
+A server such a listing **does** name is **seeded from the mcp catalog**: the catalog stands in for a host that declined to enumerate, so a curated server is not stranded with `tools: {}`. The seed is a floor, never an override — an
+existing entry wins whatever its `origin`, a `removed` tool stays removed, an uncatalogued server stays empty, and a listing that carries tool detail is taken as the whole truth even when it reports none.
 
 **Completion criterion:** All current MCP tools appear in the index; removed tools have `status: removed`.
 
@@ -179,15 +182,27 @@ intents the legacy file had; `.ai-badger/mcp-tools.yaml.migrated` exists.
 hermes answers `error: unrecognized arguments: --json` (measured 2026-07, issue #188). `init` and
 `update` therefore ask three sources in order and take the first that lists a server:
 
-| order | source | what it carries |
-|---|---|---|
-| 1 | `hermes mcp list --json` | server names **and their tools** — the only source that can |
-| 2 | `claude mcp list` | every server, plus a reachability phrase per server; no tools. Health-checks each server first (~14s for 17) |
-| 3 | `hermes mcp list` | server names and an enabled flag, from the text table; no tools |
+| order | source                   | what it carries                                                                                              |
+|-------|--------------------------|--------------------------------------------------------------------------------------------------------------|
+| 1     | `hermes mcp list --json` | server names **and their tools** — the only listing that can                                                 |
+| 2     | `claude mcp list`        | every server, plus a reachability phrase per server; no tools. Health-checks each server first (~14s for 17) |
+| 3     | `hermes mcp list`        | server names and an enabled flag, from the text table; no tools                                              |
 
 `--host hermes` or `--host claude` restricts the chain to one CLI — use it when the other is slow,
 noisy, or listing the wrong project's servers. `--from-json <document>` skips the hosts entirely and
 reads a saved `hermes mcp list --json` document.
+
+### `--discover` — ask each server for its own tools
+
+No remaining *listing* carries tool names, but `hermes mcp test <server>` does. Pass `--discover`
+to `init` or `update` and every server the listing left unenumerated is asked directly:
+
+```bash
+python3 .ai-badger/skills/mcp-index/scripts/mcp_index.py init --target <project-root> --discover
+```
+
+It is opt-in because it costs one connection per server (measured: 11 servers, ~20s, 128 tools recovered from a listing that carried none). A server hermes does not have in its own config — a plugin- or connector-provided one — cannot be
+tested; it keeps `tools_known` False, is named in the output, and falls back to the catalog seed. `hermes mcp test` **exits 0 even when it fails**, so only its printed `Tools discovered` block is treated as an answer.
 
 If no source answers, both commands **refuse** and print what each one said — a missing CLI, a
 non-zero exit with its error line, or an empty listing. They never write a half-index.

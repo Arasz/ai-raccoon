@@ -83,6 +83,62 @@ def parse_claude_listing(stdout: str) -> List[Server]:
     return servers
 
 
+# `  ✓ Tools discovered: 12`, then a blank line, then `    <name>   <description>` per tool.
+_TEST_HEADER = re.compile(r"^\s*✓\s*Tools discovered:\s*\d+\s*$")
+_TEST_TOOL = re.compile(r"^\s{3,}(?P<name>\S+)\s{2,}(?P<description>\S.*)$")
+
+
+def parse_hermes_test_tools(stdout: str) -> Optional[List[Server]]:
+    """Tools from one `hermes mcp test <server>` run, or None when it did not answer.
+
+    None and `[]` are different answers and the caller must not conflate them: the command
+    exits 0 whether it connected or printed `✗ Server '<name>' not found in config`, so only
+    the `Tools discovered` header distinguishes "enumerated nothing" from "never enumerated".
+    Descriptions arrive truncated with an ellipsis; the catalog outranks them anyway.
+    """
+    lines = stdout.splitlines()
+    for position, line in enumerate(lines):
+        if not _TEST_HEADER.match(line):
+            continue
+        tools = []
+        for entry in lines[position + 1:]:
+            if not entry.strip():
+                continue
+            match = _TEST_TOOL.match(entry)
+            if not match:
+                break
+            tools.append({"name": match.group("name"),
+                          "description": match.group("description").strip()})
+        return tools
+    return None
+
+
+def enrich_with_hermes_test(servers: List[Server],
+                            run: Optional[Callable[[List[str]], Outcome]] = None) -> List[str]:
+    """Ask `hermes mcp test` for the tools of every server the listing left unenumerated.
+
+    One subprocess per server, so callers gate it behind an opt-in. A server it cannot test —
+    one hermes does not have in its config, such as a plugin- or connector-provided server —
+    keeps `tools_known` False and is named in the returned notes.
+    """
+    run = run or run_cli
+    unanswered = []
+    for server in servers:
+        if server.get("tools_known", True):
+            continue
+        name = server.get("name", "")
+        code, stdout, _ = run(["hermes", "mcp", "test", name])
+        tools = parse_hermes_test_tools(stdout) if code is not None else None
+        if tools is None:
+            unanswered.append(name)
+            continue
+        server["tools"] = tools
+        server["tools_known"] = True
+    if unanswered:
+        return [f"hermes mcp test could not enumerate: {', '.join(unanswered)}"]
+    return []
+
+
 def carries_tool_detail(servers: List[Server]) -> bool:
     """Whether this listing named any server's tools at all.
 
