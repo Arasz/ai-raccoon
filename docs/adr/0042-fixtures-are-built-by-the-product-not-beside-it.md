@@ -1,4 +1,4 @@
-# 0043. Fixtures Are Built by the Product, Not Beside It
+# 0042. Fixtures Are Built by the Product, Not Beside It
 
 Date: 2026-08-14
 

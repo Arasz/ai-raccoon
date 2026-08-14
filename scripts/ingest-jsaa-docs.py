@@ -6,13 +6,13 @@ Thin CLI wrapper over scripts/src/pipeline.py (see docs/plans/scripts-refactor.m
 Walks the JSAA project tree, curates which files to ingest by content type
 (src/sources.py), and hands each one to AiRaccoon's own memory_ingest_file MCP
 tool — chunking is the production FileIngestor's job, not this script's (see
-ADR-0043). Requires an ingest scope configured first:
+ADR-0042). Requires an ingest scope configured first:
   ai-raccoon ingest scope add job-search-ai-assistant <JSAA_ROOT>
 
 Usage:
   python3 scripts/ingest-jsaa-docs.py --dry-run       # enumerate only
   python3 scripts/ingest-jsaa-docs.py --chunk-only     # enumerate only (alias of --dry-run;
-                                                        # no local chunk stage remains, see ADR-0043)
+                                                        # no local chunk stage remains, see ADR-0042)
   python3 scripts/ingest-jsaa-docs.py --ingest-only    # full ingest, no spot-checks
   python3 scripts/ingest-jsaa-docs.py --verify         # full ingest + spot-checks
   python3 scripts/ingest-jsaa-docs.py --reset          # delete all contexts then re-ingest
@@ -52,7 +52,7 @@ def main() -> None:
         "--chunk-only",
         action="store_true",
         help="Alias of --dry-run: chunking now happens server-side inside "
-             "memory_ingest_file, so there is no local chunk stage to preview (ADR-0043).",
+             "memory_ingest_file, so there is no local chunk stage to preview (ADR-0042).",
     )
     parser.add_argument(
         "--ingest-only",

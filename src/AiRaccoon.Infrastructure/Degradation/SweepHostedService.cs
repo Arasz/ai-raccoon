@@ -219,34 +219,34 @@ public sealed partial class SweepHostedService(
 
     private static partial class Log
     {
-        [LoggerMessage(EventId = 520, Level = LogLevel.Debug, Message = "Sweep disabled; skipping")]
+        [LoggerMessage(EventId = 530, Level = LogLevel.Debug, Message = "Sweep disabled; skipping")]
         public static partial void Skipped(ILogger logger);
 
-        [LoggerMessage(EventId = 521, Level = LogLevel.Debug, Message = "No projects in the bank; skipping")]
+        [LoggerMessage(EventId = 531, Level = LogLevel.Debug, Message = "No projects in the bank; skipping")]
         public static partial void NoProjects(ILogger logger);
 
         /// <summary>Hash, rating and age only — never the entry value, which the reaper has just destroyed.</summary>
-        [LoggerMessage(EventId = 522, Level = LogLevel.Information,
+        [LoggerMessage(EventId = 532, Level = LogLevel.Information,
             Message = "Swept {Hash} from {ProjectId} (rating {Rating}, age {AgeDays} days)")]
         public static partial void Deleted(ILogger logger, string projectId, string hash, double rating,
             double ageDays);
 
-        [LoggerMessage(EventId = 523, Level = LogLevel.Warning, Message = "Sweep pass failed for {ProjectId}")]
+        [LoggerMessage(EventId = 533, Level = LogLevel.Warning, Message = "Sweep pass failed for {ProjectId}")]
         public static partial void ProjectFailed(ILogger logger, string projectId, Exception exception);
 
-        [LoggerMessage(EventId = 524, Level = LogLevel.Information,
+        [LoggerMessage(EventId = 534, Level = LogLevel.Information,
             Message = "Sweep pass complete: {Projects} projects, {Deleted} entries deleted")]
         public static partial void RunCompleted(ILogger logger, int projects, int deleted);
 
-        [LoggerMessage(EventId = 525, Level = LogLevel.Error, Message = "Sweep run failed")]
+        [LoggerMessage(EventId = 535, Level = LogLevel.Error, Message = "Sweep run failed")]
         public static partial void RunFailed(ILogger logger, Exception exception);
 
-        [LoggerMessage(EventId = 526, Level = LogLevel.Warning,
+        [LoggerMessage(EventId = 536, Level = LogLevel.Warning,
             Message = "Sweep interval read failed; falling back to the default")]
         public static partial void IntervalReadFailed(ILogger logger, Exception exception);
 
         /// <summary>H6: a project outside full access mode is skipped, not reaped.</summary>
-        [LoggerMessage(EventId = 527, Level = LogLevel.Debug,
+        [LoggerMessage(EventId = 537, Level = LogLevel.Debug,
             Message = "Sweep skipped {ProjectId}: access mode {Mode} has not consented to destructive sweeps")]
         public static partial void SkippedMode(ILogger logger, string projectId, AccessMode mode);
     }

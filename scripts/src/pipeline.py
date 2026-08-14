@@ -1,7 +1,7 @@
 """Ingestion pipeline orchestration (moved verbatim from scripts/ingest-jsaa-docs.py).
 
 Chunking is the production FileIngestor's job (via the memory_ingest_file MCP
-tool), not this script's — see ADR-0043. This module only curates *which*
+tool), not this script's — see ADR-0042. This module only curates *which*
 files to feed it and drives the batched writes/embeds/spot-checks.
 
 Network + git — smoke-covered by the wrapper's --dry-run mode, not unit-tested.
@@ -164,7 +164,7 @@ async def run_pipeline(
     for tk in sorted(type_counts):
         log.info("  %s: %d", tk, type_counts[tk])
 
-    # chunk_only has no local meaning post-ADR-0043 (chunking moved server-side
+    # chunk_only has no local meaning post-ADR-0042 (chunking moved server-side
     # into memory_ingest_file) — it now behaves like --dry-run: enumerate and stop.
     if dry_run or chunk_only:
         log.info("Enumeration complete: %d files. No local chunking to preview — "
