@@ -1,5 +1,6 @@
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Render;
+using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 
@@ -75,41 +76,25 @@ public class CliOutputRoutingTests
     [Fact]
     public void Render_Help_NeverWritesToRealStdout()
     {
-        var original = Console.Out;
-        try
+        var (stdout, _) = ConsoleCapture.Run(() =>
         {
-            using var redirected = new StringWriter();
-            Console.SetOut(redirected);
             CliArgs.TryParse(["--help"], out var parsed);
-
             parsed!.RenderTo(new StandardStreams(TextReader.Null, TextWriter.Null, new StringWriter()));
+        });
 
-            redirected.ToString().ShouldBeEmpty();
-        }
-        finally
-        {
-            Console.SetOut(original);
-        }
+        stdout.ShouldBeEmpty();
     }
 
     [Fact]
     public void Render_ParseError_NeverWritesToRealStdout()
     {
-        var original = Console.Out;
-        try
+        var (stdout, _) = ConsoleCapture.Run(() =>
         {
-            using var redirected = new StringWriter();
-            Console.SetOut(redirected);
             CliArgs.TryParse(["--bogus"], out var parsed);
-
             parsed!.RenderTo(new StandardStreams(TextReader.Null, TextWriter.Null, new StringWriter()));
+        });
 
-            redirected.ToString().ShouldBeEmpty();
-        }
-        finally
-        {
-            Console.SetOut(original);
-        }
+        stdout.ShouldBeEmpty();
     }
 
     [CollectionDefinition(SerialCollectionName, DisableParallelization = true)]

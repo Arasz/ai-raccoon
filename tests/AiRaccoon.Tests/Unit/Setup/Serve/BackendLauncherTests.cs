@@ -57,30 +57,30 @@ public sealed class BackendLauncherTests : IDisposable
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         var capturePath = Path.Combine(_dataRoot, "stdout-capture.txt");
-        var managedStdout = new StringWriter();
-        var originalStdout = Console.Out;
-        BackendResult result;
+        var result = default(BackendResult);
+        string managedStdout;
 
         await using (var capture = new FileStream(capturePath, FileMode.Create, FileAccess.Write))
         {
-            Console.SetOut(managedStdout);
-            var savedStdout = Dup(StdoutFd);
-            Dup2(capture.SafeFileHandle.DangerousGetHandle().ToInt32(), StdoutFd);
-            try
+            (managedStdout, _) = await ConsoleCapture.RunAsync(async () =>
             {
-                lease.ReleaseForBind();
-                result = await Launcher().AcquireAsync(port, ServeExecutable, ServeArguments(port),
-                    TestContext.Current.CancellationToken);
-                // The backend prints its bound URL right after binding; hold the capture open long
-                // enough that an unredirected child would certainly have written it.
-                await Task.Delay(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
-            }
-            finally
-            {
-                Dup2(savedStdout, StdoutFd);
-                CloseFd(savedStdout);
-                Console.SetOut(originalStdout);
-            }
+                var savedStdout = Dup(StdoutFd);
+                Dup2(capture.SafeFileHandle.DangerousGetHandle().ToInt32(), StdoutFd);
+                try
+                {
+                    lease.ReleaseForBind();
+                    result = await Launcher().AcquireAsync(port, ServeExecutable, ServeArguments(port),
+                        TestContext.Current.CancellationToken);
+                    // The backend prints its bound URL right after binding; hold the capture open long
+                    // enough that an unredirected child would certainly have written it.
+                    await Task.Delay(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+                }
+                finally
+                {
+                    Dup2(savedStdout, StdoutFd);
+                    CloseFd(savedStdout);
+                }
+            });
         }
 
         result.Url.ShouldBe(UrlFor(port));
@@ -88,7 +88,7 @@ public sealed class BackendLauncherTests : IDisposable
         captured.ShouldNotContain(UrlFor(port));
         // Console.Out is process-global, so a test running in parallel can land text in this
         // capture too. Assert what only the launcher could have written, not that it is empty.
-        managedStdout.ToString().ShouldNotContain(UrlFor(port));
+        managedStdout.ShouldNotContain(UrlFor(port));
     }
 
     [Fact]
