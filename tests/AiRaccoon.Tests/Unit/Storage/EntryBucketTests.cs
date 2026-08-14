@@ -18,8 +18,8 @@ public sealed class EntryBucketTests
     [Theory]
     // shared: the caller's project id is kept, but scope is what selects the row.
     [InlineData("shared", "shared", Caller, null, null)]
-    // project: the id comes out of the context, not the caller — so it must differ from Caller here.
-    [InlineData("project:beta", "project", "beta", null, null)]
+    // project: only the caller's own project is admitted; naming another is refused, not mapped.
+    [InlineData("project:acme", "project", Caller, null, null)]
     // workspace: no scope at all — workspace rows are selected by workspace_id.
     [InlineData("workspace:ws-1", null, Caller, null, "ws-1")]
     // anything else is a custom label under the caller's project.
@@ -38,14 +38,24 @@ public sealed class EntryBucketTests
 
     /// <summary>A project context re-targets the row: the caller's own project id is discarded.</summary>
     [Fact]
-    public void For_WithAProjectContext_TakesTheProjectIdFromTheContext()
+    public void For_WithTheCallersOwnProjectContext_StaysInThatProject()
     {
-        var bucket = EntryBucket.For(ContextNaming.ProjectContext("beta"), Caller);
+        var bucket = EntryBucket.For(ContextNaming.ProjectContext(Caller), Caller);
 
-        bucket.ProjectId.ShouldBe("beta");
+        bucket.ProjectId.ShouldBe(Caller);
         bucket.Scope.ShouldBe("project");
         bucket.ContextLabel.ShouldBeNull();
         bucket.WorkspaceId.ShouldBeNull();
+    }
+
+    [Fact]
+    public void For_WithAnotherProjectsContext_IsRefused()
+    {
+        // The access gate authorises the request's projectId; without this a caller cleared for
+        // one project could land rows in another just by naming it in the context.
+        Should.Throw<ContextOutsideProjectException>(
+                () => EntryBucket.For(ContextNaming.ProjectContext("beta"), Caller))
+            .Message.ShouldContain("beta");
     }
 
     /// <summary>A workspace row stays inside the caller's project and carries no scope.</summary>
@@ -65,7 +75,7 @@ public sealed class EntryBucketTests
     public void For_ReadsTheContextStringsContextNamingProduces()
     {
         EntryBucket.For(ContextNaming.SharedContext, Caller).Scope.ShouldBe("shared");
-        EntryBucket.For(ContextNaming.ProjectContext("beta"), Caller).ProjectId.ShouldBe("beta");
+        EntryBucket.For(ContextNaming.ProjectContext(Caller), Caller).ProjectId.ShouldBe(Caller);
         EntryBucket.For(ContextNaming.WorkspaceContext("ws-1"), Caller).WorkspaceId.ShouldBe("ws-1");
     }
 
@@ -90,10 +100,9 @@ public sealed class EntryBucketTests
     [Fact]
     public void For_WithBothPrefixesNested_TakesTheOuterOne()
     {
-        var asProject = EntryBucket.For("project:workspace:ws-1", Caller);
-        asProject.Scope.ShouldBe("project");
-        asProject.ProjectId.ShouldBe("workspace:ws-1");
-        asProject.WorkspaceId.ShouldBeNull();
+        // The outer prefix still wins: it is read as a project named "workspace:ws-1", which is
+        // not the caller's, so it is refused rather than silently re-targeted.
+        Should.Throw<ContextOutsideProjectException>(() => EntryBucket.For("project:workspace:ws-1", Caller));
 
         var asWorkspace = EntryBucket.For("workspace:project:beta", Caller);
         asWorkspace.Scope.ShouldBeNull();
@@ -111,9 +120,8 @@ public sealed class EntryBucketTests
         bucket.ContextLabel.ShouldBe("shared-notes");
     }
 
-    /// <summary>An empty suffix is admitted: "project:" re-targets the row onto an empty project id.</summary>
+    /// <summary>An empty workspace suffix is admitted; an empty project suffix names no project and is refused.</summary>
     [Theory]
-    [InlineData("project:", "project", "", null)]
     [InlineData("workspace:", null, Caller, "")]
     public void For_WithAnEmptySuffix_StillTakesThePrefixBranch(
         string context, string? scope, string projectId, string? workspaceId)
@@ -125,19 +133,34 @@ public sealed class EntryBucketTests
         bucket.WorkspaceId.ShouldBe(workspaceId);
     }
 
+    [Fact]
+    public void For_WithAnEmptyProjectSuffix_IsRefused()
+    {
+        Should.Throw<ContextOutsideProjectException>(() => EntryBucket.For("project:", Caller));
+    }
+
     /// <summary>
     ///     "label:{project}:{label}" is stored whole, while MemorySql.ContextKeyFor strips the
     ///     prefix — the two disagree on the same context string (see the report on this lane).
     /// </summary>
     [Fact]
-    public void For_WithALabelContext_KeepsThePrefixThatContextKeyForStrips()
+    public void For_WithALabelContext_StripsThePrefixTheSameWayContextKeyForDoes()
     {
+        // Divergence here is invisible: the vec0 partition key and the text filter would disagree,
+        // so a labelled row is reachable by vector search and not by keyword search.
         var context = ContextNaming.LabelContext(Caller, "docs");
 
         var bucket = EntryBucket.For(context, Caller);
 
         bucket.Scope.ShouldBe("custom");
-        bucket.ContextLabel.ShouldBe("label:acme:docs");
+        bucket.ContextLabel.ShouldBe("docs");
         MemorySql.ContextKeyFor(context, Caller).ShouldBe("custom:4:acme:docs");
+    }
+
+    [Fact]
+    public void For_WithALabelContextNamingAnotherProject_IsRefused()
+    {
+        Should.Throw<ContextOutsideProjectException>(
+            () => EntryBucket.For(ContextNaming.LabelContext("beta", "docs"), Caller));
     }
 }
