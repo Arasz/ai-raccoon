@@ -192,6 +192,7 @@ internal static class CliCommandTree
         var show = new Command("show", "Shows whether pre-write noise rejection is enabled");
         show.Aliases.Add("list");
         noise.Add(show);
+        noise.Add(new Command("entries", "Summarizes noise_entries — the training-data source for a future noise learner (ADR-0029/ADR-0039)"));
         return noise;
     }
 

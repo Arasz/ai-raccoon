@@ -15,7 +15,8 @@ internal sealed class ConfigCommands(
     EncryptionCommands encryptionCommands,
     ExtractCommands extract,
     MaintenanceCommands maintenance,
-    ServeCommands serve)
+    ServeCommands serve,
+    NoiseEntriesCommands noiseEntries)
 {
     public async Task<int> RunAsync(CliInput cliInput,
         StandardStreams streams,
@@ -59,6 +60,7 @@ internal sealed class ConfigCommands(
                 ["noise", "enable"] => await settings.NoiseEnabledSetAsync(true, store, streams, ctx),
                 ["noise", "disable"] => await settings.NoiseEnabledSetAsync(false, store, streams, ctx),
                 ["noise", "show"] => await settings.NoiseShowAsync(store, streams, ctx),
+                ["noise", "entries"] => await noiseEntries.SummarizeAsync(streams, ctx),
                 ["queryguard", "enable"] => await settings.QueryGuardEnabledSetAsync(true, store, streams, ctx),
                 ["queryguard", "disable"] => await settings.QueryGuardEnabledSetAsync(false, store, streams, ctx),
                 ["queryguard", "shadow", "enable"] => await settings.QueryGuardShadowSetAsync(true, store, streams, ctx),
