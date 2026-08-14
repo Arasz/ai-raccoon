@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
 using AiRaccoon.Hosting.Common;
@@ -23,6 +23,9 @@ namespace AiRaccoon.Tests.E2E;
 [Collection(E2ETestCollection.Name)]
 public sealed class ProxyLaunchE2ETests : IAsyncLifetime
 {
+    /// <summary>Only stops a hang from wedging the run; the assertions are the exit code and stderr.</summary>
+    private static readonly TimeSpan HardCap = TimeSpan.FromSeconds(60);
+
     private readonly string _backendRoot = TestData.CreateTempRoot("proxy-backend");
     private readonly string _proxyRoot = TestData.CreateTempRoot("proxy-broken-bank");
     private IHost _backend = null!;
@@ -112,40 +115,19 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
                 TestContext.Current.CancellationToken);
 
             lease.ReleaseForBind();
-            var (exit, stderr) = await RunProxyAsync(root, port);
+            var run = await RaccoonProcess.RunAsync(
+                ["--data-root", root, "--port", port.ToString(CultureInfo.InvariantCulture)],
+                HardCap, TestContext.Current.CancellationToken);
 
-            exit.ShouldBe(ExitCode.ProxyBackendUnavailable);
-            stderr.ShouldContain($"http://127.0.0.1:{port}/mcp");
-            stderr.ShouldContain($"serve exit {ExitCode.FailedToOpenEncryptedBank}");
-            stderr.ShouldContain("ai-raccoon --transport stdio");
+            run.ExitCode.ShouldBe(ExitCode.ProxyBackendUnavailable);
+            run.Stderr.ShouldContain($"http://127.0.0.1:{port}/mcp");
+            run.Stderr.ShouldContain($"serve exit {ExitCode.FailedToOpenEncryptedBank}");
+            run.Stderr.ShouldContain("ai-raccoon --transport stdio");
         }
         finally
         {
             Delete(root);
         }
-    }
-
-    private static async Task<(int Exit, string Stderr)> RunProxyAsync(string dataRoot, int port)
-    {
-        var startInfo = new ProcessStartInfo(AiRaccoonProcess.Executable)
-        {
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false
-        };
-        startInfo.ArgumentList.Add("--data-root");
-        startInfo.ArgumentList.Add(dataRoot);
-        startInfo.ArgumentList.Add("--port");
-        startInfo.ArgumentList.Add(port.ToString());
-
-        using var process = Process.Start(startInfo)!;
-        var stderr = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
-        var stdout = process.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
-        await process.WaitForExitAsync(TestContext.Current.CancellationToken)
-            .WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
-        await stdout;
-        return (process.ExitCode, await stderr);
     }
 
     private Task<McpClient> ConnectDirectlyAsync() =>
