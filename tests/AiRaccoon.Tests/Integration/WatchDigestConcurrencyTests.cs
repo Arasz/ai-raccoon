@@ -221,7 +221,7 @@ public sealed class WatchDigestConcurrencyTests
 
         public Task Entered => _entered.Task;
 
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0)
+        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null)
         {
             if (!_armed)
             {

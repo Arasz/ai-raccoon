@@ -355,7 +355,7 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
 
     private sealed class StubChunker : IMarkdownChunker
     {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
+        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
     }
 
     private sealed class ListLogger : ILogger<PromotionQueueService>

@@ -23,6 +23,26 @@ public sealed class FileIngestor(
     private const int DefaultMaxTokens = 256;
 
     /// <summary>
+    ///     The bundled vocab never changes with the configured model path (see
+    ///     <see cref="EmbeddingService.CreateLocal" />), so one real BERT tokenizer is built lazily and
+    ///     reused for every local-engine ingest in this process (docs/adr/0036) — counting is done with
+    ///     the same tokenizer that will actually embed the chunk, not the o200k budget proxy.
+    /// </summary>
+    /// <remarks>
+    ///     Known, deliberately unaddressed gap (docs/adr/0036): a long punctuation-free, newline-joined
+    ///     run (e.g. a hash list) can collapse to a single [UNK] under this tokenizer's pretokenizer,
+    ///     reporting an implausibly small count that a budget ceiling alone would not catch. Measured
+    ///     against the live bank at 1/15,246 entries affecting a 123-char fragment — real but
+    ///     low-impact; <see cref="OnnxEmbeddingGenerator" />'s embed-time detector makes it visible.
+    ///     Chunker-side remediation is out of scope for this wave.
+    /// </remarks>
+    private static readonly Lazy<TokenCount> LocalCountTokens = new(() =>
+    {
+        var tokenizer = OnnxEmbeddingGenerator.CreateTokenizer(BundledModel.ResolveVocabPath());
+        return text => tokenizer.CountTokens(text);
+    });
+
+    /// <summary>
     ///     Set <paramref name="embedInline" /> false when the caller holds a write transaction: embedding
     ///     runs the engine per chunk, and a lock held that long stalls another process's first bank open.
     /// </summary>
@@ -74,9 +94,9 @@ public sealed class FileIngestor(
     {
         var resolvedContext = context ?? ContextNaming.ProjectContext(projectId);
         var bucket = EntryBucket.For(resolvedContext, projectId);
-        var (chunkMaxTokens, chunkOverlayTokens) = await ChunkSizeForAsync(connection, cancellationToken)
+        var (chunkMaxTokens, chunkOverlayTokens, chunkCountTokens) = await ChunkSizeForAsync(connection, cancellationToken)
             .ConfigureAwait(false);
-        var chunks = handler.Chunker.Chunk(content, chunkMaxTokens, chunkOverlayTokens);
+        var chunks = handler.Chunker.Chunk(content, chunkMaxTokens, chunkOverlayTokens, chunkCountTokens);
         if (chunks.Count == 0)
         {
             return 0;
@@ -164,7 +184,13 @@ public sealed class FileIngestor(
         return inserted > 0 ? 1 : 0;
     }
 
-    private static async Task<(int MaxTokens, int OverlayTokens)> ChunkSizeForAsync(
+    /// <summary>
+    ///     Resolves the chunk budget from the configured engine (docs/adr/0036): "local" also supplies
+    ///     the real BERT tokenizer as the counting override, so the budget and the counter that enforces
+    ///     it always agree with what will actually embed the chunk. Other providers keep the default
+    ///     o200k counter (unchanged) — the mismatch this fixes is specific to the bundled model.
+    /// </summary>
+    private static async Task<(int MaxTokens, int OverlayTokens, TokenCount? CountTokens)> ChunkSizeForAsync(
         SqliteConnection connection, CancellationToken cancellationToken)
     {
         var provider = await connection.QuerySingleOrDefaultAsync<string?>(
@@ -172,15 +198,16 @@ public sealed class FileIngestor(
             .ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(provider))
         {
-            return (DefaultMaxTokens, ChunkingDefaults.OverlayTokens);
+            return (DefaultMaxTokens, ChunkingDefaults.OverlayTokens, null);
         }
 
         var model = await connection.QuerySingleOrDefaultAsync<string?>(
                 Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Model }, cancellationToken))
             .ConfigureAwait(false);
-        var context = EmbeddingService.ContextTokensFor(provider, model);
-        return (Math.Min(DefaultMaxTokens, context),
-            Math.Min(ChunkingDefaults.OverlayTokens, Math.Max(0, context - 1)));
+        var maxTokens = Math.Min(DefaultMaxTokens, EmbeddingService.SafeChunkBudgetFor(provider, model));
+        var overlayTokens = Math.Min(ChunkingDefaults.OverlayTokens, Math.Max(0, maxTokens - 1));
+        var countTokens = provider.Equals("local", StringComparison.OrdinalIgnoreCase) ? LocalCountTokens.Value : null;
+        return (maxTokens, overlayTokens, countTokens);
     }
 
     private static async Task RequireInScopeAsync(SqliteConnection connection, string projectId, string path,
