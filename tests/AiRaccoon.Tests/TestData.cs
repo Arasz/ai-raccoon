@@ -115,6 +115,36 @@ public static class TestData
         return root;
     }
 
+    private const int DeleteTempRootMaxAttempts = 5;
+    private static readonly TimeSpan DeleteTempRootFirstDelay = TimeSpan.FromMilliseconds(20);
+
+    /// <summary>Idempotent, retry-tolerant teardown for a <see cref="CreateTempRoot"/> directory: a
+    /// directory already gone is success (not a spurious Dispose failure), a transient lock — a
+    /// handle not yet closed, a scan racing teardown — gets a few short retries. A lock that never
+    /// clears still throws after the bound: swallowing it would hide a real leak behind a green test.</summary>
+    public static void DeleteTempRoot(string path)
+    {
+        var delay = DeleteTempRootFirstDelay;
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                Directory.Delete(path, true);
+                return;
+            }
+            catch (DirectoryNotFoundException)
+            {
+                return;
+            }
+            catch (Exception ex) when (attempt < DeleteTempRootMaxAttempts &&
+                                        ex is IOException or UnauthorizedAccessException)
+            {
+                Thread.Sleep(delay);
+                delay += delay;
+            }
+        }
+    }
+
     public static InfrastructureOptions CreateInfrastructureOptions(string dataRoot, string rid = "osx-arm64") => new() { DataRoot = dataRoot, Rid = rid, Scope = InstallScope.User };
 
     /// <summary>BundledModel with a null logger and a factory that never opens real connections; the model copy beside the test host makes EnsureAsync return all-present.</summary>
