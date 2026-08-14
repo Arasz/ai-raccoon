@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.QueryGuard;
+using AiRaccoon.Core.Memory.QueryGuard.Structural;
 using AiRaccoon.Core.SearchQuality;
 using FluentValidation;
 using JetBrains.Annotations;
@@ -154,10 +155,13 @@ public sealed partial class MemoryTools(
     }
 
     /// <summary>
-    ///     The read-path query guard (docs/adr/0040): disabled reads one setting and returns Clean
-    ///     untouched (byte-identical to no guard at all). Shadow mode logs a non-Clean verdict and
-    ///     still returns Clean, so the caller's behavior is unaffected while an operator measures
-    ///     their own traffic. Live mode returns the verdict as evaluated.
+    ///     The read-path query guard (docs/adr/0040, docs/adr/0041): disabled reads one setting and
+    ///     returns Clean untouched (byte-identical to no guard at all). Shadow mode logs a
+    ///     non-Clean verdict and still returns Clean, so the caller's behavior is unaffected while
+    ///     an operator measures their own traffic. Live mode returns the verdict as evaluated. The
+    ///     structural detector (ADR-0041) only ever runs when the regex tiers found nothing —
+    ///     it is strictly a third input to the warn tier, never able to override a regex Refuse or
+    ///     Warn, and gated by its own default-off setting.
     /// </summary>
     private async Task<QueryGuardVerdict> EvaluateQueryGuardAsync(string projectId, string query,
         CancellationToken cancellationToken)
@@ -172,6 +176,11 @@ public sealed partial class MemoryTools(
         var verdict = QueryGuardPolicy.Evaluate(query);
         if (verdict.Tier == QueryGuardTier.Clean)
         {
+            verdict = await EvaluateStructuralQueryGuardAsync(query, cancellationToken) ?? verdict;
+        }
+
+        if (verdict.Tier == QueryGuardTier.Clean)
+        {
             return verdict;
         }
 
@@ -184,6 +193,28 @@ public sealed partial class MemoryTools(
 
         Log.QueryGuardShadowVerdict(logger, verdict.Tier.ToString(), projectId, verdict.PolicyName ?? string.Empty);
         return QueryGuardVerdict.Clean;
+    }
+
+    /// <summary>
+    ///     Structural detector (docs/adr/0041): default off (<see cref="QueryGuardConfigKeys.DefaultStructuralEnabled" />),
+    ///     so the settings read below only happens when an operator has explicitly opted in.
+    ///     Returns null (defer to the regex verdict) unless the score clears the calibrated
+    ///     threshold; never returns Refuse (see <see cref="StructuralQueryGuardPolicy" />).
+    /// </summary>
+    private async Task<QueryGuardVerdict?> EvaluateStructuralQueryGuardAsync(string query, CancellationToken cancellationToken)
+    {
+        var structuralEnabled = QueryGuardConfigKeys.ParseStructuralEnabled(
+            await store.GetSettingAsync(QueryGuardConfigKeys.StructuralEnabledGlobal, cancellationToken));
+        if (!structuralEnabled)
+        {
+            return null;
+        }
+
+        var threshold = QueryGuardConfigKeys.ParseStructuralThreshold(
+            await store.GetSettingAsync(QueryGuardConfigKeys.StructuralThresholdGlobal, cancellationToken));
+
+        var verdict = StructuralQueryGuardPolicy.Evaluate(query, threshold);
+        return verdict.Tier == QueryGuardTier.Warn ? verdict : null;
     }
 
     [McpServerTool(Name = TnMemoryList)]

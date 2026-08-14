@@ -435,6 +435,80 @@ public class MemoryToolsTests
         logger.Collector.Count.ShouldBe(0);
     }
 
+    // Structural detector (docs/adr/0041): default off, wired as a third input to the warn tier.
+    // queryGuard.structural.threshold.global is overridden to a value every real score satisfies
+    // (0.0) or none can satisfy (1.1) so these tests don't depend on the exact trained score of
+    // any particular string.
+
+    [Fact]
+    public async Task Search_WithStructuralDetectorDisabled_IgnoresAHighScoringQuery()
+    {
+        // Default: queryGuard.structural.enabled.global is unset (off). Even with a threshold that
+        // every query would satisfy, nothing should fire — proving criterion 4 (byte-identical
+        // to today when off).
+        _store.Settings[QueryGuardConfigKeys.StructuralThresholdGlobal] = "0.0";
+
+        var result = await _tools.Search("acme", "why did the auth build start failing",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Data!.Warning.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Search_WithStructuralDetectorEnabled_AndAScoreAboveThreshold_WarnsCleanRegexQuery()
+    {
+        _store.Settings[QueryGuardConfigKeys.StructuralEnabledGlobal] = "true";
+        _store.Settings[QueryGuardConfigKeys.StructuralThresholdGlobal] = "0.0"; // every score satisfies this
+
+        var result = await _tools.Search("acme", "why did the auth build start failing",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        _store.LastQuery.ShouldNotBeNull(); // never refuses
+        result.Data!.Warning.ShouldNotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task Search_WithStructuralDetectorEnabled_AndAScoreBelowThreshold_IsClean()
+    {
+        _store.Settings[QueryGuardConfigKeys.StructuralEnabledGlobal] = "true";
+        _store.Settings[QueryGuardConfigKeys.StructuralThresholdGlobal] = "1.1"; // no score can satisfy this
+
+        var result = await _tools.Search("acme", "why did the auth build start failing",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Data!.Warning.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Search_WithStructuralDetectorEnabled_NeverOverridesARegexRefuse()
+    {
+        _store.Settings[QueryGuardConfigKeys.StructuralEnabledGlobal] = "true";
+        _store.Settings[QueryGuardConfigKeys.StructuralThresholdGlobal] = "0.0";
+
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.Search("acme", RealHermesProcessNotification, cancellationToken: TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldStartWith("invalid-params: ");
+        _store.LastQuery.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Search_InShadowMode_WithAStructuralWarn_RecordsButDoesNotSurfaceIt()
+    {
+        var logger = new FakeLogger<MemoryTools>();
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+            new NoOpSearchQualityService(), logger);
+        _store.Settings[QueryGuardConfigKeys.StructuralEnabledGlobal] = "true";
+        _store.Settings[QueryGuardConfigKeys.StructuralThresholdGlobal] = "0.0";
+        _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
+
+        var result = await tools.Search("acme", "why did the auth build start failing",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Data!.Warning.ShouldBeNull();
+        logger.Collector.LatestRecord.Message.ShouldContain("Warn");
+    }
+
     [Fact]
     public async Task Share_DelegatesToStore_AndReportsSharedContext()
     {
