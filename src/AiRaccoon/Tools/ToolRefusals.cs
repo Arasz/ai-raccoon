@@ -34,6 +34,7 @@ internal static partial class ToolRefusals
         [typeof(SyncNetworkException)] = "sync-network",
         [typeof(SyncCorruptFileException)] = "sync-corrupt-file",
         [typeof(AccessDeniedException)] = "access-denied",
+        [typeof(ContextOutsideProjectException)] = "context-outside-project",
         [typeof(ValidationException)] = "invalid-params",
         // The SDK's own argument marshaller (Microsoft.Extensions.AI.AIFunctionFactory) throws a
         // raw JsonException when a call's JSON shape doesn't match a parameter's declared type,
