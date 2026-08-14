@@ -18,12 +18,12 @@ public class ConfigCommandsExtractTests
     {
         CliArgs.TryParse(args, out var parsed);
         parsed!.Errors.ShouldBeEmpty();
-        parsed!.CommandPath.ShouldNotBeEmpty();
+        parsed.CommandPath.ShouldNotBeEmpty();
 
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var exit = await TestData.CreateConfigCommands(store, extract: new ExtractCommands(TestData.UnusedPromotionQueueStore()))
-            .RunAsync(parsed!, new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
+            .RunAsync(parsed, new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
         return (exit, stdout.ToString(), stderr.ToString());
     }
 

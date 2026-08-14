@@ -64,7 +64,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     {
         CliArgs.TryParse(args, out var parsed);
         parsed!.Errors.ShouldBeEmpty();
-        parsed!.CommandPath.ShouldNotBeEmpty();
+        parsed.CommandPath.ShouldNotBeEmpty();
 
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
@@ -77,7 +77,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var envProvider = new StubEnvProvider(envPassphrase);
         var encryptionCommands = new EncryptionCommands(bank, runner, envProvider, encryptionState, logger);
         var exit = await TestData.CreateConfigCommands(store, encryptionCommands: encryptionCommands)
-            .RunAsync(parsed!, new StandardStreams(stdin ?? TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
+            .RunAsync(parsed, new StandardStreams(stdin ?? TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
         return new RunResult(exit, stdout.ToString(), stderr.ToString(), bank);
     }
 

@@ -326,6 +326,15 @@
       "target": ".ai-badger/skills/learned/uncategorized/documentation-drift-audit"
     },
     {
+        "category": "uncategorized",
+        "name": "dotnet-ai-embeddings",
+        "sourceHash": "54e495a63c7c486075976659b9b3917aba0132c425705b5dae49566ce598a6da",
+        "sourcePath": "software-development/dotnet-ai-embeddings",
+        "status": "synced",
+        "syncedAt": "2026-08-14T08:22:59Z",
+        "target": ".ai-badger/skills/learned/uncategorized/dotnet-ai-embeddings"
+    },
+      {
       "category": "uncategorized",
       "name": "dotnet-ai-evaluation",
       "sourceHash": "60b03aed1476979cf30f3fa3fe131d4e55ba86d2559d719e7701635454dd8132",

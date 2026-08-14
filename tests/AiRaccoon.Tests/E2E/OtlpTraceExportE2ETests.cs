@@ -24,10 +24,10 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
     private const string ProtocolVar = "OTEL_EXPORTER_OTLP_PROTOCOL";
     private const string SamplerVar = "OTEL_TRACES_SAMPLER";
     private const string SamplerProbeSource = "AiRaccoon.Tests.SamplerProbe";
-
-    private McpServerFactory _factory = null!;
     private CapturingCollector _collector = null!;
     private IDisposable _env = null!;
+
+    private McpServerFactory _factory = null!;
 
     public async ValueTask InitializeAsync()
     {
@@ -155,7 +155,7 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
 
                 using var probe = new ActivitySource(SamplerProbeSource).StartActivity("sampler-probe");
                 probe.ShouldNotBeNull();
-                probe!.Dispose();
+                probe.Dispose();
 
                 factory.Services.GetRequiredService<TracerProvider>().ForceFlush();
 
@@ -195,9 +195,9 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
     /// <summary>Minimal loopback OTLP/HTTP collector stand-in: records every request path it receives.</summary>
     private sealed class CapturingCollector : IDisposable
     {
-        private readonly HttpListener _listener = new();
-        private readonly CancellationTokenSource _cts = new();
         private readonly Task _acceptLoop;
+        private readonly CancellationTokenSource _cts = new();
+        private readonly HttpListener _listener = new();
 
         public CapturingCollector()
         {
@@ -211,6 +211,14 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
         public string Endpoint { get; }
 
         public ConcurrentBag<string> RequestedPaths { get; } = [];
+
+        public void Dispose()
+        {
+            _cts.Cancel();
+            _listener.Stop();
+            _listener.Close();
+            _cts.Dispose();
+        }
 
         public async Task WaitForRequestAsync(string path, TimeSpan timeout)
         {
@@ -242,14 +250,6 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
                     return;
                 }
             }
-        }
-
-        public void Dispose()
-        {
-            _cts.Cancel();
-            _listener.Stop();
-            _listener.Close();
-            _cts.Dispose();
         }
 
         private static int FreePort()

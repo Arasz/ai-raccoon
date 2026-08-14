@@ -2,10 +2,10 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Rating;
-using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using Dapper;
@@ -26,7 +26,7 @@ public sealed partial class SqliteMemoryStore(
     TimeProvider timeProvider,
     ILogger<SqliteMemoryStore> logger,
     INoiseFilteringService noiseFilteringService,
-    System.Collections.Generic.IEnumerable<IAutoTtlPolicy> autoTtlPolicies)
+    IEnumerable<IAutoTtlPolicy> autoTtlPolicies)
     : IMemoryStore
 {
     private const string SharedScope = "shared";
@@ -49,7 +49,7 @@ public sealed partial class SqliteMemoryStore(
             var ttl = policy.EvaluateTtl(request);
             if (ttl.HasValue)
             {
-                resolvedTtlDays = resolvedTtlDays.HasValue ? System.Math.Min(resolvedTtlDays.Value, ttl.Value) : ttl.Value;
+                resolvedTtlDays = resolvedTtlDays.HasValue ? Math.Min(resolvedTtlDays.Value, ttl.Value) : ttl.Value;
             }
         }
 

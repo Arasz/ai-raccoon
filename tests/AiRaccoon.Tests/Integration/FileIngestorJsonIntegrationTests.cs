@@ -1,5 +1,4 @@
 using AiRaccoon.Core.Ingestion;
-using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
@@ -14,9 +13,7 @@ namespace AiRaccoon.Tests.Integration;
 public class FileIngestorJsonIntegrationTests : IDisposable
 {
     private readonly SqliteConnection _conn;
-    private readonly SqliteConnectionFactory _factory;
     private readonly FileIngestor _ingestor;
-    private readonly SqliteMemorySourceStore _sourceStore;
     private readonly string _testDir;
 
     public FileIngestorJsonIntegrationTests()
@@ -25,12 +22,12 @@ public class FileIngestorJsonIntegrationTests : IDisposable
         Directory.CreateDirectory(_testDir);
 
         var opts = new InfrastructureOptions { DataRoot = _testDir, Rid = "osx-arm64", Scope = InstallScope.User };
-        _factory = new SqliteConnectionFactory(opts, NullKeyProvider.Resolver(opts));
-        _conn = _factory.OpenBankAsync(CancellationToken.None).GetAwaiter().GetResult();
+        var factory = new SqliteConnectionFactory(opts, NullKeyProvider.Resolver(opts));
+        _conn = factory.OpenBankAsync(CancellationToken.None).GetAwaiter().GetResult();
 
-        _sourceStore = new SqliteMemorySourceStore(_factory);
+        var sourceStore = new SqliteMemorySourceStore(factory);
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker()), new JsonFileTypeHandler(TestData.RealJsonChunker())]);
-        _ingestor = new FileIngestor(matcher, new EntryEmbedder(new EmbeddingService()), _sourceStore, TimeProvider.System);
+        _ingestor = new FileIngestor(matcher, new EntryEmbedder(new EmbeddingService()), sourceStore, TimeProvider.System);
 
         // Configure global scope to include testDir
         using var scopeCmd = _conn.CreateCommand();

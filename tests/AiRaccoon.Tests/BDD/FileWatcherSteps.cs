@@ -70,21 +70,21 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     private async Task<string> RunCliAsync(params string[] args)
     {
         CliArgs.TryParse(args, out var parsed);
-        if (parsed!.Errors.Count > 0 || parsed!.CommandPath.Length == 0)
+        if (parsed!.Errors.Count > 0 || parsed.CommandPath.Length == 0)
         {
             throw new InvalidOperationException(
-                $"CLI command did not parse: {string.Join("; ", parsed!.Errors)}");
+                $"CLI command did not parse: {string.Join("; ", parsed.Errors)}");
         }
 
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var exit = await TestData.CreateConfigCommands(Ctx.Store, settings: new SettingsCommands(), sync: new SyncCommands(),
                 watch: new WatchCommands(Ctx.WatchStore))
-            .RunAsync(parsed!, new StandardStreams(TextReader.Null, stdout, stderr), CancellationToken.None);
+            .RunAsync(parsed, new StandardStreams(TextReader.Null, stdout, stderr), CancellationToken.None);
         _lastCliMessage = stdout.ToString() + stderr.ToString();
         if (exit != 0)
         {
-            _lastCliError = (stderr.ToString() + string.Join("; ", parsed!.Errors)).Trim();
+            _lastCliError = (stderr.ToString() + string.Join("; ", parsed.Errors)).Trim();
         }
 
         return _lastCliMessage;

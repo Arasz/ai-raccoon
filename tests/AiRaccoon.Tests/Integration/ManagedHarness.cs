@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using AiRaccoon.Benchmarks.Corpus;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;

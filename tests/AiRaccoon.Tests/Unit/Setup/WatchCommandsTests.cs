@@ -25,17 +25,17 @@ public class WatchCommandsTests
         var stderr = new StringWriter();
         var streams = new StandardStreams(TextReader.Null, stdout, stderr);
         var commands = new WatchCommands(watchStore ?? new FakeWatchStore());
-        var exit = parsed!.CommandPath switch
+        var exit = parsed.CommandPath switch
         {
-            ["watch", "enable"] or ["watch", "disable"] => await commands.SetEnabledAsync(parsed!.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
-            ["watch", "scope", "add"] => await commands.ScopeAddAsync(parsed!.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
-            ["watch", "scope", "remove"] => await commands.ScopeRemoveAsync(parsed!.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
-            ["watch", "scope", "list"] => await commands.ScopeListAsync(parsed!.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
-            ["watch", "concurrency"] => await commands.ConcurrencyAsync(parsed!.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
+            ["watch", "enable"] or ["watch", "disable"] => await commands.SetEnabledAsync(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
+            ["watch", "scope", "add"] => await commands.ScopeAddAsync(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
+            ["watch", "scope", "remove"] => await commands.ScopeRemoveAsync(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
+            ["watch", "scope", "list"] => await commands.ScopeListAsync(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
+            ["watch", "concurrency"] => await commands.ConcurrencyAsync(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
             ["watch", "list"] => await commands.ListAsync(store, streams, TestContext.Current.CancellationToken),
-            ["watch", "registered"] => await commands.RegisteredAsync(parsed!.ParsedCliArgs, streams, TestContext.Current.CancellationToken),
-            ["watch", "remove"] => await commands.RemoveAsync(parsed!.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
-            _ => throw new InvalidOperationException($"unhandled: {string.Join(' ', parsed!.CommandPath)}")
+            ["watch", "registered"] => await commands.RegisteredAsync(parsed.ParsedCliArgs, streams, TestContext.Current.CancellationToken),
+            ["watch", "remove"] => await commands.RemoveAsync(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
+            _ => throw new InvalidOperationException($"unhandled: {string.Join(' ', parsed.CommandPath)}")
         };
         return (exit, stdout.ToString(), stderr.ToString());
     }

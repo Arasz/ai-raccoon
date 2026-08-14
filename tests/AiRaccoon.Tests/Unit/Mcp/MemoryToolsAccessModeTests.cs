@@ -1,7 +1,7 @@
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
+using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;

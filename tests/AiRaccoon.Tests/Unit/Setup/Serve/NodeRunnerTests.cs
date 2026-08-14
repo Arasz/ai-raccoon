@@ -11,7 +11,6 @@ using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Client;
 using Shouldly;
 using Xunit;
-using NodeRunner = AiRaccoon.Hosting.Node.NodeRunner;
 
 namespace AiRaccoon.Tests.Unit.Setup.Serve;
 
@@ -357,8 +356,8 @@ public sealed class NodeRunnerTests : IDisposable
     {
         CliArgs.TryParse(args, out var parsed);
         parsed!.Errors.ShouldBeEmpty();
-        parsed!.CommandPath.ShouldBe(["serve"]);
-        var config = parsed!.Options.ToServerConfig();
+        parsed.CommandPath.ShouldBe(["serve"]);
+        var config = parsed.Options.ToServerConfig();
         var stdout = new LockingWriter();
         var stderr = new LockingWriter();
         var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
@@ -368,7 +367,7 @@ public sealed class NodeRunnerTests : IDisposable
             await gate;
         }
 
-        var exit = TestData.CreateNodeRunner(parsed!.ServerConfig.Options).RunAsync(parsed!, new StandardStreams(TextReader.Null, stdout, stderr), cts.Token);
+        var exit = TestData.CreateNodeRunner(parsed.ServerConfig.Options).RunAsync(parsed, new StandardStreams(TextReader.Null, stdout, stderr), cts.Token);
         return new ServeRun(exit, stdout, stderr, cts);
     }
 

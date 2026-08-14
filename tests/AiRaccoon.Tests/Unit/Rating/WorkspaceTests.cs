@@ -1,4 +1,4 @@
-using AiRaccoon.Core.Workspace;
+using AiRaccoon.Core.Isolation;
 using Shouldly;
 using Xunit;
 
@@ -45,12 +45,10 @@ public class WorkspaceTests
     }
 
     [Fact]
-    public void Constructor_WithOverLongAgentId_Throws() =>
-        Should.Throw<ArgumentException>(() => new Workspace("ws-1", "acme", agentId: new string('a', 201)));
+    public void Constructor_WithOverLongAgentId_Throws() => Should.Throw<ArgumentException>(() => new Workspace("ws-1", "acme", agentId: new string('a', 201)));
 
     [Fact]
-    public void Constructor_WithOverLongName_Throws() =>
-        Should.Throw<ArgumentException>(() => new Workspace("ws-1", "acme", name: new string('a', 201)));
+    public void Constructor_WithOverLongName_Throws() => Should.Throw<ArgumentException>(() => new Workspace("ws-1", "acme", name: new string('a', 201)));
 
     [Fact]
     public void Constructor_WithMaxLengthProvenance_IsAccepted()
@@ -65,15 +63,13 @@ public class WorkspaceTests
     [InlineData("agent\na")]
     [InlineData("agent\ta")]
     [InlineData("agent\0a")]
-    public void Constructor_WithControlCharacterInAgentId_Throws(string agentId) =>
-        Should.Throw<ArgumentException>(() => new Workspace("ws-1", "acme", agentId: agentId));
+    public void Constructor_WithControlCharacterInAgentId_Throws(string agentId) => Should.Throw<ArgumentException>(() => new Workspace("ws-1", "acme", agentId: agentId));
 
     [Theory]
     [InlineData("name\na")]
     [InlineData("name\ta")]
     [InlineData("name\0a")]
-    public void Constructor_WithControlCharacterInName_Throws(string name) =>
-        Should.Throw<ArgumentException>(() => new Workspace("ws-1", "acme", name: name));
+    public void Constructor_WithControlCharacterInName_Throws(string name) => Should.Throw<ArgumentException>(() => new Workspace("ws-1", "acme", name: name));
 
     [Fact]
     public void Context_IsDerivedFromId()

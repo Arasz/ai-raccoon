@@ -4,9 +4,9 @@ using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Degradation;
+using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Sync;
-using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Promotion;
@@ -787,7 +787,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     {
         var obj = await CloudStore.PullAsync(ObjectKeyFor((string)scenarioContext["ProjectId"]));
         obj.ShouldNotBeNull();
-        obj!.ETag.ShouldNotBeNullOrWhiteSpace();
+        obj.ETag.ShouldNotBeNullOrWhiteSpace();
     }
 
     [Then("the snapshot passed integrity check before upload")]

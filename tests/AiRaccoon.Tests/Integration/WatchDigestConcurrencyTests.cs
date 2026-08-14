@@ -1,7 +1,6 @@
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -38,9 +37,9 @@ public sealed class WatchDigestConcurrencyTests
     {
         var token = TestContext.Current.CancellationToken;
         using var bank = new Bank("digest-race");
-        var one = bank.Process();
-        var two = bank.Process();
-        var reader = bank.Process();
+        var one = bank.TestProcess();
+        var two = bank.TestProcess();
+        var reader = bank.TestProcess();
         await bank.SeedAsync(one, $"{Sentinel} v1body", token);
 
         bank.Write($"{Sentinel} v2body");
@@ -70,8 +69,8 @@ public sealed class WatchDigestConcurrencyTests
     {
         var token = TestContext.Current.CancellationToken;
         using var bank = new Bank("digest-crash");
-        var one = bank.Process();
-        var reader = bank.Process();
+        var one = bank.TestProcess();
+        var reader = bank.TestProcess();
         await bank.SeedAsync(one, $"{Sentinel} v1body", token);
 
         bank.Write($"{Sentinel} v2body");
@@ -98,9 +97,9 @@ public sealed class WatchDigestConcurrencyTests
             FilePath = Path.Combine(WatchDir, "a.md");
         }
 
-        public string DataRoot { get; }
+        private string DataRoot { get; }
 
-        public string WatchDir { get; }
+        private string WatchDir { get; }
 
         public string FilePath { get; }
 
@@ -115,7 +114,7 @@ public sealed class WatchDigestConcurrencyTests
             }
         }
 
-        public Process Process()
+        public Process TestProcess()
         {
             var process = new Process(DataRoot);
             _processes.Add(process);
@@ -236,12 +235,9 @@ public sealed class WatchDigestConcurrencyTests
                 throw _failure;
             }
 
-            if (!_release.Wait(Patience))
-            {
-                throw new TimeoutException("the parked digest was never released — the observation did not happen mid-digest");
-            }
-
-            return _inner.Chunk(text, maxTokens, overlayTokens);
+            return !_release.Wait(Patience)
+                ? throw new TimeoutException("the parked digest was never released — the observation did not happen mid-digest")
+                : _inner.Chunk(text, maxTokens, overlayTokens);
         }
 
         public void Arm() => _armed = true;

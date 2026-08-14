@@ -24,13 +24,13 @@ public class SyncCommandsTests
         var stderr = new StringWriter();
         var streams = new StandardStreams(stdin ?? TextReader.Null, stdout, stderr);
         var commands = new SyncCommands();
-        var exit = parsed!.CommandPath switch
+        var exit = parsed.CommandPath switch
         {
-            ["sync", "add", "s3"] => await commands.AddS3Async(parsed!.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
-            ["sync", "add", "azure"] => await commands.AddAzureAsync(parsed!.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
+            ["sync", "add", "s3"] => await commands.AddS3Async(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
+            ["sync", "add", "azure"] => await commands.AddAzureAsync(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
             ["sync", "remove"] => await commands.RemoveAsync(store, streams, TestContext.Current.CancellationToken),
             ["sync", "show"] => await commands.ShowAsync(store, streams, TestContext.Current.CancellationToken),
-            _ => throw new InvalidOperationException($"unhandled: {string.Join(' ', parsed!.CommandPath)}")
+            _ => throw new InvalidOperationException($"unhandled: {string.Join(' ', parsed.CommandPath)}")
         };
         return (exit, stdout.ToString(), stderr.ToString());
     }

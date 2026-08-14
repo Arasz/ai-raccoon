@@ -1,7 +1,7 @@
-using AiRaccoon.Core.Workspace;
+using AiRaccoon.Core.Isolation;
 using CommunityToolkit.Diagnostics;
 using Dapper;
-using WorkspaceRecord = AiRaccoon.Core.Workspace.Workspace;
+using WorkspaceRecord = AiRaccoon.Core.Isolation.Workspace;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 

@@ -12,8 +12,6 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Shouldly;
 using Xunit;
-using NodeRunner = AiRaccoon.Hosting.Node.NodeRunner;
-using ObservabilityRunner = AiRaccoon.Hosting.Node.ObservabilityRunner;
 
 namespace AiRaccoon.Tests.Unit.Observability;
 
@@ -264,7 +262,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
         var stdout = new StringWriter();
         var stderr = new StringWriter();
 
-        var exit = await TestData.CreateObservabilityRunner().RunAsync(parsed!, new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
+        var exit = await TestData.CreateObservabilityRunner().RunAsync(parsed, new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
         return new ObservabilityRun(exit, stdout.ToString(), stderr.ToString());
     }
 
@@ -272,12 +270,12 @@ public sealed class ObservabilityRunnerTests : IDisposable
     {
         CliArgs.TryParse(args, out var parsed);
         parsed!.Errors.ShouldBeEmpty();
-        var config = parsed!.Options.ToServerConfig();
+        var config = parsed.Options.ToServerConfig();
         var stdout = new LockingWriter();
         var stderr = new LockingWriter();
         var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
 
-        var exit = TestData.CreateNodeRunner(parsed!.ServerConfig.Options).RunAsync(parsed!, new StandardStreams(TextReader.Null, stdout, stderr), cts.Token);
+        var exit = TestData.CreateNodeRunner(parsed.ServerConfig.Options).RunAsync(parsed, new StandardStreams(TextReader.Null, stdout, stderr), cts.Token);
         return new ServeRun(exit, stdout, stderr, cts);
     }
 

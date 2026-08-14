@@ -1,6 +1,5 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -437,7 +436,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         var sourceId = await connection.ExecuteScalarAsync<long?>(
             "SELECT source_id FROM entries WHERE hash = @hash", new { hash = entry.Hash });
         sourceId.ShouldNotBeNull("WriteAsync must set source_id on the entry");
-        sourceId!.Value.ShouldBeGreaterThan(0, "source_id must reference a real memory_source row");
+        sourceId.Value.ShouldBeGreaterThan(0, "source_id must reference a real memory_source row");
 
         var sourceType = await connection.ExecuteScalarAsync<string>(
             "SELECT source_type FROM memory_source WHERE id = @id", new { id = sourceId.Value });
@@ -464,7 +463,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
             "SELECT source_id FROM entries WHERE scope = 'shared' AND value = @value",
             new { value = "shareable source identity" });
         sharedSourceId.ShouldNotBeNull("the shared row must have source_id populated");
-        sharedSourceId!.Value.ShouldBeGreaterThan(0);
+        sharedSourceId.Value.ShouldBeGreaterThan(0);
 
         // The shared entry's SourceFile is carried into search results.
         var results = await _store.SearchAsync(

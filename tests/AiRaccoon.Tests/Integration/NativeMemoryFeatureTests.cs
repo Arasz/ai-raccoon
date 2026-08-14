@@ -1,4 +1,4 @@
-using AiRaccoon.Core.Workspace;
+using AiRaccoon.Core.Isolation;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;

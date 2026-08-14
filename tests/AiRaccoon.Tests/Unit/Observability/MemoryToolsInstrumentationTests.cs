@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using AiRaccoon.Access;
+using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Sync;
-using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Observability;
 using AiRaccoon.Tools;
@@ -203,8 +203,8 @@ public class MemoryToolsInstrumentationTests
 
     private sealed class SimpleFakeStore : IMemoryStore
     {
-        public MemoryEntry? Entry { get; set; }
-        public bool ThrowOnWrite { get; set; }
+        public MemoryEntry? Entry { get; init; }
+        public bool ThrowOnWrite { get; init; }
 
         public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
         {
@@ -283,9 +283,9 @@ public class MemoryToolsInstrumentationTests
         TimeProvider.System,
         null!)
     {
-        public Exception? Exception { get; set; }
+        public Exception? Exception { get; init; }
 
-        public override Task<SyncResult> MemorySyncAsync(string projectId, string? objectKey,
+        public override Task<SyncResult> MemorySyncAsync(string projectId, string? objectKey = null,
             CancellationToken cancellationToken = default) =>
             Exception is not null ? throw Exception : Task.FromResult(new SyncResult(0, 0, 0));
     }

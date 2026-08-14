@@ -1,6 +1,6 @@
+using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Workspace;
-using WorkspaceRecord = AiRaccoon.Core.Workspace.Workspace;
+using WorkspaceRecord = AiRaccoon.Core.Isolation.Workspace;
 
 namespace AiRaccoon.Infrastructure.Workspace;
 

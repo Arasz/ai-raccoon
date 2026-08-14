@@ -1,8 +1,8 @@
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
+using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
-using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Observability;
 using AiRaccoon.Tools;

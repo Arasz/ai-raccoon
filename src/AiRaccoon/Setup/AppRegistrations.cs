@@ -1,13 +1,13 @@
 using AiRaccoon.Access;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Memory.Filtering.Policies;
 using AiRaccoon.Core.Observability;
 using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Core.Watch;
-using AiRaccoon.Core.Workspace;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Embedding;
@@ -168,11 +168,11 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<INoiseStore, SqliteNoiseStore>();
             services.AddRequiredSingleton<INoiseFilteringService, NoiseFilteringService>();
             services.AddRequiredSingleton<INoiseVectorProvider, BundledNoiseVectorProvider>();
-            
+
             // Register default noise filter policies
             services.AddSingleton<INoiseFilterPolicy, HermesProcessNoisePolicy>();
             services.AddSingleton<INoiseFilterPolicy, ZeroShotEmbeddingNoisePolicy>();
-            
+
             // Register default TTL policies
             services.AddSingleton<IAutoTtlPolicy, PromotionScorerTtlPolicy>();
             services.AddRequiredSingleton<IMemorySourceStore, SqliteMemorySourceStore>();

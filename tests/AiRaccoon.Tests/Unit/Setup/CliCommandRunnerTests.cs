@@ -24,7 +24,7 @@ public sealed class CliCommandRunnerTests : IDisposable
         CliArgs.TryParse(args, out var parsed);
         parsed!.Errors.ShouldBeEmpty();
 
-        var config = parsed!.Options.ToServerConfig();
+        var config = parsed.Options.ToServerConfig();
 
         // Serialized with the encryption tests: AIRACCOON_DB_PASSPHRASE is process-global and
         // must be cleared during a run so a dev machine's value cannot poison a fresh-bank test.

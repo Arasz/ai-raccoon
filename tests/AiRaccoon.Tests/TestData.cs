@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
@@ -11,10 +12,9 @@ using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli.Commands;
+using AiRaccoon.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using AiRaccoon.Core.Memory.Filtering;
-using AiRaccoon.Core.Memory.Filtering.Policies;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests;
@@ -106,25 +106,6 @@ public static class TestData
         return services.BuildServiceProvider().GetRequiredService<IProxyRunner>();
     }
 
-    private sealed class UnreachablePromotionQueueStore : IPromotionQueueStore
-    {
-        public Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<IReadOnlyList<PromotionQueueRow>> ListAsync(string? projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<IReadOnlyList<PromotionQueueRow>> DiscardAsync(string projectId, string? hash, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<PromotionQueueStats> GetStatsAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<PromotionWaitStats> GetWaitStatsAsync(string? projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<PromotionQueueRow?> EvictVictimAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<int> ClearStaleAsync(string projectId, int currentScorerVersion, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task RememberDiscardsAsync(string projectId, IReadOnlyList<string> hashes, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<int> PruneRejectedAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<PromotionQueueOrphanReport> PruneOrphansAsync(bool apply, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-    }
-
-    private sealed class LoopbackHttpClientFactory : IHttpClientFactory
-    {
-        public HttpClient CreateClient(string name) => new() { Timeout = ServerProbe.RequestTimeout };
-    }
-
     public static string CreateTempRoot(string prefix = "ai-raccoon-tests")
     {
         var root = Path.Combine(Path.GetTempPath(), prefix, Guid.NewGuid().ToString("N"));
@@ -177,6 +158,25 @@ public static class TestData
         }
 
         throw new InvalidOperationException($"Could not locate {relative} from the test output directory.");
+    }
+
+    private sealed class UnreachablePromotionQueueStore : IPromotionQueueStore
+    {
+        public Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<PromotionQueueRow>> ListAsync(string? projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<PromotionQueueRow>> DiscardAsync(string projectId, string? hash, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<PromotionQueueStats> GetStatsAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<PromotionWaitStats> GetWaitStatsAsync(string? projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<PromotionQueueRow?> EvictVictimAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<int> ClearStaleAsync(string projectId, int currentScorerVersion, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task RememberDiscardsAsync(string projectId, IReadOnlyList<string> hashes, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<int> PruneRejectedAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<PromotionQueueOrphanReport> PruneOrphansAsync(bool apply, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+
+    private sealed class LoopbackHttpClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new() { Timeout = ServerProbe.RequestTimeout };
     }
 
     private sealed class NoopHttpClientFactory : IHttpClientFactory

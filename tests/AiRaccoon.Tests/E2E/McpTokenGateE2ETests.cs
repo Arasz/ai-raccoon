@@ -6,11 +6,11 @@ using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup.Cli;
+using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Client;
 using Shouldly;
 using Xunit;
-using NodeRunner = AiRaccoon.Hosting.Node.NodeRunner;
 
 namespace AiRaccoon.Tests.E2E;
 
@@ -26,6 +26,7 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
     : IClassFixture<McpTokenGateE2ETests.ServeFixture>
 {
     private static readonly HttpClient HttpClient = new();
+    private static readonly TimeProvider TimeProvider = TimeProvider.System;
 
     private int Port => serve.Port;
 
@@ -105,11 +106,9 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
 
     private async Task<HttpResponseMessage> PostInitializeAsync(string? token)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Post, Url)
-        {
-            Content = new StringContent("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}""",
-                Encoding.UTF8, new MediaTypeHeaderValue("application/json"))
-        };
+        using var request = new HttpRequestMessage(HttpMethod.Post, Url);
+        request.Content = new StringContent("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}""",
+            Encoding.UTF8, new MediaTypeHeaderValue("application/json"));
         request.Headers.Accept.ParseAdd("application/json, text/event-stream");
         if (token is not null)
         {
@@ -143,7 +142,7 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
             Port = FreePort();
             CliArgs.TryParse(["--data-root", DataRoot, "serve", "--port", Port.ToString()], out var parsed);
             parsed!.Errors.ShouldBeEmpty();
-            _serve = TestData.CreateNodeRunner(parsed!.ServerConfig.Options).RunAsync(parsed!, new StandardStreams(TextReader.Null, _stdout, _stderr), _cts.Token);
+            _serve = TestData.CreateNodeRunner(parsed.ServerConfig.Options).RunAsync(parsed, new StandardStreams(TextReader.Null, _stdout, _stderr), _cts.Token);
             await WaitForListeningAsync();
         }
 
@@ -159,18 +158,14 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
 
         private async Task WaitForListeningAsync()
         {
-            var deadline = DateTime.UtcNow.AddSeconds(90);
-            while (DateTime.UtcNow < deadline)
+            var success = await WaitByPooling
+                .WaitForAsync(() => ValueTask.FromResult(_stdout.ToString().Contains("http://", StringComparison.Ordinal)), TimeProvider, TestContext.Current.CancellationToken)
+                .ConfigureAwait(false);
+
+            if (!success)
             {
-                if (_stdout.ToString().Contains("http://", StringComparison.Ordinal))
-                {
-                    return;
-                }
-
-                await Task.Delay(50, TestContext.Current.CancellationToken);
+                throw new TimeoutException($"serve never reported a URL; stderr: {_stderr}");
             }
-
-            throw new TimeoutException($"serve never reported a URL; stderr: {_stderr}");
         }
 
         private static int FreePort()

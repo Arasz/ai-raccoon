@@ -6,7 +6,6 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup.Cli;
 using Shouldly;
 using Xunit;
-using NodeRunner = AiRaccoon.Hosting.Node.NodeRunner;
 
 namespace AiRaccoon.Tests.Unit.Setup.Serve;
 
@@ -197,11 +196,11 @@ public sealed class ServeRestartTests : IDisposable
     {
         CliArgs.TryParse(args, out var parsed);
         parsed!.Errors.ShouldBeEmpty();
-        parsed!.CommandPath.ShouldBe(["serve"]);
+        parsed.CommandPath.ShouldBe(["serve"]);
         var stdout = new LockingWriter();
         var stderr = new LockingWriter();
         var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
-        return new ServeRun(TestData.CreateNodeRunner(parsed!.ServerConfig.Options).RunAsync(parsed!, new StandardStreams(TextReader.Null, stdout, stderr), cts.Token),
+        return new ServeRun(TestData.CreateNodeRunner(parsed.ServerConfig.Options).RunAsync(parsed, new StandardStreams(TextReader.Null, stdout, stderr), cts.Token),
             stdout, stderr, cts);
     }
 

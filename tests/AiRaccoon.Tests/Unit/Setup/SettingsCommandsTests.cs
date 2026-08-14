@@ -26,20 +26,20 @@ public class SettingsCommandsTests
         var stderr = new StringWriter();
         var streams = new StandardStreams(TextReader.Null, stdout, stderr);
         var commands = new SettingsCommands();
-        var exit = parsed!.CommandPath switch
+        var exit = parsed.CommandPath switch
         {
             ["access", "default", "show"] => await commands.AccessDefaultShowAsync(store, streams, TestContext.Current.CancellationToken),
             ["access", "list"] => await commands.AccessListAsync(store, streams, TestContext.Current.CancellationToken),
-            ["model", "set", "local"] => await commands.ModelSetLocalAsync(parsed!.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
+            ["model", "set", "local"] => await commands.ModelSetLocalAsync(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
             ["model", "show"] => await commands.ModelShowAsync(store, streams, TestContext.Current.CancellationToken),
-            ["retrieval", "alpha", "set"] => await commands.RetrievalAlphaSetAsync(parsed!.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
+            ["retrieval", "alpha", "set"] => await commands.RetrievalAlphaSetAsync(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
             ["retrieval", "alpha", "show"] => await commands.RetrievalAlphaShowAsync(store, streams, TestContext.Current.CancellationToken),
             ["sweep", "enable"] => await commands.SweepEnabledSetAsync(true, store, streams, TestContext.Current.CancellationToken),
             ["sweep", "disable"] => await commands.SweepEnabledSetAsync(false, store, streams, TestContext.Current.CancellationToken),
-            ["sweep", "interval-hours"] => await commands.SweepIntervalHoursSetAsync(parsed!.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
-            ["sweep", "threshold", "set"] => await commands.SweepThresholdSetAsync(parsed!.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
+            ["sweep", "interval-hours"] => await commands.SweepIntervalHoursSetAsync(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
+            ["sweep", "threshold", "set"] => await commands.SweepThresholdSetAsync(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
             ["sweep", "show"] => await commands.SweepShowAsync(store, streams, TestContext.Current.CancellationToken),
-            _ => throw new InvalidOperationException($"unhandled: {string.Join(' ', parsed!.CommandPath)}")
+            _ => throw new InvalidOperationException($"unhandled: {string.Join(' ', parsed.CommandPath)}")
         };
         return (exit, stdout.ToString(), stderr.ToString());
     }
