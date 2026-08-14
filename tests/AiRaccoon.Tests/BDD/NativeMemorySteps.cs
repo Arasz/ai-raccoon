@@ -7,6 +7,7 @@ using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Sync;
+using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Promotion;
@@ -1260,6 +1261,17 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         fenceChunk.ShouldContain("Console.WriteLine(result);");
     }
 
+    [Then("the fence falls back to token-bounded chunks that respect max_tokens")]
+    public void ThenTheFenceFallsBackToTokenBoundedChunks()
+    {
+        var chunks = (IReadOnlyList<string>)scenarioContext["ChunksTightBudget"];
+        var tokenizer = new O200kTokenizer();
+        chunks.ShouldAllBe(chunk => tokenizer.CountTokens(chunk) <= 8,
+            "an over-budget fence must not be emitted whole (docs/adr/0036)");
+        string.Concat(chunks).ShouldContain("var sum = 1 + 2;");
+        string.Concat(chunks).ShouldContain("Console.WriteLine(result);");
+    }
+
     [Then("no error is raised")]
     public void ThenNoErrorRaised() => _lastSearch.ShouldNotBeNull();
 
@@ -1472,9 +1484,17 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public void WhenIIngestIt()
     {
         var text = (string)scenarioContext["FencedNote"];
-        // A budget smaller than the fence's own token count: a fence-unaware chunker would be
-        // forced to split it.
-        scenarioContext["Chunks"] = RealChunker.Chunk(text, 8);
+        // A budget the fence comfortably fits under: it stays one atomic chunk.
+        scenarioContext["Chunks"] = RealChunker.Chunk(text, ChunkSmallMaxTokens);
+    }
+
+    [When("I ingest it with a budget smaller than the fence")]
+    public void WhenIIngestItWithATightBudget()
+    {
+        var text = (string)scenarioContext["FencedNote"];
+        // Smaller than the fence's own token count (docs/adr/0036): an over-budget fence is already
+        // a broken chunk, so it falls back to token-bounded splitting instead of staying atomic.
+        scenarioContext["ChunksTightBudget"] = RealChunker.Chunk(text, 8);
     }
 
     [Given(@"workspace ""(.*)"" contains entries ""(.*)"" and ""(.*)""")]

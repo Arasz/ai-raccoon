@@ -1,6 +1,8 @@
 using System.ClientModel;
 using System.Collections.Concurrent;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using OpenAI;
 using OpenAI.Embeddings;
 
@@ -11,7 +13,7 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     docs/work/features-native-memory/native-memory.feature): local → the bundled int8 ONNX model
 ///     in-process, openai → any OpenAI-compatible endpoint. A fingerprint change triggers a full re-embed.
 /// </summary>
-public sealed class EmbeddingService : IEmbeddingService
+public sealed class EmbeddingService(ILogger<EmbeddingService>? logger = null) : IEmbeddingService
 {
     public const string DefaultOpenAiEndpoint = "https://api.openai.com/v1";
 
@@ -23,6 +25,8 @@ public sealed class EmbeddingService : IEmbeddingService
 
     /// <summary>Documented maximum input of OpenAI-compatible text-embedding models (all share 8191).</summary>
     public const int OpenAiEmbeddingContextTokens = 8191;
+
+    private readonly ILogger<EmbeddingService> _logger = logger ?? NullLogger<EmbeddingService>.Instance;
 
     // The service owns generator lifetimes: an ONNX session (23 MB model) and an OpenAI client
     // are expensive to build, so engines are cached per fingerprint and never disposed by callers.
@@ -58,6 +62,21 @@ public sealed class EmbeddingService : IEmbeddingService
         };
     }
 
+    /// <summary>
+    ///     Content-token chunk budget for a provider, counted in that provider's own tokenizer
+    ///     (docs/adr/0036): "local" reserves 2 of the model's 256-token window for the BERT
+    ///     [CLS]/[SEP] special tokens <see cref="OnnxEmbeddingGenerator" /> adds at embed time, so
+    ///     the chunker must never emit more than <see cref="OnnxEmbeddingGenerator.MaxContentTokens" />
+    ///     real content tokens. Other providers' context window (<see cref="ContextTokensFor" />) is
+    ///     the budget directly.
+    /// </summary>
+    public static int SafeChunkBudgetFor(string provider, string? model) =>
+        provider.ToLowerInvariant() switch
+        {
+            "local" => OnnxEmbeddingGenerator.MaxContentTokens,
+            _ => ContextTokensFor(provider, model)
+        };
+
     /// <summary>Stable engine identity recorded in settings; a change re-embeds the bank.</summary>
     public static string EngineFingerprint(string provider, string? model, string? baseUrl) =>
         provider.ToLowerInvariant() switch
@@ -82,7 +101,7 @@ public sealed class EmbeddingService : IEmbeddingService
                 "Run 'ai-raccoon model set local' for the bundled model, or 'ai-raccoon model set local <path-to-onnx>' for a custom path.");
         }
 
-        return new OnnxEmbeddingGenerator(modelPath, BundledModel.ResolveVocabPath());
+        return new OnnxEmbeddingGenerator(modelPath, BundledModel.ResolveVocabPath(), _logger);
     }
 
     private static IEmbeddingGenerator<string, Embedding<float>> CreateOpenAi(EmbeddingSettings settings)

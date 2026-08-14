@@ -225,6 +225,10 @@ Feature: Native memory store (ai-raccoon MCP server)
             Given a note containing a fenced code block
             When I ingest it
             Then no chunk boundary falls inside the fence
+        Scenario: An over-budget fence falls back to token-bounded chunks
+            Given a note containing a fenced code block
+            When I ingest it with a budget smaller than the fence
+            Then the fence falls back to token-bounded chunks that respect max_tokens
 
     # File watching is its own shipped feature: docs/features/file-watcher/file-watcher.feature
     # (memory_watch_add / memory_watch_status / memory_watch_remove, persisted watches table).

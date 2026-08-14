@@ -119,6 +119,6 @@ public sealed class SweepHostedServiceTests : IDisposable
 
     private sealed class StubChunker : IMarkdownChunker
     {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0) => [text];
+        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null) => [text];
     }
 }
