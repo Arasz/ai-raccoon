@@ -224,8 +224,8 @@ public sealed partial class SqliteMemoryStore(
 
         var fused = ReciprocalRankFusion.Fuse(
             [
-                (ModalityCandidates.ByBm25(ftsBatches), query.FtsWeight),
-                (ModalityCandidates.ByCosine(vectorBatches), query.VectorWeight)
+                (ModalityCandidates.ByBm25(ftsBatches, valueByHash), query.FtsWeight),
+                (ModalityCandidates.ByCosine(vectorBatches, valueByHash), query.VectorWeight)
             ],
             query.RrfK, 0, int.MaxValue);
         var merged = SearchResultMerger.Merge([fused], query.Limit, query.MinScore, query.RrfK,

@@ -273,6 +273,29 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             .ShouldContain(e => e.Value == "cross project convention");
     }
 
+    /// <summary>
+    ///     WP3a/ADR-0035: a promoted shared copy gets a different row hash than its project
+    ///     original (ContentHash.Of(path, value) vs. shared/&lt;sha256(value)&gt;.md), so scope=all
+    ///     used to return both. Dedup is on content, preferring the project-scoped copy.
+    /// </summary>
+    [Fact]
+    public async Task Search_ScopeAll_DedupesAPromotedSharedCopy_AgainstItsProjectOriginal()
+    {
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "container registries need image scanning before publish"),
+            TestContext.Current.CancellationToken);
+        var shared = await _store.ShareAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
+        shared.Entry.Hash.ShouldNotBe(entry.Hash, "the shared copy must carry a different row hash for this to be a real dedup test");
+
+        var results = await _store.SearchAsync(
+            new SearchQuery("acme", "container registries image scanning", MinScore: 0.0),
+            TestContext.Current.CancellationToken);
+
+        results.Count.ShouldBe(1,
+            "the promoted shared copy and its project original are the same text and must not double-count");
+        results[0].Hash.ShouldBe(entry.Hash, "the project-scoped copy is preferred over the shared duplicate");
+    }
+
     [Fact]
     public async Task Share_Twice_IsIdempotent()
     {
