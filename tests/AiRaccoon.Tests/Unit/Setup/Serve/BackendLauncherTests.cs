@@ -144,14 +144,17 @@ public sealed class BackendLauncherTests : IDisposable
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         var clock = new FakeTimeProvider();
+        var timers = new TimerRegistrations(clock);
         var launcher = new BackendLauncher(TestData.CreateServerProbe(), BackendLauncher.DefaultBudget,
-            clock, NullLogger<BackendLauncher>.Instance);
+            timers, NullLogger<BackendLauncher>.Instance);
         var stopwatch = Stopwatch.StartNew();
 
         // A process that starts, never listens and outlives the budget.
         lease.ReleaseForBind();
         var acquire = launcher.AcquireAsync(port, "sleep", ["10"], TestContext.Current.CancellationToken);
-        await Task.Delay(200, TestContext.Current.CancellationToken); // timer registers
+        // Advancing before the budget and poll timers exist would silently do nothing.
+        (await timers.WaitForAsync(2, TestContext.Current.CancellationToken))
+            .ShouldBeTrue("the launcher never registered its timers");
         acquire.IsCompleted.ShouldBeFalse();
 
         clock.Advance(BackendLauncher.DefaultBudget);
@@ -197,13 +200,16 @@ public sealed class BackendLauncherTests : IDisposable
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         var clock = new FakeTimeProvider();
+        var timers = new TimerRegistrations(clock);
         var launcher = new BackendLauncher(TestData.CreateServerProbe(), BackendLauncher.DefaultBudget,
-            clock, NullLogger<BackendLauncher>.Instance);
+            timers, NullLogger<BackendLauncher>.Instance);
         using var caller = new CancellationTokenSource();
 
         lease.ReleaseForBind();
         var acquire = launcher.AcquireAsync(port, "sleep", ["10"], caller.Token);
-        await Task.Delay(200, TestContext.Current.CancellationToken); // timer registers
+        // Cancel only once the acquire is genuinely in flight, not merely scheduled.
+        (await timers.WaitForAsync(2, TestContext.Current.CancellationToken))
+            .ShouldBeTrue("the launcher never registered its timers");
         await caller.CancelAsync();
 
         await Should.ThrowAsync<OperationCanceledException>(() => acquire.WaitAsync(TimeSpan.FromSeconds(10),
