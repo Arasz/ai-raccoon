@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Integration.Isolation;
 
@@ -36,7 +37,7 @@ public sealed class WorkspaceWriteDedupTests : IDisposable
             TestData.CreateEmbeddingService());
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public async Task Write_ToWorkspace_WhenContentAlreadyCommitted_StillLandsInTheWorkspace()
@@ -143,8 +144,4 @@ public sealed class WorkspaceWriteDedupTests : IDisposable
             "SELECT count(*) FROM entries WHERE hash = @hash", new { hash });
     }
 
-    private sealed class StubChunker : IMarkdownChunker
-    {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
-    }
 }

@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -34,7 +35,7 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
         _factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
-        _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new ParagraphChunker(), new FakeTimeProvider(FixedNow),
+        _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
             TestData.CreateEmbeddingService());
         _workspaces = new SqliteWorkspaceStore(_factory);
         await AllowIngestScopeAsync(_dataRoot);
@@ -42,10 +43,7 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
 
     public ValueTask DisposeAsync()
     {
-        if (Directory.Exists(_dataRoot))
-        {
-            Directory.Delete(_dataRoot, true);
-        }
+        TestData.DeleteTempRoot(_dataRoot);
 
         return ValueTask.CompletedTask;
     }
@@ -332,8 +330,4 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
         public int TotalChunks { get; set; }
     }
 
-    private sealed class ParagraphChunker : IMarkdownChunker
-    {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
-    }
 }

@@ -252,8 +252,4 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
             Task.FromResult(new Passphrase(Source) { Value = passphrase });
     }
 
-    private sealed class StubChunker : IMarkdownChunker
-    {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
-    }
 }

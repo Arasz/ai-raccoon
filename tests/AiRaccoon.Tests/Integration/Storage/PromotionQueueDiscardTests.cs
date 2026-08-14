@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -48,10 +49,7 @@ public sealed class PromotionQueueDiscardTests : IDisposable
     {
         foreach (var root in new[] { _dataRoot, _contentRoot })
         {
-            if (Directory.Exists(root))
-            {
-                Directory.Delete(root, true);
-            }
+            TestData.DeleteTempRoot(root);
         }
     }
 
@@ -283,8 +281,4 @@ public sealed class PromotionQueueDiscardTests : IDisposable
         }
     }
 
-    private sealed class StubChunker : IMarkdownChunker
-    {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
-    }
 }

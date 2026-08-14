@@ -38,7 +38,7 @@ public sealed class OtlpFlushOnExitTests : IDisposable
 
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-otlp-flush-on-exit");
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public async Task ExitingTheBareHostPath_FlushesTheSpanToTheCollector_WithoutAnExplicitForceFlush()
@@ -88,71 +88,10 @@ public sealed class OtlpFlushOnExitTests : IDisposable
 
     private ServerConfig Config(int port) => new(port, McpTransport.Http, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
 
-
     // Serialized with the other env-var tests via EnvScope, which takes TestData.EnvVarGate
     // (the OTEL_* vars are process-global).
     private static ValueTask<EnvScope> AcquireCleanEnvAsync(string? endpoint = null, string? protocol = null) =>
         EnvScope.AcquireAsync(TestContext.Current.CancellationToken, (EndpointVar, endpoint), (ProtocolVar, protocol));
 
     /// <summary>Minimal loopback OTLP/HTTP collector stand-in: records every request path it receives.</summary>
-    private sealed class CapturingCollector : IDisposable
-    {
-        private readonly Task _acceptLoop;
-        private readonly CancellationTokenSource _cts = new();
-        private readonly HttpListener _listener = new();
-
-        public CapturingCollector()
-        {
-            using var lease = LoopbackPort.Reserve();
-            Endpoint = $"http://127.0.0.1:{lease.Port}";
-            _listener.Prefixes.Add($"{Endpoint}/");
-            lease.ReleaseForBind();
-            _listener.Start();
-            _acceptLoop = Task.Run(AcceptLoopAsync);
-        }
-
-        public string Endpoint { get; }
-
-        public ConcurrentBag<string> RequestedPaths { get; } = [];
-
-        public void Dispose()
-        {
-            _cts.Cancel();
-            _listener.Stop();
-            _listener.Close();
-            _cts.Dispose();
-        }
-
-        public async Task WaitForRequestAsync(string path, TimeSpan timeout)
-        {
-            var deadline = DateTime.UtcNow + timeout;
-            while (DateTime.UtcNow < deadline)
-            {
-                if (RequestedPaths.Any(p => p.Contains(path, StringComparison.Ordinal)))
-                {
-                    return;
-                }
-
-                await Task.Delay(50);
-            }
-        }
-
-        private async Task AcceptLoopAsync()
-        {
-            while (!_cts.IsCancellationRequested)
-            {
-                try
-                {
-                    var context = await _listener.GetContextAsync().WaitAsync(_cts.Token);
-                    RequestedPaths.Add(context.Request.Url!.AbsolutePath);
-                    context.Response.StatusCode = 200;
-                    context.Response.Close();
-                }
-                catch (Exception) when (_cts.IsCancellationRequested)
-                {
-                    return;
-                }
-            }
-        }
-    }
 }

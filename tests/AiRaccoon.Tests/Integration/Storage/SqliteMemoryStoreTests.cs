@@ -14,6 +14,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -36,7 +37,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             TestData.CreateEmbeddingService());
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private async Task EnsureWorkspaceAsync(string workspaceId, string projectId = "acme")
     {
@@ -1256,8 +1257,4 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     }
 
     /// <summary>Deterministic test chunker: splits on blank lines.</summary>
-    private sealed class StubChunker : IMarkdownChunker
-    {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
-    }
 }

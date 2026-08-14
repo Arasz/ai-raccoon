@@ -5,6 +5,7 @@ using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.BDD;
 
@@ -33,10 +34,7 @@ public class MemoryFeatureContext : IDisposable
     /// <summary>Idempotent so scenario-container disposal and the AfterScenario hook can both run it.</summary>
     public void Dispose()
     {
-        if (Directory.Exists(DataRoot))
-        {
-            Directory.Delete(DataRoot, true);
-        }
+        TestData.DeleteTempRoot(DataRoot);
     }
 
     /// <summary>Opens the bank and returns the connection for raw SQL queries.</summary>
@@ -44,8 +42,4 @@ public class MemoryFeatureContext : IDisposable
 
     private static string CreateTempRoot() => TestData.CreateTempRoot();
 
-    private sealed class StubChunker : IMarkdownChunker
-    {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
-    }
 }

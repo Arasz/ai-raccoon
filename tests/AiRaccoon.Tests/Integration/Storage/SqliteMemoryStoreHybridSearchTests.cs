@@ -40,10 +40,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
     public async ValueTask DisposeAsync()
     {
         await _openAi.DisposeAsync();
-        if (Directory.Exists(_dataRoot))
-        {
-            Directory.Delete(_dataRoot, true);
-        }
+        TestData.DeleteTempRoot(_dataRoot);
     }
 
     [Fact]
@@ -319,8 +316,4 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
 
     private static string CreateTempRoot() => TestData.CreateTempRoot("airaccoon-store-tests");
 
-    private sealed class StubChunker : IMarkdownChunker
-    {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
-    }
 }

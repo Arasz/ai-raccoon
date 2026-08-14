@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -44,10 +45,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
     {
         foreach (var root in new[] { _dataRoot, _contentRoot, _outsideRoot })
         {
-            if (Directory.Exists(root))
-            {
-                Directory.Delete(root, true);
-            }
+            TestData.DeleteTempRoot(root);
         }
     }
 
@@ -239,8 +237,4 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
         _store.SetSettingAsync(key, IngestScopeKeys.Serialize([directory]),
             TestContext.Current.CancellationToken);
 
-    private sealed class StubChunker : IMarkdownChunker
-    {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
-    }
 }
