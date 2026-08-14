@@ -1,7 +1,5 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
-using System.Net;
-using System.Net.Sockets;
 using System.Reflection;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
@@ -10,6 +8,7 @@ using AiRaccoon.Observability;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Logging;
+using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using OpenTelemetry.Exporter;
@@ -72,8 +71,10 @@ public sealed class OtlpExportTests : IDisposable
         using var env = await AcquireCleanEnvAsync();
         Environment.SetEnvironmentVariable(EndpointVar, "127.0.0.1:4317");
 
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        using var lease = LoopbackPort.Reserve();
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, lease.Port));
 
+        lease.ReleaseForBind();
         await Should.NotThrowAsync(() => host.StartAsync(TestContext.Current.CancellationToken));
         try
         {
@@ -95,7 +96,9 @@ public sealed class OtlpExportTests : IDisposable
         using var env = await AcquireCleanEnvAsync();
         Environment.SetEnvironmentVariable(EndpointVar, "localhost:4318");
 
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        using var lease = LoopbackPort.Reserve();
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, lease.Port));
+        lease.ReleaseForBind();
         await host.StartAsync(TestContext.Current.CancellationToken);
         try
         {
@@ -116,7 +119,9 @@ public sealed class OtlpExportTests : IDisposable
         using var env = await AcquireCleanEnvAsync();
         Environment.SetEnvironmentVariable(EndpointVar, "127.0.0.1:4317");
 
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        using var lease = LoopbackPort.Reserve();
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, lease.Port));
+        lease.ReleaseForBind();
         await host.StartAsync(TestContext.Current.CancellationToken);
         try
         {
@@ -141,7 +146,8 @@ public sealed class OtlpExportTests : IDisposable
         using var env = await AcquireCleanEnvAsync();
         Environment.SetEnvironmentVariable(EndpointVar, "127.0.0.1:4317");
         var options = new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User, Quiet = true };
-        var config = new ServerConfig(FreePort(), McpTransport.Http, options);
+        using var lease = LoopbackPort.Reserve();
+        var config = new ServerConfig(lease.Port, McpTransport.Http, options);
 
         var originalError = Console.Error;
         var stderr = new StringWriter();
@@ -464,7 +470,8 @@ public sealed class OtlpExportTests : IDisposable
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
         Environment.SetEnvironmentVariable(IntervalVar, "1234");
 
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        using var lease = LoopbackPort.Reserve();
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, lease.Port));
         var meterProvider = host.Services.GetRequiredService<MeterProvider>();
 
         PeriodicReaderField(meterProvider, "ExportIntervalMilliseconds").ShouldBe(1234);
@@ -476,7 +483,8 @@ public sealed class OtlpExportTests : IDisposable
         using var env = await AcquireCleanEnvAsync();
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
 
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        using var lease = LoopbackPort.Reserve();
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, lease.Port));
         var meterProvider = host.Services.GetRequiredService<MeterProvider>();
 
         PeriodicReaderField(meterProvider, "ExportIntervalMilliseconds").ShouldBe(SdkDefaultExportIntervalMilliseconds);
@@ -489,7 +497,8 @@ public sealed class OtlpExportTests : IDisposable
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
         Environment.SetEnvironmentVariable(TimeoutVar, "9876");
 
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        using var lease = LoopbackPort.Reserve();
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, lease.Port));
         var meterProvider = host.Services.GetRequiredService<MeterProvider>();
 
         PeriodicReaderField(meterProvider, "ExportTimeoutMilliseconds").ShouldBe(9876);
@@ -501,7 +510,8 @@ public sealed class OtlpExportTests : IDisposable
         using var env = await AcquireCleanEnvAsync();
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
 
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        using var lease = LoopbackPort.Reserve();
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, lease.Port));
         var meterProvider = host.Services.GetRequiredService<MeterProvider>();
 
         PeriodicReaderField(meterProvider, "ExportTimeoutMilliseconds").ShouldBe(SdkDefaultExportTimeoutMilliseconds);
@@ -518,7 +528,8 @@ public sealed class OtlpExportTests : IDisposable
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
         Environment.SetEnvironmentVariable(ServiceNameVar, "probe-service");
 
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        using var lease = LoopbackPort.Reserve();
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, lease.Port));
 
         ServiceName(host.Services.GetRequiredService<TracerProvider>()).ShouldBe("ai-raccoon");
     }
@@ -529,7 +540,8 @@ public sealed class OtlpExportTests : IDisposable
         using var env = await AcquireCleanEnvAsync();
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
 
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        using var lease = LoopbackPort.Reserve();
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, lease.Port));
 
         var name = ServiceName(host.Services.GetRequiredService<TracerProvider>());
         name.ShouldBe("ai-raccoon");
@@ -542,7 +554,8 @@ public sealed class OtlpExportTests : IDisposable
         using var env = await AcquireCleanEnvAsync();
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
 
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        using var lease = LoopbackPort.Reserve();
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, lease.Port));
 
         ServiceName(host.Services.GetRequiredService<MeterProvider>())
             .ShouldBe(ServiceName(host.Services.GetRequiredService<TracerProvider>()));
@@ -556,7 +569,8 @@ public sealed class OtlpExportTests : IDisposable
         using var env = await AcquireCleanEnvAsync();
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
 
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        using var lease = LoopbackPort.Reserve();
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, lease.Port));
 
         ResourceAttribute(host.Services.GetRequiredService<TracerProvider>(), "service.version")
             .ShouldBe(ServerInfo.BinaryVersion);
@@ -586,7 +600,8 @@ public sealed class OtlpExportTests : IDisposable
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
         Environment.SetEnvironmentVariable(ResourceAttributesVar, "deployment.environment=probe-env");
 
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        using var lease = LoopbackPort.Reserve();
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, lease.Port));
 
         ResourceAttribute(host.Services.GetRequiredService<TracerProvider>(), "deployment.environment")
             .ShouldBe("probe-env");
@@ -601,7 +616,9 @@ public sealed class OtlpExportTests : IDisposable
         using var env = await AcquireCleanEnvAsync();
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
 
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        using var lease = LoopbackPort.Reserve();
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, lease.Port));
+        lease.ReleaseForBind();
         await host.StartAsync(TestContext.Current.CancellationToken);
         try
         {
@@ -660,14 +677,6 @@ public sealed class OtlpExportTests : IDisposable
             .GetValue(reader)!;
     }
 
-    private static int FreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
-    }
 
     private ServerConfig Config(McpTransport transport, int port = 0, TimeSpan idleTimeout = default) =>
         new(port, transport, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User }, idleTimeout);
