@@ -42,7 +42,7 @@ public sealed class QuietLoggingTests : IDisposable
         var options = QuietOptions(InstallScope.User);
         var config = new ServerConfig(DefaultOptions.Port, McpTransport.Stdio, options);
 
-        var (stdout, stderr) = CaptureConsole(() =>
+        var (stdout, stderr) = ConsoleCapture.Run(() =>
         {
             using var host = McpServerSetup.CreateServerHost(config);
             var logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("quiet-test");
@@ -63,7 +63,7 @@ public sealed class QuietLoggingTests : IDisposable
         var options = QuietOptions(InstallScope.Project);
         var config = new ServerConfig(0, McpTransport.Http, options);
 
-        var (stdout, stderr) = CaptureConsole(() =>
+        var (stdout, stderr) = ConsoleCapture.Run(() =>
         {
             using var host = McpServerSetup.CreateServerHost(config, [McpTransport.Stdio, McpTransport.Http], TimeProvider.System);
             var logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("quiet-test");
@@ -150,7 +150,7 @@ public sealed class QuietLoggingTests : IDisposable
         var options = QuietOptions(InstallScope.Project);
         var config = new ServerConfig(0, McpTransport.Http, options);
 
-        var (stdout, stderr) = CaptureConsole(() =>
+        var (stdout, stderr) = ConsoleCapture.Run(() =>
         {
             using var host = McpServerSetup.CreateServerHost(config);
             var factory = host.Services.GetRequiredService<ILoggerFactory>();
@@ -178,7 +178,7 @@ public sealed class QuietLoggingTests : IDisposable
         await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.Unauthorized,
             TestContext.Current.CancellationToken);
 
-        var (stdout, stderr) = await CaptureConsoleAsync(async () =>
+        var (stdout, stderr) = await ConsoleCapture.RunAsync(async () =>
         {
             var exit = await new AppRunner().Run(
                 ["--quiet", "--data-root", options.DataRoot, "--port", port.ToString()]);
@@ -202,7 +202,7 @@ public sealed class QuietLoggingTests : IDisposable
         // Mint the loopback token so the relay dials the backend: the probe no longer logs (log-leak fix).
         await new McpTokenFile(options.DataRoot).EnsureAsync(TestContext.Current.CancellationToken);
 
-        var (_, stderr) = await CaptureConsoleAsync(async () =>
+        var (_, stderr) = await ConsoleCapture.RunAsync(async () =>
         {
             await new AppRunner().Run(
                 ["--data-root", options.DataRoot, "--port", port.ToString()]);
@@ -223,48 +223,6 @@ public sealed class QuietLoggingTests : IDisposable
     }
 
     private static string LogFilePath(InfrastructureOptions options) => QuietLogging.LogFilePath(options);
-
-    private static (string Stdout, string Stderr) CaptureConsole(Action action)
-    {
-        var stdout = new StringWriter();
-        var stderr = new StringWriter();
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        Console.SetOut(stdout);
-        Console.SetError(stderr);
-        try
-        {
-            action();
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-        }
-
-        return (stdout.ToString(), stderr.ToString());
-    }
-
-    private static async Task<(string Stdout, string Stderr)> CaptureConsoleAsync(Func<Task> action)
-    {
-        var stdout = new StringWriter();
-        var stderr = new StringWriter();
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        Console.SetOut(stdout);
-        Console.SetError(stderr);
-        try
-        {
-            await action();
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-        }
-
-        return (stdout.ToString(), stderr.ToString());
-    }
 
 
     private static List<string> Capture(Action<ILogger> emit, ServerConfig config)
