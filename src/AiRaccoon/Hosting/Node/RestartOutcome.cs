@@ -6,6 +6,12 @@ public enum RestartOutcome
     /// <summary>Nothing was listening — a restart is a plain start.</summary>
     Nothing,
 
+    /// <summary>
+    ///     The port gave the probe no answer, so nothing was asked to stop and nothing is known
+    ///     about what holds it. Not the same fact as <see cref="Nothing" /> (ADR-0043).
+    /// </summary>
+    Unknown,
+
     /// <summary>The server stopped and the port freed.</summary>
     Stopped,
 
