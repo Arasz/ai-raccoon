@@ -198,10 +198,31 @@ internal static class MemorySchema
                                               value TEXT NOT NULL
                                           );
 
-                                          -- noise_entries/noise_clusters/vec_noise removed from the fresh-bank DDL
-                                          -- (ADR-0033): the zero-shot filter and noise-learning subsystem that wrote
-                                          -- them is gone. A legacy bank that already has them keeps them, inert —
-                                          -- see MigrateToV6Async, left as a historical no-op ladder step.
+                                          -- noise_entries (the reject log ADR-0033 found unread) stays removed from
+                                          -- the fresh-bank DDL. noise_clusters/vec_noise are restored here (ADR-0039):
+                                          -- the self-learning noise subsystem now has a real store
+                                          -- (SqliteNoiseClusterStore) and a feedback path feeding it, gated OFF by
+                                          -- default (noise.learner.enabled.global). Shape matches MigrateToV6Async
+                                          -- exactly — that ladder step is unchanged and still creates these tables
+                                          -- for a legacy bank upgrading from &lt;v6; a fresh bank now gets them directly.
+                                          CREATE TABLE IF NOT EXISTS noise_clusters (
+                                              id                 INTEGER PRIMARY KEY,
+                                              project_id         TEXT NOT NULL,
+                                              user_id            TEXT NULL,
+                                              cluster_label      TEXT NOT NULL,
+                                              sample_content     TEXT NOT NULL,
+                                              frequency          INTEGER NOT NULL DEFAULT 1,
+                                              status             TEXT NOT NULL CHECK(status IN ('candidate','active','suppressed')),
+                                              centroid_embedding BLOB NOT NULL,
+                                              created_at         INTEGER NOT NULL,
+                                              last_seen_at       INTEGER NOT NULL,
+                                              UNIQUE(project_id, cluster_label)
+                                          );
+
+                                          CREATE VIRTUAL TABLE IF NOT EXISTS vec_noise USING vec0(
+                                              ctx TEXT partition key,
+                                              embedding float[384] distance_metric=cosine
+                                          );
 
                                           CREATE TABLE IF NOT EXISTS sync_tombstones (
                                               hash TEXT NOT NULL,
