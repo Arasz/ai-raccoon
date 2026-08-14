@@ -33,7 +33,7 @@ public class McpServerSetupHostTests : IDisposable
 {
     private readonly string _dataRoot = TestData.CreateTempRoot("mcp-host-tests");
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public async Task StdioOnlyHost_HasNoWebServer_AndStartsWithTheDefaultPortHeld()

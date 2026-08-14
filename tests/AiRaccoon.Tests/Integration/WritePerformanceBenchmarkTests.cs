@@ -115,10 +115,7 @@ Iterations: {iterations}
         }
         finally
         {
-            if (Directory.Exists(dataRoot))
-            {
-                try { Directory.Delete(dataRoot, true); } catch { }
-            }
+            TestData.DeleteTempRoot(dataRoot);
         }
     }
 

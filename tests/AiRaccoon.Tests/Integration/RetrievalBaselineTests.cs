@@ -61,7 +61,7 @@ public sealed class RetrievalBaselineTests : IDisposable
             TestData.CreateEmbeddingService());
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public async Task RunAllBaselineQueries_ReportsMatchStatistics()

@@ -16,7 +16,7 @@ public sealed class McpTokenFileTests : IDisposable
 {
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-mcp-token");
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public async Task TokenFile_IsCreated_0600()

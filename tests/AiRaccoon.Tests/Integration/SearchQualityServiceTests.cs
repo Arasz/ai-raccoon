@@ -24,7 +24,7 @@ public sealed class SearchQualityServiceTests : IDisposable
         _sut = new SqliteSearchQualityService(_factory);
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private async Task EnsureSchemaAsync()
     {

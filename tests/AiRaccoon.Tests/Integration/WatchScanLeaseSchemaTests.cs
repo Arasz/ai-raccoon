@@ -43,7 +43,7 @@ public sealed class WatchScanLeaseSchemaTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public async Task EnsureAsync_OnALegacyBankWithoutLeaseColumns_AddsThem()

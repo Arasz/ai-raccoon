@@ -44,7 +44,7 @@ public sealed class WorkspaceCloseRaceTests : IDisposable
         _service = new WorkspaceService(_memoryStore, _workspaceStore, new FakeTimeProvider(FixedNow));
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     /// <summary>The RED case named by the acceptance criteria: exactly one of a concurrent
     /// consolidate/discard pair succeeds, the other raises, and the outbox is consumed once.</summary>

@@ -77,7 +77,7 @@ public sealed class ToolTelemetryCoverageTests
         }
         finally
         {
-            Directory.Delete(dataRoot, true);
+            TestData.DeleteTempRoot(dataRoot);
         }
     }
 
@@ -100,7 +100,7 @@ public sealed class ToolTelemetryCoverageTests
         }
         finally
         {
-            Directory.Delete(dataRoot, true);
+            TestData.DeleteTempRoot(dataRoot);
         }
     }
 }

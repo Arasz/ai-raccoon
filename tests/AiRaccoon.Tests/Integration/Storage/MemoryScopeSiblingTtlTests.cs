@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -35,7 +36,7 @@ public sealed class MemoryScopeSiblingTtlTests : IDisposable
             TestData.CreateEmbeddingService());
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public async Task SetEntryTtl_WithWorkspaceSibling_LeavesTheWorkspaceRowsTtlNull()
@@ -125,8 +126,4 @@ public sealed class MemoryScopeSiblingTtlTests : IDisposable
         public int? TtlDays { get; set; }
     }
 
-    private sealed class StubChunker : IMarkdownChunker
-    {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
-    }
 }

@@ -170,13 +170,7 @@ public sealed class WatchStoreCascadeTests
 
         public void Dispose()
         {
-            try
-            {
-                Directory.Delete(_dataRoot, true);
-            }
-            catch (IOException)
-            {
-            }
+            TestData.DeleteTempRoot(_dataRoot);
         }
     }
 }

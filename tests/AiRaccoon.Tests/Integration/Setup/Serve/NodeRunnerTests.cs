@@ -26,7 +26,7 @@ public sealed class NodeRunnerTests : IDisposable
     private static readonly HttpClient HttpClient = new();
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-serve-runner");
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public async Task FreePort_PrintsExactUrlLine_AndExitsZeroAfterStop()
@@ -148,7 +148,7 @@ public sealed class NodeRunnerTests : IDisposable
         }
         finally
         {
-            Directory.Delete(secondRoot, true);
+            TestData.DeleteTempRoot(secondRoot);
         }
 
         var firstExit = await first.StopAsync();
@@ -204,7 +204,7 @@ public sealed class NodeRunnerTests : IDisposable
         }
         finally
         {
-            Directory.Delete(secondRoot, true);
+            TestData.DeleteTempRoot(secondRoot);
         }
     }
 

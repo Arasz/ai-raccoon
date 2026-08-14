@@ -69,7 +69,7 @@ public sealed class SourceIdentityTests : IDisposable
         ]);
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public async Task SearchResults_CarrySourceIdentity_ForIngestedChunks()

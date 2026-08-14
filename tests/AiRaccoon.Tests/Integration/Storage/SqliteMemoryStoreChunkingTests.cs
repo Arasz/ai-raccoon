@@ -41,10 +41,7 @@ public sealed class SqliteMemoryStoreChunkingTests : IAsyncLifetime
     public async ValueTask DisposeAsync()
     {
         await _openAi.DisposeAsync();
-        if (Directory.Exists(_dataRoot))
-        {
-            Directory.Delete(_dataRoot, true);
-        }
+        TestData.DeleteTempRoot(_dataRoot);
     }
 
     [Fact]

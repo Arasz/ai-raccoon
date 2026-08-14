@@ -31,7 +31,7 @@ public sealed class NoiseShadowObserverTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private static NoiseShadowObserver CreateObserver(INoiseDetector? detector = null) =>
         new(detector ?? new NoOpNoiseDetector(), NullLogger<NoiseShadowObserver>.Instance);

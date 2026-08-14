@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -37,11 +38,11 @@ public sealed class MemoryStorePathCascadeEscapeTests : IDisposable
         var options = TestData.CreateInfrastructureOptions(_dataRoot);
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
-            new SqliteMemorySourceStore(_factory), new StubChunker(),
+            new SqliteMemorySourceStore(_factory), new SingleChunkChunker(),
             new FakeTimeProvider(new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero)), TestData.CreateEmbeddingService());
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public async Task DeleteSourcePathAsync_WithWildcardsInThePath_DeletesOnlyTheLiteralSubtree()
@@ -71,9 +72,4 @@ public sealed class MemoryStorePathCascadeEscapeTests : IDisposable
         return [.. rows];
     }
 
-    private sealed class StubChunker : IMarkdownChunker
-    {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0,
-            TokenCount? countTokens = null) => [text];
-    }
 }

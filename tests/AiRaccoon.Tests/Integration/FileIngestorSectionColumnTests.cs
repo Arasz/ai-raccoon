@@ -49,7 +49,7 @@ public class FileIngestorSectionColumnTests : IDisposable
     public void Dispose()
     {
         _conn.Dispose();
-        Directory.Delete(_testDir, true);
+        TestData.DeleteTempRoot(_testDir);
     }
 
     [Fact]

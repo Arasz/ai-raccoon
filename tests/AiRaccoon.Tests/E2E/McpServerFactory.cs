@@ -99,14 +99,7 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
 
         _disposed = true;
         base.Dispose(disposing);
-        try
-        {
-            Directory.Delete(DataRoot, true);
-        }
-        catch (IOException)
-        {
-            // Best-effort cleanup; the OS temp dir is scanned periodically anyway.
-        }
+        TestData.DeleteTempRoot(DataRoot);
     }
 
     private static string CreateTempRoot() => TestData.CreateTempRoot();

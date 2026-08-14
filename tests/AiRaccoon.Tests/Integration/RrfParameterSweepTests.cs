@@ -85,7 +85,7 @@ public sealed class RrfParameterSweepTests : IDisposable
         (_hashMap, _fileHashes) = BuildHashMapFromCorpus(Path.Combine(_dataRoot, "memory.db"));
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     /// <summary>
     ///     The chosen configuration (docs/plans/retrieval-improvement-c.md §3 Wave 4) must hold

@@ -23,7 +23,7 @@ public sealed class WatchToolsAccessModeTests
 
     public WatchToolsAccessModeTests()
     {
-        _tools = new WatchTools(new FakeWatchService(),
+        _tools = new WatchTools(new NoOpWatchService(),
             new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue()));
     }
 
@@ -92,23 +92,6 @@ public sealed class WatchToolsAccessModeTests
 
         added.ShouldNotBeNull();
         removed.ShouldNotBeNull();
-    }
-
-    private sealed class FakeWatchService : IWatchService
-    {
-        public Task AddAsync(string projectId, string path, CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public Task RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public Task<IReadOnlyList<WatchStatus>> StatusAsync(string projectId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<WatchStatus>>([]);
-
-        public Task<bool> IsEnabledAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(true);
-
-        public Task<bool> IsPathAllowedAsync(string projectId, string path,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(true);
     }
 
     /// <summary>Permits every guarded call, so a denial in a test comes from the access mode and not the store.</summary>

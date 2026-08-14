@@ -39,10 +39,7 @@ public sealed class StructurePopulationTests : IAsyncLifetime
 
     public ValueTask DisposeAsync()
     {
-        if (Directory.Exists(_dataRoot))
-        {
-            Directory.Delete(_dataRoot, true);
-        }
+        TestData.DeleteTempRoot(_dataRoot);
 
         return ValueTask.CompletedTask;
     }

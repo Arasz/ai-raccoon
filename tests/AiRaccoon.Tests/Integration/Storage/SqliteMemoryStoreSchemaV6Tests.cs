@@ -20,7 +20,7 @@ public sealed class SqliteMemoryStoreSchemaV6Tests : IDisposable
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     /// <summary>
     ///     Amended (this task): noise_clusters/vec_noise (ADR-0039's centroid-clustering store) are

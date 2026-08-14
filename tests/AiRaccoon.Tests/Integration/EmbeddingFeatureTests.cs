@@ -42,10 +42,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
     public async ValueTask DisposeAsync()
     {
         await _openAi.DisposeAsync();
-        if (Directory.Exists(_dataRoot))
-        {
-            Directory.Delete(_dataRoot, true);
-        }
+        TestData.DeleteTempRoot(_dataRoot);
     }
 
     [Fact]
@@ -92,7 +89,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         }
         finally
         {
-            Directory.Delete(Path.GetDirectoryName(custom)!, true);
+            TestData.DeleteTempRoot(Path.GetDirectoryName(custom)!);
         }
     }
 

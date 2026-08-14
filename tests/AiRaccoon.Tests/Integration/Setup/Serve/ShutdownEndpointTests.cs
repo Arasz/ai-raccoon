@@ -24,7 +24,7 @@ public sealed class ShutdownEndpointTests : IDisposable
 
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-shutdown-endpoint");
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public async Task Post_WithoutTheToken_Is401_AndTheServerKeepsServing()

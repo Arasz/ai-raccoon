@@ -173,7 +173,7 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
                 await _env.DisposeAsync();
             }
 
-            Directory.Delete(DataRoot, true);
+            TestData.DeleteTempRoot(DataRoot);
             HttpClient.Dispose();
         }
 

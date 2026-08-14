@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Integration.Extraction;
 
@@ -48,7 +49,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
             _metrics, NullLogger<PromotionQueueService>.Instance, _clock);
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private static QueueCandidate Candidate(string hash, string value, double score) => new(hash, $"{hash}.md", value, null, score, ["organic-write"]);
 
@@ -464,8 +465,4 @@ public sealed class PromotionQueueServiceTests : IDisposable
         public void RecordSnapshot(PromotionQueueStats stats, int capacity) => Snapshots.Add((stats, capacity));
     }
 
-    private sealed class StubChunker : IMarkdownChunker
-    {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null) => text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
-    }
 }

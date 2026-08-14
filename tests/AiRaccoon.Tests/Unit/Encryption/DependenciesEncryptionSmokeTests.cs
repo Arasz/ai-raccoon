@@ -40,7 +40,7 @@ public sealed class DependenciesEncryptionSmokeTests
         }
         finally
         {
-            Directory.Delete(tempRoot, true);
+            TestData.DeleteTempRoot(tempRoot);
         }
     }
 
@@ -63,7 +63,7 @@ public sealed class DependenciesEncryptionSmokeTests
         }
         finally
         {
-            Directory.Delete(tempRoot, true);
+            TestData.DeleteTempRoot(tempRoot);
         }
     }
 }

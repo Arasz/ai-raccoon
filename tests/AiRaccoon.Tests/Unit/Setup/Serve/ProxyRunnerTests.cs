@@ -17,7 +17,7 @@ public sealed class ProxyRunnerTests : IDisposable
 {
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-proxy-runner");
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Theory]
     [InlineData(0)] // "any free port": the spawned serve binds one the proxy can never learn

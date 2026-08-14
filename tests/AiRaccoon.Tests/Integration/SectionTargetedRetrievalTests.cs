@@ -70,7 +70,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
         (_hashMap, _fileHashes) = LoadDerivedHashMap();
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     /// <summary>
     ///     Wave 6 gate S4: restored to the production SearchLimit=10 window and rank &lt;= 3 once

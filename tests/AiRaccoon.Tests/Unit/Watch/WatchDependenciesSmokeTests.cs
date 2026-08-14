@@ -16,7 +16,7 @@ public sealed class WatchDependenciesSmokeTests : IDisposable
 {
     private readonly string _dataRoot = TestData.CreateTempRoot();
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public void RegisterMemoryServices_ResolvesCatchUpEventSource_AndHostsTheWatcherService()

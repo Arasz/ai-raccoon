@@ -48,7 +48,7 @@ public sealed class OtlpExportTests : IDisposable
 
     private InfrastructureOptions TestOptions => new() { DataRoot = _dataRoot, Scope = InstallScope.User };
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public void NoEndpoint_RegistersNoTracerProviderOrMeterProvider()

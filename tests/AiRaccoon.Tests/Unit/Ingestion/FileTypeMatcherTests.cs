@@ -2,6 +2,7 @@ using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Infrastructure.Ingestion;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Unit.Ingestion;
 
@@ -13,12 +14,7 @@ public class FileTypeMatcherTests
     {
         public string Name { get; } = name;
         public IReadOnlySet<string> Extensions { get; } = extensions.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        public IChunker Chunker { get; } = new FakeChunker();
-    }
-
-    private sealed class FakeChunker : IMarkdownChunker
-    {
-        public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null) => [text];
+        public IChunker Chunker { get; } = new SingleChunkChunker();
     }
 
     [Fact]

@@ -30,7 +30,7 @@ public sealed class WorkspaceEntryUniquenessTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public async Task SequentialInsert_OfIdenticalWorkspaceContent_ProducesOneRow()

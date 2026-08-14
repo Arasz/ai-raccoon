@@ -38,7 +38,7 @@ public sealed class DeleteReplaceRollbackTests : IDisposable
             TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService());
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public async Task DeleteSourcePath_WhenTheWatchFingerprintDeleteFailsMidTransaction_RollsBackTheEntryDeleteToo()

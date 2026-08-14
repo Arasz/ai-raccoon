@@ -15,7 +15,7 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
 
     private readonly string _dataRoot = TestData.CreateTempRoot();
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private string FakeBwsPath(string scriptBody)
     {

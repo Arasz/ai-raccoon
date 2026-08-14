@@ -683,13 +683,7 @@ public sealed class WatchIntegrationTests
             EventSource.StopAll();
             if (_deleteDataRoot)
             {
-                try
-                {
-                    Directory.Delete(DataRoot, true);
-                }
-                catch (IOException)
-                {
-                }
+                TestData.DeleteTempRoot(DataRoot);
             }
         }
 

@@ -36,7 +36,7 @@ public sealed class BankMaintenanceHostedServiceLifecycleTests : IDisposable
             NoOpNoiseEntryStore.Instance);
     }
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private string WalPath => Path.Combine(_dataRoot, "memory.db-wal");
 

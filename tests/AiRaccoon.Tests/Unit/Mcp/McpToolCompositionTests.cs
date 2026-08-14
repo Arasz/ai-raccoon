@@ -21,7 +21,7 @@ public sealed class McpToolCompositionTests : IDisposable
 {
     private readonly string _dataRoot = TestData.CreateTempRoot();
 
-    public void Dispose() => Directory.Delete(_dataRoot, true);
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [Fact]
     public void CompositionRoot_ConstructsEveryToolClass()

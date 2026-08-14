@@ -40,10 +40,7 @@ public class FileIngestorJsonIntegrationTests : IDisposable
     public void Dispose()
     {
         _conn.Dispose();
-        if (Directory.Exists(_testDir))
-        {
-            Directory.Delete(_testDir, true);
-        }
+        TestData.DeleteTempRoot(_testDir);
     }
 
     [Fact]
