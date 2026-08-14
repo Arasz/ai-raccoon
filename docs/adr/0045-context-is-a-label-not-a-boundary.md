@@ -60,3 +60,32 @@ context, as before.
   revealed the intent: custom rows were always meant to belong to the project.
 - Not addressed here: `minScore` defaults to 0.7 while scores are normalized so the top result is
   always 1.0, so the default reads as a quality floor and behaves as a rank cutoff.
+
+## The rest of the surface still excludes custom rows — open
+
+Search and stats are fixed. Measured against a live server on a scratch bank, with one entry
+written under `context: "adr"`, the tool surface disagrees about whether that entry exists:
+
+| Tool | Result |
+|---|---|
+| `memory_get` | returns the entry |
+| `memory_delete` | `deleted: 1` |
+| `memory_search`, `memory_stats` | fixed by this ADR |
+| `memory_set_ttl` | **`unknown-hash`** |
+| `memory_share` | **`unknown-hash`** |
+
+The cause is the same predicate in more places: `UpdateEntryTtl` and `SelectEntryMetadata` filter
+`scope = 'project'`, and `SelectSourceByHashAndProject` (which `ShareAsync` resolves through) does
+too. Those filters were written as a *disambiguation* — the comment on `UpdateEntryTtl` says hash
+alone is not a unique row, since a workspace or custom-context write of identical content shares
+it, so the project row is chosen. The rule is right; its effect when there is **no** project row
+was not considered, and disambiguation became an existence test.
+
+**This was deliberately not fixed here.** Widening those three queries would stop the false
+`unknown-hash`, but `SelectExtractionCandidates` and `SelectProjectIds` also filter
+`scope = 'project'`, so the sweep never reads a custom row: a TTL accepted on one would be an
+inert no-op reported as success. That is precisely the failure ADR-0032 exists to prevent, and
+trading an honest refusal for a silent lie is the wrong direction.
+
+The fix is to make custom rows first-class across the sweep, extraction, TTL and share together —
+one change with one gate per surface — rather than one query at a time.
