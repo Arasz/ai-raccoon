@@ -109,10 +109,45 @@ If the project already runs its own `UserPromptSubmit` hook (e.g. the `task` ski
 tracker), add this as an additional entry in the same array rather than replacing it — Claude
 Code runs all registered hooks for an event.
 
+## A mid-turn marker never reaches the hook
+
+`UserPromptSubmit` fires when a message **starts a turn**. A message sent **mid-turn** —
+queued by the user while the agent is already working — is delivered to the model as an
+attachment instead, and never passes through the hook. Its marker is therefore never
+expanded, and nothing reports a failure: the hook did not error, it was never called.
+
+Measured 2026-08-14 against a real session transcript
+(`~/.claude/projects/<project>/<session>.jsonl`):
+
+| Message | Record type | Hook ran |
+|---|---|---|
+| Sent at turn start | `type: "user"` with `promptSource`, `origin`, `entrypoint` | yes |
+| Sent mid-turn | `type: "queue-operation"` + `type: "attachment"` | **no** |
+
+Two mid-turn `f:` messages produced no `type: "user"` record at all — and no marker context,
+no other `UserPromptSubmit` output either, which is what distinguishes this from a fault in
+this skill. The hook itself is fine: fed the same text directly it returns the correct
+`additionalContext` and exit 0.
+
+**This is not fixable from a hook**, because there is no hook event for a queued message. The
+mitigation is the standing list below, which is why that list has to be complete.
+
 ## Agent-facing contract
 
 Whichever agent instruction file the project maintains (`CLAUDE.md`, …)
 should tell agents that these markers exist and name the required behavior for each — the hook
 delivers the instruction text at the moment a marker is used, but a standing mention in the
-always-loaded instructions makes the behavior legible to a human reading the file, and keeps it
-in effect even in a session where the hook somehow didn't fire.
+always-loaded instructions makes the behavior legible to a human reading the file, and is the
+**only** thing that carries the behavior when the hook does not fire.
+
+That list is generated from `features/common/templates/CLAUDE.md.tmpl` and
+`HERMES.md.tmpl`, where it is written out longhand rather than derived from
+`markers-context.json` — so adding a marker to the catalog does not add it to the templates,
+and nothing compared the two. It drifted exactly that way: `q:` and `i!:` reached the catalog
+and `HERMES.md.tmpl`, while `CLAUDE.md.tmpl` kept listing three for a release, taking both
+Copilot files with it.
+
+**Fix the template, not the agent file.** An agent file edited directly looks correct until the
+next `scaffold.py` run silently reverts it.
+`tests/test_prompt_marker_standing_list.py` compares both templates *and* every generated
+agent file against `markers-context.json`, so the next marker added fails the build.

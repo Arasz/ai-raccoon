@@ -1,6 +1,6 @@
 {
   "$schema": "./schemas/config.schema.json",
-  "frameworkVersion": "0.117.1",
+  "frameworkVersion": "0.118.2",
   "project": {
     "name": "AiRaccoon",
     "summary": "C# .NET 10 MCP server exposing agent memory management over sqlite-memory: project-scoped memory bank, workspace sandboxes, shared promotion tier, hybrid search, degradation, and optional cloud sync.",
