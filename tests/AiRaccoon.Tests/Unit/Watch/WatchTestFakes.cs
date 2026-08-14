@@ -239,6 +239,12 @@ internal sealed class FakeMemoryStore : IMemoryStore
     /// <summary>Project ids passed to EmbedPendingAsync, in call order.</summary>
     public List<string> EmbedCalls { get; } = [];
 
+    /// <summary>Backs GetProjectIdsAsync — the maintenance retry sweep's universe.</summary>
+    public List<string> ProjectIds { get; } = [];
+
+    /// <summary>Backs GetStatsAsync's PendingCount per project; absent projects report 0.</summary>
+    public Dictionary<string, int> PendingCounts { get; } = new(StringComparer.Ordinal);
+
     /// <summary>Runs after a successful ingest records content — TCS gating for in-flight digests.</summary>
     public Func<string, Task>? OnIngest { get; set; }
 
@@ -335,10 +341,11 @@ internal sealed class FakeMemoryStore : IMemoryStore
         CancellationToken cancellationToken = default) =>
         throw new NotImplementedException();
 
-    public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+    public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new MemoryStats(0, PendingCounts.GetValueOrDefault(projectId), []));
 
-
-    public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
+    public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<string>>(ProjectIds);
 
     public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
         bool includeTtlRows, CancellationToken cancellationToken = default) =>

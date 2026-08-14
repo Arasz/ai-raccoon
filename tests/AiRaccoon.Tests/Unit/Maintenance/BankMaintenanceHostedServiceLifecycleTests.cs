@@ -1,5 +1,6 @@
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.Unit.Watch;
 using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -30,7 +31,7 @@ public sealed class BankMaintenanceHostedServiceLifecycleTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _time = new FakeTimeProvider(FixedNow);
         _logger = new FakeLogger<BankMaintenanceHostedService>();
-        _service = new BankMaintenanceHostedService(_factory, _time, TestTelemetry.None, _logger);
+        _service = new BankMaintenanceHostedService(_factory, _time, TestTelemetry.None, _logger, new FakeMemoryStore());
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
