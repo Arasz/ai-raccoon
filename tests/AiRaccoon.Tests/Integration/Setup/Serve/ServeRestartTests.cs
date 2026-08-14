@@ -43,27 +43,54 @@ public sealed class ServeRestartTests : IDisposable
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
             (EnvEncryptionKeyProvider.EnvVarName, null));
-        using var lease = LoopbackPort.Reserve();
-        var port = lease.Port;
-        lease.ReleaseForBind();
-        await using var old = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
-        await WaitForUrlAsync(old);
 
-        await using var restarted = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
-        var url = await WaitForUrlAsync(restarted);
+        // A port released for the old server to bind can be taken by any process before the restart
+        // claims it. That is RestartLostThePort and nothing else, so it costs a fresh port, not a red.
+        await RetryingOnALostPortAsync(async port =>
+        {
+            await using var old = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+            await WaitForUrlAsync(old);
 
-        // The old server really exited — its own run completed, it was not merely bypassed.
-        var oldExit = await old.Exit.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
-        oldExit.ShouldBe(ExitCode.Success);
-        url.ShouldBe($"http://127.0.0.1:{port}/mcp");
-        restarted.Stderr.ShouldNotContain("attached");
-        // And the port answers for the restarted process, not a survivor.
-        (await ProbeAsync(port)).ShouldBeTrue();
-        (await restarted.StopAsync()).ShouldBe(ExitCode.Success);
+            await using var restarted = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
+            var url = await WaitForUrlAsync(restarted);
+
+            // The old server really exited — its own run completed, it was not merely bypassed.
+            var oldExit = await old.Exit.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+            oldExit.ShouldBe(ExitCode.Success);
+            url.ShouldBe($"http://127.0.0.1:{port}/mcp");
+            restarted.Stderr.ShouldNotContain("attached");
+            // And the port answers for the restarted process, not a survivor.
+            (await ProbeAsync(port)).ShouldBeTrue();
+            (await restarted.StopAsync()).ShouldBe(ExitCode.Success);
+        });
+    }
+
+    /// <summary>Runs the body on a fresh port while a restart keeps losing the port to another process.</summary>
+    private static async Task RetryingOnALostPortAsync(Func<int, Task> body, int attempts = 4)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            using var lease = LoopbackPort.Reserve();
+            var port = lease.Port;
+            lease.ReleaseForBind();
+            try
+            {
+                await body(port);
+                return;
+            }
+            catch (ServeExitedException lost) when (lost.ExitCode == ExitCode.RestartLostThePort)
+            {
+                if (attempt >= attempts)
+                {
+                    throw new InvalidOperationException(
+                        $"a restart lost the port to another process on all {attempts} attempts", lost);
+                }
+            }
+        }
     }
 
     [Fact]
-    public async Task AServerThatRefusesOurToken_ExitsRestartFailed_AndNeverAttaches()
+    public async Task AServerThatRefusesOurToken_ExitsRestartTokenRefused_AndNeverAttaches()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
             (EnvEncryptionKeyProvider.EnvVarName, null));
@@ -78,7 +105,7 @@ public sealed class ServeRestartTests : IDisposable
 
         var exit = await run.Exit.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
 
-        exit.ShouldBe(ExitCode.RestartFailed);
+        exit.ShouldBe(ExitCode.RestartTokenRefused);
         run.Stdout.ShouldBeEmpty();
         run.Stderr.ShouldContain("restart");
         run.Stderr.ShouldNotContain("   at ");
@@ -86,7 +113,7 @@ public sealed class ServeRestartTests : IDisposable
     }
 
     [Fact]
-    public async Task AServerTooOldToBeCycled_ExitsRestartFailed()
+    public async Task AServerTooOldToBeCycled_ExitsRestartUnsupportedServer()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
             (EnvEncryptionKeyProvider.EnvVarName, null));
@@ -100,13 +127,13 @@ public sealed class ServeRestartTests : IDisposable
 
         var exit = await run.Exit.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
 
-        exit.ShouldBe(ExitCode.RestartFailed);
+        exit.ShouldBe(ExitCode.RestartUnsupportedServer);
         run.Stderr.ShouldContain("restart");
         run.Stdout.ShouldBeEmpty();
     }
 
     [Fact]
-    public async Task AServerWeHoldNoTokenFor_ExitsRestartFailed_WithoutAskingItToStop()
+    public async Task AServerWeHoldNoTokenFor_ExitsRestartNoToken_WithoutAskingItToStop()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
             (EnvEncryptionKeyProvider.EnvVarName, null));
@@ -119,7 +146,7 @@ public sealed class ServeRestartTests : IDisposable
 
         var exit = await run.Exit.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
 
-        exit.ShouldBe(ExitCode.RestartFailed);
+        exit.ShouldBe(ExitCode.RestartNoToken);
         // No token to present, so nothing was asked to stop: an unauthenticated shutdown is not attempted.
         fake.ShutdownRequests.ShouldBe(0);
         run.Stderr.ShouldContain(new McpTokenFile(_dataRoot).Path);
@@ -165,7 +192,7 @@ public sealed class ServeRestartTests : IDisposable
 
         var exit = await run.Exit.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
 
-        exit.ShouldBe(ExitCode.RestartFailed);
+        exit.ShouldBe(ExitCode.RestartUnsupportedServer);
         run.Stderr.ShouldContain("(version not reported)");
         run.Stderr.ShouldNotContain("the ai-raccoon  ");
     }

@@ -119,7 +119,7 @@ internal partial class NodeRunner(
                 Log.RestartLostThePort(logger, port);
                 await streams.WriteErrorLineAsync(
                     $"ai-raccoon: restart on port {port} did not take — another server took the port while this one was starting; check it with 'ai-raccoon serve observability pid --port {port}'");
-                return ExitCode.RestartFailed;
+                return ExitCode.RestartLostThePort;
             }
 
             Log.PortInUse(logger, port);
@@ -195,16 +195,16 @@ internal partial class NodeRunner(
                 $"yourself, or" +
                 $" serve on" +
                 $" another port",
-                ExitCode.RestartFailed),
+                ExitCode.RestartNoToken),
             RestartOutcome.Refused => (
                 $"ai-raccoon: cannot restart the server on port {descriptor.Port}: it refused the token in {descriptor.TokenFile.Path} — it serves another data root; stop it yourself, or serve on another port",
-                ExitCode.RestartFailed),
+                ExitCode.RestartTokenRefused),
             RestartOutcome.Unsupported => (
                 $"ai-raccoon: cannot restart the server on port {descriptor.Port}: the ai-raccoon {result.Version ?? ServerRestart.UnknownVersion} serving it (pid {result.Pid}) is too old to be asked to stop — stop it yourself, then run serve again",
-                ExitCode.RestartFailed),
+                ExitCode.RestartUnsupportedServer),
             _ => (
                 $"ai-raccoon: restart on port {descriptor.Port} timed out: the server (pid {result.Pid}) accepted the shutdown but still held the port {ServerRestart.PortFreeWithin.TotalSeconds:0}s later — stop it yourself, then run serve again",
-                ExitCode.RestartFailed)
+                ExitCode.RestartTimedOut)
         };
 
     private async Task<int> ReportAttachedAsync(NodeLaunchDescriptor descriptor, StandardStreams streams)

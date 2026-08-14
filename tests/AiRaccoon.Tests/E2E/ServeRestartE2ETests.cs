@@ -102,7 +102,7 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
         var exit = await run.Exit.WaitAsync(TimeSpan.FromSeconds(90), TestContext.Current.CancellationToken);
         stopwatch.Stop();
 
-        exit.ShouldBe(ExitCode.RestartFailed);
+        exit.ShouldBe(ExitCode.RestartTimedOut);
         stopwatch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(60));
         run.Stdout.ShouldBeEmpty();
         run.Stderr.ShouldContain(port.ToString());
