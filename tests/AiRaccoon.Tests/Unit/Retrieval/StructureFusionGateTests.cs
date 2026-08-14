@@ -4,6 +4,8 @@ using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
+using Dapper;
+using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
 
@@ -36,9 +38,19 @@ public sealed class StructureFusionGateTests : IDisposable
     /// </summary>
     private const string Query = "What is the decision?";
 
-    private const string ExpectedTopHash = "dd9fefe6ce20fd84c981170cdeb7cb828a3d3d0d976312813dec794a5f73037e";
+    /// <summary>
+    ///     The chunk this gate expects on top, addressed by what makes it the right answer — the
+    ///     "Decision" heading of ADR-0068 — rather than by hash. Hashes are derived from the row's
+    ///     path (ContentHash.Of(path, chunk)), so pinning one breaks on every corpus regeneration
+    ///     for reasons that have nothing to do with what the gate tests. WP4c proved that: fixing
+    ///     the corpus to store repo-relative paths changed every hash while this chunk stayed
+    ///     exactly the same file and heading.
+    /// </summary>
+    private const string ExpectedSourceFile = "docs/adr/0068-what-erasure-does-not-erase.md";
+    private const string ExpectedHeading = "Decision";
 
     private readonly string _dataRoot;
+    private readonly SqliteConnectionFactory _factory;
     private readonly SqliteMemoryStore _store;
 
     public StructureFusionGateTests()
@@ -47,11 +59,11 @@ public sealed class StructureFusionGateTests : IDisposable
         var bundledDb = Path.Combine(AppContext.BaseDirectory, "Resources", "jsaa-memory.db");
         File.Copy(bundledDb, Path.Combine(_dataRoot, "memory.db"));
 
-        var factory = new SqliteConnectionFactory(
+        _factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
-        _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance,
-            new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(),
+        _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
+            new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(),
             new FakeTimeProvider(new DateTimeOffset(2026, 8, 14, 0, 0, 0, TimeSpan.Zero)), new EmbeddingService());
     }
 
@@ -70,9 +82,22 @@ public sealed class StructureFusionGateTests : IDisposable
             FtsWeight: 0, VectorWeight: 1), TestContext.Current.CancellationToken);
 
         results.ShouldNotBeEmpty();
-        results[0].Hash.ShouldBe(ExpectedTopHash,
+        var expectedHash = await ExpectedTopHashAsync();
+        results[0].Hash.ShouldBe(expectedHash,
             "the fused dual-vector rank must put the structure-matched (heading \"Decision\") chunk " +
             "first for a query this generic on content alone");
         results[0].Ranking.ShouldBe(1.0, 0.0001, "the top fused score is always normalized to 1.0");
+    }
+
+    /// <summary>Resolves the expected chunk from the corpus, so a regeneration cannot stale it.</summary>
+    private async Task<string> ExpectedTopHashAsync()
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var hash = await connection.QueryFirstOrDefaultAsync<string>(new CommandDefinition(
+            "SELECT hash FROM entries WHERE source_file = @file AND heading_path = @heading LIMIT 1",
+            new { file = ExpectedSourceFile, heading = ExpectedHeading },
+            cancellationToken: TestContext.Current.CancellationToken));
+        hash.ShouldNotBeNull($"the corpus must still contain '{ExpectedHeading}' in {ExpectedSourceFile}");
+        return hash;
     }
 }
