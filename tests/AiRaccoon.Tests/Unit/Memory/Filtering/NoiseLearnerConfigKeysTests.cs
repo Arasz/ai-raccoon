@@ -5,9 +5,10 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Memory.Filtering;
 
 /// <summary>
-///     The self-learning noise subsystem's own kill switch (ADR-0039) — opposite default of
-///     <see cref="NoiseConfigKeys.ParseEnabled" />: off unless the setting explicitly says "true",
-///     because the research lane has not yet verified the approach works.
+///     The self-learning noise subsystem's own kill switches (ADR-0039) — opposite default of
+///     <see cref="NoiseConfigKeys.ParseEnabled" />: off unless the setting explicitly says "true".
+///     No similarity-threshold setting exists here: a distance cutoff is scoring logic, and no
+///     detector has been validated on held-out data yet (see docs/adr/0039).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -27,15 +28,15 @@ public class NoiseLearnerConfigKeysTests
     public void ParseLearnerEnabled_OnlyTrueTurnsItOn(string value) => NoiseConfigKeys.ParseLearnerEnabled(value).ShouldBeTrue();
 
     [Theory]
-    [InlineData(null, 0.12)]
-    [InlineData("", 0.12)]
-    [InlineData("nonsense", 0.12)]
-    [InlineData("0", 0.12)]
-    [InlineData("3", 0.12)]
-    public void ParseLearnerClusterDistanceThreshold_InvalidOrOutOfRange_FallsBackToDefault(string? value, double expected) =>
-        NoiseConfigKeys.ParseLearnerClusterDistanceThreshold(value).ShouldBe(expected);
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("false")]
+    [InlineData("nonsense")]
+    public void ParseLearnerShadowEnabled_DefaultsOff(string? value) => NoiseConfigKeys.ParseLearnerShadowEnabled(value).ShouldBeFalse();
 
-    [Fact]
-    public void ParseLearnerClusterDistanceThreshold_ValidValue_IsHonored() =>
-        NoiseConfigKeys.ParseLearnerClusterDistanceThreshold("0.2").ShouldBe(0.2);
+    [Theory]
+    [InlineData("true")]
+    [InlineData("True")]
+    [InlineData("TRUE")]
+    public void ParseLearnerShadowEnabled_OnlyTrueTurnsItOn(string value) => NoiseConfigKeys.ParseLearnerShadowEnabled(value).ShouldBeTrue();
 }

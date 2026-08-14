@@ -164,11 +164,21 @@ public static partial class AppRegistrations
                 sp.GetRequiredService<IEncryptionKeyResolver>()));
             services.AddSingleton<ISqliteConnectionFactory>(sp => sp.GetRequiredService<SqliteConnectionFactory>());
             services.AddRequiredSingleton<IWatchStore, WatchStore>();
-            services.AddRequiredSingleton<IMemoryStore, SqliteMemoryStore>();
             services.AddRequiredSingleton<INoiseFilteringService, NoiseFilteringService>();
 
             // Register default noise filter policies (deterministic only — see ADR-0033).
             services.AddSingleton<INoiseFilterPolicy, HermesProcessNoisePolicy>();
+
+            // Self-learning noise substrate (ADR-0039): store + feedback path + shadow-mode
+            // plumbing, all wired; no scoring model registered. INoiseDetector -> NoOpNoiseDetector
+            // is the seam a future detector plugs into once one is validated on held-out data.
+            services.AddRequiredSingleton<INoiseClusterStore, SqliteNoiseClusterStore>();
+            services.AddRequiredSingleton<IContentEmbedder, SqliteContentEmbedder>();
+            services.AddSingleton<INoiseDetector, NoOpNoiseDetector>();
+            services.AddSingleton<NoiseFeedbackCollector>();
+            services.AddRequiredSingleton<INoiseShadowObserver, NoiseShadowObserver>();
+
+            services.AddRequiredSingleton<IMemoryStore, SqliteMemoryStore>();
             services.AddRequiredSingleton<IMemorySourceStore, SqliteMemorySourceStore>();
             services.AddRequiredSingleton<IWorkspaceStore, SqliteWorkspaceStore>();
             services.AddRequiredSingleton<IPromotionQueueStore, SqlitePromotionQueueStore>();

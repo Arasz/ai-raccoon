@@ -25,6 +25,9 @@ internal static class NoiseClusterSql
                                  RETURNING id
                                  """;
 
+    /// <summary>Reuses the vector EmbedIfConfiguredAsync already computed for this row (ADR-0039 shadow mode) instead of a second inference — null when no engine is configured.</summary>
+    public const string SelectEntryEmbeddingById = "SELECT embedding FROM entries WHERE id = @Id";
+
     /// <summary>vec_noise is a write-only mirror today (GetClustersAsync brute-force scans noise_clusters, which is correct at the small per-project cluster counts this subsystem expects) — kept in sync for future KNN-based lookup, per ADR-0039.</summary>
     public const string DeleteVecNoiseRow = "DELETE FROM vec_noise WHERE rowid = @Id";
 

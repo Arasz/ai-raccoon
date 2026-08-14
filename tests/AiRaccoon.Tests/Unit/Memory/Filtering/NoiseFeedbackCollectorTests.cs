@@ -6,8 +6,10 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Memory.Filtering;
 
 /// <summary>
-///     Wires an external labelled-negative signal (a rejected write's content) into the clustering
-///     service, with scope immunity for curated content. See docs/adr/0039.
+///     Wires an external labelled-negative signal (a rejected write's content) into
+///     <see cref="INoiseClusterStore" />, append-only — no assignment or merging against existing
+///     samples, since that is scoring logic ADR-0039 defers to a future detector. Scope immunity
+///     protects curated content (ADRs, shared docs) from ever becoming a training negative.
 ///     <para>
 ///     The fake embedder here deterministically derives a vector from the input string's characters
 ///     (never a fixed vector) — the original subsystem's tests used a fixed-vector fake regardless of
@@ -21,32 +23,48 @@ namespace AiRaccoon.Tests.Unit.Memory.Filtering;
 public class NoiseFeedbackCollectorTests
 {
     [Fact]
-    public async Task ProcessFeedbackAsync_ImmuneContent_NeverEmbedsOrClusters()
+    public async Task ProcessFeedbackAsync_ImmuneContent_NeverEmbedsOrStores()
     {
         var embedder = new FakeContentEmbedder();
         var store = new SpyNoiseClusterStore();
-        var sut = new NoiseFeedbackCollector(new OnlineNoiseClusteringService(store), embedder);
+        var sut = new NoiseFeedbackCollector(store, embedder);
 
-        await sut.ProcessFeedbackAsync("proj-1", "agent-1", "# ADR-0012 something", "test", clusterDistanceThreshold: 0.12,
+        await sut.ProcessFeedbackAsync("proj-1", "agent-1", "# ADR-0012 something", "test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         embedder.CallCount.ShouldBe(0);
-        store.GetClustersCallCount.ShouldBe(0);
         store.UpsertCallCount.ShouldBe(0);
     }
 
     [Fact]
-    public async Task ProcessFeedbackAsync_OrdinaryContent_EmbedsAndFeedsTheClusteringService()
+    public async Task ProcessFeedbackAsync_OrdinaryContent_EmbedsAndAppendsOneSample()
     {
         var embedder = new FakeContentEmbedder();
         var store = new SpyNoiseClusterStore();
-        var sut = new NoiseFeedbackCollector(new OnlineNoiseClusteringService(store), embedder);
+        var sut = new NoiseFeedbackCollector(store, embedder);
 
         await sut.ProcessFeedbackAsync("proj-1", "agent-1", "background process completed normally", "hermes-hit",
-            clusterDistanceThreshold: 0.12, cancellationToken: TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken);
 
         embedder.CallCount.ShouldBe(1);
         store.UpsertCallCount.ShouldBe(1);
+        store.Upserted[0].Frequency.ShouldBe(1);
+        store.Upserted[0].Status.ShouldBe("candidate");
+    }
+
+    [Fact]
+    public async Task ProcessFeedbackAsync_TwoSimilarSamples_AppendTwoSeparateRows_NoMerging()
+    {
+        var embedder = new FakeContentEmbedder();
+        var store = new SpyNoiseClusterStore();
+        var sut = new NoiseFeedbackCollector(store, embedder);
+        var ct = TestContext.Current.CancellationToken;
+
+        await sut.ProcessFeedbackAsync("proj-1", "agent-1", "background process alpha completed", "hermes-hit", cancellationToken: ct);
+        await sut.ProcessFeedbackAsync("proj-1", "agent-1", "background process beta completed", "hermes-hit", cancellationToken: ct);
+
+        store.UpsertCallCount.ShouldBe(2, "append-only: no nearest-neighbour assignment happens here (ADR-0039)");
+        store.Upserted[0].ClusterLabel.ShouldNotBe(store.Upserted[1].ClusterLabel);
     }
 
     [Fact]
@@ -54,9 +72,9 @@ public class NoiseFeedbackCollectorTests
     {
         var embedder = new FakeContentEmbedder();
         var store = new SpyNoiseClusterStore();
-        var sut = new NoiseFeedbackCollector(new OnlineNoiseClusteringService(store), embedder);
+        var sut = new NoiseFeedbackCollector(store, embedder);
 
-        await sut.ProcessFeedbackAsync("proj-1", "agent-1", "anything", "test", clusterDistanceThreshold: 0.12,
+        await sut.ProcessFeedbackAsync("proj-1", "agent-1", "anything", "test",
             precomputedVector: [1f, 0f], cancellationToken: TestContext.Current.CancellationToken);
 
         embedder.CallCount.ShouldBe(0);
@@ -64,13 +82,13 @@ public class NoiseFeedbackCollectorTests
     }
 
     [Fact]
-    public async Task ProcessFeedbackAsync_EmbedderDegrades_NeverReachesTheClusteringService()
+    public async Task ProcessFeedbackAsync_EmbedderDegrades_NeverReachesTheStore()
     {
         var embedder = new FakeContentEmbedder(alwaysReturnsNull: true);
         var store = new SpyNoiseClusterStore();
-        var sut = new NoiseFeedbackCollector(new OnlineNoiseClusteringService(store), embedder);
+        var sut = new NoiseFeedbackCollector(store, embedder);
 
-        await sut.ProcessFeedbackAsync("proj-1", "agent-1", "anything", "test", clusterDistanceThreshold: 0.12,
+        await sut.ProcessFeedbackAsync("proj-1", "agent-1", "anything", "test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         store.UpsertCallCount.ShouldBe(0);
@@ -124,19 +142,17 @@ public class NoiseFeedbackCollectorTests
 
     private sealed class SpyNoiseClusterStore : INoiseClusterStore
     {
-        public int GetClustersCallCount { get; private set; }
         public int UpsertCallCount { get; private set; }
+        public List<NoiseCluster> Upserted { get; } = [];
 
-        public Task<IReadOnlyList<NoiseCluster>> GetClustersAsync(string projectId, string? userId, CancellationToken cancellationToken = default)
-        {
-            GetClustersCallCount++;
-            return Task.FromResult<IReadOnlyList<NoiseCluster>>([]);
-        }
+        public Task<IReadOnlyList<NoiseCluster>> GetClustersAsync(string projectId, string? userId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<NoiseCluster>>([]);
 
         public Task<long> UpsertClusterAsync(NoiseCluster cluster, CancellationToken cancellationToken = default)
         {
             UpsertCallCount++;
-            return Task.FromResult(1L);
+            Upserted.Add(cluster);
+            return Task.FromResult((long)UpsertCallCount);
         }
     }
 }
