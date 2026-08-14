@@ -143,9 +143,11 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
             _originalPassphrase = Environment.GetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName);
             Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, null);
 
-            Port = FreePort();
+            using var lease = LoopbackPort.Reserve();
+            Port = lease.Port;
             CliArgs.TryParse(["--data-root", DataRoot, "serve", "--port", Port.ToString()], out var parsed);
             parsed!.Errors.ShouldBeEmpty();
+            lease.ReleaseForBind();
             _serve = TestData.CreateNodeRunner(parsed.ServerConfig.Options).RunAsync(parsed, new StandardStreams(TextReader.Null, _stdout, _stderr), _cts.Token);
             await WaitForListeningAsync();
         }
@@ -171,15 +173,6 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
             {
                 throw new TimeoutException($"serve never reported a URL; stderr: {_stderr}");
             }
-        }
-
-        private static int FreePort()
-        {
-            var listener = new TcpListener(IPAddress.Loopback, 0);
-            listener.Start();
-            var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-            listener.Stop();
-            return port;
         }
     }
 

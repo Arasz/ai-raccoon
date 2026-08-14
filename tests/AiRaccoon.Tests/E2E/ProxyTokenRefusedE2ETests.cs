@@ -4,6 +4,7 @@ using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.E2E;
 
@@ -28,7 +29,9 @@ public sealed class ProxyTokenRefusedE2ETests : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        _port = AiRaccoonProcess.FreePort();
+        using var lease = LoopbackPort.Reserve();
+        _port = lease.Port;
+        lease.ReleaseForBind();
         _backend = StartGatedServe();
         await WaitForBackendAsync();
         // A well-formed token that is deliberately not the backend's: the proxy reads this root,

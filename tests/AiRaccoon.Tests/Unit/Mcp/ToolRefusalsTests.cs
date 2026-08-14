@@ -26,6 +26,7 @@ using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Unit.Mcp;
 
@@ -149,9 +150,11 @@ public sealed class ToolRefusalsTests : IDisposable
         {
             await SeedForwardSchemaVersionAsync(dataRoot, TestContext.Current.CancellationToken);
 
-            var port = FreePort();
+            using var lease = LoopbackPort.Reserve();
+            var port = lease.Port;
             var host = McpServerSetup.CreateServerHost(
                 new ServerConfig(port, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot)));
+            lease.ReleaseForBind();
             await host.StartAsync(TestContext.Current.CancellationToken);
             try
             {
@@ -214,12 +217,14 @@ public sealed class ToolRefusalsTests : IDisposable
     private static async Task AssertRefusalOverRealServerAsync(string dataRoot, string toolName,
         Dictionary<string, object?> arguments, string expectedPrefix)
     {
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         var host = McpServerSetup.CreateServerHost(
             new ServerConfig(port, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot)));
         var fakeLogs = new FakeLoggerProvider();
         host.Services.GetRequiredService<ILoggerFactory>().AddProvider(fakeLogs);
 
+        lease.ReleaseForBind();
         await host.StartAsync(TestContext.Current.CancellationToken);
         try
         {
@@ -280,14 +285,6 @@ public sealed class ToolRefusalsTests : IDisposable
             .ConfigureAwait(false);
     }
 
-    private static int FreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
-    }
 
     [Theory]
     [MemberData(nameof(MappedRefusals))]
@@ -310,12 +307,14 @@ public sealed class ToolRefusalsTests : IDisposable
         var dataRoot = TestData.CreateTempRoot("tool-refusals-warning");
         try
         {
-            var port = FreePort();
+            using var lease = LoopbackPort.Reserve();
+            var port = lease.Port;
             var host = McpServerSetup.CreateServerHost(
                 new ServerConfig(port, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot)));
             var fakeLogs = new FakeLoggerProvider();
             host.Services.GetRequiredService<ILoggerFactory>().AddProvider(fakeLogs);
 
+            lease.ReleaseForBind();
             await host.StartAsync(TestContext.Current.CancellationToken);
             try
             {

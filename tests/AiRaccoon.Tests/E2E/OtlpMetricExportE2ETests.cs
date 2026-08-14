@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using OpenTelemetry.Metrics;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.E2E;
 
@@ -94,9 +95,10 @@ public sealed class OtlpMetricExportE2ETests : IAsyncLifetime
 
         public CapturingCollector()
         {
-            var port = FreePort();
-            Endpoint = $"http://127.0.0.1:{port}";
+            using var lease = LoopbackPort.Reserve();
+            Endpoint = $"http://127.0.0.1:{lease.Port}";
             _listener.Prefixes.Add($"{Endpoint}/");
+            lease.ReleaseForBind();
             _listener.Start();
             _acceptLoop = Task.Run(AcceptLoopAsync);
         }
@@ -148,15 +150,6 @@ public sealed class OtlpMetricExportE2ETests : IAsyncLifetime
             _listener.Stop();
             _listener.Close();
             _cts.Dispose();
-        }
-
-        private static int FreePort()
-        {
-            var listener = new TcpListener(IPAddress.Loopback, 0);
-            listener.Start();
-            var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-            listener.Stop();
-            return port;
         }
     }
 }
