@@ -180,21 +180,13 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
     /// </summary>
     public async Task<CliRun> RunCliAsync(string stdin, params string[] args)
     {
-        CliArgs.TryParse(args, out var parsed);
-        if (parsed!.Errors.Count > 0 || parsed.CommandPath.Length == 0)
-        {
-            throw new InvalidOperationException(
-                $"CLI command did not parse: {string.Join("; ", parsed.Errors)}");
-        }
-
-        var stdout = new StringWriter();
-        var stderr = new StringWriter();
         var envProvider = new StubEnvProvider(EnvPassphrase);
         var encryptionState = new EncryptionSourceSidecar(BankPath);
         var encryptionCommands = new EncryptionCommands(Bank, NewRunner(), envProvider, encryptionState, new FakeLogger<EncryptionCommands>());
-        var exit = await TestData.CreateConfigCommands(ConfigStore, encryptionCommands: encryptionCommands)
-            .RunAsync(parsed, new StandardStreams(new StringReader(stdin), stdout, stderr), CancellationToken.None);
-        return new CliRun(exit, stdout.ToString(), stderr.ToString());
+        var (exit, stdout, stderr) = await TestHelpers.CliRun.RunAsync(args,
+            TestData.CreateConfigCommands(ConfigStore, encryptionCommands: encryptionCommands),
+            new StringReader(stdin));
+        return new CliRun(exit, stdout, stderr);
     }
 
     /// <summary>
