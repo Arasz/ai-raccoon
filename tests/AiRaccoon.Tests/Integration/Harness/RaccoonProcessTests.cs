@@ -11,10 +11,20 @@ namespace AiRaccoon.Tests.Integration.Harness;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
-public sealed class RaccoonProcessTests
+public sealed class RaccoonProcessTests : IDisposable
 {
     private static readonly TimeSpan HardCap = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan Settle = TimeSpan.FromSeconds(10);
+
+    private string? _tempRoot;
+
+    public void Dispose()
+    {
+        if (_tempRoot is not null)
+        {
+            TestData.DeleteTempRoot(_tempRoot);
+        }
+    }
 
     /// <summary>
     ///     Process.Dispose() does not kill, so a `using var process` that times out orphans the child
@@ -24,7 +34,8 @@ public sealed class RaccoonProcessTests
     public async Task ARunThatOutlastsItsHardCap_LeavesNoProcessTreeBehind()
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), "the tree is built with a POSIX shell");
-        var marker = Path.Combine(TestData.CreateTempRoot("kill-tree"), "grandchild.pid");
+        _tempRoot = TestData.CreateTempRoot("kill-tree");
+        var marker = Path.Combine(_tempRoot, "grandchild.pid");
 
         var run = RaccoonProcess.RunAsync("/bin/sh",
             ["-c", $"sh -c 'echo $$ > \"{marker}\"; exec sleep 120' & wait"],
@@ -66,7 +77,8 @@ public sealed class RaccoonProcessTests
     public void AMissingBuildOutput_NamesThePathItExpected()
     {
         // Without this the failure is an opaque Win32Exception raised from inside the MCP SDK.
-        var empty = TestData.CreateTempRoot("no-build-output");
+        _tempRoot = TestData.CreateTempRoot("no-build-output");
+        var empty = _tempRoot;
 
         var thrown = Should.Throw<FileNotFoundException>(() => RaccoonProcess.ResolveExecutable(empty));
 

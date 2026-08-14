@@ -30,9 +30,17 @@ public class IngestionCompositionTests
 
     private static IReadOnlyList<IFileTypeHandler> ResolveFileTypeHandlers()
     {
-        var services = new ServiceCollection();
-        services.AddLogging(b => b.SetMinimumLevel(LogLevel.Warning));
-        services.RegisterCoreMemoryServices(TestData.CreateInfrastructureOptions(TestData.CreateTempRoot()));
-        return services.BuildServiceProvider().GetServices<IFileTypeHandler>().ToList();
+        var tempRoot = TestData.CreateTempRoot();
+        try
+        {
+            var services = new ServiceCollection();
+            services.AddLogging(b => b.SetMinimumLevel(LogLevel.Warning));
+            services.RegisterCoreMemoryServices(TestData.CreateInfrastructureOptions(tempRoot));
+            return services.BuildServiceProvider().GetServices<IFileTypeHandler>().ToList();
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(tempRoot);
+        }
     }
 }
