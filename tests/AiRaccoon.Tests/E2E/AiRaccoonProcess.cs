@@ -1,3 +1,4 @@
+using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Client;
 
@@ -6,8 +7,8 @@ namespace AiRaccoon.Tests.E2E;
 /// <summary>Speaks MCP to the built ai-raccoon binary over a real stdio pipe, as an MCP client does.</summary>
 public static class AiRaccoonProcess
 {
-    public static string Executable =>
-        Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "AiRaccoon.exe" : "AiRaccoon");
+    /// <summary>Throws naming the expected path when the build output is missing.</summary>
+    public static string Executable => RaccoonProcess.Executable;
 
     public static Task<McpClient> ConnectAsync(string[] arguments, CancellationToken cancellationToken) =>
         ConnectAsync(arguments, null, cancellationToken);
