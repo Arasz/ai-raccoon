@@ -12,7 +12,7 @@
   ],
   "skillScope": "default",
   "pluginScope": "default",
-  "configHash": "268e744168a76161497d48732b4f7538e3b63ce1459dd05d5558a4ad5b7d9546",
+  "configHash": "c844d1ff1ae39882e36085194602242d2f1166e194fe10b353575057060314da",
   "generatedConfig": [
     {
       "path": ".claude/settings.json",
@@ -1308,6 +1308,90 @@
       ]
     },
     {
+      "feature": "skills",
+      "stack": "common",
+      "name": "spec-driven-refactoring",
+      "source": "features/common/skills/spec-driven-refactoring",
+      "target": ".ai-badger/skills/spec-driven-refactoring",
+      "frameworkVersion": "0.117.1",
+      "hash": "295f0a900cf22de72c8d124e74c0ab0b7d0d8c09431c8f5b378f5502621d8546",
+      "dirMeta": {
+        "file_count": 5,
+        "dir_count": 1
+      },
+      "sourceHash": "295f0a900cf22de72c8d124e74c0ab0b7d0d8c09431c8f5b378f5502621d8546",
+      "sourceMeta": {
+        "file_count": 5,
+        "dir_count": 1
+      },
+      "projectOwned": [
+        "project-local.md"
+      ]
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "sqlite-bank-space-diagnosis",
+      "source": "features/common/skills/sqlite-bank-space-diagnosis",
+      "target": ".ai-badger/skills/sqlite-bank-space-diagnosis",
+      "frameworkVersion": "0.117.1",
+      "hash": "f3378ec804330010fa647c090725de7f2c069b3e0e3e5bf22717b5a8c041adad",
+      "dirMeta": {
+        "file_count": 1,
+        "dir_count": 0
+      },
+      "sourceHash": "f3378ec804330010fa647c090725de7f2c069b3e0e3e5bf22717b5a8c041adad",
+      "sourceMeta": {
+        "file_count": 1,
+        "dir_count": 0
+      },
+      "projectOwned": [
+        "project-local.md"
+      ]
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "sqlite-schema-review",
+      "source": "features/common/skills/sqlite-schema-review",
+      "target": ".ai-badger/skills/sqlite-schema-review",
+      "frameworkVersion": "0.117.1",
+      "hash": "c64f9875e901357e30942f792bcda4be75ad6d0036e330f85927d2e320347fa5",
+      "dirMeta": {
+        "file_count": 1,
+        "dir_count": 0
+      },
+      "sourceHash": "c64f9875e901357e30942f792bcda4be75ad6d0036e330f85927d2e320347fa5",
+      "sourceMeta": {
+        "file_count": 1,
+        "dir_count": 0
+      },
+      "projectOwned": [
+        "project-local.md"
+      ]
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "worktree-agent-isolation",
+      "source": "features/common/skills/worktree-agent-isolation",
+      "target": ".ai-badger/skills/worktree-agent-isolation",
+      "frameworkVersion": "0.117.1",
+      "hash": "fabf407b8be5f895a7198d784210a2a487a7975fc9d68ffa8e59b696e80a8256",
+      "dirMeta": {
+        "file_count": 11,
+        "dir_count": 2
+      },
+      "sourceHash": "fabf407b8be5f895a7198d784210a2a487a7975fc9d68ffa8e59b696e80a8256",
+      "sourceMeta": {
+        "file_count": 11,
+        "dir_count": 2
+      },
+      "projectOwned": [
+        "project-local.md"
+      ]
+    },
+    {
       "feature": "templates",
       "stack": "common",
       "name": "agent-instructions/schema.json",
@@ -1713,6 +1797,42 @@
     {
       "feature": "adjustments",
       "stack": "claude",
+      "name": "adjustments/.claude/skills/spec-driven-refactoring",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/spec-driven-refactoring",
+      "frameworkVersion": "0.117.1",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/skills/sqlite-bank-space-diagnosis",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/sqlite-bank-space-diagnosis",
+      "frameworkVersion": "0.117.1",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/skills/sqlite-schema-review",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/sqlite-schema-review",
+      "frameworkVersion": "0.117.1",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
+      "name": "adjustments/.claude/skills/worktree-agent-isolation",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/worktree-agent-isolation",
+      "frameworkVersion": "0.117.1",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
       "name": "adjustments/.ai-badger/skills/mcp-index/scripts/tokenizer.py",
       "source": "features/claude/adjustments/adjust_retrieval.py",
       "target": ".ai-badger/skills/mcp-index/scripts/tokenizer.py",
@@ -2049,6 +2169,42 @@
       "name": "adjustments/.github/skills/humanizer",
       "source": "features/copilot/adjustments/adjust_skills.py",
       "target": ".github/skills/humanizer",
+      "frameworkVersion": "0.117.1",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/spec-driven-refactoring",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/spec-driven-refactoring",
+      "frameworkVersion": "0.117.1",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/sqlite-bank-space-diagnosis",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/sqlite-bank-space-diagnosis",
+      "frameworkVersion": "0.117.1",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/sqlite-schema-review",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/sqlite-schema-review",
+      "frameworkVersion": "0.117.1",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/worktree-agent-isolation",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/worktree-agent-isolation",
       "frameworkVersion": "0.117.1",
       "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
     },

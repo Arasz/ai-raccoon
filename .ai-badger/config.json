@@ -58,7 +58,11 @@
       "design-gate-audit",
       "documentation-drift-audit",
       "multi-lane-report-assembly",
-      "parallel-expert-review"
+      "parallel-expert-review",
+      "spec-driven-refactoring",
+      "sqlite-bank-space-diagnosis",
+      "sqlite-schema-review",
+      "worktree-agent-isolation"
     ]
   },
   "docs": {},

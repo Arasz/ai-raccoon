@@ -78,6 +78,26 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f \"${CLAUDE_PROJECT_DIR}/.ai-badger/skills/worktree-agent-isolation/scripts/blast_radius_kill_guard.py\" ]; then python3 \"${CLAUDE_PROJECT_DIR}/.ai-badger/skills/worktree-agent-isolation/scripts/blast_radius_kill_guard.py\"; elif [ -f \".ai-badger/skills/worktree-agent-isolation/scripts/blast_radius_kill_guard.py\" ]; then python3 \".ai-badger/skills/worktree-agent-isolation/scripts/blast_radius_kill_guard.py\"; else echo '{\"systemMessage\": \"ai-badger: .ai-badger/skills/worktree-agent-isolation/scripts/blast_radius_kill_guard.py not found - hook skipped\"}'; fi",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f \"${CLAUDE_PROJECT_DIR}/.ai-badger/skills/worktree-agent-isolation/scripts/cross_worktree_dirty_warning.py\" ]; then python3 \"${CLAUDE_PROJECT_DIR}/.ai-badger/skills/worktree-agent-isolation/scripts/cross_worktree_dirty_warning.py\"; elif [ -f \".ai-badger/skills/worktree-agent-isolation/scripts/cross_worktree_dirty_warning.py\" ]; then python3 \".ai-badger/skills/worktree-agent-isolation/scripts/cross_worktree_dirty_warning.py\"; else echo '{\"systemMessage\": \"ai-badger: .ai-badger/skills/worktree-agent-isolation/scripts/cross_worktree_dirty_warning.py not found - hook skipped\"}'; fi",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PostToolUse": [
