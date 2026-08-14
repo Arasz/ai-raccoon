@@ -52,4 +52,41 @@ Output: test]";
 
         Assert.False(result.IsNoise);
     }
+
+    [Fact]
+    public async Task EvaluatePreWriteAsync_WhenTheFirstPolicyMatches_NeverEvaluatesTheSecond()
+    {
+        // First-match short-circuit (QA-F3): the loop in EvaluatePreWriteAsync must return on the
+        // first IsNoise result without consulting the remaining policies.
+        var second = new CountingNoisePolicy("would-also-match");
+        var policies = new INoiseFilterPolicy[] { new HermesProcessNoisePolicy(), second };
+        var sut = new NoiseFilteringService(policies);
+
+        var content = @"[IMPORTANT: Background process proc_qa completed normally (exit code 0).
+Command: cd /tmp && echo test
+Output: test]";
+        var request = new MemoryWriteRequest("proj-1", content);
+
+        var result = await sut.EvaluatePreWriteAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.True(result.IsNoise);
+        Assert.Equal("HermesBackgroundProcessLog", result.PolicyName);
+        Assert.Equal(0, second.EvaluationCount);
+    }
+
+    /// <summary>Always reports noise, and counts how many times it was asked — the short-circuit test's
+    /// secondary observable: the return value alone cannot prove the second policy was skipped.</summary>
+    private sealed class CountingNoisePolicy(string name) : INoiseFilterPolicy
+    {
+        public int EvaluationCount { get; private set; }
+
+        public string Name => name;
+
+        public ValueTask<NoiseFilterResult> EvaluateAsync(MemoryWriteRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            EvaluationCount++;
+            return ValueTask.FromResult(NoiseFilterResult.Noise(name));
+        }
+    }
 }
