@@ -24,7 +24,8 @@ public sealed class ServeRestartTests : IDisposable
     [Fact]
     public async Task NothingListening_ServesLikePlainServe()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EnvEncryptionKeyProvider.EnvVarName, null));
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         lease.ReleaseForBind();
@@ -40,7 +41,8 @@ public sealed class ServeRestartTests : IDisposable
     [Fact]
     public async Task AnExistingServer_IsCycled_AndTheRestartOwnsThePort()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EnvEncryptionKeyProvider.EnvVarName, null));
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         lease.ReleaseForBind();
@@ -63,7 +65,8 @@ public sealed class ServeRestartTests : IDisposable
     [Fact]
     public async Task AServerThatRefusesOurToken_ExitsRestartFailed_AndNeverAttaches()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EnvEncryptionKeyProvider.EnvVarName, null));
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         // Our data root has a token; the listener rejects it, i.e. it serves a different root.
@@ -85,7 +88,8 @@ public sealed class ServeRestartTests : IDisposable
     [Fact]
     public async Task AServerTooOldToBeCycled_ExitsRestartFailed()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EnvEncryptionKeyProvider.EnvVarName, null));
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         (await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
@@ -104,7 +108,8 @@ public sealed class ServeRestartTests : IDisposable
     [Fact]
     public async Task AServerWeHoldNoTokenFor_ExitsRestartFailed_WithoutAskingItToStop()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EnvEncryptionKeyProvider.EnvVarName, null));
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         lease.ReleaseForBind();
@@ -123,7 +128,8 @@ public sealed class ServeRestartTests : IDisposable
     [Fact]
     public async Task AListenerThatWillNotIdentify_ReportsPortInUse_WithoutAskingItToStop()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EnvEncryptionKeyProvider.EnvVarName, null));
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         (await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
@@ -146,7 +152,8 @@ public sealed class ServeRestartTests : IDisposable
     [Fact]
     public async Task AServerThatReportsNoVersion_IsStillNamedInTheRefusal()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EnvEncryptionKeyProvider.EnvVarName, null));
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         (await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
@@ -166,7 +173,8 @@ public sealed class ServeRestartTests : IDisposable
     [Fact]
     public async Task AForeignListener_StillReportsPortInUse()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EnvEncryptionKeyProvider.EnvVarName, null));
         using var holder = LoopbackPort.Occupy();
         await using var run = Start(["--data-root", _dataRoot, "serve", "--port", holder.Port.ToString(), "--restart"]);
 
@@ -180,7 +188,8 @@ public sealed class ServeRestartTests : IDisposable
     [Fact]
     public async Task WithoutRestart_AnExistingServerIsStillAttachedTo()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EnvEncryptionKeyProvider.EnvVarName, null));
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         lease.ReleaseForBind();
@@ -203,21 +212,6 @@ public sealed class ServeRestartTests : IDisposable
     private static Task<string> WaitForUrlAsync(ServeHarness run) =>
         run.WaitForUrlAsync(TestContext.Current.CancellationToken);
 
-    private static async Task<IDisposable> AcquireCleanEnvAsync()
-    {
-        await TestData.EnvVarGate.WaitAsync(TestContext.Current.CancellationToken);
-        var original = Environment.GetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName);
-        Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, null);
-        return new EnvRestore(original);
-    }
 
 
-    private sealed class EnvRestore(string? original) : IDisposable
-    {
-        public void Dispose()
-        {
-            Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, original);
-            TestData.EnvVarGate.Release();
-        }
-    }
 }
