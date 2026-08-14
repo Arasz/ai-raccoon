@@ -25,14 +25,18 @@ public sealed class SqliteMemoryStoreSizeRatchetTests
     //   1276 / 26  memory_get (ADR-0035) -- closed blocker B2, an agent could find a memory and
     //              had no call returning its content.
     //   1308 / 27  noise shadow-observer wiring (ADR-0039).
+    //   1290 / 27  LOWERED, not raised: the noise_entries write path pushed the file to 1315, and
+    //              the note below said the next person should decompose instead of adding a
+    //              fourth raise. ISettingsStore/SqliteSettingsStore is WP8's first seam -- the
+    //              four settings methods moved out and IMemoryStore delegates, so the ~40 call
+    //              sites that reach settings through the store they already hold are untouched.
     //
-    // That is two raises in a single day of work, which is the signal this ratchet exists to
-    // send. It was added because the file grew 1111 -> 1250 in eight days while its
-    // decomposition item sat open; it has now grown a further 58 lines while that item still
-    // sits open. The next person to hit this should do WP8 (extract ISettingsStore, split the
-    // store along its six seams) rather than add a fourth line above. Raising the cap is not
-    // free -- it is borrowing against a decomposition someone still has to pay for.
-    private const int MaxLines = 1308;
+    // Two raises in a single day of work was the signal this ratchet exists to send, and the
+    // third hit was paid down rather than borrowed against: settings came out. Five seams remain
+    // (write, search, delete, ingest, embedding). The next person to hit this cap should take one
+    // of them rather than add a raise -- raising is borrowing against a decomposition someone
+    // still has to pay for.
+    private const int MaxLines = 1290;
     private const int MaxMembers = 27;
 
     [Fact]

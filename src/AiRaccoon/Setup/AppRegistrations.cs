@@ -181,6 +181,7 @@ public static partial class AppRegistrations
 
             services.AddRequiredSingleton<IMemoryStore, SqliteMemoryStore>();
             services.AddRequiredSingleton<IMemorySourceStore, SqliteMemorySourceStore>();
+            services.AddRequiredSingleton<ISettingsStore, SqliteSettingsStore>();
             services.AddRequiredSingleton<IWorkspaceStore, SqliteWorkspaceStore>();
             services.AddRequiredSingleton<IPromotionQueueStore, SqlitePromotionQueueStore>();
         }

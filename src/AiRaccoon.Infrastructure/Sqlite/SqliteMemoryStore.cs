@@ -30,6 +30,7 @@ public sealed partial class SqliteMemoryStore(
 {
     private const string SharedScope = "shared";
     private readonly IEntryEmbedder _embedder = embedder;
+    private readonly ISettingsStore _settings = new SqliteSettingsStore(factory);
 
     // Both default to a Null Object, not a nullable parameter: TestData.CreateMemoryStore (out of
     // this lane's ownership) constructs SqliteMemoryStore via the 7-arg primary constructor above,
@@ -713,45 +714,20 @@ public sealed partial class SqliteMemoryStore(
         return row is null ? null : new EntryMetadata(row.Rating, row.TtlDays);
     }
 
-    public async Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+    // The settings surface lives in SqliteSettingsStore (WP8); IMemoryStore keeps the members
+    // because ~40 call sites reach settings through the store they already hold.
+    public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
+        _settings.GetSettingAsync(key, cancellationToken);
 
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        return await ReadSettingAsync(connection, key, cancellationToken).ConfigureAwait(false);
-    }
+    public Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default) =>
+        _settings.SetSettingAsync(key, value, cancellationToken);
 
-    public async Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(key);
-        ArgumentNullException.ThrowIfNull(value);
+    public Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
+        CancellationToken cancellationToken = default) =>
+        _settings.GetSettingsByPrefixAsync(prefix, cancellationToken);
 
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        await connection.ExecuteAsync(
-                Def(MemorySql.UpsertSetting, new { key, value }, cancellationToken))
-            .ConfigureAwait(false);
-    }
-
-    public async Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(prefix);
-
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        var rows = await connection.QueryAsync<SettingRow>(
-                Def(MemorySql.SelectSettingsByPrefix, new { prefix }, cancellationToken))
-            .ConfigureAwait(false);
-        return rows.ToDictionary(row => row.Key, row => row.Value, StringComparer.Ordinal);
-    }
-
-    public async Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(key);
-
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        await connection.ExecuteAsync(Def(MemorySql.DeleteSetting, new { key }, cancellationToken))
-            .ConfigureAwait(false);
-    }
+    public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) =>
+        _settings.DeleteSettingAsync(key, cancellationToken);
 
     public async Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
         CancellationToken cancellationToken = default)
@@ -1297,7 +1273,6 @@ public sealed partial class SqliteMemoryStore(
                 DateTimeOffset.FromUnixTimeSeconds(CreatedAt), (int?)TtlDays, SourceType);
     }
 
-    private sealed record SettingRow(string Key, string Value);
 
     private sealed class RatingRow
     {
