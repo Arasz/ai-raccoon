@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
@@ -509,11 +508,10 @@ public sealed class WatchIntegrationTests
         await stack.EnableAsync(TestContext.Current.CancellationToken);
         await stack.AllowScopeAsync(TestContext.Current.CancellationToken);
 
-        var stopwatch = Stopwatch.StartNew();
         await stack.AddWatchAsync(TestContext.Current.CancellationToken);
-        stopwatch.Stop();
 
-        stopwatch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(10), "add must not run the initial scan inline");
+        // State == Scanning plus a zero search count are the behavioural proof that add did
+        // not run the initial scan inline; a wall-clock bound only restated it, and flaked.
         var status = (await stack.Service.StatusAsync(Project, TestContext.Current.CancellationToken)).Single();
         status.State.ShouldBe(WatchState.Scanning);
         (await stack.SearchAsync("zephyrword0", TestContext.Current.CancellationToken)).Count

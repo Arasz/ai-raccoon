@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Sockets;
 using System.Text;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
@@ -7,6 +6,7 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Observability;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
+using AiRaccoon.Tests.TestHelpers;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -29,24 +29,17 @@ public sealed class ObservabilityRunnerTests : IDisposable
     private const string ProtocolVar = "OTEL_EXPORTER_OTLP_PROTOCOL";
 
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-observability-runner");
-    private readonly List<TcpListener> _holders = [];
 
-    public void Dispose()
-    {
-        foreach (var holder in _holders)
-        {
-            holder.Stop();
-        }
-
-        Directory.Delete(_dataRoot, true);
-    }
+    public void Dispose() => Directory.Delete(_dataRoot, true);
 
     [Fact]
     public async Task LiveServer_PrintsTheCountersCommand_WithTheServerPid()
     {
         using var env = await AcquireCleanEnvAsync();
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         var host = McpServerSetup.CreateServerHost(Config(port));
+        lease.ReleaseForBind();
         await host.StartAsync(TestContext.Current.CancellationToken);
         try
         {
@@ -66,8 +59,10 @@ public sealed class ObservabilityRunnerTests : IDisposable
     public async Task LiveServer_PrintsTheTraceCommand_WithTheServerPid()
     {
         using var env = await AcquireCleanEnvAsync();
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         var host = McpServerSetup.CreateServerHost(Config(port));
+        lease.ReleaseForBind();
         await host.StartAsync(TestContext.Current.CancellationToken);
         try
         {
@@ -87,8 +82,10 @@ public sealed class ObservabilityRunnerTests : IDisposable
     public async Task LiveServer_PrintsTheBarePid()
     {
         using var env = await AcquireCleanEnvAsync();
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         var host = McpServerSetup.CreateServerHost(Config(port));
+        lease.ReleaseForBind();
         await host.StartAsync(TestContext.Current.CancellationToken);
         try
         {
@@ -108,8 +105,10 @@ public sealed class ObservabilityRunnerTests : IDisposable
     public async Task NoServerListening_ReturnsNoServerRunning_WithAStartHint()
     {
         using var env = await AcquireCleanEnvAsync();
-        var port = FreePort(); // nothing bound to it
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
 
+        lease.ReleaseForBind(); // nothing bound to it
         var run = await RunObservabilityAsync("pid", port);
 
         run.Exit.ShouldBe(ExitCode.NoServerRunning);
@@ -123,7 +122,8 @@ public sealed class ObservabilityRunnerTests : IDisposable
     public async Task ForeignListener_ReturnsPortInUse_WithNoStackTrace()
     {
         using var env = await AcquireCleanEnvAsync();
-        using var holder = HoldLoopbackPort(out var port);
+        using var holder = LoopbackPort.Occupy();
+        var port = holder.Port;
 
         var run = await RunObservabilityAsync("pid", port);
 
@@ -138,8 +138,10 @@ public sealed class ObservabilityRunnerTests : IDisposable
     public async Task OtlpDisabled_ReturnsOtlpNotEnabled_AndWritesNothingToStdout()
     {
         using var env = await AcquireCleanEnvAsync();
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         var host = McpServerSetup.CreateServerHost(Config(port));
+        lease.ReleaseForBind();
         await host.StartAsync(TestContext.Current.CancellationToken);
         try
         {
@@ -160,8 +162,10 @@ public sealed class ObservabilityRunnerTests : IDisposable
     public async Task OtlpEnabled_PrintsTheEndpointOnStdout_AndTheProtocolOnStderr()
     {
         using var env = await AcquireCleanEnvAsync();
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         var host = McpServerSetup.CreateServerHost(Config(port));
+        lease.ReleaseForBind();
         await host.StartAsync(TestContext.Current.CancellationToken);
         try
         {
@@ -184,7 +188,9 @@ public sealed class ObservabilityRunnerTests : IDisposable
     public async Task AttachedSecondServe_StillReportsTheOwnerPid()
     {
         using var env = await AcquireCleanEnvAsync();
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
         var first = StartServe(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
         await WaitForLineAsync(first, line => line.StartsWith("http://", StringComparison.Ordinal),
             TestContext.Current.CancellationToken);
@@ -215,18 +221,22 @@ public sealed class ObservabilityRunnerTests : IDisposable
     {
         using var env = await AcquireCleanEnvAsync();
 
-        var noServerPort = FreePort();
+        using var noServerLease = LoopbackPort.Reserve();
+        var noServerPort = noServerLease.Port;
+        noServerLease.ReleaseForBind();
         var noServerRun = await RunObservabilityAsync("pid", noServerPort);
         noServerRun.Stdout.ShouldBeEmpty();
 
-        using (var holder = HoldLoopbackPort(out var foreignPort))
+        using (var holder = LoopbackPort.Occupy())
         {
-            var foreignRun = await RunObservabilityAsync("pid", foreignPort);
+            var foreignRun = await RunObservabilityAsync("pid", holder.Port);
             foreignRun.Stdout.ShouldBeEmpty();
         }
 
-        var otlpDisabledPort = FreePort();
+        using var otlpLease = LoopbackPort.Reserve();
+        var otlpDisabledPort = otlpLease.Port;
         var host = McpServerSetup.CreateServerHost(Config(otlpDisabledPort));
+        otlpLease.ReleaseForBind();
         await host.StartAsync(TestContext.Current.CancellationToken);
         try
         {
@@ -238,7 +248,9 @@ public sealed class ObservabilityRunnerTests : IDisposable
             await host.StopAsync(TestContext.Current.CancellationToken);
         }
 
-        var oldServerPort = FreePort();
+        using var oldServerLease = LoopbackPort.Reserve();
+        var oldServerPort = oldServerLease.Port;
+        oldServerLease.ReleaseForBind();
         var oldServer = await StartOldServerWithoutObservabilityAsync(oldServerPort);
         try
         {
@@ -315,57 +327,6 @@ public sealed class ObservabilityRunnerTests : IDisposable
         return app;
     }
 
-    private TcpListener HoldLoopbackPort(out int port)
-    {
-        for (var attempt = 0; attempt < 20; attempt++)
-        {
-            var probe = new TcpListener(IPAddress.Loopback, 0);
-            probe.Start();
-            var candidate = ((IPEndPoint)probe.LocalEndpoint).Port;
-            probe.Stop();
-
-            var holder = new TcpListener(IPAddress.Loopback, candidate);
-            try
-            {
-                holder.Start();
-                port = candidate;
-                _holders.Add(holder);
-
-                _ = Task.Run(AcceptClientLoop);
-                return holder;
-
-                async Task? AcceptClientLoop()
-                {
-                    while (true)
-                    {
-                        try
-                        {
-                            using var client = await holder.AcceptTcpClientAsync();
-                        }
-                        catch (Exception ex) when (ex is ObjectDisposedException or SocketException)
-                        {
-                            return;
-                        }
-                    }
-                }
-            }
-            catch (SocketException)
-            {
-                holder.Stop();
-            }
-        }
-
-        throw new InvalidOperationException("Could not reserve a loopback port");
-    }
-
-    private static int FreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
-    }
 
     private static async Task<IDisposable> AcquireCleanEnvAsync()
     {

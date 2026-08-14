@@ -1,5 +1,3 @@
-using System.Net;
-using System.Net.Sockets;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Watchdog;
 using AiRaccoon.Infrastructure.Degradation;
@@ -8,6 +6,7 @@ using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Extensions;
+using AiRaccoon.Tests.TestHelpers;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.Extensions.DependencyInjection;
@@ -39,7 +38,7 @@ public class McpServerSetupHostTests : IDisposable
     [Fact]
     public async Task StdioOnlyHost_HasNoWebServer_AndStartsWithTheDefaultPortHeld()
     {
-        using var blocker = TryHoldLoopbackPort(5000);
+        using var blocker = LoopbackPort.TryOccupy(5000);
 
         var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio));
 
@@ -51,9 +50,11 @@ public class McpServerSetupHostTests : IDisposable
     [Fact]
     public async Task HttpHost_BindsTheConfiguredPort_NotTheDefault5000()
     {
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, port));
 
+        lease.ReleaseForBind();
         await host.StartAsync(TestContext.Current.CancellationToken);
 
         try
@@ -91,9 +92,11 @@ public class McpServerSetupHostTests : IDisposable
     public async Task BothTransports_CreateWebHostWithStdio()
     {
         // Free port: 7721 may be held by a live server or a concurrent suite.
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio, FreePort()), [McpTransport.Stdio, McpTransport.Http], TimeProvider.System);
+        using var lease = LoopbackPort.Reserve();
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio, lease.Port), [McpTransport.Stdio, McpTransport.Http], TimeProvider.System);
 
         host.Services.GetService(typeof(IServer)).ShouldNotBeNull();
+        lease.ReleaseForBind();
         await host.StartAsync(TestContext.Current.CancellationToken);
         await host.StopAsync(TestContext.Current.CancellationToken);
     }
@@ -110,7 +113,8 @@ public class McpServerSetupHostTests : IDisposable
     [Fact]
     public void HttpHost_RegistersTheExtractionHostedService()
     {
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        using var lease = LoopbackPort.Reserve();
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, lease.Port));
 
         host.Services.GetServices<IHostedService>()
             .ShouldContain(service => service is ExtractionHostedService);
@@ -121,8 +125,9 @@ public class McpServerSetupHostTests : IDisposable
     {
         // HTTP/S presence means the process can live long enough for the extraction
         // loop to matter; a pure-stdio process is per-connection and recycled.
+        using var lease = LoopbackPort.Reserve();
         var host = McpServerSetup.CreateServerHost(
-            Config(McpTransport.Stdio, FreePort()), [McpTransport.Stdio, McpTransport.Http], TimeProvider.System);
+            Config(McpTransport.Stdio, lease.Port), [McpTransport.Stdio, McpTransport.Http], TimeProvider.System);
 
         host.Services.GetServices<IHostedService>()
             .ShouldContain(service => service is ExtractionHostedService);
@@ -140,7 +145,8 @@ public class McpServerSetupHostTests : IDisposable
     [Fact]
     public void HttpHost_RegistersTheSweepHostedService()
     {
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        using var lease = LoopbackPort.Reserve();
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, lease.Port));
 
         host.Services.GetServices<IHostedService>()
             .ShouldContain(service => service is SweepHostedService);
@@ -149,8 +155,9 @@ public class McpServerSetupHostTests : IDisposable
     [Fact]
     public void BothTransportsHost_RegistersTheSweepHostedService()
     {
+        using var lease = LoopbackPort.Reserve();
         var host = McpServerSetup.CreateServerHost(
-            Config(McpTransport.Stdio, FreePort()), [McpTransport.Stdio, McpTransport.Http], TimeProvider.System);
+            Config(McpTransport.Stdio, lease.Port), [McpTransport.Stdio, McpTransport.Http], TimeProvider.System);
 
         host.Services.GetServices<IHostedService>()
             .ShouldContain(service => service is SweepHostedService);
@@ -170,7 +177,8 @@ public class McpServerSetupHostTests : IDisposable
     [Fact]
     public void HttpHost_RegistersTheBankMaintenanceHostedService()
     {
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        using var lease = LoopbackPort.Reserve();
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, lease.Port));
 
         host.Services.GetServices<IHostedService>()
             .ShouldContain(service => service is BankMaintenanceHostedService);
@@ -179,8 +187,9 @@ public class McpServerSetupHostTests : IDisposable
     [Fact]
     public void BothTransportsHost_RegistersTheBankMaintenanceHostedService()
     {
+        using var lease = LoopbackPort.Reserve();
         var host = McpServerSetup.CreateServerHost(
-            Config(McpTransport.Stdio, FreePort()), [McpTransport.Stdio, McpTransport.Http], TimeProvider.System);
+            Config(McpTransport.Stdio, lease.Port), [McpTransport.Stdio, McpTransport.Http], TimeProvider.System);
 
         host.Services.GetServices<IHostedService>()
             .ShouldContain(service => service is BankMaintenanceHostedService);
@@ -189,10 +198,12 @@ public class McpServerSetupHostTests : IDisposable
     [Fact]
     public async Task RunAsync_HttpHost_StartsAndStopsCleanly()
     {
-        var config = Config(McpTransport.Http, FreePort());
+        using var lease = LoopbackPort.Reserve();
+        var config = Config(McpTransport.Http, lease.Port);
         var host = McpServerSetup.CreateServerHost(config);
         var lifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
 
+        lease.ReleaseForBind();
         var runTask = host.RunAsync(config, TestContext.Current.CancellationToken);
 
         // Wait on the lifetime signal, not on a sleep: a slow machine used to decide this.
@@ -260,7 +271,8 @@ public class McpServerSetupHostTests : IDisposable
     [Fact]
     public void HttpHost_WithIdleTimeout_RegistersWatchdogAndSignaler_AsOneInstance()
     {
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort(), TimeSpan.FromHours(4)));
+        using var lease = LoopbackPort.Reserve();
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, lease.Port, TimeSpan.FromHours(4)));
 
         // Three registrations, one instance — the middleware's signaler must be the very
         // instance the hosted service runs, or production signals the wrong object.
@@ -273,7 +285,8 @@ public class McpServerSetupHostTests : IDisposable
     [Fact]
     public void HttpHost_WithoutIdleTimeout_DoesNotRegisterTheWatchdog()
     {
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, FreePort()));
+        using var lease = LoopbackPort.Reserve();
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, lease.Port));
 
         host.Services.GetServices<IHostedService>()
             .ShouldNotContain(service => service is IdleWatchdog);
@@ -283,12 +296,14 @@ public class McpServerSetupHostTests : IDisposable
     [Fact]
     public async Task HttpHost_WithFakeClock_ToolCallResetsTheWatchdog_ThenTheHostShutsDown()
     {
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 8, 6, 12, 0, 0, TimeSpan.Zero));
         var host = McpServerSetup.CreateServerHost(
             Config(McpTransport.Http, port, TimeSpan.FromSeconds(2)), [McpTransport.Http], time);
         var lifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
 
+        lease.ReleaseForBind();
         await host.StartAsync(TestContext.Current.CancellationToken);
         try
         {
@@ -337,28 +352,4 @@ public class McpServerSetupHostTests : IDisposable
 
     private ServerConfig Config(McpTransport transport, int port = 0, TimeSpan idleTimeout = default) =>
         new(port, transport, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User }, idleTimeout);
-
-    private static int FreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
-    }
-
-    private static TcpListener? TryHoldLoopbackPort(int port)
-    {
-        var listener = new TcpListener(IPAddress.Loopback, port);
-        try
-        {
-            listener.Start();
-            return listener;
-        }
-        catch (SocketException)
-        {
-            listener.Stop();
-            return null;
-        }
-    }
 }

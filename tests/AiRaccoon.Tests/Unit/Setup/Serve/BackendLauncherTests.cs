@@ -7,6 +7,7 @@ using System.Text;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
+using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -53,7 +54,8 @@ public sealed class BackendLauncherTests : IDisposable
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), "fd-level stdout capture is POSIX-only");
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         var capturePath = Path.Combine(_dataRoot, "stdout-capture.txt");
         var managedStdout = new StringWriter();
         var originalStdout = Console.Out;
@@ -66,6 +68,7 @@ public sealed class BackendLauncherTests : IDisposable
             Dup2(capture.SafeFileHandle.DangerousGetHandle().ToInt32(), StdoutFd);
             try
             {
+                lease.ReleaseForBind();
                 result = await Launcher().AcquireAsync(port, ServeExecutable, ServeArguments(port),
                     TestContext.Current.CancellationToken);
                 // The backend prints its bound URL right after binding; hold the capture open long
@@ -92,8 +95,10 @@ public sealed class BackendLauncherTests : IDisposable
     public async Task Acquire_WhenNoServerIsListening_StartsOneAndAnswers()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
 
+        lease.ReleaseForBind();
         var result = await Launcher().AcquireAsync(port, ServeExecutable, ServeArguments(port),
             TestContext.Current.CancellationToken);
 
@@ -136,13 +141,15 @@ public sealed class BackendLauncherTests : IDisposable
     [Fact]
     public async Task Acquire_WhenTheBackendNeverAnswers_GivesUpAtTheBudget()
     {
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         var clock = new FakeTimeProvider();
         var launcher = new BackendLauncher(TestData.CreateServerProbe(), BackendLauncher.DefaultBudget,
             clock, NullLogger<BackendLauncher>.Instance);
         var stopwatch = Stopwatch.StartNew();
 
         // A process that starts, never listens and outlives the budget.
+        lease.ReleaseForBind();
         var acquire = launcher.AcquireAsync(port, "sleep", ["10"], TestContext.Current.CancellationToken);
         await Task.Delay(200, TestContext.Current.CancellationToken); // timer registers
         acquire.IsCompleted.ShouldBeFalse();
@@ -160,8 +167,10 @@ public sealed class BackendLauncherTests : IDisposable
     [Fact]
     public async Task Acquire_WhenTheBackendCannotBeStarted_FailsWithTheCommandItTried()
     {
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
 
+        lease.ReleaseForBind();
         var failure = await Should.ThrowAsync<BackendStartException>(() =>
             Launcher().AcquireAsync(port, "ai-raccoon-no-such-executable", [], TestContext.Current.CancellationToken));
 
@@ -171,11 +180,13 @@ public sealed class BackendLauncherTests : IDisposable
     [Fact]
     public async Task Acquire_WhenTheCallerHasAlreadyCancelled_ThrowsWithoutSpawning()
     {
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         using var caller = new CancellationTokenSource();
         await caller.CancelAsync();
 
         // An unstartable command: a spawn would surface as BackendStartException, never as a cancel.
+        lease.ReleaseForBind();
         await Should.ThrowAsync<OperationCanceledException>(() =>
             Launcher().AcquireAsync(port, "ai-raccoon-no-such-executable", [], caller.Token));
     }
@@ -183,12 +194,14 @@ public sealed class BackendLauncherTests : IDisposable
     [Fact]
     public async Task Acquire_WhenTheCallerCancels_PropagatesInsteadOfReportingFailure()
     {
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         var clock = new FakeTimeProvider();
         var launcher = new BackendLauncher(TestData.CreateServerProbe(), BackendLauncher.DefaultBudget,
             clock, NullLogger<BackendLauncher>.Instance);
         using var caller = new CancellationTokenSource();
 
+        lease.ReleaseForBind();
         var acquire = launcher.AcquireAsync(port, "sleep", ["10"], caller.Token);
         await Task.Delay(200, TestContext.Current.CancellationToken); // timer registers
         await caller.CancelAsync();
@@ -245,14 +258,6 @@ public sealed class BackendLauncherTests : IDisposable
         return port;
     }
 
-    private static int FreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
-    }
 
     private static async Task<IDisposable> AcquireCleanEnvAsync(CancellationToken cancellationToken)
     {

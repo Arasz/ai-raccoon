@@ -14,6 +14,9 @@ public sealed class WatchScanGuardTests
 {
     private const string Project = "acme";
 
+    /// <summary>Deadline for every wait in the racing test, so a lost race fails instead of hanging.</summary>
+    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(10);
+
     [Fact]
     public async Task Run_SameWatchTwiceWhileTheFirstIsRunning_StartsOneScan()
     {
@@ -44,6 +47,43 @@ public sealed class WatchScanGuardTests
     }
 
     [Fact]
+    public async Task Run_RacedForTheSameWatch_StartsOneScanAndJoinsIt()
+    {
+        using var dir = TempDir.New("scanguard-race");
+        var guard = new WatchScanGuard();
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var start = new Barrier(2);
+        var scans = 0;
+
+        async Task Scan(CancellationToken ct)
+        {
+            Interlocked.Increment(ref scans);
+            await gate.Task.WaitAsync(ct);
+        }
+
+        var joined = new Task[2];
+        var racers = new Task[2];
+        for (var i = 0; i < racers.Length; i++)
+        {
+            var slot = i;
+            racers[slot] = Task.Run(() =>
+            {
+                start.SignalAndWait(Patience);
+                joined[slot] = guard.Run(Project, dir.Path, Scan, TestContext.Current.CancellationToken);
+            }, TestContext.Current.CancellationToken);
+        }
+
+        await Task.WhenAll(racers).WaitAsync(Patience, TestContext.Current.CancellationToken);
+        gate.SetResult();
+        await Task.WhenAll(joined).WaitAsync(Patience, TestContext.Current.CancellationToken);
+
+        guard.StartedScans.ShouldBe(1);
+        guard.SkippedScans.ShouldBe(1);
+        scans.ShouldBe(1);
+        ReferenceEquals(joined[0], joined[1]).ShouldBeTrue();
+    }
+
+    [Fact]
     public async Task Run_DifferentWatches_StartBothScans()
     {
         using var dirA = TempDir.New("scanguard-multi-a");
@@ -52,7 +92,8 @@ public sealed class WatchScanGuardTests
 
         var first = guard.Run(Project, dirA.Path, _ => Task.CompletedTask, TestContext.Current.CancellationToken);
         var second = guard.Run(Project, dirB.Path, _ => Task.CompletedTask, TestContext.Current.CancellationToken);
-        await Task.WhenAll(first, second).WaitAsync(TestContext.Current.CancellationToken);
+        await first;
+        await second;
 
         guard.StartedScans.ShouldBe(2);
         guard.SkippedScans.ShouldBe(0);

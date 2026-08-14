@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Watch;
@@ -19,6 +18,9 @@ public sealed class WatchStoreCascadeTests
 {
     private const string Project = "acme";
     private const string OtherProject = "beta";
+
+    /// <summary>How long an unblocked remove is given to finish before absence is believed.</summary>
+    private static readonly TimeSpan Grace = TimeSpan.FromMilliseconds(300);
 
     [Fact]
     public async Task RemoveWatchAsync_AlsoDeletesTheFingerprintsUnderTheWatch()
@@ -129,16 +131,15 @@ public sealed class WatchStoreCascadeTests
 
         // Task.Run, not a bare call: Microsoft.Data.Sqlite's *Async methods run synchronously, so
         // an un-offloaded remove would block this thread and the release below would never happen.
-        var startedAt = Stopwatch.GetTimestamp();
         var remove = Task.Run(() => stack.Store.RemoveWatchAsync(Project, watchPath,
             TestContext.Current.CancellationToken), TestContext.Current.CancellationToken);
-        await Task.Delay(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
+
+        // The claim: the cascade takes the write lock, so the remove cannot finish while it is
+        // held. The grace period is what gives an unblocked remove the chance to prove otherwise.
+        await Task.WhenAny(remove, Task.Delay(Grace, TestContext.Current.CancellationToken));
+        remove.IsCompleted.ShouldBeFalse("the remove must block on the held write transaction");
         await held.CommitAsync(TestContext.Current.CancellationToken);
         await remove;
-
-        // The elapsed time is the assertion that contention actually happened: a remove that
-        // slipped in before the UPDATE took the lock would return in milliseconds.
-        Stopwatch.GetElapsedTime(startedAt).ShouldBeGreaterThan(TimeSpan.FromSeconds(1.5));
 
         var watches = await stack.Store.ListWatchesAsync(TestContext.Current.CancellationToken);
         watches.ShouldNotContain(w => w.ProjectId == Project && w.Path == watchPath);

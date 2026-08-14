@@ -1,11 +1,11 @@
 using System.Net;
-using System.Net.Sockets;
 using System.Reflection;
 using System.Text.Json;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Observability;
 using AiRaccoon.Setup;
+using AiRaccoon.Tests.TestHelpers;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -36,9 +36,11 @@ public sealed class ObservabilityEndpointTests : IDisposable
     public async Task Get_ReturnsThisProcessPidAndTheServerName()
     {
         using var env = await AcquireCleanEnvAsync();
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, port));
 
+        lease.ReleaseForBind();
         await host.StartAsync(TestContext.Current.CancellationToken);
         try
         {
@@ -59,9 +61,11 @@ public sealed class ObservabilityEndpointTests : IDisposable
         // The discriminator `serve --restart` needs (ADR-0022): without it nothing on the wire
         // says which binary answers, which is exactly the mixed-binary lockout ADR-0019 names.
         using var env = await AcquireCleanEnvAsync();
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, port));
 
+        lease.ReleaseForBind();
         await host.StartAsync(TestContext.Current.CancellationToken);
         try
         {
@@ -81,9 +85,11 @@ public sealed class ObservabilityEndpointTests : IDisposable
     public async Task Get_ReportsOtlpDisabled_WhenNoEndpointIsSet()
     {
         using var env = await AcquireCleanEnvAsync();
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, port));
 
+        lease.ReleaseForBind();
         await host.StartAsync(TestContext.Current.CancellationToken);
         try
         {
@@ -106,9 +112,11 @@ public sealed class ObservabilityEndpointTests : IDisposable
         using var env = await AcquireCleanEnvAsync();
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
         Environment.SetEnvironmentVariable(ProtocolVar, "grpc");
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, port));
 
+        lease.ReleaseForBind();
         await host.StartAsync(TestContext.Current.CancellationToken);
         try
         {
@@ -138,12 +146,14 @@ public sealed class ObservabilityEndpointTests : IDisposable
     [Fact]
     public async Task Get_DoesNotResetTheIdleWatchdog()
     {
-        var port = FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         var time = new FakeTimeProvider(FixedNow);
         var host = McpServerSetup.CreateServerHost(
             Config(McpTransport.Http, port, TimeSpan.FromSeconds(2)), [McpTransport.Http], time);
         var lifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
 
+        lease.ReleaseForBind();
         await host.StartAsync(TestContext.Current.CancellationToken);
         try
         {
@@ -187,14 +197,6 @@ public sealed class ObservabilityEndpointTests : IDisposable
     private ServerConfig Config(McpTransport transport, int port = 0, TimeSpan idleTimeout = default) =>
         new(port, transport, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User }, idleTimeout);
 
-    private static int FreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
-    }
 
     private static async Task<IDisposable> AcquireCleanEnvAsync()
     {

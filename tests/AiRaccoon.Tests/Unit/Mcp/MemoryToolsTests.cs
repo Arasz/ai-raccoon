@@ -9,6 +9,7 @@ using AiRaccoon.Core.Sync;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
+using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -498,7 +499,7 @@ public class MemoryToolsTests
         ex.Message.ShouldContain("/etc");
     }
 
-    private sealed class FakeStore : IMemoryStore
+    private sealed class FakeStore : FakeMemoryStore
     {
         public MemoryEntry Entry { get; set; } = new("h", "p.md", "project:acme", "v", 0);
 
@@ -530,102 +531,103 @@ public class MemoryToolsTests
 
         public Exception? IngestError { get; set; }
 
-        public Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
+        public override Task<MemoryEntry> WriteAsync(MemoryWriteRequest request,
+            CancellationToken cancellationToken = default)
         {
             LastRequest = request;
             return WriteError is not null ? Task.FromException<MemoryEntry>(WriteError) : Task.FromResult(Entry);
         }
 
-        public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
+        public override Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
             CancellationToken cancellationToken = default)
         {
             LastQuery = query;
             return Task.FromResult<IReadOnlyList<MemorySearchResult>>([]);
         }
 
-        public Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public override Task<bool> DeleteAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
 
-        public Task<int> DeleteContextAsync(string projectId, string context,
+        public override Task<int> DeleteContextAsync(string projectId, string context,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(0);
 
-        public Task<bool> ReplaceFileAsync(string projectId, string path, string fileHash,
+        public override Task<MemoryStats> GetStatsAsync(string projectId,
             CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
+            Task.FromResult(Stats);
 
-        public Task<int> DeleteSourcePathAsync(string projectId, string path,
-            CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
-
-        public Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(Stats);
-
-        public Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
+        public override Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
             CancellationToken cancellationToken = default)
         {
             Shared = (projectId, hash);
             return Task.FromResult(new MemoryEntryResult(SharedEntry ?? new MemoryEntry(hash, "p.md", ContextNaming.SharedContext, "v", 1), true));
         }
 
-        public Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
+        public override Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
             bool includeTtlRows, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ExtractionCandidateRow>>(Candidates);
 
-        public Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) => Task.FromResult(Index);
+        public override Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(Index);
 
-        public Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<string>>(ProjectIds);
+        public override Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<string>>(ProjectIds);
 
-        public Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult(FilesJson);
+        public override Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(FilesJson);
 
-        public Task<int> IngestFileAsync(string projectId, string path, string? context,
+        public override Task<int> IngestFileAsync(string projectId, string path, string? context,
             CancellationToken cancellationToken = default) =>
             IngestError is not null ? Task.FromException<int>(IngestError) : Task.FromResult(1);
 
-        public Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
+        public override Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
             CancellationToken cancellationToken = default) =>
             IngestError is not null ? Task.FromException<int>(IngestError) : Task.FromResult(1);
 
-        public Task<EmbeddingConfig> ConfigureEmbeddingAsync(string provider, string? model, string? baseUrl,
+        public override Task<EmbeddingConfig> ConfigureEmbeddingAsync(string provider, string? model, string? baseUrl,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new EmbeddingConfig(provider, model ?? "bundled", "local"));
 
-        public Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
+        public override Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new EmbedPendingResult(0, 0));
 
-        public Task<MemoryEntryResult> AddContentAsync(string projectId, string path, string content, string? context,
-            string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default) =>
+        public override Task<MemoryEntryResult> AddContentAsync(string projectId, string path, string content,
+            string? context, string? sourceFile = null, string? section = null,
+            CancellationToken cancellationToken = default) =>
             Task.FromResult(new MemoryEntryResult(new MemoryEntry("new-hash", path, context ?? "project:acme", content, 1), true));
 
-        public Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
+        public override Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(EntriesByContext.TryGetValue(context, out var e) ? e : []);
 
-        public Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
+        public override Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<EntryMetadata?>(new EntryMetadata(Rating, 30));
 
-        public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) => Task.FromResult(Settings.TryGetValue(key, out var value) ? value : null);
+        public override Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Settings.TryGetValue(key, out var value) ? value : null);
 
-        public Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default)
+        public override Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default)
         {
             Settings[key] = value;
             return Task.CompletedTask;
         }
 
-        public Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
+        public override Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyDictionary<string, string>>(
                 Settings.Where(kv => kv.Key.StartsWith(prefix, StringComparison.Ordinal))
                     .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal));
 
-        public Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default)
+        public override Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default)
         {
             Settings.Remove(key);
             return Task.CompletedTask;
         }
 
-
-        public Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
+        public override Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(true);
     }

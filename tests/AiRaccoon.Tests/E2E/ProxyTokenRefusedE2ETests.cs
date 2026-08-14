@@ -4,6 +4,7 @@ using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.E2E;
 
@@ -21,14 +22,22 @@ public sealed class ProxyTokenRefusedE2ETests : IAsyncLifetime
     /// below the SDK's 60 s initialize timeout, which is what a dropped refusal costs instead.</summary>
     private static readonly TimeSpan Promptly = TimeSpan.FromSeconds(20);
 
+    /// <summary>Only stops a hang from wedging the run; the assertion is the stopwatch.</summary>
+    private static readonly TimeSpan HardCap = TimeSpan.FromSeconds(150);
+
+    /// <summary>How long the gated backend gets to die once killed, before teardown calls it stuck.</summary>
+    private static readonly TimeSpan ExitWait = TimeSpan.FromSeconds(30);
+
     private readonly string _backendRoot = TestData.CreateTempRoot("token-refused-backend");
     private readonly string _proxyRoot = TestData.CreateTempRoot("token-refused-proxy");
-    private Process _backend = null!;
+    private Process? _backend;
     private int _port;
 
     public async ValueTask InitializeAsync()
     {
-        _port = AiRaccoonProcess.FreePort();
+        using var lease = LoopbackPort.Reserve();
+        _port = lease.Port;
+        lease.ReleaseForBind();
         _backend = StartGatedServe();
         await WaitForBackendAsync();
         // A well-formed token that is deliberately not the backend's: the proxy reads this root,
@@ -37,20 +46,40 @@ public sealed class ProxyTokenRefusedE2ETests : IAsyncLifetime
         await new McpTokenFile(_proxyRoot).EnsureAsync(TestContext.Current.CancellationToken);
     }
 
-    public ValueTask DisposeAsync()
+    /// <summary>A gated `serve` that outlives the test holds the port and the bank, so say so loudly.</summary>
+    public async ValueTask DisposeAsync()
     {
         try
         {
-            _backend.Kill(true);
+            await StopBackendAsync();
         }
-        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException)
+        finally
         {
-            // Already gone; nothing left to stop.
+            Delete(_backendRoot);
+            Delete(_proxyRoot);
+        }
+    }
+
+    private async Task StopBackendAsync()
+    {
+        if (_backend is null)
+        {
+            return;
         }
 
-        Delete(_backendRoot);
-        Delete(_proxyRoot);
-        return ValueTask.CompletedTask;
+        try
+        {
+            var stopped = await RaccoonProcess.KillTreeAndWaitAsync(_backend, ExitWait, CancellationToken.None);
+            if (!stopped)
+            {
+                throw new InvalidOperationException(
+                    $"the gated backend on port {_port} survived kill, so it still holds {_backendRoot}");
+            }
+        }
+        finally
+        {
+            _backend.Dispose();
+        }
     }
 
     /// <summary>
@@ -63,15 +92,15 @@ public sealed class ProxyTokenRefusedE2ETests : IAsyncLifetime
     public async Task WrongToken_SurfacesTheGatesVerdict()
     {
         var started = Stopwatch.StartNew();
-        var (exit, stderr) = await RunProxyAsync();
+        var run = await RunProxyAsync();
         started.Stop();
 
         // The server's own file, not the proxy's: naming it is what makes the mismatch diagnosable.
-        stderr.ShouldContain(Path.Combine(_backendRoot, McpTokenFile.FileName));
-        stderr.ShouldContain(McpTokenGate.HeaderName);
+        run.Stderr.ShouldContain(Path.Combine(_backendRoot, McpTokenFile.FileName));
+        run.Stderr.ShouldContain(McpTokenGate.HeaderName);
         // And the proxy's own, which is the file the operator has to change.
-        stderr.ShouldContain(Path.Combine(_proxyRoot, McpTokenFile.FileName));
-        exit.ShouldBe(ExitCode.ProxyBackendUnavailable);
+        run.Stderr.ShouldContain(Path.Combine(_proxyRoot, McpTokenFile.FileName));
+        run.ExitCode.ShouldBe(ExitCode.ProxyBackendUnavailable);
         // A refusal is knowable at once; it must never be paid for at the SDK's handshake timeout.
         started.Elapsed.ShouldBeLessThan(Promptly);
     }
@@ -93,7 +122,11 @@ public sealed class ProxyTokenRefusedE2ETests : IAsyncLifetime
             startInfo.ArgumentList.Add(argument);
         }
 
-        return Process.Start(startInfo)!;
+        var process = Process.Start(startInfo)!;
+        // Drain both pipes: a full 64 KB buffer would block the daemon mid-write for the whole test.
+        _ = process.StandardOutput.ReadToEndAsync();
+        _ = process.StandardError.ReadToEndAsync();
+        return process;
     }
 
     /// <summary>Waits on the token file, which `serve` mints strictly before it binds.</summary>
@@ -123,33 +156,9 @@ public sealed class ProxyTokenRefusedE2ETests : IAsyncLifetime
         throw new InvalidOperationException($"the gated backend never came up on port {_port}");
     }
 
-    /// <summary>The hard cap only stops a hang from wedging the run; the assertion is the stopwatch.</summary>
-    private async Task<(int Exit, string Stderr)> RunProxyAsync()
-    {
-        var startInfo = new ProcessStartInfo(AiRaccoonProcess.Executable)
-        {
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false
-        };
-        foreach (var argument in new[]
-                 {
-                     "--data-root", _proxyRoot, "--port",
-                     _port.ToString(CultureInfo.InvariantCulture)
-                 })
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
-
-        using var process = Process.Start(startInfo)!;
-        var stderr = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
-        var stdout = process.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
-        await process.WaitForExitAsync(TestContext.Current.CancellationToken)
-            .WaitAsync(TimeSpan.FromSeconds(150), TestContext.Current.CancellationToken);
-        await stdout;
-        return (process.ExitCode, await stderr);
-    }
+    private Task<ProcessRun> RunProxyAsync() =>
+        RaccoonProcess.RunAsync(["--data-root", _proxyRoot, "--port", _port.ToString(CultureInfo.InvariantCulture)],
+            HardCap, TestContext.Current.CancellationToken);
 
     private static void Delete(string root)
     {

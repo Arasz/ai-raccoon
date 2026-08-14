@@ -16,7 +16,8 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Integration;
 
-[Trait("Speed", "Slow")]
+[Trait(TestCategories.Category, TestCategories.Integration)]
+[Trait(TestCategories.Speed, TestCategories.Slow)]
 public class WritePerformanceBenchmarkTests(ITestOutputHelper output)
 {
     [Fact]
@@ -100,6 +101,17 @@ Iterations: {iterations}
 ";
 
             output.WriteLine(report);
+
+            // Overwriting a tracked file on every run dirties the tree and would land benchmark
+            // noise in CI, so publishing into docs/work is opt-in via AIRACCOON_BENCH_REPORT=1.
+            // The rejection-accuracy assertion above is what makes this test worth running anyway.
+            if (Environment.GetEnvironmentVariable("AIRACCOON_BENCH_REPORT") == "1")
+            {
+                var docsDir = Path.Combine(FindRepoRoot(AppContext.BaseDirectory), "docs", "work");
+                Directory.CreateDirectory(docsDir);
+                var reportPath = Path.Combine(docsDir, "2026-08-13-v4-write-performance-benchmark-report.md");
+                await File.WriteAllTextAsync(reportPath, report, TestContext.Current.CancellationToken);
+            }
         }
         finally
         {
@@ -108,5 +120,20 @@ Iterations: {iterations}
                 try { Directory.Delete(dataRoot, true); } catch { }
             }
         }
+    }
+
+    private static string FindRepoRoot(string startDir)
+    {
+        var current = new DirectoryInfo(startDir);
+        while (current is not null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "pyproject.toml")) ||
+                File.Exists(Path.Combine(current.FullName, "AiRaccoon.sln")))
+            {
+                return current.FullName;
+            }
+            current = current.Parent;
+        }
+        return Directory.GetCurrentDirectory();
     }
 }

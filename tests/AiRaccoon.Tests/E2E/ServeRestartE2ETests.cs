@@ -10,6 +10,7 @@ using AiRaccoon.Setup.Cli;
 using AiRaccoon.Tests.Unit.Setup.Serve;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.E2E;
 
@@ -55,8 +56,11 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
     [Fact]
     public async Task ARunningServer_IsCycled_AndADifferentProcessAnswersOnThisBuild()
     {
-        using var env = await AcquireCleanEnvAsync();
-        var port = AiRaccoonProcess.FreePort();
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EnvEncryptionKeyProvider.EnvVarName, null));
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
         _old = StartServeProcess(port);
         using var before = await WaitForServerAsync(port);
         before.RootElement.GetProperty("pid").GetInt32().ShouldBe(_old.Id);
@@ -85,10 +89,13 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
     [Fact]
     public async Task AServerThatNeverStops_ExitsNonZeroWithinTheBound_RatherThanHanging()
     {
-        using var env = await AcquireCleanEnvAsync();
-        var port = AiRaccoonProcess.FreePort();
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EnvEncryptionKeyProvider.EnvVarName, null));
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         (await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
         // Accepts the shutdown and keeps listening: the port never frees.
+        lease.ReleaseForBind();
         await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.Accepted,
             TestContext.Current.CancellationToken);
         var run = StartRestartInProcess(port);
@@ -184,24 +191,7 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
         throw new TimeoutException($"timed out waiting for serve --restart; stderr: {run.Stderr}");
     }
 
-    private static async Task<IDisposable> AcquireCleanEnvAsync()
-    {
-        await TestData.EnvVarGate.WaitAsync(TestContext.Current.CancellationToken);
-        var original = Environment.GetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName);
-        Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, null);
-        return new EnvRestore(original);
-    }
-
     private sealed record ServeRun(Task<int> Exit, LockingWriter Stdout, LockingWriter Stderr, CancellationTokenSource Cts);
-
-    private sealed class EnvRestore(string? original) : IDisposable
-    {
-        public void Dispose()
-        {
-            Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, original);
-            TestData.EnvVarGate.Release();
-        }
-    }
 
     private sealed class LockingWriter : TextWriter
     {

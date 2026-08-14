@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using OpenTelemetry.Trace;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.E2E;
 
@@ -25,25 +26,42 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
     private const string SamplerVar = "OTEL_TRACES_SAMPLER";
     private const string SamplerProbeSource = "AiRaccoon.Tests.SamplerProbe";
     private CapturingCollector _collector = null!;
-    private IDisposable _env = null!;
+    private EnvScope _env = null!;
 
     private McpServerFactory _factory = null!;
 
     public async ValueTask InitializeAsync()
     {
         await TestData.CreateBundledModel().EnsureAsync(TestContext.Current.CancellationToken);
-        _env = await AcquireCleanEnvAsync();
-        _collector = new CapturingCollector();
-        Environment.SetEnvironmentVariable(EndpointVar, _collector.Endpoint);
-        Environment.SetEnvironmentVariable(ProtocolVar, "http/protobuf");
-        _factory = new McpServerFactory();
+        _env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EndpointVar, null), (ProtocolVar, null), (SamplerVar, null));
+        try
+        {
+            // Measured on xunit.v3 3.2.2: DisposeAsync does NOT run when InitializeAsync throws,
+            // so anything constructed after the gate is taken has to release it itself.
+            _collector = new CapturingCollector();
+            Environment.SetEnvironmentVariable(EndpointVar, _collector.Endpoint);
+            Environment.SetEnvironmentVariable(ProtocolVar, "http/protobuf");
+            _factory = new McpServerFactory();
+        }
+        catch
+        {
+            await _env.DisposeAsync();
+            throw;
+        }
     }
 
     public async ValueTask DisposeAsync()
     {
-        await _factory.DisposeAsync();
-        _collector.Dispose();
-        _env.Dispose();
+        try
+        {
+            await _factory.DisposeAsync();
+            _collector.Dispose();
+        }
+        finally
+        {
+            await _env.DisposeAsync();
+        }
     }
 
     [Fact]
@@ -168,27 +186,9 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
         }
         finally
         {
+            // Back to the class scope's baseline, not to the machine's: _env snapshotted the real
+            // original and puts it back at teardown. Restoring it here used to lose it.
             Environment.SetEnvironmentVariable(SamplerVar, null);
-        }
-    }
-
-    private static async Task<IDisposable> AcquireCleanEnvAsync()
-    {
-        await TestData.EnvVarGate.WaitAsync();
-        var originalEndpoint = Environment.GetEnvironmentVariable(EndpointVar);
-        var originalProtocol = Environment.GetEnvironmentVariable(ProtocolVar);
-        Environment.SetEnvironmentVariable(EndpointVar, null);
-        Environment.SetEnvironmentVariable(ProtocolVar, null);
-        return new EnvRestore(originalEndpoint, originalProtocol);
-    }
-
-    private sealed class EnvRestore(string? originalEndpoint, string? originalProtocol) : IDisposable
-    {
-        public void Dispose()
-        {
-            Environment.SetEnvironmentVariable(EndpointVar, originalEndpoint);
-            Environment.SetEnvironmentVariable(ProtocolVar, originalProtocol);
-            TestData.EnvVarGate.Release();
         }
     }
 
@@ -201,9 +201,10 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
 
         public CapturingCollector()
         {
-            var port = FreePort();
-            Endpoint = $"http://127.0.0.1:{port}";
+            using var lease = LoopbackPort.Reserve();
+            Endpoint = $"http://127.0.0.1:{lease.Port}";
             _listener.Prefixes.Add($"{Endpoint}/");
+            lease.ReleaseForBind();
             _listener.Start();
             _acceptLoop = Task.Run(AcceptLoopAsync);
         }
@@ -250,15 +251,6 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
                     return;
                 }
             }
-        }
-
-        private static int FreePort()
-        {
-            var listener = new TcpListener(IPAddress.Loopback, 0);
-            listener.Start();
-            var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-            listener.Stop();
-            return port;
         }
     }
 }

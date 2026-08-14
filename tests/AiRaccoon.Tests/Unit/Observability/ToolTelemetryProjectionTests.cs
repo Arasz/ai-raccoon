@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using ModelContextProtocol.Server;
 using Shouldly;
 using Xunit;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Unit.Observability;
 
@@ -26,7 +27,8 @@ public sealed class ToolTelemetryProjectionTests : IAsyncLifetime
 
     public ValueTask InitializeAsync()
     {
-        _host = TelemetryServerHost.Create(_dataRoot, TelemetryServerHost.FreePort());
+        using var lease = LoopbackPort.Reserve();
+        _host = TelemetryServerHost.Create(_dataRoot, lease.Port);
         _tools = [.. _host.Services.GetServices<McpServerTool>()];
         _tools.ShouldNotBeEmpty();
         return ValueTask.CompletedTask;
@@ -75,7 +77,8 @@ public sealed class ToolTelemetryProjectionTests : IAsyncLifetime
     public async Task ShareExtract_BoundsTheCounter_KeepsTheCompositeOnTheSpan_AndRecordsEachExitOnce()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var port = TelemetryServerHost.FreePort();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
         var host = TelemetryServerHost.Create(_dataRoot, port);
         var metrics = host.Services.GetRequiredService<ToolCallMetrics>();
         using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
@@ -90,6 +93,7 @@ public sealed class ToolTelemetryProjectionTests : IAsyncLifetime
         };
         ActivitySource.AddActivityListener(listener);
 
+        lease.ReleaseForBind();
         await host.StartAsync(cancellationToken);
         try
         {

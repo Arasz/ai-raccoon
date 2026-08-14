@@ -10,6 +10,7 @@ using AiRaccoon.Tests.TestHelpers;
 using JetBrains.Annotations;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Client;
+using ModelContextProtocol.Protocol;
 using Shouldly;
 using Xunit;
 
@@ -88,7 +89,10 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
         var result = await client.CallToolAsync("memory_stats",
             new Dictionary<string, object?> { ["projectId"] = "acme" }, null, null, TestContext.Current.CancellationToken);
 
-        result.Content.ToString().ShouldNotBeNullOrEmpty();
+        // Content is IList<ContentBlock>: ToString() is the type name, so it can never be empty.
+        result.IsError.ShouldNotBe(true);
+        var text = string.Concat(result.Content.OfType<TextContentBlock>().Select(block => block.Text));
+        text.ShouldContain("\"entries\"");
     }
 
     [Fact]
@@ -125,7 +129,7 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
         private readonly LockingWriter _stdout = new();
         private readonly TimeProvider _timeProvider = TimeProvider.System;
 
-        private string? _originalPassphrase;
+        private EnvScope _env = null!;
         private Task<int> _serve = Task.FromResult(0);
         public HttpClient HttpClient { get; } = new();
 
@@ -135,31 +139,47 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
 
         public async ValueTask InitializeAsync()
         {
-            await TestData.EnvVarGate.WaitAsync(TestContext.Current.CancellationToken);
-            _originalPassphrase = Environment.GetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName);
-            Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, null);
-
-            Port = FreePort();
-            CliArgs.TryParse(["--data-root", DataRoot, "serve", "--port", Port.ToString()], out var parsed);
-            parsed!.Errors.ShouldBeEmpty();
-            _serve = TestData.CreateNodeRunner(parsed.ServerConfig.Options).RunAsync(parsed, new StandardStreams(TextReader.Null, _stdout, _stderr), _cts.Token);
-            await WaitForListeningAsync();
+            _env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+                (EnvEncryptionKeyProvider.EnvVarName, null));
+            try
+            {
+                // Measured on xunit.v3 3.2.2: DisposeAsync does NOT run when InitializeAsync
+                // throws, so a boot that never reports a URL has to release the gate itself.
+                using var lease = LoopbackPort.Reserve();
+                Port = lease.Port;
+                CliArgs.TryParse(["--data-root", DataRoot, "serve", "--port", Port.ToString()], out var parsed);
+                parsed!.Errors.ShouldBeEmpty();
+                lease.ReleaseForBind();
+                _serve = TestData.CreateNodeRunner(parsed.ServerConfig.Options).RunAsync(parsed, new StandardStreams(TextReader.Null, _stdout, _stderr), _cts.Token);
+                await WaitForListeningAsync();
+            }
+            catch
+            {
+                await _env.DisposeAsync();
+                throw;
+            }
         }
 
         public async ValueTask DisposeAsync()
         {
-            await _cts.CancelAsync();
-            await _serve;
-            _cts.Dispose();
-            Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, _originalPassphrase);
-            TestData.EnvVarGate.Release();
+            try
+            {
+                await _cts.CancelAsync();
+                await _serve;
+                _cts.Dispose();
+            }
+            finally
+            {
+                await _env.DisposeAsync();
+            }
+
             Directory.Delete(DataRoot, true);
             HttpClient.Dispose();
         }
 
         private async Task WaitForListeningAsync()
         {
-            var success = await WaitByPooling
+            var success = await WaitByPolling
                 .WaitForAsync(() => ValueTask.FromResult(_stdout.ToString().Contains("http://", StringComparison.Ordinal)), _timeProvider, TestContext.Current.CancellationToken)
                 .ConfigureAwait(false);
 
@@ -167,15 +187,6 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
             {
                 throw new TimeoutException($"serve never reported a URL; stderr: {_stderr}");
             }
-        }
-
-        private static int FreePort()
-        {
-            var listener = new TcpListener(IPAddress.Loopback, 0);
-            listener.Start();
-            var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-            listener.Stop();
-            return port;
         }
     }
 
