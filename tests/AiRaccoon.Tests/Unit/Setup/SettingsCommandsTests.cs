@@ -1,6 +1,7 @@
 using System.Globalization;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Degradation;
+using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using Shouldly;
@@ -39,6 +40,9 @@ public class SettingsCommandsTests
             ["sweep", "interval-hours"] => await commands.SweepIntervalHoursSetAsync(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
             ["sweep", "threshold", "set"] => await commands.SweepThresholdSetAsync(parsed.ParsedCliArgs, store, streams, TestContext.Current.CancellationToken),
             ["sweep", "show"] => await commands.SweepShowAsync(store, streams, TestContext.Current.CancellationToken),
+            ["noise", "enable"] => await commands.NoiseEnabledSetAsync(true, store, streams, TestContext.Current.CancellationToken),
+            ["noise", "disable"] => await commands.NoiseEnabledSetAsync(false, store, streams, TestContext.Current.CancellationToken),
+            ["noise", "show"] => await commands.NoiseShowAsync(store, streams, TestContext.Current.CancellationToken),
             _ => throw new InvalidOperationException($"unhandled: {string.Join(' ', parsed.CommandPath)}")
         };
         return (exit, stdout.ToString(), stderr.ToString());
@@ -147,6 +151,36 @@ public class SettingsCommandsTests
         enableExit.ShouldBe(0);
         enabledOut.ShouldContain("enabled: True");
         SweepConfigKeys.ParseEnabled(store.Settings[SweepConfigKeys.EnabledGlobal]).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task NoiseShow_NoRow_PrintsEnabledByDefault()
+    {
+        var (exit, stdout, _) = await Run(["noise", "show"], new FakeConfigStore());
+
+        exit.ShouldBe(0);
+        stdout.Trim().ShouldBe("enabled: True");
+    }
+
+    /// <summary>The kill switch round-trips through the same parse SqliteMemoryStore.WriteAsync reads it with.</summary>
+    [Fact]
+    public async Task NoiseDisableThenEnable_RoundTripsThroughCliShowAndNoiseConfigKeys()
+    {
+        var store = new FakeConfigStore();
+
+        var (disableExit, _, _) = await Run(["noise", "disable"], store);
+        var (_, disabledOut, _) = await Run(["noise", "show"], store);
+
+        disableExit.ShouldBe(0);
+        disabledOut.ShouldContain("enabled: False");
+        NoiseConfigKeys.ParseEnabled(store.Settings[NoiseConfigKeys.EnabledGlobal]).ShouldBeFalse();
+
+        var (enableExit, _, _) = await Run(["noise", "enable"], store);
+        var (_, enabledOut, _) = await Run(["noise", "show"], store);
+
+        enableExit.ShouldBe(0);
+        enabledOut.ShouldContain("enabled: True");
+        NoiseConfigKeys.ParseEnabled(store.Settings[NoiseConfigKeys.EnabledGlobal]).ShouldBeTrue();
     }
 
     [Fact]

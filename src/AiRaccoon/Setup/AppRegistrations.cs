@@ -165,16 +165,10 @@ public static partial class AppRegistrations
             services.AddSingleton<ISqliteConnectionFactory>(sp => sp.GetRequiredService<SqliteConnectionFactory>());
             services.AddRequiredSingleton<IWatchStore, WatchStore>();
             services.AddRequiredSingleton<IMemoryStore, SqliteMemoryStore>();
-            services.AddRequiredSingleton<INoiseStore, SqliteNoiseStore>();
             services.AddRequiredSingleton<INoiseFilteringService, NoiseFilteringService>();
-            services.AddRequiredSingleton<INoiseVectorProvider, BundledNoiseVectorProvider>();
 
-            // Register default noise filter policies
+            // Register default noise filter policies (deterministic only — see ADR-0033).
             services.AddSingleton<INoiseFilterPolicy, HermesProcessNoisePolicy>();
-            services.AddSingleton<INoiseFilterPolicy, ZeroShotEmbeddingNoisePolicy>();
-
-            // Register default TTL policies
-            services.AddSingleton<IAutoTtlPolicy, PromotionScorerTtlPolicy>();
             services.AddRequiredSingleton<IMemorySourceStore, SqliteMemorySourceStore>();
             services.AddRequiredSingleton<IWorkspaceStore, SqliteWorkspaceStore>();
             services.AddRequiredSingleton<IPromotionQueueStore, SqlitePromotionQueueStore>();
@@ -185,7 +179,6 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<IBundledModel, BundledModel>();
             services.AddRequiredSingleton<IEmbeddingService, EmbeddingService>();
             services.AddRequiredSingleton<IEntryEmbedder, EntryEmbedder>();
-            services.AddSingleton<IContentEmbedder>(sp => sp.GetRequiredService<IEntryEmbedder>());
             services.AddRequiredSingleton<IEmbeddingAvailability, EmbeddingAvailability>();
         }
 

@@ -34,7 +34,7 @@ public sealed class MemoryTools(
 
     [McpServerTool(Name = TnMemoryWrite)]
     [Description(
-        "Writes content into memory. Writes land in the project's committed context by default; naming a workspace_id routes them into that isolated workspace. Returns the stored entry.")]
+        "Writes content into memory. Writes land in the project's committed context by default; naming a workspace_id routes them into that isolated workspace. A write may be refused (e.g. it matched a noise policy) — check stored: a refused write has stored=false and a reason naming what rejected it, and hash is empty.")]
     public async Task<ApiEnvelope<WriteResult>> Write(
         [Description("The project id; every memory operation is scoped to a project.")]
         string projectId,
@@ -58,7 +58,7 @@ public sealed class MemoryTools(
         await MemoryWriteRequestValidator.ValidateAndThrowAsync(request, cancellationToken);
 
         var entry = await store.WriteAsync(request, cancellationToken);
-        var result = new WriteResult(entry.Hash, entry.Path, entry.Context, entry.CreatedAt);
+        var result = new WriteResult(entry.Hash, entry.Path, entry.Context, entry.CreatedAt, entry.Stored, entry.Reason);
         var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
         return envelope;
     }
@@ -242,7 +242,7 @@ public sealed class MemoryTools(
     }
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
-    public sealed record WriteResult(string Hash, string Path, string Context, long CreatedAt);
+    public sealed record WriteResult(string Hash, string Path, string Context, long CreatedAt, bool Stored = true, string? Reason = null);
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record SearchResultList(IReadOnlyList<MemorySearchResult> Results);

@@ -25,8 +25,7 @@ public sealed partial class SqliteMemoryStore(
     IEntryEmbedder embedder,
     TimeProvider timeProvider,
     ILogger<SqliteMemoryStore> logger,
-    INoiseFilteringService noiseFilteringService,
-    IEnumerable<IAutoTtlPolicy> autoTtlPolicies)
+    INoiseFilteringService noiseFilteringService)
     : IMemoryStore
 {
     private const string SharedScope = "shared";
@@ -36,20 +35,20 @@ public sealed partial class SqliteMemoryStore(
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var isNoise = await noiseFilteringService.EvaluatePreWriteAsync(request, cancellationToken).ConfigureAwait(false);
-        if (isNoise)
-        {
-            // Dummy entry. In C# 10+, MemoryEntry record has 5 properties: Hash, Path, Context, Value, CreatedAt
-            return new MemoryEntry("noise_hash", "noise_path", request.Context ?? string.Empty, request.Content, timeProvider.GetUtcNow().ToUnixTimeSeconds());
-        }
+        var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
 
-        int? resolvedTtlDays = null;
-        foreach (var policy in autoTtlPolicies)
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+
+        var noiseEnabled = NoiseConfigKeys.ParseEnabled(
+            await ReadSettingAsync(connection, NoiseConfigKeys.EnabledGlobal, cancellationToken).ConfigureAwait(false));
+        if (noiseEnabled)
         {
-            var ttl = policy.EvaluateTtl(request);
-            if (ttl.HasValue)
+            var noiseResult = await noiseFilteringService.EvaluatePreWriteAsync(request, cancellationToken)
+                .ConfigureAwait(false);
+            if (noiseResult.IsNoise)
             {
-                resolvedTtlDays = resolvedTtlDays.HasValue ? Math.Min(resolvedTtlDays.Value, ttl.Value) : ttl.Value;
+                return new MemoryEntry(string.Empty, string.Empty, request.Context ?? string.Empty, request.Content,
+                    now, Stored: false, Reason: $"rejected by noise policy '{noiseResult.PolicyName}'");
             }
         }
 
@@ -60,9 +59,6 @@ public sealed partial class SqliteMemoryStore(
         // identical content maps to the same slot, then scope the identity hash to it (FR-NM-7; see docs/work/features-native-memory/native-memory.feature).
         var path = WritePathFor(request.Content);
         var hash = ContentHash.Of(path, request.Content);
-        var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
-
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
 
         if (bucket.WorkspaceId is not null)
         {
@@ -101,8 +97,7 @@ public sealed partial class SqliteMemoryStore(
                         agentId = request.AgentId,
                         createdAt = now,
                         updatedAt = now,
-                        sourceId = source.Id,
-                        ttl_days = resolvedTtlDays
+                        sourceId = source.Id
                     },
                     cancellationToken))
             .ConfigureAwait(false);

@@ -17,7 +17,7 @@ internal static class CliCommandTree
     private static readonly string TransportHelpName =
         string.Join('|', Enum.GetNames<McpTransport>().Select(name => name.ToLowerInvariant()));
 
-    internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "sync", "ingest", "watch", "encryption", "extract", "maintenance", "serve"];
+    internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "noise", "sync", "ingest", "watch", "encryption", "extract", "maintenance", "serve"];
 
     /// <summary>
     ///     The root launch --port (shared with the bare launch root); serve reads it instance-based
@@ -68,6 +68,7 @@ internal static class CliCommandTree
         root.Add(ModelCommand());
         root.Add(RetrievalCommand());
         root.Add(SweepCommand());
+        root.Add(NoiseCommand());
         root.Add(SyncCommand());
         root.Add(IngestCommand());
         root.Add(WatchCommand());
@@ -168,6 +169,18 @@ internal static class CliCommandTree
         sweep.Add(threshold);
         sweep.Add(new Command("show", "Shows the whole policy: enabled, interval hours and threshold (row values, else the defaults)"));
         return sweep;
+    }
+
+    private static Command NoiseCommand()
+    {
+        var noise = new Command("noise",
+            "Pre-write noise rejection: the kill switch for the deterministic Hermes background-process-log filter. Rejection is ON by default — 'noise disable' is how you disarm it.")
+        {
+            new Command("enable", "Arms pre-write noise rejection (the default)"),
+            new Command("disable", "Disarms pre-write noise rejection — every write is stored, even ones a policy would otherwise refuse"),
+            new Command("show", "Shows whether pre-write noise rejection is enabled")
+        };
+        return noise;
     }
 
     private static Command SyncCommand()

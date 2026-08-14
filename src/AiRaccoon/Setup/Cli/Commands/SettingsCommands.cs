@@ -3,6 +3,7 @@ using System.Globalization;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Infrastructure.Embedding;
 
 namespace AiRaccoon.Setup.Cli.Commands;
@@ -244,6 +245,24 @@ public sealed class SettingsCommands
             await store.GetSettingAsync(SweepThreshold.SettingKey, cancellationToken));
         await streams.WriteOutputLineAsync(
             $"enabled: {enabled}  interval: {hours} h  threshold: {SweepThreshold.Format(threshold)}");
+        return 0;
+    }
+
+    /// <summary>The kill switch for pre-write noise rejection; `disable` is the only way to disarm a default-on filter.</summary>
+    public async Task<int> NoiseEnabledSetAsync(bool enabled, IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken)
+    {
+        await store.SetSettingAsync(NoiseConfigKeys.EnabledGlobal, enabled ? "true" : "false", cancellationToken);
+        await streams.WriteOutputLineAsync($"noise rejection {(enabled ? "enabled" : "disabled")}");
+        return 0;
+    }
+
+    public async Task<int> NoiseShowAsync(IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken)
+    {
+        var enabled = NoiseConfigKeys.ParseEnabled(
+            await store.GetSettingAsync(NoiseConfigKeys.EnabledGlobal, cancellationToken));
+        await streams.WriteOutputLineAsync($"enabled: {enabled}");
         return 0;
     }
 

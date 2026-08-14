@@ -231,8 +231,25 @@ public class MemoryToolsTests
 
         result.Data!.Hash.ShouldBe("h1");
         result.Data!.Context.ShouldBe("project:acme");
+        result.Data!.Stored.ShouldBeTrue();
+        result.Data!.Reason.ShouldBeNull();
         _store.LastRequest!.ProjectId.ShouldBe("acme");
         _store.LastRequest.AgentId.ShouldBe("agent-a");
+    }
+
+    /// <summary>ADR-0032: a refused write's Stored/Reason must reach the MCP caller unchanged.</summary>
+    [Fact]
+    public async Task Write_WhenStoreReportsRejection_MapsStoredAndReasonThrough()
+    {
+        _store.Entry = new MemoryEntry("", "", "project:acme", "content", 5,
+            Stored: false, Reason: "rejected by noise policy 'HermesBackgroundProcessLog'");
+
+        var result = await _tools.Write("acme", "content",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Data!.Stored.ShouldBeFalse();
+        result.Data!.Reason.ShouldBe("rejected by noise policy 'HermesBackgroundProcessLog'");
+        result.Data!.Hash.ShouldBeNullOrEmpty();
     }
 
     [Fact]
