@@ -23,14 +23,18 @@ Every tool requires `projectId` (camelCase — all parameters are camelCase), ex
 default; naming a `workspaceId` routes them into that workspace's isolated context.
 
 9 memory tools, 4 workspace tools, 3 watch tools, 2 promotion tools, 2 share tools,
-1 sweep tool, 1 sync tool. `memory_configure` and `memory_set_structure_alpha` were
-removed by the CLI-config refactor: configuration is no longer an MCP tool — the CLI
-verbs are the single config channel (see [Command-line options](#command-line-options)).
+2 sweep tools (`memory_sweep`, `memory_set_ttl`), 2 search-feedback tools
+(`memory_record_followthrough`, `memory_record_grade`), 1 sync tool. `memory_configure`
+and `memory_set_structure_alpha` were removed by the CLI-config refactor: configuration
+is no longer an MCP tool — the CLI verbs are the single config channel (see
+[Command-line options](#command-line-options)).
 
 | Tool                           | Parameters                                                                                                                                                  | Returns                                                                                            |
 |--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
 | `memory_write`                 | `projectId`, `content`, `workspaceId?`, `agentId?`, `context?`, `sourceFile?`, `section?`                                                                   | `{hash, path, context, createdAt}`                                                                 |
 | `memory_search`                | `projectId`, `query`, `scope=all\|project\|shared`, `workspaceId?`, `limit=20`, `minScore=0.7`, `rrfK=60`, `ftsWeight=1`, `vectorWeight=1`, `contextLabel?` | `{results:[{hash, seq, ranking, path, snippet, sourceFile?, chunkIndex, totalChunks}], projectId}` |
+| `memory_record_followthrough`  | `projectId`, `correlationId`, `filePath`                                                                                                                    | `{recorded: true}`                                                                                 |
+| `memory_record_grade`          | `projectId`, `correlationId`, `grade`, `note?`                                                                                                              | `{recorded: true}`                                                                                 |
 | `memory_list`                  | `projectId`                                                                                                                                                 | `{files: <json tree>}`                                                                             |
 | `memory_stats`                 | `projectId`                                                                                                                                                 | `{entries, pending, contexts}`                                                                     |
 | `memory_share`                 | `projectId`, `hash`                                                                                                                                         | `{shared: true, context: "shared"}`                                                                |
