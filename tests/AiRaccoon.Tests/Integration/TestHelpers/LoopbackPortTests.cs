@@ -4,13 +4,13 @@ using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.TestHelpers;
+namespace AiRaccoon.Tests.Integration.TestHelpers;
 
 /// <summary>
 ///     Pins the reservation the old FreePort() shape could not make: while a lease is held the
 ///     number cannot be taken by anyone else, and it becomes bindable once released.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class LoopbackPortTests
 {

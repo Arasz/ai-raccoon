@@ -1,17 +1,18 @@
 using System.Diagnostics;
 using AiRaccoon.Infrastructure.Watch;
 using Microsoft.Extensions.Logging.Abstractions;
+using AiRaccoon.Tests.Unit.Watch;
 using Shouldly;
 using Xunit;
 using Xunit.Sdk;
 
-namespace AiRaccoon.Tests.Unit.Watch;
+namespace AiRaccoon.Tests.Integration.Watch;
 
 /// <summary>
 ///     FileSystemWatcher adapter: the four event types translate to WatchEvent with normalized
 ///     paths, and adapter failures never throw — they surface as synthetic WatchEventError events.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class WatchEventSourceTests
 {

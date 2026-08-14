@@ -4,18 +4,19 @@ using AiRaccoon.Infrastructure.Watch;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging.Testing;
+using AiRaccoon.Tests.Unit.Watch;
 using Shouldly;
 using Xunit;
 using static System.IO.File;
 
-namespace AiRaccoon.Tests.Unit.Watch;
+namespace AiRaccoon.Tests.Integration.Watch;
 
 /// <summary>
 ///     D1 catch-up: never-synced watches (watermark 0) full-scan; otherwise only files with
 ///     mtime strictly after the watermark are queued. Scans are async — enqueue returns before
 ///     the digest work happens (feature rule 4).
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class WatchCatchUpTests
 {

@@ -4,13 +4,13 @@ using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.TestHelpers;
+namespace AiRaccoon.Tests.Integration.TestHelpers;
 
 /// <summary>
 ///     Pins the occupied-port leases that stand in for a foreign server: the number stays taken for
 ///     the whole test, and connections are accepted then closed so a probe fails fast.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class LoopbackPortOccupyTests
 {

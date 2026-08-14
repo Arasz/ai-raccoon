@@ -3,13 +3,13 @@ using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.TestHelpers;
+namespace AiRaccoon.Tests.Integration.TestHelpers;
 
 /// <summary>
 ///     Pins the runner's lifetime contract: a run that outlasts its hard cap leaves nothing behind,
 ///     a dead process is not an error to kill, and a missing build output names the path it wanted.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class RaccoonProcessTests
 {

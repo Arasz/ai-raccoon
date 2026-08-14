@@ -6,17 +6,18 @@ using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Observability;
 using AiRaccoon.Tests.Unit.Observability;
 using Microsoft.Extensions.Logging.Abstractions;
+using AiRaccoon.Tests.Unit.Watch;
 using Shouldly;
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.Watch;
+namespace AiRaccoon.Tests.Integration.Watch;
 
 /// <summary>
 ///     Re-watch loop semantics: disabled projects keep registrations without checking; enabled
 ///     registrations get a watcher + catch-up scan (full when never synced, since-watermark
 ///     otherwise); removed/disabled flips stop the watcher; StopAsync disposes everything.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class WatchHostedServiceTests
 {
