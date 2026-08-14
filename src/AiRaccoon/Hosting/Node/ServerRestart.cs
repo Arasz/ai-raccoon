@@ -152,7 +152,12 @@ public sealed partial class ServerRestart : IServerRestart
         {
             do
             {
-                if (await _probe.RespondsAsync(port, waiting.Token))
+                // Only a refused connection proves the port is free (docs/adr/0043). Treating any
+                // non-answer as "freed" is the same conflation the pre-check had: a server that
+                // accepts the shutdown, stops answering and keeps the socket open would be reported
+                // as stopped, and the bind that follows would then blame a nonexistent second server
+                // for taking the port.
+                if (await _probe.ProbeAsync(port, waiting.Token) is not ProbeVerdict.NotListening)
                 {
                     continue;
                 }

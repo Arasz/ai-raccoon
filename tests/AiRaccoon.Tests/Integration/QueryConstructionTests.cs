@@ -255,11 +255,11 @@ public sealed class QueryConstructionTests : IDisposable
         // That is a correct answer to A1's question. The pin records the measured rank; the real
         // defect is that scripts/baseline-queries.json admits one expectedSource per query, so a
         // question with two right answers must score one of them as a miss (ADR-0044 Consequences).
-        var knownRegressed = new Dictionary<string, int>(StringComparer.Ordinal)
+        var knownRegressed = new Dictionary<string, (int Best, int Worst)>(StringComparer.Ordinal)
         {
-            ["A1"] = 3,
-            ["A3"] = 3,
-            ["A7"] = 3
+            ["A1"] = (3, 3),
+            ["A3"] = (2, 3),
+            ["A7"] = (3, 3)
         };
 
         foreach (var (id, wave0Rank) in wave0)
@@ -270,11 +270,16 @@ public sealed class QueryConstructionTests : IDisposable
             _output.WriteLine($"{id} hybrid top-5: {string.Join(", ", top5.Select(h => hashMap.FirstOrDefault(p => p.Value == h).Key ?? h))}");
             rank.ShouldNotBeNull($"{id} must still find its expected file (Wave 0 rank {wave0Rank})");
 
-            if (knownRegressed.TryGetValue(id, out var regressedRank))
+            if (knownRegressed.TryGetValue(id, out var regressed))
             {
-                rank.ShouldBe(regressedRank,
-                    $"known regression (WP3b): {id} was Wave 0 rank <= {wave0Rank}, now pinned at exactly " +
-                    $"{regressedRank} -- see docs/work/2026-08-14-retrieval-rank-regressions.md; invert when WP3b lands");
+                // A band, not an exact value: ranks come out of RRF fusion over near-tied
+                // candidates, and the two platforms order those ties differently — A3 measures 3 on
+                // macOS and 2 on Linux CI (2026-08-14). The band is still tight enough that any
+                // movement outside it goes red in either direction, which is what the pin is for.
+                rank!.Value.ShouldBeInRange(regressed.Best, regressed.Worst,
+                    $"known regression (WP3b): {id} was Wave 0 rank <= {wave0Rank}, now pinned to " +
+                    $"{regressed.Best}..{regressed.Worst} across platforms -- see " +
+                    "docs/work/2026-08-14-retrieval-rank-regressions.md; invert when WP3b lands");
             }
             else
             {
