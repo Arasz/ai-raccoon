@@ -2,6 +2,8 @@ using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Filtering;
+using AiRaccoon.Core.Memory.Filtering.Policies;
 using AiRaccoon.Core.Rating;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
@@ -944,6 +946,65 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             "SELECT count(*) FROM entries WHERE path = @file",
             new { file });
         count.ShouldBe(3, "one ingest's chunk set, not two");
+    }
+
+    // ── WP1/WP2: honest write outcome (ADR-0032/0033/0034) ──
+
+    private const string HermesNoiseContent =
+        "[IMPORTANT: Background process proc_1 completed normally (exit code 0).\nCommand: cd /tmp && echo test\nOutput: test]";
+
+    [Fact]
+    public async Task RejectedWrite_ReportsNotStored()
+    {
+        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
+            new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
+            new EmbeddingService(), noisePolicies: [new HermesProcessNoisePolicy()]);
+
+        var entry = await store.WriteAsync(new MemoryWriteRequest("acme", HermesNoiseContent),
+            TestContext.Current.CancellationToken);
+
+        entry.Stored.ShouldBeFalse();
+        entry.Reason.ShouldNotBeNullOrWhiteSpace();
+        entry.Reason.ShouldContain("HermesBackgroundProcessLog");
+        entry.Hash.ShouldBeNullOrEmpty("a refused write must never carry a fabricated hash");
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var count = await connection.ExecuteScalarAsync<long>(
+            "SELECT count(*) FROM entries WHERE project_id = 'acme'");
+        count.ShouldBe(0, "a rejected write must never land a row in entries");
+    }
+
+    [Fact]
+    public async Task NoiseDisabled_StoresContentThatWouldOtherwiseBeRejected()
+    {
+        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
+            new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
+            new EmbeddingService(), noisePolicies: [new HermesProcessNoisePolicy()]);
+        await store.SetSettingAsync(NoiseConfigKeys.EnabledGlobal, "false", TestContext.Current.CancellationToken);
+
+        var entry = await store.WriteAsync(new MemoryWriteRequest("acme", HermesNoiseContent),
+            TestContext.Current.CancellationToken);
+
+        entry.Stored.ShouldBeTrue();
+        entry.Hash.ShouldNotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task ShortOrganicWrite_IsStoredWithoutTtl()
+    {
+        // Reproduces production wiring as it stands pre-WP2 (PromotionScorerTtlPolicy registered):
+        // a sub-8-word organic write must still be stored, and never carries a heuristic TTL.
+        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
+            new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
+            new EmbeddingService(), ttlPolicies: [new PromotionScorerTtlPolicy()]);
+
+        var entry = await store.WriteAsync(new MemoryWriteRequest("acme", "Push after every commit."),
+            TestContext.Current.CancellationToken);
+
+        entry.Stored.ShouldBeTrue();
+        var row = await ReadRowAsync(entry.Hash);
+        row.ShouldNotBeNull();
+        row.TtlDays.ShouldBeNull("an explicit TTL is authoritative — no heuristic assigns one at write time (ADR-0034)");
     }
 
     // ── WP2: source_id on write path ──

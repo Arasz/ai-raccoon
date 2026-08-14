@@ -17,7 +17,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 [Trait("Speed", "Slow")]
-public class WritePerformanceBenchmarkTests
+public class WritePerformanceBenchmarkTests(ITestOutputHelper output)
 {
     [Fact]
     public async Task WriteAsync_PerformanceMeasurement_BaselineVsZeroShotFiltering()
@@ -67,7 +67,7 @@ public class WritePerformanceBenchmarkTests
             {
                 var noiseContent = $"[IMPORTANT: Background process proc_{i} completed normally (exit code 0).\nCommand: cd /tmp && dotnet test\nOutput: test]";
                 var entry = await memoryStore.WriteAsync(new MemoryWriteRequest(projectId, noiseContent), TestContext.Current.CancellationToken);
-                if (entry.Hash == "noise_hash")
+                if (!entry.Stored)
                 {
                     interceptedCount++;
                 }
@@ -99,11 +99,7 @@ Iterations: {iterations}
 - Rejection Accuracy: {interceptedCount}/{iterations} ({interceptedCount * 100.0 / iterations}%)
 ";
 
-            var repoRoot = FindRepoRoot(AppContext.BaseDirectory);
-            var docsDir = Path.Combine(repoRoot, "docs", "work");
-            Directory.CreateDirectory(docsDir);
-            var reportPath = Path.Combine(docsDir, "2026-08-13-v4-write-performance-benchmark-report.md");
-            await File.WriteAllTextAsync(reportPath, report, TestContext.Current.CancellationToken);
+            output.WriteLine(report);
         }
         finally
         {
@@ -112,20 +108,5 @@ Iterations: {iterations}
                 try { Directory.Delete(dataRoot, true); } catch { }
             }
         }
-    }
-
-    private static string FindRepoRoot(string startDir)
-    {
-        var current = new DirectoryInfo(startDir);
-        while (current is not null)
-        {
-            if (File.Exists(Path.Combine(current.FullName, "pyproject.toml")) ||
-                File.Exists(Path.Combine(current.FullName, "AiRaccoon.sln")))
-            {
-                return current.FullName;
-            }
-            current = current.Parent;
-        }
-        return Directory.GetCurrentDirectory();
     }
 }

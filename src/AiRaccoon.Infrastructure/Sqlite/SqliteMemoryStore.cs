@@ -36,11 +36,21 @@ public sealed partial class SqliteMemoryStore(
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var isNoise = await noiseFilteringService.EvaluatePreWriteAsync(request, cancellationToken).ConfigureAwait(false);
-        if (isNoise)
+        var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
+
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+
+        var noiseEnabled = NoiseConfigKeys.ParseEnabled(
+            await ReadSettingAsync(connection, NoiseConfigKeys.EnabledGlobal, cancellationToken).ConfigureAwait(false));
+        if (noiseEnabled)
         {
-            // Dummy entry. In C# 10+, MemoryEntry record has 5 properties: Hash, Path, Context, Value, CreatedAt
-            return new MemoryEntry("noise_hash", "noise_path", request.Context ?? string.Empty, request.Content, timeProvider.GetUtcNow().ToUnixTimeSeconds());
+            var noiseResult = await noiseFilteringService.EvaluatePreWriteAsync(request, cancellationToken)
+                .ConfigureAwait(false);
+            if (noiseResult.IsNoise)
+            {
+                return new MemoryEntry(string.Empty, string.Empty, request.Context ?? string.Empty, request.Content,
+                    now, Stored: false, Reason: $"rejected by noise policy '{noiseResult.PolicyName}'");
+            }
         }
 
         int? resolvedTtlDays = null;
@@ -60,9 +70,6 @@ public sealed partial class SqliteMemoryStore(
         // identical content maps to the same slot, then scope the identity hash to it (FR-NM-7; see docs/work/features-native-memory/native-memory.feature).
         var path = WritePathFor(request.Content);
         var hash = ContentHash.Of(path, request.Content);
-        var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
-
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
 
         if (bucket.WorkspaceId is not null)
         {

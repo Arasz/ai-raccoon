@@ -28,7 +28,8 @@ Output: test]";
         var result = await sut.EvaluatePreWriteAsync(request, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.True(result);
+        Assert.True(result.IsNoise);
+        Assert.Equal("HermesBackgroundProcessLog", result.PolicyName);
         Assert.True(fakeStore.RecordCalled);
         Assert.Equal("HermesBackgroundProcessLog", fakeStore.RecordedPolicyName);
     }
