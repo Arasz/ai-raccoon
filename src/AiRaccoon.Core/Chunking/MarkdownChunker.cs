@@ -9,7 +9,9 @@ namespace AiRaccoon.Core.Chunking;
 ///     a fence, a long line, a minified-JSON line, one very long word — falls back to token-level
 ///     splitting, which always terminates. Joined multi-unit chunks are verified against the real
 ///     tokenizer rather than trusted from summed per-unit counts, because BPE/WordPiece token
-///     counts are not composable across a join.
+///     counts are not composable across a join. Every chunk is also a well-formed markdown
+///     fragment: a boundary never falls inside a fence, because an over-budget fence is re-fenced
+///     into several bounded fences rather than de-fenced into bare lines (docs/adr/0048).
 /// </summary>
 public sealed class MarkdownChunker : IMarkdownChunker
 {
@@ -124,10 +126,10 @@ public sealed class MarkdownChunker : IMarkdownChunker
     }
 
     /// <summary>
-    ///     Groups lines into units, keeping a closed fence atomic only while it fits maxTokens.
-    ///     An oversized fence (open-but-never-closed, or closed but over budget) falls back to one
-    ///     unit per line for that region instead of gluing it into a single unbounded unit — see
-    ///     docs/adr/0036.
+    ///     Groups lines into units, keeping a closed fence atomic only while it fits maxTokens. An
+    ///     oversized fence is re-fenced into several bounded fences rather than de-fenced into bare
+    ///     lines, and a never-closed one is closed first, so every unit is a well-formed fence
+    ///     (docs/adr/0048) and still bounded by maxTokens (docs/adr/0036).
     /// </summary>
     private static List<Unit> BuildUnits(List<string> lines, TokenCount countTokens, int maxTokens)
     {
@@ -159,19 +161,17 @@ public sealed class MarkdownChunker : IMarkdownChunker
                 fenceLines = null;
                 fenceTokens = 0;
             }
-            else if (fenceTokens > maxTokens)
-            {
-                // Already broken; keeping it atomic buys nothing, so stop treating it as fenced.
-                FlushAsLines(units, fenceLines, maxTokens, countTokens);
-                fenceLines = null;
-                fenceTokens = 0;
-            }
         }
 
         if (fenceLines is not null)
         {
-            // Never closed: not a well-formed fence, so it must not glue the rest of the note together.
-            FlushAsLines(units, fenceLines, maxTokens, countTokens);
+            // Never closed: close it here rather than de-fence it. Abandoning the fence mid-region
+            // is what let a boundary land inside a code block, and it also inverted the fence
+            // parity of everything after the region's real closing delimiter.
+            var closer = CloserFor(fenceLines[0]);
+            fenceLines[^1] = EndWithNewline(fenceLines[^1]);
+            fenceLines.Add(closer);
+            FlushFence(units, fenceLines, fenceTokens + countTokens(closer), maxTokens, countTokens);
         }
 
         return units;
@@ -193,8 +193,112 @@ public sealed class MarkdownChunker : IMarkdownChunker
             }
         }
 
-        FlushAsLines(units, fenceLines, maxTokens, countTokens);
+        FlushAsSubFences(units, fenceLines, maxTokens, countTokens);
     }
+
+    /// <summary>
+    ///     Splits an over-budget fence into consecutive bounded fences, each repeating the region's
+    ///     own opening and closing delimiter. Every unit stays a well-formed fence, so no chunk can
+    ///     begin inside a code block and be read as prose (docs/adr/0048). Falls back to bare lines
+    ///     only when the delimiters alone leave no room for content — the token budget outranks the
+    ///     balance, and that floor is unreachable at any realistic maxTokens.
+    /// </summary>
+    private static void FlushAsSubFences(List<Unit> units, List<string> fenceLines, int maxTokens,
+        TokenCount countTokens)
+    {
+        var opener = EndWithNewline(fenceLines[0]);
+        var closer = EndWithNewline(fenceLines[^1]);
+        if (countTokens(string.Concat(opener, closer)) >= maxTokens)
+        {
+            FlushAsLines(units, fenceLines, maxTokens, countTokens);
+            return;
+        }
+
+        List<string> pieces = [];
+        for (var i = 1; i < fenceLines.Count - 1; i++)
+        {
+            pieces.AddRange(SplitForSubFence(fenceLines[i], opener, closer, maxTokens, countTokens));
+        }
+
+        List<string> current = [];
+        foreach (var piece in pieces)
+        {
+            current.Add(piece);
+
+            // Every piece was sized against the delimiters it will be emitted with, so a single one
+            // always fits and shedding down to it terminates.
+            if (current.Count == 1 || countTokens(SubFenceText(opener, current, closer)) <= maxTokens)
+            {
+                continue;
+            }
+
+            current.RemoveAt(current.Count - 1);
+            AddSubFence(units, opener, current, closer, countTokens);
+            current = [piece];
+        }
+
+        AddSubFence(units, opener, current, closer, countTokens);
+    }
+
+    private static void AddSubFence(List<Unit> units, string opener, List<string> content, string closer,
+        TokenCount countTokens)
+    {
+        var lines = SubFenceLines(opener, content, closer);
+        units.Add(new Unit(lines, countTokens(string.Concat(lines))));
+    }
+
+    /// <summary>Splits one fenced line into pieces that each fit maxTokens once wrapped in the delimiters.</summary>
+    private static List<string> SplitForSubFence(string line, string opener, string closer, int maxTokens,
+        TokenCount countTokens)
+    {
+        int Wrapped(string text) => countTokens(SubFenceText(opener, [text], closer));
+
+        List<string> pieces = [];
+        var remaining = line;
+        while (remaining.Length > 0)
+        {
+            if (Wrapped(remaining) <= maxTokens)
+            {
+                pieces.Add(remaining);
+                break;
+            }
+
+            // Even a single character can tokenize over budget; take it anyway so every split makes
+            // forward progress and the loop is guaranteed to terminate.
+            var headLength = Math.Max(1, LargestPrefixWithinBudget(remaining, maxTokens, Wrapped));
+            pieces.Add(remaining[..headLength]);
+            remaining = remaining[headLength..];
+        }
+
+        return pieces;
+    }
+
+    /// <summary>A mid-line split leaves the last piece without its newline; the closing delimiter still needs its own line.</summary>
+    private static List<string> SubFenceLines(string opener, IReadOnlyList<string> content, string closer)
+    {
+        List<string> lines = [opener, .. content, closer];
+        lines[^2] = EndWithNewline(lines[^2]);
+        return lines;
+    }
+
+    private static string SubFenceText(string opener, IReadOnlyList<string> content, string closer) =>
+        string.Concat(SubFenceLines(opener, content, closer));
+
+    /// <summary>The closing delimiter matching an opener's marker character and run length.</summary>
+    private static string CloserFor(string openerLine)
+    {
+        var trimmed = openerLine.TrimStart();
+        var marker = trimmed[0];
+        var run = 0;
+        while (run < trimmed.Length && trimmed[run] == marker)
+        {
+            run++;
+        }
+
+        return new string(marker, run) + "\n";
+    }
+
+    private static string EndWithNewline(string text) => text.EndsWith('\n') ? text : text + "\n";
 
     private static void FlushAsLines(List<Unit> units, List<string> lines, int maxTokens, TokenCount countTokens)
     {
