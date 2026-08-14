@@ -132,10 +132,12 @@ class _MCPClient:
     # -- duck-typed surface (snake_case; camelCase over the wire) -----------
 
     def search(self, project_id: str, query: str, scope: str = "all",
-               limit: int = 5, min_score: float = 0.5,
+               limit: int = 5, min_relative_score: float = 0.0,
                context_label: Optional[str] = None) -> Any:
-        args: Dict[str, Any] = {"projectId": project_id, "query": query,
-                                "scope": scope, "limit": limit, "minScore": min_score}
+        # The floor is relative to this response's top hit (ADR-0047), so it cannot express
+        # "only good matches"; 0.0 is off, and is what returns the `limit` the caller asked for.
+        args: Dict[str, Any] = {"projectId": project_id, "query": query, "scope": scope,
+                                "limit": limit, "minRelativeScore": min_relative_score}
         if context_label:
             args["contextLabel"] = context_label
         return self._call("memory_search", args)

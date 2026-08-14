@@ -272,7 +272,7 @@ def test_get_config_schema_fields(make_provider):
     provider, _ = make_provider()
     fields = {f["key"] for f in provider.get_config_schema()}
     assert {"transport", "url", "binary", "project_id", "search_limit",
-            "min_score", "scope"} <= fields
+            "min_relative_score", "scope"} <= fields
     assert all(not f.get("secret") for f in provider.get_config_schema())
 
 

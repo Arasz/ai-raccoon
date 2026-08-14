@@ -63,7 +63,7 @@ def test_stdio_write_search_round_trip(real_provider):
     assert "hash" in write_result and write_result["hash"]
 
     search_result = json.loads(real_provider.handle_tool_call(
-        "memory_search", {"query": "integration probe fact", "limit": 5, "minScore": 0.0}))
+        "memory_search", {"query": "integration probe fact", "limit": 5, "minRelativeScore": 0.0}))
     snippets = [r.get("snippet", "") for r in search_result.get("results", [])]
     assert any("integration probe fact 12345" in s for s in snippets), snippets
 

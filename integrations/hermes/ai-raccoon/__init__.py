@@ -19,7 +19,7 @@ Config in $HERMES_HOME/config.yaml (profile-scoped), under plugins.ai-raccoon:
   binary: ai-raccoon                     # stdio mode (PATH lookup)
   project_id: ""                         # empty -> derived hermes-<profile>
   search_limit: 5
-  min_score: 0.5
+  min_relative_score: 0.0
   scope: all
 """
 
@@ -66,8 +66,8 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
                 "query": {"type": "string", "description": "The search query."},
                 "scope": {"type": "string", "enum": ["all", "project", "shared"], "default": "all"},
                 "limit": {"type": "integer", "description": "Maximum results (default 20).", "default": 20},
-                "minScore": {"type": "number", "description": "Minimum ranking threshold 0..1 (default 0.7).", "default": 0.7},
-                "contextLabel": {"type": "string", "description": "When set, the project scope also searches custom-scoped rows under this context label."},
+                "minRelativeScore": {"type": "number", "description": "Floor on the ranking relative to this response's top hit, which always scores 1.0 — it is not a quality bar (default 0.0, off).", "default": 0.0},
+                "contextLabel": {"type": "string", "description": "Narrows the project scope to one context. Omit it to search every context in the project."},
             },
             "required": ["query"],
         },
@@ -118,7 +118,7 @@ _TOOL_DISPATCH = {
         "query": "query",
         "scope": "scope",
         "limit": "limit",
-        "minScore": "min_score",
+        "minRelativeScore": "min_relative_score",
         "contextLabel": "context_label",
     }),
     "memory_write": ("write", {
@@ -238,7 +238,10 @@ class AiRaccoonMemoryProvider(MemoryProvider):
                 query,
                 scope=self._config.get("scope", "all"),
                 limit=int(self._config.get("search_limit", 5)),
-                min_score=float(self._config.get("min_score", 0.5)),
+                # "min_score" is the pre-ADR-0047 key; still honoured so an existing config does
+                # not silently change meaning, but it never expressed a quality bar.
+                min_relative_score=float(
+                    self._config.get("min_relative_score", self._config.get("min_score", 0.0))),
             )
         except Exception as e:
             logger.debug("ai-raccoon prefetch failed: %s", e)
@@ -347,7 +350,7 @@ class AiRaccoonMemoryProvider(MemoryProvider):
             {"key": "status_words", "description": "Print one-word status cues to stderr per call", "default": True, "choices": ["true", "false"]},
             {"key": "project_id", "description": "AiRaccoon project id (empty = derived hermes-<profile>)"},
             {"key": "search_limit", "description": "Prefetch result limit", "default": 5, "type": "integer"},
-            {"key": "min_score", "description": "Prefetch minimum ranking threshold 0..1", "default": 0.5, "type": "number"},
+            {"key": "min_relative_score", "description": "Prefetch floor relative to the top hit, which always scores 1.0 — not a quality bar (0 = off)", "default": 0.0, "type": "number"},
             {"key": "scope", "description": "Prefetch search scope", "default": "all", "choices": ["all", "project", "shared"]},
         ]
 

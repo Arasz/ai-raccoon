@@ -38,7 +38,7 @@ Rollback: `hermes config set memory.provider holographic` (or empty for built-in
 
 | Hermes lifecycle point | AiRaccoon call |
 |---|---|
-| `prefetch(query)` | `memory_search` (scope all, limit 5, minScore 0.5) → `## AiRaccoon Memory` block |
+| `prefetch(query)` | `memory_search` (scope all, limit 5, no relative-score floor) → `## AiRaccoon Memory` block |
 | `sync_turn(user, assistant)` | `memory_write` of the assistant message, `sourceFile=hermes/<session>`, `section=turn` (background) |
 | tools | `memory_search`, `memory_write`, `memory_stats`, `memory_share` (curated surface, `projectId` injected) |
 | `on_memory_write(add, …)` | `memory_write` mirror, `sourceFile=hermes-memory` |
@@ -61,7 +61,7 @@ plugins:
     status_words: true    # one-word stderr cue per call ("searching", "remembering", …)
     project_id: ""        # empty -> derived "hermes-<profile>" (e.g. hermes-default)
     search_limit: 5
-    min_score: 0.5
+    min_relative_score: 0.0
     scope: all
 ```
 
