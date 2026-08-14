@@ -743,11 +743,12 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             await _store.WriteAsync(new MemoryWriteRequest("acme", content), TestContext.Current.CancellationToken);
         }
 
-        var offTopic = await _store.WriteAsync(
-            new MemoryWriteRequest("acme",
-                "sqlite schema write guards reject any bank whose version exceeds what the pipeline validator supports"),
-            TestContext.Current.CancellationToken);
-        var shared = await _store.ShareAsync("acme", offTopic.Hash, TestContext.Current.CancellationToken);
+        // A standalone shared-tier row (not promoted from a project original) — WP3a's dedup
+        // fix collapses a promoted copy against its project original by content, so a promoted
+        // duplicate of a row already asserted on above would no longer prove this regression.
+        var shared = await _store.AddContentAsync("acme", "shared/off-topic-schema-note.md",
+            "sqlite schema write guards reject any bank whose version exceeds what the pipeline validator supports",
+            ContextNaming.SharedContext, cancellationToken: TestContext.Current.CancellationToken);
 
         var results = await _store.SearchAsync(
             new SearchQuery("acme", query, Limit: 25, MinScore: 0.0),

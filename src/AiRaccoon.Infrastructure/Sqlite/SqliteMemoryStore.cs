@@ -231,7 +231,7 @@ public sealed partial class SqliteMemoryStore(
         var merged = SearchResultMerger.Merge([fused], query.Limit, query.MinScore, query.RrfK,
             isPathQuery ? 0.0 : query.SourceLambda, query.ConsolidationThreshold, query.DocScoreFormula);
         merged = await ResolveDeferredSnippetsAsync(connection, merged, valueByHash, ftsQueryByHash, idByHash,
-            cancellationToken).ConfigureAwait(false);
+            query.Query, cancellationToken).ConfigureAwait(false);
         await BumpAccessAsync(connection, merged, query.ProjectId, cancellationToken).ConfigureAwait(false);
         return merged;
     }
@@ -909,7 +909,7 @@ public sealed partial class SqliteMemoryStore(
     private static async Task<IReadOnlyList<MemorySearchResult>> ResolveDeferredSnippetsAsync(
         SqliteConnection connection, IReadOnlyList<MemorySearchResult> results,
         IReadOnlyDictionary<string, string> valueByHash, IReadOnlyDictionary<string, string> ftsQueryByHash,
-        IReadOnlyDictionary<string, long> idByHash, CancellationToken cancellationToken)
+        IReadOnlyDictionary<string, long> idByHash, string queryText, CancellationToken cancellationToken)
     {
         var deferred = results.Where(result => result.Snippet.Length == 0).ToList();
         if (deferred.Count == 0)
@@ -935,7 +935,7 @@ public sealed partial class SqliteMemoryStore(
                 }
 
                 return valueByHash.TryGetValue(result.Hash, out var value)
-                    ? result with { Snippet = SnippetFallback.From(value, result.Hash) }
+                    ? result with { Snippet = SnippetFallback.From(value, result.Hash, queryText) }
                     : result;
             })
         ];

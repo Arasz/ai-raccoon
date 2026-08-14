@@ -91,6 +91,38 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         hit.Snippet.ShouldBe(SnippetFallback.From(longValue, hit.Hash));
     }
 
+    /// <summary>
+    ///     WP3a/ADR-0035: SnippetFallback's window used to open at a hash-seeded offset entirely
+    ///     unrelated to the query — for a long entry the agent would see ~7% of it, chosen
+    ///     arbitrarily, and could easily miss the very term that made this a hit.
+    /// </summary>
+    [Fact]
+    public async Task Search_VectorOnlyHit_SnippetIsQueryRelevant_EvenWhenTheMatchIsLateInALongEntry()
+    {
+        await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
+        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
+
+        var filler = string.Join(" ", Enumerable.Range(1, 60).Select(i =>
+            $"sentence number {i} with enough prose to push the target term well past the two hundred character window"));
+        var longValue = filler + " the target term giraffemigrationprotocol appears only here near the very end.";
+        var entry = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", longValue), TestContext.Current.CancellationToken);
+
+        // FtsWeight: 0 forces a genuinely vector-only path — the fallback snippet is the only
+        // snippet source, regardless of whether the term would also FTS-match.
+        var results = await _store.SearchAsync(
+            new SearchQuery("acme", "giraffemigrationprotocol", SearchScope.Project, Limit: 5, MinScore: 0.0,
+                RrfK: 60, FtsWeight: 0, VectorWeight: 1),
+            TestContext.Current.CancellationToken);
+
+        var hit = results.ShouldHaveSingleItem();
+        hit.Hash.ShouldBe(entry.Hash);
+        SnippetFallback.From(longValue, hit.Hash).ShouldNotContain("giraffemigrationprotocol",
+            customMessage: "sanity check: today's hash-seeded window for this fixture must not accidentally cover the term");
+        hit.Snippet.ShouldContain("giraffemigrationprotocol",
+            customMessage: "the snippet must be centered on the query match, not an arbitrary hash-seeded window");
+    }
+
     [Fact]
     public async Task Search_VectorOnly_ReturnsExactlyLimitResults_WithCorrectSnippets_OutOfALargerCandidateSet()
     {
