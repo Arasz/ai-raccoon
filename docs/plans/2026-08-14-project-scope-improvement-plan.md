@@ -419,7 +419,7 @@ measured a 0.070 nDCG spread across host CPUs against a 5e-3 tolerance, and ADR-
 fixture-pinning workaround it forced. Six RIDs ship with no PR gate on four of them. *Owner question 15.*
 
 ### WP17 · Documentation and decision-record truth
-- **Stale `Status:` fields — swept exhaustively by the orchestrator, closing the lane's open item and finding a fourth.** Of every ADR the index records as superseded or reversed, exactly one (**ADR-0002**) self-updates correctly (`Status: **Superseded** — 2026-08-09. Superseded in parts by ADR 0008…`). Four still read `Accepted` in their own files:
+- ✅ **LANDED.** **Stale `Status:` fields — swept exhaustively by the orchestrator, closing the lane's open item and finding a fourth.** Of every ADR the index records as superseded or reversed, exactly one (**ADR-0002**) self-updates correctly (`Status: **Superseded** — 2026-08-09. Superseded in parts by ADR 0008…`). Four still read `Accepted` in their own files:
 
   | ADR | What the index says | What the file says |
   |---|---|---|
@@ -438,6 +438,8 @@ fixture-pinning workaround it forced. Six RIDs ship with no PR gate on four of t
   Status line and watch it go red. Note the three header formats in play (`## Status\nAccepted`,
   `Status: Accepted`, `Status: **Superseded** — …`) — the check must tolerate all three or the
   normalisation becomes a fourth source of drift.
+
+  **Landed.** All four fixed; ADR-0013's index row gained the passive phrasing it lacked so the gate can see it. `AdrIndexTests.SupersededAdrs_DoNotStillCallThemselvesAccepted` derives the set from the index and matches the **passive voice only** — "supersedes ADR-0013" in 0016's row means 0016 is fine and 0013 is not. Watched red twice: reverting all four named 0029, 0030, 0033; reverting 0013 alone named 0013.
 - `SECURITY.md`: correct the tool count, correct "`ro` mode allows only reads" (search writes `access_count`, `last_accessed_at` and `rating`, including on shared rows), and add exception messages and stack traces to the "what leaves the process" table — OTLP export ships absolute filesystem paths today.
 - ADR-0043's "Known gap" describes a defect that `ServerRestart.cs:160` has since closed.
 - ADR-0048 claims "a chunk is a well-formed markdown fragment"; what it delivers is fence balance. A 200-row table splits with 33 of 34 chunks carrying orphaned body rows. Narrow the claim or widen the guarantee.
