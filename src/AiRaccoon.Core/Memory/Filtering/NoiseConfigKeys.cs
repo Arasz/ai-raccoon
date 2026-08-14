@@ -41,4 +41,13 @@ public static class NoiseConfigKeys
     // and no detector — centroid or otherwise — has been validated on held-out data. That threshold
     // existed in an earlier draft of this file and was removed once the write path stopped doing
     // any distance comparison; see docs/adr/0039 for why.
+
+    /// <summary>How long a rejected write stays in noise_entries before the maintenance purge removes it.</summary>
+    public const string RetentionDaysGlobal = "noise.retention-days.global";
+
+    /// <summary>ADR-0029's original hardcoded value, now a setting default rather than a constant.</summary>
+    public const int DefaultRetentionDays = 14;
+
+    public static int ParseRetentionDays(string? value) =>
+        int.TryParse(value, out var days) && days > 0 ? days : DefaultRetentionDays;
 }

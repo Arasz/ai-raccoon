@@ -198,31 +198,30 @@ internal static class MemorySchema
                                               value TEXT NOT NULL
                                           );
 
-                                          -- noise_entries (the reject log ADR-0033 found unread) stays removed from
-                                          -- the fresh-bank DDL. noise_clusters/vec_noise are restored here (ADR-0039):
-                                          -- the self-learning noise subsystem now has a real store
-                                          -- (SqliteNoiseClusterStore) and a feedback path feeding it, gated OFF by
-                                          -- default (noise.learner.enabled.global). Shape matches MigrateToV6Async
-                                          -- exactly — that ladder step is unchanged and still creates these tables
-                                          -- for a legacy bank upgrading from &lt;v6; a fresh bank now gets them directly.
-                                          CREATE TABLE IF NOT EXISTS noise_clusters (
+                                          -- noise_clusters/vec_noise (ADR-0039's centroid-clustering store) are
+                                          -- removed from the fresh-bank DDL (this task, amending ADR-0039): dead by
+                                          -- evidence — leader-follower produced 1,583 clusters from 1,940 items (93%
+                                          -- singletons) on real traffic, and noise silhouette (0.047-0.142) is no
+                                          -- better than signal (0.045-0.075). MigrateToV6Async is left unchanged as a
+                                          -- historical no-op ladder step, so a legacy bank stamped &lt;v6 still gets
+                                          -- these tables (inert) on upgrade; only a fresh bank now skips them.
+                                          --
+                                          -- noise_entries (ADR-0029) is restored: the write-time reject log is the
+                                          -- noise-learning training-data source (ADR-0039) — shadow mode plus this
+                                          -- table is how a deployment produces the labelled set the research named as
+                                          -- missing. expires_at is computed at insert time from the
+                                          -- noise.retention-days.global setting (default 14, ADR-0029).
+                                          CREATE TABLE IF NOT EXISTS noise_entries (
                                               id                 INTEGER PRIMARY KEY,
+                                              request_content    TEXT NOT NULL,
                                               project_id         TEXT NOT NULL,
-                                              user_id            TEXT NULL,
-                                              cluster_label      TEXT NOT NULL,
-                                              sample_content     TEXT NOT NULL,
-                                              frequency          INTEGER NOT NULL DEFAULT 1,
-                                              status             TEXT NOT NULL CHECK(status IN ('candidate','active','suppressed')),
-                                              centroid_embedding BLOB NOT NULL,
-                                              created_at         INTEGER NOT NULL,
-                                              last_seen_at       INTEGER NOT NULL,
-                                              UNIQUE(project_id, cluster_label)
+                                              source_file        TEXT NULL,
+                                              detected_by_policy TEXT NOT NULL,
+                                              expires_at         INTEGER NOT NULL,
+                                              created_at         INTEGER NOT NULL
                                           );
 
-                                          CREATE VIRTUAL TABLE IF NOT EXISTS vec_noise USING vec0(
-                                              ctx TEXT partition key,
-                                              embedding float[384] distance_metric=cosine
-                                          );
+                                          CREATE INDEX IF NOT EXISTS idx_noise_entries_expires_at ON noise_entries(expires_at);
 
                                           CREATE TABLE IF NOT EXISTS sync_tombstones (
                                               hash TEXT NOT NULL,
