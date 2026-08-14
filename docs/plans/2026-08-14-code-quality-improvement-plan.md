@@ -6,6 +6,30 @@ Baseline to preserve: build 0/0; `dotnet test` 2277 passed / 0 failed / 6 skippe
 **Rev 2** folds in an architect review and an adversarial gate on rev 1. Both are reflected
 throughout; the material changes are listed under *What rev 2 changed* at the end.
 
+## Status — 2026-08-14, end of the autonomous run
+
+Everything below landed on `task/code-quality-review` (PR #278) unless the row says otherwise.
+
+| Package | State | Note |
+|---|---|---|
+| WP1 + WP2 | landed | blocker B1 closed; `Stored`/`Reason` on the record (ADR-0032) |
+| WP3a | landed | blocker B2 closed; `memory_get` (ADR-0035) |
+| WP4, WP4b, WP4c | landed | corpus regenerated through the production chunker: 761 rows/0 structure vectors → 2518/871, repo-relative paths, hashes derived from the corpus instead of a retired JSON map |
+| WP5a, WP5b | landed | delete/tombstone transaction, workspace uniqueness + v7 ladder step (ADR-0037) |
+| WP6 | landed | `BumpAccess` N+1 removed; per-open Bitwarden shell-out cached (ADR-0038) |
+| WP7 | landed | engine-aware chunk budget; 0 of 4121 chunks over the window (ADR-0036) |
+| WP8-ratchet | landed | the cap was **lowered**, not raised: `ISettingsStore` extracted, store 1315 → 1290 lines |
+| WP8 (rest) | open | five seams remain: write, search, delete, ingest, embedding |
+| WP9 | landed | watch-embedding retry sweep, Bitwarden caching, SIGINT/SIGTERM wiring |
+| WP10, WP10b, WP10c | landed | vacuous gates replaced; test-hygiene consolidation; D21 concurrency gaps closed, one real `WatchPipeline` bug found by them |
+| WP11 | landed | exit codes, parse-error triple print, the unknown-sync-provider fallthrough, doc drift |
+| WP3b | **open** | four ranking regressions on the denser corpus stay pinned as characterization tests; two more were *not* ranking problems and are restored — see `docs/work/2026-08-14-retrieval-rank-regressions.md` |
+
+Work identified during the run and also landed, outside the original plan: the read-path query
+guard (ADR-0040), the structural/lexical detector (ADR-0041), the noise substrate and shadow mode
+(ADR-0039, superseding ADR-0033 on the substrate), the `section` ingest defect, the dogfooding
+audit of `scripts/` (ADR-0042), and derived gates for the ADR index and the event-id registry.
+
 ## Urgency calibration (measured against the live bank)
 
 The deployed bank (15,236 entries, build 1.11.0, which *does* contain both ADRs) shows
@@ -377,6 +401,13 @@ query must fall below a stated threshold on an **ANALYZE'd** bank with the real 
 | 0033 | Remove the zero-shot noise filter and the noise-learning subsystem; keep the deterministic policy. Records the pre-deletion `noise_entries` read | supersedes ADR-0029 |
 | 0034 | An explicit TTL is authoritative; no heuristic assigns one at write time. **Records that the motivation is relocated, not abandoned — `memory_set_ttl` already provides the explicit path** | supersedes ADR-0030; restores ADR-0025 Fact 1 |
 | 0035 | `memory_get`, plus search scores carrying absolute signal | amends ADR-0004, ADR-0006 |
+| 0036 | Engine-aware chunk token budget with a guaranteed split floor | — |
+| 0037 | Workspace and promotion-queue concurrency guards | — |
+| 0038 | Cache the resolved encryption key per config fingerprint | — |
+| 0039 | The noise-learning substrate and shadow mode — no detector yet | supersedes ADR-0033 on the substrate |
+| 0040 | Read-path query guard | — |
+| 0041 | Structural/lexical noise detector on the read path | extends ADR-0040 |
+| 0042 | Fixtures are built by the product, not beside it | — |
 
 ## Owner decisions — resolved autonomously
 
