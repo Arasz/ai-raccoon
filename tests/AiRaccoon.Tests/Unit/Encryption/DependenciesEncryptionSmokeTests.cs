@@ -4,6 +4,7 @@ using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup;
+using AiRaccoon.Tests.TestHelpers;
 using DotNext.Collections.Generic;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
@@ -44,32 +45,23 @@ public sealed class DependenciesEncryptionSmokeTests
     }
 
     [Fact]
-    public void RegisterMemoryServices_ResolverReadsEnvPassphraseWhenNoSidecar()
+    public async Task RegisterMemoryServices_ResolverReadsEnvPassphraseWhenNoSidecar()
     {
         var tempRoot = TestData.CreateTempRoot();
-        TestData.EnvVarGate.Wait(TestContext.Current.CancellationToken);
         try
         {
-            var original = Environment.GetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName);
-            try
-            {
-                Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, "smoke-pass");
-                var services = new ServiceCollection();
-                services.AddLogging();
-                services.RegisterMemoryServices(new InfrastructureOptions { DataRoot = tempRoot, Scope = InstallScope.User }, IReadOnlyList<McpTransport>.Singleton(McpTransport.Http));
+            await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+                (EnvEncryptionKeyProvider.EnvVarName, "smoke-pass"));
+            var services = new ServiceCollection();
+            services.AddLogging();
+            services.RegisterMemoryServices(new InfrastructureOptions { DataRoot = tempRoot, Scope = InstallScope.User }, IReadOnlyList<McpTransport>.Singleton(McpTransport.Http));
 
-                using var provider = services.BuildServiceProvider();
+            using var provider = services.BuildServiceProvider();
 
-                provider.GetRequiredService<IEncryptionKeyResolver>().Resolve().Passphrase.ShouldBe("smoke-pass");
-            }
-            finally
-            {
-                Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, original);
-            }
+            provider.GetRequiredService<IEncryptionKeyResolver>().Resolve().Passphrase.ShouldBe("smoke-pass");
         }
         finally
         {
-            TestData.EnvVarGate.Release();
             Directory.Delete(tempRoot, true);
         }
     }

@@ -1,4 +1,5 @@
 using AiRaccoon.Observability;
+using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 
@@ -15,7 +16,7 @@ public class OtlpExportStateTests
     [Fact]
     public async Task NoEndpointSet_IsDisabled()
     {
-        using var _ = await AcquireCleanEnvAsync();
+        await using var env = await AcquireCleanEnvAsync();
 
         var state = OtlpExportState.Resolve();
 
@@ -27,8 +28,7 @@ public class OtlpExportStateTests
     [InlineData("   ")]
     public async Task EmptyOrWhitespaceEndpoint_IsDisabled(string endpoint)
     {
-        using var _ = await AcquireCleanEnvAsync();
-        Environment.SetEnvironmentVariable(EndpointVar, endpoint);
+        await using var env = await AcquireCleanEnvAsync(endpoint);
 
         var state = OtlpExportState.Resolve();
 
@@ -38,8 +38,7 @@ public class OtlpExportStateTests
     [Fact]
     public async Task EndpointSet_IsEnabled_AndDefaultsToGrpc()
     {
-        using var _ = await AcquireCleanEnvAsync();
-        Environment.SetEnvironmentVariable(EndpointVar, "http://localhost:4317");
+        await using var env = await AcquireCleanEnvAsync("http://localhost:4317");
 
         var state = OtlpExportState.Resolve();
 
@@ -49,9 +48,7 @@ public class OtlpExportStateTests
     [Fact]
     public async Task ProtocolSet_IsReported()
     {
-        using var _ = await AcquireCleanEnvAsync();
-        Environment.SetEnvironmentVariable(EndpointVar, "http://localhost:4318");
-        Environment.SetEnvironmentVariable(ProtocolVar, "http/protobuf");
+        await using var env = await AcquireCleanEnvAsync("http://localhost:4318", "http/protobuf");
 
         var state = OtlpExportState.Resolve();
 
@@ -64,8 +61,7 @@ public class OtlpExportStateTests
     [Fact]
     public async Task MalformedEndpoint_MissingScheme_DisablesExportWithAReason()
     {
-        using var _ = await AcquireCleanEnvAsync();
-        Environment.SetEnvironmentVariable(EndpointVar, "127.0.0.1:4317");
+        await using var env = await AcquireCleanEnvAsync("127.0.0.1:4317");
 
         var state = OtlpExportState.Resolve();
 
@@ -79,8 +75,7 @@ public class OtlpExportStateTests
     [Fact]
     public async Task MalformedEndpoint_NonHttpScheme_DisablesExportWithAReason()
     {
-        using var _ = await AcquireCleanEnvAsync();
-        Environment.SetEnvironmentVariable(EndpointVar, "localhost:4318");
+        await using var env = await AcquireCleanEnvAsync("localhost:4318");
 
         var state = OtlpExportState.Resolve();
 
@@ -88,25 +83,8 @@ public class OtlpExportStateTests
         state.InvalidEndpointReason.ShouldNotBeNullOrWhiteSpace();
     }
 
-    // Serialized with the other env-var tests via TestData.EnvVarGate (process-global OTEL_* vars),
-    // same mechanism as ServeRunnerTests.AcquireCleanEnvAsync.
-    private static async Task<IDisposable> AcquireCleanEnvAsync()
-    {
-        await TestData.EnvVarGate.WaitAsync();
-        var originalEndpoint = Environment.GetEnvironmentVariable(EndpointVar);
-        var originalProtocol = Environment.GetEnvironmentVariable(ProtocolVar);
-        Environment.SetEnvironmentVariable(EndpointVar, null);
-        Environment.SetEnvironmentVariable(ProtocolVar, null);
-        return new EnvRestore(originalEndpoint, originalProtocol);
-    }
-
-    private sealed class EnvRestore(string? originalEndpoint, string? originalProtocol) : IDisposable
-    {
-        public void Dispose()
-        {
-            Environment.SetEnvironmentVariable(EndpointVar, originalEndpoint);
-            Environment.SetEnvironmentVariable(ProtocolVar, originalProtocol);
-            TestData.EnvVarGate.Release();
-        }
-    }
+    // Serialized with the other env-var tests via EnvScope, which takes TestData.EnvVarGate
+    // (the OTEL_* vars are process-global).
+    private static ValueTask<EnvScope> AcquireCleanEnvAsync(string? endpoint = null, string? protocol = null) =>
+        EnvScope.AcquireAsync(TestContext.Current.CancellationToken, (EndpointVar, endpoint), (ProtocolVar, protocol));
 }
