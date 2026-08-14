@@ -100,11 +100,16 @@ Iterations: {iterations}
 - Rejection Accuracy: {interceptedCount}/{iterations} ({interceptedCount * 100.0 / iterations}%)
 ";
 
-            var repoRoot = FindRepoRoot(AppContext.BaseDirectory);
-            var docsDir = Path.Combine(repoRoot, "docs", "work");
-            Directory.CreateDirectory(docsDir);
-            var reportPath = Path.Combine(docsDir, "2026-08-13-v4-write-performance-benchmark-report.md");
-            await File.WriteAllTextAsync(reportPath, report, TestContext.Current.CancellationToken);
+            // Overwriting a tracked file on every run dirties the tree and would land benchmark
+            // noise in CI, so publishing into docs/work is opt-in via AIRACCOON_BENCH_REPORT=1.
+            // The rejection-accuracy assertion above is what makes this test worth running anyway.
+            if (Environment.GetEnvironmentVariable("AIRACCOON_BENCH_REPORT") == "1")
+            {
+                var docsDir = Path.Combine(FindRepoRoot(AppContext.BaseDirectory), "docs", "work");
+                Directory.CreateDirectory(docsDir);
+                var reportPath = Path.Combine(docsDir, "2026-08-13-v4-write-performance-benchmark-report.md");
+                await File.WriteAllTextAsync(reportPath, report, TestContext.Current.CancellationToken);
+            }
         }
         finally
         {
