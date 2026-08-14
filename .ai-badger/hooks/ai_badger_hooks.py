@@ -810,7 +810,9 @@ def _maybe_remind_commit(tool_name: str, cwd: str) -> None:
     """
     commit_reminder = _load_commit_reminder()
     if commit_reminder is None or not commit_reminder.is_edit_tool(tool_name):
-        _debug("ai_badger_hooks/commit_reminder", "skip", tool_name=tool_name)
+        # Deliberately unrecorded: this fires on every non-edit tool call, and logging it
+        # produced 68% of the audit log, evicting other components' evidence from the
+        # 5000-record window. A missing module is already logged by _load_sibling_module.
         return
 
     project = _project_cwd(cwd)
