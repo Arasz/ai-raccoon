@@ -1,11 +1,14 @@
 """Ingestion pipeline orchestration (moved verbatim from scripts/ingest-jsaa-docs.py).
 
-Network + git — smoke-covered by the wrapper's --chunk-only mode, not unit-tested.
+Chunking is the production FileIngestor's job (via the memory_ingest_file MCP
+tool), not this script's — see ADR-0043. This module only curates *which*
+files to feed it and drives the batched writes/embeds/spot-checks.
+
+Network + git — smoke-covered by the wrapper's --dry-run mode, not unit-tested.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 import subprocess
@@ -14,78 +17,55 @@ from pathlib import Path
 
 import httpx
 
-from chunking import Chunk, chunk_file
-from hash_map import build_hash_map
-from jsaa_config import (
-    BATCH_SIZE,
-    CONTEXTS_TO_DELETE,
-    HASH_MAP_PATH,
-    JSAA_PINNED_COMMIT,
-    JSAA_ROOT,
-    PROJECT_ID,
-    SPOT_CHECKS,
-)
+from jsaa_config import BATCH_SIZE, CONTEXTS_TO_DELETE, JSAA_PINNED_COMMIT, JSAA_ROOT, PROJECT_ID, SPOT_CHECKS
 from mcp_client import AiRaccoonClient
 from sources import classify_file, enumerate_files
 
 log = logging.getLogger("ingest")
 
 
-def read_file(path: Path) -> str:
-    """Read file content, return '' on any error."""
-    try:
-        return path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        log.warning("Cannot read: %s", path)
-        return ""
-
-
-async def write_chunks_batched(
+async def ingest_files_batched(
     client: AiRaccoonClient,
     http: httpx.AsyncClient,
-    chunks: list[Chunk],
+    files: list[tuple[Path, str, str]],
     dry_run: bool = False,
 ) -> int:
-    """Write chunks in batches of BATCH_SIZE, embed after each batch.
+    """Ingest files in batches of BATCH_SIZE via memory_ingest_file, embed after each batch.
 
-    Returns number of chunks written.
+    Returns number of files ingested (0-chunk files, e.g. binary/unsupported
+    extensions, still count as attempted but contribute nothing).
     """
-    total = len(chunks)
-    written = 0
+    total = len(files)
+    ingested = 0
 
     for batch_start in range(0, total, BATCH_SIZE):
-        batch = chunks[batch_start : batch_start + BATCH_SIZE]
+        batch = files[batch_start: batch_start + BATCH_SIZE]
         batch_num = batch_start // BATCH_SIZE + 1
         total_batches = (total + BATCH_SIZE - 1) // BATCH_SIZE
 
         if dry_run:
-            log.info("[batch %d/%d] would write %d chunks (dry-run)", batch_num, total_batches, len(batch))
+            log.info("[batch %d/%d] would ingest %d files (dry-run)", batch_num, total_batches, len(batch))
             continue
 
-        # Write each chunk in the batch. Provenance travels in the source_file/section
-        # parameters (Wave 2, plan C §3 2d) — the content itself carries no [context]
-        # prefix or ## Source: header, so BM25 and the embeddings see clean body text.
-        for chunk in batch:
-            section = chunk.structured_path.split("#", 1)[1] if "#" in chunk.structured_path else None
-            await client.memory_write(
+        for abs_path, rel, _type_key in batch:
+            _, context = classify_file(rel)
+            await client.memory_ingest_file(
                 http,
                 project_id=PROJECT_ID,
-                content=chunk.content,
-                source_file=chunk.source_file,
-                section=section,
+                path=str(abs_path),
+                context=context,
             )
-            written += 1
+            ingested += 1
 
-        # Embed pending after batch
         embed_result = await client.memory_embed_pending(http, project_id=PROJECT_ID)
         processed = embed_result.get("processed", 0) if isinstance(embed_result, dict) else "?"
         log.info(
-            "[batch %d/%d] wrote %d chunks, %s/%d embedded",
+            "[batch %d/%d] ingested %d files, %s/%d embedded",
             batch_num,
             total_batches,
             len(batch),
             processed,
-            written,
+            ingested,
         )
         if isinstance(embed_result, dict) and embed_result.get("processed", 0) == 0 and embed_result.get("pending", 0) > 0:
             log.warning(
@@ -94,12 +74,11 @@ async def write_chunks_batched(
                 embed_result.get("pending", 0),
             )
 
-    # Final embed (omit limit = all pending)
     if not dry_run:
         final = await client.memory_embed_pending(http, project_id=PROJECT_ID)
         log.info("Final embed: %s", final)
 
-    return written
+    return ingested
 
 
 async def run_spot_checks(client: AiRaccoonClient, http: httpx.AsyncClient) -> None:
@@ -108,9 +87,6 @@ async def run_spot_checks(client: AiRaccoonClient, http: httpx.AsyncClient) -> N
     for query, expected in SPOT_CHECKS:
         result = await client.memory_search(http, PROJECT_ID, query, scope="project", limit=5, min_score=0.0)
         if isinstance(result, dict) and "results" in result:
-            # `path` is the hash-derived filename (WritePathFor), so the structured path
-            # lives in sourceFile (Wave 2) and the snippet — match expected against all
-            # three (hash-map contract: match by path prefix, not exact section).
             top3_paths = [r.get("path", "?") for r in result["results"][:3]]
             top3_snips = [(r.get("snippet", "") or "") for r in result["results"][:3]]
             top3_sources = [(r.get("sourceFile") or "") for r in result["results"][:3]]
@@ -144,7 +120,7 @@ def verify_jsaa_pin() -> None:
     """Abort unless the jsaa tree is at JSAA_PINNED_COMMIT.
 
     The canonical corpus must be reproducible on a clean checkout; ingesting
-    from a different jsaa commit would silently change every hash.
+    from a different jsaa commit would silently change what gets indexed.
     """
     try:
         head = subprocess.run(
@@ -182,75 +158,40 @@ async def run_pipeline(
     files = enumerate_files()
     log.info("Found %d files to ingest", len(files))
 
-    # Breakdown by type
     type_counts: dict[str, int] = {}
     for _, rel, type_key in files:
         type_counts[type_key] = type_counts.get(type_key, 0) + 1
     for tk in sorted(type_counts):
         log.info("  %s: %d", tk, type_counts[tk])
 
-    if dry_run and not chunk_only:
-        log.info("Dry-run complete: %d files enumerated.", len(files))
+    # chunk_only has no local meaning post-ADR-0043 (chunking moved server-side
+    # into memory_ingest_file) — it now behaves like --dry-run: enumerate and stop.
+    if dry_run or chunk_only:
+        log.info("Enumeration complete: %d files. No local chunking to preview — "
+                 "the production chunker runs server-side inside memory_ingest_file.", len(files))
         return
 
-    # ── 2. Chunk ──
-    log.info("━━━ PHASE 2: Chunking ━━━")
-    chunks: list[Chunk] = []
-    warnings: list[str] = []
-
-    for abs_path, rel, type_key in files:
-        _, context = classify_file(rel)
-        text = read_file(abs_path)
-        file_chunks = chunk_file(rel, text, type_key, context)
-        chunks.extend(file_chunks)
-
-        if len(file_chunks) == 0 and text.strip():
-            warnings.append(rel)
-
-    log.info("Produced %d chunks from %d files", len(chunks), len(files))
-    if warnings:
-        log.warning("  %d files produced 0 chunks: %s", len(warnings), warnings[:10])
-
-    # Context breakdown
-    ctx_counts: dict[str, int] = {}
-    for c in chunks:
-        ctx_counts[c.context] = ctx_counts.get(c.context, 0) + 1
-    for ctx in sorted(ctx_counts):
-        log.info("  context %s: %d chunks", ctx, ctx_counts[ctx])
-
-    # ── 3. Hash map ──
-    log.info("━━━ PHASE 3: Hash map ━━━")
-    hash_map = build_hash_map(chunks)
-    HASH_MAP_PATH.write_text(json.dumps(hash_map, indent=2, sort_keys=True))
-    log.info("Wrote %d entries to %s", len(hash_map), HASH_MAP_PATH)
-
-    if chunk_only:
-        log.info("Chunk-only complete: %d chunks, hash map written.", len(chunks))
-        return
-
-    # ── 4. MCP writes ──
-    log.info("━━━ PHASE 4: MCP writes ━━━")
+    # ── 2. MCP ingest ──
+    log.info("━━━ PHASE 2: MCP ingest ━━━")
+    log.info("Requires ingest scope configured first: "
+             "ai-raccoon ingest scope add %s %s", PROJECT_ID, JSAA_ROOT)
     client = AiRaccoonClient()
 
     async with httpx.AsyncClient() as http:
-        # Reset if requested
         if reset:
             log.info("Resetting contexts...")
             await reset_contexts(client, http)
 
-        # Write batches
-        written = await write_chunks_batched(client, http, chunks, dry_run=False)
-        log.info("Wrote %d chunks total", written)
+        ingested = await ingest_files_batched(client, http, files, dry_run=False)
+        log.info("Ingested %d files total", ingested)
 
-        # Stats
         stats = await client.memory_stats(http, PROJECT_ID)
         log.info("memory_stats → %s", stats)
 
-        # Verify spot-checks
         if verify:
-            log.info("━━━ PHASE 5: Spot-checks ━━━")
+            log.info("━━━ PHASE 3: Spot-checks ━━━")
             await run_spot_checks(client, http)
 
     elapsed = time.monotonic() - t0
     log.info("━━━ DONE (%.1fs) ━━━", elapsed)
-    log.info("Chunks: %d  |  Hash map entries: %d", len(chunks), len(hash_map))
+    log.info("Files ingested: %d", ingested)
