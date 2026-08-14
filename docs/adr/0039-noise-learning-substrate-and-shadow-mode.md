@@ -3,7 +3,9 @@
 Date: 2026-08-14
 
 ## Status
-Accepted
+Accepted, amended 2026-08-14 (same day, follow-on task): the centroid-clustering half of the
+substrate this ADR restored is removed again, by evidence gathered after this ADR shipped. See
+"Amendment" at the end.
 
 ## Context
 ADR-0033 deleted `ZeroShotEmbeddingNoisePolicy` (three hardcoded anchor vectors, one global cosine
@@ -140,3 +142,67 @@ caller without a promotion mechanism this pass does not build).
   branch. Both wrong turns are recorded above rather than silently corrected, because a future
   reader deciding whether to build the detector needs to see that the multi-centroid argument was
   tested and refuted by measurement, not merely superseded by a different opinion.
+
+## Amendment (2026-08-14, follow-on task: noise-store cleanup)
+
+The owner's directive for this follow-on task: keep the noise store (it stays the training-data
+source), but clean up the parts of it a since-settled design choice will never use. The design
+choice — settled by the research this ADR itself cites in "What was measured, and what was not" —
+is that the eventual detector is a **structural/lexical classifier over shape statistics: no
+embeddings, no centroids, no stored exemplars to compare against.** Everything below follows from
+that, not from a change of taste.
+
+**Kept, and completed** (ADR-0029's original, still-unmet promise):
+- `noise_entries` (the write-time reject log) is restored to the fresh-bank DDL. It is now *the*
+  training-data source this ADR's shadow mode exists to feed — every rejected write records to it,
+  unconditional on the learner/shadow switch (which gates the *detector* seam this ADR built, not
+  the reject log itself).
+- Its retention TTL — promised in ADR-0029, never implemented — is now real: purged every
+  `BankMaintenanceHostedService` pass, and the retention length is a setting
+  (`noise.retention-days.global`, default 14, citing ADR-0029's original hardcoded value) rather
+  than a constant.
+- Its read path — absent from day one, which is most of why ADR-0033 found the first incarnation
+  "nothing ever read it" — now exists: `noise entries` (CLI) summarizes total count and
+  count-by-policy against a real bank.
+
+**Removed, by evidence, not preference:**
+- `noise_clusters` / `vec_noise` — dropped from the **fresh-bank DDL only**. This ADR's own
+  measurements are the reason: leader-follower clustering on real traffic produced 1,583 clusters
+  from 1,940 items (93% singletons) — it memorises, not generalises — and noise's k-means
+  silhouette (0.047–0.142) is no better than signal's (0.045–0.075), meaning noise here is a
+  diffuse half-space, not a set of clusters. A schema built around "a cluster is the unit" (this
+  ADR's own "Negative, flagged for routing" above) cannot serve a structural/lexical classifier
+  either way — there was never a design that would have used it. `MigrateToV6Async` is
+  **untouched**, unrenumbered, and still creates these tables (inert) for any bank stamped `<v6`;
+  `CurrentVersion` is unchanged. A fresh bank simply never gets them.
+- `INoiseClusterStore` / `SqliteNoiseClusterStore` / `NoiseClusterSql` and `NoiseFeedbackCollector`
+  — the store and the append-only feedback path that fed it. Checked before deleting: nothing but
+  each other depended on them (the concurrent structural-detector lane, `work/structural-detector`,
+  had made zero commits past the shared base at the time of this change — verified by `git diff`
+  against that branch — so no in-flight dependency existed to protect). `noise_entries` now serves
+  the "accumulate labelled negatives" role the feedback collector existed for, without a clustering
+  shape.
+- `IContentEmbedder` / `SqliteContentEmbedder` — dead once their only caller
+  (`NoiseFeedbackCollector`) went, same reasoning ADR-0033 used the first time this exact pattern
+  showed up in this subsystem's history.
+- `INoiseDetector.Evaluate` simplifies from `(float[] vector, IReadOnlyList<NoiseCluster>
+  storedSamples)` to `(string content)`. This is the one judgment call in this amendment beyond
+  pure deletion, so it is called out explicitly: the vector-reuse plumbing existed to avoid a
+  second embedding inference for a detector that would score a vector against stored exemplars —
+  exactly the shape the structural/lexical decision rules out. The `storedSamples` parameter had
+  no remaining producer once its store was removed (per the previous bullet), and per this task's
+  owner, a structural/lexical classifier operates on the content's own shape, not a vector, so nothing
+  in the new signature is embedding-shaped. The **seam itself** — the interface, `NoOpNoiseDetector`
+  as the only registered implementation, and the DI registration — is unchanged in spirit and
+  still exists for whichever detector plugs in next; only its parameter shape changed, and only
+  because its old shape had nothing left to be. This is a hypothesis, not a verified fact: the
+  structural-detector lane's actual planned contract was not visible to this task (no plan
+  document existed for it in `docs/` at the time of this change), so the simplified signature was
+  the best evidence-backed guess, not a negotiated contract. If it does not fit, adjusting one
+  interface plus its one caller (`NoiseShadowObserver`) is a small, contained change.
+
+**What this leaves:** the same "genuinely low-risk, nothing shipped does anything observable"
+posture this ADR described — `NoOpNoiseDetector` still never flags anything, shadow mode still
+defaults off — but the training-data half (`noise_entries`) now actually accumulates real,
+retained, readable data, and the substrate around the detector seam no longer carries a schema and
+a store shaped for an approach the research already ruled out.

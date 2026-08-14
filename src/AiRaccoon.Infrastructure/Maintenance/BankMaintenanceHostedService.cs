@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Observability;
 using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Data.Sqlite;
@@ -9,14 +10,16 @@ namespace AiRaccoon.Infrastructure.Maintenance;
 
 /// <summary>
 ///     Bank maintenance loop: WAL checkpoint (TRUNCATE) at startup, shutdown and on the
-///     checkpoint cadence; VACUUM + ANALYZE on the vacuum cadence (ADR-0010).
+///     checkpoint cadence; VACUUM + ANALYZE on the vacuum cadence (ADR-0010); noise_entries
+///     retention purge on every pass (ADR-0029's TTL, never built until this task).
 /// </summary>
 public sealed partial class BankMaintenanceHostedService(
     ISqliteConnectionFactory factory,
     TimeProvider timeProvider,
     IOperationTelemetry telemetry,
     ILogger<BankMaintenanceHostedService> logger,
-    IMemoryStore store)
+    IMemoryStore store,
+    INoiseEntryStore noiseEntryStore)
     : BackgroundService
 {
     /// <summary>Contended checkpoints defer quickly instead of blocking the maintenance connection.</summary>
@@ -137,6 +140,7 @@ public sealed partial class BankMaintenanceHostedService(
         {
             await RunCheckpointAsync(connection, cancellationToken).ConfigureAwait(false);
             await RetryPendingEmbedsAsync(cancellationToken).ConfigureAwait(false);
+            await PurgeExpiredNoiseEntriesAsync(cancellationToken).ConfigureAwait(false);
 
             var now = timeProvider.GetUtcNow();
             if (_lastVacuumUtc is null)
@@ -269,6 +273,32 @@ public sealed partial class BankMaintenanceHostedService(
         }
     }
 
+    /// <summary>
+    ///     ADR-0029's retention TTL, never built until this task: noise_entries would otherwise
+    ///     accumulate forever. A failure logs and never blocks the checkpoint/vacuum pass — same
+    ///     silent-failure discipline as the pending-embed retry sweep above.
+    /// </summary>
+    private async Task PurgeExpiredNoiseEntriesAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
+            var purged = await noiseEntryStore.PurgeExpiredAsync(now, cancellationToken).ConfigureAwait(false);
+            if (purged > 0)
+            {
+                Log.NoiseEntriesPurged(logger, purged);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Log.NoiseEntryPurgeFailed(logger, ex);
+        }
+    }
+
     /// <summary>Re-applies the factory's busy timeout (5000 ms) before the connection returns to the pool.</summary>
     private static async Task RestoreBusyTimeoutAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -363,5 +393,11 @@ public sealed partial class BankMaintenanceHostedService(
         [LoggerMessage(EventId = 519, Level = LogLevel.Warning,
             Message = "Pending-embed retry failed for {ProjectId}; row(s) stay pending, retried on the next tick")]
         public static partial void PendingEmbedRetryFailed(ILogger logger, string projectId, Exception exception);
+
+        [LoggerMessage(EventId = 520, Level = LogLevel.Information, Message = "Noise entry retention purge removed {Count} expired row(s)")]
+        public static partial void NoiseEntriesPurged(ILogger logger, int count);
+
+        [LoggerMessage(EventId = 521, Level = LogLevel.Warning, Message = "Noise entry retention purge failed; retried on the next tick")]
+        public static partial void NoiseEntryPurgeFailed(ILogger logger, Exception exception);
     }
 }

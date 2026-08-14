@@ -31,10 +31,12 @@ public sealed partial class SqliteMemoryStore(
     private const string SharedScope = "shared";
     private readonly IEntryEmbedder _embedder = embedder;
 
-    // Defaults to a Null Object, not a nullable parameter: TestData.CreateMemoryStore (out of this
-    // lane's ownership) constructs SqliteMemoryStore via the 7-arg primary constructor above, so
-    // production DI resolves the 8-arg constructor below instead — see NoOpNoiseShadowObserver.
+    // Both default to a Null Object, not a nullable parameter: TestData.CreateMemoryStore (out of
+    // this lane's ownership) constructs SqliteMemoryStore via the 7-arg primary constructor above,
+    // so production DI resolves the 9-arg constructor below instead — see NoOpNoiseShadowObserver
+    // and NoOpNoiseEntryStore.
     private readonly INoiseShadowObserver _noiseShadowObserver = NoOpNoiseShadowObserver.Instance;
+    private readonly INoiseEntryStore _noiseEntryStore = NoOpNoiseEntryStore.Instance;
 
     public SqliteMemoryStore(
         ISqliteConnectionFactory factory,
@@ -44,10 +46,12 @@ public sealed partial class SqliteMemoryStore(
         TimeProvider timeProvider,
         ILogger<SqliteMemoryStore> logger,
         INoiseFilteringService noiseFilteringService,
-        INoiseShadowObserver noiseShadowObserver)
+        INoiseShadowObserver noiseShadowObserver,
+        INoiseEntryStore noiseEntryStore)
         : this(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService)
     {
         _noiseShadowObserver = noiseShadowObserver;
+        _noiseEntryStore = noiseEntryStore;
     }
 
     public async Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
@@ -66,10 +70,14 @@ public sealed partial class SqliteMemoryStore(
                 .ConfigureAwait(false);
             if (noiseResult.IsNoise)
             {
-                // Shadow mode (ADR-0039): feeds a confirmed rejection to the learner as a labelled
-                // negative when noise.learner.shadow.enabled.global is on; a no-op otherwise.
-                await _noiseShadowObserver.ObserveRejectedWriteAsync(connection, request.ProjectId, request.AgentId,
-                    request.Content, noiseResult.PolicyName!, cancellationToken).ConfigureAwait(false);
+                // ADR-0029/ADR-0039: the training-data source — unconditional on noise.enabled,
+                // independent of the learner/shadow switch below (that switch gates the *detector*
+                // seam, not the reject log).
+                var retentionDays = NoiseConfigKeys.ParseRetentionDays(
+                    await ReadSettingAsync(connection, NoiseConfigKeys.RetentionDaysGlobal, cancellationToken).ConfigureAwait(false));
+                var expiresAt = timeProvider.GetUtcNow().AddDays(retentionDays).ToUnixTimeSeconds();
+                await _noiseEntryStore.RecordAsync(request, noiseResult.PolicyName!, expiresAt, now, cancellationToken)
+                    .ConfigureAwait(false);
 
                 return new MemoryEntry(string.Empty, string.Empty, request.Context ?? string.Empty, request.Content,
                     now, Stored: false, Reason: $"rejected by noise policy '{noiseResult.PolicyName}'");
@@ -156,12 +164,11 @@ public sealed partial class SqliteMemoryStore(
 
         await _embedder.EmbedIfConfiguredAsync(connection, row.Id, request.Content, cancellationToken).ConfigureAwait(false);
 
-        // Shadow mode (ADR-0039): reuses the vector EmbedIfConfiguredAsync just persisted — no
-        // second inference — to record what the detector seam would have flagged (currently a
-        // no-op: no scoring model is shipped). Never affects Stored/Reason; a no-op entirely
-        // unless noise.learner.shadow.enabled.global is on.
-        await _noiseShadowObserver.ObserveStoredWriteAsync(connection, bucket.ProjectId, request.AgentId, row.Id, hash,
-            cancellationToken).ConfigureAwait(false);
+        // Shadow mode (ADR-0039, amended): hands the stored content straight to the detector seam
+        // to record what it would have flagged (currently a no-op: no scoring model is shipped).
+        // Never affects Stored/Reason; a no-op entirely unless noise.learner.shadow.enabled.global is on.
+        await _noiseShadowObserver.ObserveStoredWriteAsync(connection, bucket.ProjectId, request.AgentId,
+            request.Content, hash, cancellationToken).ConfigureAwait(false);
 
         return ToEntry(row);
     }

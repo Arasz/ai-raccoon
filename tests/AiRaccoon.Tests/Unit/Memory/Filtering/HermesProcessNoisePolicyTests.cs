@@ -86,4 +86,34 @@ Output: ]";
 
         result.IsNoise.ShouldBeFalse("widening the policy must not start eating memories that discuss processes");
     }
+
+    /// <summary>
+    ///     The third notification shape found in the live bank: process-signal notices. Measured: 7
+    ///     occurrences in search_quality (six "received signal 1", one "received signal 15"), none
+    ///     scored above grade 2.
+    /// </summary>
+    [Theory]
+    [InlineData("received signal 1")]
+    [InlineData("received signal 15")]
+    [InlineData("received signal 15.")]
+    public async Task EvaluateAsync_ReceivedSignal_IsNoise(string content)
+    {
+        var result = await new HermesProcessNoisePolicy()
+            .EvaluateAsync(new MemoryWriteRequest("p", content), TestContext.Current.CancellationToken);
+
+        result.IsNoise.ShouldBeTrue();
+        result.PolicyName.ShouldBe("HermesBackgroundProcessLog");
+    }
+
+    /// <summary>Only the exact "received signal &lt;digits&gt;" shape is machine noise; surrounding text is prose.</summary>
+    [Theory]
+    [InlineData("we received signal 1 from the child process and had to investigate")]
+    [InlineData("received signal 1 twice")]
+    public async Task EvaluateAsync_ReceivedSignalWithSurroundingText_StaysClean(string content)
+    {
+        var result = await new HermesProcessNoisePolicy()
+            .EvaluateAsync(new MemoryWriteRequest("p", content), TestContext.Current.CancellationToken);
+
+        result.IsNoise.ShouldBeFalse("over-widening past the exact machine shape is the failure mode ADR-0039 warns about");
+    }
 }

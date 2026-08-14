@@ -169,13 +169,14 @@ public static partial class AppRegistrations
             // Register default noise filter policies (deterministic only — see ADR-0033).
             services.AddSingleton<INoiseFilterPolicy, HermesProcessNoisePolicy>();
 
-            // Self-learning noise substrate (ADR-0039): store + feedback path + shadow-mode
-            // plumbing, all wired; no scoring model registered. INoiseDetector -> NoOpNoiseDetector
-            // is the seam a future detector plugs into once one is validated on held-out data.
-            services.AddRequiredSingleton<INoiseClusterStore, SqliteNoiseClusterStore>();
-            services.AddRequiredSingleton<IContentEmbedder, SqliteContentEmbedder>();
+            // noise_entries (ADR-0029/ADR-0039): the training-data source — every rejected write,
+            // TTL-purged by BankMaintenanceHostedService.
+            services.AddRequiredSingleton<INoiseEntryStore, SqliteNoiseEntryStore>();
+
+            // Self-learning noise substrate seam (ADR-0039, amended): no scoring model registered.
+            // INoiseDetector -> NoOpNoiseDetector is what a future structural/lexical detector
+            // plugs into once one is validated on held-out data.
             services.AddSingleton<INoiseDetector, NoOpNoiseDetector>();
-            services.AddSingleton<NoiseFeedbackCollector>();
             services.AddRequiredSingleton<INoiseShadowObserver, NoiseShadowObserver>();
 
             services.AddRequiredSingleton<IMemoryStore, SqliteMemoryStore>();
