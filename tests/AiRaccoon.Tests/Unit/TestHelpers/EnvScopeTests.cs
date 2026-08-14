@@ -56,7 +56,9 @@ public sealed class EnvScopeTests
         await Should.ThrowAsync<ArgumentException>(async () => await EnvScope.AcquireAsync(
             TestContext.Current.CancellationToken, (HadAValue, "applied"), (Unsettable, "boom")));
 
-        var reacquired = await TestData.EnvVarGate.WaitAsync(TimeSpan.FromSeconds(5),
+        // A stranded gate is never reacquirable, so a generous bound costs nothing here and a short
+        // one turns another test legitimately holding the gate into a false "stranded" report.
+        var reacquired = await TestData.EnvVarGate.WaitAsync(TimeSpan.FromSeconds(120),
             TestContext.Current.CancellationToken);
         try
         {
