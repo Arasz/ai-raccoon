@@ -75,16 +75,34 @@ public sealed class JsaaCorpusRegenerationTool(ITestOutputHelper output)
 
             var ingestedFiles = 0;
             var indexedChunks = 0;
-            foreach (var rel in files)
+
+            // IngestFileAsync stores the path argument verbatim as source_file/path and hashes
+            // from it (FileIngestor.InsertChunksAsync), so passing the extractRoot-joined
+            // absolute path would bake this machine's temp directory into the committed fixture.
+            // Passing the repo-relative `rel` instead keeps the stored paths clean; the process's
+            // current directory is set to extractRoot so File.ReadAllTextAsync(rel) still resolves
+            // and RequireInScopeAsync's IngestPath.Normalize (which calls Path.GetFullPath, itself
+            // CWD-relative) still resolves `rel` back to an absolute path under the configured
+            // scope. Directory.SetCurrentDirectory is process-global, which is only acceptable
+            // because this tool is env-gated (AIRACCOON_REGENERATE_JSAA_CORPUS=1) and runs alone.
+            var originalDirectory = Directory.GetCurrentDirectory();
+            Directory.SetCurrentDirectory(extractRoot);
+            try
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                var indexed = await store.IngestFileAsync(projectId, Path.Combine(extractRoot, rel), null,
-                    cancellationToken);
-                indexedChunks += indexed;
-                if (indexed > 0)
+                foreach (var rel in files)
                 {
-                    ingestedFiles++;
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var indexed = await store.IngestFileAsync(projectId, rel, null, cancellationToken);
+                    indexedChunks += indexed;
+                    if (indexed > 0)
+                    {
+                        ingestedFiles++;
+                    }
                 }
+            }
+            finally
+            {
+                Directory.SetCurrentDirectory(originalDirectory);
             }
 
             output.WriteLine($"ingested {ingestedFiles}/{files.Count} files (0-chunk files are non-indexable " +
