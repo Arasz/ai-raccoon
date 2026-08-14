@@ -167,6 +167,79 @@ public sealed class WatchPipelineTests
         stack.Pipeline.GetStatuses(Project).ShouldBeEmpty();
     }
 
+    /// <summary>
+    ///     D21 gap 3: a watch unregistered while its digest job is already in flight (dispatched from
+    ///     the current tick's drain, running inside <c>RunJobAsync</c>, outside the tick's lock).
+    ///     <c>UnregisterWatch</c> removes the `_runtime` entry immediately; <c>RunJobAsync</c>'s
+    ///     completion path must not resurrect it — a watch the caller already removed must not
+    ///     reappear in <c>GetStatuses</c> just because a job dispatched before the removal is still
+    ///     finishing.
+    /// </summary>
+    [Fact]
+    public async Task Tick_UnregisteredWhileDigestInFlight_RuntimeStatusStaysGone()
+    {
+        using var dir = TempDir.New("pipeline-unregister-inflight");
+        var file = dir.File("a.md");
+        var stack = new WatchTestStack();
+        stack.Pipeline.RegisterWatch(Project, dir.Path);
+        await File.WriteAllTextAsync(file, "v1", TestContext.Current.CancellationToken);
+        var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        stack.Memory.OnIngest = _ => hold.Task;
+        stack.Pipeline.Enqueue(new WatchEvent(Project, file, WatchEventKind.Created));
+
+        var tick = stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+        // The digest is in flight (job already dispatched out of _pending, running RunJobAsync)
+        // when the watch is unregistered — UnregisterWatch does not, and cannot, reach into a job
+        // the scheduler already owns.
+        await stack.Memory.FirstIngestTcs.Task.WaitAsync(TestContext.Current.CancellationToken);
+
+        stack.Pipeline.GetStatuses(Project).ShouldHaveSingleItem().State.ShouldBe(WatchState.Scanning);
+        stack.Pipeline.UnregisterWatch(Project, dir.Path);
+        stack.Pipeline.GetStatuses(Project).ShouldBeEmpty("unregister must drop the runtime entry immediately");
+
+        hold.SetResult();
+        await tick;
+
+        stack.Pipeline.GetStatuses(Project).ShouldBeEmpty(
+            "an unregistered watch must not reappear just because its in-flight job finishes afterward");
+    }
+
+    /// <summary>
+    ///     D21 gap 3, the register side: a brand-new watch registered while a tick for a different,
+    ///     already-registered watch has an in-flight digest. <c>RegisterWatch</c> and the tick's
+    ///     pending-drain both take the same <c>_gate</c> lock, so this is mutual exclusion, not a
+    ///     torn read — the new watch must land with a Scanning status and the in-flight watch's own
+    ///     digest must be unaffected by the concurrent registration.
+    /// </summary>
+    [Fact]
+    public async Task Tick_NewWatchRegisteredWhileAnotherWatchsDigestIsInFlight_BothEndUpCorrect()
+    {
+        using var dirA = TempDir.New("pipeline-register-inflight-a");
+        using var dirB = TempDir.New("pipeline-register-inflight-b");
+        var fileA = dirA.File("a.md");
+        var stack = new WatchTestStack();
+        stack.Pipeline.RegisterWatch(Project, dirA.Path);
+        await File.WriteAllTextAsync(fileA, "v1", TestContext.Current.CancellationToken);
+        var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        stack.Memory.OnIngest = _ => hold.Task;
+        stack.Pipeline.Enqueue(new WatchEvent(Project, fileA, WatchEventKind.Created));
+
+        var tick = stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+        await stack.Memory.FirstIngestTcs.Task.WaitAsync(TestContext.Current.CancellationToken);
+
+        stack.Pipeline.RegisterWatch(Project, dirB.Path);
+        stack.Pipeline.GetStatuses(Project).Single(s => s.Path == dirB.Path).State.ShouldBe(WatchState.Scanning);
+
+        hold.SetResult();
+        await tick;
+
+        var statuses = stack.Pipeline.GetStatuses(Project);
+        statuses.Count.ShouldBe(2);
+        statuses.Single(s => s.Path == dirA.Path).State.ShouldBe(WatchState.Healthy);
+        statuses.Single(s => s.Path == dirB.Path).State.ShouldBe(WatchState.Scanning);
+        stack.Memory.Ingested.ShouldHaveSingleItem("the concurrent registration must not disturb the in-flight digest for the other watch");
+    }
+
     [Fact]
     public async Task Tick_EventOutsideAnyRegisteredWatch_IsDropped()
     {
