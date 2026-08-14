@@ -5,7 +5,8 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Memory.Filtering;
 
-[Trait("Speed", "Fast")]
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public class HermesProcessNoisePolicyTests
 {
     private readonly HermesProcessNoisePolicy _sut = new();

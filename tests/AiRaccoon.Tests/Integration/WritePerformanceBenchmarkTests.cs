@@ -16,7 +16,8 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Integration;
 
-[Trait("Speed", "Slow")]
+[Trait(TestCategories.Category, TestCategories.Integration)]
+[Trait(TestCategories.Speed, TestCategories.Slow)]
 public class WritePerformanceBenchmarkTests
 {
     [Fact]
