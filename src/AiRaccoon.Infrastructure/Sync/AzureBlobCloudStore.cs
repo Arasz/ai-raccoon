@@ -5,7 +5,6 @@ using Azure.Identity;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Infrastructure.Sync;
 
@@ -16,7 +15,7 @@ public sealed partial class AzureBlobCloudStore : ICloudStore
     private readonly string _container;
     private readonly ILogger<AzureBlobCloudStore> _logger;
 
-    public AzureBlobCloudStore(SyncOptions options, ILogger<AzureBlobCloudStore>? logger = null)
+    public AzureBlobCloudStore(SyncOptions options, ILogger<AzureBlobCloudStore> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentException.ThrowIfNullOrWhiteSpace(options.Container);
@@ -26,19 +25,19 @@ public sealed partial class AzureBlobCloudStore : ICloudStore
         }
 
         _container = options.Container;
-        _logger = logger ?? NullLogger<AzureBlobCloudStore>.Instance;
+        _logger = logger;
         _blobs = CreateClient(options);
     }
 
     /// <summary>Test seam: build the store around an already-constructed client (canned transport).</summary>
-    internal AzureBlobCloudStore(BlobServiceClient blobs, string container, ILogger<AzureBlobCloudStore>? logger = null)
+    internal AzureBlobCloudStore(BlobServiceClient blobs, string container, ILogger<AzureBlobCloudStore> logger)
     {
         ArgumentNullException.ThrowIfNull(blobs);
         ArgumentException.ThrowIfNullOrWhiteSpace(container);
 
         _blobs = blobs;
         _container = container;
-        _logger = logger ?? NullLogger<AzureBlobCloudStore>.Instance;
+        _logger = logger;
     }
 
     public async Task<CloudObject?> PullAsync(string objectKey, CancellationToken cancellationToken = default)

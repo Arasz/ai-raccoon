@@ -120,6 +120,9 @@ public static class TestData
     /// <summary>BundledModel with a null logger and a factory that never opens real connections; the model copy beside the test host makes EnsureAsync return all-present.</summary>
     public static BundledModel CreateBundledModel() => new(NullLogger<BundledModel>.Instance, new NoopHttpClientFactory());
 
+    /// <summary>EmbeddingService with a null logger — the constructor requires a real <see cref="ILogger{TCategoryName}"/> now that it is DI-registered, so tests that don't care about logging use this.</summary>
+    public static EmbeddingService CreateEmbeddingService() => new(NullLogger<EmbeddingService>.Instance);
+
     /// <summary>Returns the p-th percentile (0–1) of the samples.</summary>
     public static double Percentile(IReadOnlyList<double> samples, double quantile)
     {

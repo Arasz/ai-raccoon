@@ -639,7 +639,7 @@ public sealed class WatchIntegrationTests
             _factory = new SqliteConnectionFactory(
                 new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
                 NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
-            Memory = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), Time, new EmbeddingService());
+            Memory = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), Time, TestData.CreateEmbeddingService());
             WatchStore = new WatchStore(_factory);
             ScanGuard = new WatchScanGuard();
             Pipeline = new WatchPipeline(new WatchScheduler(),

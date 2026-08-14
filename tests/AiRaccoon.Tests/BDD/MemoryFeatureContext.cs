@@ -19,7 +19,7 @@ public class MemoryFeatureContext : IDisposable
         Factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
-        Store = TestData.CreateMemoryStore(Factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(Factory), new StubChunker(), TimeProvider, new EmbeddingService());
+        Store = TestData.CreateMemoryStore(Factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(Factory), new StubChunker(), TimeProvider, TestData.CreateEmbeddingService());
     }
 
     public string DataRoot { get; }

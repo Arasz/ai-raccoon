@@ -39,7 +39,7 @@ public sealed class WorkspaceCloseRaceTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _memoryStore = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
-            new EmbeddingService());
+            TestData.CreateEmbeddingService());
         _workspaceStore = new SqliteWorkspaceStore(_factory);
         _service = new WorkspaceService(_memoryStore, _workspaceStore, new FakeTimeProvider(FixedNow));
     }
