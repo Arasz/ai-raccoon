@@ -10,6 +10,7 @@ using AiRaccoon.Tests.TestHelpers;
 using JetBrains.Annotations;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Client;
+using ModelContextProtocol.Protocol;
 using Shouldly;
 using Xunit;
 
@@ -88,7 +89,10 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
         var result = await client.CallToolAsync("memory_stats",
             new Dictionary<string, object?> { ["projectId"] = "acme" }, null, null, TestContext.Current.CancellationToken);
 
-        result.Content.ToString().ShouldNotBeNullOrEmpty();
+        // Content is IList<ContentBlock>: ToString() is the type name, so it can never be empty.
+        result.IsError.ShouldNotBe(true);
+        var text = string.Concat(result.Content.OfType<TextContentBlock>().Select(block => block.Text));
+        text.ShouldContain("\"entries\"");
     }
 
     [Fact]
@@ -159,7 +163,7 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
 
         private async Task WaitForListeningAsync()
         {
-            var success = await WaitByPooling
+            var success = await WaitByPolling
                 .WaitForAsync(() => ValueTask.FromResult(_stdout.ToString().Contains("http://", StringComparison.Ordinal)), _timeProvider, TestContext.Current.CancellationToken)
                 .ConfigureAwait(false);
 
