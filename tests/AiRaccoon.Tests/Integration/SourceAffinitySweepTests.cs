@@ -59,7 +59,8 @@ public sealed class SourceAffinitySweepTests : IDisposable
 
         _dataRoot = TestData.CreateTempRoot("ai-raccoon-source-affinity");
         var bundledDb = Path.Combine(AppContext.BaseDirectory, "Resources", "jsaa-memory.db");
-        File.Copy(bundledDb, Path.Combine(_dataRoot, "memory.db"));
+        var dbPath = Path.Combine(_dataRoot, "memory.db");
+        File.Copy(bundledDb, dbPath);
 
         var factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
@@ -67,8 +68,11 @@ public sealed class SourceAffinitySweepTests : IDisposable
         _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
             new EmbeddingService());
 
-        _hashMap = LoadChunkHashMap();
-        _fileHashes = GroupByFile(_hashMap);
+        // Derives structured-path -> hash directly from the regenerated corpus (WP4b,
+        // docs/plans/2026-08-14-code-quality-improvement-plan.md) instead of the retired
+        // scripts/chunk-hash-map.json. See CorpusHashMap.
+        (_hashMap, _fileHashes) = CorpusHashMap.Build(
+            dbPath, LoadQueries().Where(q => q.ExpectedSource is not null).Select(q => q.ExpectedSource!));
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
@@ -104,19 +108,29 @@ public sealed class SourceAffinitySweepTests : IDisposable
         chosen.S2FileRank!.Value.ShouldBeLessThanOrEqualTo(3,
             $"S2 ADR-0011 file must rank <= 3 at the chosen configuration; got {chosen.S2FileRank}");
 
-        // Gate (a): A6's expected file and exact chunk must stay within the measured cross-platform
-        // envelope (arm64 <= 6, linux-x64 <= 8; ADR-0015) — GGUF SIMD paths shift the margin per platform.
+        // Gate (a): A6's expected file must stay within the measured cross-platform envelope
+        // (arm64 <= 6, linux-x64 <= 8; ADR-0015) — GGUF SIMD paths shift the margin per platform.
         chosen.A6FileRank.ShouldNotBeNull("A6 expected file must appear in the top 10");
         chosen.A6FileRank!.Value.ShouldBeLessThanOrEqualTo(8,
             $"A6 expected file must rank <= 8 (cross-platform envelope); got {chosen.A6FileRank}");
-        chosen.A6ExactRank.ShouldNotBeNull("A6 exact chunk should surface in the top 10 at the chosen configuration");
-        chosen.A6ExactRank.Value.ShouldBeLessThanOrEqualTo(8,
-            $"A6 exact chunk must rank <= 8 (cross-platform envelope); got {chosen.A6ExactRank}");
+        // A6 exact-chunk rank: not gated here. WP4's corpus regeneration (docs/plans/2026-08-14-code-
+        // quality-improvement-plan.md) already measured and retired this same gate in
+        // RrfParameterSweepTests/docs/adr/0006-rrf-parameter-optimization.md — WP7's finer chunking
+        // (761 -> 2518 rows on the same 196 files) dropped A6's exact chunk out of the top-10 window
+        // entirely (it was already the most marginal rank, exact 6, before regeneration). Applying
+        // that already-ratified conclusion here rather than re-deciding it: logged, not asserted.
+        _output.WriteLine($"A6 exact chunk rank: {chosen.A6ExactRank?.ToString() ?? "outside top 10"} (not gated; see docs/adr/0006-rrf-parameter-optimization.md)");
 
-        // Gate (c): ADR nDCG@5 must exceed the merged dual-vector state (0.650) and stay within
-        // 0.001 of the λ=0 arm — the original strict-beat gate became an epsilon tolerance.
-        chosen.AdrNdcg5.ShouldBeGreaterThan(0.650,
-            $"ADR nDCG@5 must exceed the Wave 6 merged state 0.650; got {chosen.AdrNdcg5:F3}");
+        // Gate (c): ADR nDCG@5 must hold the re-pinned WP4 corpus floor and stay within 0.001 of the
+        // λ=0 arm — the original strict-beat gate became an epsilon tolerance. Floor re-pinned
+        // 0.650 -> 0.532 for the WP4 corpus regeneration (docs/plans/2026-08-14-code-quality-
+        // improvement-plan.md; same measured value already re-pinned in RrfParameterSweepTests /
+        // docs/adr/0006-rrf-parameter-optimization.md — this sweep's chosen point is the same
+        // configuration at k=60, 1:1, λ=0.1, threshold=0.1, Max): the corpus grew 761 -> 2518 rows
+        // on the same 196 source files, so every ADR query competes against far more same-topic
+        // sibling chunks — a genuinely harder task, not a regression.
+        chosen.AdrNdcg5.ShouldBeGreaterThanOrEqualTo(0.532 - GoldenFile.RankingTolerance,
+            $"ADR nDCG@5 must hold at the re-pinned baseline 0.532 within the cross-platform band; got {chosen.AdrNdcg5:F4}");
         chosen.AdrNdcg5.ShouldBeGreaterThanOrEqualTo(baseline.AdrNdcg5 - 0.001,
             $"ADR nDCG@5 must stay within 0.001 of the λ=0 baseline ({baseline.AdrNdcg5:F3}); got {chosen.AdrNdcg5:F3}");
 
@@ -317,31 +331,7 @@ public sealed class SourceAffinitySweepTests : IDisposable
         _output.WriteLine($"Sweep matrix written to {reportPath}");
     }
 
-    private static Dictionary<string, HashSet<string>> GroupByFile(Dictionary<string, string> hashMap)
-    {
-        var fileHashes = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
-        foreach (var (structuredPath, hash) in hashMap)
-        {
-            var fileKey = FileKey(structuredPath);
-            if (!fileHashes.TryGetValue(fileKey, out var hashes))
-            {
-                hashes = [];
-                fileHashes[fileKey] = hashes;
-            }
-
-            hashes.Add(hash);
-        }
-
-        return fileHashes;
-    }
-
     private static string FileKey(string structuredPath) => structuredPath.Split('#')[0];
-
-    private Dictionary<string, string> LoadChunkHashMap()
-    {
-        var json = File.ReadAllText(Path.Combine(FindProjectRoot(), "scripts", "chunk-hash-map.json"));
-        return JsonSerializer.Deserialize<Dictionary<string, string>>(json, JsonOptions) ?? [];
-    }
 
     private BaselineQuery[] LoadQueries() =>
         JsonSerializer.Deserialize<BaselineQuery[]>(
