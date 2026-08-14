@@ -1,8 +1,9 @@
 using System.Diagnostics;
+using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 
-namespace AiRaccoon.Tests.TestHelpers;
+namespace AiRaccoon.Tests.Unit.TestHelpers;
 
 /// <summary>
 ///     Pins the runner's lifetime contract: a run that outlasts its hard cap leaves nothing behind,
