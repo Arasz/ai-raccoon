@@ -9,6 +9,7 @@ using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Render;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Client;
+using ModelContextProtocol.Protocol;
 using Shouldly;
 using Xunit;
 
@@ -77,7 +78,10 @@ public sealed class NodeRunnerTests : IDisposable
         await using var client = await McpClient.CreateAsync(transport, cancellationToken: TestContext.Current.CancellationToken);
         var toolResult = await client.CallToolAsync("memory_stats",
             new Dictionary<string, object?> { ["projectId"] = "acme" }, null, null, TestContext.Current.CancellationToken);
-        toolResult.Content.ToString().ShouldNotBeNullOrEmpty();
+        // Content is IList<ContentBlock>: ToString() is the type name, so it can never be empty.
+        toolResult.IsError.ShouldNotBe(true);
+        string.Concat(toolResult.Content.OfType<TextContentBlock>().Select(block => block.Text))
+            .ShouldContain("\"entries\"");
 
         var exit = await StopAsync(run);
 
