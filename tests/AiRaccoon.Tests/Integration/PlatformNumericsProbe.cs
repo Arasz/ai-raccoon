@@ -116,7 +116,7 @@ public sealed class PlatformNumericsProbe : IDisposable
         {
             var results = await store.SearchAsync(new SearchQuery(
                 ProjectId, query.Query, SearchScope.Project,
-                Limit: SearchLimit, MinScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 1,
+                Limit: SearchLimit, MinRelativeScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 1,
                 SourceLambda: 0.1, ConsolidationThreshold: 0.1,
                 DocScoreFormula: DocScoreFormula.Max), TestContext.Current.CancellationToken);
             var relevant = _fileHashes[CorpusHashMap.FileKey(query.ExpectedSource!)];
