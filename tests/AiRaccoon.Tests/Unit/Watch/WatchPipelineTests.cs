@@ -355,18 +355,4 @@ public sealed class WatchPipelineTests
             await Task.Delay(10, cancellationToken);
         }
     }
-
-    private static async Task EventuallyAsync(Func<bool> condition, CancellationToken cancellationToken)
-    {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-        while (!condition())
-        {
-            if (DateTime.UtcNow > deadline)
-            {
-                throw new TimeoutException("Condition not met within 5s.");
-            }
-
-            await Task.Delay(10, cancellationToken);
-        }
-    }
 }
