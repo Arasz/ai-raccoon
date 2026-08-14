@@ -1,9 +1,9 @@
 {
   "$schema": "../schemas/manifest.schema.json",
   "frameworkVersion": "0.119.0",
-  "frameworkCommit": null,
+  "frameworkCommit": "abe2141b2795cddc41b81fae921f72a95c49d6a7",
   "frameworkDirty": false,
-  "frameworkRoot": "/Users/arasz/.claude/plugins/cache/ai-badger/ai-badger/0.119.0",
+  "frameworkRoot": "/Users/arasz/RiderProjects/ai-badger",
   "generatedAt": null,
   "agents": [
     "claude",
@@ -12,7 +12,7 @@
   ],
   "skillScope": "default",
   "pluginScope": "default",
-  "configHash": "3fe84035043f744b79419372cf05a615cb4a47926bc9ed63f112e9cf78a26048",
+  "configHash": "c81b5108b07eb1a3f838720baa12e8458b4b926860a32b454570cef85002caa2",
   "generatedConfig": [
     {
       "path": ".claude/settings.json",
@@ -1371,6 +1371,27 @@
       ]
     },
     {
+      "feature": "skills",
+      "stack": "common",
+      "name": "complete-project-scope-code-review",
+      "source": "features/common/skills/complete-project-scope-code-review",
+      "target": ".ai-badger/skills/complete-project-scope-code-review",
+      "frameworkVersion": "0.119.0",
+      "hash": "e475d6ead4716937d52db2e66a9f12f7f8a9b04d9c5bdb75f9846e29ed440b71",
+      "dirMeta": {
+        "file_count": 4,
+        "dir_count": 1
+      },
+      "sourceHash": "95c0f4848928d4e1f380aba5d8723a7f5852a63fcf64757ff5d970680bfe2538",
+      "sourceMeta": {
+        "file_count": 4,
+        "dir_count": 1
+      },
+      "projectOwned": [
+        "project-local.md"
+      ]
+    },
+    {
       "feature": "templates",
       "stack": "common",
       "name": "agent-instructions/schema.json",
@@ -1803,6 +1824,15 @@
     {
       "feature": "adjustments",
       "stack": "claude",
+      "name": "adjustments/.claude/skills/complete-project-scope-code-review",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/complete-project-scope-code-review",
+      "frameworkVersion": "0.119.0",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
       "name": "adjustments/.ai-badger/skills/mcp-index/scripts/tokenizer.py",
       "source": "features/claude/adjustments/adjust_retrieval.py",
       "target": ".ai-badger/skills/mcp-index/scripts/tokenizer.py",
@@ -2166,6 +2196,15 @@
       "name": "adjustments/.github/skills/worktree-agent-isolation",
       "source": "features/copilot/adjustments/adjust_skills.py",
       "target": ".github/skills/worktree-agent-isolation",
+      "frameworkVersion": "0.119.0",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/complete-project-scope-code-review",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/complete-project-scope-code-review",
       "frameworkVersion": "0.119.0",
       "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
     },
