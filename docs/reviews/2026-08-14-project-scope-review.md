@@ -96,24 +96,167 @@ Two consequences follow that the code alone does not show.
 **The delete blocker is the only finding here that is actively dangerous today.** Everything else is
 either degrading quality silently or costing disk. That is what makes it Wave 1 on its own.
 
-**The truncation is not explained by stale data, and that took measuring to establish.** The obvious
-benign story — the bank predates the chunk-budget fix — is refuted by the timestamps: the oversized
-rate *rises* after the fix landed (42.3% before → 45.9% after → 48.1% after the installed binary's
-commit). The actual mechanism is that **the running server processes predate the binary**. Three
-long-lived `ai-raccoon --quiet` processes started at 17:21, 18:58 and 22:12 while the binary was
-updated at 22:10:24, so writes kept being produced by pre-fix code for hours. The chunker at this base
-is clean: run over the exact files whose bank rows overflow, it produces **0 over-window chunks**.
+**The truncation is not explained by stale data, and establishing *what does* explain it took three
+rounds.** The obvious benign story — the bank predates the chunk-budget fix — is refuted by the
+timestamps: the oversized rate *rises* after the fix landed. The retrieval lane then attributed it to
+stale server processes, which is true but incomplete, and the adversarial pass corrected the rest. The
+honest account has three parts:
 
-That distinction decides the work. It is a **restart plus a backfill**, not a chunker change — and the
-same staleness explains why this session's live MCP schema still advertised `minScore: 0.7` after the
-code had renamed it to `minRelativeScore` defaulting to `0.0`. One lane nearly filed that as a defect
-before tracing it.
+1. **Stale processes wrote pre-fix chunks for hours.** The binary was installed at **22:24:36** (not
+   22:10:24 — that figure matches nothing on disk), and three long-lived `ai-raccoon --quiet` processes
+   started at 17:21, 18:58 and 22:12 all predate it.
+2. **The chunker at this base is clean** — 0 of 276 chunks over the window on the exact offending
+   files — **but only once `embedding.provider` is set.** With it unset, `FileIngestor.ChunkSizeForAsync`
+   silently keeps the default o200k counter and produces 104 of 258 over-window. Configuring the engine
+   later re-embeds the bank but **does not re-chunk it**, so ingest-then-configure permanently poisons
+   whatever was already there.
+3. **`memory_write` does not chunk at all, in the code running right now.** A 9,360-character body
+   stores as one row and is embedded from its first 254 tokens. That accounts for **555 live rows and
+   114,883 never-embedded tokens**, and it is the path agents use for their own notes.
+
+So it is a restart **and** a backfill **and** a code fix — not the two-step the first account implied.
+The same staleness separately explains why this session's live MCP schema still advertised
+`minScore: 0.7` after the code had renamed it to `minRelativeScore` defaulting to `0.0`; one lane
+nearly filed that as a defect before tracing it.
 
 ---
 
 ## Review integrity — what the adversarial pass changed
 
-<!-- ADVERSARIAL-TABLE -->
+An independent reviewer was given the ten load-bearing claims and the sources, **not** the
+orchestrator's reasoning, and instructed to falsify them, defaulting to "refuted" when uncertain. It
+re-derived every claim, re-ran every measured one, and **exploited two of them end to end**. Nothing
+came back `UNVERIFIED`.
+
+| Claim | Outcome |
+|---|---|
+| **B1** cross-project delete and shared-tier wipe | **Reproduced — and exploited.** Upgraded from READ to MEASURED |
+| **B2** 42.7% over the window, 9.67% of tokens unembedded | **Reproduced** (42.74% / 9.70%, ±0.03pp) — the FTS sub-caveat **refuted** |
+| **H5** the truncation persists only because the processes are stale | **Corrected** — chunker half reproduced, the causal story is wrong and incomplete |
+| **H1** `ranking` is exactly `(rrfK+1)/(rrfK+rank)` | **Corrected** — mechanism real, closed form false in the dominant case |
+| **H4** `alpha=0.5` halves structure-less rows | **Reproduced + corrected** — on the live path under an explicit setting; the cap is broader than claimed |
+| **H11** vec0 chunk waste ≈ 43 MB | **Reproduced to the byte** — but the *cause* is corrected, and it changes the fix |
+| **H13** a false `crit` on every graceful shutdown | **Symptom refuted** — the structural fact is real, the consequence is not, and the one real `crit` has a different root cause |
+| **H6** `memory_write(context:"shared")` at default `rw` | **Reproduced — and exploited** |
+| **H2** the baseline metrics gate can never fail | **Reproduced, softened** — the cited block is correctly diagnosed; the surrounding file is not as bare as the claim implies |
+| CI's three filters partition the suite exactly | **Reproduced, no corrections** — verified five ways |
+
+**The errors ran in both directions, and two of them change what gets built.** That is the point of
+running this before anyone implements.
+
+### B1 was exploited, not just read
+
+From a project named `attacker`, against one named `victim`, on a scratch bank at mode `full`, driving
+the real MCP server (`AiRaccoon 1.12.0.0`) over JSON-RPC stdio:
+
+```
+memory_delete_context {projectId: "attacker", context: "project:victim"}
+  -> {"data":{"deleted":2}}
+memory_stats victim   (before) -> {"entries":2,"contexts":["project:victim"]}
+memory_stats victim   (after)  -> {"entries":0,"contexts":[]}
+memory_stats attacker (after)  -> {"entries":1}   # attacker's own row untouched
+```
+
+and the shared tier, same session: two rows written by two different projects, both visible
+cross-project, both destroyed by `memory_delete_context {projectId:"attacker", context:"shared"}` →
+`{"deleted":2}`. **At the default `rw` the same call is correctly refused** (`access-denied:
+memory_delete_context requires mode full (current rw)`) — so the gate works; the precondition is simply
+satisfied in production.
+
+The pass also sharpened the fix: `EntryBucket.cs:16-25` is the *write*-path twin of `FilterFor` and
+**already throws** `ContextOutsideProjectException`, with a test that asserts it
+(`MemoryStoreContextScopeTests.cs:39`). This is an invariant the project has ratified and gated on one
+side, not an undecided design question.
+
+### H5's causal story was wrong, and the correction adds work
+
+Three separate errors, and the third is the expensive one.
+
+1. **The timestamps were wrong.** The binary was installed at **22:24:36**, not 22:10:24 —
+   `stat` on `~/.dotnet/tools/ai-raccoon` and the `1.12.0` store directory both say so, and nothing on
+   disk matches 22:10:24. So all three `--quiet` processes predate the new binary, including the
+   22:12:10 one the orchestrator reasoned about as post-update.
+2. **A fourth process was missed** — `82875  Fri Aug 14 22:24:47  ai-raccoon serve --restart`, the only
+   genuinely post-update one.
+3. **`memory_write` does not chunk at all, in the current build.** A 9,360-character body written
+   through it on HEAD stores as **one row**, `embed_state='embedded'`, embedded from its first 254
+   tokens — roughly 85% of the content absent from its vector. Live cost: **555 rows, 320 of them
+   over-window (57.7%), 114,883 tokens never embedded.** That is the path agents use for their own
+   notes, and **no restart fixes it.**
+
+The chunker half does reproduce — 0 of 276 chunks over the window on the offending files — but only
+after `ai-raccoon model set local`. Which produced the pass's second new finding: **the ingest budget is
+silently non-engine-aware when `embedding.provider` is unset** (104/258 over-window without it, 0/276
+with it), and setting the engine later re-embeds but **does not re-chunk**. Ingest-then-configure is a
+supported order that permanently poisons the bank, and is a more plausible origin for much of the live
+42.7% than process age.
+
+### H11 reproduced to the byte, and the byte-level cause changes the fix
+
+`43,424,256 bytes ≈ 43.4 MB`, recomputed from `dbstat` page bytes. The `size` column is 1024 on every
+chunk row and each blob is exactly 1,572,864 bytes (1024 × 384 × 4) whether the chunk is full or nearly
+empty — so chunks are fixed-capacity and the arithmetic holds, measured rather than assumed.
+
+**But without the `ctx` partition key the same 21,985 vectors need 22 chunks rather than 49, so ~42.6 MB
+— 98% — of the waste is attributable to the partition key, not to the 1024 default.** Pinning
+`chunk_size` alone would recover almost nothing. The original work package would have shipped, passed
+its gate, and reclaimed ~2% of what it promised.
+
+Two inputs corrected: **13** partitions hold under 10 rows, not 14; and the bank is **172.1 MB** now,
+not 159 MB — it grew ~22 MB during the review window.
+
+### H13's symptom is refuted
+
+The structural fact is real at all four sites, and `PeriodicTimer.WaitForNextTickAsync` was probed
+rather than assumed — it **throws** on cancellation and never returns `false`. But
+`Host.TryExecuteBackgroundServiceAsync` **returns early with no log at any level** when the task is
+cancelled during `ApplicationStopping`, which is precisely this case. The evidence is direct:
+`~/.ai-raccoon/quiet.log`, 104,002 lines across six days containing 10+ shutdown markers, has **zero**
+`[Critical]` lines and zero `BackgroundService failed` lines.
+
+The one real `crit` in `serve.log` has a different root cause entirely: **`NodeRunner.cs:117-129`
+double-disposes the host**, calling `DisposeAsync()` in a `finally` after `WaitForShutdownAsync` has
+already run `StopAsync`. The four catch blocks are still worth adding defensively, but the
+justification and the root cause both needed rewriting before anyone implemented against them.
+
+### H1's closed form is false in the dominant case
+
+The double fusion is real and the arithmetic was re-derived. But `SearchQuery.cs:16` declares
+`double SourceLambda = 0.1` — the default is **0.1, not 0** — so `SourceAffinityRanker.Rank` does not
+short-circuit: it adds a sibling boost, **re-orders**, **drops** rows via `Consolidate`, and
+**re-normalises**. Measured on the current build with ingested chunks: `1, 0.9487, 0.9369, 0.9254`
+against the claimed formula's `1, 0.9839, 0.9683, 0.9531`. Solving backwards, output positions 2-4 are
+*fused* positions 5, 6, 7.
+
+**Corrected value:** `(rankBase + 0.1 × adjacentSiblings) / max`, where
+`rankBase = (rrfK+1)/(rrfK+rank)`. It reduces to the claimed closed form only when no candidate earns a
+sibling boost — true for bare `memory_write` rows, false for the ingested chunks that dominate the
+bank. **The claim's substance survives**: the field carries no match-quality signal, only rank position
+plus a structural adjacency term.
+
+### Two claims got stronger under attack
+
+**B2's FTS caveat was refuted in the finding's favour.** The lane hedged that `content='entries'`
+external-content FTS5 might not index what it appeared to. It does: for the longest live row (34,010
+chars), four terms drawn from the last 5% of its text each match through the index. The truncated tail
+is genuinely keyword-reachable and genuinely vector-unreachable — which is what makes this a silent
+ranking defect rather than data loss.
+
+**H4 is on the live path under an explicit setting**, not an untouched default: the live bank carries
+`retrieval.structureAlpha|0.5` as a real row, and the null fraction is **63.88%** — the claimed 63.9%,
+exact. Two corrections tighten it: the penalty hits **any** row outside the structure top-k, not only
+headless ones (`StructureVectorSearchByFilter` is a KNN bounded by `@limit`), and the fused score is an
+intermediate value rather than the user-visible `ranking`. Both leave the finding standing.
+
+### New findings the pass turned up while attacking the others
+
+1. **`memory_write` does not chunk, and the current build truncates it silently** — 555 live rows, 114,883 tokens. See H5 above. **This is the most important thing the adversarial pass found.**
+2. **The ingest chunk budget is non-engine-aware when `embedding.provider` is unset**, and configuring the engine later re-embeds without re-chunking.
+3. **The `project:` scoping invariant is enforced and tested on writes, absent and untested on deletes** — which is how B1's fix should be scoped.
+4. **Nothing gates the `Speed` trait.** `BddGateCoverageTests` guards the `@bdd` tag by reflection with its own anti-vacuity check; there is no equivalent for `Speed`, and no workflow runs the complement filter. **CI's exact partition — the campaign's strongest healthy claim — is true today by discipline, not by a gate.** A new test class without `[Trait(Speed, …)]` would run in none of the three PR jobs and nothing would go red.
+5. **The deployed server is older than HEAD** — its schema exposes `minScore`/0.7/ADR-0006 where HEAD has `minRelativeScore`/0/ADR-0047. Related: `quiet.log` contains **zero** "Chunk truncated at embed time" lines, because the code carrying that EventId is not what is running.
+6. **`NodeRunner.StartHttpMcpServer` double-disposes the host** — the actual cause of the one real `crit`.
+7. **A flaky test sits in the PR gate** — `ToolRefusalsTests.KnownRefusal_ReturnsRefusal_WithoutAnSdkErrorLog` failed on a single `Speed=Fast` run and on an unfiltered run, then passed clean on rerun. This **corrects the QA lane**, which saw it only under artificial concurrency and reasonably concluded it was not a CI risk.
 
 ---
 
@@ -123,8 +266,9 @@ before tracing it.
 
 | # | Finding | Grade | Lane |
 |---|---|---|---|
-| B1 | `memory_delete_context` deletes any project's entries and can wipe the shared tier, because `FilterFor`'s `project:` branch binds `project_id` from the caller's context string and its `shared` branch has no project predicate | READ, orchestrator-reverified | security F1 |
-| B2 | 42.7% of live entries exceed the 256-token embedding window; 9.67% of all indexed text is never embedded and is silently dropped rather than split | MEASURED | retrieval F5 |
+| B1 | `memory_delete_context` deletes any project's entries and can wipe the shared tier, because `FilterFor`'s `project:` branch binds `project_id` from the caller's context string and its `shared` branch has no project predicate | **MEASURED — exploited end to end** | security F1 |
+| B2 | 42.74% of live entries exceed the 256-token embedding window; 9.70% of all indexed text is never embedded and is silently dropped rather than split | MEASURED, reproduced independently | retrieval F5 |
+| B3 | **`memory_write` does not chunk at all in the code running now** — 555 live rows, 320 over-window, 114,883 tokens never embedded, on the path agents use for their own notes | MEASURED | adversarial NF1 |
 
 ### High
 
@@ -153,6 +297,9 @@ before tracing it.
 | H21 | `IMemoryStore` is a 26-method god port mixing persistence, file ingestion, embedding orchestration and settings | MEASURED | architecture F6 |
 | H22 | The MCP layer holds real business logic — a consent gate, a mode decision, two pipelines and a query-guard policy engine | MEASURED | architecture F9 |
 | H23 | The architecture-enforcement library is pinned but never referenced, and no architecture test exists | READ | architecture F12 |
+| H24 | The ingest chunk budget is silently non-engine-aware when `embedding.provider` is unset (104/258 over-window vs 0/276), and configuring the engine later re-embeds without re-chunking | MEASURED | adversarial NF2 |
+| H25 | Nothing gates the `Speed` trait, so CI's exact partition holds by discipline rather than by a mechanism | MEASURED | adversarial NF4 |
+| H26 | `NodeRunner.StartHttpMcpServer` double-disposes the host, which is the actual cause of the one real `crit` in `serve.log` | READ | adversarial NF6 |
 
 The remaining **62 findings** at MEDIUM and LOW are in the lane reports, grouped by surface in the
 plan.
@@ -195,7 +342,14 @@ push path, ADR-0014). HKDF uses the BCL primitive correctly — the no-hand-roll
 holds.
 
 **Tests and CI.** The three CI filters partition the suite exactly — 2142 + 143 + 585 = 2870,
-measured independently by two lanes with zero escapees and zero pairwise overlap. The
+measured independently by two lanes **and re-verified five ways by the adversarial pass** (empty
+complement, three empty pairwise intersections, discovery sum, execution sum, independent unfiltered
+total). **With one caveat the pass added, and it matters: nothing gates the `Speed` trait.**
+`BddGateCoverageTests` guards the `@bdd` tag by reflection and even asserts its own query still finds
+classes; there is no equivalent for `Speed`, and no workflow runs the complement filter. A new test
+class without `[Trait(Speed, …)]` would run in none of the three PR jobs and nothing would go red. The
+partition is exact **today, by discipline** — it is not held by a mechanism. That is a gate to build,
+not a property to rely on. The
 default-interface-member dispatch trap is guarded explicitly, with a comment naming the mechanism and
 its own dedicated test. Shared fakes derive their vectors from `SHA256` of the actual input, so
 swapping inputs would change outcomes. Env-gated probes use `Assert.Skip`, not a bare `return`, so
@@ -257,7 +411,19 @@ Routed as a decision list; each needs one ruling. Marked ● where work is block
 - **Whether H4's score halving actually reorders real results.** The arithmetic and the 64% population are proved; a concrete rank flip on the live bank was not demonstrated.
 - **Whether `alpha = 0.5` in `StructureFusion` was ever swept.** It is a bare constant with an ADR reference and no sweep artefact.
 - **No security finding was demonstrated by execution** — every one is source-traced. B1 in particular needs a red-first test before its fix.
-- **`FilterFor` has four other callers** that were not enumerated for untrusted context strings.
+- ~~`FilterFor` has four other callers that were not enumerated for untrusted context strings~~ — **closed by the orchestrator, and it narrows B1 rather than widening it.** There are exactly **three** call sites (`SqliteMemoryStore.cs:211`, `:393`, `:687`):
+  - `:211` — inside `SearchAsync`, but the context comes from `SearchContexts.ResolveAsync`, which builds every string from `query.ProjectId`. **Not caller-controlled.**
+  - `:393` — `DeleteContextAsync`. **Caller-controlled. This is B1, and it is the only one.**
+  - `:687` — `ListContextAsync`, which *does* take a caller-supplied `context` parameter, but its only callers are `WorkspaceService.cs:35,49` and `SweepService.cs:19,23`, all of which construct the context internally. **Not reachable with an untrusted string from any tool or CLI verb.**
+
+  So B1's fix is one call site, and the security lane's "read isolation holds" stands. **One second-order
+  observation worth recording:** `SweepService.cs:23` calls `ListContextAsync(projectId,
+  ContextNaming.SharedContext)`, and that branch of `FilterFor` has no project predicate — so the sweep
+  run for *any* project evaluates the *whole* shared tier for deletion. Combined with security F7 (a
+  `Read`-gated `memory_search` writes `rating` on shared rows, and `rating` is the sweep's deletion
+  input), one project's search traffic influences what the sweep deletes from a tier every project
+  reads. That is design-adjacent rather than clearly a defect — the shared tier *is* cross-project — but
+  it should be a stated property rather than an emergent one.
 - **S3 conditional-write support is unverified** — all conflict tests use a fake, and an endpoint that ignores `If-Match` silently degrades CAS to last-writer-wins.
 - **Windows behaviour is untested** anywhere, and `UnixFileMode` is POSIX-only.
 - ~~Whether the ADR `Status:` staleness extends beyond 0013/0029/0030~~ — **closed by the orchestrator.** Swept every ADR the index records as superseded or reversed: exactly one (ADR-0002) self-updates correctly; **four** still read `Accepted` — 0013, 0029, 0030 and **0033**, the last of which the lane did not find. Three different Status header formats are in play, which is why no existing check catches it. See the plan's WP17 for the derived gate.

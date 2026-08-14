@@ -99,31 +99,43 @@ lands the row; record that.
 *Blocked on owner question 2 only if the answer is "direct shared writes are intended" — in which case
 this package is withdrawn and the review records the decision.*
 
-### WP3 · Restart the deployed servers, then backfill the over-window rows — **BLOCKER B2 + H5**
-**Effort:** MEDIUM · **Surface:** operational + a re-chunk pass
+### WP3 · Make every write path budget its chunks, then restart and backfill — **BLOCKERS B2 + B3, H5, H24**
+**Effort:** MEDIUM–LARGE · **Surface:** `MemoryTools.Write` → `SqliteMemoryStore.WriteAsync`, `FileIngestor.ChunkSizeForAsync`, plus an operational restart and a backfill
 
-The chunker at this base is **clean** — run over the exact files whose bank rows overflow it produces
-0 over-window chunks. The defect is that pre-fix server processes are still running and still writing.
+> **Revised after the adversarial pass.** The first draft of this package was "restart the servers,
+> then backfill" and that was **incomplete**. Two live defects remain in the code running right now,
+> and no restart touches either.
+
+**Three distinct causes, established separately:**
+
+1. **Stale processes.** The binary was installed at **22:24:36** — not 22:10:24, which matches nothing on disk — and three long-lived `--quiet` processes predate it. A fourth (`82875`, 22:24:47) is genuinely post-update.
+2. **`memory_write` does not chunk at all.** Measured on the HEAD build: a 9,360-character body stores as **one row**, `embed_state='embedded'`, embedded from its first 254 WordPiece tokens — ~85% of the content absent from its vector. Live cost: **555 rows, 320 of them over-window (57.7%), 114,883 tokens never embedded.** The only budget-aware chunking in the codebase lives in `FileIngestor`.
+3. **The ingest budget is silently non-engine-aware when `embedding.provider` is unset.** `FileIngestor.ChunkSizeForAsync:199-216` returns `DefaultMaxTokens` with the o200k counter when the setting is absent, and reaches the 254-token BERT budget only when it is present: **104/258 over-window without it, 0/276 with it.** Setting the engine later re-embeds (`EmbeddingService.EngineFingerprint`) but **does not re-chunk**, so ingest-then-configure — a supported order — permanently poisons whatever was already there.
 
 **Change, in this order:**
-1. Restart every running `ai-raccoon` process; confirm `ai-raccoon --version` and the process start times against the binary's mtime.
-2. A backfill that re-chunks and re-embeds rows whose WordPiece length exceeds the window. `EntryEmbedder` re-embeds stored text unchanged and never re-chunks, so this must go through the chunker, not the embedder.
-3. A startup log line recording the running assembly version against the bank's engine fingerprint, so this class of drift is visible rather than requiring `ps`.
+
+1. **Route `memory_write` through the same budgeted chunker `FileIngestor` uses.** This is the code fix, and it is the part with no operational workaround.
+2. **Make the ingest budget engine-aware unconditionally** — resolve the window from the engine that will actually embed, or refuse to ingest until a provider is configured. Silently falling back to a counter that does not match the model is the defect.
+3. **Restart every running `ai-raccoon` process**; confirm `ai-raccoon --version` and process start times against the binary's mtime.
+4. **Backfill** rows whose WordPiece length exceeds the window, re-chunking and re-embedding. `EntryEmbedder` re-embeds stored text unchanged and never re-chunks, so this must go through the chunker, not the embedder.
+5. **A startup log line** recording the running assembly version against the bank's engine fingerprint, so this class of drift is visible rather than requiring `ps`.
 
 **Acceptance criteria**
-- EventId 414 count is **zero** over a day of normal ingest after the restart. (WP7 of the prior campaign said it "should be provably zero"; this is the package that makes that true.)
-- Post-backfill, `SELECT COUNT(*) FROM entries` where WordPiece length > 254 is zero.
-- No entry's text is lost — `SUM(length(value))` is unchanged or larger across the backfill.
+- A `memory_write` of a 10,000-character body produces **multiple rows**, none over 254 content tokens.
+- Ingest into a bank with no configured provider either produces in-budget chunks or refuses — it never silently uses a mismatched counter.
+- EventId 414 count is **zero** over a day of normal ingest after the restart. (The prior campaign's WP7 said it "should be provably zero"; this is the package that makes that true — note that `quiet.log` currently contains **zero** 414 lines only because the running code predates the counter.)
+- Post-backfill, the count of entries over 254 WordPiece tokens is zero.
+- No text is lost — `SUM(length(value))` is unchanged or larger across the backfill.
 
-**Gate — watch it go red first.** A test that ingests a document known to produce an over-window chunk
-under the *old* budget, asserts zero over-window chunks under the current one, and — the part that
-must go red — asserts the EventId 414 counter stays at zero across the ingest. Break it by forcing the
-legacy budget and watch the counter rise.
+**Gate — watch it go red first.** Two of them, because there are two code defects:
+- A test that writes a 10,000-character body through `memory_write` and asserts every resulting row is within budget. **Today it produces one oversized row — record the token count before the fix.**
+- A test that ingests a document into a bank with no `embedding.provider` and asserts zero over-window chunks. **Today it produces 104 of 258 — record that.**
 
-**Scope decision needed** (owner question 3): whole-bank re-chunk, or only the 6,897 rows currently
-over the window. The narrower option is cheaper and sufficient for the measured defect; the wider one
-also normalises chunk boundaries changed by ADR-0048. **Recommendation: the narrow one**, because the
-wider one changes the corpus under WP11's gate for a benefit nobody has measured.
+Only then the operational gate: ingest a document known to overflow under the *old* budget and assert the EventId 414 counter stays at zero.
+
+**Scope decision needed** (owner question 3): whole-bank re-chunk, or only the ~6,900 rows currently
+over the window. **Recommendation: the narrow one**, because the wider one changes the corpus under
+WP11's gate for a benefit nobody has measured.
 
 ---
 
@@ -163,13 +175,23 @@ every ranking package downstream is measured by it.
 rebuilding every score from rank position and discarding the fused modality scores. A strong match set
 and near-orthogonal junk produce identical score curves.
 
+**Corrected by the adversarial pass — the closed form is false in the dominant case.**
+`SearchQuery.cs:16` declares `double SourceLambda = 0.1`, so `SourceAffinityRanker.Rank` does **not**
+short-circuit: it adds a sibling boost, **re-orders**, **drops** rows via `Consolidate`, and
+**re-normalises**. Measured on the current build with ingested chunks: `1, 0.9487, 0.9369, 0.9254`
+against the pure formula's `1, 0.9839, 0.9683, 0.9531` — output positions 2-4 are *fused* positions 5,
+6, 7. The true value is `(rankBase + 0.1 × adjacentSiblings) / max`, reducing to the closed form only
+for rows with no siblings (bare `memory_write` rows). **The substance stands** — the field carries rank
+position plus a structural adjacency term, and no match-quality signal — but the package must not
+claim the second pass is a no-op on ordering. **It is not, and removing it will change results.**
+
 **Change:** have `Merge` take the already-fused list and apply `SourceAffinityRanker`, the floor and
 the limit directly, without re-entering `ReciprocalRankFusion`.
 
 **Acceptance criteria**
-- `ranking` varies with match quality, not only with position.
-- Result **ordering** is unchanged by this package alone (it is a score-reporting fix, not a ranking change) — or, if ordering does change, the held-out gate says whether it improved.
-- `minRelativeScore` still behaves as documented.
+- `ranking` varies with match quality, not only with position plus adjacency.
+- ~~Result ordering is unchanged by this package alone~~ — **withdrawn.** The adversarial pass showed the second pass already re-orders and drops rows via `SourceAffinityRanker`, so ordering *will* change. The held-out gate from WP11 is what says whether it improved; there is no "safe because it only touches the score" framing available here.
+- `minRelativeScore` still behaves as documented — note that its effect is defined against `rankBase`, so changing what `ranking` means changes what the floor filters.
 
 **Gate — watch it go red first.** A test asserting that a strong candidate set and a junk candidate set
 produce **different** `ranking` values at the same rank. Today they are byte-identical; record the two
@@ -204,24 +226,43 @@ numbers.
 
 ## Wave 3 — Storage, retention and the boundary the container dissolved
 
-### WP5 · Pin vec0's `chunk_size` — **H11**
-**Effort:** SMALL · **Surface:** `MemorySchema.Ddl`, `RebuildVecTableAsync`, a new **v9** ladder step
+### WP5 · Reclaim the vec0 chunk waste — and it is the **partition key**, not `chunk_size` — **H11**
+**Effort:** MEDIUM · **Surface:** `MemorySchema.Ddl`, `RebuildVecTableAsync`, a new **v9** ladder step
 
-36 chunks allocated for 16,150 vectors (2.28×); 20 partitions of which 14 hold under 10 rows, each
-still getting a full 1024-slot chunk. ~43 MB of a 159 MB bank is empty padding.
+> **Revised after the adversarial pass. The first draft of this package would have shipped, passed its
+> gate, and reclaimed about 2% of what it promised.**
 
-**The ladder is append-only** — add a v9 step that rebuilds both vec0 tables with an explicit
-`chunk_size`, sourcing from `entries.embedding`/`structure_embedding` (the pattern `MigrateToV2Async`
-already uses). Never renumber or delete an existing step.
+The waste reproduces to the byte: **43,424,256 B ≈ 43.4 MB**, recomputed from `dbstat` page bytes
+(`vec_entries_vector_chunks00` 56,713,216 allocated vs 24,806,400 needed;
+`vec_structure_vector_chunks00` 20,480,000 vs 8,962,560). Chunks are genuinely fixed-capacity — the
+`size` column is 1024 on every row and each blob is exactly 1,572,864 B (1024 × 384 × 4) whether the
+chunk is full or nearly empty — so the arithmetic holds, measured rather than assumed.
+
+**But the cause is not the 1024 default.** Without the `ctx` partition key the same 21,985 vectors need
+**22 chunks rather than 49**, so **~42.6 MB — 98% — of the waste is attributable to partitioning**, at
+20 distinct `ctx` values of which **13** (not 14) hold under 10 rows. Pinning `chunk_size` alone
+recovers almost nothing.
+
+**So the real options are, in order of preference:**
+1. **Drop the `ctx` partition key and filter by context in the query instead.** Requires proving the KNN stays correctly scoped and measuring the latency cost — partitioning exists to prune before the `MATCH`, and `EXPLAIN QUERY PLAN` currently shows that pruning working. **Measure before choosing.**
+2. **Coarsen the partition key** — partition by `scope` rather than by full project/label/workspace identity, cutting 20 partitions to 3 or 4 while keeping most pruning.
+3. **Pin `chunk_size` as well**, worth roughly 0.8 MB on its own; only meaningful once 1 or 2 has landed.
+
+**The ladder is append-only.** Add a **v9** step that rebuilds both vec0 tables under the new shape,
+sourcing from `entries.embedding`/`structure_embedding` — which is exactly why those columns are not
+deletable (see *Explicitly not doing*). Never renumber or delete an existing step.
 
 **Acceptance criteria**
-- `chunk_size` is explicit on both vec0 tables and derived from the install's real partition-size distribution, not guessed.
-- Bank size after the migration is measured and recorded, before and after.
-- KNN results are unchanged.
+- The chosen shape is justified by a **measured** latency comparison, not by the size number alone.
+- Bank size recorded before and after; the recovered figure is stated against the measured 43.4 MB, not against a projection.
+- KNN results are unchanged — same top-k for a fixed query set, verified against the pre-migration bank.
+- The migration is idempotent on an already-migrated bank.
 
-**Gate:** a test asserting the migration is idempotent on an already-migrated bank, and a
-before/after size assertion on a fixture with many small partitions. Break the chunk-size value and
-watch the size assertion fail.
+**Gate — watch it go red first.** A fixture with many small partitions where the pre-migration
+allocated-bytes figure is asserted, then the post-migration one. Break it by reverting the partition
+change and watch the size assertion fail. **Also assert KNN equivalence** — a size gate alone would
+pass a migration that silently broke scoping. Note the bank is now **172.1 MB**, not the 159 MB first
+recorded; it grew ~22 MB during the review window.
 
 ### WP6 · Compute `rating` in SQL instead of losing updates — **data F7**
 **Effort:** QUICK · **Surface:** `BumpAccessAsync`, `MemorySql.BumpAccess`
@@ -272,7 +313,8 @@ Make all three abstract; the compiler lists the work.
 - `AllowAutoRedirect = false` on the proxy's token-carrying handler (`ProxyRegistrations.cs:19`) — its hardened sibling already does this for a documented reason (security F13).
 - `Mode = SqliteOpenMode.ReadOnly` on the rekey probe, or correct the comment that claims it (security F14).
 - `loggingBuilder.AddFilter("Microsoft.Extensions.Http", LogLevel.Warning)` — 10 MB of `quiet.log` is a 10-second framework heartbeat in a file deliberately never rotated (operations F3).
-- Wrap the four hosted-service timer awaits in `catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)`, matching `WatchHostedService`, so an ordinary shutdown stops logging a `crit` claiming a crash (H13).
+- **Fix the double-dispose in `NodeRunner.StartHttpMcpServer` (`:117-129`)** — `DisposeAsync()` in a `finally` after `WaitForShutdownAsync` has already run `StopAsync`. **This, not the missing catch blocks, is what produced the one real `crit` in `serve.log`** (H26). *Re-justified after the adversarial pass; see the revision note.*
+- Wrap the four hosted-service timer awaits in `catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)`, matching `WatchHostedService` (H13). **Defensive only** — the adversarial pass refuted the claimed symptom: `Host.TryExecuteBackgroundServiceAsync` returns early with no log when the task is cancelled during `ApplicationStopping`, and `quiet.log` has **zero** `[Critical]` lines across 104,002 lines and 10+ shutdowns. Do not justify this with "it logs a crit on every shutdown"; it does not. Justify it as making a real behaviour explicit — `PeriodicTimer.WaitForNextTickAsync` **throws** on cancellation and never returns `false`, which was probed rather than assumed.
 - `Log.SearchQualityRecordFailed` for the one direct `logger.LogWarning` among 111 source-generated call sites (operations F7).
 - `RuleFor(x => x.Limit).InclusiveBetween(1, 200)` plus `MaximumLength` on `Query` and `Content` (security F9).
 - `git rm identifier.sqlite` and a `.gitignore` rule (ci-docs F9).
@@ -280,6 +322,26 @@ Make all three abstract; the compiler lists the work.
 ---
 
 ## Wave 4 — Boundaries, gates and the things that let this happen
+
+### WP20 · Gate the `Speed` trait — **H25, adversarial NF4**
+**Effort:** QUICK · **Surface:** `tests/AiRaccoon.Tests/Unit/SpeedGateCoverageTests.cs`
+
+The campaign's strongest healthy claim — CI's three filters partition the suite exactly — was verified
+five ways and holds. **It is held by discipline, not by a mechanism.** `BddGateCoverageTests` guards the
+`@bdd` tag by reflection *and* asserts its own query still finds classes (the anti-vacuity check). There
+is no equivalent for `Speed`, and no workflow runs the complement filter, so a new test class without
+`[Trait(Speed, …)]` runs in none of the three PR jobs and nothing goes red.
+
+`nightly.yml:9-12` states in its own header that scheduled runs are best-effort and can be dropped — so
+the nightly unfiltered run is not a backstop either.
+
+**Change:** a reflection test asserting every test class carries a `Speed` trait, modelled on
+`BddGateCoverageTests`, **including its anti-vacuity assertion** (the guard must confirm it still sees
+the classes, or it becomes vacuous the day the reflection query stops matching).
+
+**Gate — watch it go red first.** Add a test class with no `Speed` trait and confirm the new guard
+fails. Then delete it. Separately, confirm the anti-vacuity assertion fails when the reflection query
+is broken.
 
 ### WP19 · Fix the flaky test in the merge gate — **adversarial new finding 7, correcting QA F3**
 **Effort:** SMALL · **Surface:** `tests/AiRaccoon.Tests/Integration/Mcp/ToolRefusalsTests.cs:218-229`
@@ -368,11 +430,38 @@ release and abandoned after 1.10.1) or generalise one.
 ## Explicitly not doing
 
 - **Re-tuning the RRF parameters.** ADR-0006's own amendment already found `k=120, 2:1` scores higher on the regenerated corpus and deliberately declined to re-pick. That judgment stands until WP11 gives a held-out number; re-tuning against an in-sample grid would be the circular-benchmark failure a second time.
-- **Deleting `entries.embedding`/`structure_embedding`.** The orchestrator proposed it as ~31 MB of vestige; the data lane refuted it by finding the reader. They are rebuild insurance, and WP5 makes a rebuild *more* likely, not less.
+- **Deleting `entries.embedding`/`structure_embedding`.** The orchestrator proposed it as ~31 MB of vestige; the data lane refuted it by finding the reader (`RebuildVecTableAsync`). They are rebuild insurance — and **WP5 is now a vec0 rebuild**, so this campaign would have had to re-embed 16,000 rows through the ONNX pipeline had they been deleted. The refutation paid for itself inside one plan revision.
 - **Restructuring the folder tree** (`Core/Isolation` → `Core/Workspaces`, a `Core/Promotion`, moving the ranking domain out of `Sqlite/`). Real findings, but a wide rename during a campaign this size is a merge-conflict generator with no behavioural payoff. Owner questions 11 and 12 decide it; if approved, it is a separate campaign after this one merges.
 - **The `jsaa-memory.db` fixture.** Owner question 9 — nobody but the owner can settle whether another project's documentation belongs in this repo.
 
 ---
+
+## What this revision changed
+
+Rev 1 was written from the lane reports. Rev 2 folds in the adversarial pass, which attacked ten
+load-bearing claims and refuted or corrected five. Listing the changes because a plan whose corrections
+are invisible teaches nobody, and a reader cannot otherwise tell a considered rejection from an
+overlooked one.
+
+| Package | Change | Why |
+|---|---|---|
+| **WP3** | **Scope grew from "restart + backfill" to "two code fixes + restart + backfill".** | `memory_write` does not chunk at all in the code running now (555 rows, 114,883 tokens), and the ingest budget is silently non-engine-aware when `embedding.provider` is unset (104/258 over-window vs 0/276). Neither is fixed by a restart. Rev 1 would have restarted the servers, run a backfill, declared B2 closed, and left two live truncation paths. |
+| **WP5** | **Rewritten. The fix changed target entirely.** | `chunk_size` is ~2% of the waste; the `ctx` **partition key** is 98% (22 chunks needed without it, 49 with). Rev 1's package would have shipped, passed its gate, and reclaimed almost nothing — a gate measuring the wrong quantity. It now requires a measured latency comparison and a KNN-equivalence assertion, because a size gate alone would pass a migration that silently broke scoping. |
+| **WP4** | Acceptance criterion **withdrawn**; corrected formula added. | Rev 1 claimed ordering was unchanged because this is "a score-reporting fix". False: `SourceLambda` defaults to **0.1**, so `SourceAffinityRanker` already re-orders, drops and re-normalises. Measured output positions 2-4 are fused positions 5, 6, 7. |
+| **WP10** | Hosted-service catches **re-justified**; a new item added. | The claimed symptom — a false `crit` on every graceful shutdown — is **refuted**: `Host.TryExecuteBackgroundServiceAsync` returns early with no log in exactly this case, and `quiet.log` has zero `[Critical]` lines across 104,002 lines. The one real `crit` comes from a **double-dispose in `NodeRunner.cs:117-129`**, now its own item. The catches stay as defensive work with an honest justification. |
+| **WP20** | **New.** | Nothing gates the `Speed` trait. The campaign's strongest healthy claim holds by discipline, not by a mechanism. |
+| **WP19** | **New.** | A flaky test in the PR gate, correcting the QA lane, which saw it only under artificial concurrency. |
+| **WP17** | Extended from three stale ADRs to **four**, plus a derived gate. | An orchestrator sweep of every ADR the index marks superseded found ADR-0033 as well, and three different `Status:` header formats — which is why nothing catches it today. |
+| **B1 / WP1** | Evidence upgraded from READ to **MEASURED**, and the fix's scope narrowed. | The pass **exploited it end to end** (`{"deleted":2}`, victim's project emptied). Separately, an orchestrator sweep found `FilterFor` has exactly three call sites and only `DeleteContextAsync` takes an untrusted context — so this is one call site, not four. |
+
+**What survived unchanged:** both blockers, the vec0 waste figure (to the byte), the 63.88% structure-null
+fraction (exact), the CI partition, and every finding in WP1, WP2, WP6–WP9 and WP11–WP18. The failures
+were in supporting numbers and causal stories — which is exactly what gets quoted later.
+
+**One claim got *stronger* under attack.** B2's hedge that external-content FTS5 might not index the
+truncated tail was refuted in the finding's favour: four terms drawn from the last 5% of the longest
+live row (34,010 chars) each match through the index. The tail is genuinely keyword-reachable and
+genuinely vector-unreachable, which is what makes this a ranking defect rather than data loss.
 
 ## Risks
 
