@@ -77,4 +77,35 @@ public class FileIngestorSectionColumnTests : IDisposable
             "the chunk under '## Decision' must carry that heading as its section, or a '#decision' " +
             "path query has nothing to match against");
     }
+
+    /// <summary>
+    ///     HeadingPathParser joins segments with " &gt; ", so the leaf cannot be taken by splitting on
+    ///     the bare '&gt;' character: a heading carrying one of its own (an HTML comment, a
+    ///     placeholder) then ends the split on an empty segment and the section goes back to null.
+    ///     Measured on the regenerated corpus: 5 of 871 headed rows.
+    /// </summary>
+    [Fact]
+    public async Task IngestFileAsync_HeadingContainingAngleBracket_StillPopulatesSection()
+    {
+        var file = Path.Combine(_testDir, "template.md");
+        await File.WriteAllTextAsync(file,
+            "# Differential template\n\n## 1. Current state <!-- REQUIRED -->\n\nWhat exists today.\n",
+            TestContext.Current.CancellationToken);
+
+        await _ingestor.IngestFileAsync(_conn, "acme", file, null, TestContext.Current.CancellationToken);
+
+        var sections = new List<string?>();
+        await using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "SELECT section FROM entries WHERE source_file = @p ORDER BY chunk_index";
+        cmd.Parameters.AddWithValue("@p", file);
+        await using var reader = await cmd.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+        while (await reader.ReadAsync(TestContext.Current.CancellationToken))
+        {
+            sections.Add(reader.IsDBNull(0) ? null : reader.GetString(0));
+        }
+
+        sections.ShouldNotBeEmpty();
+        sections.ShouldContain(s => s != null && s.Contains("Current state", StringComparison.Ordinal),
+            "the leaf must survive a heading that carries a '>' of its own");
+    }
 }

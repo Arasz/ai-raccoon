@@ -279,7 +279,10 @@ public sealed class FileIngestor(
             return null;
         }
 
-        var leaf = headingPath.Split('>')[^1].Trim();
+        // HeadingPathParser joins on " > ", so the bare '>' is not a separator: a heading carrying
+        // one of its own ("<!-- REQUIRED -->") would otherwise end the split on an empty segment.
+        var lastSeparator = headingPath.LastIndexOf(" > ", StringComparison.Ordinal);
+        var leaf = (lastSeparator < 0 ? headingPath : headingPath[(lastSeparator + 3)..]).Trim();
         return leaf.Length == 0 ? null : leaf;
     }
 }
