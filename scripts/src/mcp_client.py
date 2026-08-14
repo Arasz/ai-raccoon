@@ -69,27 +69,24 @@ class AiRaccoonClient:
             log.exception("MCP %s → error (%.2fs)", method, elapsed)
             raise
 
-    async def memory_write(
+    async def memory_ingest_file(
         self,
         client: httpx.AsyncClient,
         project_id: str,
-        content: str,
+        path: str,
         context: Optional[str] = None,
-        agent_id: Optional[str] = None,
-        source_file: Optional[str] = None,
-        section: Optional[str] = None,
     ) -> dict:
-        args: dict = {"projectId": project_id, "content": content}
+        """Index one file from disk through the production FileIngestor/chunker.
+
+        Requires the path to lie inside the project's configured ingest scope
+        (`ai-raccoon ingest scope add <project_id> <path>`) — an unscoped
+        project refuses every ingest.
+        """
+        args: dict = {"projectId": project_id, "path": path}
         if context:
             args["context"] = context
-        if agent_id:
-            args["agentId"] = agent_id
-        if source_file:
-            args["sourceFile"] = source_file
-        if section:
-            args["section"] = section
         result = await self._call(
-            client, "tools/call", {"name": "memory_write", "arguments": args}
+            client, "tools/call", {"name": "memory_ingest_file", "arguments": args}
         )
         return _unwrap(result)
 
