@@ -13,13 +13,13 @@ using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.Observability;
+namespace AiRaccoon.Tests.Integration.Observability;
 
 /// <summary>
 ///     GET /observability (ADR-0008): server identity + PID + OTLP state, mapped only in
 ///     HTTP/serve mode, and never counted as watchdog activity.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ObservabilityEndpointTests : IDisposable
 {

@@ -10,16 +10,17 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Shouldly;
+using AiRaccoon.Tests.Unit.Observability;
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.Observability;
+namespace AiRaccoon.Tests.Integration.Observability;
 
 /// <summary>
 ///     `serve observability &lt;kind&gt;` (ADR-0008): dials a live server's /observability
 ///     endpoint, prints the requested monitoring command with its PID filled in, and maps
 ///     every failure to an actionable stderr line, a non-zero exit, and empty stdout.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 [Collection(ObservabilityCollection.Name)]
 public sealed class ObservabilityRunnerTests : IDisposable

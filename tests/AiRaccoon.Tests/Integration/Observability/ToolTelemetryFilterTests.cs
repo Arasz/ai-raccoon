@@ -2,16 +2,17 @@ using AiRaccoon.Observability;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 using Shouldly;
+using AiRaccoon.Tests.Unit.Observability;
 using Xunit;
 using AiRaccoon.Tests.TestHelpers;
 
-namespace AiRaccoon.Tests.Unit.Observability;
+namespace AiRaccoon.Tests.Integration.Observability;
 
 /// <summary>
 ///     What one refused call records, over the real host. Both properties come from where the
 ///     telemetry filter sits in the pipeline, so they are pinned rather than left to registration order.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 [Collection(ObservabilityCollection.Name)]
 public sealed class ToolTelemetryFilterTests : IAsyncLifetime

@@ -6,16 +6,17 @@ using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 using Shouldly;
+using AiRaccoon.Tests.Unit.Observability;
 using Xunit;
 using AiRaccoon.Tests.TestHelpers;
 
-namespace AiRaccoon.Tests.Unit.Observability;
+namespace AiRaccoon.Tests.Integration.Observability;
 
 /// <summary>
 ///     Instrumentation coverage is a property of the server, not of each tool author's discipline:
 ///     every tool the real host registers must record an invocation when it is called.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 [Collection(ObservabilityCollection.Name)]
 public sealed class ToolTelemetryCoverageTests

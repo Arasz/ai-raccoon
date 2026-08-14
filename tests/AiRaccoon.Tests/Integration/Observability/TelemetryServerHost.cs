@@ -9,7 +9,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Client;
 
-namespace AiRaccoon.Tests.Unit.Observability;
+namespace AiRaccoon.Tests.Integration.Observability;
 
 /// <summary>The real tool-serving host on a loopback port — the only place the filter registration is exercised.</summary>
 internal static class TelemetryServerHost

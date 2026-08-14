@@ -15,15 +15,16 @@ using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 using Shouldly;
+using AiRaccoon.Tests.Unit.Observability;
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.Observability;
+namespace AiRaccoon.Tests.Integration.Observability;
 
 /// <summary>
 ///     OTel SDK wiring (ADR-0009): opt-in on OTEL_EXPORTER_OTLP_ENDPOINT, web-host only —
 ///     never stdio (short-lived, per-connection processes) and never the one-shot CLI verbs.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 [Collection(ObservabilityCollection.Name)]
 public sealed class OtlpExportTests : IDisposable

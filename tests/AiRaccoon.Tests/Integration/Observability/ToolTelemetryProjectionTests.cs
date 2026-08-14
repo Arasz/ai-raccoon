@@ -6,17 +6,18 @@ using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 using Microsoft.Extensions.Hosting;
 using ModelContextProtocol.Server;
 using Shouldly;
+using AiRaccoon.Tests.Unit.Observability;
 using Xunit;
 using AiRaccoon.Tests.TestHelpers;
 
-namespace AiRaccoon.Tests.Unit.Observability;
+namespace AiRaccoon.Tests.Integration.Observability;
 
 /// <summary>
 ///     The filter reads the project id off the wire arguments, so the two tools that do not pass a
 ///     plain one need a projection. Both halves of that table are checked against the registered
 ///     tools rather than restated here.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 [Collection(ObservabilityCollection.Name)]
 public sealed class ToolTelemetryProjectionTests : IAsyncLifetime

@@ -9,9 +9,10 @@ using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Shouldly;
+using AiRaccoon.Tests.Unit.Observability;
 using Xunit;
 
-namespace AiRaccoon.Tests.Unit.Observability;
+namespace AiRaccoon.Tests.Integration.Observability;
 
 /// <summary>
 ///     A3 (docs/reviews/2026-08-09-otlp-export-review.md): provider disposal is the OTel SDK's
@@ -19,7 +20,7 @@ namespace AiRaccoon.Tests.Unit.Observability;
 ///     Program.cs:53 uses — must dispose the host on shutdown the way ServeRunner.cs:90-93
 ///     already does.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 [Collection(ObservabilityCollection.Name)]
 public sealed class OtlpFlushOnExitTests : IDisposable
