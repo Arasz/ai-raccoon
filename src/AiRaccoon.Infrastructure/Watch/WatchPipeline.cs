@@ -232,8 +232,13 @@ public sealed partial class WatchPipeline(
             retryPolicy.RecordSuccess(evt.ProjectId, job.WatchPath);
             lock (_gate)
             {
-                _runtime[(evt.ProjectId, job.WatchPath)] =
-                    new WatchRuntimeState(WatchState.Healthy, null, timeProvider.GetUtcNow());
+                // A job dispatched before UnregisterWatch removed the entry must not resurrect it
+                // (D21): only update state for a watch that is still registered.
+                if (_runtime.ContainsKey((evt.ProjectId, job.WatchPath)))
+                {
+                    _runtime[(evt.ProjectId, job.WatchPath)] =
+                        new WatchRuntimeState(WatchState.Healthy, null, timeProvider.GetUtcNow());
+                }
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -245,10 +250,11 @@ public sealed partial class WatchPipeline(
             var state = retryPolicy.RecordFailure(evt.ProjectId, job.WatchPath, timeProvider.GetUtcNow());
             lock (_gate)
             {
-                var current = _runtime.TryGetValue((evt.ProjectId, job.WatchPath), out var existing)
-                    ? existing
-                    : new WatchRuntimeState(WatchState.Scanning, null, null);
-                _runtime[(evt.ProjectId, job.WatchPath)] = current with { State = state, LastError = ex.Message };
+                // Same rule on the failure path: a removed watch stays removed.
+                if (_runtime.TryGetValue((evt.ProjectId, job.WatchPath), out var current))
+                {
+                    _runtime[(evt.ProjectId, job.WatchPath)] = current with { State = state, LastError = ex.Message };
+                }
             }
         }
     }
