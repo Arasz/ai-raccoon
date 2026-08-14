@@ -216,13 +216,54 @@ tokens into many subwords.
 6. **Defense in depth:** an EventId'd `[LoggerMessage]` counter in `Encode` so truncation is
    detectable rather than silent. After this change it should be provably zero.
 
+**A second failure mode, found by independent verification and worse than truncation**
+*(orchestrator, measured 2026-08-14 against the real vocab and production `BertOptions`)*:
+
+`\n`, `\t` and `\r` are **not word separators** for this `Microsoft.ML.Tokenizers` BertTokenizer
+configuration — only spaces and punctuation are. Two 60-character alphanumeric words:
+
+| separator | ids |
+|---|---|
+| space | **62** |
+| newline | **3** (`[CLS] [UNK] [SEP]`) |
+| tab | 3 |
+| CRLF | 3 |
+
+So **any run of ≥100 characters containing no space and no punctuation — newlines freely
+included — collapses to a single `[UNK]` and is embedded as nothing.** Confirmed on realistic
+content: 60 newline-separated SHA-256 hex lines (3,899 chars) tokenize to **3 ids total**. File
+paths and base64 escape only incidentally, because `/`, `.`, `+` and `=` are punctuation that
+does split. This repo's own docs contain newline-separated hash tables.
+
+**It is invisible to a budget check**, because the offending chunk reports a *tiny* token count
+rather than a large one and sails through any `≤ 254` assertion. Therefore the counter must also
+flag **implausibly low token-to-character ratios**, and the gate needs a *floor* as well as a
+ceiling. Chunker-side remediation is optional for this wave; detection is not.
+
+**Also measured: engine-aware counting alone does not deliver the guarantee.** Driving today's
+chunker with the BERT counter at maxTokens=254 still leaves **127 of 4040** chunks over the
+window across `docs/**/*.md` (1234 of 3583 with the legacy o200k counter), because an
+over-budget unit is still admitted whole. The token-level split floor is what actually closes
+it — counting correctly is necessary but not sufficient.
+
 JSON key-path flattening → deferred to Wave 5.
 
-**Gate:** a corpus combining this repo's `docs/**/*.md` with four hostile cases — a hex/base64
-blob, a minified JSON line, a CJK paragraph, an unbalanced fence — produces **zero** chunks whose
-BERT WordPiece length exceeds 254, asserted as a hard invariant rather than a percentage
-improvement. RED today (~1331/3552 over the window; the fence case yields a 5621-token chunk).
-The truncation counter is non-zero today and zero after.
+**Gate — a ceiling *and* a floor.** A corpus combining this repo's `docs/**/*.md` with five
+hostile cases — hex/base64 blob, minified JSON line, CJK paragraph, unbalanced fence, and
+**newline-separated 64-char hex lines** — must satisfy both:
+- **Ceiling:** zero chunks whose BERT WordPiece length exceeds 254. RED today — measured
+  **127/4040** over even with the correct tokenizer, 1234/3583 with the legacy one, and the
+  fence case yields a single 9,344-token chunk.
+- **Floor:** no chunk collapses to `[UNK]`. RED today — the hex case yields **3 ids for 3,899
+  characters**.
+
+Both counters are non-zero today and zero after. Asserted as hard invariants, not percentage
+improvements.
+
+*Verification is independent of the implementation:* the orchestrator's harness
+(`scratchpad/chunkverify/`) loads the compiled `AiRaccoon.Core`, invokes `MarkdownChunker` by
+reflection and measures the **output** with the real tokenizer and vocab, so it is unaffected by
+how the budget is computed internally.
 
 ### WP4 · Regenerate the retrieval gate corpus
 **Effort:** MEDIUM · **Must follow WP7, precede WP3b**
