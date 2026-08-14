@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Net;
-using System.Text;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
@@ -36,24 +35,23 @@ public sealed class NodeRunnerTests : IDisposable
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         lease.ReleaseForBind();
-        var run = StartServe(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+        await using var run = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
 
-        var url = await WaitForLineAsync(run, line => line.StartsWith("http://", StringComparison.Ordinal),
-            TestContext.Current.CancellationToken);
+        var url = await run.WaitForUrlAsync(TestContext.Current.CancellationToken);
         url.ShouldBe($"http://127.0.0.1:{port}/mcp");
-        var exit = await StopAsync(run);
+        var exit = await run.StopAsync();
 
         exit.ShouldBe(ExitCode.Success);
-        run.Stdout.ToString().ShouldBe($"http://127.0.0.1:{port}/mcp{Environment.NewLine}");
+        run.Stdout.ShouldBe($"http://127.0.0.1:{port}/mcp{Environment.NewLine}");
     }
 
     [Fact]
     public async Task PortZero_PrintsBoundUrl_AndMcpClientReachesIt()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
-        var run = StartServe(["--data-root", _dataRoot, "serve", "--port", "0"]);
+        await using var run = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", "0"]);
 
-        var url = await WaitForLineAsync(run, line => line.StartsWith("http://", StringComparison.Ordinal), TestContext.Current.CancellationToken);
+        var url = await run.WaitForUrlAsync(TestContext.Current.CancellationToken);
         url.ShouldMatch(@"^http://127\.0\.0\.1:\d+/mcp$");
 
         using var httpClient = new HttpClient();
@@ -76,10 +74,10 @@ public sealed class NodeRunnerTests : IDisposable
         string.Concat(toolResult.Content.OfType<TextContentBlock>().Select(block => block.Text))
             .ShouldContain("\"entries\"");
 
-        var exit = await StopAsync(run);
+        var exit = await run.StopAsync();
 
         exit.ShouldBe(ExitCode.Success);
-        run.Stdout.ToString().ShouldMatch(@"^http://127\.0\.0\.1:\d+/mcp\r?\n$");
+        run.Stdout.ShouldMatch(@"^http://127\.0\.0\.1:\d+/mcp\r?\n$");
     }
 
     [Fact]
@@ -87,15 +85,15 @@ public sealed class NodeRunnerTests : IDisposable
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         using var holder = LoopbackPort.Occupy(); // held OPEN for the whole test
-        var run = StartServe(["--data-root", _dataRoot, "serve", "--port", holder.Port.ToString()]);
+        await using var run = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", holder.Port.ToString()]);
 
         var exit = await run.Exit;
 
         exit.ShouldBe(ExitCode.PortInUse);
-        run.Stdout.ToString().ShouldBeEmpty();
-        run.Stderr.ToString().ShouldContain("in use");
-        run.Stderr.ToString().ShouldContain("--port 0");
-        run.Stderr.ToString().ShouldNotContain("   at ");
+        run.Stdout.ShouldBeEmpty();
+        run.Stderr.ShouldContain("in use");
+        run.Stderr.ShouldContain("--port 0");
+        run.Stderr.ShouldNotContain("   at ");
     }
 
     [Fact]
@@ -109,13 +107,13 @@ public sealed class NodeRunnerTests : IDisposable
         Directory.CreateDirectory(tokenPath);
 
         lease.ReleaseForBind();
-        var run = StartServe(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+        await using var run = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
         var exit = await run.Exit;
 
         exit.ShouldBe(ExitCode.McpTokenUnavailable);
-        run.Stdout.ToString().ShouldBeEmpty();
-        run.Stderr.ToString().ShouldContain(tokenPath);
-        run.Stderr.ToString().ShouldNotContain("   at ");
+        run.Stdout.ShouldBeEmpty();
+        run.Stderr.ShouldContain(tokenPath);
+        run.Stderr.ShouldNotContain("   at ");
     }
 
     [Fact]
@@ -125,21 +123,20 @@ public sealed class NodeRunnerTests : IDisposable
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         lease.ReleaseForBind();
-        var first = StartServe(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
-        var firstUrl = await WaitForLineAsync(first, line => line.StartsWith("http://", StringComparison.Ordinal),
-            TestContext.Current.CancellationToken);
+        await using var first = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+        var firstUrl = await first.WaitForUrlAsync(TestContext.Current.CancellationToken);
 
         var secondRoot = TestData.CreateTempRoot("ai-raccoon-serve-attach");
         try
         {
             // Attach + --mcp-entry: the entry for the OWNER's bound port is printed (F7).
-            var second = StartServe(["--data-root", secondRoot, "serve", "--port", port.ToString(), "--mcp-entry", "--format", "hermes"]);
+            await using var second = ServeHarness.Start(["--data-root", secondRoot, "serve", "--port", port.ToString(), "--mcp-entry", "--format", "hermes"]);
             var secondExit = await second.Exit;
 
             secondExit.ShouldBe(ExitCode.Success);
-            second.Stdout.ToString().ShouldBe($"{McpEntryRenderer.RenderHermes(port)}{Environment.NewLine}");
-            second.Stderr.ToString().ShouldContain("attached");
-            second.Stderr.ToString().ShouldNotContain("   at ");
+            second.Stdout.ShouldBe($"{McpEntryRenderer.RenderHermes(port)}{Environment.NewLine}");
+            second.Stderr.ShouldContain("attached");
+            second.Stderr.ShouldNotContain("   at ");
 
 
             // The OWNER's token: /mcp is gated, so an unauthorized GET would 401 before routing.
@@ -151,7 +148,7 @@ public sealed class NodeRunnerTests : IDisposable
             Directory.Delete(secondRoot, true);
         }
 
-        var firstExit = await StopAsync(first);
+        var firstExit = await first.StopAsync();
         firstExit.ShouldBe(ExitCode.Success);
     }
 
@@ -165,13 +162,13 @@ public sealed class NodeRunnerTests : IDisposable
         try
         {
             var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            var firstTask = StartServeAsync(["--data-root", _dataRoot, "serve", "--port", port.ToString()], gate.Task);
-            var secondTask = StartServeAsync(["--data-root", secondRoot, "serve", "--port", port.ToString()], gate.Task);
+            var firstTask = ServeHarness.StartAsync(["--data-root", _dataRoot, "serve", "--port", port.ToString()], gate: gate.Task);
+            var secondTask = ServeHarness.StartAsync(["--data-root", secondRoot, "serve", "--port", port.ToString()], gate: gate.Task);
             // Both runners bind only once the gate opens: hold the number until then.
             lease.ReleaseForBind();
             gate.SetResult();
-            var first = await firstTask;
-            var second = await secondTask;
+            await using var first = await firstTask;
+            await using var second = await secondTask;
 
             var exits = await Task.WhenAll(first.Exit, second.Exit);
 
@@ -179,27 +176,27 @@ public sealed class NodeRunnerTests : IDisposable
             exits.Count(exit => exit == ExitCode.Success).ShouldBeGreaterThanOrEqualTo(1);
             if (exits[0] == ExitCode.Success)
             {
-                first.Stdout.ToString().ShouldMatch(@"^http://127\.0\.0\.1:\d+/mcp\r?\n$");
+                first.Stdout.ShouldMatch(@"^http://127\.0\.0\.1:\d+/mcp\r?\n$");
             }
             else
             {
-                first.Stdout.ToString().ShouldBeEmpty();
-                first.Stderr.ToString().ShouldContain("in use");
+                first.Stdout.ShouldBeEmpty();
+                first.Stderr.ShouldContain("in use");
             }
 
             if (exits[1] == ExitCode.Success)
             {
-                second.Stdout.ToString().ShouldMatch(@"^http://127\.0\.0\.1:\d+/mcp\r?\n$");
+                second.Stdout.ShouldMatch(@"^http://127\.0\.0\.1:\d+/mcp\r?\n$");
             }
             else
             {
-                second.Stdout.ToString().ShouldBeEmpty();
-                second.Stderr.ToString().ShouldContain("in use");
+                second.Stdout.ShouldBeEmpty();
+                second.Stderr.ShouldContain("in use");
             }
 
             foreach (var run in new[] { first, second })
             {
-                run.Stderr.ToString().ShouldNotContain("   at ");
+                run.Stderr.ShouldNotContain("   at ");
             }
         }
         finally
@@ -215,15 +212,15 @@ public sealed class NodeRunnerTests : IDisposable
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         lease.ReleaseForBind();
-        var run = StartServe(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--mcp-entry"]);
+        await using var run = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--mcp-entry"]);
 
-        var line = await WaitForLineAsync(run, line => line.StartsWith("{", StringComparison.Ordinal),
-            TestContext.Current.CancellationToken);
+        var line = await run.WaitForLineAsync(candidate => candidate.StartsWith("{", StringComparison.Ordinal),
+            TestContext.Current.CancellationToken, "the MCP entry JSON");
         line.ShouldBe(McpEntryRenderer.RenderHermes(port));
-        var exit = await StopAsync(run);
+        var exit = await run.StopAsync();
 
         exit.ShouldBe(ExitCode.Success);
-        run.Stdout.ToString().ShouldBe($"{McpEntryRenderer.RenderHermes(port)}{Environment.NewLine}");
+        run.Stdout.ShouldBe($"{McpEntryRenderer.RenderHermes(port)}{Environment.NewLine}");
     }
 
     [Fact]
@@ -233,13 +230,13 @@ public sealed class NodeRunnerTests : IDisposable
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         lease.ReleaseForBind();
-        var run = StartServe(
+        await using var run = ServeHarness.Start(
             ["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--mcp-entry", "--format", "claude"]);
 
-        var line = await WaitForLineAsync(run, line => line.StartsWith("{", StringComparison.Ordinal),
-            TestContext.Current.CancellationToken);
+        var line = await run.WaitForLineAsync(candidate => candidate.StartsWith("{", StringComparison.Ordinal),
+            TestContext.Current.CancellationToken, "the MCP entry JSON");
         line.ShouldBe(McpEntryRenderer.RenderClaude(port));
-        var exit = await StopAsync(run);
+        var exit = await run.StopAsync();
 
         exit.ShouldBe(ExitCode.Success);
     }
@@ -251,12 +248,11 @@ public sealed class NodeRunnerTests : IDisposable
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         lease.ReleaseForBind();
-        var run = StartServe(["--data-root", _dataRoot, "--port", port.ToString(), "serve"]);
+        await using var run = ServeHarness.Start(["--data-root", _dataRoot, "--port", port.ToString(), "serve"]);
 
-        var url = await WaitForLineAsync(run, line => line.StartsWith("http://", StringComparison.Ordinal),
-            TestContext.Current.CancellationToken);
+        var url = await run.WaitForUrlAsync(TestContext.Current.CancellationToken);
         url.ShouldBe($"http://127.0.0.1:{port}/mcp");
-        var exit = await StopAsync(run);
+        var exit = await run.StopAsync();
 
         exit.ShouldBe(ExitCode.Success);
     }
@@ -271,12 +267,11 @@ public sealed class NodeRunnerTests : IDisposable
         var servePort = serveLease.Port;
         rootLease.ReleaseForBind();
         serveLease.ReleaseForBind();
-        var run = StartServe(["--data-root", _dataRoot, "--port", rootPort.ToString(), "serve", "--port", servePort.ToString()]);
+        await using var run = ServeHarness.Start(["--data-root", _dataRoot, "--port", rootPort.ToString(), "serve", "--port", servePort.ToString()]);
 
-        var url = await WaitForLineAsync(run, line => line.StartsWith("http://", StringComparison.Ordinal),
-            TestContext.Current.CancellationToken);
+        var url = await run.WaitForUrlAsync(TestContext.Current.CancellationToken);
         url.ShouldBe($"http://127.0.0.1:{servePort}/mcp");
-        var exit = await StopAsync(run);
+        var exit = await run.StopAsync();
 
         exit.ShouldBe(ExitCode.Success);
     }
@@ -288,15 +283,14 @@ public sealed class NodeRunnerTests : IDisposable
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         lease.ReleaseForBind();
-        var run = StartServe(["--data-root", _dataRoot, "--transport", "stdio", "serve", "--port", port.ToString()]);
+        await using var run = ServeHarness.Start(["--data-root", _dataRoot, "--transport", "stdio", "serve", "--port", port.ToString()]);
 
-        var url = await WaitForLineAsync(run, line => line.StartsWith("http://", StringComparison.Ordinal),
-            TestContext.Current.CancellationToken);
+        var url = await run.WaitForUrlAsync(TestContext.Current.CancellationToken);
         url.ShouldBe($"http://127.0.0.1:{port}/mcp");
-        var exit = await StopAsync(run);
+        var exit = await run.StopAsync();
 
         exit.ShouldBe(ExitCode.Success);
-        run.Stderr.ToString().ShouldContain("serve always uses http");
+        run.Stderr.ShouldContain("serve always uses http");
     }
 
     [Fact]
@@ -307,16 +301,15 @@ public sealed class NodeRunnerTests : IDisposable
         var port = lease.Port;
         // No --transport flag: the default (Proxy, ADR-0020) is not a user choice to ignore.
         lease.ReleaseForBind();
-        var run = StartServe(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+        await using var run = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
 
-        var url = await WaitForLineAsync(run, line => line.StartsWith("http://", StringComparison.Ordinal),
-            TestContext.Current.CancellationToken);
+        var url = await run.WaitForUrlAsync(TestContext.Current.CancellationToken);
         url.ShouldBe($"http://127.0.0.1:{port}/mcp");
-        var exit = await StopAsync(run);
+        var exit = await run.StopAsync();
 
         exit.ShouldBe(ExitCode.Success);
-        run.Stderr.ToString().ShouldNotContain("ignoring --transport");
-        run.Stderr.ToString().ShouldNotContain("serve always uses http");
+        run.Stderr.ShouldNotContain("ignoring --transport");
+        run.Stderr.ShouldNotContain("serve always uses http");
     }
 
     [Fact]
@@ -326,10 +319,9 @@ public sealed class NodeRunnerTests : IDisposable
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         lease.ReleaseForBind();
-        var run = StartServe(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--idle-timeout", "5s"]);
+        await using var run = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--idle-timeout", "5s"]);
 
-        var url = await WaitForLineAsync(run, line => line.StartsWith("http://", StringComparison.Ordinal),
-            TestContext.Current.CancellationToken);
+        var url = await run.WaitForUrlAsync(TestContext.Current.CancellationToken);
         url.ShouldBe($"http://127.0.0.1:{port}/mcp");
 
 
@@ -348,10 +340,9 @@ public sealed class NodeRunnerTests : IDisposable
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         lease.ReleaseForBind();
-        var run = StartServe(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--idle-timeout", "0"]);
+        await using var run = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--idle-timeout", "0"]);
 
-        var url = await WaitForLineAsync(run, line => line.StartsWith("http://", StringComparison.Ordinal),
-            TestContext.Current.CancellationToken);
+        var url = await run.WaitForUrlAsync(TestContext.Current.CancellationToken);
         url.ShouldBe($"http://127.0.0.1:{port}/mcp");
 
         await Task.Delay(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
@@ -360,7 +351,7 @@ public sealed class NodeRunnerTests : IDisposable
         var response = await GetMcpAsync(url, _dataRoot, TestContext.Current.CancellationToken);
         response.StatusCode.ShouldBe(HttpStatusCode.MethodNotAllowed);
 
-        var exit = await StopAsync(run);
+        var exit = await run.StopAsync();
         exit.ShouldBe(ExitCode.Success);
     }
 
@@ -370,51 +361,6 @@ public sealed class NodeRunnerTests : IDisposable
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.Add(McpTokenGate.HeaderName, new McpTokenFile(dataRoot).Read());
         return await HttpClient.SendAsync(request, cancellationToken);
-    }
-
-    private static ServeRun StartServe(string[] args) => StartServeAsync(args).GetAwaiter().GetResult();
-
-    private static async Task<ServeRun> StartServeAsync(string[] args, Task? gate = null)
-    {
-        CliArgs.TryParse(args, out var parsed);
-        parsed!.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldBe(["serve"]);
-        var config = parsed.Options.ToServerConfig();
-        var stdout = new LockingWriter();
-        var stderr = new LockingWriter();
-        var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
-
-        if (gate is not null)
-        {
-            await gate;
-        }
-
-        var exit = TestData.CreateNodeRunner(parsed.ServerConfig.Options).RunAsync(parsed, new StandardStreams(TextReader.Null, stdout, stderr), cts.Token);
-        return new ServeRun(exit, stdout, stderr, cts);
-    }
-
-    private static async Task<int> StopAsync(ServeRun run)
-    {
-        await run.Cts.CancelAsync();
-        return await run.Exit;
-    }
-
-    private static async Task<string> WaitForLineAsync(ServeRun run, Func<string, bool> predicate, CancellationToken cancellationToken)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(60);
-        while (DateTime.UtcNow < deadline)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var line = run.Stdout.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-            if (line is not null && predicate(line.TrimEnd('\r')))
-            {
-                return line.TrimEnd('\r');
-            }
-
-            await Task.Delay(50, cancellationToken);
-        }
-
-        throw new TimeoutException($"timed out waiting for serve output; stderr: {run.Stderr}");
     }
 
     private static async Task<IDisposable> AcquireCleanEnvAsync(CancellationToken cancellationToken)
@@ -428,55 +374,12 @@ public sealed class NodeRunnerTests : IDisposable
     }
 
 
-    private sealed record ServeRun(Task<int> Exit, LockingWriter Stdout, LockingWriter Stderr, CancellationTokenSource Cts);
-
     private sealed class EnvRestore(string? original) : IDisposable
     {
         public void Dispose()
         {
             Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, original);
             TestData.EnvVarGate.Release();
-        }
-    }
-
-    /// <summary>Thread-safe capture for the runner's stdout/stderr writers.</summary>
-    private sealed class LockingWriter : TextWriter
-    {
-        private readonly StringBuilder _buffer = new();
-        private readonly Lock _lock = new();
-
-        public override Encoding Encoding => Encoding.UTF8;
-
-        public override void Write(char value)
-        {
-            lock (_lock)
-            {
-                _buffer.Append(value);
-            }
-        }
-
-        public override void Write(string? value)
-        {
-            lock (_lock)
-            {
-                _buffer.Append(value);
-            }
-        }
-
-        public override void WriteLine(string? value)
-        {
-            lock (_lock)
-            {
-                _buffer.AppendLine(value);
-            }
-        }
-
-        public override string ToString()
-        {
-            lock (_lock)
-            {
-                return _buffer.ToString();
-            }
         }
     }
 }
