@@ -112,6 +112,11 @@ public sealed class FileIngestor(
         foreach (var chunk in chunks)
         {
             var hash = ContentHash.Of(path, chunk);
+            // SourcePathQuery ANDs a "file#section" anchor against the FTS {source_file section}
+            // columns, so a chunk with a null section can never satisfy one. Derived from the
+            // chunk's own heading rather than left null; heading_path carries the full trail and
+            // the anchor only ever names its leaf.
+            var section = HeadingSection(chunk);
             var exists = await connection.ExecuteScalarAsync<long?>(
                     Def(MemorySql.EntryExistsByPathAndHashInBucket,
                         new
@@ -137,7 +142,7 @@ public sealed class FileIngestor(
                             path,
                             value = chunk,
                             sourceFile = path,
-                            section = (string?)null,
+                            section,
                             scope = bucket.Scope,
                             projectId = bucket.ProjectId,
                             contextLabel = bucket.ContextLabel,
@@ -264,4 +269,17 @@ public sealed class FileIngestor(
     private static CommandDefinition Def(string sql, object? parameters = null,
         CancellationToken cancellationToken = default) =>
         new(sql, parameters, cancellationToken: cancellationToken);
+
+    /// <summary>The leaf of the chunk's heading trail, or null when it has no heading.</summary>
+    private static string? HeadingSection(string chunk)
+    {
+        var headingPath = HeadingPathParser.Parse(chunk);
+        if (string.IsNullOrWhiteSpace(headingPath))
+        {
+            return null;
+        }
+
+        var leaf = headingPath.Split('>')[^1].Trim();
+        return leaf.Length == 0 ? null : leaf;
+    }
 }
