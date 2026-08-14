@@ -5,6 +5,7 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Sync;
@@ -13,6 +14,7 @@ using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using ModelContextProtocol;
 using Shouldly;
@@ -335,6 +337,102 @@ public class MemoryToolsTests
             cancellationToken: TestContext.Current.CancellationToken);
 
         _store.LastQuery!.ContextLabel.ShouldBe("docs:adr");
+    }
+
+    // search_quality id 173 (project ai-raccoon): one of 12 graded queries matching this shape,
+    // all scored 2/5, never higher — see docs/adr/0040.
+    private const string RealHermesProcessNotification =
+        """
+        [IMPORTANT: Background process proc_97aa3ea5eb50 completed normally (exit code 0).
+        Command: cd /Users/arasz/RiderProjects/ai-raccoon && dotnet test --no-build
+        Output:
+        ]
+        """;
+
+    [Fact]
+    public async Task Search_WithAMachineOutputQuery_RefusesWithoutCallingTheStore()
+    {
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.Search("acme", RealHermesProcessNotification, cancellationToken: TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldStartWith("invalid-params: ");
+        ex.Message.ShouldContain("tool output");
+        _store.LastQuery.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Search_WithALogLikeQuery_ReturnsResultsWithAWarning()
+    {
+        var result = await _tools.Search("acme", "info: something happened\n at System.Foo.Bar(baz)",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        _store.LastQuery.ShouldNotBeNull();
+        result.Data!.Warning.ShouldNotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task Search_WithAnOrdinaryQuery_HasNoWarning()
+    {
+        var result = await _tools.Search("acme", "why did the auth build start failing",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Data!.Warning.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Search_WithTheGuardDisabled_LetsAMachineOutputQueryThrough()
+    {
+        _store.Settings[QueryGuardConfigKeys.EnabledGlobal] = "false";
+
+        var result = await _tools.Search("acme", RealHermesProcessNotification,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        _store.LastQuery.ShouldNotBeNull();
+        result.Data!.Warning.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Search_InShadowMode_RecordsTheRefuseVerdict_ButStillReturnsResults()
+    {
+        var logger = new FakeLogger<MemoryTools>();
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+            new NoOpSearchQualityService(), logger);
+        _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
+
+        var result = await tools.Search("acme", RealHermesProcessNotification,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        _store.LastQuery.ShouldNotBeNull();
+        result.Data!.Warning.ShouldBeNull();
+        logger.Collector.LatestRecord.Message.ShouldContain("Refuse");
+    }
+
+    [Fact]
+    public async Task Search_InShadowMode_WithAnOrdinaryQuery_RecordsNothing()
+    {
+        var logger = new FakeLogger<MemoryTools>();
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+            new NoOpSearchQualityService(), logger);
+        _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
+
+        await tools.Search("acme", "why did the auth build start failing",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        logger.Collector.Count.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Search_WithTheGuardDisabled_RecordsNothing_EvenInShadowMode()
+    {
+        var logger = new FakeLogger<MemoryTools>();
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+            new NoOpSearchQualityService(), logger);
+        _store.Settings[QueryGuardConfigKeys.EnabledGlobal] = "false";
+        _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
+
+        await tools.Search("acme", RealHermesProcessNotification, cancellationToken: TestContext.Current.CancellationToken);
+
+        logger.Collector.Count.ShouldBe(0);
     }
 
     [Fact]

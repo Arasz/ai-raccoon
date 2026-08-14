@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Text.Json.Nodes;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.SearchQuality;
 using FluentValidation;
 using JetBrains.Annotations;
@@ -13,7 +14,7 @@ using ModelContextProtocol.Server;
 namespace AiRaccoon.Tools;
 
 /// <summary>Thin MCP tools over IMemoryStore — no business logic here (see docs/work/features-agent-memory/spec-issue-1.md §6.1).</summary>
-public sealed class MemoryTools(
+public sealed partial class MemoryTools(
     IMemoryStore store,
     ToolGate gate,
     ISearchQualityService qualityService,
@@ -124,6 +125,12 @@ public sealed class MemoryTools(
 
         await SearchQueryValidator.ValidateAndThrowAsync(searchQuery, cancellationToken);
 
+        var guardVerdict = await EvaluateQueryGuardAsync(projectId, query, cancellationToken);
+        if (guardVerdict.Tier == QueryGuardTier.Refuse)
+        {
+            throw new McpException($"invalid-params: {guardVerdict.Guidance}");
+        }
+
         var results = await store.SearchAsync(searchQuery, cancellationToken);
 
         var correlationId = Guid.CreateVersion7().ToString("N");
@@ -140,9 +147,43 @@ public sealed class MemoryTools(
             logger.LogWarning(ex, "Failed to record search quality for correlation {CorrelationId}", correlationId);
         }
 
-        var result = new SearchResultList(results);
+        var warning = guardVerdict.Tier == QueryGuardTier.Warn ? guardVerdict.Guidance : null;
+        var result = new SearchResultList(results, warning);
         var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
         return envelope with { Meta = envelope.Meta with { CorrelationId = correlationId } };
+    }
+
+    /// <summary>
+    ///     The read-path query guard (docs/adr/0040): disabled reads one setting and returns Clean
+    ///     untouched (byte-identical to no guard at all). Shadow mode logs a non-Clean verdict and
+    ///     still returns Clean, so the caller's behavior is unaffected while an operator measures
+    ///     their own traffic. Live mode returns the verdict as evaluated.
+    /// </summary>
+    private async Task<QueryGuardVerdict> EvaluateQueryGuardAsync(string projectId, string query,
+        CancellationToken cancellationToken)
+    {
+        var enabled = QueryGuardConfigKeys.ParseEnabled(
+            await store.GetSettingAsync(QueryGuardConfigKeys.EnabledGlobal, cancellationToken));
+        if (!enabled)
+        {
+            return QueryGuardVerdict.Clean;
+        }
+
+        var verdict = QueryGuardPolicy.Evaluate(query);
+        if (verdict.Tier == QueryGuardTier.Clean)
+        {
+            return verdict;
+        }
+
+        var shadow = QueryGuardConfigKeys.ParseShadow(
+            await store.GetSettingAsync(QueryGuardConfigKeys.ShadowGlobal, cancellationToken));
+        if (!shadow)
+        {
+            return verdict;
+        }
+
+        Log.QueryGuardShadowVerdict(logger, verdict.Tier.ToString(), projectId, verdict.PolicyName ?? string.Empty);
+        return QueryGuardVerdict.Clean;
     }
 
     [McpServerTool(Name = TnMemoryList)]
@@ -268,8 +309,9 @@ public sealed class MemoryTools(
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record GetResult(string Hash, string Value, string Path, string Context, long CreatedAt);
 
+    /// <summary>Warning is set only by the query guard's annotate tier (docs/adr/0040): a non-null value never changes Results.</summary>
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
-    public sealed record SearchResultList(IReadOnlyList<MemorySearchResult> Results);
+    public sealed record SearchResultList(IReadOnlyList<MemorySearchResult> Results, string? Warning = null);
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record ListResult(JsonNode Files);
@@ -291,4 +333,11 @@ public sealed class MemoryTools(
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record EmbedResult(int Processed, int Pending);
+
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 920, Level = LogLevel.Information,
+            Message = "query guard shadow mode: would {Tier} search for project {ProjectId} (policy {PolicyName})")]
+        public static partial void QueryGuardShadowVerdict(ILogger logger, string tier, string projectId, string policyName);
+    }
 }
