@@ -83,5 +83,5 @@ public sealed class ModalityCandidatesTests
         ordered.ShouldHaveSingleItem().Ranking.ShouldBe(0.9);
     }
 
-    private static MemorySearchResult Hit(string hash, double ranking) => new(hash, 0, ranking, $"{hash}.md", "s");
+    private static MemorySearchResult Hit(string hash, double ranking) => new(hash, ranking, $"{hash}.md", "s");
 }

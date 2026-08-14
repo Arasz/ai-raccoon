@@ -104,7 +104,7 @@ internal static class MemorySql
     // snippet() is deferred to ranking survivors (docs/plans/2026-08-08-search-knn-perf.md §WP7) —
     // FtsSnippetsForSurvivors resolves it there instead.
     public const string SearchByFilter = """
-                                         SELECT e.hash AS Hash, 0 AS Seq, bm25(entries_fts, 1.0, 8.0, 16.0) AS Ranking,
+                                         SELECT e.hash AS Hash, bm25(entries_fts, 1.0, 8.0, 16.0) AS Ranking,
                                                 e.path AS Path, e.value AS Value, e.source_file AS SourceFile,
                                                 e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks,
                                                 e.id AS Id
@@ -132,7 +132,7 @@ internal static class MemorySql
     // v.distance, e.path` preserves the existing distance-tie break. Vector hits carry a fallback
     // snippet built in C# (the FTS list's snippet() wins for docs both modalities retrieve).
     public const string VectorSearchByFilter = """
-                                               SELECT e.hash AS Hash, 0 AS Seq, e.path AS Path, e.value AS Value,
+                                               SELECT e.hash AS Hash, e.path AS Path, e.value AS Value,
                                                       v.distance AS Distance, e.source_file AS SourceFile,
                                                       e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks
                                                FROM vec_entries v
@@ -145,7 +145,7 @@ internal static class MemorySql
     // same shape as the content query (source identity included) so both lists fuse in C# by
     // entry hash.
     public const string StructureVectorSearchByFilter = """
-                                                        SELECT e.hash AS Hash, 0 AS Seq, e.path AS Path, e.value AS Value,
+                                                        SELECT e.hash AS Hash, e.path AS Path, e.value AS Value,
                                                                v.distance AS Distance, e.source_file AS SourceFile,
                                                                e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks
                                                         FROM vec_structure v

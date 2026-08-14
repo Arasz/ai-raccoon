@@ -140,8 +140,8 @@ public sealed class SourceAffinityRankerTests
     {
         var candidates = new[]
         {
-            new MemorySearchResult("h1", 1, 1.0, "p1", "s"),
-            new MemorySearchResult("h2", 2, 0.9, "p2", "s")
+            new MemorySearchResult("h1", 1.0, "p1", "s"),
+            new MemorySearchResult("h2", 0.9, "p2", "s")
         };
 
         var ranked = SourceAffinityRanker.Rank(candidates, lambda: 0.1, 0.1, DocScoreFormula.Max);
@@ -181,5 +181,5 @@ public sealed class SourceAffinityRankerTests
         merged.Select(r => r.Hash).ShouldBe(["h0", "h1", "h2"]);
     }
 
-    private static MemorySearchResult Hit(string hash, double ranking, string sourceFile, int chunkIndex) => new(hash, 0, ranking, $"{sourceFile}#{chunkIndex}", "s", sourceFile, chunkIndex, 5);
+    private static MemorySearchResult Hit(string hash, double ranking, string sourceFile, int chunkIndex) => new(hash, ranking, $"{sourceFile}#{chunkIndex}", "s", sourceFile, chunkIndex, 5);
 }

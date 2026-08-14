@@ -830,7 +830,7 @@ public sealed partial class SqliteMemoryStore(
     internal static IReadOnlyList<MemorySearchResult> BuildFtsResults(IReadOnlyList<SearchRow> rows) =>
     [
         .. rows.Select(row => new MemorySearchResult(
-            row.Hash, row.Seq, row.Ranking, row.Path, string.Empty,
+            row.Hash, row.Ranking, row.Path, string.Empty,
             row.SourceFile, row.ChunkIndex, row.TotalChunks))
     ];
 
@@ -897,7 +897,7 @@ public sealed partial class SqliteMemoryStore(
         IReadOnlyList<(VectorRow Row, double Score)> ranked) =>
     [
         .. ranked.Select(item => new MemorySearchResult(
-            item.Row.Hash, item.Row.Seq, item.Score, item.Row.Path, string.Empty,
+            item.Row.Hash, item.Score, item.Row.Path, string.Empty,
             item.Row.SourceFile, item.Row.ChunkIndex, item.Row.TotalChunks))
     ];
 
@@ -1182,8 +1182,6 @@ public sealed partial class SqliteMemoryStore(
     {
         public string Hash { get; set; } = "";
 
-        public int Seq { get; set; }
-
         public double Ranking { get; set; }
 
         public string Path { get; set; } = "";
@@ -1211,8 +1209,6 @@ public sealed partial class SqliteMemoryStore(
     internal sealed class VectorRow
     {
         public string Hash { get; set; } = "";
-
-        public int Seq { get; set; }
 
         public string Path { get; set; } = "";
 

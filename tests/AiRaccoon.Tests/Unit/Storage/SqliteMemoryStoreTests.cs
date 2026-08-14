@@ -742,8 +742,8 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [Fact]
     public void Merge_RrfAcrossContextBatches_PromotesDualRetrievedDocs_AndNormalizesToMax()
     {
-        var shared = new[] { Hit("h1", 1, "a.md"), Hit("h2", 2, "b.md") };
-        var project = new[] { Hit("h2", 1, "b.md"), Hit("h3", 2, "c.md") };
+        var shared = new[] { Hit("h1", "a.md"), Hit("h2", "b.md") };
+        var project = new[] { Hit("h2", "b.md"), Hit("h3", "c.md") };
 
         var merged = SearchResultMerger.Merge([shared, project], 10, rrfK: 60);
 
@@ -756,7 +756,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [Fact]
     public void Merge_SingleContextBatch_KeepsItsOrderAndNormalizesTopToOne()
     {
-        var results = new[] { Hit("h1", 1, "a.md"), Hit("h2", 2, "b.md"), Hit("h3", 3, "c.md") };
+        var results = new[] { Hit("h1", "a.md"), Hit("h2", "b.md"), Hit("h3", "c.md") };
 
         var merged = SearchResultMerger.Merge([results], 10);
 
@@ -767,7 +767,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [Fact]
     public void Merge_AppliesMinScoreAfterNormalization()
     {
-        var results = new[] { Hit("h1", 1, "a.md"), Hit("h2", 2, "b.md"), Hit("h3", 3, "c.md") };
+        var results = new[] { Hit("h1", "a.md"), Hit("h2", "b.md"), Hit("h3", "c.md") };
 
         var merged = SearchResultMerger.Merge([results], 10, 0.9, 10);
 
@@ -780,9 +780,9 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     {
         var results = new[]
         {
-            new MemorySearchResult("h1", 1, 0.4, "a.md", "s"),
-            new MemorySearchResult("h2", 2, 0.9, "b.md", "s"),
-            new MemorySearchResult("h3", 3, 0.7, "c.md", "s")
+            new MemorySearchResult("h1", 0.4, "a.md", "s"),
+            new MemorySearchResult("h2", 0.9, "b.md", "s"),
+            new MemorySearchResult("h3", 0.7, "c.md", "s")
         };
 
         var merged = SearchResultMerger.Merge([results], 2);
@@ -796,7 +796,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         SearchResultMerger.Merge([[], []], 10)
             .ShouldBeEmpty();
 
-    private static MemorySearchResult Hit(string hash, int seq, string path) => new(hash, seq, 0, path, "s");
+    private static MemorySearchResult Hit(string hash, string path) => new(hash, 0, path, "s");
 
     private async Task<EntryRow?> ReadRowAsync(string hash)
     {
