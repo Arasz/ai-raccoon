@@ -6,6 +6,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.TestHelpers;
 
 [Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class FakeMemoryStoreTests
 {
     [Fact]
