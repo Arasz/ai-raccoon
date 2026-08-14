@@ -281,6 +281,26 @@ Make all three abstract; the compiler lists the work.
 
 ## Wave 4 — Boundaries, gates and the things that let this happen
 
+### WP19 · Fix the flaky test in the merge gate — **adversarial new finding 7, correcting QA F3**
+**Effort:** SMALL · **Surface:** `tests/AiRaccoon.Tests/Integration/Mcp/ToolRefusalsTests.cs:218-229`
+
+The QA lane saw `KnownRefusal_ReturnsRefusal_WithoutAnSdkErrorLog` fail only when three `dotnet test`
+invocations ran concurrently on one machine, and concluded — reasonably — that it was an artefact of a
+condition CI never creates. **The adversarial pass corrects that:** it failed on a single
+`Speed=Fast` run *and* on an unfiltered full run (`Failed: 1, Passed: 2860, Skipped: 9`), then passed
+clean on an immediate rerun with no code change. It is flaky in isolation, not only under contention,
+and `Speed=Fast` is the PR gate.
+
+**Why this matters more than one test.** This repo has already been bitten by a gate nobody trusted:
+`build.yml:85-90` documents four red tests merged through a green PR, and `nightly.yml:5-7` documents a
+backstop that had failed on every run it ever had. A gate that goes red at random trains people to
+re-run rather than read — the same failure mode arriving by a different door.
+
+**Gate — watch it go red first.** Find the actual race (the test binds a real loopback HTTP server;
+`LoopbackPort.BindWithRetryAsync` retries only on `SocketError.AddressAlreadyInUse`), then reproduce it
+deterministically — by injecting the timing rather than by looping the test — before fixing it. A flake
+"fixed" without a reproduction is a flake that moved.
+
 ### WP13 · Wire up the architecture test that is already paid for — **H23**
 `tests/Directory.Packages.props:18` pins `TngTech.ArchUnitNET.xUnitV3` and no project references it.
 The only mechanical layering guard in the repo is a missing `ProjectReference`, which catches
