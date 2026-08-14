@@ -244,6 +244,6 @@ public sealed class SearchFixtureBank : IAsyncDisposable
 
     private sealed class NoopEncryptionKeyResolver : IEncryptionKeyResolver
     {
-        public ResolvedKey Resolve() => ResolvedKey.None;
+        public Task<ResolvedKey> ResolveAsync(CancellationToken cancellationToken = default) => Task.FromResult(ResolvedKey.None);
     }
 }

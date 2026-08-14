@@ -17,12 +17,12 @@ public sealed class EnvEncryptionKeyProvider : IEncryptionKeyProvider
 
     public bool IsForSource(string source) => Source.Equals(source, StringComparison.Ordinal);
 
-    public Passphrase GetPassphrase(EncryptionData encryptionData)
+    public Task<Passphrase> GetPassphraseAsync(EncryptionData encryptionData, CancellationToken cancellationToken = default)
     {
         var value = Environment.GetEnvironmentVariable(EnvVarName);
-        return new Passphrase(Source)
+        return Task.FromResult(new Passphrase(Source)
         {
             Value = string.IsNullOrEmpty(value) ? null : value
-        };
+        });
     }
 }

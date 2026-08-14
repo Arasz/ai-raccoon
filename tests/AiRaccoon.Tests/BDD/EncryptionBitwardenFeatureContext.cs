@@ -198,16 +198,23 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
     }
 
     /// <summary>
-    ///     Mirrors the Program.cs eager-startup open: resolves the key then opens the bank.
-    ///     Returns null on success, else the error text the process would print (mismatch text
-    ///     only for an actual key mismatch, SQLCipher code 26; other errors map generically).
+    ///     Mirrors the Program.cs eager-startup open: resolves the key then opens the bank. Uses a
+    ///     fresh resolver, not the scenario's shared <see cref="Resolver" /> — a real server process
+    ///     gets a fresh, cold-cache resolver from DI on every start (.NET-F2 caches per resolver
+    ///     instance, not globally), and the "Given" step's own fixture probe-open must not poison
+    ///     what "the server opens the bank" observes. Returns null on success, else the error text
+    ///     the process would print (mismatch text only for an actual key mismatch, SQLCipher code
+    ///     26; other errors map generically).
     /// </summary>
     public async Task<string?> StartServerErrorAsync(CancellationToken cancellationToken = default)
     {
+        var freshResolver = new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath),
+            [new StubEnvProvider(EnvPassphrase), new BitwardenEncryptionKeyProvider(NewRunner())]);
+
         ResolvedKey resolved;
         try
         {
-            resolved = Resolver.Resolve();
+            resolved = await freshResolver.ResolveAsync(cancellationToken);
         }
         catch (Exception)
         {
@@ -239,7 +246,8 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
 
     private sealed class PathSwitchingRunner(Func<string> path) : ICliSecretManager
     {
-        public BwsResult Run(IReadOnlyList<string> args, string? token, TimeSpan timeout) => new BitwardenCliSecretManager(path()).Run(args, token, timeout);
+        public Task<BwsResult> RunAsync(IReadOnlyList<string> args, string? token, TimeSpan timeout,
+            CancellationToken cancellationToken = default) => new BitwardenCliSecretManager(path()).RunAsync(args, token, timeout, cancellationToken);
     }
 
     private sealed class StubEnvProvider(string? passphrase) : IEncryptionKeyProvider
@@ -248,7 +256,8 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
 
         public bool IsForSource(string source) => Source.Equals(source, StringComparison.Ordinal);
 
-        public Passphrase GetPassphrase(EncryptionData encryptionData) => new(Source) { Value = passphrase };
+        public Task<Passphrase> GetPassphraseAsync(EncryptionData encryptionData, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new Passphrase(Source) { Value = passphrase });
     }
 
     private sealed class StubChunker : IMarkdownChunker

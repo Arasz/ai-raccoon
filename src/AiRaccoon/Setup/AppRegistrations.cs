@@ -79,9 +79,9 @@ public static partial class AppRegistrations
                 sp.GetRequiredService<ILoggerFactory>().CreateLogger<SyncService>()));
             return;
 
-            static string SnapshotConnectionString(IServiceProvider sp, string path, bool readOnly)
+            static async Task<string> SnapshotConnectionString(IServiceProvider sp, string path, bool readOnly, CancellationToken ct)
             {
-                var key = sp.GetRequiredService<IEncryptionKeyResolver>().Resolve().Passphrase;
+                var key = (await sp.GetRequiredService<IEncryptionKeyResolver>().ResolveAsync(ct)).Passphrase;
                 var csb = new SqliteConnectionStringBuilder
                 {
                     DataSource = path,
@@ -97,7 +97,7 @@ public static partial class AppRegistrations
 
             static async Task<SqliteConnection> OpenSnapshotWithKey(IServiceProvider sp, string path, CancellationToken ct)
             {
-                var conn = new SqliteConnection(SnapshotConnectionString(sp, path, false));
+                var conn = new SqliteConnection(await SnapshotConnectionString(sp, path, false, ct));
                 await conn.OpenAsync(ct);
                 conn.EnableExtensions();
                 conn.LoadVector();
@@ -106,7 +106,7 @@ public static partial class AppRegistrations
 
             static async Task<SqliteConnection> OpenSnapshotReadOnly(IServiceProvider sp, string path, CancellationToken ct)
             {
-                var conn = new SqliteConnection(SnapshotConnectionString(sp, path, true));
+                var conn = new SqliteConnection(await SnapshotConnectionString(sp, path, true, ct));
                 await conn.OpenAsync(ct);
                 conn.EnableExtensions();
                 conn.LoadVector();

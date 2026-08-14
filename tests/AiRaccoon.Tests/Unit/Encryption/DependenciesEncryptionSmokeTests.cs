@@ -44,7 +44,7 @@ public sealed class DependenciesEncryptionSmokeTests
     }
 
     [Fact]
-    public void RegisterMemoryServices_ResolverReadsEnvPassphraseWhenNoSidecar()
+    public async Task RegisterMemoryServices_ResolverReadsEnvPassphraseWhenNoSidecar()
     {
         var tempRoot = TestData.CreateTempRoot();
         TestData.EnvVarGate.Wait(TestContext.Current.CancellationToken);
@@ -60,7 +60,7 @@ public sealed class DependenciesEncryptionSmokeTests
 
                 using var provider = services.BuildServiceProvider();
 
-                provider.GetRequiredService<IEncryptionKeyResolver>().Resolve().Passphrase.ShouldBe("smoke-pass");
+                (await provider.GetRequiredService<IEncryptionKeyResolver>().ResolveAsync(TestContext.Current.CancellationToken)).Passphrase.ShouldBe("smoke-pass");
             }
             finally
             {

@@ -21,7 +21,8 @@ public sealed class BitwardenCliSecretManager : ICliSecretManager
         _executable = executable;
     }
 
-    public BwsResult Run(IReadOnlyList<string> args, string? token, TimeSpan timeout)
+    public async Task<BwsResult> RunAsync(IReadOnlyList<string> args, string? token, TimeSpan timeout,
+        CancellationToken cancellationToken = default)
     {
         Guard.IsNotNull(args);
         Guard.IsGreaterThan(timeout, TimeSpan.Zero);
@@ -58,26 +59,32 @@ public sealed class BitwardenCliSecretManager : ICliSecretManager
 
         using (process)
         {
-            var stdoutTask = process.StandardOutput.ReadToEndAsync();
-            var stderrTask = process.StandardError.ReadToEndAsync();
+            // Started before the wait, same as a sync ReadToEnd would be: the child's pipes must
+            // drain concurrently with the wait, or a full buffer deadlocks it.
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
+            var stderrTask = process.StandardError.ReadToEndAsync(CancellationToken.None);
 
-            if (!process.WaitForExit((int)timeout.TotalMilliseconds))
+            using var timeoutCts = new CancellationTokenSource(timeout);
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+
+            try
             {
-                try
+                await process.WaitForExitAsync(linkedCts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                TryKill(process);
+                await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+                if (timeoutCts.IsCancellationRequested)
                 {
-                    process.Kill(entireProcessTree: true);
-                }
-                catch (Exception ex) when (ex is InvalidOperationException or Win32Exception)
-                {
-                    // The process already exited between the timeout check and the kill.
+                    throw new BwsInvocationException($"bws timed out after {(int)timeout.TotalSeconds}s");
                 }
 
-                process.WaitForExit();
-                throw new BwsInvocationException($"bws timed out after {(int)timeout.TotalSeconds}s");
+                throw; // the caller's own token cancelled the run — propagate as-is
             }
 
-            var stdout = stdoutTask.GetAwaiter().GetResult();
-            var stderr = stderrTask.GetAwaiter().GetResult();
+            var stdout = await stdoutTask.ConfigureAwait(false);
+            var stderr = await stderrTask.ConfigureAwait(false);
 
             if (process.ExitCode == 0 && string.IsNullOrWhiteSpace(stdout))
             {
@@ -85,6 +92,18 @@ public sealed class BitwardenCliSecretManager : ICliSecretManager
             }
 
             return new BwsResult(process.ExitCode, stdout, stderr);
+        }
+
+        static void TryKill(Process process)
+        {
+            try
+            {
+                process.Kill(entireProcessTree: true);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or Win32Exception)
+            {
+                // The process already exited between the timeout check and the kill.
+            }
         }
     }
 }

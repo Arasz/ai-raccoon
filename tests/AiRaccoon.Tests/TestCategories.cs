@@ -24,7 +24,7 @@ public static class TestCategories
 /// <summary>Never resolves a passphrase — no encryption. Use for existing unencrypted-DB tests.</summary>
 public sealed class NullKeyProvider : IEncryptionKeyResolver
 {
-    public ResolvedKey Resolve() => ResolvedKey.None;
+    public Task<ResolvedKey> ResolveAsync(CancellationToken cancellationToken = default) => Task.FromResult(ResolvedKey.None);
 
     public static IEncryptionKeyResolver Resolver(InfrastructureOptions options) => new NullKeyProvider();
 }
