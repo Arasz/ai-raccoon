@@ -25,23 +25,40 @@ public sealed class OtlpMetricExportE2ETests : IAsyncLifetime
 
     private McpServerFactory _factory = null!;
     private CapturingCollector _collector = null!;
-    private IDisposable _env = null!;
+    private EnvScope _env = null!;
 
     public async ValueTask InitializeAsync()
     {
         await TestData.CreateBundledModel().EnsureAsync(TestContext.Current.CancellationToken);
-        _env = await AcquireCleanEnvAsync();
-        _collector = new CapturingCollector();
-        Environment.SetEnvironmentVariable(EndpointVar, _collector.Endpoint);
-        Environment.SetEnvironmentVariable(ProtocolVar, "http/protobuf");
-        _factory = new McpServerFactory();
+        _env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EndpointVar, null), (ProtocolVar, null));
+        try
+        {
+            // Measured on xunit.v3 3.2.2: DisposeAsync does NOT run when InitializeAsync throws,
+            // so anything constructed after the gate is taken has to release it itself.
+            _collector = new CapturingCollector();
+            Environment.SetEnvironmentVariable(EndpointVar, _collector.Endpoint);
+            Environment.SetEnvironmentVariable(ProtocolVar, "http/protobuf");
+            _factory = new McpServerFactory();
+        }
+        catch
+        {
+            await _env.DisposeAsync();
+            throw;
+        }
     }
 
     public async ValueTask DisposeAsync()
     {
-        await _factory.DisposeAsync();
-        _collector.Dispose();
-        _env.Dispose();
+        try
+        {
+            await _factory.DisposeAsync();
+            _collector.Dispose();
+        }
+        finally
+        {
+            await _env.DisposeAsync();
+        }
     }
 
     [Fact]
@@ -62,26 +79,6 @@ public sealed class OtlpMetricExportE2ETests : IAsyncLifetime
         finally
         {
             await client.DisposeAsync();
-        }
-    }
-
-    private static async Task<IDisposable> AcquireCleanEnvAsync()
-    {
-        await TestData.EnvVarGate.WaitAsync();
-        var originalEndpoint = Environment.GetEnvironmentVariable(EndpointVar);
-        var originalProtocol = Environment.GetEnvironmentVariable(ProtocolVar);
-        Environment.SetEnvironmentVariable(EndpointVar, null);
-        Environment.SetEnvironmentVariable(ProtocolVar, null);
-        return new EnvRestore(originalEndpoint, originalProtocol);
-    }
-
-    private sealed class EnvRestore(string? originalEndpoint, string? originalProtocol) : IDisposable
-    {
-        public void Dispose()
-        {
-            Environment.SetEnvironmentVariable(EndpointVar, originalEndpoint);
-            Environment.SetEnvironmentVariable(ProtocolVar, originalProtocol);
-            TestData.EnvVarGate.Release();
         }
     }
 

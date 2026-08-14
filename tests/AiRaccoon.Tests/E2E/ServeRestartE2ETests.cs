@@ -56,7 +56,8 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
     [Fact]
     public async Task ARunningServer_IsCycled_AndADifferentProcessAnswersOnThisBuild()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EnvEncryptionKeyProvider.EnvVarName, null));
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         lease.ReleaseForBind();
@@ -88,7 +89,8 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
     [Fact]
     public async Task AServerThatNeverStops_ExitsNonZeroWithinTheBound_RatherThanHanging()
     {
-        using var env = await AcquireCleanEnvAsync();
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EnvEncryptionKeyProvider.EnvVarName, null));
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         (await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
@@ -189,24 +191,7 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
         throw new TimeoutException($"timed out waiting for serve --restart; stderr: {run.Stderr}");
     }
 
-    private static async Task<IDisposable> AcquireCleanEnvAsync()
-    {
-        await TestData.EnvVarGate.WaitAsync(TestContext.Current.CancellationToken);
-        var original = Environment.GetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName);
-        Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, null);
-        return new EnvRestore(original);
-    }
-
     private sealed record ServeRun(Task<int> Exit, LockingWriter Stdout, LockingWriter Stderr, CancellationTokenSource Cts);
-
-    private sealed class EnvRestore(string? original) : IDisposable
-    {
-        public void Dispose()
-        {
-            Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, original);
-            TestData.EnvVarGate.Release();
-        }
-    }
 
     private sealed class LockingWriter : TextWriter
     {
