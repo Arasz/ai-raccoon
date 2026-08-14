@@ -27,16 +27,27 @@ public sealed class TestDataDeleteTempRootTests
     {
         var root = LockedRootOrSkip("delete-temp-root-retry");
 
-        var unlockAfter = Task.Run(async () =>
+        // A dedicated thread, not the pool: DeleteTempRoot's whole retry budget is 300ms
+        // (20+40+80+160), and under a loaded CI runner a pooled unlock scheduled at 150ms can miss
+        // it entirely — measured, this test failed at 302ms on a CI run whose fast job was
+        // executing 2129 tests. The same thread-pool starvation is why the concurrency suites use
+        // real threads. 30ms against a 300ms budget leaves a 10x margin instead of 2x.
+        var unlocked = new ManualResetEventSlim(false);
+        var unlocker = new Thread(() =>
         {
-            await Task.Delay(TimeSpan.FromMilliseconds(150), TestContext.Current.CancellationToken);
+            Thread.Sleep(TimeSpan.FromMilliseconds(30));
             Unlock(root);
-        }, TestContext.Current.CancellationToken);
+            unlocked.Set();
+        }) { IsBackground = true };
+        unlocker.Start();
 
         TestData.DeleteTempRoot(root);
 
-        await unlockAfter.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        unlocked.Wait(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken).ShouldBeTrue(
+            "the unlocker thread must have run");
+        unlocker.Join(TimeSpan.FromSeconds(5)).ShouldBeTrue();
         Directory.Exists(root).ShouldBeFalse();
+        await Task.CompletedTask;
     }
 
     [Fact]
