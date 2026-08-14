@@ -129,6 +129,72 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     }
 
 
+    // STRAND PROBE 1 (temporary): a holder that never releases must not wedge the next acquire
+    // forever. WithEnvPassphrase takes the gate with Wait() — no token, no timeout.
+    [Fact]
+    public async Task StrandProbe_AcquireHonoursTheCallersToken_RatherThanBlockingForever()
+    {
+        await TestData.EnvVarGate.WaitAsync(TestContext.Current.CancellationToken);
+        Task? probe = null;
+        try
+        {
+            using var caller = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
+            var token = caller.Token;
+            probe = Task.Run(() => WithEnvPassphrase("probe", () => { token.ThrowIfCancellationRequested(); return 0; }),
+                CancellationToken.None);
+
+            await Should.ThrowAsync<OperationCanceledException>(() =>
+                probe.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            // Whatever the probe did, the permit we took goes back; the probe's own acquire
+            // (once it wins) is released by WithEnvPassphrase's own finally.
+            TestData.EnvVarGate.Release();
+            if (probe is not null)
+            {
+                await probe.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken)
+                    .ContinueWith(static _ => { }, TaskScheduler.Default);
+            }
+        }
+    }
+
+    // STRAND PROBE 2 (temporary): the gate must stay held for the whole awaited body.
+    // WithEnvPassphrase is Func<T>, so with T = Task<...> it releases at the first await.
+    [Fact]
+    public async Task StrandProbe_TheGateStaysHeldUntilTheAwaitedBodyCompletes()
+    {
+        var bodyStarted = new TaskCompletionSource();
+        var letBodyFinish = new TaskCompletionSource();
+
+        var outer = WithEnvPassphrase("probe", async () =>
+        {
+            bodyStarted.SetResult();
+            await letBodyFinish.Task;
+            return 0;
+        });
+
+        await bodyStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        // The body is still running, so the gate must still be held and this must NOT succeed.
+        var stolen = await TestData.EnvVarGate.WaitAsync(TimeSpan.FromMilliseconds(500),
+            TestContext.Current.CancellationToken);
+        try
+        {
+            stolen.ShouldBeFalse("the gate was released while the protected body was still running");
+        }
+        finally
+        {
+            if (stolen)
+            {
+                TestData.EnvVarGate.Release();
+            }
+
+            letBodyFinish.SetResult();
+            await outer.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        }
+    }
+
     /// <summary>The seed is a byte[] local to the command; DeriveAndZeroSeed is the one call site free to clear it.</summary>
     [Fact]
     public void DeriveAndZeroSeed_DerivesTheRawKeyThenZeroesTheSeed()
