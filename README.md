@@ -31,6 +31,7 @@ flowchart LR
 
 ## What's new
 
+- **Honest write outcomes; zero-shot noise filter and heuristic write-time TTL removed (1.12.0).** `memory_write` used to report success for content it silently discarded. It now returns `stored`/`reason` — a refused write is reported, not lied about — and `noise.enabled` is a kill switch for pre-write rejection, mirroring `sweep.enabled`. The zero-shot embedding noise filter (0/50 recall against its own ADR's noise set) and the noise-learning subsystem it fed are removed; only the deterministic Hermes background-process-log policy remains. `PromotionScorerTtlPolicy`'s write-time TTL heuristic is removed too — `memory_set_ttl` is the one explicit path. [ADR-0032](docs/adr/0032-truthful-write-outcome.md), [ADR-0033](docs/adr/0033-remove-zero-shot-noise-filter-and-noise-learning.md), [ADR-0034](docs/adr/0034-explicit-ttl-is-authoritative.md)
 - **Semantic promotion classifier removed (1.11.0).** [Why it was removed](docs/work/2026-08-13-fixing-zero-shot-promotion-classifier.md)
 - **Auto-Improving Dynamic Noise Vectors (1.10.0)** — [Plan](docs/plans/2026-08-13-v4-dynamic-noise-and-semantic-promotion-plan.md) and [Research](docs/plans/2026-08-13-dynamic-noise-vector-learning-research.md)
   * **Leader-Follower Centroid Clustering**: Automatically learns user-specific noise vectors over `sqlite-vec` (`vec_noise`) from 4 feedback channels (search quality, discards, unread TTL expirations, process log intercepts) with 5 mandatory safety bounds ($\cos(\mu_{noise}, \mu_{core}) \le 0.75$).
