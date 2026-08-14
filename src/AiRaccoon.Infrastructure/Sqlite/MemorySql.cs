@@ -338,11 +338,30 @@ internal static class MemorySql
     public const string SelectAllEmbedded =
         "SELECT id AS Id, value AS Value FROM entries WHERE embed_state = 'embedded' ORDER BY id";
 
+    // Custom contexts are listed alongside shared/project because their label is the only key that
+    // reaches their rows through memory_search (SearchContexts.For), and this is the only place a
+    // caller can read it back. Omitting them made a context-scoped write unreachable by any means
+    // except a hash the caller had to have kept.
+    /// <summary>The custom-context labels a project has rows under; the project scope reads them all.</summary>
+    public const string CustomContextLabels = """
+                                              SELECT DISTINCT context_label
+                                              FROM entries
+                                              WHERE scope = 'custom' AND project_id = @projectId
+                                                AND context_label IS NOT NULL
+                                              ORDER BY context_label
+                                              """;
+
     public const string CommittedContexts = """
-                                            SELECT DISTINCT CASE WHEN scope = 'shared' THEN 'shared' ELSE 'project:' || project_id END AS context
+                                            SELECT DISTINCT CASE
+                                                     WHEN scope = 'shared' THEN 'shared'
+                                                     WHEN scope = 'custom' THEN 'custom:' || context_label
+                                                     ELSE 'project:' || project_id
+                                                   END AS context
                                             FROM entries
-                                            WHERE scope = 'shared' OR (scope = 'project' AND project_id = @projectId)
-                                            ORDER BY CASE WHEN scope = 'shared' THEN 0 ELSE 1 END, context
+                                            WHERE scope = 'shared'
+                                               OR (scope = 'project' AND project_id = @projectId)
+                                               OR (scope = 'custom' AND project_id = @projectId AND context_label IS NOT NULL)
+                                            ORDER BY CASE WHEN scope = 'shared' THEN 0 WHEN scope = 'project' THEN 1 ELSE 2 END, context
                                             """;
 
     public const string DistinctFilePaths = """

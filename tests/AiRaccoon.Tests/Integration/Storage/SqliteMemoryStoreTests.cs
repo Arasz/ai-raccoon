@@ -193,7 +193,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task Search_ProjectScope_ExcludesOtherProjectsAndCustomContexts()
+    public async Task Search_ProjectScope_ExcludesOtherProjects_ButCoversItsOwnContexts()
     {
         var acmeEntry = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "acme project fact"), TestContext.Current.CancellationToken);
@@ -209,7 +209,8 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
         results.Select(r => r.Hash).ShouldContain(acmeEntry.Hash);
         results.ShouldNotContain(r => r.Hash == otherEntry.Hash);
-        results.ShouldNotContain(r => r.Hash == customEntry.Hash);
+        results.Select(r => r.Hash).ShouldContain(customEntry.Hash,
+            "the project is the isolation boundary; a context inside it is in scope (ADR-0045)");
     }
 
     [Fact]
@@ -683,13 +684,26 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         SearchContexts.For(query).ShouldBe([ContextNaming.SharedContext]);
     }
 
+    /// <summary>A named context narrows to that context; it does not add to the unlabelled rows (ADR-0045).</summary>
     [Fact]
-    public void SearchContexts_ProjectScope_WithContextLabel_AddsTheLabelContext()
+    public void SearchContexts_ProjectScope_WithContextLabel_IsThatContextOnly()
     {
         var query = new SearchQuery("acme", "q", SearchScope.Project, ContextLabel: "docs:adr");
 
-        SearchContexts.For(query).ShouldBe(
-            [ContextNaming.ProjectContext("acme"), ContextNaming.LabelContext("acme", "docs:adr")]);
+        SearchContexts.For(query, ["other"]).ShouldBe([ContextNaming.LabelContext("acme", "docs:adr")]);
+    }
+
+    /// <summary>No context named means every context in the project, not just the unlabelled ones.</summary>
+    [Fact]
+    public void SearchContexts_ProjectScope_WithoutContextLabel_CoversEveryContextInTheProject()
+    {
+        var query = new SearchQuery("acme", "q", SearchScope.Project);
+
+        SearchContexts.For(query, ["adr", "notes"]).ShouldBe([
+            ContextNaming.ProjectContext("acme"),
+            ContextNaming.LabelContext("acme", "adr"),
+            ContextNaming.LabelContext("acme", "notes")
+        ]);
     }
 
     [Fact]
@@ -726,8 +740,9 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         results.ShouldHaveSingleItem();
     }
 
+    /// <summary>Inverted by ADR-0045: a context is a label inside the project, not a wall around it.</summary>
     [Fact]
-    public async Task Search_WithoutContextLabel_ExcludesCustomScopedRows()
+    public async Task Search_WithoutContextLabel_IncludesEveryContextInTheProject()
     {
         await _store.WriteAsync(new MemoryWriteRequest("acme", "docs only fact", "docs:adr"),
             TestContext.Current.CancellationToken);
@@ -736,11 +751,12 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             new SearchQuery("acme", "docs only fact", SearchScope.Project, Limit: 5, MinScore: 0.0),
             TestContext.Current.CancellationToken);
 
-        results.ShouldBeEmpty("scope='custom' rows are invisible to the plain project scope");
+        results.ShouldHaveSingleItem();
     }
 
+    /// <summary>Narrowing, not augmenting (ADR-0045): naming a context excludes the other contexts.</summary>
     [Fact]
-    public async Task Search_WithContextLabel_IncludesCustomScopedRows_AlongsideProjectRows()
+    public async Task Search_WithContextLabel_ReturnsThatContextOnly()
     {
         await _store.WriteAsync(new MemoryWriteRequest("acme", "custom labeled fact", "docs:adr"),
             TestContext.Current.CancellationToken);
@@ -753,8 +769,8 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             TestContext.Current.CancellationToken);
 
         results.Select(r => r.Snippet).ShouldContain(s => s.Contains("custom labeled fact", StringComparison.Ordinal));
-        results.Select(r => r.Snippet).ShouldContain(s => s.Contains("plain project fact", StringComparison.Ordinal),
-            "the context label filter augments the project scope, it does not replace it");
+        results.Select(r => r.Snippet).ShouldNotContain(s => s.Contains("plain project fact", StringComparison.Ordinal),
+            "asking for one context means that context, not that context plus the unlabelled rows");
     }
 
     /// <summary>

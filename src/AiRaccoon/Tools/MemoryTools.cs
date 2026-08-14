@@ -47,7 +47,7 @@ public sealed partial class MemoryTools(
         string? workspaceId = null,
         [Description("Provenance only: which agent wrote this.")]
         string? agentId = null,
-        [Description("Optional custom context label instead of the default project/workspace context.")]
+        [Description("Optional context label for this entry, instead of the default project/workspace context. A context organises entries inside the project; it does not hide them — a plain project search still finds them.")]
         string? context = null,
         [Description("Optional original file path the content came from; chunks of one file share it.")]
         string? sourceFile = null,
@@ -88,7 +88,7 @@ public sealed partial class MemoryTools(
 
     [McpServerTool(Name = TnMemorySearch)]
     [Description(
-        "Hybrid semantic search over the bank. scope=all (default) searches shared + project (+ workspace when named); scope=project searches the project only; scope=shared searches the shared promotion tier only.")]
+        "Hybrid semantic search over the bank. scope=all (default) searches shared + project (+ workspace when named); scope=project searches the project only; scope=shared searches the shared promotion tier only. A project scope covers every context in the project unless contextLabel narrows it to one.")]
     public async Task<ApiEnvelope<SearchResultList>> Search(
         [Description("The project id.")] string projectId,
         [Description("The search query.")] string query,
@@ -107,7 +107,8 @@ public sealed partial class MemoryTools(
         int ftsWeight = 1,
         [Description("Weight of the semantic (vector) list in the RRF fusion (default 1).")]
         int vectorWeight = 1,
-        [Description("When set, the project scope also searches custom-scoped rows under this context label.")]
+        [Description("Narrows the project scope to one context. Omit it to search every context in " +
+                     "the project (the default); memory_stats lists the labels in use.")]
         string? contextLabel = null,
         CancellationToken cancellationToken = default)
     {
