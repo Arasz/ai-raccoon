@@ -14,6 +14,24 @@ files in QA-F5 and 6 of the 10 uncalibrated thresholds as a side effect.
 Every package names its acceptance criteria and the gate that proves them. Per the project's
 invariant, **each new gate is broken on purpose first and watched go red** before it is trusted.
 
+## Urgency calibration (measured against the live bank)
+
+The deployed bank (15,236 entries, build 1.11.0, which *does* contain both ADRs) shows
+`noise_entries = 0` and `ttl_days` NULL on every row. **Neither blocker has fired in
+production.** Both code paths are exactly as the review describes; the reason they have not bitten
+is behavioural — the filter's own 2/12 recall, and real writes running 64–166 words.
+
+Consequences for this plan:
+
+- **This is not a hotfix.** Nothing is being lost right now, so the waves can be done properly
+  with tests rather than rushed. The plan's ordering stands.
+- **But the reaper is armed:** `access.mode.global=full`, `sweep.enabled.global=true`. The margin
+  is luck, not design.
+- **Hard constraint:** no work that increases the noise filter's recall may land before WP1's
+  honest write outcome. Doing so would convert a dormant defect into an active one. WP2 deletes
+  the filter, which removes the hazard rather than tuning it — a further argument for the
+  chosen ordering.
+
 ## Wave 1 — The write path (blocker B1)
 
 One coherent change to one surface. Ships as one PR.

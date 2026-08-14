@@ -59,6 +59,37 @@ removes most of the blocker surface rather than patching it.
 
 ---
 
+## Live-bank calibration — both blockers are loaded, neither has fired
+
+Read-only queries against the deployed bank (`~/.ai-raccoon/memory.db`, **15,236 entries**,
+installed build **1.11.0+c955b1f7** — which does contain ADR-0029 and ADR-0030):
+
+| Check | Result |
+|---|---|
+| `SELECT COUNT(*) FROM noise_entries` | **0** — no write has *ever* been rejected in production |
+| `ttl_days` across all 15,236 entries | **NULL on every row**, including all 39 under 8 words |
+| `access.mode.global` | **`full`** |
+| `sweep.enabled.global` / threshold / interval | **`true`** / 0.3 / 24 h |
+
+**Neither finding is refuted — the code does exactly what the lanes measured.** But the honest
+framing is *loaded gun, not yet fired*, and this review states it that way rather than implying
+active ongoing loss:
+
+- **B1 has never fired** because the deterministic Hermes policy matches a prefix this user's
+  agents do not write, and the zero-shot policy's measured 2/12 recall means it almost never
+  triggers. **The filter's ineffectiveness is the only reason the silent-discard path has not
+  cost anyone a memory.**
+- **Auto-TTL has never fired** because real agent writes run 64–166 words, comfortably over the
+  8-word floor. The 39 short entries all predate the feature. Even when it does fire, the rating
+  gate means nothing is sweepable before day 22.2.
+- **But the reaper is armed and live**: `full` mode with sweeping enabled, which answers the
+  ML lane's open question. The safety margin is behavioural, not structural.
+
+**The sequencing constraint this implies is load-bearing:** improving the noise filter's recall
+*without first landing WP1's honest write outcome* would convert a dormant defect into an active
+one. No filter-recall work before WP1. This is a further argument for WP2 (deleting the filter)
+over repairing it.
+
 ## The two blockers
 
 ### B1 — `memory_write` reports a fabricated success for content it discarded
