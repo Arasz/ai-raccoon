@@ -10,18 +10,16 @@ internal static class EntryBucket
     {
         if (context == ContextNaming.SharedContext)
         {
+            // Deliberately not routed through ContextScope: a direct write to the shared tier is an
+            // open owner decision (2026-08-14 project-scope review, WP2), unlike the delete path,
+            // which refuses it.
             return ("shared", projectId, null, null);
         }
 
         if (context.StartsWith("project:", StringComparison.Ordinal))
         {
-            var named = context["project:".Length..];
-            if (!string.Equals(named, projectId, StringComparison.Ordinal))
-            {
-                throw new ContextOutsideProjectException(context, projectId);
-            }
-
-            return ("project", named, null, null);
+            ContextScope.RequireWithinProject(context, projectId);
+            return ("project", projectId, null, null);
         }
 
         if (context.StartsWith("workspace:", StringComparison.Ordinal))
@@ -37,12 +35,7 @@ internal static class EntryBucket
             var colon = rest.IndexOf(':', StringComparison.Ordinal);
             if (colon > 0)
             {
-                var named = rest[..colon];
-                if (!string.Equals(named, projectId, StringComparison.Ordinal))
-                {
-                    throw new ContextOutsideProjectException(context, projectId);
-                }
-
+                ContextScope.RequireWithinProject(context, projectId);
                 return ("custom", projectId, rest[(colon + 1)..], null);
             }
         }

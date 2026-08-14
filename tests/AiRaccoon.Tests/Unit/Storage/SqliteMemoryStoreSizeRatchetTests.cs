@@ -33,13 +33,18 @@ public sealed class SqliteMemoryStoreSizeRatchetTests
     //              fourth raise. ISettingsStore/SqliteSettingsStore is WP8's first seam -- the
     //              four settings methods moved out and IMemoryStore delegates, so the ~40 call
     //              sites that reach settings through the store they already hold are untouched.
+    //   1251 / 27  LOWERED, not raised: WP1's project-confinement guard pushed the file to 1298 and
+    //              this cap caught it. Taking the note below at its word, the *delete* seam came
+    //              out instead of a raise -- FilterFor moved to ContextFilter.cs, next to its
+    //              write-path twin EntryBucket, which is also where the review said the mapping
+    //              belonged (the two halves of one rule sat 1,000 lines apart in different files).
     //
     // Two raises in a single day of work was the signal this ratchet exists to send, and the
-    // third hit was paid down rather than borrowed against: settings came out. Five seams remain
-    // (write, search, delete, ingest, embedding). The next person to hit this cap should take one
+    // third hit was paid down rather than borrowed against: settings came out. Four seams remain
+    // (write, search, ingest, embedding). The next person to hit this cap should take one
     // of them rather than add a raise -- raising is borrowing against a decomposition someone
     // still has to pay for.
-    private const int MaxLines = 1291;
+    private const int MaxLines = 1251;
     private const int MaxMembers = 27;
 
     [Fact]

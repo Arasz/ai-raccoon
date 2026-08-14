@@ -72,6 +72,53 @@ public sealed class MemoryStoreContextScopeTests : IDisposable
         MemorySql.ContextKeyFor(context, Caller).ShouldEndWith($":{stored}");
     }
 
+    [Fact]
+    public async Task DeleteContextAsync_NamingAnotherProject_DeletesNothing()
+    {
+        // The access gate authorises the request's projectId; a context that re-targets the delete
+        // would destroy rows in a project the caller was never cleared for.
+        await _store.AddContentAsync(Victim, "/notes/theirs.md", "theirs",
+            ContextNaming.ProjectContext(Victim), cancellationToken: TestContext.Current.CancellationToken);
+
+        await Should.ThrowAsync<ContextOutsideProjectException>(() => _store.DeleteContextAsync(
+            Caller, ContextNaming.ProjectContext(Victim), TestContext.Current.CancellationToken));
+
+        (await RowsForProjectAsync(Victim)).ShouldBe(1, "the refused delete must leave the victim's row");
+    }
+
+    [Fact]
+    public async Task DeleteContextAsync_NamingTheSharedTier_DeletesNothing()
+    {
+        // `shared` names no project, so a filter built from it carries no project predicate and
+        // would sweep every project's promoted rows.
+        await _store.AddContentAsync(Victim, "/notes/promoted.md", "promoted",
+            ContextNaming.SharedContext, cancellationToken: TestContext.Current.CancellationToken);
+
+        await Should.ThrowAsync<ContextOutsideProjectException>(() => _store.DeleteContextAsync(
+            Caller, ContextNaming.SharedContext, TestContext.Current.CancellationToken));
+
+        (await SharedRowsAsync()).ShouldBe(1, "the refused delete must leave the shared tier intact");
+    }
+
+    [Fact]
+    public async Task DeleteContextAsync_WithTheCallersOwnProjectContext_Deletes()
+    {
+        await _store.AddContentAsync(Caller, "/notes/ours.md", "ours",
+            ContextNaming.ProjectContext(Caller), cancellationToken: TestContext.Current.CancellationToken);
+
+        var deleted = await _store.DeleteContextAsync(
+            Caller, ContextNaming.ProjectContext(Caller), TestContext.Current.CancellationToken);
+
+        deleted.ShouldBe(1);
+        (await RowsForProjectAsync(Caller)).ShouldBe(0);
+    }
+
+    private async Task<int> SharedRowsAsync()
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM entries WHERE scope = 'shared'");
+    }
+
     private async Task<int> RowsForProjectAsync(string projectId)
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
