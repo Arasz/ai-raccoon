@@ -114,6 +114,9 @@ internal sealed class PinnedQueryEmbeddingService(PinnedQueryVectorFile file) : 
         return _generator;
     }
 
+    /// <summary>Pinned vectors are keyed by the exact query text, so trimming here would miss every pin.</summary>
+    public string TrimQueryToWindow(EmbeddingSettings settings, string query) => query;
+
     private sealed class PinnedGenerator : IEmbeddingGenerator<string, Embedding<float>>
     {
         private readonly Dictionary<string, float[]> _byQuery;
