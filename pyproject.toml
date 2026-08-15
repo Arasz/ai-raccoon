@@ -1,7 +1,16 @@
 [project]
 name = "ai-raccoon-scripts"
 version = "0.1.0"
-requires-python = ">=3.9"
+# Raised from >=3.9: numpy (>=3.12) and scikit-learn (>=3.11) already need
+# newer than that at their current releases, so >=3.9 was dishonest the
+# moment these deps got declared. See docs/plans/2026-08-14-project-scope-improvement-plan.md WP18.
+requires-python = ">=3.12"
+dependencies = [
+    "httpx",
+    "numpy",
+    "scikit-learn",
+    "pytest",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["scripts/tests"]
