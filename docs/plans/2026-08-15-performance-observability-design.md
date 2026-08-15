@@ -4,6 +4,18 @@ Date: 2026-08-15 · Base commit `02f2512e` · Owner request: *"do we measure and
 search performance? Or any performance inputs? If not, design and plan the store and tools + CI
 interface that will return collected performance characteristics."*
 
+> **STATUS, same day, after phase one shipped
+> (`docs/plans/2026-08-15-performance-metrics-implementation.md`):** this document is the design
+> that motivated the work, kept as history — read it as "what was true before phase one", not as
+> current state. **Gap 1 (nothing times the store's phases) and gap 2 (nothing can answer a
+> performance question without a collector) are closed:** `SearchTimings` carries the six
+> per-phase durations, the `metrics` table persists them plus per-tool durations, and
+> `memory_performance` reads them back — see
+> [Read back performance metrics](../how-to/read-performance-metrics.md) and
+> [Architecture: Performance metrics](../explanation/architecture.md#performance-metrics).
+> **Gap 3 (per-phase CI budgets) is still open** — deferred as spec.json's card S1, unbuilt because
+> it needs the very measurements phase one just shipped as its input.
+
 ## The short answer
 
 **Yes for tool-level latency. No for anything inside the store, and no for reading it back.**

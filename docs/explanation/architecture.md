@@ -74,9 +74,27 @@ erDiagram
         INTEGER deleted_at
     }
 
+    metrics {
+        INTEGER id PK
+        TEXT name
+        TEXT kind
+        REAL value
+        TEXT unit
+        TEXT project_id
+        TEXT query_hash
+        TEXT correlation_id
+        TEXT tags
+        INTEGER recorded_at
+    }
+
     workspaces ||--o{ entries : "workspace_id"
     memory_source ||--o{ entries : "source_id"
 ```
+
+`metrics` carries no foreign key — `project_id`/`query_hash`/`correlation_id` are loose string
+references (the last two join back to `search_quality` by value, not by constraint), consistent
+with the rest of this table's "universal row" design (see
+[Performance metrics](#performance-metrics) below).
 
 ### Context partitioning
 
@@ -323,6 +341,65 @@ searches the project's `scope='custom'` rows under that label (plan C §3 Wave 2
 > (RRF), `src/AiRaccoon.Infrastructure/Sqlite/SearchResultMerger.cs:12-24`
 > (merger), `src/AiRaccoon.Infrastructure/Sqlite/SearchContexts.cs:9-29`
 > (context resolution)
+
+## Performance metrics
+
+AiRaccoon measures itself: every tool call and every `memory_search` phase (`fts`, `vector`,
+`fusion`, `affinity`, `snippets`, `bump`) is recorded off the hot path into the `metrics` table
+above, and read back through the `memory_performance` tool — without an OTLP collector. See
+[Monitor and export server telemetry](../how-to/monitor-and-export-telemetry.md) for the
+unchanged Meter/OTLP path and
+[Read back performance metrics](../how-to/read-performance-metrics.md) for using this one.
+
+```mermaid
+flowchart LR
+    subgraph HotPath["Hot path — never blocks, never writes to the bank"]
+        Tool["MCP tool call"] --> Activity["ToolExecutionActivity<br/>(one row per call)"]
+        Search["SqliteMemoryStore.SearchAsync<br/>(SearchTimings: fts/vector/fusion/<br/>affinity/snippets/bump)"] --> MT["MemoryTools<br/>(tags correlation id)"]
+    end
+    Activity --> Recorder["MetricsRecorder"]
+    MT --> Recorder
+    Recorder -->|"TryEnqueue<br/>(drop + count past capacity)"| Buffer["MeasurementBuffer<br/>capped, default 1000"]
+    Buffer -->|"DrainAll, fixed interval<br/>default 30s"| Flusher["MetricsFlusher<br/>(BackgroundService)"]
+    Flusher -->|batch INSERT| Metrics[("metrics table")]
+    Flusher -.->|"self-metrics (flush duration,<br/>batch size, drop count) —<br/>written directly, never enqueued"| Metrics
+    Reaper["MetricsRetentionJob<br/>(BankMaintenanceHostedService, every 2h)"] -->|"DELETE past<br/>the retention window"| Metrics
+    Metrics --> ReportSvc["MetricsReportService<br/>(window/bucket aggregation)"]
+    ReportSvc --> PerfTool["memory_performance"]
+```
+
+**Recording is best-effort and never on the caller's thread.** `MetricsRecorder.Record` swallows
+every exception a full or misbehaving buffer can throw, so a metrics failure never fails the
+search or tool call it is measuring. `MeasurementBuffer` is a capped `ConcurrentQueue` (not the
+`Channel`-based design the spec first proposed) — a slot is reserved with `Interlocked.Increment`
+before enqueueing, so concurrent writers cannot overrun the cap; past it, the measurement is
+dropped and `DroppedCount` counts it. `MetricsFlusher` drains the buffer on a fixed interval and
+batch-inserts it, then writes its own flush duration, batch size and cumulative drop count
+*directly* to the store — bypassing the buffer, so the writer measuring itself cannot recurse
+into itself. See [ADR-0073](../adr/0073-a-capped-buffer-satisfies-the-channel-rule-and-reshapes-g4.md)
+for why the buffer replaces the channel and what that forced on the "no bank write during a
+search" gate.
+
+**`MetricsRetentionJob`** is one entry in the same job list `VacuumJob` and `ChunkBackfillJob`
+run from (ADR-0070) — every 2 hours it deletes `metrics` rows older than
+`metrics.retention-days.global` (default 28). Retention is best-effort: holding more than the
+window is within contract, not a defect (docs/work/specs/PerformanceMetrics.feature).
+
+**`memory_performance`** derives its series list from the server's own tool inventory
+(`McpToolInventory.Names()`) plus the six search-phase names (`SearchTimings.PhaseNames`) —
+never from `SELECT DISTINCT name FROM metrics` — so a tool or phase nothing has called yet still
+appears, at count zero, rather than being silently omitted (derive-or-delete-the-list). The
+report is project-scoped only; the whole-bank scope is deferred (D6,
+docs/plans/2026-08-15-performance-metrics-implementation.md §5).
+
+> **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:332-353` (schema, in `Ddl` so
+> it reaches legacy banks), `src/AiRaccoon.Infrastructure/Metrics/MeasurementBuffer.cs`,
+> `src/AiRaccoon.Infrastructure/Metrics/MetricsFlusher.cs`,
+> `src/AiRaccoon.Infrastructure/Metrics/SqliteMetricsStore.cs`,
+> `src/AiRaccoon.Infrastructure/Maintenance/MaintenanceJobs.cs` (`MetricsRetentionJob`),
+> `src/AiRaccoon.Infrastructure/Metrics/MetricsReportService.cs`,
+> `src/AiRaccoon/Tools/PerformanceTools.cs`, `src/AiRaccoon/Tools/McpToolInventory.cs`,
+> `src/AiRaccoon.Core/Memory/SearchResults.cs` (`SearchTimings`)
 
 ## Sync cycle
 
@@ -594,8 +671,9 @@ engine's maximum input tokens:
 
 ```
 src/AiRaccoon/              Thin MCP server — tool definitions, transport, DI
-  Tools/MemoryTools.cs      9 [McpServerTool] methods, no business logic
-                            (22 tools in all, across the seven Tools/*.cs classes)
+  Tools/MemoryTools.cs      10 [McpServerTool] methods, no business logic
+                            (27 tools in all, across the nine Tools/*.cs classes)
+  Tools/PerformanceTools.cs memory_performance — thin over MetricsReportService (ADR-0065)
   Access/MemoryAccessGuard  Enforces access modes at the tool boundary
   Setup/McpServerSetup.cs   --transport CLI flag → stdio/HTTP host selection
   Setup/Serve/              proxy (the default) and serve: ProxyRunner, ProxyForwarder,
@@ -603,7 +681,11 @@ src/AiRaccoon/              Thin MCP server — tool definitions, transport, DI
                             IdleWatchdog (ADR-0020)
 
 src/AiRaccoon.Core/         Pure domain layer — zero framework deps
-  Memory/                   IMemoryStore port, records, ContentHash, SearchQuery, ContextNaming
+  Memory/                   IMemoryStore port, records, ContentHash, SearchQuery, ContextNaming,
+                            SearchResults/SearchTimings (six search-phase durations),
+                            MetricsConfigKeys (buffer/flush/retention settings)
+  Metrics/                  Measurement, MeasurementKind, IMeasurementRecorder,
+                            Statistics (pure percentile/min/max/mean), PerformanceReport/Builder
   Chunking/                 IChunker base, IMarkdownChunker, IJsonChunker, MarkdownChunker (pure splitter)
   Access/                   AccessMode enum, AccessModePolicy, AccessRequirement, AccessDeniedException
   Ingestion/                IFileTypeHandler, IFileTypeMatcher, IngestPath, IngestScopeKeys/List,
@@ -628,7 +710,12 @@ src/AiRaccoon.Infrastructure/   Adapters — Dapper over SQLite, sync, embedding
   Watch/                    WatchService, WatchPipeline, WatchScheduler, WatchHostedService
   Promotion/                PromotionQueueService (propose-tier queue, ADR-0007)
   Extraction/               ExtractionHostedService (background shared-extraction loop, #55)
-  Maintenance/              BankMaintenanceHostedService (WAL checkpoint + VACUUM/ANALYZE, #79)
+  Maintenance/              BankMaintenanceHostedService (WAL checkpoint, #79) running a job list
+                            (ADR-0070): VacuumJob, Vec0ReclaimJob, ChunkBackfillJob,
+                            MetricsRetentionJob (purges `metrics` past its retention window)
+  Metrics/                  MeasurementBuffer (capped queue), MetricsFlusher (fixed-interval
+                            BackgroundService), SqliteMetricsStore, MetricsRecorder,
+                            MetricsReportService (window/bucket aggregation for memory_performance)
   Encryption/               BitwardenCliSecretManager (Bitwarden key source)
   Degradation/              SweepService
   Options/                  SyncOptions, InfrastructureOptions
