@@ -145,21 +145,41 @@ public sealed class PerformanceReportBuilderTests
     }
 
     /// <summary>
-    ///     Finding 3: an agent-supplied window with no upper bound allocates ceil(window/bucket)
-    ///     buckets per series — 525600 minutes (a year) at the 1-minute default bucket is ~18.9M
-    ///     bucket objects across ~36 series. Clamped to MaxWindow, matching the precedent of
-    ///     clamping an over-wide bucket rather than throwing.
+    ///     Finding 3, resolved per owner ruling ("bound the bucket count, not the window" —
+    ///     docs/work/specs/PerformanceMetrics.feature rules four weeks a best-effort limit, not a
+    ///     guarantee): an agent-supplied window with no upper bound must not allocate
+    ///     ceil(window/bucket) buckets per series unbounded — 525600 minutes (a year, the review's
+    ///     windowMinutes: 525600) at the 1-minute default bucket would be ~18.9M bucket objects
+    ///     across ~36 series. The window is honoured in full; the bucket widens instead, so the
+    ///     per-series bucket count never exceeds <see cref="PerformanceReportBuilder.MaxBucketCount" />.
     /// </summary>
     [Fact]
-    public void Build_WindowWiderThanMaxWindow_ClampsToMaxWindow()
+    public void Build_ExtremeWindow_WidensTheBucketInsteadOfTruncatingTheWindow()
+    {
+        var window = TimeSpan.FromMinutes(525_600);
+
+        var report = PerformanceReportBuilder.Build(["memory_write"], [], Now, window, TimeSpan.FromMinutes(1));
+
+        report.Window.ShouldBe(window, "the window is never truncated — only the bucket widens");
+        report.BucketCount.ShouldBeLessThanOrEqualTo(PerformanceReportBuilder.MaxBucketCount);
+        report.Bucket.ShouldBeGreaterThan(TimeSpan.FromMinutes(1),
+            "the requested 1-minute bucket must widen to keep the bucket count bounded");
+        report.Series.Single().Buckets.Count.ShouldBe(report.BucketCount);
+    }
+
+    /// <summary>
+    ///     A window that DOES fit within the cap at the requested bucket width must not be widened —
+    ///     the cap only bites when it would otherwise be exceeded, matching the default-case gate
+    ///     (<see cref="Build_DefaultWindowAndBucket_Yields180Buckets" />) at a different scale.
+    /// </summary>
+    [Fact]
+    public void Build_WindowWithinCapAtRequestedBucket_BucketIsNotWidened()
     {
         var report = PerformanceReportBuilder.Build(["memory_write"], [], Now,
-            TimeSpan.FromDays(365), TimeSpan.FromMinutes(1));
+            TimeSpan.FromDays(1), TimeSpan.FromMinutes(1));
 
-        report.Window.ShouldBe(PerformanceReportBuilder.MaxWindow,
-            "a window wider than data can ever survive retention is clamped, not honoured");
-        report.BucketCount.ShouldBeLessThanOrEqualTo(
-            (int)Math.Ceiling(PerformanceReportBuilder.MaxWindow / TimeSpan.FromMinutes(1)));
+        report.Bucket.ShouldBe(TimeSpan.FromMinutes(1), "1440 buckets is under the cap, so the bucket stays as requested");
+        report.BucketCount.ShouldBe(1440);
     }
 
     /// <summary>

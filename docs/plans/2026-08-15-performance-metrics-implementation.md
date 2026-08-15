@@ -651,6 +651,17 @@ package.** No scenario disappears silently.
 >   `[Fact(Skip = ...)]`, naming the conflict and this section, so the gap is visible rather than either
 >   breaking the suite or vanishing silently. **This is an owner decision** (relax the clamp, or amend
 >   the scenario) — not resolved by this pass, per instruction.
+>
+> **Resolution, 2026-08-16.** Owner ruling: bound the bucket count, not the window. `MaxWindow` is
+> gone; `PerformanceReportBuilder.MaxBucketCount` (2000) caps the per-series bucket count instead, by
+> widening the bucket to fit the whole requested window rather than truncating the window — the same
+> shape the .feature already rules for an over-wide bucket clamping to the window, applied in the
+> other direction. The window is always honoured in full; `PerformanceReport.Bucket`/`BucketCount`
+> report the bucket actually used, widened or not. `Build_BankHolding40DaysOfMeasurements...` is
+> un-skipped and green. Allocation bound verified: `Build_ExtremeWindow_WidensTheBucketInsteadOfTruncatingTheWindow`
+> asserts `BucketCount <= MaxBucketCount` for a 525,600-minute (one-year) window at the 1-minute
+> default bucket — watched red with the cap removed (`BucketCount` came back as 525600, matching the
+> ~18.9M-object unbounded case this exists to prevent).
 > - **#17** — closed. `SearchMetricsIsolationTests.Search_EveryMetricsSettingAtItsMostRestrictiveValue_StillRecordsAMeasurement`
 >   derives the settings keys from `MetricsConfigKeys`'s own `*Global` constants via reflection (a new
 >   setting joins automatically), pins each to its most restrictive functioning value, and shows a
