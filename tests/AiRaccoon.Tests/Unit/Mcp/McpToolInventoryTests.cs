@@ -27,4 +27,24 @@ public sealed class McpToolInventoryTests
     {
         McpToolInventory.Names().ShouldContain("memory_performance");
     }
+
+    /// <summary>
+    ///     F10 (owner ruling): "SDK permits - we don't, in this project tool name is required and
+    ///     must be defined." The SDK allows an <c>[McpServerTool]</c> with no <c>Name</c> (falling
+    ///     back to the method name), but this project does not: an explicit name is a project
+    ///     requirement, so the ambiguous case must not be able to exist — this gate, not a
+    ///     reconciliation of two readers that disagree about it, is what makes that true.
+    /// </summary>
+    [Fact]
+    public void AllTools_DeclareAnExplicitName()
+    {
+        var unnamed = RegisteredTools.Methods()
+            .Where(x => string.IsNullOrWhiteSpace(x.Attr.Name))
+            .Select(x => $"{x.Class.Name}.{x.Method.Name}")
+            .Order(StringComparer.Ordinal)
+            .ToList();
+
+        unnamed.ShouldBeEmpty(
+            $"every [McpServerTool] in AiRaccoon.Tools must declare an explicit Name: {string.Join(", ", unnamed)}");
+    }
 }
