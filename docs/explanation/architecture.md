@@ -376,7 +376,7 @@ before enqueueing, so concurrent writers cannot overrun the cap; past it, the me
 dropped and `DroppedCount` counts it. `MetricsFlusher` drains the buffer on a fixed interval and
 batch-inserts it, then writes its own flush duration, batch size and cumulative drop count
 *directly* to the store — bypassing the buffer, so the writer measuring itself cannot recurse
-into itself. See [ADR-0073](../adr/0073-a-capped-buffer-satisfies-the-channel-rule-and-reshapes-g4.md)
+into itself. See [ADR-0074](../adr/0074-a-capped-buffer-satisfies-the-channel-rule-and-reshapes-g4.md)
 for why the buffer replaces the channel and what that forced on the "no bank write during a
 search" gate.
 

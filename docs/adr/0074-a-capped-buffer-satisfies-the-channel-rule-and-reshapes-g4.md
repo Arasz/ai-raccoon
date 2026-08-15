@@ -1,4 +1,4 @@
-# 0073. A capped buffer satisfies the channel rule, and reshapes G4
+# 0074. A capped buffer satisfies the channel rule, and reshapes G4
 
 Date: 2026-08-15
 

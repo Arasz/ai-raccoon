@@ -101,7 +101,7 @@ for the keys and how (not yet) to change them.
   unchanged and complementary
 - [Architecture: Performance metrics](../explanation/architecture.md#performance-metrics) — the
   data flow from hot path to table to report
-- [ADR-0073](../adr/0073-a-capped-buffer-satisfies-the-channel-rule-and-reshapes-g4.md) — why the
+- [ADR-0074](../adr/0074-a-capped-buffer-satisfies-the-channel-rule-and-reshapes-g4.md) — why the
   writer is a capped buffer, not a channel
 - [docs/reference/agent-memory-server.md](../reference/agent-memory-server.md#tools-27) — the full
   `memory_performance` tool contract
