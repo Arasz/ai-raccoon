@@ -31,6 +31,7 @@ flowchart LR
 
 ## What's new
 
+- **The bank reclaims most of its vector storage.** (1.16.0) [ADR-0068](docs/adr/0068-ctx-is-a-vec0-metadata-column-not-a-partition-key.md)
 - **A long `memory_write` is now searchable across its whole length.** (1.15.0) [ADR-0064](docs/adr/0064-memory-write-chunks-like-everything-else.md)
 - **Naming `shared` on a write asks for promotion instead of bypassing review.** (1.15.0) [ADR-0067](docs/adr/0067-naming-shared-asks-for-promotion.md)
 - **Workspaces no longer require `full`.** (1.13.0) [ADR-0052](docs/adr/0052-the-workspace-lifecycle-is-a-write-not-a-destruction.md)
