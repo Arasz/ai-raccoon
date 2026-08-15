@@ -1,5 +1,5 @@
 using System.Net;
-using AiRaccoon.Resilience;
+using AiRaccoon.Infrastructure.Resilience;
 using Polly;
 using Shouldly;
 using Xunit;

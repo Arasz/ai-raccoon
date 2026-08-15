@@ -16,7 +16,7 @@ namespace AiRaccoon.Tools;
 /// </summary>
 public sealed class WorkspaceTools(
     IWorkspaceService workspaces,
-    ToolGate gate)
+    IToolGate gate)
 {
     private const string TnMemoryWorkspaceBegin = "memory_workspace_begin";
     private const string TnMemoryWorkspaceStatus = "memory_workspace_status";

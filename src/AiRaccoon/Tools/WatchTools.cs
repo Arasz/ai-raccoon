@@ -8,7 +8,7 @@ namespace AiRaccoon.Tools;
 /// <summary>Thin MCP tools over IWatchService — no business logic here (see docs/work/features-agent-memory/spec-issue-1.md §6.1).</summary>
 public sealed class WatchTools(
     IWatchService watch,
-    ToolGate gate)
+    IToolGate gate)
 {
     private const string TnWatchAdd = "memory_watch_add";
     private const string TnWatchStatus = "memory_watch_status";

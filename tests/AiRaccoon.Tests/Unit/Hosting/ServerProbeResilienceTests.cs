@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using AiRaccoon.Hosting.Common;
-using AiRaccoon.Resilience;
+using AiRaccoon.Infrastructure.Resilience;
 using Polly;
 using Shouldly;
 using Xunit;
