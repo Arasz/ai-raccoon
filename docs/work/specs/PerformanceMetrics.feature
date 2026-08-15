@@ -1,7 +1,9 @@
-# DRAFT — elicitation in progress (create-task-spec). Not a contract until the decision gate is ruled.
+# The behavioural contract for AiRaccoon's self-instrumentation. Elicited with create-task-spec,
+# 2026-08-15; ruled at the decision gate 4/4 (docs/work/2026-08-15-perf-metrics-spec-feedback.md).
+# Manifest: docs/work/specs/spec.json
 # Stage 02 answers recorded verbatim from the owner, 2026-08-15.
 
-@draft
+@bdd
 Feature: Performance metrics for AiRaccoon's own development
 
   As a developer of AiRaccoon
