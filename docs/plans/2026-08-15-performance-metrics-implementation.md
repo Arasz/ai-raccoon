@@ -611,14 +611,33 @@ why the reasoning is recorded in two places.
 
 ## 4. Scenario map — all 39
 
-**23 scenarios are proven by phase one; 16 are deferred with their package.** No scenario disappears
-silently.
+**16 scenarios are proven by phase one, 7 were claimed but are not, and 16 are deferred with their
+package.** No scenario disappears silently.
+
+> **Correction, 2026-08-15, from the integration review.** This section originally claimed 23 proven.
+> It was checked scenario by scenario against the tests that claim them, and the claim does not hold.
+> No test method was missing or renamed — every gap is an absent test, or a test proving something
+> adjacent to what the scenario says. Recorded rather than quietly amended, because a coverage number
+> nobody re-derived is exactly the kind of claim `proof-of-done` exists to stop.
+>
+> **No test exists at all (4):** #1 (a three-week-old bank still answers for its oldest measurement —
+> nothing seeds beyond a one-hour window), #2 (a bank holding more than four weeks is within contract
+> — the reaper test covers the delete boundary, not the read), #17 (no setting turns measurement off —
+> nothing sets all three `MetricsConfigKeys` restrictively and then shows a search still records; this
+> is also spec.json's own accepted weakness **O2**, whose stronger derived form was never built), #23
+> (two runs of the same query share a hash — only one run is ever hashed).
+>
+> **Weaker than claimed (3):** #20 (asserts the row count, never that the search returned its own
+> results nor that the report excludes it), #19 (proves the async flusher path is not retried, never
+> exercises the synchronous recorder path its Given/When describes), #25 (passes, but against the
+> denylist the review found — the tests exercise only the five known keys, so they cannot catch the
+> gap).
 
 Reqnroll binding is deferred (**D5**), so phase-one scenarios are proven as **ordinary unit and
 integration tests**. The `.feature` stays **unlinked**, which is what keeps the `Category=bdd` job
 green — an unlinked feature generates no test class, so `BddGateCoverageTests` never sees it.
 
-### Proven by phase one (23)
+### Claimed by phase one (23 — of which 16 hold; see the correction above)
 
 | # | Scenario | Package | Proof |
 |---|---|---|---|
