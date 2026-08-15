@@ -108,27 +108,23 @@ Feature: Performance metrics for AiRaccoon's own development
     # Owner: "let the client specify with a default for last 3h of data with 1 minute bucket."
     # => 180 points at the default, which is a plottable series rather than a raw dump.
 
-  @open-question
-  Rule: The background reader flushes on channel pressure, bounded by time
+  Rule: The background reader flushes on channel pressure, rate-limited to one flush per 4 seconds
     # Owner: "calculating the pressure in the channel with a time limit - we will aim at 60% of the
     # capacity flush by default, pressure will decrease aim (so if a lot of data is coming we want to
     # make more space) but we will limit flush period - to at most 4 seconds? And also every 30
     # second if aim target was not reached. I think we will adjust it."
     # AGREED: flush when the channel reaches an occupancy aim, default 60% of capacity; rising
     # pressure LOWERS that aim so a burst drains sooner; all values are settings.
-    # OPEN: whether "at most 4 seconds" is a floor on how OFTEN a flush may happen (a rate limit
-    # protecting the bank from write amplification) or a ceiling on how LONG a pressured batch may
-    # wait. Carried to the decision gate rather than guessed — the two produce different behaviour
-    # under exactly the burst this rule exists for.
+    # RESOLVED, owner: "floor - i was thinking about rate limiting." => 4 seconds is the MINIMUM
+    # interval between flushes, protecting the bank from write amplification under a burst. It is
+    # not a deadline on a pressured batch. Consequence to carry into scenarios: between two flushes
+    # the channel can still fill, so the rate limit and the drop counter interact — a burst that
+    # exceeds 1000 items in 4 seconds drops, by design, and the drop count is how that is seen.
 
-  @open-question
-  Rule: The metrics subsystem measures itself
+  Rule: The metrics subsystem measures itself, without going through itself
     # Owner: "also we want to save metrics for this system." => channel occupancy and pressure,
     # dropped count, flush duration and batch size, checkpoint duration, table growth.
-    # OPEN, and the reason this is tagged: a subsystem that measures itself THROUGH itself feeds
-    # itself. Recording "flush took 12 ms" enqueues a measurement, which the next flush measures,
-    # which enqueues another. Under the pressure-based aim this is worst exactly when the channel is
-    # already full — the moment the numbers matter most. Needs a ruling on which of:
-    #   (a) self-metrics bypass the channel and are written directly by the flusher;
-    #   (b) self-metrics go through the channel but a flush never measures itself;
-    #   (c) self-metrics are sampled on a timer rather than emitted per event.
+    # RESOLVED, owner: (a) — self-metrics BYPASS the channel and are written directly by the
+    # flusher, which already holds a write. Cannot recurse by construction: a subsystem measuring
+    # itself through itself feeds itself, and the feedback is worst exactly when the channel is full
+    # — the moment the numbers matter most and the drop counter starts lying about what filled it.
