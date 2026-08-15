@@ -355,7 +355,7 @@ numbers.
 
 ## Wave 3 — Storage, retention and the boundary the container dissolved
 
-### WP5 · Reclaim the vec0 chunk waste — and it is the **partition key**, not `chunk_size` — **H11**
+### WP5 · Reclaim the vec0 chunk waste — and it is the **partition key**, not `chunk_size` — ✅ **IN REVIEW** (ladder step v9, ADR-0068) — **H11**
 **Effort:** MEDIUM · **Surface:** `MemorySchema.Ddl`, `RebuildVecTableAsync`, a new **v9** ladder step
 
 > **Revised after the adversarial pass. The first draft of this package would have shipped, passed its

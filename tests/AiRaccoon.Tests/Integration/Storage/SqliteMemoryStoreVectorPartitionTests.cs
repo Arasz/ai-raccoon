@@ -14,7 +14,7 @@ namespace AiRaccoon.Tests.Integration.Storage;
 
 /// <summary>
 ///     docs/plans/2026-08-08-search-knn-perf.md §3.4/§3.5: the vector queries switched from
-///     `WHERE {filter}` to a native vec0 KNN over the `ctx` partition key. These pin the
+///     `WHERE {filter}` to a native vec0 KNN over the `ctx` column. These pin the
 ///     invariants that switch relied on: per-context isolation, no cross-scope leakage, and k larger than the partition returns the whole partition.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]

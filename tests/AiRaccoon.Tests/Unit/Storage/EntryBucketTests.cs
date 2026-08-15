@@ -146,7 +146,7 @@ public sealed class EntryBucketTests
     [Fact]
     public void For_WithALabelContext_StripsThePrefixTheSameWayContextKeyForDoes()
     {
-        // Divergence here is invisible: the vec0 partition key and the text filter would disagree,
+        // Divergence here is invisible: the vec0 `ctx` column and the text filter would disagree,
         // so a labelled row is reachable by vector search and not by keyword search.
         var context = ContextNaming.LabelContext(Caller, "docs");
 

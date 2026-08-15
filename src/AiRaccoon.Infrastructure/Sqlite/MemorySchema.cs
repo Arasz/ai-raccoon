@@ -36,12 +36,13 @@ internal static class MemorySchema
     ///     The schema shape this build creates. Bumped by one per shipped schema change, with a
     ///     matching ladder step in <see cref="MigrateToV1Async" />/<see cref="MigrateToV2Async" />/
     ///     <see cref="MigrateToV3Async" />/<see cref="MigrateToV4Async" />/<see cref="MigrateToV5Async" />/<see cref="MigrateToV6Async" />/
-    ///     <see cref="MigrateToV7Async" />/<see cref="MigrateToV8Async" /> (ADR-0011). Not every schema
+    ///     <see cref="MigrateToV7Async" />/<see cref="MigrateToV8Async" />/
+    ///     <see cref="MigrateToV9Async" /> (ADR-0011). Not every schema
     ///     change needs a ladder step: a trigger body replacement that is safely re-runnable on every
     ///     open belongs in the unconditional <see cref="Ddl" /> instead (ADR-0023 amendment) — the
     ///     ladder is for changes that need guarded, one-time work.
     /// </summary>
-    internal const int CurrentVersion = 8;
+    internal const int CurrentVersion = 9;
 
     /// <summary>
     ///     The promotion_queue_entries_ad body (ADR-0023, amended by H4 and again by ADR-0046):
@@ -116,14 +117,14 @@ internal static class MemorySchema
                                           );
 
                                           -- vec0 stays empty until the embed pipeline fills it; the embedder owns the embedding
-                                          -- dimension if the model is not all-MiniLM (384). `ctx` is the vec0 partition key
-                                          -- (docs/plans/2026-08-08-search-knn-perf.md §3.1), queried instead of a WHERE
-                                          -- filter; cosine is declared explicitly so a bare MATCH cannot fall back to L2.
-                                          CREATE VIRTUAL TABLE IF NOT EXISTS vec_entries USING vec0(ctx TEXT partition key, embedding float[384] distance_metric=cosine);
+                                          -- dimension if the model is not all-MiniLM (384). `ctx` is a vec0 metadata column,
+                                          -- filterable but not a partition key (ADR-0068, ladder step v9); cosine is declared
+                                          -- explicitly so a bare MATCH cannot fall back to L2.
+                                          CREATE VIRTUAL TABLE IF NOT EXISTS vec_entries USING vec0(ctx TEXT, embedding float[384] distance_metric=cosine);
 
                                           -- Structure modality: heading-path vectors, rowid = entry id. Written by the
                                           -- embed transition (EntryEmbedder, ADR-0004); the triggers below keep it consistent.
-                                          CREATE VIRTUAL TABLE IF NOT EXISTS vec_structure USING vec0(ctx TEXT partition key, embedding float[384] distance_metric=cosine);
+                                          CREATE VIRTUAL TABLE IF NOT EXISTS vec_structure USING vec0(ctx TEXT, embedding float[384] distance_metric=cosine);
 
                                           CREATE TRIGGER IF NOT EXISTS vec_structure_ad AFTER DELETE ON entries BEGIN
                                               DELETE FROM vec_structure WHERE rowid = OLD.id;
@@ -430,6 +431,11 @@ internal static class MemorySchema
             await MigrateToV8Async(connection, cancellationToken).ConfigureAwait(false);
         }
 
+        if (healthy && storedVersion < 9)
+        {
+            await MigrateToV9Async(connection, cancellationToken).ConfigureAwait(false);
+        }
+
         if (healthy)
         {
             await StampAsync(connection, CurrentVersion, cancellationToken).ConfigureAwait(false);
@@ -548,6 +554,43 @@ internal static class MemorySchema
                         "ALTER TABLE promotion_queue ADD COLUMN claimed_at INTEGER NULL",
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    ///     Ladder step 9 (ADR-0068): rebuilds vec_entries/vec_structure with `ctx` demoted from
+    ///     partition key to an ordinary vec0 metadata column. Rethrows for the same reason the v2
+    ///     step does — an empty-shell vec_entries answers every query with silence.
+    /// </summary>
+    private static async Task MigrateToV9Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var entriesDimension = await ReadVecDimensionAsync(connection, "vec_entries", cancellationToken)
+            .ConfigureAwait(false);
+        var structureDimension = await ReadVecDimensionAsync(connection, "vec_structure", cancellationToken)
+            .ConfigureAwait(false);
+
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        try
+        {
+            await RebuildVecTableAsync(connection, "vec_entries", entriesDimension, "embedding",
+                    "embed_state = 'embedded' AND embedding IS NOT NULL", cancellationToken)
+                .ConfigureAwait(false);
+            await RebuildVecTableAsync(connection, "vec_structure", structureDimension, "structure_embedding",
+                    "structure_embedding IS NOT NULL", cancellationToken)
+                .ConfigureAwait(false);
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
         }
     }
 
@@ -883,7 +926,10 @@ internal static class MemorySchema
 
     /// <summary>
     ///     Ladder step 2 (docs/plans/2026-08-08-search-knn-perf.md): persists chunk_index/total_chunks
-    ///     and rebuilds vec_entries/vec_structure with the vec0 partition key. Rethrows on failure —
+    ///     and rebuilds vec_entries/vec_structure with a `ctx` column. It shared its DDL with the v9
+    ///     step from the start, so it now creates the demoted shape directly — the end state after a
+    ///     full ladder run is identical either way, and one vec0 DDL beats two that can drift.
+    ///     Rethrows on failure —
     ///     an empty-shell vec_entries answers every query with silence, worse than failing to open.
     /// </summary>
     private static async Task MigrateToV2Async(SqliteConnection connection, CancellationToken cancellationToken)
@@ -1190,7 +1236,7 @@ internal static class MemorySchema
             .ConfigureAwait(false);
         await connection.ExecuteAsync(
                 new CommandDefinition(
-                    $"CREATE VIRTUAL TABLE {table} USING vec0(ctx TEXT partition key, embedding float[{dimension}] distance_metric=cosine)",
+                    $"CREATE VIRTUAL TABLE {table} USING vec0(ctx TEXT, embedding float[{dimension}] distance_metric=cosine)",
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
         await connection.ExecuteAsync(

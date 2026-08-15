@@ -60,7 +60,7 @@ public sealed class MemoryStoreContextScopeTests : IDisposable
     [Fact]
     public async Task AddContentAsync_WithALabelContext_StoresTheLabelTheFilterLooksFor()
     {
-        // The stored context_label must equal what ContextKeyFor puts in the vec0 partition key,
+        // The stored context_label must equal what ContextKeyFor puts in the vec0 `ctx` column,
         // or the row is reachable by vector search and invisible to keyword search.
         var context = ContextNaming.LabelContext(Caller, "docs");
 
