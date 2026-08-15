@@ -489,6 +489,34 @@ re-run rather than read — the same failure mode arriving by a different door.
 deterministically — by injecting the timing rather than by looping the test — before fixing it. A flake
 "fixed" without a reproduction is a flake that moved.
 
+### WP21 · Stop calling async ADO.NET methods on SQLite — **new, 2026-08-15, owner-supplied source**
+**Effort:** LARGE · **Surface:** every `ExecuteAsync`/`QueryAsync*` call in `src/AiRaccoon.Infrastructure/`
+
+Microsoft's own page for this provider says it plainly
+([Async limitations](https://learn.microsoft.com/en-us/dotnet/standard/data/sqlite/async)):
+
+> "SQLite doesn't support asynchronous I/O. Async ADO.NET methods will execute synchronously in
+> Microsoft.Data.Sqlite. **Avoid calling them.**"
+
+The data layer calls them throughout. They buy no concurrency and cost a state machine per call — but
+the real damage is that they *look* like concurrency. **That is what made WP6's first reproduction pass
+against a live defect** (ADR-0053): `Task.WhenAll` over a `Select` of `SearchAsync` ran 200 searches one
+after another, and the lost-update race the test existed to catch could not occur. Any future test
+reasoning about concurrent bank access has the same trap waiting.
+
+**Why this is LARGE and not a sweep.** The signatures are `async` all the way up to the MCP tool
+surface, which genuinely is async (HTTP). Converting the data layer to synchronous calls without
+converting the layers above it just moves the state machines; converting the layers above changes the
+tool surface. **The decision is not "remove async" — it is where the async boundary belongs**, and that
+is an architecture question, not a mechanical edit.
+
+**What is cheap and worth doing first, independent of the above:**
+1. **A note where it will be read** — on `SqliteConnectionFactory` and in the testing docs — that async here is synchronous, and that a concurrency test must use `Task.Run`. This is the part that already cost real time.
+2. **A gate**: a test asserting that any test claiming to exercise bank concurrency uses real parallelism. Hard to express directly; the practical version is the note plus a review checklist item.
+
+WAL, which that page recommends instead, is already enabled (`SqliteConnectionFactory`), so the
+performance advice is satisfied — it is the "avoid calling them" half that is outstanding.
+
 ### WP13 · Wire up the architecture test that is already paid for — **H23**
 `tests/Directory.Packages.props:18` pins `TngTech.ArchUnitNET.xUnitV3` and no project references it.
 The only mechanical layering guard in the repo is a missing `ProjectReference`, which catches

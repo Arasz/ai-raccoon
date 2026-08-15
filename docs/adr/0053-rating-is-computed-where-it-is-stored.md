@@ -27,8 +27,11 @@ SQL shape is racy; it does not prove the store exposes it. The first reproductio
 red** — 24, then 200 concurrent `SearchAsync` calls left `rating` exactly consistent
 (`access_count=200`, `rating=10.5 = 0.5 × (1 + 200 × 0.1)`).
 
-The reason is worth recording, because it will mislead the next person too: **`Microsoft.Data.Sqlite`
-has no true async I/O.** Dapper's `ExecuteAsync` completes synchronously, so
+The reason is worth recording, because it will mislead the next person too, and it is documented
+rather than inferred — [Async limitations](https://learn.microsoft.com/en-us/dotnet/standard/data/sqlite/async),
+Microsoft.Data.Sqlite: *"SQLite doesn't support asynchronous I/O. Async ADO.NET methods will execute
+synchronously in Microsoft.Data.Sqlite. **Avoid calling them.**"* Dapper's `ExecuteAsync` therefore
+completes synchronously, so
 `Task.WhenAll(range.Select(_ => store.SearchAsync(...)))` runs the searches one after another and
 never interleaves. Wrapping each in `Task.Run` to force thread-pool parallelism reproduced it
 immediately:
@@ -40,6 +43,13 @@ accessCount=64  rating=3.6      # 3.6 is the rating of 62 — two bumps' contrib
 
 **A concurrency test built on `WhenAll` over an async-in-name-only provider is not a concurrency
 test.** It passes against the defect it exists to catch.
+
+The same page's second half is a finding this codebase has not acted on: the data layer calls those
+async ADO.NET methods throughout, which Microsoft says plainly to avoid. They buy no concurrency and
+cost a state machine per call; the concurrency they appear to promise is the thing that made the first
+reproduction here pass against a live defect. Recorded in the improvement plan rather than changed
+under this ADR — the signatures are async all the way up to the MCP tool surface, so it is a package,
+not a footnote. WAL, which the page recommends instead, is already enabled.
 
 ## Decision
 

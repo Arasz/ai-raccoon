@@ -7,8 +7,11 @@ namespace AiRaccoon.Tests.TestHelpers;
 ///     fake declares only the members its subject calls. Holds no state — behaviour belongs in the override.
 /// </summary>
 /// <remarks>
-///     <see cref="IMemoryStore.DeleteInScopeAsync" /> is deliberately not declared here; the interface's
-///     own default delegates it to <see cref="DeleteAsync" />, so overriding that member covers both.
+///     <see cref="IMemoryStore.DeleteInScopeAsync" /> is declared here and forwards to
+///     <see cref="DeleteAsync" />, so overriding that member still covers both. It used to inherit
+///     that forwarding from the interface's own default — which widened a scoped delete into an
+///     unscoped one for every implementor, not just this fake (ADR-0054). Simplifying is a fake's
+///     privilege; it was never the port's.
 /// </remarks>
 public class FakeMemoryStore : IMemoryStore
 {
@@ -23,6 +26,11 @@ public class FakeMemoryStore : IMemoryStore
     public virtual Task<bool> DeleteAsync(string projectId, string hash,
         CancellationToken cancellationToken = default) =>
         throw NotOverridden(nameof(DeleteAsync));
+
+    /// <summary>Forwards to <see cref="DeleteAsync" /> — see the remarks on this type.</summary>
+    public virtual Task<bool> DeleteInScopeAsync(string projectId, string hash, string scope,
+        CancellationToken cancellationToken = default) =>
+        DeleteAsync(projectId, hash, cancellationToken);
 
     /// <summary>
     ///     Declared virtual here rather than left to IMemoryStore's default implementation: a

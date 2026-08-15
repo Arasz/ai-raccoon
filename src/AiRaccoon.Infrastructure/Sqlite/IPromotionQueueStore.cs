@@ -57,13 +57,12 @@ public interface IPromotionQueueStore
     /// <summary>
     ///     Claims one row for promotion by marking it claimed rather than deleting it (WP5b/A-F11):
     ///     a ShareAsync failure after this leaves the row reclaimable instead of destroyed. Null
-    ///     when the row is already claimed, discarded, or never existed. Default implementation
-    ///     forwards to the delete-based <see cref="DiscardAsync" /> for stores with no claimed_at
-    ///     column of their own — <c>SqlitePromotionQueueStore</c> overrides with the real claim.
+    ///     when the row is already claimed, discarded, or never existed. Abstract on purpose: the
+    ///     old default forwarded to the delete-based <see cref="DiscardAsync" />, so an implementor
+    ///     that forgot to override destroyed the candidate instead of claiming it (ADR-0054).
     /// </summary>
-    async Task<PromotionQueueRow?> ClaimAsync(string projectId, string hash,
-        CancellationToken cancellationToken = default) =>
-        (await DiscardAsync(projectId, hash, cancellationToken).ConfigureAwait(false)).SingleOrDefault();
+    Task<PromotionQueueRow?> ClaimAsync(string projectId, string hash,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     Releases claims older than <paramref name="staleAfter" /> back to the queue (WP5b/A-F11):
