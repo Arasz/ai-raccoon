@@ -17,14 +17,30 @@ namespace AiRaccoon.Tests.Integration.Setup.Serve;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
-public sealed class ShutdownEndpointTests : IDisposable
+public sealed class ShutdownEndpointTests : IAsyncLifetime
 {
     private const string Token = "test-token-0123456789012345678901234567890123";
     private static readonly HttpClient HttpClient = new() { Timeout = TimeSpan.FromSeconds(10) };
 
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-shutdown-endpoint");
 
-    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
+    private IAsyncDisposable? _envGate;
+
+    /// <summary>
+    ///     Holds the env gate as a reader: this class opens a bank through the real host, so an
+    ///     encryption test's window would make it open a plain bank with a key (docs/adr/0066).
+    /// </summary>
+    public async ValueTask InitializeAsync() =>
+        _envGate = await TestData.HoldEnvGateAsync(TestContext.Current.CancellationToken);
+
+    public async ValueTask DisposeAsync()
+    {
+        TestData.DeleteTempRoot(_dataRoot);
+        if (_envGate is not null)
+        {
+            await _envGate.DisposeAsync();
+        }
+    }
 
     [Fact]
     public async Task Post_WithoutTheToken_Is401_AndTheServerKeepsServing()

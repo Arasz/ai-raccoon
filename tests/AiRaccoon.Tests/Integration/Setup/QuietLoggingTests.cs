@@ -23,15 +23,29 @@ namespace AiRaccoon.Tests.Integration.Setup;
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 [Collection(QuietLoggingCollection.Name)]
-public sealed class QuietLoggingTests : IDisposable
+public sealed class QuietLoggingTests : IAsyncLifetime
 {
     private readonly List<string> _dataRoots = [];
 
-    public void Dispose()
+    private IAsyncDisposable? _envGate;
+
+    /// <summary>
+    ///     Holds the env gate as a reader: this class opens a bank through the real host, so an
+    ///     encryption test's window would make it open a plain bank with a key (docs/adr/0066).
+    /// </summary>
+    public async ValueTask InitializeAsync() =>
+        _envGate = await TestData.HoldEnvGateAsync(TestContext.Current.CancellationToken);
+
+    public async ValueTask DisposeAsync()
     {
         foreach (var root in _dataRoots)
         {
             TestData.DeleteTempRoot(root);
+        }
+
+        if (_envGate is not null)
+        {
+            await _envGate.DisposeAsync();
         }
     }
 

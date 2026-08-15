@@ -25,6 +25,34 @@ public static class TestData
     /// <summary>Serializes tests that mutate the process-global AIRACCOON_DB_PASSPHRASE (shared by CliCommandRunnerTests and ConfigCommandsEncryptionTests).</summary>
     public static readonly SemaphoreSlim EnvVarGate = new(1, 1);
 
+    /// <summary>
+    ///     Holds <see cref="EnvVarGate" /> as a READER, for a test that opens a bank through the real
+    ///     host and therefore reads AIRACCOON_DB_PASSPHRASE without meaning to (docs/adr/0066). The
+    ///     gate was built for writers; a reader overlapping one opens a plain bank with a key, which
+    ///     SQLite reports as error 26, "file is not a database".
+    /// </summary>
+    public static async ValueTask<IAsyncDisposable> HoldEnvGateAsync(CancellationToken cancellationToken)
+    {
+        await EnvVarGate.WaitAsync(cancellationToken);
+        return new EnvGateHold();
+    }
+
+    private sealed class EnvGateHold : IAsyncDisposable
+    {
+        private bool _released;
+
+        public ValueTask DisposeAsync()
+        {
+            if (!_released)
+            {
+                _released = true;
+                EnvVarGate.Release();
+            }
+
+            return ValueTask.CompletedTask;
+        }
+    }
+
     /// <summary>Builds a real <see cref="SqliteMemoryStore"/> wired to a <see cref="FileIngestor"/> backed by the given
     /// chunkers — the pre-DI-refactor convenience, kept as one place so tests stay decoupled from the ingest graph.</summary>
     public static SqliteMemoryStore CreateMemoryStore(

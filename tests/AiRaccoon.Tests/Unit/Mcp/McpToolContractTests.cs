@@ -16,7 +16,7 @@ namespace AiRaccoon.Tests.Unit.Mcp;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
-public sealed class McpToolContractTests : IDisposable
+public sealed class McpToolContractTests : IAsyncLifetime
 {
     /// <summary>
     ///     One line per tool: name(param:type!, param:type?) — `!` required, `?` optional, in
@@ -54,7 +54,23 @@ public sealed class McpToolContractTests : IDisposable
 
     private readonly string _dataRoot = TestData.CreateTempRoot("mcp-contract-tests");
 
-    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
+    private IAsyncDisposable? _envGate;
+
+    /// <summary>
+    ///     Holds the env gate as a reader: this class opens a bank through the real host, so an
+    ///     encryption test's window would make it open a plain bank with a key (docs/adr/0066).
+    /// </summary>
+    public async ValueTask InitializeAsync() =>
+        _envGate = await TestData.HoldEnvGateAsync(TestContext.Current.CancellationToken);
+
+    public async ValueTask DisposeAsync()
+    {
+        TestData.DeleteTempRoot(_dataRoot);
+        if (_envGate is not null)
+        {
+            await _envGate.DisposeAsync();
+        }
+    }
 
     [Fact]
     public void InputSchemas_MatchTheDeclaredContract()

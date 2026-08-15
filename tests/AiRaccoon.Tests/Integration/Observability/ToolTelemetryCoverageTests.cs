@@ -24,6 +24,8 @@ public sealed class ToolTelemetryCoverageTests
     [Fact]
     public async Task EveryRegisteredTool_RecordsAnInvocation()
     {
+        // Reader of the env gate (docs/adr/0066): this test stands up the real host.
+        await using var envGate = await TestData.HoldEnvGateAsync(TestContext.Current.CancellationToken);
         var dataRoot = TestData.CreateTempRoot("tool-telemetry-coverage");
         try
         {
