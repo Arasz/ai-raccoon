@@ -52,7 +52,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
-          dotnet-version: 10.0.x
+          global-json-file: global.json
       - name: Verify the bundled embedding model
         # src/AiRaccoon/Models is the pack source. The ONNX is committed, so
         # fetch_verified finds it present and SHA-matching and skips the download
@@ -99,7 +99,7 @@ jobs:
       # on PATH. Mirrors the pack job's setup-dotnet step.
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
-          dotnet-version: 10.0.x
+          global-json-file: global.json
       - name: NuGet login (OIDC -> temp API key)
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1
         id: login
