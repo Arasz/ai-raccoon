@@ -44,6 +44,16 @@ no longer mistake fenced content for prose, whether that consumer is `FileIngest
 or one not written yet. This is a property of the text, not a parameter threaded through one call
 path, which is why it is fixed in the chunker rather than by passing fence state to the parser.
 
+> **Scope amendment — 2026-08-15, project-scope review.** The Decision above is precise: it claims
+> every chunk *opens and closes its fence state within itself*, and that is what was built and
+> measured (96/96 balanced on a 50 KB single fence). **The title generalises further than the
+> guarantee does**, and a reader who takes "well-formed markdown fragment" at face value will be
+> wrong in two measured cases: a 200-row table split at `maxTokens=150` yields 34 chunks of which
+> **33 carry orphaned body rows with no header**, and a 20 KB single-line document at
+> `maxTokens=100` puts **14 of 31 boundaries mid-word** — `AddUnitOrSplit`/`LargestPrefixWithinBudget`
+> is a token binary search with no word awareness. The guarantee delivered is **fence balance**.
+> Table-header carry-over and word-boundary awareness are unbuilt, not broken.
+
 Three changes to `MarkdownChunker` carry it:
 
 1. **An over-budget fence is re-fenced, not de-fenced.** `FlushAsSubFences` splits the region into

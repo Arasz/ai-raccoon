@@ -109,11 +109,14 @@ any outcome `MayBind` accepts rather than falling through to the timed-out line.
   timeout does not, but nothing downstream would act differently on the two, and it doubles the
   table for a distinction no operator line uses.
 
-## Known gap
+## Known gap — closed 2026-08-14
 
-`ServerRestart.WaitForPortToFreeAsync` still treats "the probe stopped answering" as "the port
-freed", which is the same conflation inside the restart's own wait loop: a probe that times out
-while the old server drains would be read as a freed port. It is left alone here because changing
-it without a gate that watches it fail would be exactly the habit this ADR exists to correct; a
-closed listening socket refuses on loopback, so the loop is right today for the reason it should be
-asserting.
+`ServerRestart.WaitForPortToFreeAsync` used to treat "the probe stopped answering" as "the port
+freed", the same conflation inside the restart's own wait loop. **It no longer does.**
+`src/AiRaccoon/Hosting/Node/ServerRestart.cs:160` now reads
+`if (await _probe.ProbeAsync(port, waiting.Token) is not ProbeVerdict.NotListening) { continue; }` —
+only a positive `NotListening` verdict exits the loop, so a timing-out probe keeps waiting instead of
+being read as a freed port.
+
+*Recorded by the 2026-08-14 project-scope review, which found this section still describing the gap
+as open. The gap is the thing that changed; the decision above did not.*

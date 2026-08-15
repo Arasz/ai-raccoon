@@ -41,7 +41,7 @@ network surface beyond an optional localhost HTTP endpoint. The honest threat mo
 | `/observability` endpoint (HTTP mode) | Returns the server's PID, binary version and OTLP export state on the same loopback port as `/mcp`                                                                          | Any process that can reach the listening port |
 | `/shutdown` endpoint (`serve` only) | Stops the server gracefully for `serve --restart` (ADR-0022). POST only, **guarded by the same loopback token as `/mcp`**, and mapped only when a token exists — an ungated `--transport http` host has no such endpoint | Any local process that can read the token file |
 | OTLP export (opt-in)       | Exports metrics and traces to the collector named by `OTEL_EXPORTER_OTLP_ENDPOINT`; off entirely when that variable is unset                                                           | Whoever sets the environment variable for the server process |
-| Memory tools (23 tools)    | Read/write/search/manage the SQLite memory bank; watch files/directories; begin/consolidate/discard workspaces; run degradation sweeps; sync to a cloud object store (S3 or Azure Blob) | The calling MCP client                        |
+| Memory tools (26 tools)    | Read/write/search/manage the SQLite memory bank; watch files/directories; begin/consolidate/discard workspaces; run degradation sweeps; sync to a cloud object store (S3 or Azure Blob) | The calling MCP client                        |
 | NuGet package / local feed | Ships the built tool via `dotnet pack` and the local `.nupkg-local/` feed                                                                                                               | The pack/push commands and feed contents      |
 | Embedded ONNX model        | Runs `all-MiniLM-L6-v2` inference in-process for local embeddings (~23 MB, bundled)                                                                                                     | The model file shipped with the binary        |
 | Cloud sync (opt-in)        | Pushes/pulls VACUUM snapshots to/from a cloud object store (S3-compatible or Azure Blob)                                                                                                | Credentials from the bank's settings table    |
@@ -82,9 +82,19 @@ accepted before ADR-0020, so it is not a regression; but if you run it, the list
 open to any local process. And `UnixFileMode` is POSIX-only: on Windows the token file
 inherits the data-root directory's ACL rather than being owner-only.
 
-**Access modes provide a defence-in-depth layer:** `ro` mode allows only reads; `rw`
-(default) adds writes; `full` enables destructive operations (delete, sweep, forget).
-Per-project modes override the global setting, stored in the bank's `settings` table.
+**Access modes provide a defence-in-depth layer:** `ro` mode allows only reads *of entry
+content*; `rw` (default) adds writes; `full` enables destructive operations (delete, sweep,
+forget). Per-project modes override the global setting, stored in the bank's `settings` table.
+
+**`ro` is not literally read-only.** `memory_search` is gated `Read`, and it updates
+`access_count`, `last_accessed_at` and `rating` on the rows it returns — including rows in the
+shared tier, which belong to no single project. `rating` is the sweep's deletion input, so search
+traffic from a project pinned to `ro` still influences what the sweep later removes. Treat `ro` as
+"cannot add or destroy content", not as "writes nothing".
+
+**Access mode is a per-project setting, not a per-caller permission.** It resolves the mode of the
+project the caller *names*; nothing in the tool surface carries caller identity. It limits what a
+cooperating client can do by accident, not what a hostile one can do on purpose.
 
 **Path-reading tools are contained by the declared scope.** `memory_ingest_file`,
 `memory_ingest_directory` and `memory_watch_add` all take a caller-supplied path, and the
@@ -125,8 +135,14 @@ no embeddings — only the scope name (`project_id`) and call-shape telemetry (w
 tool, how long, success or failure). If your first worry on reading this is "is my
 memory bank being shipped to a collector" — it is not.
 
+**One exception to "content never leaves", and it is not entry text.** When a tool call fails,
+the span carries `exception.message` and `exception.stacktrace`. Some refusal messages interpolate
+the caller-supplied path — `PathOutsideScopeException` renders `Path '<absolute path>' is outside
+the ingest scope.` — so an **absolute filesystem path** can reach the collector, directory names
+included. No entry content, no query text, no file contents.
+
 The exposure this creates is: whoever can read your collector learns your **project
-names** and your usage pattern. Do not use a project id that is itself sensitive (a
+names**, any absolute paths that appear in refusals, and your usage pattern. Do not use a project id that is itself sensitive (a
 client name, an unreleased codename) if you point `OTEL_EXPORTER_OTLP_ENDPOINT` at a
 shared team or third-party vendor collector.
 
