@@ -380,8 +380,17 @@ test fake at the cost of a silent wrong answer.
 
 Make all three abstract; the compiler lists the work.
 
-### WP10 · The one-line hygiene set
+### WP10 · The one-line hygiene set — ✅ **FOUR LANDED**
 **Effort:** QUICK each · can share a PR
+**Landed** on `work/wp10-hygiene`, merged into the campaign branch: the proxy redirect, the rekey
+probe's create mode, the quiet-log framework filter, and `identifier.sqlite`. The redirect fix ships
+with `HttpHandlerRedirectTests`, a source-derived gate (every `SocketsHttpHandler` must set
+`AllowAutoRedirect = false`, with an anti-vacuity assertion), watched red naming `ProxyRegistrations.cs`
+then green. **Neither handler had a test before, so the already-hardened sibling was unprotected too.**
+
+*Two adjustments made while implementing, both recorded rather than silently absorbed:*
+- The rekey probe went to `ReadWrite`, **not** `ReadOnly` as the lane suggested — a WAL bank needs a writable `-shm` to open, so `ReadOnly` would have traded a wrong comment for a broken probe. `Create` is gone, which is the hazard that mattered, and the comment is now true.
+- `Log.SearchQualityRecordFailed` and the `limit`/`MaximumLength` validator bounds were **not** taken: the first touches `MemoryTools.cs`, a serialisation point with WP8, and the second changes a public contract (rejecting `limit > 200`) which deserves the owner's sight rather than an away-mode judgment call.
 
 - `AllowAutoRedirect = false` on the proxy's token-carrying handler (`ProxyRegistrations.cs:19`) — its hardened sibling already does this for a documented reason (security F13).
 - `Mode = SqliteOpenMode.ReadOnly` on the rekey probe, or correct the comment that claims it (security F14).
