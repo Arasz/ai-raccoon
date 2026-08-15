@@ -99,7 +99,43 @@ internal static partial class ToolRefusals
                 // confirm-required) is a user-input mistake, never an infrastructure fault.
                 return Refused(request, ex.Message, "refused", LogLevel.Information);
             }
+            catch (Exception ex)
+            {
+                // Nothing maps this, so it is a genuine failure — but letting it escape cost the
+                // caller every clue: the SDK replaces it with "An error occurred invoking '<tool>'."
+                // (docs/adr/0061). Answering here keeps the Error record the SDK used to produce,
+                // which is why Unexpected logs at Error itself rather than relying on the rethrow.
+                return Unexpected(request, ex);
+            }
         };
+
+    /// <summary>
+    ///     What the caller is told about an exception nothing maps: the type, and nothing else. The
+    ///     message stays server-side — a refusal's text is chosen for the caller, an unexpected
+    ///     failure's is not, and may carry a bank path or a SQL fragment (docs/adr/0061).
+    /// </summary>
+    internal static string UnexpectedText(Exception exception) =>
+        $"unexpected-error: {exception.GetType().Name}";
+
+    /// <summary>
+    ///     Answers an unmapped exception instead of letting it escape, and logs it at Error itself:
+    ///     the SDK produced that Error record only because the exception reached it, so catching
+    ///     here without logging would trade eleven useless words for silence.
+    /// </summary>
+    private static CallToolResult Unexpected(RequestContext<CallToolRequestParams> request, Exception exception)
+    {
+        var logger = request.Services?.GetService<ILoggerFactory>()?.CreateLogger("AiRaccoon.Tools.ToolRefusals");
+        if (logger is not null)
+        {
+            Log.ToolFailed(logger, request.Params?.Name ?? string.Empty, exception.GetType().Name, exception);
+        }
+
+        return new CallToolResult
+        {
+            IsError = true,
+            Content = [new TextContentBlock { Text = UnexpectedText(exception) }]
+        };
+    }
 
     private static CallToolResult Refused(RequestContext<CallToolRequestParams> request, string message,
         string prefix, LogLevel level)
@@ -127,5 +163,8 @@ internal static partial class ToolRefusals
 
         [LoggerMessage(EventId = 911, Level = LogLevel.Warning, Message = "\"{ToolName}\" refused: {Reason}")]
         public static partial void ToolRefusedAtWarning(ILogger logger, string toolName, string reason);
+
+        [LoggerMessage(EventId = 912, Level = LogLevel.Error, Message = "\"{ToolName}\" failed with an unmapped {ExceptionType}")]
+        public static partial void ToolFailed(ILogger logger, string toolName, string exceptionType, Exception exception);
     }
 }
