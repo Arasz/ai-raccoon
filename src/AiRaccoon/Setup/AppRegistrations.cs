@@ -139,6 +139,15 @@ public static partial class AppRegistrations
         private void RegisterBankMaintenanceBackgrounbdService()
         {
             services.AddRequiredSingleton<ISweepService, SweepService>();
+            services.AddSingleton<MaintenanceJobRunner>();
+            // The list is the schedule (ADR-0070). Order matters only in that a reclaim after the
+            // backfill collects the pages the backfill's deletes freed as well.
+            services.AddSingleton<IReadOnlyList<IMaintenanceJob>>(sp =>
+            [
+                new ChunkBackfillJob(sp.GetRequiredService<IMarkdownChunker>(), sp.GetRequiredService<TimeProvider>()),
+                new Vec0ReclaimJob(),
+                new VacuumJob()
+            ]);
             services.AddHostedService<BankMaintenanceHostedService>();
         }
 

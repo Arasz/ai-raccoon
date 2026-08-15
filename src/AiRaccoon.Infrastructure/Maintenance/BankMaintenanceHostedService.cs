@@ -31,7 +31,29 @@ public sealed partial class BankMaintenanceHostedService(
     /// <summary>Span name and `operation` tag of one maintenance pass.</summary>
     internal const string OperationName = "bank.maintenance";
 
-    private DateTimeOffset? _lastVacuumUtc;
+    // Same shape the store uses for its noise ports: the primary constructor above stays the
+    // narrow one the tests build, and production DI resolves the wider constructor below. A service
+    // built without jobs simply runs none, which is what every pre-ADR-0070 test wants.
+    private readonly MaintenanceJobRunner? _jobRunner;
+    private readonly IReadOnlyList<IMaintenanceJob> _jobs = [];
+
+    /// <inheritdoc cref="BankMaintenanceHostedService" />
+    public BankMaintenanceHostedService(
+        ISqliteConnectionFactory factory,
+        TimeProvider timeProvider,
+        IOperationTelemetry telemetry,
+        ILogger<BankMaintenanceHostedService> logger,
+        IMemoryStore store,
+        INoiseEntryStore noiseEntryStore,
+        IPromotionQueueStore promotionQueueStore,
+        ISearchQualityService searchQuality,
+        MaintenanceJobRunner jobRunner,
+        IReadOnlyList<IMaintenanceJob> jobs)
+        : this(factory, timeProvider, telemetry, logger, store, noiseEntryStore, promotionQueueStore, searchQuality)
+    {
+        _jobRunner = jobRunner;
+        _jobs = jobs;
+    }
 
     /// <summary>Completed after each maintenance pass (startup + ticks); test seam.</summary>
     internal TickSignal Ticks { get; } = new();
@@ -146,50 +168,18 @@ public sealed partial class BankMaintenanceHostedService(
             await PurgeExpiredNoiseEntriesAsync(cancellationToken).ConfigureAwait(false);
             await PurgeExpiredRetentionAsync(connection, cancellationToken).ConfigureAwait(false);
 
-            var now = timeProvider.GetUtcNow();
-            if (_lastVacuumUtc is null)
+            // Scheduling moved into MaintenanceJobRunner and the bank's maintenance_jobs ledger
+            // (ADR-0070). The clock it replaces was the _lastVacuumUtc field below, seeded on first
+            // run, so a bank only ever opened by short-lived processes never vacuumed at all.
+            var outcomes = _jobRunner is null
+                ? []
+                : await _jobRunner.RunDueAsync(connection, _jobs, cancellationToken).ConfigureAwait(false);
+            if (outcomes.Any(o => o.Ran))
             {
-                // Seed on first run: short-lived processes never vacuum (the clock resets per process).
-                _lastVacuumUtc = now;
-                return;
+                pass.Tag("jobs.ran", string.Join(',', outcomes.Where(o => o.Ran).Select(o => o.Name)));
+                // A VACUUM rewrites the whole file through the WAL; truncate it now, not next tick.
+                await RunCheckpointAsync(connection, cancellationToken).ConfigureAwait(false);
             }
-
-            var vacuumIntervalDays = await ReadVacuumIntervalDaysSafeAsync(connection, cancellationToken)
-                .ConfigureAwait(false);
-            if (now - _lastVacuumUtc.Value < TimeSpan.FromDays(vacuumIntervalDays))
-            {
-                return;
-            }
-
-            try
-            {
-                await using (var vacuum = connection.CreateCommand())
-                {
-                    vacuum.CommandText = "VACUUM";
-                    await vacuum.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-                }
-            }
-            catch (SqliteException ex) when (ex.SqliteErrorCode is 5 or 6) // SQLITE_BUSY / SQLITE_LOCKED
-            {
-                // A contended VACUUM defers like a contended checkpoint: Warning, clock
-                // untouched so the next tick retries — never an Error.
-                Log.VacuumDeferred(logger);
-                return;
-            }
-
-            // VACUUM drops sqlite_stat1, so ANALYZE must run after it.
-            await using (var analyze = connection.CreateCommand())
-            {
-                analyze.CommandText = "ANALYZE";
-                await analyze.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-            }
-
-            // The VACUUM rewrote the whole file through the WAL; truncate it now, not at the next tick.
-            await RunCheckpointAsync(connection, cancellationToken).ConfigureAwait(false);
-
-            _lastVacuumUtc = now;
-            pass.Tag("vacuumed", "true");
-            Log.Vacuum(logger);
         }
         finally
         {
