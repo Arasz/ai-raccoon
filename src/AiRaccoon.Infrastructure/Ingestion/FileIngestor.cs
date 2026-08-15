@@ -206,22 +206,31 @@ public sealed class FileIngestor(
         return inserted > 0 ? 1 : 0;
     }
 
+    /// <summary>The engine an unconfigured bank will embed with once one is configured (docs/adr/0063).</summary>
+    private const string BundledProvider = "local";
+
     /// <summary>
-    ///     Resolves the chunk budget from the configured engine (docs/adr/0036): "local" also supplies
-    ///     the real BERT tokenizer as the counting override, so the budget and the counter that enforces
-    ///     it always agree with what will actually embed the chunk. Other providers keep the default
-    ///     o200k counter (unchanged) — the mismatch this fixes is specific to the bundled model.
+    ///     Resolves the chunk budget from the engine that will embed these chunks (docs/adr/0036):
+    ///     "local" also supplies the real BERT tokenizer as the counting override, so the budget and
+    ///     the counter that enforces it always agree with what will actually embed the chunk. Other
+    ///     providers keep the default o200k counter — the mismatch this fixes is specific to the
+    ///     bundled model.
+    ///     <para>
+    ///         An **unset** provider resolves to the bundled local engine rather than to the default
+    ///         o200k budget (docs/adr/0063). Nothing embeds yet at that point, but the boundaries
+    ///         drawn now are the ones the engine is handed later, and configuring an engine re-embeds
+    ///         the bank without re-chunking it — so ingest-then-configure, a supported order, made
+    ///         those boundaries permanently wrong. Chunking to the most restrictive plausible window
+    ///         is safe in the other direction: a chunk that fits the bundled model fits a larger one.
+    ///     </para>
     /// </summary>
     private static async Task<(int MaxTokens, int OverlayTokens, TokenCount? CountTokens)> ChunkSizeForAsync(
         SqliteConnection connection, CancellationToken cancellationToken)
     {
-        var provider = await connection.QuerySingleOrDefaultAsync<string?>(
+        var configured = await connection.QuerySingleOrDefaultAsync<string?>(
                 Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Provider }, cancellationToken))
             .ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(provider))
-        {
-            return (DefaultMaxTokens, ChunkingDefaults.OverlayTokens, null);
-        }
+        var provider = string.IsNullOrWhiteSpace(configured) ? BundledProvider : configured;
 
         var model = await connection.QuerySingleOrDefaultAsync<string?>(
                 Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Model }, cancellationToken))
