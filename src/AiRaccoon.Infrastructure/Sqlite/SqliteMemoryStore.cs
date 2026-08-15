@@ -202,6 +202,12 @@ public sealed partial class SqliteMemoryStore(
         var ftsQueryByHash = new Dictionary<string, string>(StringComparer.Ordinal);
         var idByHash = new Dictionary<string, long>(StringComparer.Ordinal);
 
+        // fts/vector are accumulated, not spanned: each runs once per context (fts up to twice,
+        // on the fallback re-query), so a single bracket would understate a multi-context search
+        // (docs/plans/2026-08-15-performance-metrics-implementation.md, WP2).
+        var ftsElapsed = TimeSpan.Zero;
+        var vectorElapsed = TimeSpan.Zero;
+
         foreach (var context in contexts)
         {
             var (filter, values) = ContextFilter.For(context, query.ProjectId, "e.");
@@ -211,21 +217,29 @@ public sealed partial class SqliteMemoryStore(
             IReadOnlyList<MemorySearchResult> ftsResults = [];
             if (plan.Expression.Length > 0 && query.FtsWeight != 0)
             {
+                var ftsStart = timeProvider.GetTimestamp();
                 ftsResults = await QueryFtsBatchAsync(connection, filter, plan.Expression,
                         SearchParameters(plan.Expression), valueByHash, ftsQueryByHash, idByHash, cancellationToken)
                     .ConfigureAwait(false);
+                ftsElapsed += timeProvider.GetElapsedTime(ftsStart);
                 if (plan.Fallback is not null && ftsResults.Count <= Math.Max(plan.TokenCount, query.Limit))
                 {
+                    var fallbackStart = timeProvider.GetTimestamp();
                     ftsResults = await QueryFtsBatchAsync(connection, filter, plan.Fallback,
                             SearchParameters(plan.Fallback), valueByHash, ftsQueryByHash, idByHash, cancellationToken)
                         .ConfigureAwait(false);
+                    ftsElapsed += timeProvider.GetElapsedTime(fallbackStart);
                 }
             }
 
-            var vectorResults = queryVector is null || query.VectorWeight == 0
-                ? []
-                : await QueryDualVectorBatchAsync(connection,
+            IReadOnlyList<MemorySearchResult> vectorResults = [];
+            if (queryVector is not null && query.VectorWeight != 0)
+            {
+                var vectorStart = timeProvider.GetTimestamp();
+                vectorResults = await QueryDualVectorBatchAsync(connection,
                     VectorParameters(), alpha, valueByHash, cancellationToken).ConfigureAwait(false);
+                vectorElapsed += timeProvider.GetElapsedTime(vectorStart);
+            }
 
             ftsBatches.Add(ftsResults);
             vectorBatches.Add(vectorResults);
@@ -259,18 +273,31 @@ public sealed partial class SqliteMemoryStore(
             }
         }
 
+        var fusionStart = timeProvider.GetTimestamp();
         var fused = ReciprocalRankFusion.Fuse(
             [
                 (ModalityCandidates.ByBm25(ftsBatches, valueByHash), query.FtsWeight),
                 (ModalityCandidates.ByCosine(vectorBatches, valueByHash), query.VectorWeight)
             ],
             query.RrfK, 0, int.MaxValue);
+        var fusionElapsed = timeProvider.GetElapsedTime(fusionStart);
+
+        var affinityStart = timeProvider.GetTimestamp();
         var merged = SearchResultMerger.Merge([fused], query.Limit, query.MinRelativeScore, query.RrfK,
             isPathQuery ? 0.0 : query.SourceLambda, query.ConsolidationThreshold, query.DocScoreFormula);
+        var affinityElapsed = timeProvider.GetElapsedTime(affinityStart);
+
+        var snippetsStart = timeProvider.GetTimestamp();
         merged = await ResolveDeferredSnippetsAsync(connection, merged, valueByHash, ftsQueryByHash, idByHash,
             query.Query, cancellationToken).ConfigureAwait(false);
+        var snippetsElapsed = timeProvider.GetElapsedTime(snippetsStart);
+
+        var bumpStart = timeProvider.GetTimestamp();
         await BumpAccessAsync(connection, merged, query.ProjectId, cancellationToken).ConfigureAwait(false);
-        return new SearchResults(merged, SearchTimings.Empty);
+        var bumpElapsed = timeProvider.GetElapsedTime(bumpStart);
+
+        var timings = new SearchTimings(ftsElapsed, vectorElapsed, fusionElapsed, affinityElapsed, snippetsElapsed, bumpElapsed);
+        return new SearchResults(merged, timings);
     }
 
     /// <summary>memory_get (ADR-0035): the caller's own rows plus the cross-project shared tier; null when no such hash is reachable.</summary>
@@ -1115,100 +1142,5 @@ public sealed partial class SqliteMemoryStore(
         [LoggerMessage(EventId = 900, Level = LogLevel.Warning,
             Message = "Keyword search failed; degrading to the vector modality for this query")]
         public static partial void KeywordModalityFailed(ILogger logger, Exception exception);
-    }
-
-    private sealed class EntryRow
-    {
-        public long Id { get; set; }
-
-        public string Hash { get; set; } = "";
-
-        public string Path { get; set; } = "";
-
-        public string Value { get; set; } = "";
-
-        public string? Scope { get; set; }
-
-        public string ProjectId { get; set; } = "";
-
-        public string? ContextLabel { get; set; }
-
-        public string? WorkspaceId { get; set; }
-
-        public long CreatedAt { get; set; }
-    }
-
-    internal sealed class SearchRow
-    {
-        public string Hash { get; set; } = "";
-
-        public double Ranking { get; set; }
-
-        public string Path { get; set; } = "";
-
-        public string Value { get; set; } = "";
-
-        public string? SourceFile { get; set; }
-
-        public int ChunkIndex { get; set; }
-
-        public int TotalChunks { get; set; }
-
-        /// <summary>entries.id — the FTS5 rowid, used to resolve the deferred snippet by row identity rather than hash.</summary>
-        public long Id { get; set; }
-    }
-
-    /// <summary>Row shape for <see cref="MemorySql.FtsSnippetsForSurvivors" />.</summary>
-    private sealed class SnippetRow
-    {
-        public string Hash { get; set; } = "";
-
-        public string Snippet { get; set; } = "";
-    }
-
-    internal sealed class VectorRow
-    {
-        public string Hash { get; set; } = "";
-
-        public string Path { get; set; } = "";
-
-        public string Value { get; set; } = "";
-
-        public double Distance { get; set; }
-
-        public string? SourceFile { get; set; }
-
-        public int ChunkIndex { get; set; }
-
-        public int TotalChunks { get; set; }
-    }
-
-    private sealed record SourceRow(string Path, string Value, string? SourceFile, string? Section, string? SourceType, string? HeadingPath);
-
-    private sealed record DeleteRecomputeRow(string? Scope, string? ContextLabel, string? WorkspaceId, string? SourceFile);
-
-    private sealed record SharedRow(string Path, string Value);
-
-    private sealed record ExtractionRow(
-        string Hash,
-        string Path,
-        string Value,
-        string? SourceFile,
-        string? SourceType,
-        double Rating,
-        long AccessCount,
-        long CreatedAt,
-        long? TtlDays)
-    {
-        public ExtractionCandidateRow ToCandidate() =>
-            new(Hash, Path, Value, SourceFile, Rating, (int)AccessCount,
-                DateTimeOffset.FromUnixTimeSeconds(CreatedAt), (int?)TtlDays, SourceType);
-    }
-
-    private sealed class MetadataRow
-    {
-        public double Rating { get; set; }
-
-        public int? TtlDays { get; set; }
     }
 }
