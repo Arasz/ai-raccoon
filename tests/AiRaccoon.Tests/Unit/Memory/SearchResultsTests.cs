@@ -42,8 +42,9 @@ public sealed class SearchResultsTests
     }
 
     /// <summary>
-    ///     Derived from the record's own shape (reflection over its TimeSpan properties), not a
-    ///     hand-written list — a seventh phase added to SearchTimings needs no list edited here.
+    ///     F11 (owner ruling): SearchTimings.PhaseNames is an explicit declaration, not reflection
+    ///     over TimeSpan properties — a seventh phase means editing PhaseNames/Phases() AND this
+    ///     literal, deliberately, so nothing (e.g. a future computed Total) can mint a series unnoticed.
     /// </summary>
     [Fact]
     public void PhaseNames_OneEntryPerTimeSpanMember_PrefixedWithSearch()
