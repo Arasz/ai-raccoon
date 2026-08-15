@@ -372,7 +372,32 @@ chunk is full or nearly empty — so the arithmetic holds, measured rather than 
 20 distinct `ctx` values of which **13** (not 14) hold under 10 rows. Pinning `chunk_size` alone
 recovers almost nothing.
 
-**So the real options are, in order of preference:**
+> **MEASURED 2026-08-15 — and it inverts this ordering. Option 2 should be struck.**
+>
+> `Vec0PartitionKeyProbe` (run with `AIRACCOON_VEC0_PARTITION_PROBE=1`), 2,518 real vectors from the
+> committed corpus under a partition distribution synthesised to the live bank's measured shape
+> (20 ctx values, 13 of them small):
+>
+> | shape | chunks | chunk bytes | KNN @ k=10 |
+> |---|---|---|---|
+> | `ctx`-partitioned (today) | 20 | 31,457,280 | **0.354 ms** |
+> | `scope`-partitioned (option 2) | 3 | 4,718,592 | **3.420 ms** |
+> | unpartitioned (option 1) | 3 | 4,718,592 | **1.952 ms** |
+>
+> **The size win is real: 85% of the chunk bytes, 31.5 MB → 4.7 MB.** The latency cost is also real:
+> **5.5× for option 1, 9.7× for option 2.**
+>
+> **Option 2 measures worse than option 1 on latency at identical size, so it is not a middle ground —
+> it is dominated.** Coarsening still pays the partition-filter machinery while pruning nothing once
+> every row shares a scope. Strike it; the choice is between today's shape and dropping the key.
+>
+> **What this does not settle**, stated so nobody quotes it further than it goes: the partition
+> distribution is synthetic (the vectors are real, the `ctx` assignment is not), it is one corpus at
+> 2,518 vectors against a live bank of ~16k, and `k=10`. Whether the 1.6 ms gap grows or shrinks with
+> corpus size is unmeasured. **The trade is now explicit — roughly 26.7 MB against +1.6 ms per KNN on
+> the search hot path — and that is an owner decision, not a technical one.**
+>
+> **So the real options are, in order of preference:**
 1. **Drop the `ctx` partition key and filter by context in the query instead.** Requires proving the KNN stays correctly scoped and measuring the latency cost — partitioning exists to prune before the `MATCH`, and `EXPLAIN QUERY PLAN` currently shows that pruning working. **Measure before choosing.**
 2. **Coarsen the partition key** — partition by `scope` rather than by full project/label/workspace identity, cutting 20 partitions to 3 or 4 while keeping most pruning.
 3. **Pin `chunk_size` as well**, worth roughly 0.8 MB on its own; only meaningful once 1 or 2 has landed.
