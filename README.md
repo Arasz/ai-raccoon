@@ -31,6 +31,7 @@ flowchart LR
 
 ## What's new
 
+- **A search query too long for the model is trimmed openly, and the log says so.** (1.18.0) [ADR-0071](docs/adr/0071-a-query-is-trimmed-deliberately-and-said-so.md)
 - **The bank now compacts itself, and repairs entries too long to be searchable.** (1.17.0) [ADR-0070](docs/adr/0070-maintenance-is-a-list-of-jobs-with-a-ledger.md)
 - **The bank reclaims most of its vector storage.** (1.16.0) [ADR-0068](docs/adr/0068-ctx-is-a-vec0-metadata-column-not-a-partition-key.md)
 - **A long `memory_write` is now searchable across its whole length.** (1.15.0) [ADR-0064](docs/adr/0064-memory-write-chunks-like-everything-else.md)
