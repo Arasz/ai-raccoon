@@ -45,7 +45,7 @@ By pairing `ai-badger` prompt hooks with `AiRaccoon` memory ingestion, decision 
 
 ### Empirical Case Study (Session 2026-08-13)
 When queried about *why* specific skills were added in this session:
-- **`ai-raccoon-state-checklist`**: Added to automate pre-flight system state checks after global package updates and `ai-raccoon serve` restarts, producing a dated audit resource (`.ai-raccoon/state-checklist-20260813.json`).
+- **`ai-raccoon-state-checklist`**: Added to automate pre-flight system state checks after global package updates and `ai-raccoon serve` restarts, producing a dated audit resource (now `docs/work/checklist/2026-08-13-state-preflight.json`; the skill was deleted on 2026-08-14).
 - **`ai-text-humanization`**: Added following empirical literature research (`docs/research/llm-humanization-research.md`) identifying 9 humanization levers that reduce AI output detection by 80–90%.
 - **`refactoring-fix`**: Added following PR #265 lessons where `dotnet build` silently skipped broken files; enforces `dotnet clean && dotnet build` and domain-type compensation rules.
 

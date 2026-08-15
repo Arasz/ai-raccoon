@@ -2,5 +2,8 @@
 # Install alongside runtime deps:
 #   python3 -m pip install -r engine/requirements.txt -r engine/requirements-dev.txt
 pylint>=4.0.6
+# pylint's own ceiling, restated so a direct `pip install -U astroid` cannot cross it.
+# Above it every pylint run dies with NodeNG.infer() got an unexpected keyword argument 'asname'.
+astroid<4.1
 pytest>=7.0.0
 pytest-xdist>=3.8.0

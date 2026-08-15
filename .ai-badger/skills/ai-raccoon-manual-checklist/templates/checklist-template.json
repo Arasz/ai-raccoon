@@ -1,4 +1,5 @@
 {
+  "_note": "Copy to docs/work/checklist/<yyyy-mm-dd>-<subject>.json. Never fill this file in place. status is pass|fail|skipped|substituted; substituted means checked by a different instrument than the item names, and its reason must say which. accepted stays null until a human answers it, so an unfinished run is visibly unfinished. Delete any item whose feature no longer exists rather than skipping it.",
   "run": {
     "date": "",
     "branch": "",
@@ -10,8 +11,18 @@
     "version": "",
     "mcp-tool-count": "",
     "mcp-prompt-count": "",
-    "note": "Read from the tree at run time (SKILL.md step 2), never typed from memory."
+    "note": "Produced by scripts/derive-facts.sh at run time, never typed from memory or a previous run."
   },
+  "findings-against-prior-runs": [
+    {
+      "_example": "Delete this example. One entry per thing an earlier run got wrong — a verdict, a reason, or a step that could not have failed. A checklist that can only describe the current build cannot report that the last checklist lied.",
+      "prior-run": "",
+      "prior-claim": "",
+      "what-is-actually-true": "",
+      "evidence": "",
+      "so-what": ""
+    }
+  ],
   "items": [
     {
       "item": "build-and-install-global-package",
@@ -20,8 +31,8 @@
       "evidence": "",
       "observed-result": "",
       "status": "",
-      "accepted": false,
-      "acceptation-reason": ""
+      "accepted": null,
+      "acceptance-reason": ""
     },
     {
       "item": "server-lifecycle",
@@ -30,8 +41,8 @@
       "evidence": "",
       "observed-result": "",
       "status": "",
-      "accepted": false,
-      "acceptation-reason": ""
+      "accepted": null,
+      "acceptance-reason": ""
     },
     {
       "item": "memory-write-stores-and-reports-truthfully",
@@ -40,8 +51,8 @@
       "evidence": "",
       "observed-result": "",
       "status": "",
-      "accepted": false,
-      "acceptation-reason": ""
+      "accepted": null,
+      "acceptance-reason": ""
     },
     {
       "item": "memory-search-hybrid-retrieval",
@@ -50,8 +61,8 @@
       "evidence": "",
       "observed-result": "",
       "status": "",
-      "accepted": false,
-      "acceptation-reason": ""
+      "accepted": null,
+      "acceptance-reason": ""
     },
     {
       "item": "memory-get-returns-content-by-hash",
@@ -60,8 +71,8 @@
       "evidence": "",
       "observed-result": "",
       "status": "",
-      "accepted": false,
-      "acceptation-reason": ""
+      "accepted": null,
+      "acceptance-reason": ""
     },
     {
       "item": "source-path-anchor-resolves-its-chunk",
@@ -70,8 +81,8 @@
       "evidence": "",
       "observed-result": "",
       "status": "",
-      "accepted": false,
-      "acceptation-reason": ""
+      "accepted": null,
+      "acceptance-reason": ""
     },
     {
       "item": "write-path-noise-filtering",
@@ -80,8 +91,8 @@
       "evidence": "",
       "observed-result": "",
       "status": "",
-      "accepted": false,
-      "acceptation-reason": ""
+      "accepted": null,
+      "acceptance-reason": ""
     },
     {
       "item": "read-path-query-guard",
@@ -90,8 +101,8 @@
       "evidence": "",
       "observed-result": "",
       "status": "",
-      "accepted": false,
-      "acceptation-reason": ""
+      "accepted": null,
+      "acceptance-reason": ""
     },
     {
       "item": "file-watch-status",
@@ -100,8 +111,8 @@
       "evidence": "",
       "observed-result": "",
       "status": "",
-      "accepted": false,
-      "acceptation-reason": ""
+      "accepted": null,
+      "acceptance-reason": ""
     },
     {
       "item": "promotion-queue-state",
@@ -110,8 +121,8 @@
       "evidence": "",
       "observed-result": "",
       "status": "",
-      "accepted": false,
-      "acceptation-reason": ""
+      "accepted": null,
+      "acceptance-reason": ""
     },
     {
       "item": "full-mcp-surface",
@@ -120,8 +131,8 @@
       "evidence": "",
       "observed-result": "",
       "status": "",
-      "accepted": false,
-      "acceptation-reason": ""
+      "accepted": null,
+      "acceptance-reason": ""
     },
     {
       "item": "observability-event-ids",
@@ -130,8 +141,8 @@
       "evidence": "",
       "observed-result": "",
       "status": "",
-      "accepted": false,
-      "acceptation-reason": ""
+      "accepted": null,
+      "acceptance-reason": ""
     }
   ]
 }
