@@ -484,7 +484,7 @@ reading its own settings inside the tools file.
 Extract `ShareExtractService` and `QueryGuardService` into Core. Both tool methods become the thin
 delegations the other 21 already are.
 
-### WP9 · Finish the `ISettingsStore` extraction and make three lying defaults abstract — 🔶 **F8 LANDED · F7 PART-REFUSED, PART-OPEN** — **architecture F7 + F8**
+### WP9 · Finish the `ISettingsStore` extraction and make three lying defaults abstract — ✅ **CLOSED (F8 landed · F7 part-declined, part-fixed in #323)** — **architecture F7 + F8**
 
 > **Verified against `src/`, 2026-08-15.**
 > **F8 is done (ADR-0054).** `GetAsync` and its two siblings are abstract; `IMemoryStore.cs:15`
@@ -493,9 +493,22 @@ delegations the other 21 already are.
 > keeps the members because ~40 call sites reach settings through the store they already hold."*
 > That is a decision, not an omission, and the finding should be closed as declined rather than left
 > reading as outstanding work.
-> **What remains of F7 is one line.** `SqliteMemoryStore.cs:33` still hand-builds
-> `new SqliteSettingsStore(factory)` beside the registered one instead of taking it injected. That
-> half is real and unaddressed.
+> **What remained of F7 was one line, and it is now fixed (PR #323).** `SqliteMemoryStore` takes
+> `ISettingsStore` as a constructor parameter instead of hand-building `new SqliteSettingsStore(factory)`.
+>
+> **The gate is discriminating, which took deciding.** Writing a setting and reading it back passes
+> either way — a hand-built and an injected `SqliteSettingsStore` hit the same on-disk bank, so that
+> test measures nothing. `SettingsStoreInjectionTests` instead registers a **recording decorator**
+> after `RegisterCoreMemoryServices`, resolves `IMemoryStore` from the container and asserts the
+> decorator saw the call. Watched red first:
+> `recorder.GetSettingKeys should contain "probe-key" but was actually []`.
+>
+> **BDD was considered and rejected, explicitly rather than silently.** This is DI wiring, not
+> user-facing behaviour; a Gherkin scenario would have described the container rather than anything
+> an agent or operator can observe. Recorded in the commit so the omission reads as a decision.
+>
+> With this, WP9 is closed: F8 landed as ADR-0054, F7's interface half is declined by the owner and
+> recorded as such, and F7's construction half is fixed.
 **Effort:** SMALL · **Surface:** `IMemoryStore.cs`, `SqliteMemoryStore.cs:33,720-724`, `IPromotionQueueStore.cs`
 
 The settings members remain on `IMemoryStore` alongside the new port, `SqliteMemoryStore` hand-builds a

@@ -37,7 +37,7 @@ public sealed class ProjectRowsTests : IDisposable
             new FileIngestor(new FileTypeMatcher([]), embedder, new SqliteMemorySourceStore(_factory),
                 new FakeTimeProvider(FixedNow)),
             embedder, new FakeTimeProvider(FixedNow), NullLogger<SqliteMemoryStore>.Instance,
-            new NoiseFilteringService([]));
+            new NoiseFilteringService([]), new SqliteSettingsStore(_factory));
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);

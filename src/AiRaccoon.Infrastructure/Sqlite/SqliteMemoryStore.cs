@@ -25,16 +25,17 @@ public sealed partial class SqliteMemoryStore(
     IEntryEmbedder embedder,
     TimeProvider timeProvider,
     ILogger<SqliteMemoryStore> logger,
-    INoiseFilteringService noiseFilteringService)
+    INoiseFilteringService noiseFilteringService,
+    ISettingsStore settings)
     : IMemoryStore
 {
     private const string SharedScope = "shared";
     private readonly IEntryEmbedder _embedder = embedder;
-    private readonly ISettingsStore _settings = new SqliteSettingsStore(factory);
+    private readonly ISettingsStore _settings = settings;
 
     // Both default to a Null Object, not a nullable parameter: TestData.CreateMemoryStore (out of
-    // this lane's ownership) constructs SqliteMemoryStore via the 7-arg primary constructor above,
-    // so production DI resolves the 9-arg constructor below instead — see NoOpNoiseShadowObserver
+    // this lane's ownership) constructs SqliteMemoryStore via the 8-arg primary constructor above,
+    // so production DI resolves the 10-arg constructor below instead — see NoOpNoiseShadowObserver
     // and NoOpNoiseEntryStore.
     private readonly INoiseShadowObserver _noiseShadowObserver = NoOpNoiseShadowObserver.Instance;
     private readonly INoiseEntryStore _noiseEntryStore = NoOpNoiseEntryStore.Instance;
@@ -47,9 +48,10 @@ public sealed partial class SqliteMemoryStore(
         TimeProvider timeProvider,
         ILogger<SqliteMemoryStore> logger,
         INoiseFilteringService noiseFilteringService,
+        ISettingsStore settings,
         INoiseShadowObserver noiseShadowObserver,
         INoiseEntryStore noiseEntryStore)
-        : this(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService)
+        : this(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService, settings)
     {
         _noiseShadowObserver = noiseShadowObserver;
         _noiseEntryStore = noiseEntryStore;

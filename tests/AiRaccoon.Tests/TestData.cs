@@ -63,7 +63,8 @@ public static class TestData
         TimeProvider timeProvider,
         IEmbeddingService embeddings,
         IJsonChunker? jsonChunker = null,
-        IEnumerable<INoiseFilterPolicy>? noisePolicies = null)
+        IEnumerable<INoiseFilterPolicy>? noisePolicies = null,
+        ISettingsStore? settings = null)
     {
         jsonChunker ??= RealJsonChunker(markdownChunker);
         var embedder = new EntryEmbedder(embeddings);
@@ -71,7 +72,8 @@ public static class TestData
             [new MarkdownFileTypeHandler(markdownChunker), new JsonFileTypeHandler(jsonChunker)]);
         var fileIngestor = new FileIngestor(matcher, embedder, sourceStore, timeProvider);
         var noiseFilteringService = new NoiseFilteringService(noisePolicies ?? Array.Empty<INoiseFilterPolicy>());
-        return new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService);
+        return new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService,
+            settings ?? new SqliteSettingsStore(factory));
     }
 
     /// <summary>Real o200k-backed markdown chunker for tests that exercise token bounds, not just structure.</summary>
