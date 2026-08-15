@@ -1,0 +1,124 @@
+{
+  "name": "PerformanceMetrics",
+  "title": "Performance metrics for AiRaccoon's own development",
+  "spec": "docs/work/specs/PerformanceMetrics.feature",
+  "elicited": "2026-08-15",
+  "gate": "docs/work/2026-08-15-perf-metrics-spec-feedback.md",
+  "design": "docs/plans/2026-08-15-performance-observability-design.md",
+
+  "scope": [
+    "A `metrics` table in the bank holding one row per measurement in a universal shape (name, kind, value, unit, tags, recorded_at).",
+    "Phase timings out of the store: a SearchTimings value carried on the search result (fts, vector, fusion, affinity, snippets, bump) and a WriteTimings parallel.",
+    "A bounded channel plus a background reader: measurements leave the hot path, are written in batches, and drops are counted.",
+    "A background maintenance pass that checkpoints and prunes, in that order, pruning only on a successful checkpoint.",
+    "A checkpoint table of rolled-up statistics, each row carrying the commit, its version and the commit timestamp.",
+    "An MCP tool `memory_performance` returning JSON, project-scoped by default, whole-bank behind the elevated access mode.",
+    "A CLI `ai-raccoon performance` writing a report file and returning its path.",
+    "Self-instrumentation of the metrics subsystem, written directly rather than through its own channel."
+  ],
+
+  "outOfScope": [
+    {
+      "item": "Per-phase CI budgets (design layer 3b).",
+      "reason": "Ruled out of scope at the gate, card S1. The budgets must be MEASURED on this corpus before they can be pinned with a raise history, and this feature is what produces the measurement. Specifying them now would be guessing. Stated explicitly because an unexplained omission reads as an oversight and gets built anyway.",
+      "followUp": "A separate package once this feature has produced numbers on the parity corpus."
+    },
+    {
+      "item": "Replacing or changing OTLP export.",
+      "reason": "The existing Meter instruments stay. This is about what the process can answer WITHOUT a collector standing by, not a second metrics stack."
+    },
+    {
+      "item": "Any end-user-facing surface, dashboard or visualisation.",
+      "reason": "Owner at stage 02: the audience is AiRaccoon's own developers. 'For other users - for now? Nothing?'"
+    },
+    {
+      "item": "A kill switch for metrics collection.",
+      "reason": "Owner at stage 03: 'no, always on'. Deliberately unlike noise/sweep/queryguard. A series with holes is worse than no series."
+    }
+  ],
+
+  "nonFunctional": [
+    "Recording is best effort and never fails the operation being measured.",
+    "No synchronous bank write on the search hot path to record a measurement.",
+    "The channel is bounded (default 1000 items, a setting) and its memory cost is a stated budget.",
+    "A full channel uses DropWrite + TryWrite; drops are counted via Channel.CreateBounded's itemDropped callback, so the counter is a registration rather than bookkeeping.",
+    "Flush aims at 60% occupancy by default; rising ARRIVAL RATE lowers the aim; minimum four seconds between flushes (a rate-limit floor, not a deadline); a 30-second idle sweep.",
+    "Correlation dimensions are sampled once per flush, not per measurement — the embedded fraction alone costs 1.286 ms per read on 2,518 rows.",
+    "A measurement's query identity is exactly {hash, correlation_id}, enforced on save. No query text reaches the metrics table.",
+    "Every value the owner called tunable is a setting, not a constant: channel capacity, aim, flush floor, idle sweep, retention windows."
+  ],
+
+  "targets": [
+    "src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs (new tables; the ladder is append-only, so a v10 step)",
+    "src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs (phase timings on the result)",
+    "src/AiRaccoon.Infrastructure/Maintenance/ (the background checkpoint-and-prune pass)",
+    "src/AiRaccoon/Tools/ (memory_performance)",
+    "src/AiRaccoon/Cli/ (ai-raccoon performance)",
+    "src/AiRaccoon/Observability/ (the channel, the reader, self-instrumentation)"
+  ],
+
+  "constraints": [
+    "The schema ladder is append-only: add a step, never renumber or delete one.",
+    "Core takes no logging or framework dependency (clean-architecture-layering); the host logs.",
+    "MCP tools stay thin — the tool maps onto a service and holds no logic (mcp-thin, ADR-0065).",
+    "Logging via a nested static partial Log class with [LoggerMessage] and explicit EventIds.",
+    "The report's series list is DERIVED from the tool inventory, not from what happens to be in the metrics table — a zero-count series has nothing to come from otherwise, and two tool lists would drift.",
+    "This feature is the first customer of its own measurement: WP5's +1.4 ms per KNN (ADR-0068) is invisible in production until the store times its phases."
+  ],
+
+  "gates": [
+    {
+      "id": "G1",
+      "name": "Every tool produces at least one measurement",
+      "shape": "A tool-call integration test over the DERIVED tool inventory asserting each tool records at least one measurement when called.",
+      "watchRed": "Silence one tool's recording and watch the gate name that tool.",
+      "provenance": "Owner, stage 04: 'Every tool records something. We should enforce it with test, even a tool call integration test that will ensure at least one measurement was produced.' Moved out of the .feature at stage 05 because its When was 'the coverage test runs', which nothing in AiRaccoon can trigger."
+    },
+    {
+      "id": "G2",
+      "name": "Percentiles are asserted against hand-computed values",
+      "shape": "Feed a known distribution; assert p50/p95/p99 against values computed outside the code under test.",
+      "watchRed": "Perturb the percentile function and watch the assertion fail.",
+      "provenance": "'p99 is between min and max' is true of every implementation including a broken one. This campaign has already shipped two vacuous gates; a percentile function is the classic third."
+    },
+    {
+      "id": "G3",
+      "name": "The reaper deletes past the window and nothing inside it",
+      "shape": "Assert both directions: rows older than the window go, rows inside it stay.",
+      "watchRed": "As ADR-0055's reaper gate was — invert the comparison and watch it delete the wrong side.",
+      "provenance": "promotion_discards (965 rows) and search_quality (424) both grew with no reaper until WP7. A per-measurement table grows far faster."
+    },
+    {
+      "id": "G4",
+      "name": "A search records its phases without a synchronous write",
+      "shape": "Count bank writes during the call; assert zero.",
+      "watchRed": "Write one measurement synchronously and watch the count go non-zero."
+    }
+  ],
+
+  "deferred": [],
+
+  "acceptedWeaknesses": [
+    {
+      "id": "O2",
+      "item": "'No setting turns measurement off' proves one setting combination does not disable measurement, not that none can.",
+      "ruling": "APPROVE — accepted knowingly at the gate.",
+      "risk": "A future setting that does disable measurement would pass this scenario.",
+      "strongerForm": "Derive the list of settings the metrics subsystem reads and assert none disables it — a structural gate belonging beside G1, not in the .feature."
+    }
+  ],
+
+  "supersededDuringElicitation": [
+    {
+      "was": "The checkpoint table is capped at 24 rows.",
+      "now": "Checkpoint retention is purely age: keep one year, drop what is older, whatever the count.",
+      "why": "Owner: 'instead count based - we want to keep 1 year of checkpoints.' The 24 rows were a proxy for 'about a year', and the proxy stopped holding once versions could also trigger a checkpoint. One bound replaces two interacting ones.",
+      "cost": "The row count is unbounded within the year — a weekly-release project writes ~78 rows rather than 24. Accepted; checkpoints are small summaries."
+    },
+    {
+      "was": "No metric row contains query text (a prohibition, verified by sweeping the table).",
+      "now": "A measurement's query identity is exactly {hash, correlation_id}, enforced on save.",
+      "why": "Owner rephrasing. The sweep failed OPEN — it passes every day until something writes text, and by then the text is on disk. An allowlist enforced at the write point fails closed, and removes the only internal-state assertion in the file."
+    }
+  ]
+}
