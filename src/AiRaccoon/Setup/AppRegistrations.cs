@@ -149,7 +149,8 @@ public static partial class AppRegistrations
             [
                 new ChunkBackfillJob(sp.GetRequiredService<IMarkdownChunker>(), sp.GetRequiredService<TimeProvider>()),
                 new Vec0ReclaimJob(),
-                new VacuumJob()
+                new VacuumJob(),
+                new MetricsRetentionJob(sp.GetRequiredService<TimeProvider>())
             ]);
             services.AddHostedService<BankMaintenanceHostedService>();
         }
