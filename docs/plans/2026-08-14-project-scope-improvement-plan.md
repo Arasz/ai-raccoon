@@ -720,11 +720,22 @@ guarded only where it has an **independent** second source, the packaged README.
 not automatically safer than pinning it — a derived expectation compared against its own source is
 strictly worse than a pin, because a pin can at least go stale visibly.**
 
-### WP16 · Platform coverage in CI — ⏳ **OPEN, confirmed** — **H16**
+### WP16 · Platform coverage in CI — ❌ **DECLINED by the owner, 2026-08-15** — **H16**
 
 > **Verified against `.github/workflows/`, 2026-08-15.** Every `runs-on:` in `build.yml`,
 > `nightly.yml` and `labeler.yml` is `ubuntu-latest`; `publish.yml` matrixes RIDs but not runners.
-> No macOS or Windows leg exists. Still blocked on owner question 15.
+> No macOS or Windows leg exists — the finding was accurate.
+>
+> **Owner ruling: "WP16 - do not add".** Closed as declined, not deferred. Nothing further is
+> planned here and the finding should not be re-proposed.
+>
+> **What that accepts, stated so it is a decision rather than an oversight.** Six RIDs ship and four
+> of them have no PR gate; ADR-0049 measured a **0.070 nDCG spread across host CPUs** against a
+> 5e-3 tolerance, and ADR-0050 documents the fixture-pinning workaround that spread forced. So a
+> retrieval regression that only appears on macOS or Windows would reach a release unseen. The
+> mitigation that exists is the fixture pinning already in place; the residual risk is
+> platform-specific behaviour that pinning does not cover. This is accepted risk from here, not an
+> open item.
 Add `macos-latest` and `windows-latest` legs to `build-fast` only, for cost control. ADR-0049 already
 measured a 0.070 nDCG spread across host CPUs against a 5e-3 tolerance, and ADR-0050 documents the
 fixture-pinning workaround it forced. Six RIDs ship with no PR gate on four of them. *Owner question 15.*
