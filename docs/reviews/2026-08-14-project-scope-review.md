@@ -374,6 +374,12 @@ These are findings too, and several of them saved work.
 - **"`memory_search`'s `contextLabel` is a cross-project read primitive."** Refuted — every context string is built from the caller's own `projectId`. Read isolation holds **by construction rather than by check**, which is precisely why the delete path fails.
 - **"The chunker is the source of the production truncation."** Refuted, and this one changed the plan (H5).
 - **"The 2.43:1 test-to-production ratio is bloat."** Not supported by anything sampled.
+- **H1 — "the double fusion changes results."** The *score* finding survives and is verdict item 3;
+  the implied ranking harm is refuted. **At λ=0 the code with and without the second fusion is
+  byte-identical** — `(k+1)/(k+rank)` is strictly decreasing in rank, so re-fusing a sorted list
+  preserves order. The pass has never moved a result. What it does is compress the score range that
+  ADR-0005's two swept constants were calibrated against, which is why removing it is not the QUICK
+  package it looked like. ADR-0058.
 - **H4 — "the headless penalty is a defect."** The *finding* survives; the *fix* is refuted. Two lanes
   independently flagged `structureSim ?? 0.0` capping the 64% of rows with no structure embedding at
   half score, and ADR-0004 claims the opposite behaviour. Building the fix and measuring it — on a gate
