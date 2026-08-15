@@ -176,6 +176,9 @@ Explore the complete [Documentation Tree](docs/README.md):
 ## Contributing & Security
 
 - Read [CLAUDE.md](CLAUDE.md) for repo conventions and mandatory TDD workflow.
+- `scripts/` holds standalone Python tooling (embedding-model download, JSAA docs ingest,
+  benchmark-corpus generation, and more) — see [Run the Python scripts](docs/how-to/run-the-python-scripts.md)
+  for setup with `uv`.
 - Report security issues privately per [SECURITY.md](SECURITY.md).
 
 ## License
