@@ -93,7 +93,11 @@ public sealed class Vec0PartitionKeyProbe : IDisposable
                 row => row.Item2),
             ("scope-partitioned", "ctx TEXT partition key, embedding float[384] distance_metric=cosine",
                 row => row.Item3),
-            ("unpartitioned", "embedding float[384] distance_metric=cosine", _ => string.Empty)
+            ("unpartitioned", "embedding float[384] distance_metric=cosine", _ => string.Empty),
+            // The shape a CORRECT replacement needs: no partition key, but ctx still filterable as a
+            // vec0 metadata column, so the KNN stays scoped to the caller's context. The plain
+            // unpartitioned row above is NOT a correct replacement — it returns the global top-k.
+            ("metadata-ctx", "ctx TEXT, embedding float[384] distance_metric=cosine", row => row.Item2)
         };
 
         _output.WriteLine($"corpus: {vectors.Count} vectors, "
