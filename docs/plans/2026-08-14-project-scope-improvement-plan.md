@@ -861,12 +861,35 @@ stale exactly like any other.
 | **Owner-held** | WP3 steps 3–5 (restart + backfill against the live bank — not revertible by git), WP21 (deferred) |
 | **Subsumed** | WP14 → WP13 |
 
-**`main` is red as of this commit**, and not because of anything above: PR #323's `build-fast`
+**Postscript on `main`'s health.** It went red twice after the record above, and neither was a lane's
+fault. Once because PR #323's `build-fast` failed on the size ratchet and the PR merged anyway on
+ruleset bypass; once because a branch cut before #325 landed silently reverted its plan corrections
+when squash-merged. Both were caught by reading a diff that looked wrong rather than by a gate, which
+is the argument for reading them.
+
+**`main` was red as of the original commit**, and not because of anything above: PR #323's `build-fast`
 failed on the `SqliteMemoryStore` size ratchet (1239 lines vs a 1237 cap) and was merged anyway.
 The ratchet fired correctly and before the merge. **PR #324 fixes it by paying the cap down rather
 than raising it** — `BuildJsonTree` moved out to `FileTree.cs`, 1239 → 1214. Main's full run is
 otherwise clean: **2171 passed, 1 failed**, the one failure being that ratchet. So the multi-branch
 join produced exactly one defect, which is the number this phase exists to find.
+
+**What happened after the record above was written**, because a closing record that stops at its own
+closing date is the kind of document this campaign kept finding stale:
+
+| | |
+|---|---|
+| **WP3 finished** | steps 4 and 5 landed (ADR-0069, `BankEngineReporter`); step 3 **abandoned**, see its section |
+| **ADR-0068** | `ctx` demoted to a vec0 metadata column — 1.16.0 |
+| **ADR-0069** | the chunk backfill re-chunks the row it has, not the file it remembers |
+| **ADR-0070** | maintenance is a list of jobs with a ledger in the bank — 1.17.0 |
+| **Releases** | 1.16.0, 1.17.0 |
+
+**The owner's question was the most valuable input of the whole tail**: *"we will reclaim size on this
+machine, but what for other users?"* Measured, the answer was **nobody, including us** — v9 frees
+42 MB into SQLite's free list and the file does not shrink, and the vacuum clock was an in-memory
+field seeded on first run, so a bank only ever opened by short-lived processes never reached it. One
+question turned a one-machine fix into a defect every install carried.
 
 **Two things this campaign should be remembered for, because both were nearly missed:**
 
