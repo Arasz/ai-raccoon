@@ -28,7 +28,7 @@ internal static class EntryBucket
         }
 
         // Mirrors MemorySql.ContextKeyFor: the label's project segment is stripped, so the text
-        // column and the vec0 partition key agree on what the label is.
+        // column and the vec0 `ctx` column agree on what the label is.
         if (context.StartsWith("label:", StringComparison.Ordinal))
         {
             var rest = context["label:".Length..];

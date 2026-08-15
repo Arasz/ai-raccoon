@@ -166,8 +166,16 @@ public sealed class MemorySchemaVersionTests
         (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
     }
 
+    /// <summary>
+    ///     Adjudicated at the v9 change (ADR-0068): this assertion read `partition key`, which was a
+    ///     transcription of the shape the v2 step happened to create, not the contract it was written
+    ///     to protect. The contract is that a v1 bank leaves the ladder with vec_entries rebuilt,
+    ///     ctx-scoped, cosine, and holding embedded rows only — all four still asserted. v9 rebuilds
+    ///     the table again at the end of the same ladder run, so a v1 bank now finishes in the
+    ///     demoted shape and the old wording could only have been kept by exempting it.
+    /// </summary>
     [Fact]
-    public async Task EnsureAsync_OnAV1Bank_RebuildsVecEntries_WithPartitionKeyAndCosine_HoldingEmbeddedRowsOnly()
+    public async Task EnsureAsync_OnAV1Bank_RebuildsVecEntries_WithCtxAndCosine_HoldingEmbeddedRowsOnly()
     {
         await using var connection = await OpenAsync();
         await SeedV1BankAsync(connection,
@@ -181,7 +189,9 @@ public sealed class MemorySchemaVersionTests
                 "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'vec_entries'",
                 cancellationToken: TestContext.Current.CancellationToken));
         sql.ShouldNotBeNull();
-        sql.ShouldContain("partition key");
+        sql.ShouldContain("ctx");
+        sql.Contains("partition key", StringComparison.OrdinalIgnoreCase).ShouldBeFalse(
+            "v9 demotes ctx to a metadata column, and the ladder runs it on the same open");
         sql.ShouldContain("distance_metric=cosine");
 
         var vecCount = await connection.ExecuteScalarAsync<long>(
