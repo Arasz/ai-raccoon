@@ -379,11 +379,11 @@ These are findings too, and several of them saved work.
 
 ## Owner questions
 
-Routed as a decision list; each needs one ruling. Marked ● where work is blocked until answered.
+Routed as a decision list; each needs one ruling. Marked ● where work is blocked until answered; ✅ where the owner has ruled.
 
 1. ● Is `access.mode.global = full` intended on this install, given `memory_sweep` requires it? (Decides whether B1 ships as a hotfix or with Wave 1.)
-2. ● Should the shared tier be writable directly via `memory_write(context: "shared")`, or only through `memory_share`? (H6 is a one-line fix if the answer is "only through share".)
-3. ● Should the B2 backfill re-chunk the whole bank, or only rows currently over the window?
+2. ✅ **Answered 2026-08-15 — neither.** A write naming `shared` is the agent *requesting* promotion, which is a stronger signal than any scorer inference. It lands in the project scope and enqueues a promotion candidate (`agent-requested-share`). Also settled a premise: `shared` is **not** a label inside the project — it is the one context string that crosses the project boundary, and `scope=all` already searches shared and project together by default. See plan WP2.
+3. ✅ **Answered 2026-08-15 — whole bank**, on the owner's rule ("whole if it makes a difference to retrieval, otherwise the cheaper option"). The choice dissolves on measurement: chunking is document-level, so the narrow option re-chunks 1,004 of 1,217 documents holding 92.7% of rows anyway — saving 7.3% while leaving two chunk generations in one corpus. See plan WP3.
 4. Is `memory_sync`'s whole-bank behaviour intended, or was per-project sync the design? (Decides whether H9 is a code fix or a doc fix.)
 5. Should `memory_promotion_list` with no `projectId` stay on the MCP surface, or become CLI-only? (H8.)
 6. Do you want `ro` to mean genuinely read-only, or is access-count bookkeeping an accepted exception?
