@@ -1,6 +1,6 @@
 """Shared helpers for ai-badger scripts.
 
-Deterministic and offline (Python 3.8+, the floor CI tests): scripts must be runnable wherever
+Deterministic and offline (Python 3.10+, the floor CI tests): scripts must be runnable wherever
 the plugin is
 installed. `ensure_root(allow_network=True)` is the single exception and the only function
 here that may reach the network; it is opt-in and pinned to a release tag. JSON Schema

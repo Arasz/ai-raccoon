@@ -303,7 +303,7 @@ REAL_ROOT_ENV = "AI_BADGER_REAL_ROOT"
 
 
 def _is_inside(candidate: Path, parent: Path) -> bool:
-    """Whether *candidate* sits under *parent*. `Path.is_relative_to` is 3.9+; the floor is 3.8."""
+    """Whether *candidate* sits under *parent*, without relying on `Path.is_relative_to`."""
     try:
         candidate.relative_to(parent)
         return True

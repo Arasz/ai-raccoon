@@ -2,3 +2,5 @@
 # Install alongside runtime deps:
 #   python3 -m pip install -r engine/requirements.txt -r engine/requirements-dev.txt
 pylint>=4.0.6
+pytest>=7.0.0
+pytest-xdist>=3.8.0

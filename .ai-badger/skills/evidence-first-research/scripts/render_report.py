@@ -338,7 +338,7 @@ def output_path(repo_root, slug: str) -> Path:
 
 
 def _is_inside(target: Path, root: Path) -> bool:
-    """3.8-safe containment test; `Path.is_relative_to` is 3.9+."""
+    """Containment test that does not rely on `Path.is_relative_to`."""
     try:
         target.resolve().relative_to(root.resolve())
         return True
