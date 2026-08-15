@@ -239,13 +239,8 @@ public class McpServerSetupHostTests : IDisposable
         var toolNames = (options.ToolCollection ?? throw new InvalidOperationException("ToolCollection not configured"))
             .Select(t => t.ProtocolTool.Name).ToList();
 
-        toolNames.Count.ShouldBe(26);
-        toolNames.ShouldContain("memory_share_extract");
-        toolNames.ShouldContain("memory_watch_add");
-        toolNames.ShouldContain("memory_watch_status");
-        toolNames.ShouldContain("memory_watch_remove");
-        toolNames.ShouldContain("memory_record_followthrough");
-        toolNames.ShouldContain("memory_record_grade");
+        // The whole set, derived — a count plus six samples passes while the other twenty drift.
+        toolNames.OrderBy(n => n, StringComparer.Ordinal).ShouldBe(RegisteredTools.Names());
     }
 
     [Fact]

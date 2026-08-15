@@ -215,6 +215,23 @@ public sealed class ToolRefusalsTests : IDisposable
         }
     }
 
+    /// <summary>
+    ///     Everything the server said while handling the call, at Warning and above, with exception
+    ///     types — the only place a CI-only refusal failure can be diagnosed from.
+    /// </summary>
+    private static string ServerDiagnostics(FakeLoggerProvider logs)
+    {
+        var records = logs.Collector.GetSnapshot()
+            .Where(r => r.Level >= LogLevel.Warning)
+            .Select(r => $"  [{r.Level}] {r.Category}: {r.Message}"
+                         + (r.Exception is null ? string.Empty : $"\n    -> {r.Exception.GetType().FullName}: {r.Exception.Message}"))
+            .ToList();
+
+        return records.Count == 0
+            ? "The server logged nothing at Warning or above."
+            : "Server log records at Warning and above:\n" + string.Join("\n", records);
+    }
+
     private static async Task AssertRefusalOverRealServerAsync(string dataRoot, string toolName,
         Dictionary<string, object?> arguments, string expectedPrefix)
     {
@@ -248,7 +265,13 @@ public sealed class ToolRefusalsTests : IDisposable
 
             result.IsError.ShouldBe(true);
             var text = string.Concat(result.Content.OfType<TextContentBlock>().Select(b => b.Text));
-            text.ShouldStartWith($"{expectedPrefix}:");
+
+            // When the prefix is missing the tool threw something ToolRefusals does not map, and the
+            // SDK replaces it with "An error occurred invoking '<tool>'." — eleven words carrying
+            // neither the type nor the message. Without the server's own log records in the failure,
+            // a CI-only failure here cannot be diagnosed at all; that is what made this class's
+            // intermittent reds unreadable (2026-08-15 project-scope review, WP19).
+            text.ShouldStartWith($"{expectedPrefix}:", customMessage: ServerDiagnostics(fakeLogs));
 
             // Every fail-level log record here is a real crash, never a refusal.
             var errors = fakeLogs.Collector.GetSnapshot().Where(r => r.Level == LogLevel.Error).ToList();

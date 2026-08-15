@@ -442,6 +442,35 @@ condition CI never creates. **The adversarial pass corrects that:** it failed on
 clean on an immediate rerun with no code change. It is flaky in isolation, not only under contention,
 and `Speed=Fast` is the PR gate.
 
+**It has now cost a red build on an unrelated PR — 2026-08-15, and this is the fourth and fifth
+observation.** `ToolRefusalsTests.IngestFile_OutsideScope_ReturnsRefusal_WithoutAnSdkErrorLog` failed
+`build-fast` on PR #291, whose diff touches only tool-inventory test files and a plan document —
+nothing within reach of ingest scope or refusal mapping. The same test passes 3/3 locally. **That is
+the concrete harm this package predicted: a red gate on a change that could not have caused it, which
+trains the next reader to re-run rather than read.**
+
+**And the failure mode is not port contention, which changes what the fix has to be.** The assertion
+that failed was the refusal text, not a bind:
+
+```
+Shouldly.ShouldAssertException : text
+"An error occurred invoking 'memory_ingest_file'."      # expected a "path-outside-scope:" prefix
+```
+
+The tool threw something `ToolRefusals.Filter` does not map, so the SDK returned its **generic**
+message. Under CI load the most likely candidate is a bank open losing the 5-second busy timeout and
+surfacing a `SqliteException` where a `PathOutsideScopeException` was expected — but *that cannot be
+read from the failure*, because the generic message carries no detail.
+
+**This answers the consumer-surface lane's open question** — "whether an unmapped exception reaches the
+MCP client with any more diagnostic text than a mapped refusal, or just becomes a generic protocol
+error". It becomes a generic protocol error with nothing in it. So the package now has two halves:
+
+1. **Make an unmapped exception diagnosable** at the MCP boundary — its type at minimum. Today an
+   agent, an operator and a CI log all get the same eleven words. *(Product behaviour change; sequence
+   it deliberately rather than folding it into a test fix.)*
+2. **Then** reproduce and fix the race, which is only tractable once the first half says what threw.
+
 **A third independent observation, from WP1's own verification run.** Two `Speed=Fast` failures
 appeared on one run and a different single failure on the next, with all 52 passing in isolation —
 `ServeRestartTests.AnExistingServer_IsCycled_AndTheRestartOwnsThePort` joins `ToolRefusalsTests` and
@@ -479,12 +508,25 @@ reports the difference. 8 of 8 tool classes inject the concrete `ToolGate`. Regi
 interface and fix the compile errors — each one is a consumer that was bypassing a port. *Owner
 question 10.*
 
-### WP15 · Derive the tool list everywhere it is pinned — **QA F1 + surface F5/F8/F9 + security F16**
+### WP15 · Derive the tool list everywhere it is pinned — ✅ **IN REVIEW (PR #291)** — **QA F1 + surface F5/F8/F9 + security F16**
 Nine stale or pinned copies of the 26-tool surface across four lanes' findings. The numeric assertions
 are all correct today; the names and prose are not (`ToolsNamespace_ExposesAll24SpecTools` asserts 26;
 one E2E file carries three different numbers; `SECURITY.md` says 23; `docs/reference/README.md` and
 `docs/explanation/architecture.md` say 22). `ToolInventoryTests.cs:124-149` already does this correctly
 for the packaged README — apply that pattern to the rest and delete the pins.
+
+**Landed on `work/wp15-derive-tools`.** `TestHelpers/RegisteredTools` is the one source; the 26-entry
+`ExpectedToolNames` array is deleted. `McpServerSetupHostTests` gained real coverage in the process —
+it compared a count plus six sampled names, which passes while the other twenty drift, and now
+compares the whole derived set, so it also catches a tool declared and never registered.
+
+**A tautology was introduced and caught here, and it is worth recording.** The first version asserted
+`tools.Count.ShouldBe(RegisteredTools.Count)` with *both sides derived from the same reflection* — a
+comparison that can only ever pass. The red-first probe is what exposed it: a 27th `[McpServerTool]`
+turned five other checks red and left that one green. The count assertion was removed; the count is
+guarded only where it has an **independent** second source, the packaged README. **Deriving a value is
+not automatically safer than pinning it — a derived expectation compared against its own source is
+strictly worse than a pin, because a pin can at least go stale visibly.**
 
 ### WP16 · Platform coverage in CI — **H16**
 Add `macos-latest` and `windows-latest` legs to `build-fast` only, for cost control. ADR-0049 already
