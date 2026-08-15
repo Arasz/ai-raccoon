@@ -37,6 +37,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
     private readonly string _dataRoot = TestData.CreateTempRoot("airaccoon-search-metrics-isolation");
     private readonly SqliteConnectionFactory _factory;
     private readonly SqliteMetricsStore _metricsStore;
+    private readonly IMemoryStore _store;
     private readonly MemoryTools _tools;
 
     public SearchMetricsIsolationTests()
@@ -48,13 +49,16 @@ public sealed class SearchMetricsIsolationTests : IDisposable
         // The flusher is deliberately never constructed here — "paused" for this test means it
         // does not exist, so nothing but the assertions themselves can touch the metrics table.
         var sourceStore = new SqliteMemorySourceStore(_factory);
-        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, sourceStore,
+        _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, sourceStore,
             TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService());
         var recorder = new MetricsRecorder(_buffer, NullLogger<MetricsRecorder>.Instance);
-        _tools = new MemoryTools(store, new ToolGate(new MemoryAccessGuard(store), new FakePromotionQueue()),
-            new NoOpSearchQualityService(), new QueryGuardService(new InMemorySettings()),
-            new MemoryWriteService(store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
+        _tools = BuildTools(recorder);
     }
+
+    private MemoryTools BuildTools(IMeasurementRecorder recorder) =>
+        new(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue()),
+            new NoOpSearchQualityService(), new QueryGuardService(new InMemorySettings()),
+            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
@@ -141,26 +145,38 @@ public sealed class SearchMetricsIsolationTests : IDisposable
     }
 
     /// <summary>
-    ///     Watch-red for G4: proves the before/after count actually detects a synchronous write in
-    ///     the window it brackets, rather than passing vacuously because nothing writes there yet.
-    ///     Simulates the exact defect the gate exists to forbid — "write one measurement
-    ///     synchronously inside the search path" — at this package's own boundary (SqliteMetricsStore),
-    ///     since the real search path (SqliteMemoryStore.SearchAsync/MemoryTools.Search) is WP1's
-    ///     locked file and out of scope here.
+    ///     Honest watch-red for G4 (review-fixes finding 10): the previous version of this test wrote
+    ///     through <see cref="SqliteMetricsStore" /> directly, *after* <c>Search</c> had already
+    ///     returned — proving only that <c>COUNT(*)</c> moves when a row is inserted, never that the
+    ///     before/after technique <see cref="Search_MetricsRowCountIsUnchangedWhenTheCallReturns" />
+    ///     relies on can actually catch the defect it exists to forbid. The original author left it
+    ///     that way because the real search path
+    ///     (<see cref="SqliteMemoryStore.SearchAsync" />/<see cref="MemoryTools.Search" />) was
+    ///     another package's locked file. It is not locked now: this plugs a recorder that writes
+    ///     straight through to the store — synchronously, on the caller's thread, exactly the
+    ///     "MetricsRecorder.Record write through synchronously" defect shape — into that real call
+    ///     chain (<c>MemoryTools.Search</c> → <c>RecordPhaseMeasurements</c> →
+    ///     <c>IMeasurementRecorder.Record</c>), and shows the count really does move during the call.
     /// </summary>
     [Fact]
-    public async Task WatchRed_ASynchronousWriteDuringTheWindow_MovesTheCount()
+    public async Task WatchRed_ASynchronousRecorderPluggedIntoTheRealSearchPath_MovesTheCountDuringTheCall()
     {
+        await _tools.Write("acme", "the chassis pattern decision", cancellationToken: TestContext.Current.CancellationToken);
+        var toolsWithSynchronousRecorder = BuildTools(new SynchronousMetricsRecorder(_metricsStore));
+
         var before = await CountMetricsRowsAsync();
 
-        await _tools.Search("acme", "chassis", cancellationToken: TestContext.Current.CancellationToken);
-
-        // Simulated defect: a synchronous metrics write "during" the search call.
-        await _metricsStore.SaveBatchAsync(
-            [new Measurement("search.fts", MeasurementKind.Histogram, 1, "ms", FixedNow)],
-            TestContext.Current.CancellationToken);
+        await toolsWithSynchronousRecorder.Search("acme", "chassis", cancellationToken: TestContext.Current.CancellationToken);
 
         var after = await CountMetricsRowsAsync();
-        after.ShouldBeGreaterThan(before, "the gate must be able to fail: a synchronous write must move the count");
+        after.ShouldBeGreaterThan(before,
+            "a recorder that writes through synchronously, plugged into the real search path, must move the count the gate checks");
+    }
+
+    /// <summary>Simulates the exact defect G4 forbids: writes straight through to the store, blocking, on the caller's thread.</summary>
+    private sealed class SynchronousMetricsRecorder(IMetricsStore store) : IMeasurementRecorder
+    {
+        public void Record(Measurement measurement) =>
+            store.SaveBatchAsync([measurement], CancellationToken.None).GetAwaiter().GetResult();
     }
 }
