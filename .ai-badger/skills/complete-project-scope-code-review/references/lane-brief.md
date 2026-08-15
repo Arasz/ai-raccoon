@@ -20,7 +20,19 @@ Recurring lenses, as a starting point and not a list to copy:
 | Data access | transactions, indexes, uniqueness, concurrency, migration ladders |
 | Test-suite QA | assertion honesty, fake fidelity, skip honesty, coverage of destructive paths |
 | Consumer surface | CLI/API/UI contracts, error text, exit codes, documentation drift |
+| Product design | flows, information architecture, interaction states, microcopy, adherence to the project's own design language |
 | Operations | deployment, secrets, observability, infrastructure definitions |
+
+**Consumer surface and product design are two lanes, not one.** The first asks whether the
+contract is correct — the flag parses, the error text matches the exit code, the response shape is
+what the documentation promises. The second asks whether the thing is good to use — how many steps
+the task costs, what the surface says when there is nothing to show, whether it follows the design
+language the project already wrote down. Merged, they collapse into the first, because correctness
+is the easier question and it arrives with evidence attached. Run as separate lanes over the same
+files on one campaign they overlapped almost nowhere: the design lane produced several times the
+findings of the code lane reviewing the same surface, and barely one was the same finding. The
+design lane is not a frontend lane either — the flow, the states and the wording are the lens, and
+they exist on a command line and in a terminal UI as much as in a rendered view.
 
 Give the expensive reasoning lanes to a high-reasoning model and the survey lanes to a mid-tier
 one; the agent-specific extension binds those roles to concrete models.
@@ -71,6 +83,13 @@ one; the agent-specific extension binds those roles to concrete models.
   dropped it is calibrating. One that only ever confirms is not.
 - **It names missing tests specifically.** "Consider adding tests" is not a finding; "no test
   covers the escape function that stands between a path containing `_` and a cascade delete" is.
+- **A design lane started the product.** Its best findings come from using the surface — a
+  screenshot of the real view, a session in the real terminal — because a flow that is too long
+  and a state with nothing to say are invisible in the source that produces them. Make the lane
+  state, per finding, whether it saw the running product or read the code. The same instrument
+  cuts the other way: a finding produced against the lane's own mock, fixture or sample data is a
+  finding about the mock, and on the source campaign the design lane filed two of those and
+  withdrew both itself once it checked.
 
 ## Reading the results
 
@@ -81,3 +100,16 @@ one; the agent-specific extension binds those roles to concrete models.
   work, whatever its grade. Cheap findings ride on their lane's grade.
 - **A withdrawn supporting number does not withdraw the conclusion.** Remove the number, state
   which leg of the argument went with it, keep the claim if its other legs hold.
+- **Look for the ratified decision before accepting taste as a defect.** A design lane needs this
+  check more than a code lane does: design choices are deliberate far more often than code
+  defects are, and the ruling that made one deliberate usually lives in a plan or design document
+  rather than in the code the lane read. On the source campaign the design lane's single
+  highest-severity finding died this way — it flagged a product-wide default as a defect, and the
+  default turned out to be an owner-approved decision recorded in a document the lane never
+  opened. Require every design finding to name where it checked for a prior ruling; "nowhere" is
+  an answer, and it downgrades the finding to a question for the owner.
+- **A cosmetic finding can be sitting on a correctness bug.** "This status is styled
+  inconsistently" was, underneath, a status that never rendered at all, because the producer and
+  the consumer parsed it differently. Design review lands on exactly the surfaces where a silent
+  defect shows up as something that merely looks off, so trace what feeds a cosmetic finding
+  before filing it as a nit.

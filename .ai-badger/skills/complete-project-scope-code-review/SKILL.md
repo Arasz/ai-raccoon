@@ -71,7 +71,13 @@ library, and both need lanes nobody would have guessed without looking.
 
 Lanes that recur: architecture/layering, domain algorithm (retrieval, scoring, whatever the
 product's hard part is), the primary language's code quality, data access, test-suite QA, the
-consumer-facing surface (CLI, API, UI), and operations/infrastructure.
+consumer-facing surface (CLI, API, UI), the product's **design** — flows, states, wording — and
+operations/infrastructure.
+
+The surface and the design are two lanes, not one. "Is this contract correct" and "is this good
+to use" are different questions, and the second loses to the first whenever they share a lane.
+Give the design lane a way to *run* the product, and read `references/lane-brief.md` before
+dispatching it — a design lane briefed like a code lane returns opinions.
 
 Each lane is **read-only**, gets **its own worktree and its own workspace id**, and is told:
 
@@ -486,6 +492,14 @@ ever does:
   the fix.
 - **A refuted supporting number does not refute the conclusion.** Withdraw the number, keep the
   claim if its other legs hold, and say which leg was removed.
+- **Taste is not a defect until you have looked for the ruling.** A design finding must name where
+  it checked for a prior decision, because the ruling that made a choice deliberate lives in a
+  plan or design document and not in the code. The design lane's highest-severity finding on the
+  source campaign was refuted exactly there: an approved default, filed as a defect by a lane that
+  had not opened the document approving it. The lesson is not that design lanes are unreliable —
+  the adversarial pass corrected or refuted well under half of that lane's findings and the rest
+  stood — it is that this particular check is load-bearing for a design lane and optional for a
+  code one.
 
 ## Verification checklist
 
@@ -493,6 +507,8 @@ ever does:
 - [ ] Lane roster derived from this repository's own stacks and directories
 - [ ] Every lane got the ground-truth block, the grade contract, and explicit permission to refute
 - [ ] Adversarial pass ran, and its refutations are published in the record
+- [ ] Every design finding says whether it saw the running product, and where it looked for a
+      prior ruling before calling a choice wrong
 - [ ] Severity calibrated against the live system; "loaded, not fired" stated where true
 - [ ] Every work package has a gate that has been watched go red
 - [ ] Every held-out claim is held-out; no in-sample number justifies a package
