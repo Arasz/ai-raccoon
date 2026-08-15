@@ -44,13 +44,22 @@ public sealed class SqliteMemoryStoreSizeRatchetTests
     //   1243 / 27  LOWERED again: WP6 folded the rating computation into the BumpAccess statement,
     //              which removed the SELECT, the RatingRow type and the C# arithmetic between them.
     //              A fix that deletes more than it adds is the shape to prefer here.
+    //   1214 / 27  LOWERED again, and this cap caught a RED main: WP9's injected ISettingsStore
+    //              parameter pushed the file to 1239 against a 1237 cap. The PR's own build-fast
+    //              failed and was merged anyway, so the ratchet was doing its job and the merge
+    //              overrode it -- worth noting, because a gate that only fails after the fact still
+    //              only works if someone reads it. Taking the note below at its word for the fifth
+    //              time, BuildJsonTree came out to FileTree.cs instead of a raise: a pure function
+    //              over paths that never touched the bank, so it was never the store's to hold, and
+    //              it is now directly testable (FileTreeTests) where before it had only indirect
+    //              coverage through ListFilesAsync. The unused System.Text.Json using went with it.
     //
     // Two raises in a single day of work was the signal this ratchet exists to send, and the
     // third hit was paid down rather than borrowed against: settings came out. Four seams remain
     // (write, search, ingest, embedding). The next person to hit this cap should take one
     // of them rather than add a raise -- raising is borrowing against a decomposition someone
     // still has to pay for.
-    private const int MaxLines = 1237;
+    private const int MaxLines = 1214;
     private const int MaxMembers = 27;
 
     [Fact]

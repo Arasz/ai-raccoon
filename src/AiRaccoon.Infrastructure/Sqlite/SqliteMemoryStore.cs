@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
@@ -541,7 +540,7 @@ public sealed partial class SqliteMemoryStore(
         var paths = await connection.QueryAsync<string>(
                 Def(MemorySql.DistinctFilePaths, new { projectId }, cancellationToken))
             .ConfigureAwait(false);
-        return BuildJsonTree(paths);
+        return FileTree.Build(paths);
     }
 
     public async Task<int> IngestFileAsync(string projectId, string path, string? context,
@@ -1105,30 +1104,6 @@ public sealed partial class SqliteMemoryStore(
         }
 
         return (SourceType.File, sourceFile);
-    }
-
-    private static string BuildJsonTree(IEnumerable<string> paths)
-    {
-        var root = new SortedDictionary<string, object>(StringComparer.Ordinal);
-        foreach (var path in paths)
-        {
-            var node = root;
-            var segments = path.Split('/');
-            for (var i = 0; i < segments.Length - 1; i++)
-            {
-                if (!node.TryGetValue(segments[i], out var child) || child is not SortedDictionary<string, object> dir)
-                {
-                    dir = new SortedDictionary<string, object>(StringComparer.Ordinal);
-                    node[segments[i]] = dir;
-                }
-
-                node = dir;
-            }
-
-            node[segments[^1]] = new object();
-        }
-
-        return JsonSerializer.Serialize(root);
     }
 
     private static CommandDefinition Def(string sql, object? parameters = null,
