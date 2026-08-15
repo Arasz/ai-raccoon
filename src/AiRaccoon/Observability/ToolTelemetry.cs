@@ -44,10 +44,11 @@ internal static class ToolTelemetry
         {
             var metrics = request.Services?.GetService<ToolCallMetrics>();
             var recorder = request.Services?.GetService<IMeasurementRecorder>();
+            var timeProvider = request.Services?.GetService<TimeProvider>();
             return metrics is null
                 ? await next(request, cancellationToken).ConfigureAwait(false)
                 : await RecordAsync(metrics, request.Params?.Name ?? string.Empty, request.Params?.Arguments,
-                    token => next(request, token), cancellationToken, recorder).ConfigureAwait(false);
+                    token => next(request, token), cancellationToken, recorder, timeProvider).ConfigureAwait(false);
         };
 
     /// <summary>
@@ -58,10 +59,10 @@ internal static class ToolTelemetry
     internal static async ValueTask<CallToolResult> RecordAsync(ToolCallMetrics metrics, string toolName,
         IDictionary<string, JsonElement>? arguments,
         Func<CancellationToken, ValueTask<CallToolResult>> next, CancellationToken cancellationToken,
-        IMeasurementRecorder? recorder = null)
+        IMeasurementRecorder? recorder = null, TimeProvider? timeProvider = null)
     {
         var project = ProjectFor(toolName, arguments);
-        using var activity = new ToolExecutionActivity(metrics, toolName, project.SpanId, project.MetricId, recorder);
+        using var activity = new ToolExecutionActivity(metrics, toolName, project.SpanId, project.MetricId, recorder, timeProvider);
         try
         {
             var result = await next(cancellationToken).ConfigureAwait(false);

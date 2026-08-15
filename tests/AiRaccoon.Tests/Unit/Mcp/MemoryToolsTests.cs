@@ -319,6 +319,25 @@ public class MemoryToolsTests
         recorder.Recorded.ShouldAllBe(m => m.Tags == null);
     }
 
+    /// <summary>
+    ///     Finding 6: MetricsReportService windows samples on an injected TimeProvider, so a
+    ///     phase measurement stamped with DateTimeOffset.UtcNow instead is invisible to a report
+    ///     built on a fake clock. RecordedAt must come from the same injected clock the report uses.
+    /// </summary>
+    [Fact]
+    public async Task Search_RecordsSixPhaseMeasurements_RecordedAt_FromTheInjectedTimeProvider()
+    {
+        var recorder = new RecordingMeasurementRecorder();
+        var time = new FakeTimeProvider(FixedNow);
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+            new NoOpSearchQualityService(), new QueryGuardService(_store),
+            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance, time);
+
+        await tools.Search("acme", "widgets", cancellationToken: TestContext.Current.CancellationToken);
+
+        recorder.Recorded.ShouldAllBe(m => m.RecordedAt == FixedNow);
+    }
+
     /// <summary>AC4: a throwing recorder must never fail or slow the search — best effort, per IMeasurementRecorder's own contract plus MemoryTools's own defensive catch.</summary>
     [Fact]
     public async Task Search_WhenTheRecorderThrows_StillReturnsResults()

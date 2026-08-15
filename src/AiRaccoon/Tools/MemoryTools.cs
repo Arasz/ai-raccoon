@@ -23,8 +23,12 @@ public sealed partial class MemoryTools(
     IQueryGuardService queryGuard,
     IMemoryWriteService writes,
     IMeasurementRecorder measurements,
-    ILogger<MemoryTools> logger)
+    ILogger<MemoryTools> logger,
+    TimeProvider? timeProvider = null)
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+
+
     private const string TnMemoryWrite = "memory_write";
     private const string TnMemoryGet = "memory_get";
     private const string TnMemorySearch = "memory_search";
@@ -325,7 +329,7 @@ public sealed partial class MemoryTools(
     {
         try
         {
-            var recordedAt = DateTimeOffset.UtcNow;
+            var recordedAt = _timeProvider.GetUtcNow();
             foreach (var (name, value) in timings.Phases())
             {
                 measurements.Record(new Measurement(name, MeasurementKind.Histogram, value.TotalMilliseconds,

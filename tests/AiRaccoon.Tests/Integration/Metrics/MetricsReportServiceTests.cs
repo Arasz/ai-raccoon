@@ -82,6 +82,21 @@ public sealed class MetricsReportServiceTests : IDisposable
         series.Max.ShouldBe(20.0, "other-project's 999 must never leak in");
     }
 
+    /// <summary>
+    ///     Finding 9: seriesNames is toolNames + the six phase names, and PhaseNames is never empty,
+    ///     so seriesNames can never be empty either — an empty toolNames list still goes through the
+    ///     normal query path and still returns the six phase series, at count 0 on a quiet bank.
+    /// </summary>
+    [Fact]
+    public async Task GetReportAsync_NoToolNamesGiven_StillReturnsThePhaseSeries()
+    {
+        var report = await _service.GetReportAsync("acme", [], TimeSpan.FromHours(1), TimeSpan.FromMinutes(1),
+            TestContext.Current.CancellationToken);
+
+        report.Series.Select(s => s.Tool).ShouldBe(SearchTimings.PhaseNames, ignoreOrder: true);
+        report.Series.ShouldAllBe(s => s.Count == 0);
+    }
+
     [Fact]
     public async Task GetReportAsync_SampleOutsideTheWindow_IsExcluded()
     {

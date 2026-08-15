@@ -144,6 +144,49 @@ public sealed class PerformanceReportBuilderTests
         neverRecorded.Count.ShouldBe(0, "a phase never measured is still present, at count 0 — same derived-inventory contract as tools");
     }
 
+    /// <summary>
+    ///     Finding 3: an agent-supplied window with no upper bound allocates ceil(window/bucket)
+    ///     buckets per series — 525600 minutes (a year) at the 1-minute default bucket is ~18.9M
+    ///     bucket objects across ~36 series. Clamped to MaxWindow, matching the precedent of
+    ///     clamping an over-wide bucket rather than throwing.
+    /// </summary>
+    [Fact]
+    public void Build_WindowWiderThanMaxWindow_ClampsToMaxWindow()
+    {
+        var report = PerformanceReportBuilder.Build(["memory_write"], [], Now,
+            TimeSpan.FromDays(365), TimeSpan.FromMinutes(1));
+
+        report.Window.ShouldBe(PerformanceReportBuilder.MaxWindow,
+            "a window wider than data can ever survive retention is clamped, not honoured");
+        report.BucketCount.ShouldBeLessThanOrEqualTo(
+            (int)Math.Ceiling(PerformanceReportBuilder.MaxWindow / TimeSpan.FromMinutes(1)));
+    }
+
+    /// <summary>
+    ///     Finding 7: MetricsReportService floors `now - window` to whole seconds for its SQL
+    ///     boundary (the `metrics` table only stores whole-second recorded_at), so a sub-second
+    ///     `now` lets a row from just before the true window start through. Build must exclude it
+    ///     from both the series stats and every bucket — never let a row feed Count/P50 while
+    ///     landing in no bucket.
+    /// </summary>
+    [Fact]
+    public void Build_SubSecondNow_ExcludesASampleFromBeforeTheTrueWindowStart()
+    {
+        var subSecondNow = new DateTimeOffset(2026, 8, 15, 12, 0, 0, 700, TimeSpan.Zero);
+        var window = TimeSpan.FromHours(1);
+        var trueStart = subSecondNow - window; // 11:00:00.700
+        // What a floor(from)-based SQL boundary would admit: the whole second below the true start.
+        var flooredStart = new DateTimeOffset(trueStart.Year, trueStart.Month, trueStart.Day, trueStart.Hour,
+            trueStart.Minute, trueStart.Second, TimeSpan.Zero); // 11:00:00.000
+        var samples = new[] { new MetricSample("memory_write", 5, flooredStart) };
+
+        var report = PerformanceReportBuilder.Build(["memory_write"], samples, subSecondNow, window, TimeSpan.FromMinutes(1));
+
+        var series = report.Series.Single();
+        series.Count.ShouldBe(0, "a sample from before the true sub-second window start must not feed Count");
+        series.Buckets.Sum(b => b.Count).ShouldBe(series.Count, "sum(buckets[].Count) must equal series.Count");
+    }
+
     /// <summary>Omitting phaseNames keeps the exact pre-WP10 behaviour: tool series only.</summary>
     [Fact]
     public void Build_NoPhaseNamesGiven_BehavesExactlyAsBeforePhaseSeriesExisted()

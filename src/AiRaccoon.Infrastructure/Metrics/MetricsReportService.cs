@@ -37,13 +37,9 @@ public sealed class MetricsReportService(ISqliteConnectionFactory factory, TimeP
         var effectiveWindow = window ?? PerformanceReportBuilder.DefaultWindow;
         var effectiveBucket = bucket ?? PerformanceReportBuilder.DefaultBucket;
         var phaseNames = SearchTimings.PhaseNames;
+        // toolNames + phaseNames can never be empty: SearchTimings.PhaseNames always holds six
+        // entries, so this always goes through the query below — no separate empty-list branch.
         var seriesNames = (IReadOnlyList<string>) [.. toolNames, .. phaseNames];
-
-        if (seriesNames.Count == 0)
-        {
-            return PerformanceReportBuilder.Build(toolNames, [], now, effectiveWindow, effectiveBucket, phaseNames);
-        }
-
         var from = now - effectiveWindow;
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
