@@ -32,6 +32,12 @@ Feature: Performance metrics for AiRaccoon's own development
     # 'current' scope and long running history."
     # => hot table: rolling 4 weeks of raw measurements, so >= 2 weeks of detail is always present.
     # => checkpoint table: rolled-up summaries, capped at 24 rows (~1 year at a fortnightly cadence).
+    # AMENDED, stage 04: the four weeks is a BEST-EFFORT limit, not a guarantee. Holding more than
+    # four weeks is acceptable and is not a violation — owner: "we can hold more than four weeks,
+    # this is best effort limit."
+    # AMENDED, stage 04: the checkpoint is written FIRST and the prune runs only if it succeeded —
+    # owner: "we first do a checkpoint then prune only on success." Pruning on a failed checkpoint
+    # destroys the only copy of the window it was summarising.
 
   Rule: Every operation is measured, not a chosen subset
     # Owner: "in - we want a complete view."
@@ -128,3 +134,25 @@ Feature: Performance metrics for AiRaccoon's own development
     # flusher, which already holds a write. Cannot recurse by construction: a subsystem measuring
     # itself through itself feeds itself, and the feedback is worst exactly when the channel is full
     # — the moment the numbers matter most and the drop counter starts lying about what filled it.
+
+  # ---- Stage 04, batch 1. Titles proposed by me at the owner's request, then corrected by them.
+  # Step-less on purpose: this is the queue stage 05 fills, and what spec_holes.py counts. ----
+
+  Rule: Retention scenarios
+    Scenario: A three-week-old bank still answers for its oldest measurement
+    Scenario: A bank holding more than four weeks is within contract, not over it
+    Scenario: A failed checkpoint leaves the hot table unpruned
+
+  Rule: Checkpoint cap scenarios
+    Scenario: The twenty-fourth checkpoint is written and none is discarded
+    Scenario: The twenty-fifth checkpoint discards the oldest, not the newest
+
+  Rule: Coverage scenarios
+    Scenario: Every tool on the MCP surface produces at least one measurement when called
+    Scenario: An operation added since the last release has recorded nothing yet
+    Scenario: A tool that records no measurement fails the coverage test
+
+  Rule: Channel scenarios
+    Scenario: A burst within capacity is flushed whole
+    Scenario: Exactly one thousand measurements arrive between two flushes
+    Scenario: A burst beyond capacity drops, and the drop count reports how many
