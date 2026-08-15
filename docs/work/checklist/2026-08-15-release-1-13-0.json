@@ -1,0 +1,147 @@
+{
+  "run": {
+    "date": "2026-08-15",
+    "branch": "campaign/project-scope-review-0814",
+    "commit": "1d1889d517baf840df0b839f547091bd7f46808b",
+    "data-root": "/private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/8dd0aa34-1038-47d4-9a63-74533d857492/scratchpad/checklist-root-0815",
+    "note": "A scratch --data-root, never ~/.ai-raccoon."
+  },
+  "derived": {
+    "version": "1.13.0",
+    "mcp-tool-count": "26",
+    "mcp-prompt-count": "2",
+    "note": "Read from the tree at run time (SKILL.md step 2), never typed from memory."
+  },
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
+      "command": "dotnet pack -c Release && dotnet tool update -g ai-raccoon --add-source $PWD/.nupkg --version 1.13.0 && ai-raccoon --version",
+      "evidence": "Successfully created package '.../ai-raccoon.1.13.0.nupkg' (7 RIDs) | Tool 'ai-raccoon' was successfully updated from version '1.12.0' to version '1.13.0'. | 1.13.0+48fb1448b46d692ad9ce1f16c774fe060bd7b4d0",
+      "observed-result": "Release pack produced all 7 RID packages; the global tool force-updated and reports the derived version.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "Reported version matches derived.version exactly."
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+      "command": "ai-raccoon --data-root <scratch> serve --port 0  # then serve --restart --port <bound>",
+      "evidence": "Now listening on: http://127.0.0.1:63911 | pid on 63911 before restart = 33887 | after `serve --restart --port 63911` the incumbent is gone | lsof 7721 still pid=98602 (the user's own server) throughout",
+      "observed-result": "serve --port 0 binds an ephemeral port and reports it; serve --restart cycles the server it finds on that port. Never touched 7721.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "Restart is a FOREGROUND server, not a fire-and-forget command \u2014 it replaces the incumbent and then serves. An invocation that blocks is correct behaviour, not a hang; worth knowing before someone 'fixes' it."
+    },
+    {
+      "item": "memory-write-stores-and-reports-truthfully",
+      "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
+      "command": "tools/call memory_write {projectId:\"checklist\", content:\"...\", sourceFile:\"docs/checklist-probe.md\", section:\"read-path\"}",
+      "evidence": "{\"data\":{\"hash\":\"3c4cbf547254d3f6...\",\"path\":\"59209ffca876...md\",\"context\":\"project:checklist\",\"createdAt\":1786754682,\"stored\":true}}",
+      "observed-result": "A real content hash and stored:true \u2014 no sentinel hash, no fabricated entry.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "ADR-0032's honest write outcome holds on the shipped build."
+    },
+    {
+      "item": "memory-search-hybrid-retrieval",
+      "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking",
+      "command": "tools/call memory_search {projectId:\"checklist\", query:\"read path findable by search readable by hash\", scope:\"all\"}",
+      "evidence": "2 results; ranking 1 and 0.9853372434017593; both carry sourceFile \"docs/checklist-probe.md\" with chunkIndex/totalChunks 0/2",
+      "observed-result": "Both written entries returned and ranked. Note 0.98533 is NOT the pure (k+1)/(k+rank)=0.98387, which corroborates the review's corrected finding that SourceAffinityRanker perturbs the score after fusion.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "Retrieval works FTS-only here: no embedding provider is configured on a fresh root, so vector recall is untested by this item \u2014 see memory-get item's note."
+    },
+    {
+      "item": "memory-get-returns-content-by-hash",
+      "expected-result": "memory_get returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
+      "command": "tools/call memory_get {projectId:\"checklist\", hash:\"3c4cbf...\"} and again with an all-zero hash",
+      "evidence": "{\"data\":{\"hash\":\"3c4cbf...\",\"value\":\"The manual checklist verifies the read path end to end: an entry written through memory_write must be findable by memory_search and readable in full by memory_get using the hash it returned.\",...}} | unknown-hash: No entry with hash '000...0' in project 'checklist'.",
+      "observed-result": "Full content returned by hash (ADR-0035); an unknown hash refuses cleanly with the unknown-id contract (ADR-0024) rather than returning empty.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "Both the happy path and the refusal path behave as their ADRs describe."
+    },
+    {
+      "item": "source-path-anchor-resolves-its-chunk",
+      "expected-result": "a `file#section` query returns that exact chunk within the production result window",
+      "command": "tools/call memory_search {projectId:\"checklist\", query:\"docs/checklist-probe.md#read-path\"}",
+      "evidence": "2 results returned, top ranking 1, both with sourceFile \"docs/checklist-probe.md\"",
+      "observed-result": "The file#section anchor resolves against the indexed section column rather than returning nothing.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "ADR-0044's section column is populated and matched."
+    },
+    {
+      "item": "write-path-noise-filtering",
+      "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
+      "command": "ai-raccoon --data-root <scratch> noise show",
+      "evidence": "enabled: True",
+      "observed-result": "The deterministic write-path rejection is ON by default on a fresh root, matching the verb's own help text ('Rejection is ON by default').",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "Only the switch state was verified. A rejection was NOT exercised end to end \u2014 the deterministic policy matches Hermes background-process log shapes, which this run did not synthesise. Recorded as partial rather than claimed."
+    },
+    {
+      "item": "read-path-query-guard",
+      "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
+      "command": "ai-raccoon --data-root <scratch> queryguard show",
+      "evidence": "enabled: True  shadow: False  structural: False  threshold: 0.98939822280316",
+      "observed-result": "Armed by default with shadow off; the structural detector (ADR-0041) is off unless armed, exactly as the checklist scope says.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "Defaults match ADR-0040/0041. Tier behaviour on a real query was not exercised."
+    },
+    {
+      "item": "file-watch-status",
+      "expected-result": "memory_watch_status lists live registrations and their sync state",
+      "command": "tools/call memory_watch_status {projectId:\"checklist\"}",
+      "evidence": "{\"data\":{\"watches\":[]}}",
+      "observed-result": "Reports no registrations on a fresh root, which is the truthful answer \u2014 watches are created by agents, not by config.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "Empty is correct for a scratch root with no memory_watch_add call."
+    },
+    {
+      "item": "promotion-queue-state",
+      "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately",
+      "command": "tools/call memory_promotion_list {projectId:\"checklist\"}",
+      "evidence": "{\"data\":{\"rows\":[]},\"meta\":{\"waitingPromotionsCount\":0}}",
+      "observed-result": "Empty queue reported accurately, and the envelope meta agrees with the body.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "Consistent between rows and meta."
+    },
+    {
+      "item": "full-mcp-surface",
+      "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+      "command": "JSON-RPC tools/list and prompts/list over --transport stdio",
+      "evidence": "TOOLS: 26 | PROMPTS: 2 ['memory-usage-guide', 'workspace-consolidation-guide']",
+      "observed-result": "The running binary exposes exactly the derived counts: 26 tools, 2 prompts.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "Matches derived.mcp-tool-count and derived.mcp-prompt-count."
+    },
+    {
+      "item": "observability-event-ids",
+      "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+      "command": "grep -c '^| ' docs/reference/logging-event-ids.md",
+      "evidence": "35 documented event-id rows",
+      "observed-result": "The reference exists and is populated.",
+      "status": "skipped",
+      "accepted": false,
+      "acceptation-reason": "SKIPPED, not a pass: the ids in the reference were counted, not resolved against ids actually emitted by this build. Resolving them needs a run that provokes each id. Tracked as an open checklist gap."
+    },
+    {
+      "item": "cli-unrecognised-verb-falls-through-to-the-proxy",
+      "expected-result": "An unrecognised CLI verb fails with a parse error and a non-zero exit code",
+      "command": "ai-raccoon --data-root <scratch> settings get noise.enabled.global   # `settings` is not a verb",
+      "evidence": "End processing HTTP request after 7.077ms - 401 | ai-raccoon: the backend at http://127.0.0.1:7721/mcp would not open a session (401 Unauthorized ... does not match the token in /Users/arasz/.ai-raccoon/mcp-token) \u2014 check that <scratch>/mcp-token holds the token it minted | `ai-raccoon --help` Commands: access, model, retrieval, sweep, noise, queryguard, sync, ingest, watch, encryption, extract, maintenance, serve  (no `settings`)",
+      "observed-result": "The unrecognised verb did not error. It fell through to the proxy launch path, which dialled the DEFAULT port 7721 \u2014 the user's live server \u2014 and failed on a token mismatch against the live install's token file. A command explicitly scoped to a scratch --data-root reached into the production install.",
+      "status": "fail",
+      "accepted": true,
+      "acceptation-reason": "Known and tracked: consumer-surface lane F1 in docs/reviews/2026-08-14-project-scope-review.md, fix specified there. This run reproduces it on the shipped 1.13.0 build and RAISES its consequence \u2014 the lane described a mistyped verb hanging or attaching to a backend; it also crosses data roots, so a scratch-scoped command is not scratch-scoped."
+    }
+  ]
+}
