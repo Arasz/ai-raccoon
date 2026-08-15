@@ -158,7 +158,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
 
         public TimeSpan? Interval => interval;
 
-        public Task RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
+        public Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
         {
             if (ThrowAlways || (ThrowOnce && !_thrown))
             {
@@ -167,7 +167,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
             }
 
             Runs++;
-            return Task.CompletedTask;
+            return Task.FromResult(false);
         }
     }
 }

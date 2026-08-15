@@ -80,6 +80,13 @@ been satisfied by a bank that happened to have nothing to reclaim.
 **The event-id uniqueness gate earned its keep.** The first draft used 530-531, which
 `SweepHostedService` already owns; the gate named both collisions. Moved to 525-526.
 
+**Amendment, same day.** A job now reports whether it *created work*, and the pass sweeps pending
+embeds again only when one did. The first version swept after any job that ran, which was wrong twice
+over: vacuum and reclaim never make work, and the needless sweep doubled the window in which a
+background embed races an in-flight write — `Embeddings_ConfigureOpenAi_RoutesThroughTheConfiguredEndpoint`
+went red on CI while passing locally, asserting one embedding request and seeing two. Only
+`chunk-backfill` returns true, and only when it actually replaced rows.
+
 **What this does not do:** it does not bound how long a job may take. `chunk-backfill` on a bank the
 size of the one measured here rewrites 6,240 rows and leaves 13,578 rows pending embedding. It runs
 once, in the background, but a user watching a maintenance pass will see it work.
