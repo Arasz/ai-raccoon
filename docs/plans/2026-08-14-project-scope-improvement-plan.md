@@ -380,12 +380,21 @@ recovers almost nothing.
 >
 > | shape | chunks | chunk bytes | KNN @ k=10 |
 > |---|---|---|---|
-> | `ctx`-partitioned (today) | 20 | 31,457,280 | **0.354 ms** |
-> | `scope`-partitioned (option 2) | 3 | 4,718,592 | **3.420 ms** |
-> | unpartitioned (option 1) | 3 | 4,718,592 | **1.952 ms** |
+> | `ctx`-partitioned (today) | 20 | 31,457,280 | **0.343 ms** |
+> | `scope`-partitioned (option 2) | 3 | 4,718,592 | **2.301 ms** |
+> | unpartitioned — *not a correct replacement* | 3 | 4,718,592 | 2.274 ms |
+> | **`ctx` as a metadata column (option 1, corrected)** | **3** | **4,718,592** | **1.734 ms** |
+>
+> **CORRECTION, same day.** The first run measured an *unpartitioned* table with no `ctx` at all, and
+> queried it without a context filter — so it measured a KNN that returns the **global** top-k and is
+> not correctly scoped. That is not a replacement for today's behaviour, and its 1.952 ms was the
+> latency of a wrong query. The shape a correct replacement needs keeps `ctx` as a vec0 **metadata
+> column** — filterable, just not a partition key. It measures **1.734 ms** at the same 4.7 MB, so the
+> conclusion is unchanged and slightly better than reported: **"drop the partition key" means demote
+> `ctx` to a metadata column, not remove it.**
 >
 > **The size win is real: 85% of the chunk bytes, 31.5 MB → 4.7 MB.** The latency cost is also real:
-> **5.5× for option 1, 9.7× for option 2.**
+> **5.1× for option 1 (corrected), 6.7× for option 2.**
 >
 > **Option 2 measures worse than option 1 on latency at identical size, so it is not a middle ground —
 > it is dominated.** Coarsening still pays the partition-filter machinery while pruning nothing once
@@ -394,7 +403,7 @@ recovers almost nothing.
 > **What this does not settle**, stated so nobody quotes it further than it goes: the partition
 > distribution is synthetic (the vectors are real, the `ctx` assignment is not), it is one corpus at
 > 2,518 vectors against a live bank of ~16k, and `k=10`. Whether the 1.6 ms gap grows or shrinks with
-> corpus size is unmeasured. **The trade is now explicit — roughly 26.7 MB against +1.6 ms per KNN on
+> corpus size is unmeasured. **The trade is now explicit — roughly 26.7 MB against +1.4 ms per KNN on
 > the search hot path — and that is an owner decision, not a technical one.**
 >
 > **OWNER RULING, 2026-08-15: option 1 — drop the `ctx` partition key.** The measurement above is
