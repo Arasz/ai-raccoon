@@ -12,8 +12,8 @@ namespace AiRaccoon.Tools;
 /// <summary>Thin MCP tools over the shared-extraction pipeline — no business logic here (see docs/work/features-agent-memory/spec-issue-1.md §6.1).</summary>
 public sealed class ShareTools(
     IMemoryStore store,
-    ToolGate gate,
-    SharedExtractionRunner extraction,
+    IToolGate gate,
+    ISharedExtractionRunner extraction,
     IPromotionQueue queue)
 {
     private const string TnMemoryShare = "memory_share";

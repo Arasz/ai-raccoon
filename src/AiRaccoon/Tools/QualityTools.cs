@@ -8,7 +8,7 @@ namespace AiRaccoon.Tools;
 /// <summary>Thin MCP tools over ISearchQualityService — no business logic here.</summary>
 public sealed class QualityTools(
     ISearchQualityService qualityService,
-    ToolGate gate)
+    IToolGate gate)
 {
     private const string TnRecordFollowThrough = "memory_record_followthrough";
     private const string TnRecordGrade = "memory_record_grade";

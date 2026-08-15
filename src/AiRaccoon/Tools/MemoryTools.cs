@@ -17,7 +17,7 @@ namespace AiRaccoon.Tools;
 /// <summary>Thin MCP tools over IMemoryStore — no business logic here (see docs/work/features-agent-memory/spec-issue-1.md §6.1).</summary>
 public sealed partial class MemoryTools(
     IMemoryStore store,
-    ToolGate gate,
+    IToolGate gate,
     ISearchQualityService qualityService,
     ILogger<MemoryTools> logger)
 {

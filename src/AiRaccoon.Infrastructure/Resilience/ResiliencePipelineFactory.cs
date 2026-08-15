@@ -3,7 +3,7 @@ using System.Net.Sockets;
 using Polly;
 using Polly.Retry;
 
-namespace AiRaccoon.Resilience;
+namespace AiRaccoon.Infrastructure.Resilience;
 
 /// <summary>
 ///     Factory for Polly v8 resilience pipelines configured with exponential backoff

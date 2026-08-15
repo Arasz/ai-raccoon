@@ -20,6 +20,7 @@
         <PackageReference Include="OpenTelemetry.Exporter.InMemory"/>
         <PackageReference Include="Reqnroll.xunit.v3"/>
         <PackageReference Include="Reqnroll.Tools.MsBuild.Generation" PrivateAssets="all"/>
+        <PackageReference Include="TngTech.ArchUnitNET.xUnitV3"/>
         <PackageReference Include="Shouldly"/>
         <PackageReference Include="xunit.v3"/>
         <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all"/>

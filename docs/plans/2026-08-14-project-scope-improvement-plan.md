@@ -555,7 +555,7 @@ is an architecture question, not a mechanical edit.
 WAL, which that page recommends instead, is already enabled (`SqliteConnectionFactory`), so the
 performance advice is satisfied — it is the "avoid calling them" half that is outstanding.
 
-### WP13 · Wire up the architecture test that is already paid for — **H23**
+### WP13 · Wire up the architecture test that is already paid for — ✅ **IN REVIEW** — **H23**
 `tests/Directory.Packages.props:18` pins `TngTech.ArchUnitNET.xUnitV3` and no project references it.
 The only mechanical layering guard in the repo is a missing `ProjectReference`, which catches
 assembly-level leaks and nothing else — not the string-matched Infrastructure dependency in Core, not
@@ -567,7 +567,14 @@ Three starter rules, each watched fail against today's code first: Core depends 
 assembly; no type in `AiRaccoon.Core.*` references `System.Net.*`; every `[McpServerTool]` class's
 constructor parameters are interfaces. **Rules two and three fail today** — that is the demonstration.
 
-### WP14 · Close the port boundary the DI helper dissolved — **H19**
+### WP14 · Close the port boundary the DI helper dissolved — ✅ **SUBSUMED BY WP13** — **H19**
+
+> **Owner question 10 is no longer blocking (ADR-0059).** WP13's rule 3 fixes the same defect from the
+> consumer side and needs no registration change: it found **12** concrete injections, not 8, and every
+> one of the four extra types (`SharedExtractionRunner`, `SweepService`, `ForgettingPolicyService`,
+> `SyncCloudStoreFactory`) already had an interface, so the fix was parameter types and nothing else.
+> Narrowing `AddRequiredSingleton` to register only the interface remains available as separate
+> hardening, and is what question 10 should now be read as asking.
 `AddRequiredSingleton` registers each implementation under both its concrete type and its interface, so
 injecting the concrete Infrastructure class is exactly as easy as injecting the port and nothing
 reports the difference. 8 of 8 tool classes inject the concrete `ToolGate`. Register only via the
