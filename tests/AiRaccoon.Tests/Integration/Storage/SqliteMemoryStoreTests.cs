@@ -233,7 +233,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         metadata.Rating.ShouldBe(row.Rating);
     }
 
-    /// <summary>SelectRatingForBump/BumpAccess must not touch another project's row that happens
+    /// <summary>BumpAccess must not touch another project's row that happens
     /// to share the same content hash — searching one project must never age or rate-bump another's.</summary>
     [Fact]
     public async Task Search_BumpsAccessOnlyForTheSearchedProjectsRow_NotAnotherProjectsIdenticalHash()

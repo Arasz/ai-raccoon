@@ -1030,19 +1030,18 @@ public sealed partial class SqliteMemoryStore(
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
         foreach (var hash in results.Select(r => r.Hash).Distinct(StringComparer.Ordinal))
         {
-            var row = await connection.QueryFirstOrDefaultAsync<RatingRow>(
-                    Def(MemorySql.SelectRatingForBump, new { hash, projectId }, cancellationToken))
-                .ConfigureAwait(false);
-            if (row is null)
-            {
-                continue;
-            }
-
-            var ageDays = Math.Max(0, (now - row.CreatedAt) / 86_400.0);
-            var rating = RatingPolicy.Rating(
-                RatingPolicy.DefaultBaseScore, row.AccessCount + 1, ageDays, RatingPolicy.DefaultHalfLifeDays);
             await connection.ExecuteAsync(
-                    Def(MemorySql.BumpAccess, new { hash, now, rating, projectId }, cancellationToken))
+                    Def(MemorySql.BumpAccess,
+                        new
+                        {
+                            hash,
+                            now,
+                            projectId,
+                            baseScore = RatingPolicy.DefaultBaseScore,
+                            halfLifeDays = RatingPolicy.DefaultHalfLifeDays,
+                            accessMultiplier = RatingPolicy.DefaultAccessMultiplier
+                        },
+                        cancellationToken))
                 .ConfigureAwait(false);
         }
     }
@@ -1234,13 +1233,6 @@ public sealed partial class SqliteMemoryStore(
                 DateTimeOffset.FromUnixTimeSeconds(CreatedAt), (int?)TtlDays, SourceType);
     }
 
-
-    private sealed class RatingRow
-    {
-        public long CreatedAt { get; set; }
-
-        public int AccessCount { get; set; }
-    }
 
     private sealed class MetadataRow
     {

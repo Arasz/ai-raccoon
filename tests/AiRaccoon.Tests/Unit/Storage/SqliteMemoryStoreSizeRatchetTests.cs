@@ -38,13 +38,16 @@ public sealed class SqliteMemoryStoreSizeRatchetTests
     //              out instead of a raise -- FilterFor moved to ContextFilter.cs, next to its
     //              write-path twin EntryBucket, which is also where the review said the mapping
     //              belonged (the two halves of one rule sat 1,000 lines apart in different files).
+    //   1243 / 27  LOWERED again: WP6 folded the rating computation into the BumpAccess statement,
+    //              which removed the SELECT, the RatingRow type and the C# arithmetic between them.
+    //              A fix that deletes more than it adds is the shape to prefer here.
     //
     // Two raises in a single day of work was the signal this ratchet exists to send, and the
     // third hit was paid down rather than borrowed against: settings came out. Four seams remain
     // (write, search, ingest, embedding). The next person to hit this cap should take one
     // of them rather than add a raise -- raising is borrowing against a decomposition someone
     // still has to pay for.
-    private const int MaxLines = 1251;
+    private const int MaxLines = 1243;
     private const int MaxMembers = 27;
 
     [Fact]

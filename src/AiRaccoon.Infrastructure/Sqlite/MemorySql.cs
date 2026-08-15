@@ -375,7 +375,7 @@ internal static class MemorySql
                                             """;
 
     // memory_get read path (ADR-0035): a hash addressable within the caller's own project rows
-    // plus the cross-project shared tier — the same reach SelectRatingForBump/BumpAccess already
+    // plus the cross-project shared tier — the same reach BumpAccess already
     // grant search hits.
     public const string SelectEntryByHashForRead = """
                                                    SELECT hash AS Hash, path AS Path, value AS Value, scope AS Scope,
@@ -386,16 +386,21 @@ internal static class MemorySql
                                                    LIMIT 1
                                                    """;
 
-    public const string SelectRatingForBump =
-        "SELECT created_at AS CreatedAt, access_count AS AccessCount FROM entries " +
-        "WHERE hash = @hash AND (project_id = @projectId OR scope = 'shared') LIMIT 1";
-
+    /// <summary>
+    ///     One statement, so `rating` is always the rating of the `access_count` stored beside it.
+    ///     Computing it in C# from an earlier SELECT lost a bump's rating whenever two hits on one
+    ///     hash interleaved — the counter is relative and survives, a literal rating does not
+    ///     (docs/adr/0053). SQLite evaluates every SET right-hand side against the pre-UPDATE row, so
+    ///     `access_count + 1` here is the new count. Mirrors RatingPolicy.Rating.
+    /// </summary>
     public const string BumpAccess =
         """
         UPDATE entries
         SET access_count = access_count + 1,
             last_accessed_at = @now,
-            rating = @rating
+            rating = @baseScore
+                     * pow(0.5, max(0.0, (@now - created_at) / 86400.0) / @halfLifeDays)
+                     * (1 + (access_count + 1) * @accessMultiplier)
         WHERE hash = @hash AND (project_id = @projectId OR scope = 'shared')
         """;
 
