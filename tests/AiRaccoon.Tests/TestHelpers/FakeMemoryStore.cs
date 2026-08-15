@@ -13,7 +13,7 @@ namespace AiRaccoon.Tests.TestHelpers;
 ///     unscoped one for every implementor, not just this fake (ADR-0054). Simplifying is a fake's
 ///     privilege; it was never the port's.
 /// </remarks>
-public class FakeMemoryStore : IMemoryStore
+public class FakeMemoryStore : IMemoryStore, ISettingsStore
 {
     public virtual Task<MemoryEntry> WriteAsync(MemoryWriteRequest request,
         CancellationToken cancellationToken = default) =>

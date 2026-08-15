@@ -89,7 +89,13 @@ method by reflection and asserting each one's guard requirement, mirroring the e
 `EveryTool_NamesTheProjectIdParameter`. Break it with a stub tool that omits the gate and watch it go
 red.
 
-### WP2 · Treat a write naming `shared` as a promotion request, not as a write — **H6**
+### WP2 · Treat a write naming `shared` as a promotion request, not as a write — ✅ **IN REVIEW** — **H6**
+
+> **Shipped as ADR-0067**, immediately after WP8 as the plan recommended. The cycle really was the
+> argument for the extraction rather than an obstacle: `MemoryWriteService` composes `IMemoryStore`
+> and `IPromotionQueue` from Core, which the store itself cannot. Watched red on the pre-fix path
+> (`Expected: 0 rows WHERE scope = 'shared'`). The rejected one-line `EntryBucket` variant is
+> recorded with its reason.
 **Effort:** SMALL · **Surface:** `EntryBucket.For`, `SqliteMemoryStore.WriteAsync`, `IPromotionQueue.ProposeAsync`
 **Owner ruling, 2026-08-15 — this package was redesigned, not withdrawn.**
 
@@ -408,7 +414,16 @@ two values.
 
 *Retention windows are owner question 18.*
 
-### WP8 · Move the business logic out of the MCP layer — **H22**
+### WP8 · Move the business logic out of the MCP layer — ✅ **IN REVIEW** — **H22**
+
+> **Shipped as ADR-0065.** A size gate over `[McpServerTool]` bodies was watched red naming both
+> offenders — `ShareExtract = 51 lines`, `Search = 34` — then `ShareExtractService` and
+> `QueryGuardService` moved to Core. Core carries **no logging dependency**, so the guard returns a
+> `Shadowed` verdict for the host to log rather than logging inside Core; event id 920 stays in
+> `MemoryTools` because the id names the event, not the file. `confirm-required` became a domain
+> exception mapped to the same wire prefix, and four tests that asserted `McpException` were
+> re-pointed at `ToolRefusals.PrefixFor` — they were asserting the mechanism, not the contract.
+> **This unblocks WP2.**
 **Effort:** MEDIUM · **Surface:** `ShareTools.cs:43-118`, `MemoryTools.cs:170-222`
 
 `memory_share_extract` is 62 body lines against a median of 9 — a consent gate, a mode decision and

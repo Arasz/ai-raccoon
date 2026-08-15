@@ -19,6 +19,8 @@ public sealed partial class MemoryTools(
     IMemoryStore store,
     IToolGate gate,
     ISearchQualityService qualityService,
+    IQueryGuardService queryGuard,
+    IMemoryWriteService writes,
     ILogger<MemoryTools> logger)
 {
     private const string TnMemoryWrite = "memory_write";
@@ -60,7 +62,7 @@ public sealed partial class MemoryTools(
         var request = new MemoryWriteRequest(projectId, content, context, agentId, workspaceId, sourceFile, section);
         await MemoryWriteRequestValidator.ValidateAndThrowAsync(request, cancellationToken);
 
-        var entry = await store.WriteAsync(request, cancellationToken);
+        var entry = await writes.WriteAsync(request, cancellationToken);
         var result = new WriteResult(entry.Hash, entry.Path, entry.Context, entry.CreatedAt, entry.Stored, entry.Reason);
         var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
         return envelope;
@@ -130,10 +132,16 @@ public sealed partial class MemoryTools(
 
         await SearchQueryValidator.ValidateAndThrowAsync(searchQuery, cancellationToken);
 
-        var guardVerdict = await EvaluateQueryGuardAsync(projectId, query, cancellationToken);
-        if (guardVerdict.Tier == QueryGuardTier.Refuse)
+        var guard = await queryGuard.EvaluateAsync(projectId, query, cancellationToken);
+        if (guard.Shadowed is { } suppressed)
         {
-            throw new McpException($"invalid-params: {guardVerdict.Guidance}");
+            Log.QueryGuardShadowVerdict(logger, suppressed.Tier.ToString(), projectId,
+                suppressed.PolicyName ?? string.Empty);
+        }
+
+        if (guard.Verdict.Tier == QueryGuardTier.Refuse)
+        {
+            throw new McpException($"invalid-params: {guard.Verdict.Guidance}");
         }
 
         var results = await store.SearchAsync(searchQuery, cancellationToken);
@@ -152,73 +160,10 @@ public sealed partial class MemoryTools(
             logger.LogWarning(ex, "Failed to record search quality for correlation {CorrelationId}", correlationId);
         }
 
-        var warning = guardVerdict.Tier == QueryGuardTier.Warn ? guardVerdict.Guidance : null;
+        var warning = guard.Verdict.Tier == QueryGuardTier.Warn ? guard.Verdict.Guidance : null;
         var result = new SearchResultList(results, warning);
         var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
         return envelope with { Meta = envelope.Meta with { CorrelationId = correlationId } };
-    }
-
-    /// <summary>
-    ///     The read-path query guard (docs/adr/0040, docs/adr/0041): disabled reads one setting and
-    ///     returns Clean untouched (byte-identical to no guard at all). Shadow mode logs a
-    ///     non-Clean verdict and still returns Clean, so the caller's behavior is unaffected while
-    ///     an operator measures their own traffic. Live mode returns the verdict as evaluated. The
-    ///     structural detector (ADR-0041) only ever runs when the regex tiers found nothing —
-    ///     it is strictly a third input to the warn tier, never able to override a regex Refuse or
-    ///     Warn, and gated by its own default-off setting.
-    /// </summary>
-    private async Task<QueryGuardVerdict> EvaluateQueryGuardAsync(string projectId, string query,
-        CancellationToken cancellationToken)
-    {
-        var enabled = QueryGuardConfigKeys.ParseEnabled(
-            await store.GetSettingAsync(QueryGuardConfigKeys.EnabledGlobal, cancellationToken));
-        if (!enabled)
-        {
-            return QueryGuardVerdict.Clean;
-        }
-
-        var verdict = QueryGuardPolicy.Evaluate(query);
-        if (verdict.Tier == QueryGuardTier.Clean)
-        {
-            verdict = await EvaluateStructuralQueryGuardAsync(query, cancellationToken) ?? verdict;
-        }
-
-        if (verdict.Tier == QueryGuardTier.Clean)
-        {
-            return verdict;
-        }
-
-        var shadow = QueryGuardConfigKeys.ParseShadow(
-            await store.GetSettingAsync(QueryGuardConfigKeys.ShadowGlobal, cancellationToken));
-        if (!shadow)
-        {
-            return verdict;
-        }
-
-        Log.QueryGuardShadowVerdict(logger, verdict.Tier.ToString(), projectId, verdict.PolicyName ?? string.Empty);
-        return QueryGuardVerdict.Clean;
-    }
-
-    /// <summary>
-    ///     Structural detector (docs/adr/0041): default off (<see cref="QueryGuardConfigKeys.DefaultStructuralEnabled" />),
-    ///     so the settings read below only happens when an operator has explicitly opted in.
-    ///     Returns null (defer to the regex verdict) unless the score clears the calibrated
-    ///     threshold; never returns Refuse (see <see cref="StructuralQueryGuardPolicy" />).
-    /// </summary>
-    private async Task<QueryGuardVerdict?> EvaluateStructuralQueryGuardAsync(string query, CancellationToken cancellationToken)
-    {
-        var structuralEnabled = QueryGuardConfigKeys.ParseStructuralEnabled(
-            await store.GetSettingAsync(QueryGuardConfigKeys.StructuralEnabledGlobal, cancellationToken));
-        if (!structuralEnabled)
-        {
-            return null;
-        }
-
-        var threshold = QueryGuardConfigKeys.ParseStructuralThreshold(
-            await store.GetSettingAsync(QueryGuardConfigKeys.StructuralThresholdGlobal, cancellationToken));
-
-        var verdict = StructuralQueryGuardPolicy.Evaluate(query, threshold);
-        return verdict.Tier == QueryGuardTier.Warn ? verdict : null;
     }
 
     [McpServerTool(Name = TnMemoryList)]
@@ -371,8 +316,9 @@ public sealed partial class MemoryTools(
 
     private static partial class Log
     {
+        /// <summary>Kept here, not in Core: the guard decides, the host reports (docs/adr/0065).</summary>
         [LoggerMessage(EventId = 920, Level = LogLevel.Information,
-            Message = "query guard shadow mode: would {Tier} search for project {ProjectId} (policy {PolicyName})")]
+            Message = "Query guard (shadow) would have returned {Tier} for project {ProjectId} via {PolicyName}")]
         public static partial void QueryGuardShadowVerdict(ILogger logger, string tier, string projectId, string policyName);
     }
 }
