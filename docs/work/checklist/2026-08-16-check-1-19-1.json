@@ -14,7 +14,7 @@
   },
   "scope-note": {
     "added-since-1.15.0": "Three items were added beyond the template, covering what shipped between the last checklist run (1.15.0) and this one: write-embeds-the-chunk-it-stored (#344), over-window-query-warns-not-refuses (#339/#333), maintenance-job-ledger (#330/#335). A release checklist that never grows with the releases rots the same way hand-pinned facts do.",
-    "baseline-compared": "docs/work/checklist/2026-08-15-release-1-15-0.json, and the pre-skill run at .ai-raccoon/state-checklist-1.9.1-1786636733.json."
+    "baseline-compared": "docs/work/checklist/2026-08-15-release-1-15-0.json, and the pre-skill run now at docs/work/checklist/2026-08-13-state-1-9-1-1558.json (moved out of .ai-raccoon/ by this PR — results do not belong in a bank directory)."
   },
   "items": [
     {
@@ -178,7 +178,7 @@
   "findings-against-prior-runs": [
     {
       "finding": "The 1.9.1 run passed an item for a feature that does not exist.",
-      "detail": ".ai-raccoon/state-checklist-1.9.1-1786636733.json carries 'noise-filtering-zero-shot-semantic-filter' as checked:true, accepted:true, reason 'ZeroShotEmbeddingNoisePolicy evaluated against bundled noise vectors'. ADR-0033 removed that policy; AppRegistrations.cs:187 registers only HermesProcessNoisePolicy. The run's own recorded evidence shows a normal stored hash — nothing was filtered — and it was accepted anyway. Caught here only because the policy list was derived from the tree."
+      "detail": "docs/work/checklist/2026-08-13-state-1-9-1-1558.json carries 'noise-filtering-zero-shot-semantic-filter' as checked:true, accepted:true, reason 'ZeroShotEmbeddingNoisePolicy evaluated against bundled noise vectors'. ADR-0033 removed that policy; AppRegistrations.cs:187 registers only HermesProcessNoisePolicy. The run's own recorded evidence shows a normal stored hash — nothing was filtered — and it was accepted anyway. Caught here only because the policy list was derived from the tree."
     },
     {
       "finding": "The 1.9.1 run pinned the tool count, and the pin went stale.",
