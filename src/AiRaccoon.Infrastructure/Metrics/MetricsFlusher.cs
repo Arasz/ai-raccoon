@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Metrics;
+using AiRaccoon.Core.Observability;
 using AiRaccoon.Infrastructure.Maintenance;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -18,9 +19,13 @@ public sealed partial class MetricsFlusher(
     IMetricsStore store,
     ISettingsStore settings,
     TimeProvider timeProvider,
+    IOperationTelemetry telemetry,
     ILogger<MetricsFlusher> logger)
     : BackgroundService
 {
+    /// <summary>Span name and `operation` tag of one flush pass.</summary>
+    internal const string OperationName = "metrics.flush";
+
     /// <summary>Completed after each flush pass (batch write + self-metrics write); test seam.</summary>
     internal TickSignal Flushes { get; } = new();
 
@@ -44,14 +49,46 @@ public sealed partial class MetricsFlusher(
     /// <summary>One flush pass: drain the buffer, batch-write it, then record self-metrics directly. Test seam.</summary>
     internal async Task FlushOnceAsync(CancellationToken cancellationToken)
     {
+        using var pass = telemetry.Begin(OperationName);
         var start = timeProvider.GetTimestamp();
         var batch = buffer.DrainAll();
+
+        if (batch.Count > 0)
+        {
+            // A flush that persisted buffered measurements is always worth reading, unlike an
+            // idle one (WP13 span-volume fix, SweepHostedService's precedent): NoteWork only
+            // fires here, never unconditionally. At this service's cadence (default 30s) —
+            // far more frequent than BankMaintenanceHostedService's hourly-or-slower pass —
+            // spanning every idle tick would flood span storage for no reason.
+            pass.NoteWork();
+        }
+
+        var batchFailure = await TrySaveBatchAsync(batch, cancellationToken).ConfigureAwait(false);
+        var selfMetricsFailure = await RecordSelfMetricsAsync(start, batch.Count, cancellationToken).ConfigureAwait(false);
+        Flushes.Increment();
+
+        var failure = batchFailure ?? selfMetricsFailure;
+        if (failure is not null)
+        {
+            pass.Failed(failure);
+        }
+        else
+        {
+            pass.Succeeded();
+        }
+    }
+
+    private async Task<Exception?> TrySaveBatchAsync(IReadOnlyList<Measurement> batch, CancellationToken cancellationToken)
+    {
+        if (batch.Count == 0)
+        {
+            return null;
+        }
+
         try
         {
-            if (batch.Count > 0)
-            {
-                await store.SaveBatchAsync(batch, cancellationToken).ConfigureAwait(false);
-            }
+            await store.SaveBatchAsync(batch, cancellationToken).ConfigureAwait(false);
+            return null;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -60,11 +97,7 @@ public sealed partial class MetricsFlusher(
         catch (Exception ex)
         {
             Log.FlushFailed(logger, ex, batch.Count);
-        }
-        finally
-        {
-            await RecordSelfMetricsAsync(start, batch.Count, cancellationToken).ConfigureAwait(false);
-            Flushes.Increment();
+            return ex;
         }
     }
 
@@ -73,7 +106,7 @@ public sealed partial class MetricsFlusher(
     ///     <see cref="IMeasurementRecorder" /> — so a flush cannot recurse into itself, and self-metrics
     ///     land even when the buffer is at capacity (AC5).
     /// </summary>
-    private async Task RecordSelfMetricsAsync(long start, int batchSize, CancellationToken cancellationToken)
+    private async Task<Exception?> RecordSelfMetricsAsync(long start, int batchSize, CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
         var durationMs = timeProvider.GetElapsedTime(start).TotalMilliseconds;
@@ -87,6 +120,7 @@ public sealed partial class MetricsFlusher(
         try
         {
             await store.SaveBatchAsync(selfMetrics, cancellationToken).ConfigureAwait(false);
+            return null;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -95,6 +129,7 @@ public sealed partial class MetricsFlusher(
         catch (Exception ex)
         {
             Log.SelfMetricsWriteFailed(logger, ex);
+            return ex;
         }
     }
 

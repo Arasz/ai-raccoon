@@ -16,18 +16,18 @@ namespace AiRaccoon.Tests.Integration.Metrics;
 
 /// <summary>
 ///     WP3 AC4 and G4 (reshaped, ruling 2): the `metrics` row count must be unchanged when
-///     memory_search returns, flusher paused. Calls the real, today-signature MemoryTools.Search
-///     (docs/plans/2026-08-15-performance-metrics-implementation.md, WP3 AC4) — WP1 is changing
-///     that signature to return a SearchResults envelope concurrently in a different worktree; this
-///     test targets today's shape deliberately, per the task's own note that the seam will be
-///     resolved when both branches merge.
+///     memory_search returns, flusher paused. Calls the real MemoryTools.Search
+///     (docs/plans/2026-08-15-performance-metrics-implementation.md, WP3 AC4) — WP1's envelope
+///     migration (IMemoryStore.SearchAsync now returns SearchResults, unpacked inline by
+///     MemoryTools.Search) is merged as of task/perf-metrics; MemoryTools.Search's own public
+///     signature was unchanged by that migration, so this test needed no update at merge.
 ///
 ///     No package in this task wires IMeasurementRecorder into the search path yet (WP2 measures
 ///     the phases, WP8 wires the tool-level hook) — so today this assertion is honestly vacuous by
 ///     absence, not by a proven-clean call path. The watch-red test below proves the counting
 ///     mechanism itself would catch the defect G4 exists to forbid, by simulating "a measurement
 ///     recorded synchronously inside the search window" at the WP3 boundary this package owns,
-///     since editing SqliteMemoryStore.cs/MemoryTools.cs is out of scope while WP1 holds them.
+///     since editing SqliteMemoryStore.cs/MemoryTools.cs is out of scope for this package.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]

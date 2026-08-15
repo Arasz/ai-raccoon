@@ -28,7 +28,7 @@ public sealed class MetricsFlusherTests
     private static MetricsFlusher CreateFlusher(IMeasurementBuffer buffer, IMetricsStore store,
         ISettingsStore? settings = null, FakeTimeProvider? time = null) =>
         new(buffer, store, settings ?? new InMemorySettings(), time ?? new FakeTimeProvider(FixedNow),
-            NullLogger<MetricsFlusher>.Instance);
+            TestTelemetry.None, NullLogger<MetricsFlusher>.Instance);
 
     [Fact]
     public async Task FlushOnceAsync_BurstWithinCapacity_WritesAllMeasurementsWhole()
