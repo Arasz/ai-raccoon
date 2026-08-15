@@ -72,6 +72,20 @@ public sealed class QueryGuardRecallProbe
             _output.WriteLine($"  {tier,-7}        : {n} ({(longOnes.Count == 0 ? 0 : 100.0 * n / longOnes.Count):F0}%)");
         }
 
+        // FALSE POSITIVE check for the 1,000-char warning threshold (PR #339): a character count is
+        // a proxy for a token count, and whitespace-heavy text tokenises far shorter than its length
+        // suggests — a 12,952-char markdown table measured 249 tokens, comfortably inside the window.
+        var tokenizer = AiRaccoon.Infrastructure.Embedding.OnnxEmbeddingGenerator.CreateTokenizer(
+            AiRaccoon.Infrastructure.Embedding.BundledModel.ResolveVocabPath());
+        const int WindowTokens = 254;
+        const int ThresholdChars = 1000;
+        var overChars = queries.Where(q => q.Length > ThresholdChars).ToList();
+        var wouldWarnButFits = overChars.Count(q => tokenizer.CountTokens(q) <= WindowTokens);
+        var underCharsButOver = queries.Count(q => q.Length <= ThresholdChars && tokenizer.CountTokens(q) > WindowTokens);
+        _output.WriteLine($"would warn (>{ThresholdChars} chars): {overChars.Count}");
+        _output.WriteLine($"  FALSE POSITIVE — warned but fits in {WindowTokens} tokens: {wouldWarnButFits}");
+        _output.WriteLine($"  FALSE NEGATIVE — under {ThresholdChars} chars but over window: {underCharsButOver}");
+
         _output.WriteLine("--- longest queries the guard called Clean, first line only ---");
         foreach (var v in longOnes.Where(v => v.Tier == QueryGuardTier.Clean)
                      .OrderByDescending(v => v.Query.Length).Take(8))
