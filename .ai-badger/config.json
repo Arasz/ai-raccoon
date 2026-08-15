@@ -10,7 +10,8 @@
     "dotnet",
     "mcp",
     "python",
-    "github"
+    "github",
+    "ai-raccoon"
   ],
   "agents": [
     "claude",
