@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Metrics;
@@ -69,6 +70,21 @@ public sealed class PerformanceToolsTests
         var result = await _tools.Performance("acme", cancellationToken: TestContext.Current.CancellationToken);
 
         result.Data.ShouldBe(_reportService.ReportToReturn);
+    }
+
+    /// <summary>AC1: an agent calling memory_performance gets JSON, not prose.</summary>
+    [Fact]
+    public async Task Performance_ResponseParsesAsJson_AndCarriesASeriesPerTool()
+    {
+        var result = await _tools.Performance("acme", cancellationToken: TestContext.Current.CancellationToken);
+
+        var json = JsonSerializer.Serialize(result);
+        using var parsed = JsonDocument.Parse(json);
+
+        // Plain JsonSerializer.Serialize (no options) uses the record's own PascalCase property
+        // names, not the SDK wire's camelCase (McpToolContractTests exercises that path instead).
+        parsed.RootElement.GetProperty("Data").GetProperty("Series").GetArrayLength()
+            .ShouldBe(_reportService.ReportToReturn.Series.Count);
     }
 
     private sealed class FakeToolGate : IToolGate
