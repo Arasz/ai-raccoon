@@ -48,13 +48,22 @@ matched on its opening and nothing else.
 
 Measured on this project's own traffic: the median query is **61 characters** and works well.
 Of the 57 queries over 1,200 characters, **every single one was pasted machine output** — HTTP
-header dumps, log errors, test output — with the actual question in the first line and
-thousands of characters of noise after it. One was 448,900 characters.
+header dumps, log errors, test output. One was 448,900 characters.
 
-So: **paste the question, not the output.** If you are searching *about* a log or a stack
-trace, extract the identifying line — the exception type, the error code, the failing test
-name — and search for that. Keyword matching still sees your whole query, so nothing is lost
-from FTS; it is the semantic half that goes blind past 254 tokens.
+**And the question is often not in there at all.** Of the twelve longest, about half open on
+something like `'},'` or `'"value": "1.1 varnish"'` — a paste with no question anywhere in it.
+Do not assume trimming keeps the useful part; frequently there is no useful part to keep.
+
+So: **write the question, do not paste the output.** If you are searching *about* a log or a
+stack trace, extract the identifying token — the exception type, the error code, the failing
+test name — and search for that.
+
+**Do not count on keyword search to rescue a long query.** FTS does see the whole text, but
+measured on a purpose-built long-query condition (ADR-0072) the keyword leg scored **0.0000**
+once a paste was in the query: the paste's own vocabulary swamps the few terms that matter, and
+repeated terms are weighted linearly, so the noise outranks the signal. That number comes from
+a constructed corpus and is directional rather than definitive — but the direction is clear
+enough that "FTS will still find it" is not a plan.
 
 ## 3. Escalation by result
 
