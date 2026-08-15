@@ -65,6 +65,9 @@ public static partial class AppRegistrations
         {
             services.AddRequiredSingleton<ISharedExtractionService, SharedExtractionService>();
             services.AddRequiredSingleton<ISharedExtractionRunner, SharedExtractionRunner>();
+            // WP2 (docs/adr/0067): composes the store and the queue, which the store itself cannot —
+            // PromotionQueueService already takes IMemoryStore, so store -> queue -> store is a cycle.
+            services.AddRequiredSingleton<IMemoryWriteService, MemoryWriteService>();
         }
 
         private void RegisterSyncServices()

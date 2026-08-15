@@ -43,7 +43,7 @@ public class MemoryToolsTests
         var workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
         var gate = new ToolGate(access, _queue);
-        _tools = new MemoryTools(_store, gate, new NoOpSearchQualityService(), NullLogger<MemoryTools>.Instance);
+        _tools = new MemoryTools(_store, gate, new NoOpSearchQualityService(), new MemoryWriteService(_store, new FakePromotionQueue()), NullLogger<MemoryTools>.Instance);
         _share = new ShareTools(_store, gate,
             new SharedExtractionRunner(_store, new SharedExtractionService(), _queue,
                 new FakeTimeProvider(FixedNow)), _queue);
@@ -396,7 +396,7 @@ public class MemoryToolsTests
     {
         var logger = new FakeLogger<MemoryTools>();
         var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
-            new NoOpSearchQualityService(), logger);
+            new NoOpSearchQualityService(), new MemoryWriteService(_store, new FakePromotionQueue()), logger);
         _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
 
         var result = await tools.Search("acme", RealHermesProcessNotification,
@@ -412,7 +412,7 @@ public class MemoryToolsTests
     {
         var logger = new FakeLogger<MemoryTools>();
         var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
-            new NoOpSearchQualityService(), logger);
+            new NoOpSearchQualityService(), new MemoryWriteService(_store, new FakePromotionQueue()), logger);
         _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
 
         await tools.Search("acme", "why did the auth build start failing",
@@ -426,7 +426,7 @@ public class MemoryToolsTests
     {
         var logger = new FakeLogger<MemoryTools>();
         var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
-            new NoOpSearchQualityService(), logger);
+            new NoOpSearchQualityService(), new MemoryWriteService(_store, new FakePromotionQueue()), logger);
         _store.Settings[QueryGuardConfigKeys.EnabledGlobal] = "false";
         _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
 
@@ -497,7 +497,7 @@ public class MemoryToolsTests
     {
         var logger = new FakeLogger<MemoryTools>();
         var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
-            new NoOpSearchQualityService(), logger);
+            new NoOpSearchQualityService(), new MemoryWriteService(_store, new FakePromotionQueue()), logger);
         _store.Settings[QueryGuardConfigKeys.StructuralEnabledGlobal] = "true";
         _store.Settings[QueryGuardConfigKeys.StructuralThresholdGlobal] = "0.0";
         _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
