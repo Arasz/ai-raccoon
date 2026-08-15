@@ -22,12 +22,18 @@ namespace AiRaccoon.Tests.Integration.Metrics;
 ///     MemoryTools.Search) is merged as of task/perf-metrics; MemoryTools.Search's own public
 ///     signature was unchanged by that migration, so this test needed no update at merge.
 ///
-///     No package in this task wires IMeasurementRecorder into the search path yet (WP2 measures
-///     the phases, WP8 wires the tool-level hook) — so today this assertion is honestly vacuous by
-///     absence, not by a proven-clean call path. The watch-red test below proves the counting
-///     mechanism itself would catch the defect G4 exists to forbid, by simulating "a measurement
-///     recorded synchronously inside the search window" at the WP3 boundary this package owns,
-///     since editing SqliteMemoryStore.cs/MemoryTools.cs is out of scope for this package.
+///     WP8 has since wired IMeasurementRecorder into a real consumer — ToolTelemetry, the
+///     CallToolFilter tool-level hook (ToolTelemetryMeasurementCoverageTests, G1). That hook sits
+///     at the MCP protocol dispatch layer, which this test never reaches: it constructs
+///     MemoryTools directly and calls Search() as a plain method, bypassing CallToolFilter
+///     entirely — and MemoryTools's constructor takes no IMeasurementRecorder of its own. No
+///     package wires the search-phase family (SearchTimings) into a recorder either. So this
+///     assertion remains honestly vacuous by absence for the exact path it exercises — not because
+///     the write is properly deferred, but because nothing reachable from this test's own call
+///     path can write at all yet. The watch-red test below proves the counting mechanism itself
+///     would catch the defect G4 exists to forbid, by simulating "a measurement recorded
+///     synchronously inside the search window" at the WP3 boundary this package owns, since
+///     editing SqliteMemoryStore.cs/MemoryTools.cs is out of scope for this package.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
