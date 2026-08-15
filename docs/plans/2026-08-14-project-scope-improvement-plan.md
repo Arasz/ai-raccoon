@@ -491,6 +491,16 @@ than overlooked.*
 > fixing the race — is unchanged and still open**; the flake was observed again during this work, on
 > a different case each run. What changed is that its next failure will name its exception type.
 >
+> **AND IT DID — root cause found, 2026-08-15 (ADR-0062).** The next CI failure read
+> `unexpected-error: SqliteException`, with the server log showing **SQLite error 26, 'file is not a
+> database'**, hitting three services in one server at once. Error 26 is what SQLite returns when a
+> **plain** bank is opened **with** a key. `TestData.EnvVarGate` serialises the classes that mutate
+> the process-global `AIRACCOON_DB_PASSPHRASE` against each other, but **not** against the rest of
+> the suite — and `ToolRefusalsTests`, `WatchEventSourceTests`, `ServeRestartTests` and
+> `BackendLauncherTests` all open a real bank without taking that gate. **The `LoopbackPort`
+> hypothesis is disconfirmed outright: no port is involved.** The fix — a seam over the environment
+> read rather than serialising the suite's slowest tests — is scoped, not guessed.
+>
 > **Half 2 found two defects, not one (ADR-0062).** The package assumed a shared
 > `LoopbackPort.BindWithRetryAsync` cause. `IdleWatchdogTests` binds no port and holds **18**
 > `Task.Delay` calls where `ToolRefusalsTests` holds **zero**. The watchdog's race is root-caused,

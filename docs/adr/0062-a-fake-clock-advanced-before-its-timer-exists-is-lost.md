@@ -95,6 +95,50 @@ service's advance to be lost exactly as before.
 
 ## What is NOT fixed
 
+**`ToolRefusalsTests` — the cause is now known, and it is not a race at all.**
+
+ADR-0061's diagnostic did exactly what it was built for. The next CI failure named itself:
+
+```
+text should start with "access-denied:" but was "unexpected-error: SqliteException"
+
+Server log records at Warning and above:
+  [Error] WatchHostedService: Watch re-watch reconcile pass failed
+    -> SqliteException: SQLite Error 26: 'file is not a database'.
+  [Error] BankMaintenanceHostedService: Bank maintenance run failed
+    -> SqliteException: SQLite Error 26: 'file is not a database'.
+  [Error] ToolRefusals: "memory_write" failed with an unmapped SqliteException
+    -> SqliteException: SQLite Error 26: 'file is not a database'.
+```
+
+**SQLite error 26 is what you get opening a plain database with a key.** Three services in one server
+hit it simultaneously, because they were all opening the same bank.
+
+`TestData.cs` already names the mechanism: *"Serializes tests that mutate the process-global
+`AIRACCOON_DB_PASSPHRASE`"*. But `EnvVarGate` is a `SemaphoreSlim` that only the env-mutating classes
+hold — it serialises them against **each other**, not against the rest of the suite.
+`ToolRefusalsTests`, `WatchEventSourceTests`, `ServeRestartTests` and `BackendLauncherTests` all stand
+up real servers that open a bank, and none of them takes that gate. Any of them overlapping an
+encryption test's window opens its **plain** bank **with** a passphrase.
+
+That accounts for every observation, including the ones that refuted the earlier hypotheses:
+
+| Observation | Explained by |
+|---|---|
+| varying failure set per run | whichever bank-opening test lands in the window |
+| passes 34/34 in isolation | no concurrent env-mutating test |
+| unaffected by ten busy loops on ten cores | it is a **window**, not a timing budget |
+| several services failing at once | they share one bank |
+
+**The `LoopbackPort` hypothesis is disconfirmed outright** — no port is involved.
+
+**The fix is not in this ADR.** Serialising every server-based class against the gate would work and
+would also serialise the slowest tests in the suite; the better fix is to stop mutating process-global
+state, which means a seam over the environment read in `EnvEncryptionKeyProvider`. That is a package,
+not a footnote, and it is scoped rather than guessed at now that the cause is measured.
+
+## What was open before this was traced
+
 **`ToolRefusalsTests`.** Its race is a different defect and remains open:
 
 - It has no `Task.Delay` and no fake clock, so nothing above applies to it.
