@@ -28,7 +28,42 @@ public sealed class FakeEmbeddingEndpoint : IAsyncDisposable
 
     public string BaseUrl { get; private set; }
 
-    public List<CapturedEmbeddingRequest> Requests { get; } = [];
+    private readonly List<CapturedEmbeddingRequest> _requests = [];
+    private readonly Lock _requestsLock = new();
+
+    /// <summary>
+    ///     A snapshot, taken under the lock. This is an HTTP endpoint, so concurrent requests hitting
+    ///     it is the normal case, not an exotic one — an unguarded <c>List.Add</c> can lose an entry or
+    ///     throw, which would surface as a test flake blamed on the code under test rather than on the
+    ///     double.
+    /// </summary>
+    public IReadOnlyList<CapturedEmbeddingRequest> Requests
+    {
+        get
+        {
+            lock (_requestsLock)
+            {
+                return [.. _requests];
+            }
+        }
+    }
+
+    /// <summary>Resets between phases of a test; locked for the same reason the capture is.</summary>
+    public void ClearRequests()
+    {
+        lock (_requestsLock)
+        {
+            _requests.Clear();
+        }
+    }
+
+    internal void Capture(CapturedEmbeddingRequest request)
+    {
+        lock (_requestsLock)
+        {
+            _requests.Add(request);
+        }
+    }
 
     public async ValueTask DisposeAsync() => await _app.DisposeAsync();
 
@@ -75,7 +110,7 @@ public sealed class FakeEmbeddingEndpoint : IAsyncDisposable
                 }
             }
 
-            endpoint.Requests.Add(new CapturedEmbeddingRequest(model, inputs,
+            endpoint.Capture(new CapturedEmbeddingRequest(model, inputs,
                 context.Request.Headers.Authorization.ToString()));
 
             var data = new List<object>();

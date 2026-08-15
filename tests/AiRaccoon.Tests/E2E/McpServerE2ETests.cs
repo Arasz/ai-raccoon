@@ -210,9 +210,15 @@ public class McpServerE2ETests : IAsyncLifetime
         await CallAsync("memory_write",
             ("projectId", "acme"), ("content", "routed e2e fact"));
 
-        var request = _openAi.Requests.ShouldHaveSingleItem();
+        // The claim under test is routing (model, endpoint, api key), not how many requests the
+        // fake endpoint saw in total — a background maintenance sweep can legitimately add more
+        // (PR #335, run 31901946020; narrowed but not closed by PR #336). The duplicate-embed
+        // guarantee this count used to catch by accident now has its own deterministic test:
+        // WriteEmbedsContentExactlyOnceTests, built with no hosted service in the process.
+        var request = _openAi.Requests.FirstOrDefault(r => r.Inputs.Contains("routed e2e fact"));
+        request.ShouldNotBeNull();
         request.Model.ShouldBe("nomic-embed-text");
-        request.Inputs.ShouldBe(["routed e2e fact"]);
+        request.Authorization.ShouldBe("Bearer test-key-123");
 
         var stats = await CallAsync("memory_stats", ("projectId", "acme"));
         Text(stats).ShouldContain("\"pending\":0");

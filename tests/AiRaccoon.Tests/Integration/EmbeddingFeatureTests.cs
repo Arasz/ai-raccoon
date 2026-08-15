@@ -377,7 +377,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         }
 
         await SimulatePreWp5ShapeForProjectAsync("acme");
-        _openAi.Requests.Clear();
+        _openAi.ClearRequests();
 
         await _store.EmbedPendingAsync("acme", 1, TestContext.Current.CancellationToken);
 

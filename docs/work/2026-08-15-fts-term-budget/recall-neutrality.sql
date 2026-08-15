@@ -1,0 +1,11 @@
+CREATE VIRTUAL TABLE t USING fts5(v);
+INSERT INTO t VALUES('zebra filler filler filler');
+INSERT INTO t VALUES('raccoon filler filler filler');
+INSERT INTO t VALUES('zebra raccoon filler filler');
+INSERT INTO t VALUES('filler alpha beta gamma');
+SELECT '--- matched set, deduped ---';
+SELECT group_concat(rowid) FROM (SELECT rowid FROM t WHERE t MATCH 'zebra OR raccoon' ORDER BY rowid);
+SELECT '--- matched set, duplicated ---';
+SELECT group_concat(rowid) FROM (SELECT rowid FROM t WHERE t MATCH 'zebra OR zebra OR zebra OR raccoon' ORDER BY rowid);
+SELECT '--- matched set, capped (raccoon dropped) ---';
+SELECT group_concat(rowid) FROM (SELECT rowid FROM t WHERE t MATCH 'zebra' ORDER BY rowid);

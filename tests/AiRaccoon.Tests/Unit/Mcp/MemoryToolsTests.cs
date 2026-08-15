@@ -426,6 +426,43 @@ public class MemoryToolsTests
         result.Data!.Warning.ShouldBeNull();
     }
 
+    // Query-length warning (docs/adr/0072): always on, unlike the tiered regex/structural guard
+    // above — a fact about the bundled model's embedding window, not a togglable policy.
+
+    [Fact]
+    public async Task Search_WithAQueryOverTheLengthThreshold_ReturnsAWarning()
+    {
+        var query = new string('a', QueryLengthGuard.WarnThresholdChars + 1);
+
+        var result = await _tools.Search("acme", query, cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Data!.Warning.ShouldNotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task Search_WithAQueryAtExactlyTheLengthThreshold_HasNoWarning()
+    {
+        var query = new string('a', QueryLengthGuard.WarnThresholdChars);
+        query.Length.ShouldBe(QueryLengthGuard.WarnThresholdChars); // pin the fixture to the boundary first
+
+        var result = await _tools.Search("acme", query, cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Data!.Warning.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Search_WithTheGuardDisabled_StillWarnsOnAnOverLengthQuery()
+    {
+        // Proves the length warning is not gated by queryGuard.enabled.global -- it is a fact
+        // about the embedding window, not part of the togglable machine-output-shaped-query guard.
+        _store.Settings[QueryGuardConfigKeys.EnabledGlobal] = "false";
+        var query = new string('a', QueryLengthGuard.WarnThresholdChars + 1);
+
+        var result = await _tools.Search("acme", query, cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Data!.Warning.ShouldNotBeNullOrWhiteSpace();
+    }
+
     [Fact]
     public async Task Search_InShadowMode_RecordsTheRefuseVerdict_ButStillReturnsResults()
     {
