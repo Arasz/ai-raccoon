@@ -1,33 +1,25 @@
 name: build
 
+# No `paths:`/`paths-ignore:` filter on `pull_request:` below — on purpose.
+#
+# build-fast, build-bdd and build-slow are required status checks (see the
+# repository ruleset). If this workflow were trigger-filtered to skip doc-only
+# PRs, those checks would simply never report on such a PR, and branch
+# protection would block it forever waiting for a check that will never
+# arrive. That is not hypothetical: this workflow used to carry exactly that
+# `paths:` filter on `pull_request:`, and PR #301 (docs/work/checklist only)
+# merged with none of the three required checks in its status rollup — it
+# went through only because the merging account has ruleset bypass. Anyone
+# without bypass would have been stuck.
+#
+# Instead, the workflow always triggers and each heavy job always runs (see
+# `changes` below): a cheap diff classifies the PR, and build-fast/build-bdd/
+# build-slow skip their expensive steps — but the *job* itself still executes
+# and still reports success, which is what branch protection needs to see.
 on:
   push:
     branches: [main]
-    paths:
-        - 'src/**/*.cs'
-        - 'tests/**/*.cs'
-        - '**/*.csproj'
-        - '**/*.sln'
-        - '**/Directory.Build.props'
-        - '**/Directory.Packages.props'
-        - '**/*.feature'
-        - '**/*.onnx'
-        - 'nuget.config'
-        - 'scripts/verify-tool-package.py'
-        - '.github/workflows/build.yml'
-  pull_request:
-      paths:
-          - 'src/**/*.cs'
-          - 'tests/**/*.cs'
-          - '**/*.csproj'
-          - '**/*.sln'
-          - '**/Directory.Build.props'
-          - '**/Directory.Packages.props'
-          - '**/*.feature'
-          - '**/*.onnx'
-          - 'nuget.config'
-          - 'scripts/verify-tool-package.py'
-          - '.github/workflows/build.yml'
+  pull_request: {}
 
 permissions:
   contents: read
@@ -39,21 +31,75 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  changes:
+    # Single source of truth for "does this diff affect build/test outcome".
+    # build-fast/build-bdd/build-slow each read this job's `code` output and
+    # skip their expensive steps when it is 'false' — see the note on
+    # `pull_request:` above for why this lives in a job instead of a trigger
+    # filter.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Classify the diff
+        id: filter
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+
+          # Mirrors the paths this workflow used to trigger on. Anything not
+          # matched here (docs/**, *.md, etc.) is treated as safe to skip.
+          CODE_REGEX='^src/.*\.cs$|^tests/.*\.cs$|\.csproj$|\.sln$|(^|/)Directory\.Build\.props$|(^|/)Directory\.Packages\.props$|\.feature$|\.onnx$|^nuget\.config$|^scripts/verify-tool-package\.py$|^\.github/workflows/build\.yml$'
+
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BASE" 2>/dev/null; then
+            echo "No usable base commit (new branch or force-push); treating as a code change."
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          CHANGED=$(git diff --name-only "$BASE" "$HEAD")
+          echo "Changed files:"
+          echo "$CHANGED"
+
+          if echo "$CHANGED" | grep -qE "$CODE_REGEX"; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build-fast:
+    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: true
     steps:
+      - name: Skip (doc-only change)
+        if: needs.changes.outputs.code != 'true'
+        run: echo "No code-relevant paths changed; skipping build and tests."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: needs.changes.outputs.code == 'true'
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        if: needs.changes.outputs.code == 'true'
         with:
           dotnet-version: 10.0.x
       - name: Build
+        if: needs.changes.outputs.code == 'true'
         # nuget.config references the gitignored local feed .nupkg-local/; make it
         # exist on the fresh runner or restore fails with NU1301.
         run: mkdir -p .nupkg-local && dotnet build --nologo
       - name: Fast tests
+        if: needs.changes.outputs.code == 'true'
         # Speed=Fast only; Speed=Slow is gated by build-slow below and BDD by
         # build-bdd. The three filters together cover the suite — see
         # tests/AiRaccoon.Tests/TestCategories.cs for the trait split.
@@ -62,18 +108,26 @@ jobs:
   build-bdd:
     # Separate job, not a second step: it runs beside build-fast rather than after
     # it, so gating the BDD scenarios costs concurrency instead of wall-clock.
+    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: true
     steps:
+      - name: Skip (doc-only change)
+        if: needs.changes.outputs.code != 'true'
+        run: echo "No code-relevant paths changed; skipping build and tests."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: needs.changes.outputs.code == 'true'
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        if: needs.changes.outputs.code == 'true'
         with:
           dotnet-version: 10.0.x
       - name: Build
+        if: needs.changes.outputs.code == 'true'
         run: mkdir -p .nupkg-local && dotnet build --nologo
       - name: BDD scenarios
+        if: needs.changes.outputs.code == 'true'
         # Category=bdd comes from the @bdd tag on each feature file. The scenarios
         # carry no Speed trait, so Speed=Fast never matched them and they gated
         # nothing until this job existed. BddGateCoverageTests fails if a feature
@@ -89,6 +143,7 @@ jobs:
     #
     # Runs beside the other two jobs, so the coverage costs concurrency, not wall
     # clock (measured: the full suite is ~3m30s of test time).
+    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -99,15 +154,23 @@ jobs:
       DOTNET_DbgMiniDumpType: 2
       DOTNET_DbgMiniDumpName: ${{ github.workspace }}/dumps/coredump.%p.dmp
     steps:
+      - name: Skip (doc-only change)
+        if: needs.changes.outputs.code != 'true'
+        run: echo "No code-relevant paths changed; skipping build and tests."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: needs.changes.outputs.code == 'true'
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        if: needs.changes.outputs.code == 'true'
         with:
           dotnet-version: 10.0.x
       - name: Build
+        if: needs.changes.outputs.code == 'true'
         run: mkdir -p .nupkg-local && dotnet build --nologo
       - name: Prepare dump directory
+        if: needs.changes.outputs.code == 'true'
         run: mkdir -p dumps
       - name: Slow tests (integration + E2E)
+        if: needs.changes.outputs.code == 'true'
         # GoldenFileTests skips itself off osx-arm64 — the golden reference is a
         # host-specific ONNX artifact, not a portable expectation.
         run: dotnet test --filter "Speed=Slow" --no-build --nologo -v m
