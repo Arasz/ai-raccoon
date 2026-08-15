@@ -774,7 +774,37 @@ fixture-pinning workaround it forced. Six RIDs ship with no PR gate on four of t
 - ADR-0048 claims "a chunk is a well-formed markdown fragment"; what it delivers is fence balance. A 200-row table splits with 33 of 34 chunks carrying orphaned body rows. Narrow the claim or widen the guarantee.
 - `docs/reference/agent-memory-server.md` omits `memory_promotion_list`'s `includeFullValue` — the one existing route to a full entry body.
 
-### WP18 · Python packaging honesty — ⏳ **OPEN, confirmed** — **ci-docs F6 + F7**
+### WP18 · Python packaging honesty — ✅ **IN REVIEW (PR #322)** — **ci-docs F6 + F7**
+
+> **Shipped.** `[project.dependencies]` declares `httpx`, `numpy`, `scikit-learn` and `pytest`;
+> `uv.lock` regenerated 8 → 350 lines and verified end-to-end (`uv run pytest`, 115 passed);
+> `requires-python` raised `>=3.9` → `>=3.12`, because `>=3.9` became dishonest the moment real
+> dependencies were declared. `docs/how-to/run-the-python-scripts.md` is new — there was **no**
+> documentation anywhere for running these scripts, which is half of why a clean checkout could not.
+>
+> **Two briefed facts were disproved, which is a result and not a nuisance.** `uv` was genuinely
+> absent and `pip install --user uv` genuinely PEP-668-refused — but `pipx install uv` bypasses both,
+> so the lockfile *could* be regenerated after all. The brief said it very likely could not.
+>
+> **The derived gate is `scripts/tests/test_dependencies_declared.py`**: imports read from the `.py`
+> files with `ast`, declarations parsed from `pyproject.toml` with `tomllib` — two independent
+> sources, so it cannot be satisfied by comparing a list against itself. It found `pytest`, which the
+> brief's hand-listed imports had missed; the derivation caught what the human enumeration did not.
+>
+> **It shipped with a second test, added in review, because the first could pass vacuously.** An
+> empty scan satisfies "no missing dependencies" for the same reason a correct one does. Pointing
+> `rglob` at a non-existent extension leaves the dependency check **green** and only the new guard
+> red — which is the entire argument for it.
+>
+> The three abandoned checklist scripts (1,671 lines, matching the plan's count exactly) are deleted.
+> Verified unreferenced independently of the agent that deleted them: the only hits repo-wide are the
+> review lane doc and one script's own comment naming its predecessor. The manual-checklist *process*
+> they implemented was itself retired on 2026-08-14 in favour of the JSON-template process, so none
+> was a live release path under an old name.
+>
+> **This is not a CI gate.** Python tests were ruled out of CI scope by the owner previously, and the
+> change-filter correctly classifies this PR as non-code — its .NET jobs skip in ~5 s. The test
+> protects local runs, not merges. Stated so nobody reads a gate into it.
 
 > **Verified, 2026-08-15.** `pyproject.toml` has no `dependencies` key at all — not an empty one —
 > while `scripts/` imports `numpy`, `httpx` and three `sklearn` modules. `uv.lock` is still 8 lines.
