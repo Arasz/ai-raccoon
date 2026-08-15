@@ -1,0 +1,15 @@
+CREATE VIRTUAL TABLE t USING fts5(v);
+INSERT INTO t VALUES('zebra filler filler filler');
+INSERT INTO t VALUES('raccoon filler filler filler');
+INSERT INTO t VALUES('zebra raccoon filler filler');
+INSERT INTO t VALUES('filler alpha beta gamma');
+INSERT INTO t VALUES('filler alpha beta gamma');
+INSERT INTO t VALUES('filler alpha beta gamma');
+INSERT INTO t VALUES('filler alpha beta gamma');
+INSERT INTO t VALUES('filler alpha beta gamma');
+INSERT INTO t VALUES('filler alpha beta gamma');
+INSERT INTO t VALUES('filler alpha beta gamma');
+SELECT '--- A: zebra OR raccoon (each once) ---';
+SELECT rowid, round(bm25(t),4) FROM t WHERE t MATCH 'zebra OR raccoon' ORDER BY bm25(t);
+SELECT '--- B: zebra x3 OR raccoon (zebra repeated) ---';
+SELECT rowid, round(bm25(t),4) FROM t WHERE t MATCH 'zebra OR zebra OR zebra OR raccoon' ORDER BY bm25(t);
