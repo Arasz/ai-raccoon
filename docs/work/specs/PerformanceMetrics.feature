@@ -80,10 +80,21 @@ Feature: Performance metrics for AiRaccoon's own development
 
   Rule: Every operation is measured, not a chosen subset
     # Owner: "in - we want a complete view."
+    # MOVED, stage 05 batch 2, owner: "move scenario 3 to specs." The proposed scenario 'A tool that
+    # records no measurement fails the coverage test' described OUR TEST SUITE, not the product --
+    # its `When` was "the coverage test runs", which nothing in AiRaccoon can trigger. It becomes a
+    # named GATE in spec.json instead: a tool-call integration test asserting every tool on the
+    # derived inventory produces at least one measurement, watched red by silencing one tool.
+    # The rule is unchanged; only where its enforcement is recorded moved.
 
     Scenario: Every tool on the MCP surface produces at least one measurement when called
+      Given the derived tool inventory
+      When I call each tool once
+      Then each one has recorded at least one measurement
     Scenario: An operation added since the last release has recorded nothing yet
-    Scenario: A tool that records no measurement fails the coverage test
+      Given a tool that has never been called
+      When I call memory_performance
+      Then the report has no series for that tool
 
   Rule: The MCP tool returns the report as JSON to the calling agent
     # RESOLVED, stage 04 batch 3, owner: "2. yes." => a window with no measurements in it is an
@@ -92,13 +103,37 @@ Feature: Performance metrics for AiRaccoon's own development
     # tool being broken.
 
     Scenario: An agent calling memory_performance gets JSON, not prose
+      When I call memory_performance
+      Then the response parses as JSON
+      And it carries a series for each measured operation
     Scenario: A window with no measurements is an empty series, not an error
+      Given a bank with no measurements in the last hour
+      When I call memory_performance for a window of one hour
+      Then the report is an empty series
+      And the tool does not error
 
   Rule: The CLI writes the report to a file and returns its path
     # Owner: "CLI? return path to saved report file - probably in the dir where CLI was accessed."
+    # ADDED, stage 05 batch 2, owner: "lets fallback to tmp." Found by writing the steps: a rule that
+    # promises a path back has to say what happens when the invocation directory cannot be written.
+    # An unwritable directory falls back to the temp directory rather than erroring — the report is
+    # the point, and its location is not worth failing the command over. The path returned is always
+    # where the file actually went, never where it was meant to go.
 
     Scenario: The CLI prints a path and the file exists at it
+      When I run ai-raccoon performance
+      Then it prints a path
+      And a report file exists at that path
     Scenario: The report lands in the invocation directory, not the data root
+      Given I am in a directory that is not the data root
+      When I run ai-raccoon performance
+      Then the report file is in that directory
+
+    Scenario: A CLI run in an unwritable directory falls back to the temp directory
+      Given I am in a directory that cannot be written
+      When I run ai-raccoon performance
+      Then the report file is in the temp directory
+      And the printed path is where the file actually went
 
   Rule: Correlation dimensions are sampled periodically, not carried on every measurement
     # Owner picked the periodic bank-shape sample over per-row and per-checkpoint capture, and
