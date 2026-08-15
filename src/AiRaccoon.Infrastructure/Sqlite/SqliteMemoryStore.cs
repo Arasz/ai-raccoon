@@ -160,7 +160,10 @@ public sealed partial class SqliteMemoryStore(
                 cancellationToken).ConfigureAwait(false);
         }
 
-        await _embedder.EmbedIfConfiguredAsync(connection, row.Id, request.Content, cancellationToken).ConfigureAwait(false);
+        // chunks[0], not request.Content: this row STORES chunks[0], and embedding the whole
+        // document here gave it a vector built from the document truncated to the window — the
+        // text chunked, the vector not (ADR-0073).
+        await _embedder.EmbedIfConfiguredAsync(connection, row.Id, chunks[0], cancellationToken).ConfigureAwait(false);
 
         // Shadow mode (ADR-0039, amended): hands the stored content straight to the detector seam
         // to record what it would have flagged (currently a no-op: no scoring model is shipped).

@@ -31,6 +31,7 @@ flowchart LR
 
 ## What's new
 
+- **A long memory_write now matches on the chunk it stored, not the first page of the document.** (1.19.1) [ADR-0073](docs/adr/0073-a-write-embeds-the-chunk-it-stored.md)
 - **A search query too long for the model now says so in the response, and the tool explains the limit.** (1.19.0) [ADR-0071](docs/adr/0071-a-query-is-trimmed-deliberately-and-said-so.md)
 - **A search query too long for the model is trimmed openly, and the log says so.** (1.18.0) [ADR-0071](docs/adr/0071-a-query-is-trimmed-deliberately-and-said-so.md)
 - **The bank now compacts itself, and repairs entries too long to be searchable.** (1.17.0) [ADR-0070](docs/adr/0070-maintenance-is-a-list-of-jobs-with-a-ledger.md)
