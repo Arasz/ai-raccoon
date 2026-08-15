@@ -136,9 +136,9 @@ public sealed class AccessModeGuardTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new MemoryEntry("h", "p.md", "project:acme", "v", 1));
 
-        public override Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
+        public override Task<SearchResults> SearchAsync(SearchQuery query,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<MemorySearchResult>>([]);
+            Task.FromResult(new SearchResults([], SearchTimings.Empty));
 
         public override Task<bool> DeleteAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>

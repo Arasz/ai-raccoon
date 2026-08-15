@@ -28,11 +28,15 @@ public static class RegisteredTools
         }
     }
 
-    /// <summary>Tool names, ordinal-sorted so a caller can compare against a sorted actual set.</summary>
+    /// <summary>
+    ///     Tool names, ordinal-sorted so a caller can compare against a sorted actual set. No
+    ///     fallback to the method name: <see cref="AiRaccoon.Tests.Unit.Mcp.McpToolInventoryTests.AllTools_DeclareAnExplicitName" />
+    ///     (F10) guarantees every attribute's <c>Name</c> is explicit, so the ambiguous case cannot exist.
+    /// </summary>
     public static IReadOnlyList<string> Names() =>
     [
         .. Methods()
-            .Select(x => x.Attr.Name ?? x.Method.Name)
+            .Select(x => x.Attr.Name!)
             .OrderBy(name => name, StringComparer.Ordinal)
     ];
 

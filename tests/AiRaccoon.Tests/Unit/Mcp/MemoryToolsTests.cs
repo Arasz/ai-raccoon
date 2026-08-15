@@ -7,6 +7,7 @@ using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.QueryGuard;
+using AiRaccoon.Core.Metrics;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Sync;
@@ -44,7 +45,7 @@ public class MemoryToolsTests
         var workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
         var gate = new ToolGate(access, _queue);
-        _tools = new MemoryTools(_store, gate, new NoOpSearchQualityService(), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), NullLogger<MemoryTools>.Instance);
+        _tools = new MemoryTools(_store, gate, new NoOpSearchQualityService(), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), NullLogger<MemoryTools>.Instance);
         _share = new ShareTools(_store, gate, new ShareExtractService(_store,
             new SharedExtractionRunner(_store, new SharedExtractionService(), _queue,
                 new FakeTimeProvider(FixedNow)), _queue));
@@ -300,6 +301,78 @@ public class MemoryToolsTests
         _store.LastQuery.ProjectId.ShouldBe("acme");
     }
 
+    /// <summary>WP10: the six SearchTimings phases reach the recorder, each tagged with the query hash and this call's own correlation id — never the query text.</summary>
+    [Fact]
+    public async Task Search_RecordsSixPhaseMeasurements_TaggedWithHashAndCorrelationId_NeverQueryText()
+    {
+        var recorder = new RecordingMeasurementRecorder();
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+            new NoOpSearchQualityService(), new QueryGuardService(_store),
+            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
+
+        var envelope = await tools.Search("acme", "widgets", cancellationToken: TestContext.Current.CancellationToken);
+        var correlationId = envelope.Meta.CorrelationId.ShouldNotBeNull();
+
+        recorder.Recorded.Select(m => m.Name).ShouldBe(SearchTimings.PhaseNames, ignoreOrder: true);
+        recorder.Recorded.ShouldAllBe(m => m.QueryHash == ContentHash.OfValue("widgets"));
+        recorder.Recorded.ShouldAllBe(m => m.CorrelationId == correlationId);
+        recorder.Recorded.ShouldAllBe(m => m.Tags == null);
+    }
+
+    /// <summary>
+    ///     Finding 6: MetricsReportService windows samples on an injected TimeProvider, so a
+    ///     phase measurement stamped with DateTimeOffset.UtcNow instead is invisible to a report
+    ///     built on a fake clock. RecordedAt must come from the same injected clock the report uses.
+    /// </summary>
+    [Fact]
+    public async Task Search_RecordsSixPhaseMeasurements_RecordedAt_FromTheInjectedTimeProvider()
+    {
+        var recorder = new RecordingMeasurementRecorder();
+        var time = new FakeTimeProvider(FixedNow);
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+            new NoOpSearchQualityService(), new QueryGuardService(_store),
+            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance, time);
+
+        await tools.Search("acme", "widgets", cancellationToken: TestContext.Current.CancellationToken);
+
+        recorder.Recorded.ShouldAllBe(m => m.RecordedAt == FixedNow);
+    }
+
+    /// <summary>AC4: a throwing recorder must never fail or slow the search — best effort, per IMeasurementRecorder's own contract plus MemoryTools's own defensive catch.</summary>
+    [Fact]
+    public async Task Search_WhenTheRecorderThrows_StillReturnsResults()
+    {
+        var recorder = new RecordingMeasurementRecorder { ThrowOnRecord = new InvalidOperationException("boom") };
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+            new NoOpSearchQualityService(), new QueryGuardService(_store),
+            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
+
+        var envelope = await tools.Search("acme", "widgets", cancellationToken: TestContext.Current.CancellationToken);
+
+        envelope.Data.ShouldNotBeNull();
+        recorder.Recorded.ShouldBeEmpty("the throwing recorder never got to append anything");
+    }
+
+    /// <summary>
+    ///     Spec scenario 19: "a failed metric write is not retried into the caller's latency" —
+    ///     exercised on the caller's own path (RecordPhaseMeasurements' synchronous loop inside
+    ///     MemoryTools.Search), not the async flusher's batch write. The internal-state assertion is
+    ///     a call count, not just "no exception was thrown": one attempt total, never a retry loop.
+    /// </summary>
+    [Fact]
+    public async Task Search_WhenTheRecorderThrows_TheFailedWriteIsNotAttemptedAgain()
+    {
+        var recorder = new RecordingMeasurementRecorder { ThrowOnRecord = new InvalidOperationException("boom") };
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+            new NoOpSearchQualityService(), new QueryGuardService(_store),
+            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
+
+        await tools.Search("acme", "widgets", cancellationToken: TestContext.Current.CancellationToken);
+
+        recorder.CallCount.ShouldBe(1,
+            "the first phase measurement's write fails and RecordPhaseMeasurements' loop stops there — nothing retries it");
+    }
+
     [Fact]
     public async Task Search_WithFusionParameters_DelegatesThemOnTheQuery()
     {
@@ -434,7 +507,7 @@ public class MemoryToolsTests
     {
         var logger = new FakeLogger<MemoryTools>();
         var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
-            new NoOpSearchQualityService(), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), logger);
+            new NoOpSearchQualityService(), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), logger);
         _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
 
         var result = await tools.Search("acme", RealHermesProcessNotification,
@@ -450,7 +523,7 @@ public class MemoryToolsTests
     {
         var logger = new FakeLogger<MemoryTools>();
         var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
-            new NoOpSearchQualityService(), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), logger);
+            new NoOpSearchQualityService(), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), logger);
         _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
 
         await tools.Search("acme", "why did the auth build start failing",
@@ -464,7 +537,7 @@ public class MemoryToolsTests
     {
         var logger = new FakeLogger<MemoryTools>();
         var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
-            new NoOpSearchQualityService(), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), logger);
+            new NoOpSearchQualityService(), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), logger);
         _store.Settings[QueryGuardConfigKeys.EnabledGlobal] = "false";
         _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
 
@@ -535,7 +608,7 @@ public class MemoryToolsTests
     {
         var logger = new FakeLogger<MemoryTools>();
         var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
-            new NoOpSearchQualityService(), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), logger);
+            new NoOpSearchQualityService(), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), logger);
         _store.Settings[QueryGuardConfigKeys.StructuralEnabledGlobal] = "true";
         _store.Settings[QueryGuardConfigKeys.StructuralThresholdGlobal] = "0.0";
         _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
@@ -776,11 +849,11 @@ public class MemoryToolsTests
             return WriteError is not null ? Task.FromException<MemoryEntry>(WriteError) : Task.FromResult(Entry);
         }
 
-        public override Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
+        public override Task<SearchResults> SearchAsync(SearchQuery query,
             CancellationToken cancellationToken = default)
         {
             LastQuery = query;
-            return Task.FromResult<IReadOnlyList<MemorySearchResult>>([]);
+            return Task.FromResult(new SearchResults([], SearchTimings.Empty));
         }
 
         public override Task<bool> DeleteAsync(string projectId, string hash,

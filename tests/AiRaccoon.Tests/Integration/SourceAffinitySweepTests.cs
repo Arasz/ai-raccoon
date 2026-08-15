@@ -285,11 +285,11 @@ public sealed class SourceAffinitySweepTests : IDisposable
     private async Task<IReadOnlyList<MemorySearchResult>> SearchAsync(
         string text, (double Lambda, double Threshold, DocScoreFormula Formula) point,
         CancellationToken cancellationToken) =>
-        await _store.SearchAsync(new SearchQuery(
+        (await _store.SearchAsync(new SearchQuery(
             ProjectId, text, SearchScope.Project,
             Limit: SearchLimit, MinRelativeScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 1,
             SourceLambda: point.Lambda, ConsolidationThreshold: point.Threshold,
-            DocScoreFormula: point.Formula), cancellationToken);
+            DocScoreFormula: point.Formula), cancellationToken)).Results;
 
     private (int? ExactRank, int? FileRank) MapRanks(
         BaselineQuery query, IReadOnlyList<MemorySearchResult> results)

@@ -53,8 +53,8 @@ public sealed class SqliteMemoryStoreDegradationTests : IDisposable
         await _store.AddContentAsync("acme", "notes.md", "the quick brown fox", null,
             "notes.md", "getting-started", TestContext.Current.CancellationToken);
 
-        var results = await _store.SearchAsync(
-            new SearchQuery("acme", "notes.md#getting-started"), TestContext.Current.CancellationToken);
+        var results = (await _store.SearchAsync(
+            new SearchQuery("acme", "notes.md#getting-started"), TestContext.Current.CancellationToken)).Results;
 
         results.ShouldNotBeEmpty("the anchor's own chunk is the answer to a path query");
         _logger.Collector.GetSnapshot().ShouldNotContain(r => r.Level == LogLevel.Warning);
@@ -66,8 +66,8 @@ public sealed class SqliteMemoryStoreDegradationTests : IDisposable
         await _store.WriteAsync(new MemoryWriteRequest("acme", "the quick brown fox"),
             TestContext.Current.CancellationToken);
 
-        var results = await _store.SearchAsync(
-            new SearchQuery("acme", "quick"), TestContext.Current.CancellationToken);
+        var results = (await _store.SearchAsync(
+            new SearchQuery("acme", "quick"), TestContext.Current.CancellationToken)).Results;
 
         results.ShouldNotBeEmpty();
         _logger.Collector.GetSnapshot().ShouldNotContain(r => r.Level == LogLevel.Warning);

@@ -337,12 +337,12 @@ public sealed class RrfParameterSweepTests : IDisposable
 
     private async Task<IReadOnlyList<MemorySearchResult>> SearchAsync(
         string text, SweepPoint point, CancellationToken cancellationToken) =>
-        await _store.SearchAsync(new SearchQuery(
+        (await _store.SearchAsync(new SearchQuery(
             ProjectId, text, SearchScope.Project,
             Limit: SearchLimit, MinRelativeScore: point.MinRelativeScore, RrfK: point.K,
             FtsWeight: point.FtsWeight, VectorWeight: point.VectorWeight,
             SourceLambda: FixedSourceLambda, ConsolidationThreshold: FixedConsolidationThreshold,
-            DocScoreFormula: DocScoreFormula.Max, CandidateWindow: point.Window), cancellationToken);
+            DocScoreFormula: DocScoreFormula.Max, CandidateWindow: point.Window), cancellationToken)).Results;
 
     private (int? ExactRank, int? FileRank) MapRanks(
         BaselineQuery query, IReadOnlyList<MemorySearchResult> results)

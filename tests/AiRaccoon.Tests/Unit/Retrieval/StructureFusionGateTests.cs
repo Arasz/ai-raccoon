@@ -77,9 +77,9 @@ public sealed class StructureFusionGateTests : IDisposable
     [Fact]
     public async Task VectorOnlySearch_GenericDecisionQuery_RanksStructureMatchedChunkFirst()
     {
-        var results = await _store.SearchAsync(new SearchQuery(
+        var results = (await _store.SearchAsync(new SearchQuery(
             ProjectId, Query, SearchScope.Project, Limit: 5, MinRelativeScore: 0.0,
-            FtsWeight: 0, VectorWeight: 1), TestContext.Current.CancellationToken);
+            FtsWeight: 0, VectorWeight: 1), TestContext.Current.CancellationToken)).Results;
 
         results.ShouldNotBeEmpty();
         var expectedHash = await ExpectedTopHashAsync();

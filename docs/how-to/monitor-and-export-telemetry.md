@@ -2,6 +2,12 @@
 
 Inspect live server metrics, capture diagnostic traces, and export OpenTelemetry (OTLP) data.
 
+> This page covers the Meter/ActivitySource/OTLP path below — unchanged by AiRaccoon's
+> self-instrumentation. For what the server can tell you about its own performance **without** a
+> collector — a persisted `metrics` table, read back with the `memory_performance` MCP tool — see
+> [Read back performance metrics](read-performance-metrics.md). The two are complementary, not
+> alternatives: this page's Meter keeps exporting the same counters and spans either way.
+
 ---
 
 ## Telemetry architecture
@@ -96,6 +102,8 @@ Per [ADR-0009](../adr/0009-otlp-export.md) and [SECURITY.md](../../SECURITY.md):
 
 ## Related documentation
 
+- [Read back performance metrics](read-performance-metrics.md) — the self-instrumentation path
+  that needs no collector
 - [ADR-0002: OpenTelemetry observability](../adr/0002-opentelemetry-observability.md)
 - [ADR-0009: OTLP export privacy and boundaries](../adr/0009-otlp-export.md)
 - [Security threat model](../../SECURITY.md#what-leaves-the-process-when-otlp-export-is-on)

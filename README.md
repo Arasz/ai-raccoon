@@ -31,6 +31,7 @@ flowchart LR
 
 ## What's new
 
+- **AiRaccoon now measures its own performance, and you can ask it.** Per-tool and per-search-phase durations, persisted and read back with `memory_performance` — no OTLP collector required. (1.20.0) [ADR-0074](docs/adr/0074-a-capped-buffer-satisfies-the-channel-rule-and-reshapes-g4.md) · [How-to](docs/how-to/read-performance-metrics.md)
 - **A long memory_write now matches on the chunk it stored, not the first page of the document.** (1.19.1) [ADR-0073](docs/adr/0073-a-write-embeds-the-chunk-it-stored.md)
 - **A search query too long for the model now says so in the response, and the tool explains the limit.** (1.19.0) [ADR-0071](docs/adr/0071-a-query-is-trimmed-deliberately-and-said-so.md)
 - **A search query too long for the model is trimmed openly, and the log says so.** (1.18.0) [ADR-0071](docs/adr/0071-a-query-is-trimmed-deliberately-and-said-so.md)

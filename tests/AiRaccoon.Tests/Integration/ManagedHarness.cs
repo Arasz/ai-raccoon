@@ -88,7 +88,7 @@ public sealed class ManagedHarness
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            var results = await Store.SearchAsync(new SearchQuery(
+            var results = (await Store.SearchAsync(new SearchQuery(
                 ProjectId,
                 query.Text,
                 SearchScope.Project,
@@ -96,7 +96,7 @@ public sealed class ManagedHarness
                 MinRelativeScore: 0.0,
                 RrfK: point.K,
                 FtsWeight: point.FtsWeight,
-                VectorWeight: point.VectorWeight), cancellationToken).ConfigureAwait(false);
+                VectorWeight: point.VectorWeight), cancellationToken).ConfigureAwait(false)).Results;
             return [.. results.Select(result => result.Path)];
         }
         finally

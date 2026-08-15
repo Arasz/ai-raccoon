@@ -4,6 +4,7 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Memory.QueryGuard.Structural;
+using AiRaccoon.Core.Metrics;
 using AiRaccoon.Core.SearchQuality;
 using FluentValidation;
 using JetBrains.Annotations;
@@ -21,8 +22,13 @@ public sealed partial class MemoryTools(
     ISearchQualityService qualityService,
     IQueryGuardService queryGuard,
     IMemoryWriteService writes,
-    ILogger<MemoryTools> logger)
+    IMeasurementRecorder measurements,
+    ILogger<MemoryTools> logger,
+    TimeProvider? timeProvider = null)
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+
+
     private const string TnMemoryWrite = "memory_write";
     private const string TnMemoryGet = "memory_get";
     private const string TnMemorySearch = "memory_search";
@@ -149,21 +155,13 @@ public sealed partial class MemoryTools(
             throw new McpException($"invalid-params: {guard.Verdict.Guidance}");
         }
 
-        var results = await store.SearchAsync(searchQuery, cancellationToken);
+        var searchResults = await store.SearchAsync(searchQuery, cancellationToken);
+        var results = searchResults.Results;
 
         var correlationId = Guid.CreateVersion7().ToString("N");
-        try
-        {
-            await qualityService.RecordSearchAsync(
-                correlationId, query, scope, projectId, null,
-                results.Count,
-                [.. results.Where(r => r.SourceFile is not null).Select(r => r.SourceFile!).Take(5)],
-                cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to record search quality for correlation {CorrelationId}", correlationId);
-        }
+        await qualityService.RecordSearchSafeAsync(correlationId, query, scope, projectId, results.Count,
+            [.. results.Where(r => r.SourceFile is not null).Select(r => r.SourceFile!).Take(5)], cancellationToken);
+        RecordPhaseMeasurements(searchResults.Timings, ContentHash.OfValue(query), correlationId, projectId);
 
         // QueryLengthGuard is always on -- a fact about the embedding window, not a togglable
         // policy like the guard above -- so it is evaluated unconditionally, never through
@@ -322,11 +320,37 @@ public sealed partial class MemoryTools(
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record EmbedResult(int Processed, int Pending);
 
+    /// <summary>
+    ///     Tags each of the six search phases with the query hash and correlation id and hands them
+    ///     to the recorder — never the query text itself (SqliteMetricsStore's save-time allowlist
+    ///     rejects it). Best-effort: a throwing recorder must never fail or slow the search (WP3).
+    /// </summary>
+    private void RecordPhaseMeasurements(SearchTimings timings, string queryHash, string correlationId, string projectId)
+    {
+        try
+        {
+            var recordedAt = _timeProvider.GetUtcNow();
+            foreach (var (name, value) in timings.Phases())
+            {
+                measurements.Record(new Measurement(name, MeasurementKind.Histogram, value.TotalMilliseconds,
+                    "ms", recordedAt, projectId, queryHash, correlationId));
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.PhaseMeasurementRecordingFailed(logger, ex, correlationId);
+        }
+    }
+
     private static partial class Log
     {
         /// <summary>Kept here, not in Core: the guard decides, the host reports (docs/adr/0065).</summary>
         [LoggerMessage(EventId = 920, Level = LogLevel.Information,
             Message = "Query guard (shadow) would have returned {Tier} for project {ProjectId} via {PolicyName}")]
         public static partial void QueryGuardShadowVerdict(ILogger logger, string tier, string projectId, string policyName);
+
+        [LoggerMessage(EventId = 921, Level = LogLevel.Warning,
+            Message = "Failed to record search phase measurements for correlation {CorrelationId}")]
+        public static partial void PhaseMeasurementRecordingFailed(ILogger logger, Exception exception, string correlationId);
     }
 }

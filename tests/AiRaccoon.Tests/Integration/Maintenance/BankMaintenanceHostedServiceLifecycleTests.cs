@@ -34,7 +34,7 @@ public sealed class BankMaintenanceHostedServiceLifecycleTests : IDisposable
         _logger = new FakeLogger<BankMaintenanceHostedService>();
         _service = new BankMaintenanceHostedService(_factory, _time, TestTelemetry.None, _logger, new FakeWatchMemoryStore(),
             NoOpNoiseEntryStore.Instance,
-            new SqlitePromotionQueueStore(_factory, _time), new SqliteSearchQualityService(_factory));
+            new SqlitePromotionQueueStore(_factory, _time), new SqliteSearchQualityService(_factory, Microsoft.Extensions.Logging.Abstractions.NullLogger<SqliteSearchQualityService>.Instance));
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);

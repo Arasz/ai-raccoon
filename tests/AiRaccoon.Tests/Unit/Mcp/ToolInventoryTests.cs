@@ -56,6 +56,7 @@ public class ToolInventoryTests
         tools.ShouldContain("memory_watch_remove");
         tools.ShouldContain("memory_record_followthrough");
         tools.ShouldContain("memory_record_grade");
+        tools.ShouldContain("memory_performance");
     }
 
     /// <summary>Assert that every [McpServerTool].Name has a matching Tn const in its own class.</summary>

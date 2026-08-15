@@ -186,6 +186,26 @@ ai-raccoon retrieval alpha show        # 0.5
 ai-raccoon retrieval alpha set 0.7     # 0..1; weights the structure vector against the content vector
 ```
 
+### Self-instrumentation (metrics)
+
+Controls the background writer for AiRaccoon's own performance measurements (see
+[Read back performance metrics](read-performance-metrics.md)). Recording itself cannot be turned
+off — these three settings only tune the writer, not whether it runs.
+
+| Setting | Key | Default |
+|---|---|---|
+| Buffer capacity | `metrics.buffer-capacity.global` | `1000` measurements |
+| Flush interval | `metrics.flush-interval-seconds.global` | `30` seconds |
+| Hot-table retention | `metrics.retention-days.global` (best-effort — holding more is not a violation) | `28` days |
+
+**No CLI verb sets these yet** — unlike the families above, there is no `ai-raccoon metrics …`
+command. They live in the settings table with hard-coded defaults
+(`AiRaccoon.Core.Memory.MetricsConfigKeys`). A row written directly into `settings` is honoured:
+`MetricsFlusher` re-reads the flush interval before every tick (so a change applies on the next
+one, no restart needed) but reads buffer capacity only once at startup; `MetricsRetentionJob`
+re-reads the retention window on every maintenance pass. There is just no supported command that
+writes any of these rows today.
+
 ---
 
 ## Related documentation

@@ -114,11 +114,11 @@ public sealed class PlatformNumericsProbe : IDisposable
         var scores = new List<double>();
         foreach (var query in LoadQueries().Where(q => GateQueryIds.Contains(q.Id) && q.ExpectedSource is not null))
         {
-            var results = await store.SearchAsync(new SearchQuery(
+            var results = (await store.SearchAsync(new SearchQuery(
                 ProjectId, query.Query, SearchScope.Project,
                 Limit: SearchLimit, MinRelativeScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 1,
                 SourceLambda: 0.1, ConsolidationThreshold: 0.1,
-                DocScoreFormula: DocScoreFormula.Max), TestContext.Current.CancellationToken);
+                DocScoreFormula: DocScoreFormula.Max), TestContext.Current.CancellationToken)).Results;
             var relevant = _fileHashes[CorpusHashMap.FileKey(query.ExpectedSource!)];
             var hashes = results.Select(r => r.Hash).ToList();
             var ndcg = RetrievalMetrics.NdcgAtK(hashes, relevant, RankCutoff);

@@ -173,9 +173,9 @@ public sealed class HeldOutRetrievalGateTests : IDisposable
 
     private async Task<double> ScoreAsync(CatalogQuery query, bool reverse, CancellationToken cancellationToken)
     {
-        var results = await _store.SearchAsync(new SearchQuery(
+        var results = (await _store.SearchAsync(new SearchQuery(
             ProjectId, query.Query, SearchScope.Project,
-            Limit: SearchLimit, MinRelativeScore: 0.0), cancellationToken);
+            Limit: SearchLimit, MinRelativeScore: 0.0), cancellationToken)).Results;
         var ranked = results.Select(result => result.Hash).ToList();
         if (reverse)
         {

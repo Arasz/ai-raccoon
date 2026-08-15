@@ -163,7 +163,7 @@ public sealed class SearchFixtureBank : IAsyncDisposable
                 new SearchQuery(ProjectId, Queries[0], Limit: 10, MinRelativeScore: 0.0),
                 cancellationToken)
             .ConfigureAwait(false);
-        if (probe.Count == 0)
+        if (probe.Results.Count == 0)
         {
             throw new InvalidOperationException(
                 $"Search fixture bank returned 0 results for probe query '{Queries[0]}' — the benchmark would measure nothing.");

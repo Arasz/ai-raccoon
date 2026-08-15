@@ -16,7 +16,7 @@ watches, watch_files, FTS5, vec0, sync_meta, and sync_tombstones — live in
 starts clean with the new native schema. A re-hash + re-embed migration path is
 deferred to a deployment that needs it (D11).
 
-## Tools (26)
+## Tools (27)
 
 Every tool requires `projectId` (camelCase — all parameters are camelCase), except
 `memory_promotion_list` where it is optional. Writes land in `project:<id>` by
@@ -25,9 +25,10 @@ default; naming a `workspaceId` routes them into that workspace's isolated conte
 10 memory tools (including `memory_get`, ADR-0035), 4 workspace tools, 3 watch tools,
 2 promotion tools, 2 share tools, 2 sweep tools (`memory_sweep`, `memory_set_ttl`),
 2 search-feedback tools (`memory_record_followthrough`, `memory_record_grade`),
-1 sync tool. `memory_configure` and `memory_set_structure_alpha` were removed by the
-CLI-config refactor: configuration is no longer an MCP tool — the CLI verbs are the
-single config channel (see [Command-line options](#command-line-options)).
+1 sync tool, 1 performance tool (`memory_performance`). `memory_configure` and
+`memory_set_structure_alpha` were removed by the CLI-config refactor: configuration
+is no longer an MCP tool — the CLI verbs are the single config channel (see
+[Command-line options](#command-line-options)).
 
 | Tool                           | Parameters                                                                                                                                                  | Returns                                                                                            |
 |--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
@@ -57,6 +58,7 @@ single config channel (see [Command-line options](#command-line-options)).
 | `memory_sync`                  | `projectId`                                                                                                                                                 | `{sent, received, reindexed}`                                                                      |
 | `memory_promotion_list`        | `projectId?`, `limit=50`, `includeFullValue=false`                                                                                                                                  | `{rows: [PromotionQueueRow]}`                                                                       |
 | `memory_promotion_discard`     | `projectId`, `hash?`                                                                                                                                        | `{discarded: n}`                                                                                   |
+| `memory_performance`           | `projectId`, `windowMinutes?=180`, `bucketMinutes?=1`                                                                                                       | `{generatedAt, window, bucket, bucketCount, series: [{tool, count, p50, p95, p99, min, max, buckets: [{start, count, average}]}]}` |
 
 ### Notes on the less obvious tools
 
@@ -195,6 +197,14 @@ single config channel (see [Command-line options](#command-line-options)).
   watch failures never fail the server.
 - **Deferred writes:** until an engine is configured, writes are stored deferred
   (`memory_stats.pending > 0`) and only become searchable after `memory_embed_pending`.
+- **`memory_performance`:** project-scoped only (the whole-bank scope is deferred). The
+  `series` list is derived from the server's tool inventory plus the six
+  `memory_search` phases (`search.fts`, `search.vector`, `search.fusion`,
+  `search.affinity`, `search.snippets`, `search.bump`) — not from what happens to be
+  in the metrics table — so a tool or phase that has never been recorded still appears,
+  at `count: 0`, rather than being omitted. `bucketMinutes` wider than `windowMinutes`
+  is never an error: it clamps to the window and the series returns one averaged point.
+  A window with no measurements is an empty series (every `count: 0`), never an error.
 
 ### Unknown-id rule
 

@@ -329,6 +329,35 @@ internal static class MemorySchema
 
                                           CREATE INDEX IF NOT EXISTS idx_sq_project_time ON search_quality(project_id, created_at);
 
+                                          -- Universal self-instrumentation row (docs/plans/2026-08-15-performance-metrics-implementation.md,
+                                          -- WP0). project_id/query_hash/correlation_id are real, indexed columns rather than
+                                          -- entries inside tags: project_id is the performance report's primary filter, and the
+                                          -- other two join back to search_quality. Every other deferred dimension stores as a
+                                          -- row under a new `name`, not a new column. In Ddl (not the `if (fresh)` branch) so
+                                          -- it and both indexes reach legacy banks on the next open, not only fresh ones —
+                                          -- idx_entries_source_id already had to be written twice for missing exactly this.
+                                          CREATE TABLE IF NOT EXISTS metrics (
+                                              id             INTEGER PRIMARY KEY,
+                                              name           TEXT NOT NULL,
+                                              kind           TEXT NOT NULL,
+                                              value          REAL NOT NULL,
+                                              unit           TEXT NOT NULL,
+                                              project_id     TEXT NULL,
+                                              query_hash     TEXT NULL,
+                                              correlation_id TEXT NULL,
+                                              tags           TEXT NULL,
+                                              recorded_at    INTEGER NOT NULL
+                                          );
+
+                                          CREATE INDEX IF NOT EXISTS idx_metrics_name_time    ON metrics(name, recorded_at);
+                                          CREATE INDEX IF NOT EXISTS idx_metrics_project_time ON metrics(project_id, recorded_at);
+
+                                          -- The retention reaper (MetricsRetentionJob) deletes on recorded_at alone; neither
+                                          -- index above leads with it, so every reap was a full-table SCAN (review-fixes
+                                          -- finding 4, confirmed with EXPLAIN QUERY PLAN). In the unconditional Ddl block,
+                                          -- not the `if (fresh)` branch, for the same reason as the two indexes above.
+                                          CREATE INDEX IF NOT EXISTS idx_metrics_recorded_at ON metrics(recorded_at);
+
                                           """;
 
     private static readonly Regex VecDimensionPattern = new(@"float\[(\d+)\]", RegexOptions.Compiled);

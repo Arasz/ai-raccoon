@@ -66,7 +66,11 @@ public sealed class SqliteMemoryStoreSizeRatchetTests
     // (write, search, ingest, embedding). The next person to hit this cap should take one
     // of them rather than add a raise -- raising is borrowing against a decomposition someone
     // still has to pay for.
-    private const int MaxLines = 1181;
+    //   1112 / 27  LOWERED again, by two reductions that landed independently and compounded:
+    //              main's ADR-0073 comment sweep (1181) and this branch's move of the nine
+    //              Dapper row DTOs to SqliteMemoryStore.Rows.cs, which made room for the search
+    //              phase timings (1146). Measured on the merge of both, not on either alone.
+    private const int MaxLines = 1112;
     private const int MaxMembers = 27;
 
     [Fact]

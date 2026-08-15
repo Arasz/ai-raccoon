@@ -41,7 +41,7 @@ public sealed class MemoryToolsAccessModeTests
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
         var queue = new FakePromotionQueue();
         var gate = new ToolGate(access, queue);
-        _tools = new MemoryTools(_store, gate, new NoOpSearchQualityService(), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), NullLogger<MemoryTools>.Instance);
+        _tools = new MemoryTools(_store, gate, new NoOpSearchQualityService(), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), NullLogger<MemoryTools>.Instance);
         _share = new ShareTools(_store, gate, new ShareExtractService(_store,
             new SharedExtractionRunner(_store, new SharedExtractionService(), queue,
                 new FakeTimeProvider(FixedNow)), queue));
@@ -81,7 +81,7 @@ public sealed class MemoryToolsAccessModeTests
     public async Task RoMode_WriteIsDenied_AndSearchStillWorks()
     {
         SetMode(perProject: "ro");
-        _store.SearchResults = [new MemorySearchResult("h1", 0.9, "p.md", "content")];
+        _store.StubResults = [new MemorySearchResult("h1", 0.9, "p.md", "content")];
 
         var writeEx = await Should.ThrowAsync<AccessDeniedException>(() =>
             _tools.Write("acme-web", "content", cancellationToken: TestContext.Current.CancellationToken));
@@ -257,15 +257,15 @@ public sealed class MemoryToolsAccessModeTests
 
         public Dictionary<string, IReadOnlyList<MemoryEntry>> EntriesByContext { get; } = [];
 
-        public IReadOnlyList<MemorySearchResult> SearchResults { get; set; } = [];
+        public IReadOnlyList<MemorySearchResult> StubResults { get; set; } = [];
 
         public override Task<MemoryEntry> WriteAsync(MemoryWriteRequest request,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(Entry);
 
-        public override Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
+        public override Task<SearchResults> SearchAsync(SearchQuery query,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(SearchResults);
+            Task.FromResult(new SearchResults(StubResults, SearchTimings.Empty));
 
         public override Task<bool> DeleteAsync(string projectId, string hash,
             CancellationToken cancellationToken = default)

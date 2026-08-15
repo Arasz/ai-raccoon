@@ -68,10 +68,10 @@ public sealed class QueryConstructionTests : IDisposable
         var query = LoadQueries().First(q => q.Id == "A4");
         var exactHash = _hashMap[query.ExpectedSource!];
 
-        var results = await _store.SearchAsync(new SearchQuery(
+        var results = (await _store.SearchAsync(new SearchQuery(
                 ProjectId, query.Query, SearchScope.Project,
                 Limit: 10, MinRelativeScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 0),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Results;
 
         var rank = results.Select(r => r.Hash).ToList().IndexOf(exactHash) + 1;
         rank.ShouldBeGreaterThan(0,
@@ -96,9 +96,9 @@ public sealed class QueryConstructionTests : IDisposable
     public async Task AndPrimary_UnderMatchedRows_DocumentsKnownRankRegression()
     {
         await EnsureModelAsync();
-        var results = await _store.SearchAsync(new SearchQuery(
+        var results = (await _store.SearchAsync(new SearchQuery(
             ProjectId, "How does the project handle data erasure?", SearchScope.Project,
-            Limit: 30, MinRelativeScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 0), TestContext.Current.CancellationToken);
+            Limit: 30, MinRelativeScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 0), TestContext.Current.CancellationToken)).Results;
         var rank = FirstFileRank(results.Select(r => r.Hash).ToList(),
             FileLevel("docs:adr:0067-registry-driven-erasure-with-runtime-verification.md"));
         rank.ShouldNotBeNull("A6's AND primary matches only ADR-0068 rows; the OR fallback must restore ADR-0067");
@@ -159,9 +159,9 @@ public sealed class QueryConstructionTests : IDisposable
 
         foreach (var query in queries)
         {
-            var results = await _store.SearchAsync(new SearchQuery(
+            var results = (await _store.SearchAsync(new SearchQuery(
                 ProjectId, query.Query, SearchScope.Project,
-                Limit: query.SearchLimit, MinRelativeScore: 0.0), TestContext.Current.CancellationToken);
+                Limit: query.SearchLimit, MinRelativeScore: 0.0), TestContext.Current.CancellationToken)).Results;
             if (results.Count == 0)
             {
                 zeroMatches.Add(query.Id);
@@ -315,10 +315,10 @@ public sealed class QueryConstructionTests : IDisposable
     private async Task<IReadOnlyList<string>> TopHashesAsync(
         string text, int ftsWeight, int vectorWeight, CancellationToken cancellationToken)
     {
-        var results = await _store.SearchAsync(new SearchQuery(
+        var results = (await _store.SearchAsync(new SearchQuery(
             ProjectId, text, SearchScope.Project,
             Limit: SearchLimit, MinRelativeScore: 0.0, RrfK: 60,
-            FtsWeight: ftsWeight, VectorWeight: vectorWeight), cancellationToken);
+            FtsWeight: ftsWeight, VectorWeight: vectorWeight), cancellationToken)).Results;
         return [.. results.Take(RankCutoff).Select(result => result.Hash)];
     }
 

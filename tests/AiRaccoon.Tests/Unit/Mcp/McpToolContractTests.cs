@@ -31,6 +31,7 @@ public sealed class McpToolContractTests : IAsyncLifetime
                                             memory_ingest_directory(projectId:string!, path:string!, context:string|null?)
                                             memory_ingest_file(projectId:string!, path:string!, context:string|null?)
                                             memory_list(projectId:string!)
+                                            memory_performance(projectId:string!, windowMinutes:integer|null?, bucketMinutes:integer|null?)
                                             memory_promotion_discard(projectId:string!, hash:string|null?)
                                             memory_promotion_list(projectId:string|null?, limit:integer?, includeFullValue:boolean?)
                                             memory_record_followthrough(projectId:string!, correlationId:string!, filePath:string!)

@@ -274,10 +274,10 @@ public sealed class BaselineMetricsTests : IDisposable
     private async Task<IReadOnlyList<string>> TopHashesAsync(
         string text, int ftsWeight, int vectorWeight, CancellationToken cancellationToken)
     {
-        var results = await _store.SearchAsync(new SearchQuery(
+        var results = (await _store.SearchAsync(new SearchQuery(
             ProjectId, text, SearchScope.Project,
             Limit: SearchLimit, MinRelativeScore: 0.0, RrfK: 60,
-            FtsWeight: ftsWeight, VectorWeight: vectorWeight), cancellationToken);
+            FtsWeight: ftsWeight, VectorWeight: vectorWeight), cancellationToken)).Results;
         return [.. results.Take(RankCutoff).Select(result => result.Hash)];
     }
 

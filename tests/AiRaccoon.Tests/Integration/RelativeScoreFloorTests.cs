@@ -68,8 +68,8 @@ public sealed class RelativeScoreFloorTests : IDisposable
         var truncated = new List<string>();
         foreach (var query in LoadQueries())
         {
-            var results = await _store.SearchAsync(
-                new SearchQuery(ProjectId, query.Query, SearchScope.Project, Limit: SearchLimit), ct);
+            var results = (await _store.SearchAsync(
+                new SearchQuery(ProjectId, query.Query, SearchScope.Project, Limit: SearchLimit), ct)).Results;
             if (results.Count != SearchLimit)
             {
                 truncated.Add($"{query.Id}={results.Count}");
@@ -93,8 +93,8 @@ public sealed class RelativeScoreFloorTests : IDisposable
 
         foreach (var text in OffCorpusQueries)
         {
-            var results = await _store.SearchAsync(
-                new SearchQuery(ProjectId, text, SearchScope.Project, Limit: 5), ct);
+            var results = (await _store.SearchAsync(
+                new SearchQuery(ProjectId, text, SearchScope.Project, Limit: 5), ct)).Results;
 
             results.ShouldNotBeEmpty(text);
             results[0].Ranking.ShouldBe(1.0, 1e-9,

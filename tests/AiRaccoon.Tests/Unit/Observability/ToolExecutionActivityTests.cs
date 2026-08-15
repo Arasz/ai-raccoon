@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using AiRaccoon.Core.Metrics;
 using AiRaccoon.Observability;
 using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 using Shouldly;
@@ -219,5 +220,94 @@ public class ToolExecutionActivityTests
         }
 
         stoppedActivities.Count.ShouldBe(1);
+    }
+
+    /// <summary>WP8 AC1/AC2: the tool-level measurement carries the tool name and the bounded project id.</summary>
+    [Fact]
+    public void RecordInvocation_RecordsAMeasurement_WithToolNameAndProjectId()
+    {
+        var metrics = new ToolCallMetrics();
+        var recorder = new RecordingRecorder();
+
+        using var activity = new ToolExecutionActivity(metrics, "memory_write", "acme", recorder: recorder);
+        activity.RecordInvocation();
+
+        var measurement = recorder.Recorded.ShouldHaveSingleItem();
+        measurement.Name.ShouldBe("memory_write");
+        measurement.ProjectId.ShouldBe("acme");
+    }
+
+    /// <summary>
+    ///     Finding 6: every other timed component records RecordedAt off an injected TimeProvider;
+    ///     this one used DateTimeOffset.UtcNow, so a host on a fake clock writes rows a
+    ///     TimeProvider-windowed report can never see them in.
+    /// </summary>
+    [Fact]
+    public void RecordInvocation_StampsRecordedAt_FromTheInjectedTimeProvider()
+    {
+        var fixedNow = new DateTimeOffset(2026, 8, 15, 0, 0, 0, TimeSpan.Zero);
+        var time = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(fixedNow);
+        var metrics = new ToolCallMetrics();
+        var recorder = new RecordingRecorder();
+
+        using var activity = new ToolExecutionActivity(metrics, "memory_write", "acme", recorder: recorder, timeProvider: time);
+        activity.RecordInvocation();
+
+        recorder.Recorded.ShouldHaveSingleItem().RecordedAt.ShouldBe(fixedNow);
+    }
+
+    /// <summary>
+    ///     WP8 AC1: the measurement is a duration histogram in milliseconds — percentiles apply.
+    ///     A Stopwatch elapsed value can never be negative, so ">= 0" would pass even if the
+    ///     constructor never started the clock at all; sleeping past a real, non-zero duration
+    ///     before recording is what actually demands the clock ran.
+    /// </summary>
+    [Fact]
+    public void RecordInvocation_RecordsAHistogramMeasurement_InMilliseconds()
+    {
+        var metrics = new ToolCallMetrics();
+        var recorder = new RecordingRecorder();
+
+        using var activity = new ToolExecutionActivity(metrics, "memory_stats", "acme", recorder: recorder);
+        Thread.Sleep(5);
+        activity.RecordInvocation();
+
+        var measurement = recorder.Recorded.ShouldHaveSingleItem();
+        measurement.Kind.ShouldBe(MeasurementKind.Histogram);
+        measurement.Unit.ShouldBe("ms");
+        measurement.Value.ShouldBeGreaterThan(0);
+    }
+
+    /// <summary>WP8 AC3: a refused call still records, tagged with the bounded refused sentinel — never the caller's project id.</summary>
+    [Fact]
+    public void RecordError_RecordsAMeasurement_WithTheRefusedSentinel_WhenGiven()
+    {
+        var metrics = new ToolCallMetrics();
+        var recorder = new RecordingRecorder();
+
+        using var activity = new ToolExecutionActivity(metrics, "memory_write", "acme", recorder: recorder);
+        activity.RecordError(new InvalidOperationException("boom"), ToolTelemetry.RefusedProjectId);
+
+        var measurement = recorder.Recorded.ShouldHaveSingleItem();
+        measurement.Name.ShouldBe("memory_write");
+        measurement.ProjectId.ShouldBe(ToolTelemetry.RefusedProjectId);
+        measurement.ProjectId.ShouldNotBe("acme");
+    }
+
+    /// <summary>No recorder given (e.g. a host with telemetry disabled) must never throw — best-effort per IMeasurementRecorder's contract.</summary>
+    [Fact]
+    public void RecordInvocation_DoesNotThrow_WhenNoRecorderGiven()
+    {
+        var metrics = new ToolCallMetrics();
+        using var activity = new ToolExecutionActivity(metrics, "memory_write", "acme");
+
+        Should.NotThrow(() => activity.RecordInvocation());
+    }
+
+    private sealed class RecordingRecorder : IMeasurementRecorder
+    {
+        public List<Measurement> Recorded { get; } = [];
+
+        public void Record(Measurement measurement) => Recorded.Add(measurement);
     }
 }

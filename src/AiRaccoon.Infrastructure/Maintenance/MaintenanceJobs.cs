@@ -15,6 +15,13 @@ public static class MaintenanceJobDefaults
     ///     0.6 s on a 183 MB bank — the cost that made the old caution unnecessary.
     /// </summary>
     public static readonly TimeSpan VacuumInterval = TimeSpan.FromHours(2);
+
+    /// <summary>
+    ///     How often the metrics reaper checks for rows past the retention window. Independent of
+    ///     <see cref="VacuumInterval" /> even though it starts at the same value — the two jobs
+    ///     reap different tables for different reasons and each may move on its own.
+    /// </summary>
+    public static readonly TimeSpan MetricsRetentionInterval = TimeSpan.FromHours(2);
 }
 
 /// <summary>
@@ -115,5 +122,46 @@ public sealed class ChunkBackfillJob(IMarkdownChunker chunker, TimeProvider time
             .RunAsync(connection, dryRun: false, cancellationToken).ConfigureAwait(false);
         // Only a backfill that actually replaced rows leaves anything to embed.
         return report.RowsReplaced > 0;
+    }
+}
+
+/// <summary>
+///     Deletes `metrics` rows past the retention window
+///     (docs/plans/2026-08-15-performance-metrics-implementation.md, WP4). Retention is best-effort:
+///     the window bounds growth, it does not guarantee a ceiling — holding more than it is within
+///     contract. Re-cast from the plan's original inline-purge shape onto ADR-0070's job list, the
+///     same generalisation <see cref="VacuumJob" /> underwent.
+/// </summary>
+public sealed class MetricsRetentionJob(TimeProvider timeProvider) : IMaintenanceJob
+{
+    public const string JobName = "metrics-retention";
+
+    public string Name => JobName;
+
+    public string DisplayName => "purge metrics rows past the retention window";
+
+    public TimeSpan? Interval => MaintenanceJobDefaults.MetricsRetentionInterval;
+
+    public async Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        var days = await ReadRetentionDaysAsync(connection, cancellationToken).ConfigureAwait(false);
+        var cutoff = timeProvider.GetUtcNow().AddDays(-days).ToUnixTimeSeconds();
+        await connection.ExecuteAsync(new CommandDefinition(
+                "DELETE FROM metrics WHERE recorded_at < @cutoff",
+                new { cutoff }, cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        // A reaper only deletes; it never leaves a row needing an embedding.
+        return false;
+    }
+
+    private static async Task<int> ReadRetentionDaysAsync(SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        var raw = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+                "SELECT value FROM settings WHERE key = @key",
+                new { key = MetricsConfigKeys.RetentionDaysGlobal }, cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        return MetricsConfigKeys.ParseRetentionDays(raw);
     }
 }

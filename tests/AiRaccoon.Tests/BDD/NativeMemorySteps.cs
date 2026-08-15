@@ -409,8 +409,8 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task ThenEntrySearchable()
     {
         var projectId = (string)scenarioContext["ProjectId"];
-        var results = await _store.SearchAsync(
-            new SearchQuery(projectId, "deferred note"), CancellationToken.None);
+        var results = (await _store.SearchAsync(
+            new SearchQuery(projectId, "deferred note"), CancellationToken.None)).Results;
         results.Count.ShouldBeGreaterThan(0);
     }
 
@@ -430,9 +430,9 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     // ── FR-NM-4: Hybrid search ──
     [When(@"I search for ""(.*)"" in project ""([^""]*)""(?! with)")]
     public async Task WhenISearchForInProject(string query, string projectId) =>
-        _lastSearch = await _store.SearchAsync(
+        _lastSearch = (await _store.SearchAsync(
             new SearchQuery(projectId, query),
-            CancellationToken.None);
+            CancellationToken.None)).Results;
 
     [When(@"I search for ""(.*)"" in project ""(.*)"" with scope ""(.*)""")]
     public async Task WhenISearchWithScope(string query, string projectId, string scope)
@@ -444,16 +444,16 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
             "shared" => SearchScope.Shared,
             _ => SearchScope.All
         };
-        _lastSearch = await _store.SearchAsync(
+        _lastSearch = (await _store.SearchAsync(
             new SearchQuery(projectId, query, parsedScope),
-            CancellationToken.None);
+            CancellationToken.None)).Results;
     }
 
     [When(@"I search for ""(.*)"" in project ""(.*)"" with workspace ""(.*)""")]
     public async Task WhenISearchWithWorkspace(string query, string projectId, string wsId) =>
-        _lastSearch = await _store.SearchAsync(
+        _lastSearch = (await _store.SearchAsync(
             new SearchQuery(projectId, query, SearchScope.All, wsId),
-            CancellationToken.None);
+            CancellationToken.None)).Results;
 
     [Then("results carry hash, ranking, path and snippet")]
     public void ThenResultsCarryContractFields()
@@ -487,9 +487,9 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
             "project" => SearchScope.Project,
             _ => SearchScope.All
         };
-        _lastSearch = await _store.SearchAsync(
+        _lastSearch = (await _store.SearchAsync(
             new SearchQuery(projectId, "test", parsedScope),
-            CancellationToken.None);
+            CancellationToken.None)).Results;
     }
 
     [Then("no results are returned")]
@@ -881,8 +881,8 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         var state = await conn.QueryFirstOrDefaultAsync<string>(
             "SELECT embed_state FROM entries WHERE value = 'merged fresh fact'");
         state.ShouldBe("embedded");
-        var results = await _store.SearchAsync(
-            new SearchQuery(projectId, "merged fresh fact"), CancellationToken.None);
+        var results = (await _store.SearchAsync(
+            new SearchQuery(projectId, "merged fresh fact"), CancellationToken.None)).Results;
         results.Count.ShouldBeGreaterThan(0);
     }
 
@@ -972,9 +972,9 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     {
         // Read is allowed in every mode — the gate must not throw here even while ro denies writes.
         await Gate.RequireAsync(projectId, AccessRequirement.Read, "memory_search", CancellationToken.None);
-        _lastSearch = await _store.SearchAsync(
+        _lastSearch = (await _store.SearchAsync(
             new SearchQuery(projectId, "content"),
-            CancellationToken.None);
+            CancellationToken.None)).Results;
         _lastSearch.ShouldNotBeNull();
     }
 
@@ -1139,9 +1139,9 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
             "shared" => SearchScope.Shared,
             _ => SearchScope.All
         };
-        _lastSearch = await _store.SearchAsync(
+        _lastSearch = (await _store.SearchAsync(
             new SearchQuery(projectId, query, parsedScope),
-            CancellationToken.None);
+            CancellationToken.None)).Results;
     }
 
     [Given("a note containing a fenced code block")]
@@ -1448,12 +1448,12 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
             CancellationToken.None);
 
         const string query = "rrf fusion weighting";
-        _defaultRrfSearch = await _store.SearchAsync(
+        _defaultRrfSearch = (await _store.SearchAsync(
             new SearchQuery(projectId, query, SearchScope.All, null, 20, 0.0),
-            CancellationToken.None);
-        _lastSearch = await _store.SearchAsync(
+            CancellationToken.None)).Results;
+        _lastSearch = (await _store.SearchAsync(
             new SearchQuery(projectId, query, SearchScope.All, null, 20, 0.0, 30, 2),
-            CancellationToken.None);
+            CancellationToken.None)).Results;
     }
 
     [When("I call memory_sweep with dry_run false")]
@@ -1478,9 +1478,9 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task WhenISearchExactPhrase()
     {
         var projectId = (string)scenarioContext["ProjectId"];
-        _lastSearch = await _store.SearchAsync(
+        _lastSearch = (await _store.SearchAsync(
             new SearchQuery(projectId, "specific-keyword-match"),
-            CancellationToken.None);
+            CancellationToken.None)).Results;
     }
 
     [When("I ingest a markdown note longer than max_tokens")]
@@ -1539,8 +1539,8 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         var projectId = (string)scenarioContext["ProjectId"];
         // Consolidation promotes via add_content: the kept content lands as a fresh
         // project-scoped row (the workspace hash itself is deleted).
-        var results = await _store.SearchAsync(
-            new SearchQuery(projectId, content, SearchScope.Project), CancellationToken.None);
+        var results = (await _store.SearchAsync(
+            new SearchQuery(projectId, content, SearchScope.Project), CancellationToken.None)).Results;
         results.Count.ShouldBe(1);
     }
 
@@ -1592,9 +1592,9 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task WhenISearchRestrictedToContext(string query, string context)
     {
         var projectId = (string)scenarioContext["ProjectId"];
-        _lastSearch = await _store.SearchAsync(
+        _lastSearch = (await _store.SearchAsync(
             new SearchQuery(projectId, query, ContextLabel: context),
-            CancellationToken.None);
+            CancellationToken.None)).Results;
     }
 
     // "And when I search ..." parses as a Then step; StepDefinition matches any keyword.
@@ -1846,8 +1846,8 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
             OpenReadOnlyAsync, secondInstall.TimeProvider, NullLogger<SyncService>.Instance);
         await sync.MemorySyncAsync(projectId, ObjectKeyFor(projectId), CancellationToken.None);
 
-        var results = await secondInstall.Store.SearchAsync(
-            new SearchQuery(projectId, "shared payload fact", SearchScope.Shared), CancellationToken.None);
+        var results = (await secondInstall.Store.SearchAsync(
+            new SearchQuery(projectId, "shared payload fact", SearchScope.Shared), CancellationToken.None)).Results;
         results.Count.ShouldBeGreaterThan(0);
     }
 }

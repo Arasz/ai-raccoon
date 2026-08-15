@@ -80,9 +80,9 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     public async Task S4_ConsequencesOfAdr0011_ConsequencesChunkAtRankAtMost3()
     {
         var expectedHash = _hashMap["docs:adr:0011-frontend-chassis-stack.md#consequences"];
-        var results = await _store.SearchAsync(new SearchQuery(
+        var results = (await _store.SearchAsync(new SearchQuery(
             ProjectId, "Consequences of ADR-0011?", SearchScope.Project,
-            Limit: 10, MinRelativeScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 1), TestContext.Current.CancellationToken);
+            Limit: 10, MinRelativeScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 1), TestContext.Current.CancellationToken)).Results;
         var rank = results.ToList().FindIndex(r => r.Hash == expectedHash) + 1;
 
         _output.WriteLine($"S4 section rank: {rank}");
@@ -291,10 +291,10 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
 
     private async Task<List<MemorySearchResult>> TopResultsAsync(string text, CancellationToken cancellationToken)
     {
-        var results = await _store.SearchAsync(new SearchQuery(
+        var results = (await _store.SearchAsync(new SearchQuery(
             ProjectId, text, SearchScope.Project,
             Limit: SearchLimit, MinRelativeScore: 0.0, RrfK: 60,
-            FtsWeight: 1, VectorWeight: 1), cancellationToken);
+            FtsWeight: 1, VectorWeight: 1), cancellationToken)).Results;
         return [.. results];
     }
 

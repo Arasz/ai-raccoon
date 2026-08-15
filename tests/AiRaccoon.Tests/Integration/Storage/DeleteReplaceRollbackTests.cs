@@ -115,7 +115,7 @@ public sealed class DeleteReplaceRollbackTests : IDisposable
 
         (await CountEntriesAsync("acme", ct)).ShouldBe(preEntries,
             "the delete-and-reingest must have been rolled back — the row count must be exactly what it was before the failed replace");
-        (await _store.SearchAsync(new SearchQuery("acme", "gallimaufry original"), ct))
+        (await _store.SearchAsync(new SearchQuery("acme", "gallimaufry original"), ct)).Results
             .ShouldNotBeEmpty("the original content must still be there — the replace never committed");
         // Raw SQL, not _store.SearchAsync: hybrid (FTS + vector) search can surface a semantically
         // near result even for text that was never written, so the direct row content is the only

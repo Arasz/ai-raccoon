@@ -87,7 +87,7 @@ public sealed class RetrievalBaselineTests : IDisposable
         {
             var searchQuery = new SearchQuery(ProjectId, query.Query, SearchScope.Project,
                 Limit: query.SearchLimit, MinRelativeScore: 0.0);
-            var results = await _store.SearchAsync(searchQuery, TestContext.Current.CancellationToken);
+            var results = (await _store.SearchAsync(searchQuery, TestContext.Current.CancellationToken)).Results;
 
             var (exactMatch, fileMatch, firstExactRank, firstFileRank) =
                 MapResults(query, results, hashMap, fileHashes, out var mappedResults);
@@ -306,9 +306,9 @@ public sealed class RetrievalBaselineTests : IDisposable
             return; // empty corpus can't test FTS
         }
 
-        var results = await _store.SearchAsync(
+        var results = (await _store.SearchAsync(
             new SearchQuery(ProjectId, "memory", SearchScope.Project, Limit: 5, MinRelativeScore: 0.0),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Results;
         results.ShouldNotBeEmpty("FTS bm25 search must still return results after source normalization");
         results.Any(r => r.SourceFile is not null).ShouldBeTrue(
             "search results must still carry SourceFile from the denormalized column");
