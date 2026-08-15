@@ -442,6 +442,35 @@ condition CI never creates. **The adversarial pass corrects that:** it failed on
 clean on an immediate rerun with no code change. It is flaky in isolation, not only under contention,
 and `Speed=Fast` is the PR gate.
 
+**It has now cost a red build on an unrelated PR — 2026-08-15, and this is the fourth and fifth
+observation.** `ToolRefusalsTests.IngestFile_OutsideScope_ReturnsRefusal_WithoutAnSdkErrorLog` failed
+`build-fast` on PR #291, whose diff touches only tool-inventory test files and a plan document —
+nothing within reach of ingest scope or refusal mapping. The same test passes 3/3 locally. **That is
+the concrete harm this package predicted: a red gate on a change that could not have caused it, which
+trains the next reader to re-run rather than read.**
+
+**And the failure mode is not port contention, which changes what the fix has to be.** The assertion
+that failed was the refusal text, not a bind:
+
+```
+Shouldly.ShouldAssertException : text
+"An error occurred invoking 'memory_ingest_file'."      # expected a "path-outside-scope:" prefix
+```
+
+The tool threw something `ToolRefusals.Filter` does not map, so the SDK returned its **generic**
+message. Under CI load the most likely candidate is a bank open losing the 5-second busy timeout and
+surfacing a `SqliteException` where a `PathOutsideScopeException` was expected — but *that cannot be
+read from the failure*, because the generic message carries no detail.
+
+**This answers the consumer-surface lane's open question** — "whether an unmapped exception reaches the
+MCP client with any more diagnostic text than a mapped refusal, or just becomes a generic protocol
+error". It becomes a generic protocol error with nothing in it. So the package now has two halves:
+
+1. **Make an unmapped exception diagnosable** at the MCP boundary — its type at minimum. Today an
+   agent, an operator and a CI log all get the same eleven words. *(Product behaviour change; sequence
+   it deliberately rather than folding it into a test fix.)*
+2. **Then** reproduce and fix the race, which is only tractable once the first half says what threw.
+
 **A third independent observation, from WP1's own verification run.** Two `Speed=Fast` failures
 appeared on one run and a different single failure on the next, with all 52 passing in isolation —
 `ServeRestartTests.AnExistingServer_IsCycled_AndTheRestartOwnsThePort` joins `ToolRefusalsTests` and
