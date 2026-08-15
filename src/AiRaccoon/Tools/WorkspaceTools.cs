@@ -9,7 +9,11 @@ using ModelContextProtocol.Server;
 
 namespace AiRaccoon.Tools;
 
-/// <summary>Thin MCP tools over WorkspaceService — no business logic here (see docs/work/features-agent-memory/spec-issue-1.md §6.1).</summary>
+/// <summary>
+///     Thin MCP tools over WorkspaceService — no business logic here (see docs/work/features-agent-memory/spec-issue-1.md §6.1).
+///     The whole lifecycle is gated Write, not Destructive: a workspace is a sandbox the caller
+///     created and never committed, and both terminal transitions are confined to it (ADR-0052).
+/// </summary>
 public sealed class WorkspaceTools(
     IWorkspaceService workspaces,
     ToolGate gate)
@@ -65,7 +69,7 @@ public sealed class WorkspaceTools(
         string[] keep,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Destructive, TnMemoryWorkspaceConsolidate, cancellationToken);
+        await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryWorkspaceConsolidate, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
         ArgumentNullException.ThrowIfNull(keep);
 
@@ -82,7 +86,7 @@ public sealed class WorkspaceTools(
         [Description("The workspace id.")] string workspaceId,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Destructive, TnMemoryWorkspaceDiscard, cancellationToken);
+        await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryWorkspaceDiscard, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
 
         var discarded = await workspaces.DiscardAsync(projectId, workspaceId, cancellationToken);
