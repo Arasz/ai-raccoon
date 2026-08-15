@@ -16,7 +16,9 @@ public static class ProxyRegistrations
             serviceCollection.AddSingleton<IServerProbe>(sp => sp.GetRequiredService<ServerProbe>());
             serviceCollection.AddHttpClient(BackendLauncher.BackendSessionClient).ConfigurePrimaryHttpMessageHandler(_ => new JsonRpcErrorHandler
             {
-                InnerHandler = new SocketsHttpHandler()
+                // ADR-0022:135-137: .NET strips Authorization across a host hop but not a custom
+                // header, so a redirect would carry the loopback token off-machine.
+                InnerHandler = new SocketsHttpHandler { AllowAutoRedirect = false }
             }).ConfigureHttpClient(client => client.Timeout = Timeout.InfiniteTimeSpan);
             serviceCollection.AddRequiredSingleton<IBackendLauncher, BackendLauncher>(sp => new BackendLauncher(
                 sp.GetRequiredService<IServerProbe>(),
