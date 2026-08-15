@@ -103,14 +103,57 @@ public sealed class PerformanceReportBuilderTests
         series.Max.ShouldBe(21.0);
     }
 
+    /// <summary>
+    ///     Restated for the phase series (WP10): a name that is neither a tool nor a phase — not in
+    ///     the derived series-name list at all — must still not invent a series.
+    /// </summary>
     [Fact]
-    public void Build_SamplesForAnUnlistedTool_AreIgnored()
+    public void Build_SamplesForAnUnknownName_AreIgnored()
     {
-        var samples = new[] { new MetricSample("some_other_tool", 5, Now - TimeSpan.FromMinutes(1)) };
+        var samples = new[] { new MetricSample("totally_unknown_name", 5, Now - TimeSpan.FromMinutes(1)) };
 
         var report = PerformanceReportBuilder.Build(["memory_write"], samples, Now,
             TimeSpan.FromHours(1), TimeSpan.FromMinutes(1));
 
         report.Series.Single().Count.ShouldBe(0);
+    }
+
+    /// <summary>
+    ///     WP10: the per-phase search timings (search.fts, search.vector, …) must appear as series
+    ///     alongside the tool series, not be silently dropped for having a name that is not a tool.
+    /// </summary>
+    [Fact]
+    public void Build_PhaseNamesGiven_AppearAsSeriesAlongsideTools()
+    {
+        var samples = new[]
+        {
+            new MetricSample("memory_search", 10, Now - TimeSpan.FromMinutes(1)),
+            new MetricSample("search.fts", 3, Now - TimeSpan.FromMinutes(1)),
+            new MetricSample("search.fts", 7, Now - TimeSpan.FromMinutes(2))
+        };
+
+        var report = PerformanceReportBuilder.Build(["memory_search"], samples, Now,
+            TimeSpan.FromHours(1), TimeSpan.FromMinutes(1), ["search.fts", "search.vector"]);
+
+        report.Series.Select(s => s.Tool).ShouldBe(["memory_search", "search.fts", "search.vector"]);
+        var fts = report.Series.Single(s => s.Tool == "search.fts");
+        fts.Count.ShouldBe(2);
+        fts.Max.ShouldBe(7.0);
+
+        var neverRecorded = report.Series.Single(s => s.Tool == "search.vector");
+        neverRecorded.Count.ShouldBe(0, "a phase never measured is still present, at count 0 — same derived-inventory contract as tools");
+    }
+
+    /// <summary>Omitting phaseNames keeps the exact pre-WP10 behaviour: tool series only.</summary>
+    [Fact]
+    public void Build_NoPhaseNamesGiven_BehavesExactlyAsBeforePhaseSeriesExisted()
+    {
+        var samples = new[] { new MetricSample("search.fts", 3, Now - TimeSpan.FromMinutes(1)) };
+
+        var report = PerformanceReportBuilder.Build(["memory_search"], samples, Now,
+            TimeSpan.FromHours(1), TimeSpan.FromMinutes(1));
+
+        report.Series.Single().Tool.ShouldBe("memory_search");
+        report.Series.Single().Count.ShouldBe(0, "search.fts is not a tool and no phaseNames were given, so it must not appear");
     }
 }

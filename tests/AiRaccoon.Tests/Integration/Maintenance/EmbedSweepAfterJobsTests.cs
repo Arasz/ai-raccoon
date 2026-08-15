@@ -95,7 +95,7 @@ public sealed class EmbedSweepAfterJobsTests : IDisposable
     private BankMaintenanceHostedService ServiceWith(params IMaintenanceJob[] jobs) =>
         new(_factory, _time, _probe.Telemetry, new FakeLogger<BankMaintenanceHostedService>(), _memory,
             NoOpNoiseEntryStore.Instance, new SqlitePromotionQueueStore(_factory, _time),
-            new SqliteSearchQualityService(_factory),
+            new SqliteSearchQualityService(_factory, Microsoft.Extensions.Logging.Abstractions.NullLogger<SqliteSearchQualityService>.Instance),
             new MaintenanceJobRunner(_time, NullLogger<MaintenanceJobRunner>.Instance), jobs);
 
     /// <summary>Stands in for vacuum and reclaim: runs, changes nothing that needs embedding.</summary>

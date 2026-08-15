@@ -1,6 +1,7 @@
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
+using AiRaccoon.Core.Metrics;
 using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
@@ -358,6 +359,10 @@ public sealed class NoOpSearchQualityService : ISearchQualityService
         string? sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default) =>
         Task.CompletedTask;
 
+    public Task RecordSearchSafeAsync(string correlationId, string query, string? scope, string? projectId,
+        int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default) =>
+        Task.CompletedTask;
+
     public Task RecordFollowThroughAsync(string correlationId, string filePath, CancellationToken ct = default) => Task.CompletedTask;
 
     public Task RecordGradeAsync(string projectId, string correlationId, int grade, string? note,
@@ -367,6 +372,32 @@ public sealed class NoOpSearchQualityService : ISearchQualityService
     public Task<SearchQualityMetrics> GetMetricsAsync(string? projectId, DateTimeOffset from,
         CancellationToken ct = default) =>
         Task.FromResult(new SearchQualityMetrics(0, 0, 0, 0, 0, 0, 0));
+}
+
+/// <summary>Discards every measurement — for tests that need an <see cref="IMeasurementRecorder" /> but do not assert on it.</summary>
+public sealed class NoOpMeasurementRecorder : IMeasurementRecorder
+{
+    public void Record(Measurement measurement)
+    {
+    }
+}
+
+/// <summary>Captures every measurement handed to it; optionally throws, to exercise a caller's best-effort handling.</summary>
+public sealed class RecordingMeasurementRecorder : IMeasurementRecorder
+{
+    public List<Measurement> Recorded { get; } = [];
+
+    public Exception? ThrowOnRecord { get; set; }
+
+    public void Record(Measurement measurement)
+    {
+        if (ThrowOnRecord is { } exception)
+        {
+            throw exception;
+        }
+
+        Recorded.Add(measurement);
+    }
 }
 
 /// <summary>In-memory store fake for the shared-extraction path: settings, project ids, candidate rows and the shared index.</summary>

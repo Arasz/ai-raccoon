@@ -40,4 +40,35 @@ public sealed class SearchResultsTests
         empty.Snippets.ShouldBe(TimeSpan.Zero);
         empty.Bump.ShouldBe(TimeSpan.Zero);
     }
+
+    /// <summary>
+    ///     Derived from the record's own shape (reflection over its TimeSpan properties), not a
+    ///     hand-written list — a seventh phase added to SearchTimings needs no list edited here.
+    /// </summary>
+    [Fact]
+    public void PhaseNames_OneEntryPerTimeSpanMember_PrefixedWithSearch()
+    {
+        SearchTimings.PhaseNames.ShouldBe(
+            ["search.fts", "search.vector", "search.fusion", "search.affinity", "search.snippets", "search.bump"]);
+    }
+
+    [Fact]
+    public void Phases_PairsEachDerivedNameWithItsOwnValue()
+    {
+        var timings = new SearchTimings(
+            TimeSpan.FromMilliseconds(1), TimeSpan.FromMilliseconds(2), TimeSpan.FromMilliseconds(3),
+            TimeSpan.FromMilliseconds(4), TimeSpan.FromMilliseconds(5), TimeSpan.FromMilliseconds(6));
+
+        var phases = timings.Phases();
+
+        phases.ShouldBe(
+        [
+            ("search.fts", TimeSpan.FromMilliseconds(1)),
+            ("search.vector", TimeSpan.FromMilliseconds(2)),
+            ("search.fusion", TimeSpan.FromMilliseconds(3)),
+            ("search.affinity", TimeSpan.FromMilliseconds(4)),
+            ("search.snippets", TimeSpan.FromMilliseconds(5)),
+            ("search.bump", TimeSpan.FromMilliseconds(6))
+        ]);
+    }
 }

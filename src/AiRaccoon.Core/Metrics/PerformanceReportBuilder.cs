@@ -14,16 +14,20 @@ public static class PerformanceReportBuilder
 
     /// <summary>
     ///     Builds one series per <paramref name="toolNames" /> entry — the derived tool inventory, not
-    ///     whatever names happen to appear in <paramref name="samples" /> — bucketed across
-    ///     [<paramref name="now" /> - <paramref name="window" />, <paramref name="now" />]. A bucket
-    ///     wider than the window clamps to the window (one averaged point).
+    ///     whatever names happen to appear in <paramref name="samples" /> — plus, when given, one more
+    ///     per <paramref name="phaseNames" /> entry (WP10: the search-phase measurements, so they read
+    ///     alongside the tool series rather than being dropped for having a name that is not a tool).
+    ///     Both lists follow the same derived-inventory contract: a name with zero samples is still
+    ///     present, at count zero. Bucketed across [<paramref name="now" /> - <paramref name="window" />,
+    ///     <paramref name="now" />]. A bucket wider than the window clamps to the window (one averaged point).
     /// </summary>
     public static PerformanceReport Build(
         IReadOnlyList<string> toolNames,
         IReadOnlyList<MetricSample> samples,
         DateTimeOffset now,
         TimeSpan window,
-        TimeSpan bucket)
+        TimeSpan bucket,
+        IReadOnlyList<string>? phaseNames = null)
     {
         Guard.IsNotNull(toolNames);
         Guard.IsNotNull(samples);
@@ -32,7 +36,8 @@ public static class PerformanceReportBuilder
         var start = now - window;
         var bucketCount = Math.Max(1, (int)Math.Ceiling(window / effectiveBucket));
 
-        var series = toolNames
+        IReadOnlyList<string> seriesNames = phaseNames is { Count: > 0 } ? [.. toolNames, .. phaseNames] : toolNames;
+        var series = seriesNames
             .Select(name => BuildSeries(name, samples, start, now, effectiveBucket, bucketCount))
             .ToList();
 

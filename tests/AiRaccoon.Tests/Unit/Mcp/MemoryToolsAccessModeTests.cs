@@ -41,7 +41,7 @@ public sealed class MemoryToolsAccessModeTests
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
         var queue = new FakePromotionQueue();
         var gate = new ToolGate(access, queue);
-        _tools = new MemoryTools(_store, gate, new NoOpSearchQualityService(), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), NullLogger<MemoryTools>.Instance);
+        _tools = new MemoryTools(_store, gate, new NoOpSearchQualityService(), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), NullLogger<MemoryTools>.Instance);
         _share = new ShareTools(_store, gate, new ShareExtractService(_store,
             new SharedExtractionRunner(_store, new SharedExtractionService(), queue,
                 new FakeTimeProvider(FixedNow)), queue));

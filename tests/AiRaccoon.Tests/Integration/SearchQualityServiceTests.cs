@@ -21,7 +21,7 @@ public sealed class SearchQualityServiceTests : IDisposable
     {
         var options = new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
-        _sut = new SqliteSearchQualityService(_factory);
+        _sut = new SqliteSearchQualityService(_factory, Microsoft.Extensions.Logging.Abstractions.NullLogger<SqliteSearchQualityService>.Instance);
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);

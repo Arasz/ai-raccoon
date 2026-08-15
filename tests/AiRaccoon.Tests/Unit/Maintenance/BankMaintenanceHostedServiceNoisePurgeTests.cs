@@ -38,7 +38,7 @@ public sealed class BankMaintenanceHostedServiceNoisePurgeTests : IDisposable
         _logger = new FakeLogger<BankMaintenanceHostedService>();
         _noiseEntryStore = new SqliteNoiseEntryStore(_factory);
         _service = new BankMaintenanceHostedService(_factory, _time, _probe.Telemetry, _logger, new FakeWatchMemoryStore(), _noiseEntryStore,
-            new SqlitePromotionQueueStore(_factory, _time), new SqliteSearchQualityService(_factory));
+            new SqlitePromotionQueueStore(_factory, _time), new SqliteSearchQualityService(_factory, Microsoft.Extensions.Logging.Abstractions.NullLogger<SqliteSearchQualityService>.Instance));
     }
 
     public void Dispose()
@@ -87,7 +87,7 @@ public sealed class BankMaintenanceHostedServiceNoisePurgeTests : IDisposable
         var throwingStore = new ThrowingNoiseEntryStore();
         var service = new BankMaintenanceHostedService(_factory, _time, _probe.Telemetry, _logger,
             new FakeWatchMemoryStore(), throwingStore,
-            new SqlitePromotionQueueStore(_factory, _time), new SqliteSearchQualityService(_factory));
+            new SqlitePromotionQueueStore(_factory, _time), new SqliteSearchQualityService(_factory, Microsoft.Extensions.Logging.Abstractions.NullLogger<SqliteSearchQualityService>.Instance));
 
         await Should.NotThrowAsync(() => service.RunOnceAsync(TestContext.Current.CancellationToken));
 

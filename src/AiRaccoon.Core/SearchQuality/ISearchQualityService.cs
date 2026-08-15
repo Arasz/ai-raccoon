@@ -23,6 +23,20 @@ public interface ISearchQualityService
         CancellationToken ct = default);
 
     /// <summary>
+    ///     <see cref="RecordSearchAsync" />, best-effort: swallows and logs any failure instead of
+    ///     throwing. The tool layer calls this, not the throwing form, so a quality-recording
+    ///     failure never fails the search it describes.
+    /// </summary>
+    Task RecordSearchSafeAsync(
+        string correlationId,
+        string query,
+        string? scope,
+        string? projectId,
+        int resultCount,
+        IReadOnlyList<string> topSourceFiles,
+        CancellationToken ct = default);
+
+    /// <summary>
     ///     Records that the agent read a file that appeared in the search results.
     ///     Updates the existing row by <paramref name="correlationId" />.
     /// </summary>

@@ -198,11 +198,13 @@ is no longer an MCP tool — the CLI verbs are the single config channel (see
 - **Deferred writes:** until an engine is configured, writes are stored deferred
   (`memory_stats.pending > 0`) and only become searchable after `memory_embed_pending`.
 - **`memory_performance`:** project-scoped only (the whole-bank scope is deferred). The
-  `series` list is derived from the server's tool inventory, not from what happens to be
-  in the metrics table — a tool that has never been called still appears, at `count: 0`,
-  rather than being omitted. `bucketMinutes` wider than `windowMinutes` is never an
-  error: it clamps to the window and the series returns one averaged point. A window
-  with no measurements is an empty series (every `count: 0`), never an error.
+  `series` list is derived from the server's tool inventory plus the six
+  `memory_search` phases (`search.fts`, `search.vector`, `search.fusion`,
+  `search.affinity`, `search.snippets`, `search.bump`) — not from what happens to be
+  in the metrics table — so a tool or phase that has never been recorded still appears,
+  at `count: 0`, rather than being omitted. `bucketMinutes` wider than `windowMinutes`
+  is never an error: it clamps to the window and the series returns one averaged point.
+  A window with no measurements is an empty series (every `count: 0`), never an error.
 
 ### Unknown-id rule
 

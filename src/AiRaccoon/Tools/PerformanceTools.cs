@@ -15,7 +15,7 @@ public sealed class PerformanceTools(IMetricsReportService reportService, IToolG
 
     [McpServerTool(Name = TnMemoryPerformance)]
     [Description(
-        "Reports this project's self-instrumentation: one series per tool on the server's tool inventory, each with count/p50/p95/p99/min/max plus a bucketed time series. Defaults to the last 3 hours in 1-minute buckets (180 points); a bucket wider than the window clamps to a single averaged point. A tool never called still appears, at count 0. A quiet window is an empty series, never an error.")]
+        "Reports this project's self-instrumentation: one series per tool on the server's tool inventory, plus one series per memory_search phase (search.fts, search.vector, search.fusion, search.affinity, search.snippets, search.bump), each with count/p50/p95/p99/min/max plus a bucketed time series. Defaults to the last 3 hours in 1-minute buckets (180 points); a bucket wider than the window clamps to a single averaged point. A tool or phase never recorded still appears, at count 0. A quiet window is an empty series, never an error.")]
     public async Task<ApiEnvelope<PerformanceReport>> Performance(
         [Description("The project id.")] string projectId,
         [Description("Window size in minutes; defaults to 180 (3 hours).")]

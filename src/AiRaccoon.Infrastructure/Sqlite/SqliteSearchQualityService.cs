@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AiRaccoon.Core.SearchQuality;
 using Dapper;
+using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 
@@ -8,8 +9,30 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 ///     Records search-quality signals (search, follow-through, grade) into the search_quality table.
 ///     See docs/plans/2026-08-11-search-quality-metric-plan.md.
 /// </summary>
-public sealed class SqliteSearchQualityService(ISqliteConnectionFactory factory) : ISearchQualityService
+public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory factory, ILogger<SqliteSearchQualityService> logger)
+    : ISearchQualityService
 {
+    /// <summary>Best-effort: never throws (docs/plans/2026-08-15-performance-metrics-implementation.md, WP1 tool-size step).</summary>
+    public async Task RecordSearchSafeAsync(
+        string correlationId,
+        string query,
+        string? scope,
+        string? projectId,
+        int resultCount,
+        IReadOnlyList<string> topSourceFiles,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            await RecordSearchAsync(correlationId, query, scope, projectId, null, resultCount, topSourceFiles, ct)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Log.RecordSearchSafeFailed(logger, ex, correlationId);
+        }
+    }
+
     public async Task RecordSearchAsync(
         string correlationId,
         string query,
@@ -143,5 +166,12 @@ public sealed class SqliteSearchQualityService(ISqliteConnectionFactory factory)
                 new CommandDefinition("DELETE FROM search_quality WHERE created_at < @cutoff",
                     new { cutoff }, cancellationToken: cancellationToken))
             .ConfigureAwait(false);
+    }
+
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 965, Level = LogLevel.Warning,
+            Message = "Failed to record search quality for correlation {CorrelationId}")]
+        public static partial void RecordSearchSafeFailed(ILogger logger, Exception exception, string correlationId);
     }
 }
