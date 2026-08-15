@@ -792,6 +792,45 @@ public sealed class MemorySchemaVersionTests
             "a bank whose trigger already carries the scope-aware guard must not take a schema write on reopen");
     }
 
+    // ── WP0: metrics table + indexes (docs/plans/2026-08-15-performance-metrics-implementation.md) ──
+
+    [Fact]
+    public async Task EnsureAsync_FreshBank_HasMetricsTableAndBothIndexes()
+    {
+        await using var connection = await OpenAsync();
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        (await TableExistsAsync(connection, "metrics")).ShouldBeTrue("a fresh bank must have the metrics table");
+        (await IndexExistsAsync(connection, "idx_metrics_name_time")).ShouldBeTrue();
+        (await IndexExistsAsync(connection, "idx_metrics_project_time")).ShouldBeTrue();
+    }
+
+    /// <summary>
+    ///     The criterion finding B exists for (docs/plans/2026-08-15-performance-metrics-implementation.md,
+    ///     WP0): a bank already stamped at CurrentVersion — the state every existing developer bank is
+    ///     in before this build's first open — must still gain the table and both indexes on reopen,
+    ///     because they live in the unconditional Ddl string, not the fresh-only branch. Dropping the
+    ///     table also drops its indexes, so this simulates "predates the metrics feature entirely".
+    /// </summary>
+    [Fact]
+    public async Task EnsureAsync_OnALegacyBankStampedAtCurrentVersion_WithMetricsTableAbsent_CreatesTheTableAndBothIndexes()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "DROP TABLE metrics", cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        (await TableExistsAsync(connection, "metrics")).ShouldBeTrue(
+            "the metrics table lives in the unconditional Ddl string, so it must reach a legacy bank on reopen");
+        (await IndexExistsAsync(connection, "idx_metrics_name_time")).ShouldBeTrue();
+        (await IndexExistsAsync(connection, "idx_metrics_project_time")).ShouldBeTrue();
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion,
+            "no ladder step is needed or expected for the metrics table");
+    }
+
     /// <summary>Builds a v1-shaped bank (stamped user_version = 1) with vec_entries at the given dimension and the given rows.</summary>
     private static async Task SeedV1BankAsync(SqliteConnection connection,
         params (string Hash, string Path, string? Scope, string ProjectId, string? ContextLabel, string? WorkspaceId, string? SourceFile, bool Embedded)[] rows) =>
