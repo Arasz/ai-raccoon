@@ -12,9 +12,9 @@ namespace AiRaccoon.Tools;
 
 /// <summary>Thin MCP tool over SweepService — no business logic here (see docs/work/features-agent-memory/spec-issue-1.md §6.1).</summary>
 public sealed class SweepTools(
-    SweepService sweeper,
-    ForgettingPolicyService knobs,
-    ToolGate gate)
+    ISweepService sweeper,
+    IForgettingPolicyService knobs,
+    IToolGate gate)
 {
     private const string TnMemorySweep = "memory_sweep";
     private const string TnMemorySetTtl = "memory_set_ttl";

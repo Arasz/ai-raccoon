@@ -12,7 +12,7 @@ namespace AiRaccoon.Tools;
 /// <summary>Thin MCP tools over the propose tier (IPromotionQueue) — no business logic here.</summary>
 public sealed class PromotionTools(
     IPromotionQueue queue,
-    ToolGate gate)
+    IToolGate gate)
 {
     private const string TnMemoryPromotionList = "memory_promotion_list";
     private const string TnMemoryPromotionDiscard = "memory_promotion_discard";
