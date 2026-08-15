@@ -187,7 +187,6 @@ public sealed partial class SqliteMemoryStore(
             plan = plan with { Expression = pathExpression, Fallback = null };
         }
 
-
         var alpha = StructureFusion.DefaultAlpha;
         if (queryVector is not null)
         {
@@ -1228,7 +1227,6 @@ public sealed partial class SqliteMemoryStore(
             new(Hash, Path, Value, SourceFile, Rating, (int)AccessCount,
                 DateTimeOffset.FromUnixTimeSeconds(CreatedAt), (int?)TtlDays, SourceType);
     }
-
 
     private sealed class MetadataRow
     {

@@ -285,10 +285,17 @@ public sealed class IdleWatchdogTests
 
         public int TimersCreated => Volatile.Read(ref _timersCreated);
 
+        /// <summary>
+        ///     Counted AFTER the base call, never before. Incrementing first reports "armed" while the
+        ///     timer is not yet in the provider's queue, so an advance racing that window is lost —
+        ///     the exact ordering bug this class exists to close, and it survived four clean local
+        ///     runs before CI's timing exposed it.
+        /// </summary>
         public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
         {
+            var timer = base.CreateTimer(callback, state, dueTime, period);
             Interlocked.Increment(ref _timersCreated);
-            return base.CreateTimer(callback, state, dueTime, period);
+            return timer;
         }
     }
 

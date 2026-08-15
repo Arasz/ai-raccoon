@@ -50,7 +50,7 @@ public sealed class SqliteMemoryStoreSizeRatchetTests
     // (write, search, ingest, embedding). The next person to hit this cap should take one
     // of them rather than add a raise -- raising is borrowing against a decomposition someone
     // still has to pay for.
-    private const int MaxLines = 1238;
+    private const int MaxLines = 1237;
     private const int MaxMembers = 27;
 
     [Fact]

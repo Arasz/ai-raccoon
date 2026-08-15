@@ -107,6 +107,28 @@ service's advance to be lost exactly as before.
 ADR-0061 armed the diagnostic that will name its exception type on the next occurrence. Until that
 occurrence, anything said about its cause would be a guess.
 
+## The fix reintroduced the bug once, and CI caught it
+
+`ObservableTime.CreateTimer` first incremented its counter and **then** delegated to
+`base.CreateTimer`. So `StartAndArmAsync` could report "armed" while the timer was not yet in the
+provider's queue — an advance racing that window is lost, which is the exact ordering bug this whole
+ADR is about, reintroduced inside its own fix.
+
+It survived **three consecutive local runs of the file and four full local `Speed=Fast` runs**, one of
+them under ten busy loops on ten cores. Only CI's timing exposed it:
+
+```
+System.TimeoutException : timed out after 15s waiting for a check after advancing 00:00:01
+                          (saw 0, wanted more than 0)
+```
+
+The increment now happens **after** the base call returns, when the timer really is registered. That
+this matters is measured, not argued: putting the increment back in front and widening the window with
+a 50 ms sleep fails **5 of 8 every run**, where the corrected order passes 8/8.
+
+The general lesson is the one the ADR already states, aimed at itself: passing locally is not evidence
+about a race, however many times it passes.
+
 ## Evidence
 
 `tests/AiRaccoon.Tests/Unit/Setup/Serve/IdleWatchdogTests.cs`.
