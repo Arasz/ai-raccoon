@@ -18,7 +18,8 @@
       "expected-result": "Release build and pack succeed; the global tool force-updates and `ai-raccoon --version` matches derived.version",
       "evidence": "9 packages including ai-raccoon.1.14.0.nupkg and all 7 RID packages | Tool 'ai-raccoon' was successfully updated from version '1.13.0' to version '1.14.0'. | 1.14.0+56d35d837e551422dd276521a095c0b18ef3b8d3",
       "observed-result": "Pack produced every RID package; the tool reports the derived version with the HEAD sha.",
-      "status": "pass", "accepted": true,
+      "status": "pass",
+      "accepted": true,
       "acceptation-reason": "Version and +sha both match `git rev-parse HEAD` exactly."
     },
     {
@@ -26,7 +27,8 @@
       "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` stops the incumbent and serves in its place",
       "evidence": "Now listening on: http://127.0.0.1:60857 | http://127.0.0.1:60857/mcp | ServerRestart[651] the server on port 60857 (pid 70117) stopped and the port is free | first server's own log: Application is shutting down...",
       "observed-result": "Port 0 bound and printed both URL and /mcp entry; --restart named the incumbent by pid, confirmed the port free and bound in its place.",
-      "status": "pass", "accepted": true,
+      "status": "pass",
+      "accepted": true,
       "acceptation-reason": "The incumbent's shutdown is confirmed from its own log, not inferred from the restarting process."
     },
     {
@@ -34,36 +36,44 @@
       "expected-result": "A write returns stored:true with a content-derived hash and path",
       "evidence": "{\"hash\":\"011c14bd...6f76\",\"path\":\"ebe2b33b...d5ba.md\",\"context\":\"project:checklist\",\"stored\":true}",
       "observed-result": "Both a substantive and a one-character write stored, each with a distinct content-derived hash and path.",
-      "status": "pass", "accepted": true, "acceptation-reason": "stored:true is corroborated by memory_get returning the value below."
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "stored:true is corroborated by memory_get returning the value below."
     },
     {
       "item": "memory-search-hybrid-retrieval",
       "expected-result": "A natural-language query returns the written entry with a ranking and a snippet",
-      "evidence": "results[0] = {hash 011c14bd..., ranking 1, snippet \"The retention reaper purges a promotion discard only once its entry is…\"}, correlationId 01a004f6dfb0...",
+      "evidence": "results[0] = {hash 011c14bd..., ranking 1, snippet \"The retention reaper purges a promotion discard only once its entry is\u2026\"}, correlationId 01a004f6dfb0...",
       "observed-result": "Top hit is the written entry; a correlationId is issued, so the search_quality row this release now reaps is being written.",
-      "status": "pass", "accepted": true, "acceptation-reason": "Hit identity checked by hash, not by snippet text."
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "Hit identity checked by hash, not by snippet text."
     },
     {
       "item": "memory-get-returns-content-by-hash",
       "expected-result": "memory_get on the search hit's hash returns the exact stored value",
       "evidence": "{\"hash\":\"011c14bd...6f76\",\"value\":\"The retention reaper purges a promotion discard only once its entry is gone.\",\"context\":\"project:checklist\"}",
       "observed-result": "Byte-exact round trip of the written content.",
-      "status": "pass", "accepted": true, "acceptation-reason": "Compared against the string written earlier in the same session."
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "Compared against the string written earlier in the same session."
     },
     {
       "item": "source-path-anchor-resolves-its-chunk",
       "expected-result": "An ingested file is chunked, and a `file.md#section` query returns that file's chunks carrying sourceFile",
       "evidence": "ingest {\"indexed\":1} | anchored query returned chunkIndex 3 and 1 of totalChunks 5, both sourceFile .../0055-a-discard-is-load-bearing-while-its-entry-lives.md",
       "observed-result": "One file ingested into 5 chunks; the anchored query returned chunks of that exact file with source identity attached.",
-      "status": "pass", "accepted": true,
-      "acceptation-reason": "First attempt returned `path-outside-scope` — CORRECT: the ingest allowlist is empty by default. Re-run after `ingest scope add`, which is the documented precondition, not a workaround."
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "First attempt returned `path-outside-scope` \u2014 CORRECT: the ingest allowlist is empty by default. Re-run after `ingest scope add`, which is the documented precondition, not a workaround."
     },
     {
       "item": "write-path-noise-filtering",
       "expected-result": "A write matching a noise policy is refused with stored:false and a named reason",
       "evidence": "\"[IMPORTANT: Background process...\" -> {\"stored\":false,\"reason\":\"rejected by noise policy 'HermesBackgroundProcessLog'\"} | \"received signal 15\" -> same",
       "observed-result": "Both shapes the policy names are refused, with the truthful outcome ADR-0032 requires: empty hash, stored:false, named policy.",
-      "status": "pass", "accepted": true,
+      "status": "pass",
+      "accepted": true,
       "acceptation-reason": "An earlier probe using a `<background_process_notification>` block WAS stored. Read HermesProcessNoisePolicy before reporting it: the policy names three exact shapes and that is not one of them, so storing it is correct. The probe was wrong, not the product."
     },
     {
@@ -71,23 +81,26 @@
       "expected-result": "A query containing log output is annotated; a query that IS machine output is refused",
       "evidence": "warn tier: \"info: ...BankMaintenanceHostedService[510] Bank WAL checkpoint complete\" -> results plus warning \"This query contains what looks like log or stack-trace output...\" | refuse tier: \"[IMPORTANT: Background process bg_1 completed normally]\\nCommand: npm run dev\" -> invalid-params: \"This looks like tool output rather than a question...\"",
       "observed-result": "Both tiers fire with their ADR-0040 guidance text.",
-      "status": "pass", "accepted": true,
-      "acceptation-reason": "A first refuse-tier probe carried the prefix but neither co-marker and came back clean. QueryGuardPolicy requires prefix AND (`completed normally` | `Command:`) — deliberate, and its own comment says so: the read path demands two signals where the write path needs one. Clean was correct; the probe was under-specified."
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "A first refuse-tier probe carried the prefix but neither co-marker and came back clean. QueryGuardPolicy requires prefix AND (`completed normally` | `Command:`) \u2014 deliberate, and its own comment says so: the read path demands two signals where the write path needs one. Clean was correct; the probe was under-specified."
     },
     {
       "item": "file-watch-status",
       "expected-result": "memory_watch_add registers a watch and memory_watch_status reports it",
       "evidence": "add -> {\"projectId\":\"checklist\",\"path\":\".../docs/adr\"} | status -> watches[0] {path .../docs/adr, state \"Scanning\"}",
       "observed-result": "Watch registered and reported in Scanning state.",
-      "status": "pass", "accepted": true,
-      "acceptation-reason": "Before `watch enable checklist true`, add returned the typed refusal `watching-disabled` and status stayed empty — correct for a disabled feature, and the refusal is typed rather than a crash."
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "Before `watch enable checklist true`, add returned the typed refusal `watching-disabled` and status stayed empty \u2014 correct for a disabled feature, and the refusal is typed rather than a crash."
     },
     {
       "item": "promotion-queue-state",
       "expected-result": "memory_promotion_list and memory_stats answer for a fresh project",
       "evidence": "promotion_list -> {\"rows\":[]} | stats -> {\"entries\":3,\"pending\":3,\"contexts\":[\"project:checklist\"]} | every response envelope carries meta.waitingPromotionsCount 0",
       "observed-result": "Empty queue on a fresh bank; stats count the writes made in this session and name the one context.",
-      "status": "pass", "accepted": true,
+      "status": "pass",
+      "accepted": true,
       "acceptation-reason": "entries=3 matches the three writes that were not noise-rejected."
     },
     {
@@ -95,7 +108,8 @@
       "expected-result": "initialize + tools/list + prompts/list return derived.mcp-tool-count tools and derived.mcp-prompt-count prompts",
       "evidence": "serverInfo {\"name\":\"AiRaccoon\",\"version\":\"1.14.0.0\"} | tools: 26 | prompts: 2 ['workspace-consolidation-guide','memory-usage-guide']",
       "observed-result": "Live surface matches the counts derived from the tree, and serverInfo reports the release version.",
-      "status": "pass", "accepted": true,
+      "status": "pass",
+      "accepted": true,
       "acceptation-reason": "The counts were derived from the tree FIRST and then confirmed against the server, so neither number was copied from the other."
     },
     {
@@ -103,16 +117,18 @@
       "expected-result": "The maintenance pass logs its registered event ids, including WP7's new 522-524",
       "evidence": "BankMaintenanceHostedService[510] Bank WAL checkpoint complete (observed at both startup and shutdown of both servers) | IdleWatchdog[610] idle watchdog armed (04:00:00) | ServerRestart[650]/[651]",
       "observed-result": "510, 610, 650 and 651 observed. Event ids 522-524 (the retention reapers this release adds) were NOT observed: their pass runs on the maintenance cadence and there was nothing to purge on a bank minutes old.",
-      "status": "partial", "accepted": false,
+      "status": "partial",
+      "accepted": false,
       "acceptation-reason": "Four event ids confirmed live, but the three THIS RELEASE introduces were not exercised. Their integration test (RetentionReaperTests) covers the purge; what is unverified here is that the hosted service reaches them on a real cadence. Needs a run with the retention window set short against a bank with aged rows."
     },
     {
       "item": "cli-unrecognised-verb-falls-through-to-the-proxy",
       "expected-result": "An unrecognised verb is passed through to the proxy without polluting the JSON-RPC channel or failing the process",
       "evidence": "`ai-raccoon --data-root <scratch> notaverb` -> rc 6, stderr \"Unrecognized command or argument 'notaverb'.\" followed by the proxy dialling POST http://127.0.0.1:7721/mcp",
-      "observed-result": "It does fall through — the proxy starts and dials the backend — but it first prints 'Unrecognized command or argument' and the process exits with code 6.",
-      "status": "fail", "accepted": false,
-      "acceptation-reason": "REPEAT of the 1.13.0 failure, unchanged. Falling through is only half the contract: the stray line and the non-zero exit are both observable by a client that passed an unknown argument, and rc 6 makes a wrapper treat a working proxy as a failed launch."
+      "observed-result": "It does fall through \u2014 the proxy starts and dials the backend \u2014 but it first prints 'Unrecognized command or argument' and the process exits with code 6.",
+      "status": "fail",
+      "accepted": false,
+      "acceptation-reason": "REPEAT of the 1.13.0 failure, unchanged. Falling through is only half the contract: the stray line and the non-zero exit are both observable by a client that passed an unknown argument, and rc 6 makes a wrapper treat a working proxy as a failed launch. FIXED in 1.14.1 (docs/adr/0060): a parse error on a launch path is now fatal \u2014 exit 9, and nothing launches."
     }
   ]
 }
