@@ -178,12 +178,16 @@ public sealed partial class BankMaintenanceHostedService(
             {
                 pass.Tag("jobs.ran", string.Join(',', outcomes.Where(o => o.Ran).Select(o => o.Name)));
 
-                // Sweep again: a job can CREATE pending rows, and the sweep above already ran before
-                // it did. chunk-backfill produced 13,578 unembedded rows on a real bank and they sat
-                // until the next pass, up to a checkpoint interval away, absent from vector search
-                // the whole time. Cheap when no job made work — the sweep skips a project whose
-                // pending count is zero.
-                await RetryPendingEmbedsAsync(cancellationToken).ConfigureAwait(false);
+                // Sweep again ONLY when a job actually created rows to embed. chunk-backfill produced
+                // 13,578 unembedded rows on a real bank and the sweep above had already run before it
+                // did, so they sat until the next pass — up to a checkpoint interval away, absent from
+                // vector search. Gated rather than unconditional: vacuum and reclaim never make work,
+                // and a needless extra sweep doubles the window in which a background embed races an
+                // in-flight write (an E2E asserting one embedding request caught exactly that).
+                if (outcomes.Any(o => o.CreatedWork))
+                {
+                    await RetryPendingEmbedsAsync(cancellationToken).ConfigureAwait(false);
+                }
 
                 // A VACUUM rewrites the whole file through the WAL; truncate it now, not next tick.
                 await RunCheckpointAsync(connection, cancellationToken).ConfigureAwait(false);
