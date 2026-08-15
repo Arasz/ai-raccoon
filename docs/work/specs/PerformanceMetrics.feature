@@ -120,3 +120,15 @@ Feature: Performance metrics for AiRaccoon's own development
     # protecting the bank from write amplification) or a ceiling on how LONG a pressured batch may
     # wait. Carried to the decision gate rather than guessed — the two produce different behaviour
     # under exactly the burst this rule exists for.
+
+  @open-question
+  Rule: The metrics subsystem measures itself
+    # Owner: "also we want to save metrics for this system." => channel occupancy and pressure,
+    # dropped count, flush duration and batch size, checkpoint duration, table growth.
+    # OPEN, and the reason this is tagged: a subsystem that measures itself THROUGH itself feeds
+    # itself. Recording "flush took 12 ms" enqueues a measurement, which the next flush measures,
+    # which enqueues another. Under the pressure-based aim this is worst exactly when the channel is
+    # already full — the moment the numbers matter most. Needs a ruling on which of:
+    #   (a) self-metrics bypass the channel and are written directly by the flusher;
+    #   (b) self-metrics go through the channel but a flush never measures itself;
+    #   (c) self-metrics are sampled on a timer rather than emitted per event.
