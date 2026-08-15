@@ -93,7 +93,12 @@ public sealed partial class MemoryTools(
         "Hybrid semantic search over the bank. scope=all (default) searches shared + project (+ workspace when named); scope=project searches the project only; scope=shared searches the shared promotion tier only. A project scope covers every context in the project unless contextLabel narrows it to one.")]
     public async Task<ApiEnvelope<SearchResultList>> Search(
         [Description("The project id.")] string projectId,
-        [Description("The search query.")] string query,
+        [Description(
+            "The search query. Semantic matching only sees roughly the first 254 tokens (~1,000 " +
+            "characters of English prose, approximate) — for a long paste (a log, stack trace, test " +
+            "output), search its identifying line (exception type, error code, failing test name) " +
+            "instead of the whole dump. Keyword matching still covers the query in full.")]
+        string query,
         [Description("Search scope: all (default), project, or shared.")]
         string scope = "all",
         [Description("When set, also searches this workspace's isolated context.")]
@@ -160,7 +165,10 @@ public sealed partial class MemoryTools(
             logger.LogWarning(ex, "Failed to record search quality for correlation {CorrelationId}", correlationId);
         }
 
-        var warning = guard.Verdict.Tier == QueryGuardTier.Warn ? guard.Verdict.Guidance : null;
+        // QueryLengthGuard is always on -- a fact about the embedding window, not a togglable
+        // policy like the guard above -- so it is evaluated unconditionally, never through
+        // IQueryGuardService (a disabled guard must not silence it).
+        var warning = SearchWarnings.Compose(guard.Verdict, QueryLengthGuard.Evaluate(query));
         var result = new SearchResultList(results, warning);
         var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
         return envelope with { Meta = envelope.Meta with { CorrelationId = correlationId } };
