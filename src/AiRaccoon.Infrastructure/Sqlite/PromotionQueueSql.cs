@@ -20,7 +20,6 @@ internal static class PromotionQueueSql
                                      updated_at = excluded.updated_at
                                  """;
 
-    /// <summary>One agent rejection (docs/adr/0026): permanent per (project_id, hash), idempotent.</summary>
     /// <summary>
     ///     Both conditions on purpose: age alone would forget a rejection whose entry is still in the
     ///     bank, and the propose path would offer it again (ADR-0055).
@@ -31,6 +30,7 @@ internal static class PromotionQueueSql
                                              AND NOT EXISTS (SELECT 1 FROM entries e WHERE e.hash = promotion_discards.hash)
                                            """;
 
+    /// <summary>One agent rejection (docs/adr/0026): permanent per (project_id, hash), idempotent.</summary>
     public const string RememberDiscard = """
                                           INSERT OR IGNORE INTO promotion_discards (project_id, hash, discarded_at)
                                           VALUES (@ProjectId, @Hash, @DiscardedAt)
