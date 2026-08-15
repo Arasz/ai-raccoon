@@ -437,7 +437,13 @@ change and watch the size assertion fail. **Also assert KNN equivalence** — a 
 pass a migration that silently broke scoping. Note the bank is now **172.1 MB**, not the 159 MB first
 recorded; it grew ~22 MB during the review window.
 
-### WP6 · Compute `rating` in SQL instead of losing updates — **data F7**
+### WP6 · Compute `rating` in SQL instead of losing updates — ✅ **LANDED (ADR-0053)** — **data F7**
+
+> **Verified against `src/`, 2026-08-15.** `MemorySql.BumpAccess` is one `UPDATE` computing `rating`
+> from `access_count + 1` in the same statement, so the read-then-write is gone. Gate:
+> `tests/AiRaccoon.Tests/Integration/Storage/RatingBumpConsistencyTests.cs`, 4 tests, and ADR-0053
+> records it was watched red first. This section read as unstarted while the work was complete —
+> it was found by branching to implement it.
 **Effort:** QUICK · **Surface:** `BumpAccessAsync`, `MemorySql.BumpAccess`
 
 The read-then-write is two round trips with no transaction; `access_count` is immune (relative SQL
@@ -478,7 +484,18 @@ reading its own settings inside the tools file.
 Extract `ShareExtractService` and `QueryGuardService` into Core. Both tool methods become the thin
 delegations the other 21 already are.
 
-### WP9 · Finish the `ISettingsStore` extraction and make three lying defaults abstract — **architecture F7 + F8**
+### WP9 · Finish the `ISettingsStore` extraction and make three lying defaults abstract — 🔶 **F8 LANDED · F7 PART-REFUSED, PART-OPEN** — **architecture F7 + F8**
+
+> **Verified against `src/`, 2026-08-15.**
+> **F8 is done (ADR-0054).** `GetAsync` and its two siblings are abstract; `IMemoryStore.cs:15`
+> carries the reason — *"a default of 'not found' is a wrong answer, not a safe one"*.
+> **F7 is deliberately not done, and the code says why.** `SqliteMemoryStore.cs:717`: *"IMemoryStore
+> keeps the members because ~40 call sites reach settings through the store they already hold."*
+> That is a decision, not an omission, and the finding should be closed as declined rather than left
+> reading as outstanding work.
+> **What remains of F7 is one line.** `SqliteMemoryStore.cs:33` still hand-builds
+> `new SqliteSettingsStore(factory)` beside the registered one instead of taking it injected. That
+> half is real and unaddressed.
 **Effort:** SMALL · **Surface:** `IMemoryStore.cs`, `SqliteMemoryStore.cs:33,720-724`, `IPromotionQueueStore.cs`
 
 The settings members remain on `IMemoryStore` alongside the new port, `SqliteMemoryStore` hand-builds a
@@ -703,12 +720,23 @@ guarded only where it has an **independent** second source, the packaged README.
 not automatically safer than pinning it — a derived expectation compared against its own source is
 strictly worse than a pin, because a pin can at least go stale visibly.**
 
-### WP16 · Platform coverage in CI — **H16**
+### WP16 · Platform coverage in CI — ⏳ **OPEN, confirmed** — **H16**
+
+> **Verified against `.github/workflows/`, 2026-08-15.** Every `runs-on:` in `build.yml`,
+> `nightly.yml` and `labeler.yml` is `ubuntu-latest`; `publish.yml` matrixes RIDs but not runners.
+> No macOS or Windows leg exists. Still blocked on owner question 15.
 Add `macos-latest` and `windows-latest` legs to `build-fast` only, for cost control. ADR-0049 already
 measured a 0.070 nDCG spread across host CPUs against a 5e-3 tolerance, and ADR-0050 documents the
 fixture-pinning workaround it forced. Six RIDs ship with no PR gate on four of them. *Owner question 15.*
 
-### WP17 · Documentation and decision-record truth
+### WP17 · Documentation and decision-record truth — ✅ **LANDED IN FULL**
+
+> **Verified against the tree, 2026-08-15 — every bullet below is now closed.** `SECURITY.md:44`
+> reads "26 tools" against an actual 26 `[McpServerTool]` attributes (derived, not counted by hand).
+> `SECURITY.md:89` now carries *"**`ro` is not literally read-only**"* naming `access_count`,
+> `last_accessed_at` and `rating`. ADR-0043's gap is headed *"Known gap — closed 2026-08-14"*.
+> ADR-0048 carries a 2026-08-15 scope amendment stating the delivered guarantee is **fence balance**
+> and that the title generalises further. `agent-memory-server.md:58` documents `includeFullValue`.
 - ✅ **LANDED.** **Stale `Status:` fields — swept exhaustively by the orchestrator, closing the lane's open item and finding a fourth.** Of every ADR the index records as superseded or reversed, exactly one (**ADR-0002**) self-updates correctly (`Status: **Superseded** — 2026-08-09. Superseded in parts by ADR 0008…`). Four still read `Accepted` in their own files:
 
   | ADR | What the index says | What the file says |
@@ -735,7 +763,10 @@ fixture-pinning workaround it forced. Six RIDs ship with no PR gate on four of t
 - ADR-0048 claims "a chunk is a well-formed markdown fragment"; what it delivers is fence balance. A 200-row table splits with 33 of 34 chunks carrying orphaned body rows. Narrow the claim or widen the guarantee.
 - `docs/reference/agent-memory-server.md` omits `memory_promotion_list`'s `includeFullValue` — the one existing route to a full entry body.
 
-### WP18 · Python packaging honesty — **ci-docs F6 + F7**
+### WP18 · Python packaging honesty — ⏳ **OPEN, confirmed** — **ci-docs F6 + F7**
+
+> **Verified, 2026-08-15.** `pyproject.toml` has no `dependencies` key at all — not an empty one —
+> while `scripts/` imports `numpy`, `httpx` and three `sklearn` modules. `uv.lock` is still 8 lines.
 `pyproject.toml` declares zero dependencies while scripts import `numpy`, `scikit-learn` and `httpx`;
 `uv.lock` is 8 lines and locks none of them, so `uv sync` on a clean checkout cannot run the code it
 covers. Delete the three unreferenced version-pinned checklist scripts (~1,671 lines, forked per
