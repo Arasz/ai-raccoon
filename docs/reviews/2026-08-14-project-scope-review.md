@@ -374,6 +374,13 @@ These are findings too, and several of them saved work.
 - **"`memory_search`'s `contextLabel` is a cross-project read primitive."** Refuted — every context string is built from the caller's own `projectId`. Read isolation holds **by construction rather than by check**, which is precisely why the delete path fails.
 - **"The chunker is the source of the production truncation."** Refuted, and this one changed the plan (H5).
 - **"The 2.43:1 test-to-production ratio is bloat."** Not supported by anything sampled.
+- **H4 — "the headless penalty is a defect."** The *finding* survives; the *fix* is refuted. Two lanes
+  independently flagged `structureSim ?? 0.0` capping the 64% of rows with no structure embedding at
+  half score, and ADR-0004 claims the opposite behaviour. Building the fix and measuring it — on a gate
+  corpus first checked as representative at 65.4% headless — regressed S3 3→4, S4 3→6, S6 3→10, A2 1→2
+  and held-out A10 0.170→0.146, and **inverted** WP11's reversal probe: 0.610 reversed against 0.282
+  unreversed. The cap is the mechanism by which the dual-vector signal favours headed chunks at all.
+  ADR-0057; `StructureFusion` unchanged.
 
 ---
 
