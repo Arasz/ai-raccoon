@@ -1,0 +1,64 @@
+{
+  "run": {
+    "date": "2026-08-15",
+    "branch": "work/release-1-14-0",
+    "commit": "56d35d837e551422dd276521a095c0b18ef3b8d3",
+    "data-root": "/private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/8dd0aa34-1038-47d4-9a63-74533d857492/scratchpad/checklist-root-0815-114",
+    "note": "A scratch --data-root, never ~/.ai-raccoon. INCOMPLETE RUN — see run.incomplete."
+  },
+  "incomplete": {
+    "ran": 3,
+    "of": 13,
+    "reason": "The autonomous-work window expired mid-run. Items 3-13 were not attempted; the MCP-surface item was attempted twice and failed to produce output for a harness reason, not a product one (see its entry). Nothing here is inferred: an item with no evidence is recorded as not-run, not as pass.",
+    "items-not-run": [
+      "memory-write-stores-and-reports-truthfully",
+      "memory-search-hybrid-retrieval",
+      "memory-get-returns-content-by-hash",
+      "source-path-anchor-resolves-its-chunk",
+      "write-path-noise-filtering",
+      "read-path-query-guard",
+      "file-watch-status",
+      "promotion-queue-state",
+      "observability-event-ids",
+      "cli-unrecognised-verb-falls-through-to-the-proxy"
+    ]
+  },
+  "derived": {
+    "version": "1.14.0",
+    "mcp-tool-count": "26",
+    "mcp-prompt-count": "2",
+    "note": "Counted from the tree at run time: [McpServerTool] in src/AiRaccoon/Tools/*.cs and McpServerPrompt in src/AiRaccoon/Prompts/MemoryPrompts.cs."
+  },
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
+      "command": "dotnet pack -c Release && dotnet tool update -g ai-raccoon --add-source $PWD/.nupkg --version 1.14.0 && ai-raccoon --version",
+      "evidence": "9 packages created including ai-raccoon.1.14.0.nupkg and all 7 RID packages | Tool 'ai-raccoon' was successfully updated from version '1.13.0' to version '1.14.0'. | 1.14.0+56d35d837e551422dd276521a095c0b18ef3b8d3",
+      "observed-result": "Pack produced every RID package; the global tool updated and reports the derived version with the HEAD commit sha.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "Reported version matches derived.version, and the +sha suffix matches `git rev-parse HEAD` exactly."
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port stops the running server and serves in its place",
+      "command": "ai-raccoon --data-root <scratch> serve --port 0 ; ai-raccoon --data-root <scratch> serve --port 60857 --restart",
+      "evidence": "Now listening on: http://127.0.0.1:60857 | http://127.0.0.1:60857/mcp | ServerRestart[651] ai-raccoon: the server on port 60857 (pid 70117) stopped and the port is free | Now listening on: http://127.0.0.1:60857 | first server's log tail: Application is shutting down...",
+      "observed-result": "Port 0 bound a free port and printed both the URL and the /mcp entry. --restart named the incumbent by pid, confirmed the port free, and bound in its place; the first server logged its own shutdown.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "Both halves observed, and the incumbent's shutdown is confirmed from its own log rather than inferred from the restarting process."
+    },
+    {
+      "item": "full-mcp-surface",
+      "expected-result": "initialize + tools/list + prompts/list over the proxy return derived.mcp-tool-count tools and derived.mcp-prompt-count prompts",
+      "command": "printf '<initialize><initialized><tools/list><prompts/list>' | ai-raccoon --data-root <scratch>   (and again with --transport stdio)",
+      "evidence": "proxy run: 0 bytes on stdout. stdio run: stderr shows 'ModelContextProtocol.Server.StdioServerTransport[1256455528] Server (stream) (AiRaccoon) shut down.' and no JSON-RPC frames reached the capturing pipe.",
+      "observed-result": "No JSON-RPC responses were captured on either transport. The server started and shut down cleanly both times, so this is a framing/buffering problem in the one-shot pipe used here, not an observed product defect — but it was not run down, so nothing is claimed either way.",
+      "status": "not-run",
+      "accepted": false,
+      "acceptation-reason": "An item with no evidence for its expected result is not a pass. The tool and prompt counts in derived were read from the tree, NOT confirmed against a live server."
+    }
+  ]
+}
