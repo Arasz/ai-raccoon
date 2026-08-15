@@ -251,9 +251,22 @@ confirm the new gate fails. Today's gate passes under that perturbation — demo
 the commit message. This is the single most important red-first demonstration in the plan, because
 every ranking package downstream is measured by it.
 
-### WP4 · Stop fusing an already-fused list — **H1**
+### WP4 · Stop fusing an already-fused list — ⛔ **BLOCKED ON HELD-OUT CAPACITY** — **H1**
 **Effort:** QUICK · **Surface:** `SearchResultMerger.cs:26`, `SqliteMemoryStore.cs:266-273`
 **Follows WP11.**
+
+> **Owner question 7 answered — "can we do both?" — and the blocker turned out to be the corpus,
+> not the ruling (ADR-0058).** Built and measured four ways. The decisive fact: **at λ=0 the code
+> with and without the second fusion is byte-identical** (held-out 0.269842, in-sample 0.652739),
+> because `(k+1)/(k+rank)` is strictly decreasing in rank, so re-fusing a sorted list preserves
+> order. The pass has never moved a result. Its only effect is compressing the score range that
+> ADR-0005's sibling-visibility floor and consolidation gap were swept against, so deleting it
+> silently re-scales two tuned constants: held-out **0.2846 → 0.2571** alone, **→ 0.3333** with the
+> sibling floor restated as its equivalent rank window (`0.1` below max ⇒ top ~7.78 ranks —
+> arithmetic, not a re-tune), **→ 0.2818** with both constants restated. The derivation applies to
+> **both**, and that row is inconclusive against today; selecting the 0.3333 row would be tuning on a
+> 3-query held-out set. Ships three characterisation tests that pin the defect and go red when it is
+> fixed. **Unblocked by:** enough held-out queries that a ±0.03 mean is a result rather than noise.
 
 `SearchResultMerger.Merge` re-runs `ReciprocalRankFusion.Fuse` on a single, already-fused list,
 rebuilding every score from rank position and discarding the fused modality scores. A strong match set
