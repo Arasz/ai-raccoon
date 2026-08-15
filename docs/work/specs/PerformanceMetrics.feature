@@ -93,3 +93,30 @@ Feature: Performance metrics for AiRaccoon's own development
     # at the call site, where a later WriteAsync silently reintroduces back-pressure.
     # Channel.CreateBounded's itemDropped callback overload makes the drop counter a registration
     # rather than bookkeeping, which is how "drops must be visible" is satisfied.
+
+  # ---- Stage 03, round 4. ----
+
+  Rule: The channel holds at most 1000 measurements
+    # Owner: "items, lets start from 1000, we will need to tune those numbers." => a setting, not a
+    # constant, because the owner has said twice that these numbers are expected to move.
+
+  Rule: A checkpoint records the commit, not the release
+    # Owner: "commit." => ServerInfo's +sha suffix, so a regression pins to the change that caused
+    # it rather than to the release that shipped it.
+
+  Rule: The report window and bucket are the caller's choice, defaulting to the last 3 hours in 1-minute buckets
+    # Owner: "let the client specify with a default for last 3h of data with 1 minute bucket."
+    # => 180 points at the default, which is a plottable series rather than a raw dump.
+
+  @open-question
+  Rule: The background reader flushes on channel pressure, bounded by time
+    # Owner: "calculating the pressure in the channel with a time limit - we will aim at 60% of the
+    # capacity flush by default, pressure will decrease aim (so if a lot of data is coming we want to
+    # make more space) but we will limit flush period - to at most 4 seconds? And also every 30
+    # second if aim target was not reached. I think we will adjust it."
+    # AGREED: flush when the channel reaches an occupancy aim, default 60% of capacity; rising
+    # pressure LOWERS that aim so a burst drains sooner; all values are settings.
+    # OPEN: whether "at most 4 seconds" is a floor on how OFTEN a flush may happen (a rate limit
+    # protecting the bank from write amplification) or a ceiling on how LONG a pressured batch may
+    # wait. Carried to the decision gate rather than guessed — the two produce different behaviour
+    # under exactly the burst this rule exists for.
