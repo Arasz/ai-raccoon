@@ -143,11 +143,12 @@ public sealed partial class MetricsFlusher(
     {
         var now = timeProvider.GetUtcNow();
         var durationMs = timeProvider.GetElapsedTime(start).TotalMilliseconds;
+        const string selfMetricsProjectId = MetricsConfigKeys.SelfMetricsProjectId;
         Measurement[] selfMetrics =
         [
-            new("metrics.flush.duration_ms", MeasurementKind.Histogram, durationMs, "ms", now),
-            new("metrics.flush.batch_size", MeasurementKind.Gauge, batchSize, "count", now),
-            new("metrics.dropped", MeasurementKind.Counter, buffer.DroppedCount, "count", now)
+            new("metrics.flush.duration_ms", MeasurementKind.Histogram, durationMs, "ms", now, selfMetricsProjectId),
+            new("metrics.flush.batch_size", MeasurementKind.Gauge, batchSize, "count", now, selfMetricsProjectId),
+            new("metrics.dropped", MeasurementKind.Counter, buffer.DroppedCount, "count", now, selfMetricsProjectId)
         ];
 
         try

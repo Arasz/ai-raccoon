@@ -109,6 +109,37 @@ public sealed class MetricsReportServiceTests : IDisposable
     }
 
     /// <summary>
+    ///     Finding 5: self-metrics (flush duration/batch size, drop count) are bank-wide, not
+    ///     project-scoped, so they must not appear in an ordinary project's report — but they must
+    ///     be readable from *somewhere*, or a drop count can never surface as a number.
+    /// </summary>
+    [Fact]
+    public async Task GetReportAsync_OrdinaryProject_NeverSeesSelfMetrics()
+    {
+        await SeedAsync("metrics.dropped", 7, FixedNow - TimeSpan.FromMinutes(1), MetricsConfigKeys.SelfMetricsProjectId);
+
+        var report = await _service.GetReportAsync("acme", ["memory_search"],
+            TimeSpan.FromHours(1), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
+
+        report.Series.ShouldNotContain(s => s.Tool == "metrics.dropped",
+            "self-metrics are bank-wide, not this project's — an ordinary report must not be polluted by them");
+    }
+
+    /// <summary>The self-metrics sentinel project id is the one surface that can show the drop count.</summary>
+    [Fact]
+    public async Task GetReportAsync_TheSelfMetricsProjectId_SurfacesTheDropCount()
+    {
+        await SeedAsync("metrics.dropped", 7, FixedNow - TimeSpan.FromMinutes(1), MetricsConfigKeys.SelfMetricsProjectId);
+
+        var report = await _service.GetReportAsync(MetricsConfigKeys.SelfMetricsProjectId, [],
+            TimeSpan.FromHours(1), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
+
+        var dropped = report.Series.Single(s => s.Tool == "metrics.dropped");
+        dropped.Count.ShouldBe(1);
+        dropped.Max.ShouldBe(7.0);
+    }
+
+    /// <summary>
     ///     WP10: the report carries the search-phase series alongside the tool series, reading them
     ///     back from the same `metrics` table WP3's writer fills — the phase names must not be
     ///     filtered out of the SQL query the same way a hand-written tool-only list would drop them.

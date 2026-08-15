@@ -36,9 +36,14 @@ public sealed class MetricsReportService(ISqliteConnectionFactory factory, TimeP
         var now = timeProvider.GetUtcNow();
         var effectiveWindow = window ?? PerformanceReportBuilder.DefaultWindow;
         var effectiveBucket = bucket ?? PerformanceReportBuilder.DefaultBucket;
-        var phaseNames = SearchTimings.PhaseNames;
+        // Self-metrics are bank-wide, not project-scoped, so they ride in only when the caller asks
+        // for the self-metrics report specifically — never folded into an ordinary project's series,
+        // which would misattribute a bank-wide number to whichever project happened to ask first.
+        var isSelfMetricsReport = string.Equals(projectId, MetricsConfigKeys.SelfMetricsProjectId, StringComparison.Ordinal);
+        var selfMetricNames = isSelfMetricsReport ? MetricsConfigKeys.SelfMetricNames : [];
         // toolNames + phaseNames can never be empty: SearchTimings.PhaseNames always holds six
         // entries, so this always goes through the query below — no separate empty-list branch.
+        var phaseNames = (IReadOnlyList<string>) [.. SearchTimings.PhaseNames, .. selfMetricNames];
         var seriesNames = (IReadOnlyList<string>) [.. toolNames, .. phaseNames];
         var from = now - effectiveWindow;
 

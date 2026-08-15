@@ -96,6 +96,25 @@ public sealed class MetricsFlusherTests
         store.Saved.Single(m => m.Name == "metrics.flush.batch_size").Value.ShouldBe(0);
     }
 
+    /// <summary>
+    ///     Finding 5: self-metrics were written with ProjectId = null, and MetricsReportService
+    ///     filters `project_id = @ProjectId`, which can never match null — no surface could ever
+    ///     show the drop count. Tagging them with the self-metrics sentinel project id makes them
+    ///     reachable through that same equality filter, without polluting any real project's report.
+    /// </summary>
+    [Fact]
+    public async Task FlushOnceAsync_TagsSelfMetrics_WithTheSelfMetricsProjectId()
+    {
+        var buffer = new MeasurementBuffer(1000);
+        var store = new FakeMetricsStore();
+        var flusher = CreateFlusher(buffer, store);
+
+        await flusher.FlushOnceAsync(TestContext.Current.CancellationToken);
+
+        store.Saved.Where(m => MetricsConfigKeys.SelfMetricNames.Contains(m.Name))
+            .ShouldAllBe(m => m.ProjectId == MetricsConfigKeys.SelfMetricsProjectId);
+    }
+
     /// <summary>AC5: self-metrics land even when the buffer can accept nothing at all.</summary>
     [Fact]
     public async Task FlushOnceAsync_BufferAtZeroCapacity_StillWritesSelfMetrics()
