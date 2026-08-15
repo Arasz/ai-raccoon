@@ -35,6 +35,9 @@ internal static partial class ToolRefusals
         [typeof(SyncCorruptFileException)] = "sync-corrupt-file",
         [typeof(AccessDeniedException)] = "access-denied",
         [typeof(ContextOutsideProjectException)] = "context-outside-project",
+        // Moved out of DirectThrowPrefixes by docs/adr/0065: the consent gate now lives in
+        // ShareExtractService, so it raises a domain exception instead of a bare McpException.
+        [typeof(ConfirmationRequiredException)] = "confirm-required",
         [typeof(ValidationException)] = "invalid-params",
         // The SDK's own argument marshaller (Microsoft.Extensions.AI.AIFunctionFactory) throws a
         // raw JsonException when a call's JSON shape doesn't match a parameter's declared type,
@@ -51,7 +54,7 @@ internal static partial class ToolRefusals
     ///     mapped from an exception type here (ToolGate.cs, MemoryTools.cs, ShareTools.cs,
     ///     PromotionTools.cs). Kept next to <see cref="RefusalPrefixes" /> so the doc-drift test's expected set stays code-derived.
     /// </summary>
-    internal static readonly IReadOnlyCollection<string> DirectThrowPrefixes = ["invalid-params", "confirm-required"];
+    internal static readonly IReadOnlyCollection<string> DirectThrowPrefixes = ["invalid-params"];
 
     /// <summary>Expected refusals remain visible at Warning without being logged as errors.</summary>
     private static readonly HashSet<string> WarningPrefixes =

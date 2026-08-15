@@ -33,7 +33,7 @@ public sealed class ShareExtractScoringScopeTests
         store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
 
         var gate = new ToolGate(new MemoryAccessGuard(store), queue);
-        var shareTools = new ShareTools(store, gate, runner, queue);
+        var shareTools = new ShareTools(store, gate, new ShareExtractService(store, runner, queue));
         var toolResult = await shareTools.ShareExtract(["acme"],
             cancellationToken: TestContext.Current.CancellationToken);
         var scoreViaTool = toolResult.Data!.Candidates.Single(c => c.Hash == "h1").Score;
@@ -61,7 +61,7 @@ public sealed class ShareExtractScoringScopeTests
         store.Candidates["beta"] = [Row("h2", "organic fact about acme")];
 
         var gate = new ToolGate(new MemoryAccessGuard(store), queue);
-        var shareTools = new ShareTools(store, gate, runner, queue);
+        var shareTools = new ShareTools(store, gate, new ShareExtractService(store, runner, queue));
         var toolResult = await shareTools.ShareExtract(["acme"],
             cancellationToken: TestContext.Current.CancellationToken);
 
