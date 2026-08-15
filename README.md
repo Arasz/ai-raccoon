@@ -31,6 +31,8 @@ flowchart LR
 
 ## What's new
 
+- **A long `memory_write` is now searchable across its whole length.** (1.15.0) [ADR-0064](docs/adr/0064-memory-write-chunks-like-everything-else.md)
+- **Naming `shared` on a write asks for promotion instead of bypassing review.** (1.15.0) [ADR-0067](docs/adr/0067-naming-shared-asks-for-promotion.md)
 - **Workspaces no longer require `full`.** (1.13.0) [ADR-0052](docs/adr/0052-the-workspace-lifecycle-is-a-write-not-a-destruction.md)
 - **SECURITY — a delete could name another project, and wipe the shared tier.** (1.13.0) [ADR-0051](docs/adr/0051-a-context-never-names-another-project.md)
 - **BREAKING — `memory_search`'s `minScore` is now `minRelativeScore`, and defaults to off.** (1.12.0) [ADR-0047](docs/adr/0047-relative-score-floor.md)

@@ -1,0 +1,134 @@
+{
+  "run": {
+    "date": "2026-08-15",
+    "branch": "work/release-1-15-0",
+    "commit": "aa51b34d1070a95729b38570c11c640038871636",
+    "data-root": "/private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/8dd0aa34-1038-47d4-9a63-74533d857492/scratchpad/checklist-115",
+    "note": "A scratch --data-root, never ~/.ai-raccoon. Driven over stdio MCP by scratchpad/mcpcli.py."
+  },
+  "derived": {
+    "version": "1.15.0",
+    "mcp-tool-count": "26",
+    "mcp-prompt-count": "2",
+    "note": "Counted from the tree, then CONFIRMED against the live server's tools/list and prompts/list."
+  },
+  "integration-review": {
+    "note": "The campaign's Phase 7 join review, run on the MERGED tree rather than on any branch.",
+    "build": "0 warnings, 0 errors",
+    "fast-suite": "2169 passed, 1 skipped, 0 failed",
+    "seams-present": "ChunkToBudgetAsync, WriteChunks.InsertAsync, BundledProvider, IShareExtractService, IQueryGuardService, IMemoryWriteService, agent-requested-share, ObservableTime, UnexpectedText — every one still on main after four squash merges",
+    "dispatch-not-just-compile": "MemoryTools.Write -> writes.WriteAsync; Search -> queryGuard.EvaluateAsync; ShareExtract -> shareExtract.RunAsync; and NO tool calls store.WriteAsync directly any more. A wiring that compiles but never dispatches is the named join hazard, so it was checked by call site and then again live below."
+  },
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "Release pack succeeds; the global tool updates and reports derived.version",
+      "evidence": "9 packages incl. all 7 RIDs | updated from '1.14.1' to '1.15.0' | 1.15.0+aa51b34d1070a95729b38570c11c640038871636",
+      "observed-result": "Version and +sha both match HEAD.",
+      "status": "pass", "accepted": true, "acceptation-reason": "sha matches `git rev-parse HEAD` exactly."
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "`serve --port 0` binds and reports its port; `--restart` cycles the incumbent",
+      "evidence": "Now listening on: http://127.0.0.1:50169 | http://127.0.0.1:50169/mcp | 'the server on port 50169 (pid 16878) stopped and the port is free' then bound again",
+      "observed-result": "Both halves observed; the incumbent named by pid.",
+      "status": "pass", "accepted": true, "acceptation-reason": "Restart confirmed the port free before rebinding."
+    },
+    {
+      "item": "full-mcp-surface",
+      "expected-result": "26 tools, 2 prompts, serverInfo reports the release version",
+      "evidence": "serverInfo {\"name\":\"AiRaccoon\",\"version\":\"1.15.0.0\"} | tools: 26 | prompts: 2",
+      "observed-result": "Live surface matches the tree-derived counts.",
+      "status": "pass", "accepted": true, "acceptation-reason": "Counts derived FIRST, then confirmed — neither copied from the other."
+    },
+    {
+      "item": "wp3-memory_write-chunks-to-budget",
+      "expected-result": "A long body stores as multiple in-budget rows with no text lost (ADR-0064)",
+      "evidence": "29,200-char body -> 40 rows under one path, max chunk 1,076 chars, 34,543 chars total across rows (overlap accounts for the excess)",
+      "observed-result": "Chunked live through a real server. Before this release the same body stored as ONE row of 8,123 BERT tokens against a 256-token window.",
+      "status": "pass", "accepted": true,
+      "acceptation-reason": "Row count read from the bank directly, not inferred from memory_list — which lists FILES and showed one entry either way."
+    },
+    {
+      "item": "wp2-shared-write-is-a-promotion-request",
+      "expected-result": "memory_write(context:'shared') creates no shared row, lands in the caller's project, and queues a candidate (ADR-0067)",
+      "evidence": "write -> {context: 'project:release115', stored: true, reason: 'queued-for-promotion: agent-requested-share'} | memory_promotion_list -> one row, score 1, reasons ['agent-requested-share']",
+      "observed-result": "Every acceptance criterion of WP2 observed end to end: no shared row, project-scoped storage, a queued candidate distinguishable by its reason, and a response that says what happened.",
+      "status": "pass", "accepted": true,
+      "acceptation-reason": "This is the strongest form of the join review — the tool, the Core service and the queue exercised together through a real MCP session."
+    },
+    {
+      "item": "memory-write-stores-and-reports-truthfully",
+      "expected-result": "A write returns stored:true with a content-derived hash and path",
+      "evidence": "stored: true with distinct content-derived hash/path",
+      "observed-result": "Unchanged.", "status": "pass", "accepted": true,
+      "acceptation-reason": "Corroborated by memory_get below."
+    },
+    {
+      "item": "memory-search-hybrid-retrieval",
+      "expected-result": "A natural-language query returns the written entry with ranking and snippet",
+      "evidence": "results[0] hash 011c14bd..., ranking 1, correlationId issued",
+      "observed-result": "Top hit is the written entry; the search_quality row this release still reaps is written.",
+      "status": "pass", "accepted": true, "acceptation-reason": "Hit checked by hash, not snippet text."
+    },
+    {
+      "item": "memory-get-returns-content-by-hash",
+      "expected-result": "memory_get returns the exact stored value",
+      "evidence": "byte-exact round trip of the written content",
+      "observed-result": "Unchanged.", "status": "pass", "accepted": true, "acceptation-reason": "Compared against the string written in the same session."
+    },
+    {
+      "item": "source-path-anchor-resolves-its-chunk",
+      "expected-result": "An ingested file is chunked and a file#section query returns its chunks",
+      "evidence": "ingest {\"indexed\":1}; anchored query returned chunks of that exact ADR carrying sourceFile",
+      "observed-result": "Passes once the ingest scope is added.",
+      "status": "pass", "accepted": true,
+      "acceptation-reason": "First attempt returned path-outside-scope — CORRECT, the allowlist is empty by default. Documented precondition, not a workaround."
+    },
+    {
+      "item": "write-path-noise-filtering",
+      "expected-result": "A write matching a noise policy is refused with stored:false and a named reason",
+      "evidence": "the '[IMPORTANT: Background process' and 'received signal' shapes are both refused with reason 'rejected by noise policy HermesBackgroundProcessLog'",
+      "observed-result": "Unchanged from 1.14.0.", "status": "pass", "accepted": true,
+      "acceptation-reason": "A shape the policy does NOT name is stored — correct, and checked against HermesProcessNoisePolicy rather than assumed."
+    },
+    {
+      "item": "read-path-query-guard",
+      "expected-result": "Log-like queries are annotated; machine-output queries are refused",
+      "evidence": "warn tier returns results plus the ADR-0040 guidance; refuse tier returns invalid-params with its guidance",
+      "observed-result": "Both tiers fire. Now served by QueryGuardService in Core (ADR-0065) rather than by MemoryTools, and the behaviour is identical.",
+      "status": "pass", "accepted": true,
+      "acceptation-reason": "This is the live confirmation that WP8's extraction did not change what a caller sees."
+    },
+    {
+      "item": "file-watch-status",
+      "expected-result": "memory_watch_add registers a watch and status reports it",
+      "evidence": "add -> {projectId, path}; status -> the watch present",
+      "observed-result": "Passes once watching is enabled and scoped; before that, a typed 'watching-disabled' refusal.",
+      "status": "pass", "accepted": true, "acceptation-reason": "The disabled path refuses typed rather than crashing."
+    },
+    {
+      "item": "promotion-queue-state",
+      "expected-result": "memory_promotion_list and memory_stats answer",
+      "evidence": "stats {entries, pending, contexts}; promotion_list carries the agent-requested row above",
+      "observed-result": "Both answer, and the queue now has real content because of WP2.",
+      "status": "pass", "accepted": true, "acceptation-reason": "Cross-checked against the WP2 item."
+    },
+    {
+      "item": "observability-event-ids",
+      "expected-result": "The maintenance pass logs its registered event ids, including 522-524",
+      "evidence": "510 (WAL checkpoint), 610 (idle watchdog armed), 650/651 (restart) observed live",
+      "observed-result": "Four ids confirmed. 522-524 — the retention reapers — were NOT exercised: their pass runs on the maintenance cadence and a bank minutes old has nothing to purge.",
+      "status": "partial", "accepted": false,
+      "acceptation-reason": "Unchanged from 1.14.0 and honest: RetentionReaperTests covers the purge; what stays unverified live is that the hosted service reaches those ids on a real cadence."
+    },
+    {
+      "item": "cli-unrecognised-verb-falls-through-to-the-proxy",
+      "expected-result": "An unrecognised verb fails with a parse error and a non-zero exit",
+      "evidence": "fixed in 1.14.1 by ADR-0060; exit 9 (FailedToParseCliArgs), nothing launched",
+      "observed-result": "The 1.13.0 and 1.14.0 failure is closed.",
+      "status": "pass", "accepted": true,
+      "acceptation-reason": "Regression-covered by AppRunnerUnrecognisedVerbTests; not re-driven by hand here because the unit gate asserts the exit code directly."
+    }
+  ]
+}
