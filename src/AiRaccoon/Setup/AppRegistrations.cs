@@ -166,6 +166,7 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<IMetricsStore, SqliteMetricsStore>();
             services.AddRequiredSingleton<IMeasurementRecorder, MetricsRecorder>();
             services.AddHostedService<MetricsFlusher>();
+            services.AddRequiredSingleton<IMetricsReportService, MetricsReportService>();
         }
 
         private void RegisterFileIngestionServices()
