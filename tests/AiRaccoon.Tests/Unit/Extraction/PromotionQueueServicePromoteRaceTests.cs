@@ -179,6 +179,8 @@ public sealed class PromotionQueueServicePromoteRaceTests
 
     private sealed class RaceyQueueStore : IPromotionQueueStore
     {
+        public Task<int> PurgeOldDiscardsAsync(long nowUnixSeconds, int retentionDays,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public List<PromotionQueueRow> Rows { get; } = [];
         public HashSet<string> AlreadyGoneHashes { get; } = new(StringComparer.Ordinal);
 

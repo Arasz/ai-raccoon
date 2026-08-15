@@ -198,6 +198,7 @@ public static class TestData
 
     private sealed class UnreachablePromotionQueueStore : IPromotionQueueStore
     {
+        public Task<int> PurgeOldDiscardsAsync(long nowUnixSeconds, int retentionDays, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<PromotionQueueRow>> ListAsync(string? projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<PromotionQueueRow>> DiscardAsync(string projectId, string? hash, CancellationToken cancellationToken = default) => throw new NotSupportedException();
@@ -320,6 +321,9 @@ public sealed class FakePromotionQueue : IPromotionQueue
 /// <summary>No-op implementation of <see cref="ISearchQualityService"/> for unit tests that construct <see cref="MemoryTools"/> directly.</summary>
 public sealed class NoOpSearchQualityService : ISearchQualityService
 {
+    public Task<int> PurgeOlderThanAsync(long nowUnixSeconds, int retentionDays,
+        CancellationToken cancellationToken = default) => Task.FromResult(0);
+
     public Task RecordSearchAsync(string correlationId, string query, string? scope, string? projectId,
         string? sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default) =>
         Task.CompletedTask;

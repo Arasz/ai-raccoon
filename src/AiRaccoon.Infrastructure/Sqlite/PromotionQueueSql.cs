@@ -21,6 +21,16 @@ internal static class PromotionQueueSql
                                  """;
 
     /// <summary>One agent rejection (docs/adr/0026): permanent per (project_id, hash), idempotent.</summary>
+    /// <summary>
+    ///     Both conditions on purpose: age alone would forget a rejection whose entry is still in the
+    ///     bank, and the propose path would offer it again (ADR-0055).
+    /// </summary>
+    public const string PurgeOldDiscards = """
+                                           DELETE FROM promotion_discards
+                                           WHERE discarded_at < @cutoff
+                                             AND NOT EXISTS (SELECT 1 FROM entries e WHERE e.hash = promotion_discards.hash)
+                                           """;
+
     public const string RememberDiscard = """
                                           INSERT OR IGNORE INTO promotion_discards (project_id, hash, discarded_at)
                                           VALUES (@ProjectId, @Hash, @DiscardedAt)
