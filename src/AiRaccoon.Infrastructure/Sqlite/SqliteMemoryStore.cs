@@ -91,7 +91,6 @@ public sealed partial class SqliteMemoryStore(
         // memory_write carries no logical path; derive a stable one from the content itself so
         // identical content maps to the same slot, then scope the identity hash to it (FR-NM-7; see docs/work/features-native-memory/native-memory.feature).
         var path = WritePathFor(request.Content);
-        var hash = ContentHash.Of(path, request.Content);
 
         if (bucket.WorkspaceId is not null)
         {
@@ -114,26 +113,22 @@ public sealed partial class SqliteMemoryStore(
         var source = await ResolveSourceAsync(connection, request.SourceFile, request.Section, cancellationToken)
             .ConfigureAwait(false);
 
-        await connection.ExecuteAsync(
-                Def(MemorySql.InsertEntry,
-                    new
-                    {
-                        hash,
-                        path,
-                        value = request.Content,
-                        sourceFile = source.SourceLocator is { Length: > 0 } ? source.SourceLocator : null,
-                        section = request.Section,
-                        scope = bucket.Scope,
-                        projectId = bucket.ProjectId,
-                        contextLabel = bucket.ContextLabel,
-                        workspaceId = bucket.WorkspaceId,
-                        agentId = request.AgentId,
-                        createdAt = now,
-                        updatedAt = now,
-                        sourceId = source.Id
-                    },
-                    cancellationToken))
+        // memory_write had no chunking of its own, so a long body stored as one row and embedded
+        // only its first window (docs/adr/0064). Content that already fits comes back as one chunk,
+        // so the common short write is byte-for-byte what it was.
+        var chunks = await fileIngestor.ChunkToBudgetAsync(connection, request.Content, cancellationToken)
             .ConfigureAwait(false);
+        // The returned entry addresses chunk 0; the path is derived from the WHOLE body, so the
+        // document keeps one identity however many rows it becomes.
+        var hash = ContentHash.Of(path, chunks[0]);
+        foreach (var chunk in chunks.Skip(1))
+        {
+            await WriteChunks.InsertAsync(connection, ContentHash.Of(path, chunk), path, chunk, source, request,
+                bucket, now, cancellationToken).ConfigureAwait(false);
+        }
+
+        await WriteChunks.InsertAsync(connection, hash, path, chunks[0], source, request, bucket, now,
+            cancellationToken).ConfigureAwait(false);
 
         var row = bucket.Scope == SharedScope
             ? await connection.QueryFirstOrDefaultAsync<EntryRow>(
@@ -141,10 +136,11 @@ public sealed partial class SqliteMemoryStore(
                         new { path, hash }, cancellationToken))
                 .ConfigureAwait(false)
             : await connection.QueryFirstOrDefaultAsync<EntryRow>(
-                    Def(MemorySql.SelectEntryByPathInBucket,
+                    Def(MemorySql.SelectEntryByPathAndHashInBucket,
                         new
                         {
                             path,
+                            hash,
                             scope = bucket.Scope,
                             projectId = bucket.ProjectId,
                             contextLabel = bucket.ContextLabel,
