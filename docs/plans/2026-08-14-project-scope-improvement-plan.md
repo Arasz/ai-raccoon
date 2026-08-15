@@ -130,6 +130,31 @@ it should bypass the queue's capacity eviction entirely is a policy call. **Deci
 above the scorer's range but leave eviction untouched, which is reversible and cannot silently drop the
 request without it showing up in the queue's own metrics.
 
+---
+
+**Implementation blocked on a dependency cycle — found while starting it, 2026-08-15.**
+
+The enqueue cannot live in `SqliteMemoryStore`. `PromotionQueueService` takes `IMemoryStore`
+(`src/AiRaccoon.Infrastructure/Promotion/PromotionQueueService.cs:14`), so injecting `IPromotionQueue`
+into the store is **store → queue → store** — a genuine cycle at singleton scope, resolvable only by a
+lazy/service-locator closure, which is exactly the smell the architecture lane filed as F15. And the
+store is sitting at **exactly** its 1251-line ratchet cap, whose own note names `write` as one of the
+four remaining seams.
+
+So the enqueue needs a Core service composing the store and the queue — which is the same extraction
+**WP8** performs for `ShareTools` and `MemoryTools`' query guard. **That makes WP2 MEDIUM, not SMALL,
+and binds it to WP8.**
+
+**A smaller WP2a was considered and rejected.** Mapping `shared` to the project scope in
+`EntryBucket.For` alone is one line and closes the boundary crossing with no cycle — but it changes
+behaviour silently unless `WriteResult.Reason` says so, and setting that reason means growing
+`WriteAsync`, which the ratchet refuses. Landing the one line without the reason would leave an agent's
+promotion request dropped with no signal — the exact failure mode this campaign exists to find. Not
+worth trading one silent behaviour for another to save a wave.
+
+**Recommendation:** sequence WP2 immediately after WP8's write-seam extraction, and treat the cycle as
+the argument for that extraction rather than an obstacle to this package.
+
 ### WP3 · Make every write path budget its chunks, then restart and backfill — **BLOCKERS B2 + B3, H5, H24**
 **Effort:** MEDIUM–LARGE · **Surface:** `MemoryTools.Write` → `SqliteMemoryStore.WriteAsync`, `FileIngestor.ChunkSizeForAsync`, plus an operational restart and a backfill
 
