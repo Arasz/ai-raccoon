@@ -525,7 +525,8 @@ internal static class MemorySql
                                                                     WHERE entries.id IN (SELECT id FROM numbered)
                                                                    """;
 
-    // The vec0 partition key (docs/plans/2026-08-08-search-knn-perf.md §3.1). Length-prefixed, not
+    // The vec0 `ctx` column — a partition key until v9, a metadata column since (ADR-0068).
+    // Length-prefixed, not
     // ':'-joined, because the naive join collides across project id/label boundaries.
     public static string ContextKeyExpression(string prefix) =>
         $"""

@@ -5,7 +5,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Storage;
 
 /// <summary>
-///     The vec0 partition key (docs/plans/2026-08-08-search-knn-perf.md §3.1): one context-key
+///     The vec0 `ctx` column (ADR-0068 demoted it from partition key to metadata): one context-key
 ///     encoding shared by the SQL fragment and its C# twin. Length-prefixed rather than
 ///     ':'-joined so a project id containing ':' cannot collide with a label containing ':'.
 /// </summary>
