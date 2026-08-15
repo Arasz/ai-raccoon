@@ -89,24 +89,46 @@ method by reflection and asserting each one's guard requirement, mirroring the e
 `EveryTool_NamesTheProjectIdParameter`. Break it with a stub tool that omits the gate and watch it go
 red.
 
-### WP2 · Refuse a direct write to the shared tier — **H6**
-**Effort:** QUICK · **Surface:** `EntryBucket.For` · **One branch added to WP1's helper** (see sequencing rule 3, corrected in rev 2)
+### WP2 · Treat a write naming `shared` as a promotion request, not as a write — **H6**
+**Effort:** SMALL · **Surface:** `EntryBucket.For`, `SqliteMemoryStore.WriteAsync`, `IPromotionQueue.ProposeAsync`
+**Owner ruling, 2026-08-15 — this package was redesigned, not withdrawn.**
 
-`EntryBucket.cs:11-14` maps `context == "shared"` to `scope='shared'` and is not covered by the
-project check added at `:19-22`/`:41-44`. At the default `rw` mode, one `memory_write` puts arbitrary
-content in the tier every project reads, exempt from the sweep, bypassing both the propose/review flow
-and `memory_share_extract`'s `confirm=true` gate.
+Rev 1 proposed *refusing* `memory_write(context: "shared")`. The owner's steer is better and this
+package now follows it: **an agent naming `shared` is asking for the row to be promoted, and that is
+the strongest promotion signal available** — far better than a scorer inferring it. Refusing throws
+that signal away; writing it straight through skips the review the shared tier exists to have.
+
+**First, the factual correction the design rests on.** The owner asked whether `shared` is "just a
+context — a label inside the project". Checked against the code and the live bank: **no, and it is the
+only context string for which the answer is no.**
+
+- `SearchContexts.For` with `scope=all` (the default) already adds the shared context **plus** the project context **plus** every custom label in the project. *Both are already searchable by default; nothing needs changing there.*
+- A **label** is `scope='custom'` with `context_label` set — 12 rows in the live bank. ADR-0045's own doc comment states the rule: "the project is the isolation boundary; a context is a label inside it, not a second boundary."
+- **`shared` is a distinct scope, not a label** — 138 rows across 5 projects, each retaining its originating `project_id`, and `context_label` NULL on every one. It is the one context that *crosses* the project boundary, which is precisely why it was reachable at the default `rw` mode without review.
+
+**Change:** `memory_write(context: "shared")` writes the row into the **caller's project scope** and
+enqueues a promotion candidate via `IPromotionQueue.ProposeAsync` with `Reasons` carrying
+`agent-requested-share`. `QueueCandidate` already has a `Reasons` list, so this is a first-class
+reason rather than a special case. The response says what happened — stored, and queued for promotion.
 
 **Acceptance criteria**
-- `memory_write(context: "shared")` is refused with a message naming `memory_share` as the route.
-- `memory_share`/`memory_share_extract` still reach the shared tier.
+- `memory_write(context: "shared")` at default `rw` creates **no** `scope='shared'` row.
+- It creates one project-scoped row **and** one `promotion_queue` row for that hash, carrying the `agent-requested-share` reason.
+- The write is not lost and the agent can find it immediately by ordinary project search.
+- `memory_share` / `memory_share_extract` still reach the shared tier directly — the review path is unchanged.
+- An agent-requested candidate is distinguishable in `memory_promotion_list` from a scorer-proposed one.
 
-**Gate — watch it go red first.** A test writing with `context: "shared"` at default mode and
-asserting the refusal plus `SELECT COUNT(*) FROM entries WHERE scope='shared'` unchanged. Today it
-lands the row; record that.
+**Gate — watch it go red first.** A test writing with `context: "shared"` at default mode, asserting
+`COUNT(*) WHERE scope='shared'` is unchanged **and** a queue row exists with the reason. Today the
+shared row lands and no queue row is created — the adversarial pass demonstrated exactly that
+(`{"context":"shared","stored":true}`, `memory_promotion_list` → `{"rows":[]}`). Record both before the
+fix.
 
-*Blocked on owner question 2 only if the answer is "direct shared writes are intended" — in which case
-this package is withdrawn and the review records the decision.*
+**Open sub-question for the owner, not blocking:** what `Score` an agent-requested candidate gets. It
+should outrank scorer-proposed candidates, since an explicit request beats an inference — but whether
+it should bypass the queue's capacity eviction entirely is a policy call. **Decided for now:** score it
+above the scorer's range but leave eviction untouched, which is reversible and cannot silently drop the
+request without it showing up in the queue's own metrics.
 
 ### WP3 · Make every write path budget its chunks, then restart and backfill — **BLOCKERS B2 + B3, H5, H24**
 **Effort:** MEDIUM–LARGE · **Surface:** `MemoryTools.Write` → `SqliteMemoryStore.WriteAsync`, `FileIngestor.ChunkSizeForAsync`, plus an operational restart and a backfill
@@ -142,9 +164,26 @@ this package is withdrawn and the review records the decision.*
 
 Only then the operational gate: ingest a document known to overflow under the *old* budget and assert the EventId 414 counter stays at zero.
 
-**Scope decision needed** (owner question 3): whole-bank re-chunk, or only the ~6,900 rows currently
-over the window. **Recommendation: the narrow one**, because the wider one changes the corpus under
-WP11's gate for a benefit nobody has measured.
+**Scope decided — whole bank (owner ruling, 2026-08-15).** The owner's rule was "if it makes a
+difference for memory retrieval, whole; if not, the more performance-friendly solution." Measured, and
+the choice dissolves: **chunking is a document-level operation.** A single chunk cannot be re-chunked
+in isolation — re-chunking re-derives every boundary in its document. So the narrow option is not
+"~6,900 rows", it is "every document containing one of them":
+
+| | |
+|---|---|
+| Distinct source documents in the bank | 1,217 |
+| Documents holding at least one over-window row | **1,004 (82.5%)** |
+| Rows in those documents | **14,979 of 16,152 (92.7%)** |
+
+The performance-friendly option therefore saves **7.3%** and leaves the corpus carrying two chunk
+generations — some documents on pre-fix boundaries, some on post-fix ones — which is its own retrieval
+hazard and a confound for WP11's gate. It is not meaningfully cheaper, so on the owner's own rule the
+answer is the whole bank.
+
+**Two row classes need different handling, and the narrow/whole axis does not cover the second:**
+- **Document rows** (16,152 − 56 with a `source_file`): re-chunk the document, re-embed its chunks.
+- **`memory_write` rows** — 56 with no `source_file` at all, plus 130 oversized rows with `total_chunks <= 1`. These are not documents and cannot be "re-chunked" as one. They need the WP3 code fix first, then their stored `value` treated as its own document.
 
 ---
 
