@@ -87,6 +87,9 @@ public sealed class ExtractionMetricsTests
     /// round trip without a database.</summary>
     private sealed class InMemoryPromotionQueueStore : IPromotionQueueStore
     {
+        /// <summary>No retention pressure in a round-trip fake.</summary>
+        public Task<int> PurgeOldDiscardsAsync(long nowUnixSeconds, int retentionDays,
+            CancellationToken cancellationToken = default) => Task.FromResult(0);
 
         /// <summary>Forwards to this fake's own DiscardAsync — the behaviour IPromotionQueueStore
         /// used to supply as a default, now stated where it is chosen (ADR-0054).</summary>

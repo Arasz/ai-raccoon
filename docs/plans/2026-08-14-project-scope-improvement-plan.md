@@ -348,7 +348,7 @@ on one hash — and `rating` feeds sweep eligibility.
 both read, both write; assert `rating` reflects the final `access_count`. Today it does not; record the
 two values.
 
-### WP7 · Reap `promotion_discards` and `search_quality` — **H12 + data F6**
+### WP7 · Reap `promotion_discards` and `search_quality` — ✅ **IN REVIEW** — **H12 + data F6**
 **Effort:** SMALL · **Surface:** `BankMaintenanceHostedService.RunPassAsync`, `PromotionQueueSql`
 
 965 discard rows against 19 queued and 138 shared entries, with no delete statement anywhere.
@@ -489,8 +489,12 @@ re-run rather than read — the same failure mode arriving by a different door.
 deterministically — by injecting the timing rather than by looping the test — before fixing it. A flake
 "fixed" without a reproduction is a flake that moved.
 
-### WP21 · Stop calling async ADO.NET methods on SQLite — **new, 2026-08-15, owner-supplied source**
+### WP21 · Stop calling async ADO.NET methods on SQLite — ⏸ **DEFERRED by owner, 2026-08-15** — *new, owner-supplied source*
 **Effort:** LARGE · **Surface:** every `ExecuteAsync`/`QueryAsync*` call in `src/AiRaccoon.Infrastructure/`
+
+> **Owner ruling, 2026-08-15: "we can leave the async access for now."** Kept in the plan rather
+> than deleted — the citation and the reasoning are the expensive part, and the trap it explains
+> (a concurrency test that runs sequentially) will catch someone again whether or not the calls change.
 
 Microsoft's own page for this provider says it plainly
 ([Async limitations](https://learn.microsoft.com/en-us/dotnet/standard/data/sqlite/async)):

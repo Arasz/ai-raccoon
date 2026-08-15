@@ -90,6 +90,8 @@ public sealed class PromotionQueueServiceGuardTests
 
     private sealed class UnreachableQueueStore : IPromotionQueueStore
     {
+        public Task<int> PurgeOldDiscardsAsync(long nowUnixSeconds, int retentionDays,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
         /// <summary>Forwards to this fake's own DiscardAsync — the behaviour IPromotionQueueStore
         /// used to supply as a default, now stated where it is chosen (ADR-0054).</summary>
@@ -139,6 +141,8 @@ public sealed class PromotionQueueServiceGuardTests
     /// because DiscardAsync must return before touching stats or the cap.</summary>
     private sealed class EmptyDiscardQueueStore : IPromotionQueueStore
     {
+        public Task<int> PurgeOldDiscardsAsync(long nowUnixSeconds, int retentionDays,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
         /// <summary>Forwards to this fake's own DiscardAsync — the behaviour IPromotionQueueStore
         /// used to supply as a default, now stated where it is chosen (ADR-0054).</summary>

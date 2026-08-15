@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Observability;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -19,7 +20,9 @@ public sealed partial class BankMaintenanceHostedService(
     IOperationTelemetry telemetry,
     ILogger<BankMaintenanceHostedService> logger,
     IMemoryStore store,
-    INoiseEntryStore noiseEntryStore)
+    INoiseEntryStore noiseEntryStore,
+    IPromotionQueueStore promotionQueueStore,
+    ISearchQualityService searchQuality)
     : BackgroundService
 {
     /// <summary>Contended checkpoints defer quickly instead of blocking the maintenance connection.</summary>
@@ -141,6 +144,7 @@ public sealed partial class BankMaintenanceHostedService(
             await RunCheckpointAsync(connection, cancellationToken).ConfigureAwait(false);
             await RetryPendingEmbedsAsync(cancellationToken).ConfigureAwait(false);
             await PurgeExpiredNoiseEntriesAsync(cancellationToken).ConfigureAwait(false);
+            await PurgeExpiredRetentionAsync(connection, cancellationToken).ConfigureAwait(false);
 
             var now = timeProvider.GetUtcNow();
             if (_lastVacuumUtc is null)
@@ -278,6 +282,46 @@ public sealed partial class BankMaintenanceHostedService(
     ///     accumulate forever. A failure logs and never blocks the checkpoint/vacuum pass — same
     ///     silent-failure discipline as the pending-embed retry sweep above.
     /// </summary>
+    /// <summary>
+    ///     Age-bounds the two tables that grew without one (ADR-0055). Same log-and-continue
+    ///     discipline as the noise purge: retention is housekeeping, never a reason to fail a pass.
+    /// </summary>
+    private async Task PurgeExpiredRetentionAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
+
+            var discardDays = await ReadIntervalAsync(connection,
+                BankMaintenanceConfigKeys.PromotionDiscardRetentionDaysGlobal,
+                BankMaintenanceConfigKeys.ParsePromotionDiscardRetentionDays, cancellationToken).ConfigureAwait(false);
+            var discards = await promotionQueueStore
+                .PurgeOldDiscardsAsync(now, discardDays, cancellationToken).ConfigureAwait(false);
+            if (discards > 0)
+            {
+                Log.PromotionDiscardsPurged(logger, discards, discardDays);
+            }
+
+            var qualityDays = await ReadIntervalAsync(connection,
+                BankMaintenanceConfigKeys.SearchQualityRetentionDaysGlobal,
+                BankMaintenanceConfigKeys.ParseSearchQualityRetentionDays, cancellationToken).ConfigureAwait(false);
+            var quality = await searchQuality
+                .PurgeOlderThanAsync(now, qualityDays, cancellationToken).ConfigureAwait(false);
+            if (quality > 0)
+            {
+                Log.SearchQualityPurged(logger, quality, qualityDays);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Log.RetentionPurgeFailed(logger, ex);
+        }
+    }
+
     private async Task PurgeExpiredNoiseEntriesAsync(CancellationToken cancellationToken)
     {
         try
@@ -399,5 +443,17 @@ public sealed partial class BankMaintenanceHostedService(
 
         [LoggerMessage(EventId = 521, Level = LogLevel.Warning, Message = "Noise entry retention purge failed; retried on the next tick")]
         public static partial void NoiseEntryPurgeFailed(ILogger logger, Exception exception);
+
+        [LoggerMessage(EventId = 522, Level = LogLevel.Information,
+            Message = "Promotion-discard retention purge removed {Count} row(s) past {RetentionDays} day(s) whose entry is gone")]
+        public static partial void PromotionDiscardsPurged(ILogger logger, int count, int retentionDays);
+
+        [LoggerMessage(EventId = 523, Level = LogLevel.Information,
+            Message = "Search-quality retention purge removed {Count} row(s) past {RetentionDays} day(s)")]
+        public static partial void SearchQualityPurged(ILogger logger, int count, int retentionDays);
+
+        [LoggerMessage(EventId = 524, Level = LogLevel.Warning,
+            Message = "Retention purge failed; retried on the next tick")]
+        public static partial void RetentionPurgeFailed(ILogger logger, Exception exception);
     }
 }

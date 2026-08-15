@@ -179,6 +179,8 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
     /// <summary>Queue store whose rows the test controls (copy of the race-tests shape).</summary>
     private sealed class RaceyQueueStore : IPromotionQueueStore
     {
+        public Task<int> PurgeOldDiscardsAsync(long nowUnixSeconds, int retentionDays,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
         /// <summary>Forwards to this fake's own DiscardAsync — the behaviour IPromotionQueueStore
         /// used to supply as a default, now stated where it is chosen (ADR-0054).</summary>

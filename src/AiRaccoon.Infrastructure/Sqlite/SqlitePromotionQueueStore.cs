@@ -205,6 +205,17 @@ public sealed class SqlitePromotionQueueStore(
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
+
+    public async Task<int> PurgeOldDiscardsAsync(long nowUnixSeconds, int retentionDays,
+        CancellationToken cancellationToken = default)
+    {
+        var cutoff = nowUnixSeconds - (long)retentionDays * 86_400;
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        return await connection.ExecuteAsync(
+                new CommandDefinition(PromotionQueueSql.PurgeOldDiscards, new { cutoff },
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
     public async Task<int> PruneRejectedAsync(string projectId,
         CancellationToken cancellationToken = default)
     {

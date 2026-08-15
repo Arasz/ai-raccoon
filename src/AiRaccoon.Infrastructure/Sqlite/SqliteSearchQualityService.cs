@@ -131,4 +131,16 @@ public sealed class SqliteSearchQualityService(ISqliteConnectionFactory factory)
             total > 0 ? (double)graded / total : 0.0,
             total / days);
     }
+
+    public async Task<int> PurgeOlderThanAsync(long nowUnixSeconds, int retentionDays,
+        CancellationToken cancellationToken = default)
+    {
+        var cutoff = nowUnixSeconds - (long)retentionDays * 86_400;
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        // idx_sq_project_time (project_id, created_at) exists for exactly this purge and had no query.
+        return await connection.ExecuteAsync(
+                new CommandDefinition("DELETE FROM search_quality WHERE created_at < @cutoff",
+                    new { cutoff }, cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
 }

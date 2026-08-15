@@ -51,6 +51,13 @@ public interface IPromotionQueueStore
     /// </summary>
     Task<int> PruneRejectedAsync(string projectId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    ///     Removes discards older than the retention window whose entry no longer exists. Both
+    ///     conditions are required — see ADR-0055. Returns the count removed.
+    /// </summary>
+    Task<int> PurgeOldDiscardsAsync(long nowUnixSeconds, int retentionDays,
+        CancellationToken cancellationToken = default);
+
     Task<PromotionQueueOrphanReport> PruneOrphansAsync(bool apply,
         CancellationToken cancellationToken = default);
 

@@ -49,4 +49,8 @@ public interface ISearchQualityService
         string? projectId,
         DateTimeOffset from,
         CancellationToken ct = default);
+
+    /// <summary>Removes telemetry rows older than the retention window. Returns the count removed.</summary>
+    Task<int> PurgeOlderThanAsync(long nowUnixSeconds, int retentionDays,
+        CancellationToken cancellationToken = default);
 }
