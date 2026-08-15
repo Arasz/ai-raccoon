@@ -31,7 +31,16 @@ Feature: Performance metrics for AiRaccoon's own development
     # checkpoint table - this can be just limited to 24 entries. This will give us details in the
     # 'current' scope and long running history."
     # => hot table: rolling 4 weeks of raw measurements, so >= 2 weeks of detail is always present.
-    # => checkpoint table: rolled-up summaries, capped at 24 rows (~1 year at a fortnightly cadence).
+    # => checkpoint table: rolled-up summaries.
+    # SUPERSEDED, stage 06 follow-up, owner: "instead count based - we want to keep 1 year of
+    # checkpoints." THE 24-ROW CAP IS GONE. Checkpoint retention is purely age: keep one year, drop
+    # what is older, whatever the count. Strictly simpler than what it replaces -- one bound instead
+    # of two interacting ones -- and it says what was wanted all along. The 24 rows were only ever a
+    # proxy for "about a year", and the proxy stopped holding the moment versions could also trigger
+    # a checkpoint. Dropping it also removes the question of which bound bites first.
+    # Consequence, stated because it is the cost of the simplification: the row count is UNBOUNDED
+    # within the year. Both triggers fire, so a project releasing weekly writes ~78 rows a year
+    # rather than 24. Accepted -- checkpoints are small summaries, and a year of them was the ask.
     # AMENDED, stage 04: the four weeks is a BEST-EFFORT limit, not a guarantee. Holding more than
     # four weeks is acceptable and is not a violation — owner: "we can hold more than four weeks,
     # this is best effort limit."
@@ -41,9 +50,16 @@ Feature: Performance metrics for AiRaccoon's own development
     # AMENDED, stage 04 batch 3, owner: "I think we could align checkpoints with versions - so we
     # always start checkpoint on the version." => the cadence is NOT purely fortnightly. A new
     # version STARTS a checkpoint, so a checkpoint's window is bounded by version boundaries.
-    # Consequence to carry forward: with a release-driven cadence, the 24-row cap is no longer
-    # "~1 year" — that gloss assumed a fixed fortnight. How far back 24 checkpoints reach now
-    # depends on release frequency, and that is a fact about the release train, not a bug.
+    # (Stage 04 had retired the "24 rows ~= 1 year" gloss as unsafe once versions could trigger a
+    # checkpoint. The supersession above settles it from the other side: the year is now the rule.)
+    # RULED, stage 06 card O1 (APPROVE), owner: "either, we record the same version in both. But in
+    # that case we need a base limit on the time span - when last checkpoint is older than 1 year -
+    # remove it."
+    # => EITHER TRIGGER FIRES. A version cuts a checkpoint AND a fortnight cuts one; a quiet
+    # fortnight is not skipped. Two checkpoints inside one version both record that version, so
+    # version is not unique per checkpoint -- it is a label, not a key. That is the point: it gives
+    # sub-version granularity while still pinning a regression to a release.
+    # => THE BOUND IS AGE, AND ONLY AGE: a checkpoint older than one year is removed.
     # ADDED, stage 05 batch 1, owner: "retention should be a background maintenance pass." The gap
     # was found by writing a step — `When the retention pass runs` named something no rule had
     # decided. So: checkpoint-and-prune is a BACKGROUND MAINTENANCE PASS, not work the flusher does
@@ -64,19 +80,34 @@ Feature: Performance metrics for AiRaccoon's own development
       And a checkpoint write that fails
       When the background maintenance pass runs
       Then a report over the oldest two weeks still returns them
-    Scenario: The twenty-fourth checkpoint is written and none is discarded
-      # The trigger is deliberately unnamed. A checkpoint can start because a fortnight elapsed or
-      # because a version was cut, and the cap behaves identically either way — owner, stage 05:
-      # "keep the checkpoint step vague". Naming one trigger would pin behaviour nobody decided.
-      Given a checkpoint table holding 23 checkpoints
-      When a checkpoint is written
-      Then the report lists 24 checkpoints
-    Scenario: The twenty-fifth checkpoint discards the oldest, not the newest
-      Given a checkpoint table holding 24 checkpoints
-      When a checkpoint is written
-      Then the report lists 24 checkpoints
-      And the checkpoint that was oldest is gone
-      And the one just written is present
+    Scenario: A fortnight with no release still writes a checkpoint
+      # Card O1: either trigger fires. Without this, a quiet release period writes nothing and the
+      # hot table grows past four weeks with no checkpoint behind it to prune against.
+      Given no version has been released for a fortnight
+      When the background maintenance pass runs
+      Then a checkpoint is written
+
+    Scenario: A checkpoint older than a year is removed
+      Given a checkpoint table holding 10 checkpoints
+      And the oldest of them is 13 months old
+      When the background maintenance pass runs
+      Then the report lists 9 checkpoints
+
+    Scenario: A year of checkpoints is kept however many there are
+      # The scenario that would have failed under the superseded 24-row rule: a dense release cadence
+      # must not cost history.
+      Given a checkpoint table holding 78 checkpoints spanning one year
+      When the background maintenance pass runs
+      Then the report lists 78 checkpoints
+
+    Scenario: Discarding takes the oldest, not the newest
+      # Kept from the superseded count rule because the ordering claim survives it: whatever triggers
+      # a discard, it is always the oldest that goes. Owner at stage 04: "we discard the oldest,
+      # versions doesn't matter."
+      Given a checkpoint table whose oldest checkpoint is 13 months old
+      When the background maintenance pass runs
+      Then the checkpoint that was oldest is gone
+      And the most recent one is present
 
   Rule: Every operation is measured, not a chosen subset
     # Owner: "in - we want a complete view."
@@ -317,6 +348,8 @@ Feature: Performance metrics for AiRaccoon's own development
       And no drop is counted
 
   Rule: A checkpoint records the commit, not the release
+    # Note after card O1: two checkpoints inside one version both carry that version, so the version
+    # is a LABEL on a checkpoint, not a key for it. The commit is what distinguishes them.
     # Owner: "commit." => ServerInfo's +sha suffix, so a regression pins to the change that caused
     # it rather than to the release that shipped it.
     # RESOLVED, stage 04 batch 3, owner: "we want commit, version and timestamp of the commit. And
@@ -410,14 +443,20 @@ Feature: Performance metrics for AiRaccoon's own development
   #   from. That makes it the same derived inventory the coverage gate uses, which is the right
   #   answer for the derive-or-delete reason: two lists of tools would drift.
   #
-  # CARD 2 (proposed in stage 05 batch 5, not ruled). The two deliberate choices in that batch --
-  #   the p99 expectation computed outside the code under test, and the bank-shape sample asserted
-  #   by counting reads -- were flagged and drew no objection. Silence is not agreement; both are
-  #   cheap to reverse and are recorded as proposed-not-ruled.
+  # CARD P1 — RULED, APPROVE, owner: "both confirmed". Closed. The p99 expectation stays computed
+  #   outside the code under test, and the bank-shape sample stays asserted by counting reads.
   #
-  # CARD 3 (carried from stage 05 batch 3). "No setting turns measurement off" is behavioural and
-  #   weak by construction: it proves one setting combination does not disable measurement, not that
-  #   none can. The strong form is structural and belongs beside the coverage gate in spec.json.
+  # CARD O2 — RULED, APPROVE. Closed. "No setting turns measurement off" stays behavioural and weak,
+  #   with the weakness on the record: a future setting that DOES disable measurement would pass it.
+  #   Accepted knowingly rather than overlooked.
+  #
+  # CARD S1 — RULED, APPROVE. The per-phase CI budgets (design layer 3b) are OUT OF SCOPE for this
+  #   spec, and spec.json says so explicitly rather than leaving the omission to be read as an
+  #   oversight. They cannot be specified before the measurement THIS feature produces.
+  #
+  # CARD O1 — RULED, APPROVE with an addition. Recorded on the retention rule above.
+  #
+  # Gate record: docs/work/2026-08-15-perf-metrics-spec-feedback.md (4/4 answered, none deferred).
   #
   # GATE, for spec.json rather than for this file: a tool-call integration test asserting every tool
   #   on the DERIVED inventory produces at least one measurement, watched red by silencing one tool.
