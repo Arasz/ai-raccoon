@@ -42,6 +42,18 @@ public sealed partial class AppRunner
             return await RunCliCommand(cliInput);
         }
 
+        // A parse error on a path that would otherwise LAUNCH is fatal (docs/adr/0060).
+        // CliArgs.TryParse reports success whenever the *option* read succeeded, so without this an
+        // unrecognised verb printed "Unrecognized command or argument" and then launched the proxy
+        // anyway — against the DEFAULT port and token file, not the --data-root the caller passed.
+        // Deliberately after the verb branch: a known verb whose own argument is wrong keeps
+        // ExitCode.InvalidArgument (15), which is how a script tells "you mistyped" from
+        // "unparseable". GetCliInput has already rendered the message.
+        if (cliInput.Errors.Count > 0)
+        {
+            return ExitCode.FailedToParseCliArgs;
+        }
+
         if (cliInput.IsProxyInput)
         {
             return await RunProxy(cliInput);
