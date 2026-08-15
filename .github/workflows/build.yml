@@ -92,7 +92,10 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         if: needs.changes.outputs.code == 'true'
         with:
-          dotnet-version: 10.0.x
+          # Pinned via global.json, not a floating 10.0.x. An unpinned SDK is a mutable
+          # dependency re-resolved on every run — the same hazard this workflow already
+          # avoids by pinning every action to a commit SHA.
+          global-json-file: global.json
       - name: Build
         if: needs.changes.outputs.code == 'true'
         # nuget.config references the gitignored local feed .nupkg-local/; make it
@@ -122,7 +125,10 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         if: needs.changes.outputs.code == 'true'
         with:
-          dotnet-version: 10.0.x
+          # Pinned via global.json, not a floating 10.0.x. An unpinned SDK is a mutable
+          # dependency re-resolved on every run — the same hazard this workflow already
+          # avoids by pinning every action to a commit SHA.
+          global-json-file: global.json
       - name: Build
         if: needs.changes.outputs.code == 'true'
         run: mkdir -p .nupkg-local && dotnet build --nologo
@@ -162,7 +168,10 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         if: needs.changes.outputs.code == 'true'
         with:
-          dotnet-version: 10.0.x
+          # Pinned via global.json, not a floating 10.0.x. An unpinned SDK is a mutable
+          # dependency re-resolved on every run — the same hazard this workflow already
+          # avoids by pinning every action to a commit SHA.
+          global-json-file: global.json
       - name: Build
         if: needs.changes.outputs.code == 'true'
         run: mkdir -p .nupkg-local && dotnet build --nologo
