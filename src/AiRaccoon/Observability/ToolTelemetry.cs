@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AiRaccoon.Core.Metrics;
 using AiRaccoon.Tools;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
@@ -42,22 +43,25 @@ internal static class ToolTelemetry
         async (request, cancellationToken) =>
         {
             var metrics = request.Services?.GetService<ToolCallMetrics>();
+            var recorder = request.Services?.GetService<IMeasurementRecorder>();
             return metrics is null
                 ? await next(request, cancellationToken).ConfigureAwait(false)
                 : await RecordAsync(metrics, request.Params?.Name ?? string.Empty, request.Params?.Arguments,
-                    token => next(request, token), cancellationToken).ConfigureAwait(false);
+                    token => next(request, token), cancellationToken, recorder).ConfigureAwait(false);
         };
 
     /// <summary>
     ///     Times one invocation and records it once it has returned — success only after the result
-    ///     exists, so a failure while producing it counts as an error.
+    ///     exists, so a failure while producing it counts as an error. <paramref name="recorder" /> is
+    ///     the WP8 tool-level measurement hook — best-effort, so a null recorder just skips it.
     /// </summary>
     internal static async ValueTask<CallToolResult> RecordAsync(ToolCallMetrics metrics, string toolName,
         IDictionary<string, JsonElement>? arguments,
-        Func<CancellationToken, ValueTask<CallToolResult>> next, CancellationToken cancellationToken)
+        Func<CancellationToken, ValueTask<CallToolResult>> next, CancellationToken cancellationToken,
+        IMeasurementRecorder? recorder = null)
     {
         var project = ProjectFor(toolName, arguments);
-        using var activity = new ToolExecutionActivity(metrics, toolName, project.SpanId, project.MetricId);
+        using var activity = new ToolExecutionActivity(metrics, toolName, project.SpanId, project.MetricId, recorder);
         try
         {
             var result = await next(cancellationToken).ConfigureAwait(false);
