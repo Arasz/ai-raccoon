@@ -9,3 +9,4 @@ Task-oriented recipes: the reader has a goal (configure server, switch embedding
 - [Configure Rider AI completion with a local Qwen3.5-9B](configure-rider-local-autocompletion.md) — point a Rider AI-completion plugin at a local Qwen3.5-9B endpoint and paste a system prompt that matches the repo's C# conventions.
 - [Monitor and export server telemetry](monitor-and-export-telemetry.md) — live process discovery, `dotnet-counters`/`dotnet-trace` integration, and OTLP metrics/traces export.
 - [Rekey an encrypted bank](rekey-an-encrypted-bank.md) — move a Bitwarden/SSH-keyed bank from the pre-ADR-0012 key derivation to the current HKDF one with `ai-raccoon encryption migrate`.
+- [Run the Python scripts](run-the-python-scripts.md) — set up `uv`, install the declared dependencies, and run `scripts/` tooling and its test suite from a bare checkout.
