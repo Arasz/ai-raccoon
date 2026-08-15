@@ -168,7 +168,15 @@ a dead link.
 ## Still open
 
 - Whether `dotnet tool install -g ai-raccoon`'s installed shim is a native apphost (unaffected by F2's `ProcessPath` bug) — inferred from `RuntimeIdentifiers`+`PackAsTool` packaging convention and the test harness's deliberate use of the apphost binary, but not measured against a real global-tool install.
-- Whether an unmapped/genuine exception (the "it failed" case in `ToolRefusals.Filter`, `ToolRefusals.cs:76-102`) reaches the MCP client with more diagnostic text than a mapped refusal, or becomes a generic protocol error — not traced end to end.
+- ~~Whether an unmapped/genuine exception reaches the MCP client with more diagnostic text than a
+  mapped refusal, or becomes a generic protocol error~~ — **answered 2026-08-15, by a CI failure
+  rather than by tracing.** `ToolRefusalsTests.IngestFile_OutsideScope` failed `build-fast` on PR #291
+  with `Shouldly.ShouldAssertException : text "An error occurred invoking 'memory_ingest_file'."`
+  where a `path-outside-scope:` prefix was expected. **An unmapped exception becomes the SDK's generic
+  protocol error, carrying nothing — not the exception type, not a message.** The lane's instinct to
+  flag it was right, and the cost is concrete: the flake that surfaced it cannot be diagnosed from its
+  own failure output. Folded into the plan's WP19, which now fixes diagnosability first and the race
+  second.
 - Whether `--quiet` mode suppresses F1's "Unrecognized command" warning entirely, making the silent-fallthrough case even more silent — plausible from `AppRunner.cs:187-200`, not measured.
 - Full audit of every CLI subcommand's `--help` text — root, `access`, `access set` were sampled and every verb's registration read; leaf `--help` was not exhaustively invoked.
 
