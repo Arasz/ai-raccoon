@@ -9,6 +9,10 @@ cross-context RRF pass they were measured through is removed (see the amendment 
 Amended 2026-08-14 — the gate corpus was regenerated (WP4); the chosen parameters are
 unchanged, but every measured number moved and the 0.722 baseline is permanently retired
 (see the amendment at the end).
+Amended 2026-08-15 — **every number in this ADR is in-sample.** The 96-point grid selected
+the parameters over the same 11 queries that gate them, so nDCG@5 here describes the tuning
+set, not retrieval. The out-of-sample figure is 0.285 against this ADR's 0.673 on the same
+path; see [ADR-0056](0056-a-retrieval-gate-measured-off-its-tuning-set.md).
 
 ## Context
 

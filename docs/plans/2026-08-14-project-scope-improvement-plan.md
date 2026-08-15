@@ -214,9 +214,20 @@ answer is the whole bank.
 
 ## Wave 2 — Make the measurements honest before changing what they measure
 
-### WP11 · A retrieval gate that can fail, on a held-out family — **H2 + H3**
+### WP11 · A retrieval gate that can fail, on a held-out family — ✅ **IN REVIEW** — **H2 + H3**
 **Effort:** MEDIUM · **Surface:** `tests/…/Integration/BaselineMetricsTests.cs`, `RrfParameterSweepTests.cs`, `scripts/baseline-queries.json`
 **Precedes WP4 and WP12.**
+
+> **Built as ADR-0056, with one correction to this package.** The prescribed
+> leave-one-family-out partition is **not available on this corpus**: `jsaa-memory.db` has two
+> generators (`docs/`, 112 files; `.ai-badger/`, 78) and no arasz-home-page, and the 11-query
+> tuning set spans both — no family is unseen. The partition is taken at the **document** instead,
+> which leaves **A8, A9, A10** held out; `S1`/`S3`/`S4`/`S5`/`S6` are *not*, because `S2` and `A4`
+> tuned on their documents. Measured on one path: **in-sample 0.673, held out 0.285.** The
+> reversal perturbation this package demanded works on the mean but not per query — reversing the
+> ranking *improves* A8 (0.131 → 0.491) — so the per-query floors are regression pins and the mean
+> is the gate. A gate fails the day a genuinely unseen family appears, which is the signal to
+> promote this to the family-level control originally asked for.
 
 `BaselineMetricsTests.cs:107-112` asserts only `ShouldBeInRange(0.0, 1.0)` on nDCG@5, MRR and
 recall@5 — values those functions return by construction for any input. The file concedes it: "logged
@@ -348,7 +359,7 @@ on one hash — and `rating` feeds sweep eligibility.
 both read, both write; assert `rating` reflects the final `access_count`. Today it does not; record the
 two values.
 
-### WP7 · Reap `promotion_discards` and `search_quality` — ✅ **IN REVIEW** — **H12 + data F6**
+### WP7 · Reap `promotion_discards` and `search_quality` — ✅ **LANDED (PR #295)** — **H12 + data F6**
 **Effort:** SMALL · **Surface:** `BankMaintenanceHostedService.RunPassAsync`, `PromotionQueueSql`
 
 965 discard rows against 19 queued and 138 shared entries, with no delete statement anywhere.

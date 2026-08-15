@@ -2,7 +2,11 @@
 
 Date: 2026-08-04
 
-Status: Accepted
+Status: Accepted.
+Amended 2026-08-15 — **every number in this ADR is in-sample.** The λ / threshold / formula
+grid was scored over the same 11 queries that gate it. The out-of-sample figure is 0.285
+against 0.673 on the same path; see
+[ADR-0056](0056-a-retrieval-gate-measured-off-its-tuning-set.md).
 
 ## Context
 

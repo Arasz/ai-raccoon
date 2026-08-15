@@ -5,6 +5,7 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.Integration.Retrieval;
 using AiRaccoon.Tests.Unit.Retrieval;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -38,9 +39,10 @@ public sealed class SourceAffinitySweepTests : IDisposable
 
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
 
-    /// <summary>The 11 expected-source queries the Wave 3 gates were measured over (see docs/adr/0005-source-affinity-ranking.md).</summary>
-    private static readonly string[] SourceAffinityGateQueryIds =
-        ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "S2", "C1", "C2", "C5"];
+    /// <summary>The 11 expected-source queries the Wave 3 gates were measured over (see
+    /// docs/adr/0005-source-affinity-ranking.md). Every number here is in-sample: the held-out
+    /// gate that can fail is HeldOutRetrievalGateTests (docs/adr/0056).</summary>
+    private static readonly string[] SourceAffinityGateQueryIds = RetrievalTuningSets.TuningQueryIds;
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 

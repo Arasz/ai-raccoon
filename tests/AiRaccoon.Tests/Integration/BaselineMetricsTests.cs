@@ -102,11 +102,13 @@ public sealed class BaselineMetricsTests : IDisposable
         evaluated.Count.ShouldBe(19,
             "all 19 expected-source queries (A1-A10, S1-S6, C1/C2/C5) should be gradeable via the corpus-derived hash map (CorpusHashMap)");
 
+        // The [0,1] range assertions that stood here are deleted (WP11, docs/adr/0056): nDCG, MRR
+        // and recall return a value in [0,1] by construction for any input, so they reported success
+        // for a reversed ranking. What can fail lives in HeldOutRetrievalGateTests, over the queries
+        // no parameter sweep tuned on; this test keeps only the finiteness check, which a NaN from a
+        // degenerate ideal-DCG would trip, and remains the determinism/report gate it was written as.
         foreach (var metric in metrics)
         {
-            metric.Ndcg5.ShouldBeInRange(0.0, 1.0, $"nDCG@5 for {metric.Id}");
-            metric.Mrr.ShouldBeInRange(0.0, 1.0, $"MRR for {metric.Id}");
-            metric.Recall5.ShouldBeInRange(0.0, 1.0, $"recall@5 for {metric.Id}");
             double.IsFinite(metric.Ndcg5).ShouldBeTrue($"nDCG@5 for {metric.Id} must be finite");
             double.IsFinite(metric.Mrr).ShouldBeTrue($"MRR for {metric.Id} must be finite");
             double.IsFinite(metric.Recall5).ShouldBeTrue($"recall@5 for {metric.Id} must be finite");
