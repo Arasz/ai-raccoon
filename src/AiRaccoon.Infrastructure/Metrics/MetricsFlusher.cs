@@ -26,6 +26,9 @@ public sealed partial class MetricsFlusher(
     /// <summary>Span name and `operation` tag of one flush pass.</summary>
     internal const string OperationName = "metrics.flush";
 
+    /// <summary>Caps the shutdown-time final flush so a slow or hanging store can never hang shutdown.</summary>
+    internal static readonly TimeSpan ShutdownFlushTimeout = TimeSpan.FromSeconds(5);
+
     /// <summary>Completed after each flush pass (batch write + self-metrics write); test seam.</summary>
     internal TickSignal Flushes { get; } = new();
 
@@ -44,6 +47,36 @@ public sealed partial class MetricsFlusher(
             await FlushOnceAsync(stoppingToken).ConfigureAwait(false);
             timer.Period = await ReadFlushIntervalSafeAsync(stoppingToken).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    ///     Drains and flushes whatever is still buffered before the host stops — without this, a
+    ///     session that only ever enqueues (never lives to the next periodic tick) writes zero rows.
+    ///     Bounded by <see cref="ShutdownFlushTimeout" />, on <paramref name="cancellationToken"/> and
+    ///     the timer's own <see cref="TimeProvider"/>, so a slow or hanging store cannot hang shutdown.
+    /// </summary>
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        using var timeoutCts = new CancellationTokenSource(ShutdownFlushTimeout, timeProvider);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+        try
+        {
+            await FlushOnceAsync(linkedCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            Log.ShutdownFlushTimedOut(logger);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The host's own shutdown token fired, not our timeout: nothing more to log.
+        }
+        catch (Exception ex)
+        {
+            Log.ShutdownFlushFailed(logger, ex);
+        }
+
+        await base.StopAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>One flush pass: drain the buffer, batch-write it, then record self-metrics directly. Test seam.</summary>
@@ -172,15 +205,22 @@ public sealed partial class MetricsFlusher(
 
     private static partial class Log
     {
-        [LoggerMessage(EventId = 962, Level = LogLevel.Warning,
+        [LoggerMessage(EventId = 970, Level = LogLevel.Warning,
             Message = "Metrics flush failed for a batch of {BatchSize}; the batch is dropped, not retried")]
         public static partial void FlushFailed(ILogger logger, Exception exception, int batchSize);
 
-        [LoggerMessage(EventId = 963, Level = LogLevel.Warning, Message = "Metrics self-instrumentation write failed")]
+        [LoggerMessage(EventId = 971, Level = LogLevel.Warning, Message = "Metrics self-instrumentation write failed")]
         public static partial void SelfMetricsWriteFailed(ILogger logger, Exception exception);
 
-        [LoggerMessage(EventId = 964, Level = LogLevel.Warning,
+        [LoggerMessage(EventId = 972, Level = LogLevel.Warning,
             Message = "Metrics setting read failed; falling back to the default")]
         public static partial void SettingReadFailed(ILogger logger, Exception exception);
+
+        [LoggerMessage(EventId = 973, Level = LogLevel.Warning,
+            Message = "Shutdown metrics flush timed out; some buffered measurements from this session may be lost")]
+        public static partial void ShutdownFlushTimedOut(ILogger logger);
+
+        [LoggerMessage(EventId = 974, Level = LogLevel.Warning, Message = "Shutdown metrics flush failed")]
+        public static partial void ShutdownFlushFailed(ILogger logger, Exception exception);
     }
 }

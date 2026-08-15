@@ -218,6 +218,52 @@ public sealed class MetricsFlusherTests
         await flusher.StopAsync(TestContext.Current.CancellationToken);
     }
 
+    // ── Blocker 2: StopAsync must drain and flush the buffer, bounded, before the host stops. ──
+
+    [Fact]
+    public async Task StopAsync_DrainsAndFlushesTheBufferBeforeStopping()
+    {
+        var buffer = new MeasurementBuffer(1000);
+        buffer.TryEnqueue(AMeasurement());
+        buffer.TryEnqueue(AMeasurement());
+        var store = new FakeMetricsStore();
+        var flusher = CreateFlusher(buffer, store);
+
+        await flusher.StopAsync(TestContext.Current.CancellationToken);
+
+        store.Saved.Count(m => m.Name == "test.metric").ShouldBe(2,
+            "a session that only ever enqueues must not lose its buffered rows on shutdown");
+    }
+
+    [Fact]
+    public async Task StopAsync_EmptyBuffer_StillCompletesAndRecordsSelfMetrics()
+    {
+        var buffer = new MeasurementBuffer(1000);
+        var store = new FakeMetricsStore();
+        var flusher = CreateFlusher(buffer, store);
+
+        await flusher.StopAsync(TestContext.Current.CancellationToken);
+
+        store.Saved.ShouldContain(m => m.Name == "metrics.flush.duration_ms");
+    }
+
+    [Fact]
+    public async Task StopAsync_StoreHangsOnTheFinalFlush_ReturnsWithinTheBoundedTimeout_InsteadOfHanging()
+    {
+        var buffer = new MeasurementBuffer(1000);
+        buffer.TryEnqueue(AMeasurement());
+        var store = new HangingMetricsStore();
+        var time = new FakeTimeProvider(FixedNow);
+        var flusher = CreateFlusher(buffer, store, time: time);
+
+        var stopTask = flusher.StopAsync(CancellationToken.None);
+        time.Advance(MetricsFlusher.ShutdownFlushTimeout + TimeSpan.FromSeconds(1));
+
+        (await Task.WhenAny(stopTask, Task.Delay(SignalTimeout, TestContext.Current.CancellationToken)))
+            .ShouldBe(stopTask, "a hanging store must not hang shutdown");
+        await stopTask;
+    }
+
     private sealed class FakeMetricsStore : IMetricsStore
     {
         public List<Measurement> Saved { get; } = [];
@@ -235,5 +281,12 @@ public sealed class MetricsFlusherTests
             Saved.AddRange(measurements);
             return Task.CompletedTask;
         }
+    }
+
+    /// <summary>Never completes on its own — only cancellation (the shutdown-flush timeout) ends the wait.</summary>
+    private sealed class HangingMetricsStore : IMetricsStore
+    {
+        public Task SaveBatchAsync(IReadOnlyList<Measurement> measurements, CancellationToken cancellationToken = default) =>
+            Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
     }
 }

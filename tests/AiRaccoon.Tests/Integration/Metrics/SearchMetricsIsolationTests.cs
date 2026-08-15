@@ -121,19 +121,22 @@ public sealed class SearchMetricsIsolationTests : IDisposable
     {
         await _tools.Write("acme", "the chassis pattern decision", cancellationToken: TestContext.Current.CancellationToken);
 
+        var hashedCorrelationId = Guid.CreateVersion7().ToString("N");
+        var leakedCorrelationId = Guid.CreateVersion7().ToString("N");
         var hashed = new Measurement("search.fts", MeasurementKind.Histogram, 1, "ms", FixedNow,
-            "acme", ContentHash.OfValue("chassis"), "corr-hashed");
+            "acme", ContentHash.OfValue("chassis"), hashedCorrelationId);
         var queryTextLeaked = new Measurement("search.fts", MeasurementKind.Histogram, 1, "ms", FixedNow,
-            "acme", ContentHash.OfValue("chassis"), "corr-leaked",
+            "acme", ContentHash.OfValue("chassis"), leakedCorrelationId,
             Tags: System.Text.Json.JsonSerializer.Serialize(new { query = "chassis" }));
 
         await _metricsStore.SaveBatchAsync([hashed, queryTextLeaked], TestContext.Current.CancellationToken);
 
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var savedCorrelationIds = await connection.QueryAsync<string>(
-            "SELECT correlation_id FROM metrics WHERE name = 'search.fts' AND correlation_id LIKE 'corr-%'");
+            "SELECT correlation_id FROM metrics WHERE name = 'search.fts' AND correlation_id IN (@Hashed, @Leaked)",
+            new { Hashed = hashedCorrelationId, Leaked = leakedCorrelationId });
 
-        savedCorrelationIds.ShouldBe(["corr-hashed"],
+        savedCorrelationIds.ShouldBe([hashedCorrelationId],
             "the properly-hashed row is saved; the row carrying query text in Tags is rejected — the allowlist fails closed");
     }
 
