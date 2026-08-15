@@ -41,6 +41,21 @@ Always pass `projectId`. Before web search, code search, or asking the user, run
 `memory_search(projectId, scope=all)` with 2-3 formulations: exact phrase → keywords →
 plain-English restatement. Entries carry source paths — cite them as evidence.
 
+**A query is a question, not a payload — and the limit is a real number.** The bundled
+embedding model reads **254 WordPiece tokens**, roughly **1,000 characters** of English prose.
+Everything past that is cut from the query's vector before the search runs, so a long query is
+matched on its opening and nothing else.
+
+Measured on this project's own traffic: the median query is **61 characters** and works well.
+Of the 57 queries over 1,200 characters, **every single one was pasted machine output** — HTTP
+header dumps, log errors, test output — with the actual question in the first line and
+thousands of characters of noise after it. One was 448,900 characters.
+
+So: **paste the question, not the output.** If you are searching *about* a log or a stack
+trace, extract the identifying line — the exception type, the error code, the failing test
+name — and search for that. Keyword matching still sees your whole query, so nothing is lost
+from FTS; it is the semantic half that goes blind past 254 tokens.
+
 ## 3. Escalation by result
 
 - Decisive hit → use it; cite the source path.
