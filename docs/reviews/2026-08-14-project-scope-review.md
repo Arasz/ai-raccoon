@@ -404,6 +404,32 @@ Routed as a decision list; each needs one ruling. Marked ● where work is block
 
 ---
 
+## A live corroboration of architecture F1, from CI
+
+`build-slow` failed on the campaign PR with:
+
+```
+all-MiniLM-L6-v2.Q5_K_M.gguf: expected sha256 908c82ac3849f9ca...
+got E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855
+(source: download:https://huggingface.co/leliuga/all-MiniLM-L6-v2-GGUF/resolve/main/...)
+```
+
+`E3B0C442...B855` is the SHA-256 of **the empty string**. The upstream download returned a zero-byte
+file, and the asset gate caught it rather than letting an empty model reach an embedding run — the
+gate working exactly as intended, and worth recording as healthy.
+
+**What it corroborates:** architecture F1 found that `ResiliencePipelineFactory` retries an empty
+download by **string-matching the exception type name** — `.Handle<Exception>(ex => ex.GetType().Name
+== "EmptyDownloadException")` — because Core cannot reference the Infrastructure type. This CI run is
+the failure that machinery exists to absorb, arriving in the wild. Whether the retry fired and the
+upstream was empty on every attempt, or the retry never matched, **cannot be told from the failure**;
+the gate reports the final hash mismatch, not the retry history.
+
+That is the same shape as WP19's finding one layer down: the check is correct, and the diagnostic
+behind it is missing. If F1's string match ever silently stops matching — a rename, a namespace move —
+empty downloads simply stop being retried and nothing says so. **Add the retry count to the asset
+gate's failure message when F1 is fixed**, so the two cases are distinguishable.
+
 ## A process finding this campaign produced by committing it
 
 `ci-docs F10` records that v1.11.0 shipped 21 commits of which ~20 went straight to `main`, against
