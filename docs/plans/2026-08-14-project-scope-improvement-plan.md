@@ -155,7 +155,16 @@ worth trading one silent behaviour for another to save a wave.
 **Recommendation:** sequence WP2 immediately after WP8's write-seam extraction, and treat the cycle as
 the argument for that extraction rather than an obstacle to this package.
 
-### WP3 · Make every write path budget its chunks, then restart and backfill — **BLOCKERS B2 + B3, H5, H24**
+### WP3 · Make every write path budget its chunks, then restart and backfill — 🔶 **STEP 2 IN REVIEW** — **BLOCKERS B2 + B3, H5, H24**
+
+> **Step 2 shipped as ADR-0063.** An unset `embedding.provider` now resolves to the bundled engine
+> instead of the o200k default, so ingest-then-configure stops writing permanently-truncated
+> boundaries. Watched red at **23 of 37 chunks over-window, worst 295 tokens**. Step 1
+> (`memory_write` does not chunk at all) is next and is a separate change. **Steps 3-5 — restarting
+> every running process and backfilling 1,217 documents — mutate the live 167 MB bank, are not
+> revertible by git, and are deliberately left to be sequenced by hand.** Shipping the code fixes
+> first is the right order regardless: backfilling before `memory_write` chunks would re-poison the
+> bank on the next write.
 **Effort:** MEDIUM–LARGE · **Surface:** `MemoryTools.Write` → `SqliteMemoryStore.WriteAsync`, `FileIngestor.ChunkSizeForAsync`, plus an operational restart and a backfill
 
 > **Revised after the adversarial pass.** The first draft of this package was "restart the servers,
