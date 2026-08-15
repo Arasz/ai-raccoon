@@ -137,7 +137,8 @@ public sealed class SqliteSearchQualityService(ISqliteConnectionFactory factory)
     {
         var cutoff = nowUnixSeconds - (long)retentionDays * 86_400;
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        // idx_sq_project_time (project_id, created_at) exists for exactly this purge and had no query.
+        // Retention is global, so no project filter: idx_sq_project_time leads with project_id and
+        // serves ReadMetricsAsync, not this — SQLite skip-scans or scans here.
         return await connection.ExecuteAsync(
                 new CommandDefinition("DELETE FROM search_quality WHERE created_at < @cutoff",
                     new { cutoff }, cancellationToken: cancellationToken))

@@ -278,11 +278,6 @@ public sealed partial class BankMaintenanceHostedService(
     }
 
     /// <summary>
-    ///     ADR-0029's retention TTL, never built until this task: noise_entries would otherwise
-    ///     accumulate forever. A failure logs and never blocks the checkpoint/vacuum pass — same
-    ///     silent-failure discipline as the pending-embed retry sweep above.
-    /// </summary>
-    /// <summary>
     ///     Age-bounds the two tables that grew without one (ADR-0055). Same log-and-continue
     ///     discipline as the noise purge: retention is housekeeping, never a reason to fail a pass.
     /// </summary>
@@ -322,6 +317,11 @@ public sealed partial class BankMaintenanceHostedService(
         }
     }
 
+    /// <summary>
+    ///     ADR-0029's retention TTL, never built until this task: noise_entries would otherwise
+    ///     accumulate forever. A failure logs and never blocks the checkpoint/vacuum pass — same
+    ///     silent-failure discipline as the pending-embed retry sweep above.
+    /// </summary>
     private async Task PurgeExpiredNoiseEntriesAsync(CancellationToken cancellationToken)
     {
         try
