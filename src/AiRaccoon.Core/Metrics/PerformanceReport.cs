@@ -1,4 +1,4 @@
-namespace AiRaccoon.Infrastructure.Metrics;
+namespace AiRaccoon.Core.Metrics;
 
 /// <summary>One raw `metrics` row, projected to what the report builder needs (no I/O here).</summary>
 public readonly record struct MetricSample(string Name, double Value, DateTimeOffset RecordedAt);

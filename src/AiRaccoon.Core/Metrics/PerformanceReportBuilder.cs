@@ -1,7 +1,6 @@
-using AiRaccoon.Core.Metrics;
 using CommunityToolkit.Diagnostics;
 
-namespace AiRaccoon.Infrastructure.Metrics;
+namespace AiRaccoon.Core.Metrics;
 
 /// <summary>
 ///     Pure window/bucket aggregation over raw measurement samples — no I/O, no state (WP6,

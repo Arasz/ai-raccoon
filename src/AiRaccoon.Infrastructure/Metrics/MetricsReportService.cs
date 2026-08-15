@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Metrics;
 using AiRaccoon.Infrastructure.Sqlite;
 using CommunityToolkit.Diagnostics;
 using Dapper;

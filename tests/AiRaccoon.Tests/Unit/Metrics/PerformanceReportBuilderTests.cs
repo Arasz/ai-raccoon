@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Metrics;
 using AiRaccoon.Infrastructure.Metrics;
 using Shouldly;
 using Xunit;

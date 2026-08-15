@@ -59,7 +59,10 @@ public sealed class SqliteMemoryStoreSizeRatchetTests
     // (write, search, ingest, embedding). The next person to hit this cap should take one
     // of them rather than add a raise -- raising is borrowing against a decomposition someone
     // still has to pay for.
-    private const int MaxLines = 1214;
+    // Paid down again 2026-08-15: the nine Dapper row DTOs moved to SqliteMemoryStore.Rows.cs to
+    // make room for the search phase timings, so the cap follows the file down rather than banking
+    // the slack for the next addition to spend.
+    private const int MaxLines = 1146;
     private const int MaxMembers = 27;
 
     [Fact]

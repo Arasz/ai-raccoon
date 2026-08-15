@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Metrics;
 using System.Text.Json;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;

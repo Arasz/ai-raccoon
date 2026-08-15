@@ -142,7 +142,7 @@ public sealed class MetricsRetentionJob(TimeProvider timeProvider) : IMaintenanc
 
     public TimeSpan? Interval => MaintenanceJobDefaults.MetricsRetentionInterval;
 
-    public async Task RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    public async Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
         var days = await ReadRetentionDaysAsync(connection, cancellationToken).ConfigureAwait(false);
@@ -151,6 +151,8 @@ public sealed class MetricsRetentionJob(TimeProvider timeProvider) : IMaintenanc
                 "DELETE FROM metrics WHERE recorded_at < @cutoff",
                 new { cutoff }, cancellationToken: cancellationToken))
             .ConfigureAwait(false);
+        // A reaper only deletes; it never leaves a row needing an embedding.
+        return false;
     }
 
     private static async Task<int> ReadRetentionDaysAsync(SqliteConnection connection,

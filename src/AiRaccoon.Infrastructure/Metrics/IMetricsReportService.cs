@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Metrics;
 namespace AiRaccoon.Infrastructure.Metrics;
 
 /// <summary>Produces the `memory_performance` report for one project (WP6, project-scoped only per ruling 1).</summary>
