@@ -92,9 +92,14 @@ Feature: Performance metrics for AiRaccoon's own development
       When I call each tool once
       Then each one has recorded at least one measurement
     Scenario: An operation added since the last release has recorded nothing yet
+      # RULED, stage 06 card 1, owner: "carry with zero". A tool that has never been called gets a
+      # series with a zero count, NOT an omitted key. The draft said omit; that was a placeholder,
+      # and this reverses it. The reason it matters: present-with-zero distinguishes "never called"
+      # from "not a tool", and an absent key cannot. A consumer plotting coverage over time can see
+      # a new tool appear at zero and then rise; with omission it appears from nowhere.
       Given a tool that has never been called
       When I call memory_performance
-      Then the report has no series for that tool
+      Then the report carries a series for that tool with a count of zero
 
   Rule: The MCP tool returns the report as JSON to the calling agent
     # RESOLVED, stage 04 batch 3, owner: "2. yes." => a window with no measurements in it is an
@@ -398,11 +403,12 @@ Feature: Performance metrics for AiRaccoon's own development
 
   # ---- Stage 06 queue: what goes to the decision gate. Nothing is emitted while a card is open. ----
   #
-  # CARD 1 (open, asked twice, not ruled). For a tool that has never been called, does the report
-  #   OMIT its series or carry it with a ZERO COUNT? Recorded as "omit" in the scenario above
-  #   because a draft needs a value, NOT because it was agreed. They are different products for a
-  #   consumer plotting a series: present-with-zero distinguishes "never called" from "not a tool",
-  #   absent does not. Fallback if unruled: omit, being the cheaper and more honest of the two.
+  # CARD 1 — RULED, owner: "carry with zero". Closed. A never-called tool gets a zero-count series,
+  #   not an omitted key. The draft's "omit" was a placeholder and has been reversed in the scenario.
+  #   Consequence for the report shape: the series list is derived from the tool inventory, not from
+  #   what happens to be in the metrics table -- otherwise a zero-count series has nothing to come
+  #   from. That makes it the same derived inventory the coverage gate uses, which is the right
+  #   answer for the derive-or-delete reason: two lists of tools would drift.
   #
   # CARD 2 (proposed in stage 05 batch 5, not ruled). The two deliberate choices in that batch --
   #   the p99 expectation computed outside the code under test, and the bank-shape sample asserted
