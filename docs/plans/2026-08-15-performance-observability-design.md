@@ -12,6 +12,10 @@ Three things exist, one CI gate guards a single path, and the two gaps that matt
 times the *phases* of a search and nothing can *answer* a question about performance without an OTLP
 collector standing by.
 
+**Owner ruling, 2026-08-15:** emit the metrics **and persist them in a single table in a universal
+format**, so they can be read back. Layer 2 below is that table; it ships with its reaper, because a
+per-measurement table that grows forever is the defect WP7 has just finished fixing twice.
+
 ---
 
 ## What exists — measured, at `path:line`
@@ -70,26 +74,61 @@ in-process. Returning the timings lets layer 2 aggregate them *and* layer 1 stay
 store gains no observability dependency, which keeps `mcp-thin`'s sibling rule intact for the
 infrastructure layer.
 
-### Layer 2 — a rolling in-process summary, readable back
+### Layer 2 — one metrics table, universal shape
 
-`IPerformanceSnapshot` in Core, one implementation holding a bounded ring buffer per operation:
+**Owner ruling, 2026-08-15: persist the measurements in a single table in a universal format, so they
+can be read back.** Not in-memory-only, and not a `duration_ms` column bolted onto `search_quality` —
+that table is about *quality* and mixing the two would make neither queryable on its own.
 
+One row per measurement, one shape for every instrument:
+
+```sql
+CREATE TABLE IF NOT EXISTS metrics (
+    id           INTEGER PRIMARY KEY,
+    name         TEXT NOT NULL,      -- "search.vector", "tool.duration", "queue.wait"
+    kind         TEXT NOT NULL,      -- counter | histogram | gauge
+    value        REAL NOT NULL,
+    unit         TEXT NOT NULL,      -- "s", "{invocation}", "By"
+    tags         TEXT,               -- JSON: {"tool":"memory_search","project_id":"acme"}
+    recorded_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_metrics_name_time ON metrics(name, recorded_at);
 ```
-count, p50, p95, p99, max, and the phase breakdown for the same window
-```
 
-Bounded and in-memory — no new table, no growth, nothing to reap. It is a *snapshot*, not a history:
-the durable history is OTLP's job and already works.
+**Why this shape.** It is deliberately the OpenTelemetry data-point shape — name, kind, value, unit,
+attributes, timestamp — so a search phase, a tool duration, a queue wait and anything added later are
+the *same row*, and the read side is one query rather than one per instrument. `tags` as JSON keeps
+it universal without a column per dimension; SQLite's JSON functions make it filterable
+(`json_extract(tags, '$.tool')`), and `idx_metrics_name_time` is what the aggregate reads.
+
+**Three things this must get right, because the campaign has already been bitten by each:**
+
+**Retention, from the first commit.** `promotion_discards` (965 rows) and `search_quality` (424) both
+grew with no reaper anywhere in `src/` until WP7 added one (ADR-0055). A per-measurement table grows
+far faster than either. `metrics` ships **with** its reaper in the same maintenance pass and its own
+`maintenance.metrics-retention-days.global` setting, and the acceptance criteria say so. Adding the
+table without the reaper would be repeating a defect this campaign just fixed.
+
+**The hot path must not pay a write per measurement.** A search that records six phase rows
+synchronously has traded latency for the ability to measure latency. Measurements go to a bounded
+in-memory queue and are flushed in batches by the existing `BankMaintenanceHostedService` pass, or on
+overflow. **Dropping on overflow is correct and must be counted** — a `metrics.dropped` counter, so a
+gap in the data is visible as a number rather than as an absence.
+
+**Cardinality is a growth multiplier.** `project_id` in tags is fine; a raw query string would not be
+— it would make every row unique and the table unaggregatable. The tag set is a fixed allowlist per
+instrument, asserted by a test, for the same reason the tool list is derived rather than pinned.
 
 Fed by the existing `ToolTelemetry` filter (which already sees every call and its duration) plus the
-phase timings from layer 1.
+phase timings from layer 1. **The Meter instruments stay** — OTLP export is unchanged and this is not
+a replacement for it; the table is what makes the numbers readable *without* a collector.
 
 ### Layer 3 — the interfaces that return it
 
 | Surface | Shape | Why |
 |---|---|---|
-| **MCP tool** `memory_performance` | `{ operation, count, p50, p95, p99, phases }` per operation | an agent can notice its own bank is slow and say so; read-only, `AccessRequirement.Read` |
-| **CLI** `ai-raccoon performance` | the same snapshot, formatted | an operator with no collector; sits beside `serve observability` which already exists |
+| **MCP tool** `memory_performance` | `{ name, count, p50, p95, p99, max }` per metric over a window, aggregated in SQL | an agent can notice its own bank is slow and say so; read-only, `AccessRequirement.Read` |
+| **CLI** `ai-raccoon performance` | the same aggregate, formatted, plus `--since` | an operator with no collector; sits beside `serve observability` which already exists |
 | **CI** | assert per-phase budgets on the parity corpus **and write the numbers to the run summary** | turns the single p95 into a per-phase gate, and makes the trend visible run over run |
 
 The CI leg is the one that changes behaviour over time: a budget that only fails on catastrophe still
@@ -103,9 +142,11 @@ without anyone building a dashboard.
 1. **Layer 1** — timings on the result. *Gate:* a test asserting the phases sum to within a tolerance
    of the whole, and that a deliberately slowed phase (inject a delay in the fake `TimeProvider`)
    shows up in *that* phase and not another. Watch it fail by attributing the delay to the wrong phase.
-2. **Layer 2** — the snapshot. *Gate:* feed a known distribution and assert p50/p95 exactly; watch it
-   red with an off-by-one percentile. **A percentile function is the classic place a gate passes on
-   any input** — assert against a hand-computed distribution, not against itself.
+2. **Layer 2** — the table, the batched writer and the reaper. *Gates, three:* feed a known
+   distribution and assert p50/p95 **exactly** against hand-computed values — a percentile function is
+   the classic place a gate passes on any input, so it must not be asserted against itself; assert the
+   reaper deletes past the window and nothing inside it (watched red, as ADR-0055's was); and assert a
+   search records its phases **without** a synchronous write, by counting writes during the call.
 3. **Layer 3a** — the tool and CLI. *Gate:* the tool appears in the derived tool inventory (26 → 27,
    which `RegisteredTools` will force) and returns a populated snapshot after a known number of calls.
 4. **Layer 3b** — the CI budgets. *Gate:* **break each budget deliberately and watch it go red**, one
@@ -116,11 +157,11 @@ without anyone building a dashboard.
 
 ## Open questions for the owner
 
-1. **Is the in-process snapshot enough, or should durations persist?** A `search_quality.duration_ms`
-   column is one migration and makes latency queryable next to usefulness — attractive, because it
-   would let "slow searches" and "unhelpful searches" be correlated for the first time. It also grows
-   a table this campaign just had to add a reaper to. **Recommendation: start in-memory; add the
-   column only if the correlation is actually wanted.**
+1. ~~Is the in-process snapshot enough, or should durations persist?~~ **Answered by the owner,
+   2026-08-15: persist, one table, universal format, readable.** Layer 2 above is rewritten to that
+   ruling. The correlation with `search_quality` stays available through `tags` carrying the
+   `correlation_id` a search already mints, so "slow" and "unhelpful" can be joined **without** either
+   table having to know the other's shape.
 2. **Should `memory_performance` be project-scoped or bank-wide?** Bank-wide is more useful and leaks
    cross-project timing shape. Recommendation: project-scoped by default, bank-wide behind the same
    `full` gate the other cross-project surfaces use.
@@ -133,4 +174,5 @@ without anyone building a dashboard.
   and `TimeProvider` are already here and already exported.
 - **No sampling or tracing changes.** OTLP already carries spans; this is about what the process can
   answer on its own, not about replacing the collector.
-- **No storage growth by default** — see open question 1.
+- **No unbounded growth.** The table ships with its reaper and its retention setting, and a
+  `metrics.dropped` counter so a buffer overflow is visible rather than silent.
