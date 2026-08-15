@@ -179,6 +179,12 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
     /// <summary>Queue store whose rows the test controls (copy of the race-tests shape).</summary>
     private sealed class RaceyQueueStore : IPromotionQueueStore
     {
+
+        /// <summary>Forwards to this fake's own DiscardAsync — the behaviour IPromotionQueueStore
+        /// used to supply as a default, now stated where it is chosen (ADR-0054).</summary>
+        public async Task<PromotionQueueRow?> ClaimAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default) =>
+            (await DiscardAsync(projectId, hash, cancellationToken).ConfigureAwait(false)).SingleOrDefault();
         public List<PromotionQueueRow> Rows { get; } = [];
 
         public Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,

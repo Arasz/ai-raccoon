@@ -11,23 +11,21 @@ public interface IMemoryStore
     /// <summary>
     ///     Reads one entry's full content by hash (memory_get; ADR-0035) — a hash addressable in
     ///     the caller's own scopes plus the cross-project shared tier, the same reach BumpAccess
-    ///     already uses for search hits. Null when the project owns no such hash. Defaults to
-    ///     "not found" so an implementation predating this read path needs no change.
+    ///     already uses for search hits. Null when the project owns no such hash. Abstract on
+    ///     purpose: a default of "not found" is a wrong answer, not a safe one (ADR-0054).
     /// </summary>
-    Task<MemoryEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
-        Task.FromResult<MemoryEntry?>(null);
+    Task<MemoryEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default);
 
     Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     Deletes hash within one scope only — the sweep's own delete (H2), so a project-scoped
     ///     pass cannot reach a sibling row sharing this hash in another scope (hash alone is not
-    ///     a unique row). Defaults to <see cref="DeleteAsync" />'s unscoped reach, so an
-    ///     implementation predating this distinction needs no change.
+    ///     a unique row). Abstract on purpose: defaulting to <see cref="DeleteAsync" /> widened a
+    ///     scoped delete into an unscoped one — the exact reach this member exists to prevent (ADR-0054).
     /// </summary>
     Task<bool> DeleteInScopeAsync(string projectId, string hash, string scope,
-        CancellationToken cancellationToken = default) =>
-        DeleteAsync(projectId, hash, cancellationToken);
+        CancellationToken cancellationToken = default);
 
     Task<int> DeleteContextAsync(string projectId, string context, CancellationToken cancellationToken = default);
 

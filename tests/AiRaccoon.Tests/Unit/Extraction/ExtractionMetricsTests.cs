@@ -87,6 +87,12 @@ public sealed class ExtractionMetricsTests
     /// round trip without a database.</summary>
     private sealed class InMemoryPromotionQueueStore : IPromotionQueueStore
     {
+
+        /// <summary>Forwards to this fake's own DiscardAsync — the behaviour IPromotionQueueStore
+        /// used to supply as a default, now stated where it is chosen (ADR-0054).</summary>
+        public async Task<PromotionQueueRow?> ClaimAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default) =>
+            (await DiscardAsync(projectId, hash, cancellationToken).ConfigureAwait(false)).SingleOrDefault();
         private readonly HashSet<(string ProjectId, string Hash)> _discarded = [];
         private readonly List<PromotionQueueRow> _rows = [];
 

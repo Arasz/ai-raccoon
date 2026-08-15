@@ -90,6 +90,12 @@ public sealed class PromotionQueueServiceGuardTests
 
     private sealed class UnreachableQueueStore : IPromotionQueueStore
     {
+
+        /// <summary>Forwards to this fake's own DiscardAsync — the behaviour IPromotionQueueStore
+        /// used to supply as a default, now stated where it is chosen (ADR-0054).</summary>
+        public async Task<PromotionQueueRow?> ClaimAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default) =>
+            (await DiscardAsync(projectId, hash, cancellationToken).ConfigureAwait(false)).SingleOrDefault();
         public Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
@@ -133,6 +139,12 @@ public sealed class PromotionQueueServiceGuardTests
     /// because DiscardAsync must return before touching stats or the cap.</summary>
     private sealed class EmptyDiscardQueueStore : IPromotionQueueStore
     {
+
+        /// <summary>Forwards to this fake's own DiscardAsync — the behaviour IPromotionQueueStore
+        /// used to supply as a default, now stated where it is chosen (ADR-0054).</summary>
+        public async Task<PromotionQueueRow?> ClaimAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default) =>
+            (await DiscardAsync(projectId, hash, cancellationToken).ConfigureAwait(false)).SingleOrDefault();
         public Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
