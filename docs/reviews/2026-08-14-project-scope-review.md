@@ -404,6 +404,27 @@ Routed as a decision list; each needs one ruling. Marked ● where work is block
 
 ---
 
+## A process finding this campaign produced by committing it
+
+`ci-docs F10` records that v1.11.0 shipped 21 commits of which ~20 went straight to `main`, against
+the project's own "never push directly to the trunk" invariant, and that GitHub's release notes
+therefore described 1 of them.
+
+**During this campaign the orchestrator did the same thing, once.** A `git worktree add`/`remove`
+pair silently reset the shell's working directory from the campaign worktree to the main checkout,
+which is on `main`; the next `git push` put a commit (`facba7aa`, the manual checklist JSON) on the
+trunk and GitHub reported `Bypassed rule violations for refs/heads/main`.
+
+Recorded rather than quietly cleaned up, because the mechanism is the finding:
+
+- **It was not carelessness about which branch to use** — every commit before and after went to the campaign branch correctly. It was a working directory that moved without the operator noticing, and a `git push` with no explicit refspec that inherited the new branch.
+- **The protection was in place and did not stop it.** The rule exists; the push bypassed it, presumably on an admin allowance. A guard that reports a violation *after* accepting the push is a log line, not a gate.
+- **Resolution: not a force-push.** The content was a docs file, harmless and already fetched by anyone watching; rewriting a protected trunk to tidy history is a much larger risk than the thing it tidies. It was cherry-picked onto the campaign branch so the PR stays self-contained, and left on `main`.
+
+**The cheap mechanical fix** — worth more than resolving to be careful — is `git push` with an
+explicit refspec, or a pre-push hook that refuses `main` unless the push names it deliberately. This
+campaign's WP-list gains that as an item.
+
 ## Still open
 
 - **Leave-one-family-out on the RRF parameters has not been run.** Until it is, every ADR-0006 nDCG figure is in-sample and cannot justify work (H3).
