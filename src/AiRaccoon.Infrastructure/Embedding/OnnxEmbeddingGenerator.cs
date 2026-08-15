@@ -143,10 +143,15 @@ internal sealed partial class OnnxEmbeddingGenerator(string modelPath, string vo
 
     public static partial class Log
     {
-        /// <summary>Fires when a chunk's real BERT WordPiece length exceeds the model's window and gets
-        /// silently truncated (docs/adr/0036) — should stay at zero once chunk budgets are engine-aware.</summary>
+        /// <summary>
+        ///     A STORED entry exceeded the window (docs/adr/0036). Should stay at zero once chunk budgets
+        ///     are engine-aware — which it could not, while queries reached this same event (ADR-0071).
+        /// </summary>
         [LoggerMessage(EventId = 414, Level = LogLevel.Warning,
-            Message = "Chunk truncated at embed time: {ActualTokens} BERT WordPiece tokens exceed the bundled model's {MaxTokens}-token window")]
+            Message = "A stored entry was shortened before embedding: {ActualTokens} tokens exceeded the "
+                      + "{MaxTokens}-token window, so the tail of that entry is missing from its search vector. "
+                      + "The entry's text is intact; only what search matches on is short. Queries are trimmed "
+                      + "separately and reported as event 416 — this one is always a write or an ingest.")]
         public static partial void ChunkTruncatedAtEmbedTime(ILogger logger, int actualTokens, int maxTokens);
 
         /// <summary>Fires when a long chunk tokenizes to almost nothing — likely an [UNK] collapse from a
