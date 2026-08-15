@@ -404,10 +404,15 @@ Routed as a decision list; each needs one ruling. Marked ● where work is block
 
 ---
 
-## CI is red on `build-slow`, and it is a recurrence — read this before merging
+## `build-slow` and the empty download — a call I got wrong, corrected
 
-**`build-slow` has failed twice consecutively on the campaign PR with an identical error**, and
-because branch protection requires all three checks, **#290 cannot merge on approval alone.**
+**Resolved: `build-slow` is green.** It failed **twice consecutively** with an identical error and
+then passed on the third run with no change to the branch. I called it "not transient, and a
+diagnosis, not noise" after the second failure. **That was wrong** — the upstream is intermittent, and
+two identical failures in a row was not the evidence I treated it as. Recorded rather than quietly
+edited, because the campaign spends its length on exactly this: a confident reading of thin evidence.
+
+What the failure was, and what still stands:
 
 ```
 all-MiniLM-L6-v2.Q5_K_M.gguf: expected sha256 908c82ac3849f9ca...
@@ -423,18 +428,22 @@ and **it is not new**: `git log` on `BundledModel.cs` shows
 `78343496 CI flakes: fix the zero-byte download (incl. production); make the SIGSEGV diagnosable (#235)`.
 **This exact failure was fixed once and has come back.**
 
-**Options, for the owner:**
+**What the recovery settles, and what it does not.** It refutes "the asset moved or now needs auth" —
+the file is there and downloads correctly. It does **not** tell us whether the retry behind #235's fix
+fired and eventually won, or whether it never matched and the third run simply got a healthy upstream.
+**Those two remain indistinguishable from the failure output**, which is the point worth keeping: this
+is the third instance tonight of a correct gate with a missing diagnostic, and the argument for fixing
+architecture F1 — a retry wired by string-matching an exception's type name — rather than trusting it
+silently.
 
-1. **Upstream is genuinely empty** — the `leliuga/all-MiniLM-L6-v2-GGUF` file moved, was removed, or now needs auth. Fix: re-pin to a live URL and SHA, or vendor the asset. Verifiable in one `curl -I`.
-2. **The retry stopped firing.** #235's fix retries an empty download, and architecture F1 found that retry is wired by **string-matching the exception type name** — `ex.GetType().Name == "EmptyDownloadException"` — because Core cannot reference the Infrastructure type. A rename or namespace move silently disables it, and nothing reports that.
+**The concrete follow-up stands:** have the asset gate report its retry count on failure. Then a
+future red distinguishes "upstream was empty every time" from "the retry never ran", instead of
+leaving the next reader to guess as I did.
 
-**The two are indistinguishable from the failure output**, which is the third instance tonight of the
-same shape: the gate is correct and the diagnostic behind it is missing. That is the argument for
-fixing F1 properly rather than re-pinning and moving on.
-
-**Not attempted here, deliberately:** re-running a third time (two identical failures is a diagnosis,
-not noise), and changing the asset pin or the resilience handler blind — a network-dependent
-production path is the wrong thing to edit without being able to reach the network to verify.
+**Not attempted, and still the right call:** editing the asset pin or the resilience handler blind. A
+network-dependent production path is the wrong thing to change without being able to reach the network
+to verify — and had I done so, I would have "fixed" a working system on the strength of a wrong
+reading.
 
 ## A live corroboration of architecture F1, from CI
 
