@@ -83,8 +83,32 @@ public sealed class MetricsFlusherTests
         store.Saved.Single(m => m.Name == "metrics.dropped").Value.ShouldBe(200);
     }
 
+    /// <summary>
+    ///     F7 (owner ruling): self-metrics are behind the same "did something" condition as
+    ///     pass.NoteWork() — a flush that drained a non-empty batch records duration/batch-size/drops.
+    /// </summary>
     [Fact]
-    public async Task FlushOnceAsync_AlwaysRecordsItsOwnDurationAndBatchSize()
+    public async Task FlushOnceAsync_NonEmptyBatch_RecordsItsOwnDurationAndBatchSize()
+    {
+        var buffer = new MeasurementBuffer(1000);
+        buffer.TryEnqueue(AMeasurement());
+        var store = new FakeMetricsStore();
+        var flusher = CreateFlusher(buffer, store);
+
+        await flusher.FlushOnceAsync(TestContext.Current.CancellationToken);
+
+        store.Saved.ShouldContain(m => m.Name == "metrics.flush.duration_ms");
+        store.Saved.Single(m => m.Name == "metrics.flush.batch_size").Value.ShouldBe(1);
+    }
+
+    /// <summary>
+    ///     F7 (owner ruling): "it should be behind condition and emit something only when flush was
+    ///     done - we don't need performance metrics for empty run." An idle tick (nothing drained)
+    ///     writes nothing at all — not even the duration or batch-size-zero rows it used to write
+    ///     unconditionally.
+    /// </summary>
+    [Fact]
+    public async Task FlushOnceAsync_EmptyBatch_RecordsNoSelfMetrics()
     {
         var buffer = new MeasurementBuffer(1000);
         var store = new FakeMetricsStore();
@@ -92,8 +116,7 @@ public sealed class MetricsFlusherTests
 
         await flusher.FlushOnceAsync(TestContext.Current.CancellationToken);
 
-        store.Saved.ShouldContain(m => m.Name == "metrics.flush.duration_ms");
-        store.Saved.Single(m => m.Name == "metrics.flush.batch_size").Value.ShouldBe(0);
+        store.Saved.ShouldBeEmpty("an idle flush must write nothing (F7): no self-metrics for an empty run");
     }
 
     /// <summary>
@@ -106,6 +129,7 @@ public sealed class MetricsFlusherTests
     public async Task FlushOnceAsync_TagsSelfMetrics_WithTheSelfMetricsProjectId()
     {
         var buffer = new MeasurementBuffer(1000);
+        buffer.TryEnqueue(AMeasurement());
         var store = new FakeMetricsStore();
         var flusher = CreateFlusher(buffer, store);
 
@@ -115,9 +139,16 @@ public sealed class MetricsFlusherTests
             .ShouldAllBe(m => m.ProjectId == MetricsConfigKeys.SelfMetricsProjectId);
     }
 
-    /// <summary>AC5: self-metrics land even when the buffer can accept nothing at all.</summary>
+    /// <summary>
+    ///     F7 supersedes AC5: AC5 originally required self-metrics to land even at zero buffer
+    ///     capacity, so a drop would always be visible. The owner's ruling is stronger and wins — an
+    ///     empty run (nothing drained, batch.Count == 0) writes nothing, even though a drop happened,
+    ///     because "did something" is defined the same way pass.NoteWork() already defines it. The
+    ///     drop is not lost forever: DroppedCount is cumulative, so it surfaces on the next flush that
+    ///     drains something.
+    /// </summary>
     [Fact]
-    public async Task FlushOnceAsync_BufferAtZeroCapacity_StillWritesSelfMetrics()
+    public async Task FlushOnceAsync_BufferAtZeroCapacity_WritesNoSelfMetrics()
     {
         var buffer = new MeasurementBuffer(0);
         buffer.TryEnqueue(AMeasurement()).ShouldBeFalse("capacity 0 means every enqueue is dropped");
@@ -127,9 +158,7 @@ public sealed class MetricsFlusherTests
 
         await flusher.FlushOnceAsync(TestContext.Current.CancellationToken);
 
-        store.Saved.ShouldContain(m => m.Name == "metrics.flush.duration_ms");
-        store.Saved.ShouldContain(m => m.Name == "metrics.flush.batch_size");
-        store.Saved.Single(m => m.Name == "metrics.dropped").Value.ShouldBe(1);
+        store.Saved.ShouldBeEmpty("nothing was drained, so F7's condition is not met even though a drop occurred");
     }
 
     /// <summary>No-recursion gate: self-metrics bypass the buffer entirely, so a flush cannot move EnqueuedCount.</summary>
@@ -162,18 +191,6 @@ public sealed class MetricsFlusherTests
         store.CallCount.ShouldBe(2);
     }
 
-    [Fact]
-    public async Task FlushOnceAsync_EmptyBuffer_StillCompletesAndRecordsSelfMetrics()
-    {
-        var buffer = new MeasurementBuffer(1000);
-        var store = new FakeMetricsStore();
-        var flusher = CreateFlusher(buffer, store);
-
-        await flusher.FlushOnceAsync(TestContext.Current.CancellationToken);
-
-        store.Saved.Single(m => m.Name == "metrics.flush.batch_size").Value.ShouldBe(0);
-    }
-
     // ── ADR-0062: wait for the observable (TimerArmed / Flushes), never for the clock. No Task.Delay. ──
 
     private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(5);
@@ -202,6 +219,7 @@ public sealed class MetricsFlusherTests
         settings.Values[MetricsConfigKeys.FlushIntervalSecondsGlobal] = "5";
         var time = new FakeTimeProvider(FixedNow);
         var buffer = new MeasurementBuffer(1000);
+        buffer.TryEnqueue(AMeasurement()); // F7: self-metrics only land when a flush drains something
         var store = new FakeMetricsStore();
         var flusher = CreateFlusher(buffer, store, settings, time);
 
@@ -255,7 +273,7 @@ public sealed class MetricsFlusherTests
     }
 
     [Fact]
-    public async Task StopAsync_EmptyBuffer_StillCompletesAndRecordsSelfMetrics()
+    public async Task StopAsync_EmptyBuffer_RecordsNoSelfMetrics()
     {
         var buffer = new MeasurementBuffer(1000);
         var store = new FakeMetricsStore();
@@ -263,7 +281,7 @@ public sealed class MetricsFlusherTests
 
         await flusher.StopAsync(TestContext.Current.CancellationToken);
 
-        store.Saved.ShouldContain(m => m.Name == "metrics.flush.duration_ms");
+        store.Saved.ShouldBeEmpty("F7: a shutdown flush that drained nothing writes no self-metrics");
     }
 
     [Fact]

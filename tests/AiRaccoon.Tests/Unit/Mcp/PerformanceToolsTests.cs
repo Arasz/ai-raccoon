@@ -2,7 +2,6 @@ using AiRaccoon.Core.Metrics;
 using System.Text.Json;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Infrastructure.Metrics;
 using AiRaccoon.Tools;
 using Shouldly;
 using Xunit;

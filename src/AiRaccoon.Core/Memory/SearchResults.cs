@@ -1,5 +1,3 @@
-using System.Reflection;
-
 namespace AiRaccoon.Core.Memory;
 
 /// <summary>
@@ -22,23 +20,23 @@ public sealed record SearchTimings(
     public static SearchTimings Empty { get; } = new(TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero);
 
     /// <summary>
-    ///     This record's own TimeSpan properties, reflected once at type load — the source of truth
-    ///     for both <see cref="PhaseNames" /> and <see cref="Phases" />, so a phase added here needs
-    ///     no list edited anywhere else (derive-or-delete-the-list).
+    ///     The metric names a search records — `search.&lt;phase&gt;`, one per constructor parameter
+    ///     above, in declaration order. Declared explicitly, not derived by reflecting over "every
+    ///     TimeSpan property" (F11): that would have silently minted a series for any future computed
+    ///     property (e.g. a <c>Total</c>). Adding a seventh phase means adding it here <em>and</em> to
+    ///     the test that pins these six names (SearchResultsTests) — deliberate, not an oversight.
     /// </summary>
-    private static readonly PropertyInfo[] PhaseProperties =
-    [
-        .. typeof(SearchTimings)
-            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p.PropertyType == typeof(TimeSpan))
-    ];
-
-    /// <summary>The metric names a search records — `search.&lt;phase&gt;` per <see cref="TimeSpan" /> member above, in declaration order.</summary>
-    public static IReadOnlyList<string> PhaseNames { get; } = [.. PhaseProperties.Select(PhaseName)];
+    public static IReadOnlyList<string> PhaseNames { get; } =
+        ["search.fts", "search.vector", "search.fusion", "search.affinity", "search.snippets", "search.bump"];
 
     /// <summary>This instance's phases as name/value pairs, in the same order as <see cref="PhaseNames" />.</summary>
     public IReadOnlyList<(string Name, TimeSpan Value)> Phases() =>
-        [.. PhaseProperties.Select(p => (PhaseName(p), (TimeSpan)p.GetValue(this)!))];
-
-    private static string PhaseName(PropertyInfo property) => $"search.{property.Name.ToLowerInvariant()}";
+        [
+            (PhaseNames[0], Fts),
+            (PhaseNames[1], Vector),
+            (PhaseNames[2], Fusion),
+            (PhaseNames[3], Affinity),
+            (PhaseNames[4], Snippets),
+            (PhaseNames[5], Bump)
+        ];
 }

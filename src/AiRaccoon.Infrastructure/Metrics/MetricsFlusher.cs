@@ -9,8 +9,9 @@ namespace AiRaccoon.Infrastructure.Metrics;
 
 /// <summary>
 ///     Fixed-interval background flusher (docs/plans/2026-08-15-performance-metrics-implementation.md,
-///     WP3): on every tick, drains the buffer and batch-writes it, then records its own flush
-///     duration, batch size and cumulative drop count directly to the store — never through the
+///     WP3): on every tick, drains the buffer and batch-writes it. Only when that batch was
+///     non-empty, it also records its own flush duration, batch size and cumulative drop count
+///     directly to the store (F7 owner ruling: no self-metrics for an empty run) — never through the
 ///     buffer, so it cannot recurse by construction. A failed write is logged and never retried
 ///     within the same pass.
 /// </summary>
@@ -97,7 +98,11 @@ public sealed partial class MetricsFlusher(
         }
 
         var batchFailure = await TrySaveBatchAsync(batch, cancellationToken).ConfigureAwait(false);
-        var selfMetricsFailure = await RecordSelfMetricsAsync(start, batch.Count, cancellationToken).ConfigureAwait(false);
+        // F7 (owner ruling): self-metrics are worth a row under exactly the condition NoteWork()
+        // already uses above — an empty run gets no self-metrics either, not just no span.
+        var selfMetricsFailure = batch.Count > 0
+            ? await RecordSelfMetricsAsync(start, batch.Count, cancellationToken).ConfigureAwait(false)
+            : null;
         Flushes.Increment();
 
         var failure = batchFailure ?? selfMetricsFailure;
