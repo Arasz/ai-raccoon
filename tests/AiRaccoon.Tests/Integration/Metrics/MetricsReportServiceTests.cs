@@ -127,21 +127,16 @@ public sealed class MetricsReportServiceTests : IDisposable
     /// <summary>
     ///     Spec scenario 2: "a bank holding more than four weeks is within contract, not over it" —
     ///     the .feature is explicit that four weeks is a BEST-EFFORT limit, not a guarantee (stage 04
-    ///     amendment). This conflicts with a landed review fix: <see cref="PerformanceReportBuilder.MaxWindow" />
-    ///     hard-clamps every report to <see cref="MetricsConfigKeys.DefaultRetentionDays" /> (28 days)
-    ///     — see PerformanceReportBuilder.cs:23 and Build's `effectiveWindow = window > MaxWindow ?
-    ///     MaxWindow : window` at :45, which re-filters samples against the clamped start regardless
-    ///     of what SQL fetched. A bank holding 40 days can never have its 40th day answered for; the
-    ///     clamp and the scenario cannot both hold. GENUINE CONFLICT — not resolved here (test-engineer
-    ///     owns test files only, not production code, and this needs an owner ruling: relax the clamp,
-    ///     or amend the scenario). Skipped rather than left red, so the gap is visible and named
-    ///     instead of either breaking the suite or silently vanishing.
-    ///     RED evidence (captured before this was skipped, MaxWindow unchanged): seeding rows at 40,
-    ///     20 and 1 days old and asking for a 40-day window returns Count == 2, not 3 — the 40-day-old
-    ///     row is discarded by the clamp.
+    ///     amendment). This used to conflict with a landed review fix that hard-clamped every report's
+    ///     WINDOW to <see cref="MetricsConfigKeys.DefaultRetentionDays" /> (28 days) to bound
+    ///     allocation. Owner ruling: bound the bucket count, not the window
+    ///     (<see cref="PerformanceReportBuilder.MaxBucketCount" />) — a wide window widens its bucket
+    ///     instead of being truncated, so the whole window is covered and allocation still bounded.
+    ///     RED evidence (captured before the ruling, window-clamp still in place): seeding rows at 40,
+    ///     20 and 1 days old and asking for a 40-day window returned Count == 2, not 3 — the 40-day-old
+    ///     row was discarded by the window clamp.
     /// </summary>
-    [Fact(Skip = "Genuine conflict with PerformanceReportBuilder.MaxWindow's 28-day clamp (review fix) — " +
-                  "owner must rule: relax the clamp or amend the scenario. See docs/plans/2026-08-15-performance-metrics-implementation.md §4.")]
+    [Fact]
     public async Task GetReportAsync_BankHolding40DaysOfMeasurements_WindowOf40Days_ReportCoversAll40Days()
     {
         await SeedAsync("memory_search", 1, FixedNow - TimeSpan.FromDays(40), "acme");

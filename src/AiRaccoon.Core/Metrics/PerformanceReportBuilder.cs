@@ -1,4 +1,3 @@
-using AiRaccoon.Core.Memory;
 using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Core.Metrics;
@@ -14,13 +13,18 @@ public static class PerformanceReportBuilder
     public static readonly TimeSpan DefaultBucket = TimeSpan.FromMinutes(1);
 
     /// <summary>
-    ///     A window wider than this can never hold more real data than the metrics-retention
-    ///     default already discards, so a wider request is clamped, not honoured — an agent-supplied
-    ///     windowMinutes with no upper bound otherwise allocates ceil(window/bucket) buckets per
-    ///     series unbounded (e.g. ~18.9M bucket objects across ~36 series at a 1-year window and the
-    ///     1-minute default bucket). Kinder than a throw, matching the existing bucket-vs-window clamp.
+    ///     Caps allocation by bounding the bucket count per series, not the window — the .feature
+    ///     rules retention a best-effort limit, not a guarantee (docs/work/specs/PerformanceMetrics.feature,
+    ///     "A bank holding more than four weeks is within contract, not over it"), so a wide window
+    ///     must be honoured in full. An agent-supplied windowMinutes with no upper bound would
+    ///     otherwise allocate ceil(window/bucket) buckets per series unbounded (e.g. ~18.9M bucket
+    ///     objects across ~36 series at a 1-year window and the 1-minute default bucket); instead the
+    ///     bucket widens to fit the window within this cap. At ~36 series and a ~64-byte
+    ///     <see cref="PerformanceBucket" /> object, 2000 * 36 * 64B ~= 4.6MB worst case, against the
+    ///     ~18.9M-object unbounded case — plainly safe, while still ten-plus times finer than the
+    ///     180-bucket default, so no realistic caller notices the cap.
     /// </summary>
-    public static readonly TimeSpan MaxWindow = TimeSpan.FromDays(MetricsConfigKeys.DefaultRetentionDays);
+    public const int MaxBucketCount = 2000;
 
     /// <summary>
     ///     Builds one series per <paramref name="toolNames" /> entry — the derived tool inventory, not
@@ -29,7 +33,10 @@ public static class PerformanceReportBuilder
     ///     alongside the tool series rather than being dropped for having a name that is not a tool).
     ///     Both lists follow the same derived-inventory contract: a name with zero samples is still
     ///     present, at count zero. Bucketed across [<paramref name="now" /> - <paramref name="window" />,
-    ///     <paramref name="now" />]. A bucket wider than the window clamps to the window (one averaged point).
+    ///     <paramref name="now" />] — the window is never truncated. A bucket wider than the window
+    ///     clamps to the window (one averaged point); a bucket that would push the per-series count
+    ///     past <see cref="MaxBucketCount" /> widens instead, so the whole window still gets covered
+    ///     within a bounded number of buckets.
     /// </summary>
     public static PerformanceReport Build(
         IReadOnlyList<string> toolNames,
@@ -42,17 +49,18 @@ public static class PerformanceReportBuilder
         Guard.IsNotNull(toolNames);
         Guard.IsNotNull(samples);
 
-        var effectiveWindow = window > MaxWindow ? MaxWindow : window;
-        var effectiveBucket = bucket > effectiveWindow ? effectiveWindow : bucket;
-        var start = now - effectiveWindow;
-        var bucketCount = Math.Max(1, (int)Math.Ceiling(effectiveWindow / effectiveBucket));
+        var start = now - window;
+        var boundedBucket = bucket > window ? window : bucket;
+        var minBucketForCap = TimeSpan.FromTicks((long)Math.Ceiling(window.Ticks / (double)MaxBucketCount));
+        var effectiveBucket = boundedBucket < minBucketForCap ? minBucketForCap : boundedBucket;
+        var bucketCount = Math.Max(1, (int)Math.Ceiling(window / effectiveBucket));
 
         IReadOnlyList<string> seriesNames = phaseNames is { Count: > 0 } ? [.. toolNames, .. phaseNames] : toolNames;
         var series = seriesNames
             .Select(name => BuildSeries(name, samples, start, now, effectiveBucket, bucketCount))
             .ToList();
 
-        return new PerformanceReport(now, effectiveWindow, effectiveBucket, bucketCount, series);
+        return new PerformanceReport(now, window, effectiveBucket, bucketCount, series);
     }
 
     private static ToolPerformanceSeries BuildSeries(
