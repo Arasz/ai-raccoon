@@ -81,3 +81,15 @@ Feature: Performance metrics for AiRaccoon's own development
     # Owner: "lets calculate all useful statistics, and we should probably correlate them with
     # version too - so we can pin changes to version."
     # => the year of history can answer "did p99 move in 1.15.0", not only "did the mean move".
+
+  # ---- Stage 03, round 3. ----
+
+  Rule: A full channel drops the incoming measurement and counts the drop
+    # Owner chose DropWrite + TryWrite over DropOldest and over relying on the default.
+    # Verified against the official docs rather than from memory: BoundedChannelFullMode.Wait is the
+    # DEFAULT (value 0) and applies back-pressure to the writer, which rule "recording never fails
+    # the operation" forbids. TryWrite returns false immediately even under Wait, so a non-blocking
+    # hot path is achievable without changing FullMode — rejected because the guarantee would live
+    # at the call site, where a later WriteAsync silently reintroduces back-pressure.
+    # Channel.CreateBounded's itemDropped callback overload makes the drop counter a registration
+    # rather than bookkeeping, which is how "drops must be visible" is satisfied.
