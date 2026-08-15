@@ -54,6 +54,24 @@ public sealed class MetricsRetentionJobTests : IDisposable
         survivors.ShouldBe(["inside-window"]);
     }
 
+    /// <summary>
+    ///     Finding 4: the reaper deletes on recorded_at, but the only two indexes on `metrics` lead
+    ///     with name/project_id, not recorded_at — so every reap was a full-table SCAN. Asserted via
+    ///     the same EXPLAIN QUERY PLAN the SQLite planner actually uses, not an assumption about it.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_UsesAnIndexOnRecordedAt_NotAFullTableScan()
+    {
+        await using var connection = await OpenAsync();
+
+        var rows = await connection.QueryAsync<dynamic>(
+            "EXPLAIN QUERY PLAN DELETE FROM metrics WHERE recorded_at < @cutoff", new { cutoff = DaysAgo(28) });
+        var plan = string.Join(" | ", rows.Select(r => (string)r.detail));
+
+        plan.ShouldNotContain("SCAN metrics", Case.Sensitive,
+            $"the reaper's DELETE must use an index on recorded_at, not a full-table scan; actual plan: {plan}");
+    }
+
     /// <summary>AC1 — the reaper runs as a registered job and is stamped in the ledger like the others.</summary>
     [Fact]
     public async Task TheJob_AppearsInTheMaintenanceLedgerAfterRunning()

@@ -352,6 +352,12 @@ internal static class MemorySchema
                                           CREATE INDEX IF NOT EXISTS idx_metrics_name_time    ON metrics(name, recorded_at);
                                           CREATE INDEX IF NOT EXISTS idx_metrics_project_time ON metrics(project_id, recorded_at);
 
+                                          -- The retention reaper (MetricsRetentionJob) deletes on recorded_at alone; neither
+                                          -- index above leads with it, so every reap was a full-table SCAN (review-fixes
+                                          -- finding 4, confirmed with EXPLAIN QUERY PLAN). In the unconditional Ddl block,
+                                          -- not the `if (fresh)` branch, for the same reason as the two indexes above.
+                                          CREATE INDEX IF NOT EXISTS idx_metrics_recorded_at ON metrics(recorded_at);
+
                                           """;
 
     private static readonly Regex VecDimensionPattern = new(@"float\[(\d+)\]", RegexOptions.Compiled);
