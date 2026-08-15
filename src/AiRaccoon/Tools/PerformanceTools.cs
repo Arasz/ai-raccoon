@@ -1,7 +1,6 @@
 using AiRaccoon.Core.Metrics;
 using System.ComponentModel;
 using AiRaccoon.Core.Access;
-using AiRaccoon.Infrastructure.Metrics;
 using ModelContextProtocol.Server;
 
 // ReSharper disable ExplicitCallerInfoArgument

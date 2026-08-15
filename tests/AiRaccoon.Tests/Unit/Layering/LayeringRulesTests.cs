@@ -137,4 +137,22 @@ public sealed class LayeringRulesTests
         || type == typeof(TimeProvider)
         || type.IsPrimitive
         || type == typeof(string);
+
+    /// <summary>
+    ///     Rule 4 — F13: <c>IMetricsReportService</c> is a port, so it lives beside the other ports
+    ///     in Core (<c>IMemoryStore</c>, <c>IMeasurementRecorder</c>, <c>ISearchQualityService</c>)
+    ///     and beside its own return type, <c>PerformanceReport</c> — not in Infrastructure with the
+    ///     implementation that backs it. Resolved by name, not <c>typeof</c>, so this test compiles
+    ///     (and fails honestly) both before and after the move.
+    /// </summary>
+    [Fact]
+    public void IMetricsReportService_LivesInCoreMetrics()
+    {
+        var port = CoreAssembly.GetType("AiRaccoon.Core.Metrics.IMetricsReportService")
+                   ?? InfrastructureAssembly.GetType("AiRaccoon.Infrastructure.Metrics.IMetricsReportService");
+
+        port.ShouldNotBeNull("IMetricsReportService must exist somewhere in Core or Infrastructure");
+        port.Assembly.ShouldBe(CoreAssembly, "IMetricsReportService is a port and belongs in Core, beside the other ports");
+        port.Namespace.ShouldBe("AiRaccoon.Core.Metrics");
+    }
 }
