@@ -153,12 +153,31 @@ Feature: Performance metrics for AiRaccoon's own development
     # switches. A series with holes in it is worse than no series.
 
     Scenario: No setting turns measurement off
+      # RULED as proposed, stage 05 batch 3 ("all good"), with its weakness stated rather than
+      # hidden: this proves ONE setting combination does not disable measurement, not that no
+      # setting can. The stronger form derives the settings list and asserts none of them disables
+      # it -- rejected here because that is a structural test about our code, the same species the
+      # coverage check was moved to spec.json for. Behavioural and weak beats structural in a
+      # .feature; if the weakness bites, the derived form belongs in spec.json beside the other gate.
+      Given metrics have been recorded
+      When I set every metrics setting to its most restrictive value
+      Then a subsequent memory_search still records a measurement
 
   Rule: Recording is best effort and never fails the operation being measured
     # Owner: "recording is a best effort only."
 
     Scenario: A search succeeds when the metric write throws
+      Given a metrics writer that throws on every write
+      When I call memory_search
+      Then the search returns its results
     Scenario: A failed metric write is not retried into the caller's latency
+      # Internal-state assertion, chosen deliberately. The behavioural alternative -- "the search
+      # takes no longer than one against a healthy writer" -- is a timing comparison, and a timing
+      # assertion in CI is the kind that goes flaky and then gets muted, which is worse than an
+      # honest structural one.
+      Given a metrics writer that throws on every write
+      When I call memory_search
+      Then the failed write is not attempted again
 
   Rule: Measurements leave the hot path through a channel and are written by a background reader
     # Owner: "use channels, save the metric to the channel then process them in the background. We
@@ -167,7 +186,16 @@ Feature: Performance metrics for AiRaccoon's own development
     # => two competing budgets, both owner-stated: durability on crash vs hot-path cost.
 
     Scenario: A search returns before its measurement is written
+      Given a background reader that has not yet run
+      When I call memory_search
+      Then the search returns its results
+      And the report does not yet include that search
     Scenario: No measurement is written on the caller's thread
+      # Counted as bank writes during the call rather than as thread identity: the thread a write
+      # lands on is an implementation detail, but a synchronous write is observable and is the thing
+      # the rule exists to forbid.
+      When I call memory_search
+      Then no bank write happens during the call
 
   Rule: The channel is bounded and its memory cost is a stated budget
     # Owner: "we should consider memory pressure, so we should base on how metrics are collected
@@ -182,7 +210,17 @@ Feature: Performance metrics for AiRaccoon's own development
     # No user content is duplicated into the metrics table.
 
     Scenario: Two runs of the same query share a hash
+      Given I have run the same query twice
+      When I call memory_performance
+      Then both measurements carry the same query hash
     Scenario: No metric row contains query text
+      # THE STATED EXCEPTION to "a Then must not inspect internal state". There is no report-shaped
+      # way to prove text is NOT stored -- a report that omits it proves only that the report omits
+      # it, which is exactly the failure this rule guards against. The table is the only honest
+      # witness, so this scenario reads it on purpose.
+      Given I have run a query containing "secret-token"
+      When I read every metrics row
+      Then none of them contains "secret-token"
 
   Rule: The report is project-scoped by default and can be asked for the whole bank
     # Owner: "lets go with project scoped, but we want to have get all data access too."
