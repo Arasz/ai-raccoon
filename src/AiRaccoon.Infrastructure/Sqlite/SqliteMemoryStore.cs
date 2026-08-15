@@ -32,10 +32,6 @@ public sealed partial class SqliteMemoryStore(
     private readonly IEntryEmbedder _embedder = embedder;
     private readonly ISettingsStore _settings = settings;
 
-    // Both default to a Null Object, not a nullable parameter: TestData.CreateMemoryStore (out of
-    // this lane's ownership) constructs SqliteMemoryStore via the 8-arg primary constructor above,
-    // so production DI resolves the 10-arg constructor below instead — see NoOpNoiseShadowObserver
-    // and NoOpNoiseEntryStore.
     private readonly INoiseShadowObserver _noiseShadowObserver = NoOpNoiseShadowObserver.Instance;
     private readonly INoiseEntryStore _noiseEntryStore = NoOpNoiseEntryStore.Instance;
 
@@ -72,9 +68,6 @@ public sealed partial class SqliteMemoryStore(
                 .ConfigureAwait(false);
             if (noiseResult.IsNoise)
             {
-                // ADR-0029/ADR-0039: the training-data source — unconditional on noise.enabled,
-                // independent of the learner/shadow switch below (that switch gates the *detector*
-                // seam, not the reject log).
                 var retentionDays = NoiseConfigKeys.ParseRetentionDays(
                     await ReadSettingAsync(connection, NoiseConfigKeys.RetentionDaysGlobal, cancellationToken).ConfigureAwait(false));
                 var expiresAt = timeProvider.GetUtcNow().AddDays(retentionDays).ToUnixTimeSeconds();
@@ -89,8 +82,6 @@ public sealed partial class SqliteMemoryStore(
         var context = ContextResolver.Resolve(request);
         var bucket = EntryBucket.For(context, request.ProjectId);
 
-        // memory_write carries no logical path; derive a stable one from the content itself so
-        // identical content maps to the same slot, then scope the identity hash to it (FR-NM-7; see docs/work/features-native-memory/native-memory.feature).
         var path = WritePathFor(request.Content);
 
         if (bucket.WorkspaceId is not null)
@@ -114,13 +105,8 @@ public sealed partial class SqliteMemoryStore(
         var source = await ResolveSourceAsync(connection, request.SourceFile, request.Section, cancellationToken)
             .ConfigureAwait(false);
 
-        // memory_write had no chunking of its own, so a long body stored as one row and embedded
-        // only its first window (docs/adr/0064). Content that already fits comes back as one chunk,
-        // so the common short write is byte-for-byte what it was.
         var chunks = await fileIngestor.ChunkToBudgetAsync(connection, request.Content, cancellationToken)
             .ConfigureAwait(false);
-        // The returned entry addresses chunk 0; the path is derived from the WHOLE body, so the
-        // document keeps one identity however many rows it becomes.
         var hash = ContentHash.Of(path, chunks[0]);
         foreach (var chunk in chunks.Skip(1))
         {
@@ -160,14 +146,8 @@ public sealed partial class SqliteMemoryStore(
                 cancellationToken).ConfigureAwait(false);
         }
 
-        // chunks[0], not request.Content: this row STORES chunks[0], and embedding the whole
-        // document here gave it a vector built from the document truncated to the window — the
-        // text chunked, the vector not (ADR-0073).
         await _embedder.EmbedIfConfiguredAsync(connection, row.Id, chunks[0], cancellationToken).ConfigureAwait(false);
 
-        // Shadow mode (ADR-0039, amended): hands the stored content straight to the detector seam
-        // to record what it would have flagged (currently a no-op: no scoring model is shipped).
-        // Never affects Stored/Reason; a no-op entirely unless noise.learner.shadow.enabled.global is on.
         await _noiseShadowObserver.ObserveStoredWriteAsync(connection, bucket.ProjectId, request.AgentId,
             request.Content, hash, cancellationToken).ConfigureAwait(false);
 
@@ -345,8 +325,6 @@ public sealed partial class SqliteMemoryStore(
                     new { projectId, includeTtlRows = includeTtlRows ? 1 : 0 }, cancellationToken))
             .ConfigureAwait(false);
 
-        // Operator-configured source_file exclusions (extract.exclude.prefixes): rows whose
-        // source_file starts with an excluded prefix never become shared-extraction candidates.
         var excluded = ExtractionConfigKeys.ParseExcludePrefixes(
             await connection.QueryFirstOrDefaultAsync<string?>(
                     Def(MemorySql.SelectSetting,
@@ -416,8 +394,6 @@ public sealed partial class SqliteMemoryStore(
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(context);
 
-        // The access gate authorises `projectId`; the context must not re-target the delete at
-        // another project or at the shared tier, which belongs to none.
         ContextScope.RequireWithinProject(context, projectId);
 
         var (filter, values) = ContextFilter.For(context, projectId, "");
@@ -548,8 +524,6 @@ public sealed partial class SqliteMemoryStore(
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
 
-        // Entry count is scoped to this project's committed context: workspace scratch and
-        // other projects' rows are excluded. Pending comes from embed_state, filled by the embed pipeline.
         var entries = await connection.ExecuteScalarAsync<int>(
             Def(MemorySql.CountProjectEntries, new { projectId }, cancellationToken)).ConfigureAwait(false);
         var pendingCount = await connection.ExecuteScalarAsync<int>(
@@ -616,7 +590,6 @@ public sealed partial class SqliteMemoryStore(
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
 
-        // No engine configured: nothing can be embedded; pending is reported from embed_state.
         var settings = await _embedder.ReadSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(settings.Provider))
         {
@@ -695,9 +668,6 @@ public sealed partial class SqliteMemoryStore(
                 $"memory_add_content stored no row for '{path}' in '{resolvedContext}'.");
         }
 
-        // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): scoped to the
-        // TARGET context — ShareAsync/promotion write into a different context than the source
-        // row, and only the target's group changed.
         if (sourceFile is not null)
         {
             await RecomputeChunkColumnsAsync(connection, resolvedContext, projectId, sourceFile, cancellationToken)
@@ -745,8 +715,6 @@ public sealed partial class SqliteMemoryStore(
         return row is null ? null : new EntryMetadata(row.Rating, row.TtlDays);
     }
 
-    // The settings surface lives in SqliteSettingsStore (WP8); IMemoryStore keeps the members
-    // because ~40 call sites reach settings through the store they already hold.
     public Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
         _settings.GetSettingAsync(key, cancellationToken);
 
@@ -858,9 +826,6 @@ public sealed partial class SqliteMemoryStore(
     {
         try
         {
-            // FtsQueryNormalizer sanitizes its own expressions, but SourcePathQuery bypasses it,
-            // so a malformed expression can still reach FTS5; a failed keyword modality degrades
-            // to the vector list.
             var rows = (await connection.QueryAsync<SearchRow>(
                     new CommandDefinition(
                         MemorySql.SearchByFilter.Replace("{filter}", filter), parameters,
@@ -878,8 +843,6 @@ public sealed partial class SqliteMemoryStore(
         }
         catch (SqliteException ex)
         {
-            // Deliberate degradation, but never a silent one: the caller just gets a shorter
-            // list, and a broken index looks exactly like "nothing matched" without this.
             Log.KeywordModalityFailed(logger, ex);
             return [];
         }

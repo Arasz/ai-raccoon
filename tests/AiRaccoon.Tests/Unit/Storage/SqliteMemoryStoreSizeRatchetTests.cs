@@ -54,15 +54,23 @@ public sealed class SqliteMemoryStoreSizeRatchetTests
     //              it is now directly testable (FileTreeTests) where before it had only indirect
     //              coverage through ListFilesAsync. The unused System.Text.Json using went with it.
     //
+    //   1181 / 27  LOWERED again, and this one is a correction rather than a seam: ADR-0073's fix
+    //              is one argument, and I wrote a three-line comment above it explaining why. That
+    //              pushed the file to 1217 and turned main red on exactly this gate. The comment was
+    //              the inline rationale minimal-comments forbids when an ADR already carries it, so
+    //              the fix was to delete it -- and then every other standalone // in the file, 37 of
+    //              them, for the same reason. The XML doc comments stay: they state contracts.
+
     // Two raises in a single day of work was the signal this ratchet exists to send, and the
     // third hit was paid down rather than borrowed against: settings came out. Four seams remain
     // (write, search, ingest, embedding). The next person to hit this cap should take one
     // of them rather than add a raise -- raising is borrowing against a decomposition someone
     // still has to pay for.
-    // Paid down again 2026-08-15: the nine Dapper row DTOs moved to SqliteMemoryStore.Rows.cs to
-    // make room for the search phase timings, so the cap follows the file down rather than banking
-    // the slack for the next addition to spend.
-    private const int MaxLines = 1146;
+    //   1112 / 27  LOWERED again, by two reductions that landed independently and compounded:
+    //              main's ADR-0073 comment sweep (1181) and this branch's move of the nine
+    //              Dapper row DTOs to SqliteMemoryStore.Rows.cs, which made room for the search
+    //              phase timings (1146). Measured on the merge of both, not on either alone.
+    private const int MaxLines = 1112;
     private const int MaxMembers = 27;
 
     [Fact]
