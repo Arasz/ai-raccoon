@@ -45,8 +45,18 @@ Feature: Performance metrics for AiRaccoon's own development
     # "~1 year" — that gloss assumed a fixed fortnight. How far back 24 checkpoints reach now
     # depends on release frequency, and that is a fact about the release train, not a bug.
 
+    Scenario: A three-week-old bank still answers for its oldest measurement
+    Scenario: A bank holding more than four weeks is within contract, not over it
+    Scenario: A failed checkpoint leaves the hot table unpruned
+    Scenario: The twenty-fourth checkpoint is written and none is discarded
+    Scenario: The twenty-fifth checkpoint discards the oldest, not the newest
+
   Rule: Every operation is measured, not a chosen subset
     # Owner: "in - we want a complete view."
+
+    Scenario: Every tool on the MCP surface produces at least one measurement when called
+    Scenario: An operation added since the last release has recorded nothing yet
+    Scenario: A tool that records no measurement fails the coverage test
 
   Rule: The MCP tool returns the report as JSON to the calling agent
     # RESOLVED, stage 04 batch 3, owner: "2. yes." => a window with no measurements in it is an
@@ -54,8 +64,14 @@ Feature: Performance metrics for AiRaccoon's own development
     # saying nothing happened, which is an answer; an error would be indistinguishable from the
     # tool being broken.
 
+    Scenario: An agent calling memory_performance gets JSON, not prose
+    Scenario: A window with no measurements is an empty series, not an error
+
   Rule: The CLI writes the report to a file and returns its path
     # Owner: "CLI? return path to saved report file - probably in the dir where CLI was accessed."
+
+    Scenario: The CLI prints a path and the file exists at it
+    Scenario: The report lands in the invocation directory, not the data root
 
   Rule: Correlation dimensions are sampled periodically, not carried on every measurement
     # Owner picked the periodic bank-shape sample over per-row and per-checkpoint capture, and
@@ -65,14 +81,22 @@ Feature: Performance metrics for AiRaccoon's own development
     # projects 0.075 ms, embedded 1.286 ms, over-window requires the tokenizer. Read once per flush
     # rather than per measurement, which is what makes the expensive ones affordable.
 
+    Scenario: A measurement carries no dimensions of its own
+    Scenario: Bank shape is sampled once per flush, not once per measurement
+
   # ---- Stage 03, round 2. Owner-stated. ----
 
   Rule: Metrics collection is always on
     # Owner: "no, always on." Deliberately unlike noise/sweep/queryguard, which all have kill
     # switches. A series with holes in it is worse than no series.
 
+    Scenario: No setting turns measurement off
+
   Rule: Recording is best effort and never fails the operation being measured
     # Owner: "recording is a best effort only."
+
+    Scenario: A search succeeds when the metric write throws
+    Scenario: A failed metric write is not retried into the caller's latency
 
   Rule: Measurements leave the hot path through a channel and are written by a background reader
     # Owner: "use channels, save the metric to the channel then process them in the background. We
@@ -80,9 +104,14 @@ Feature: Performance metrics for AiRaccoon's own development
     # so the hot paths are almost not affected."
     # => two competing budgets, both owner-stated: durability on crash vs hot-path cost.
 
+    Scenario: A search returns before its measurement is written
+    Scenario: No measurement is written on the caller's thread
+
   Rule: The channel is bounded and its memory cost is a stated budget
     # Owner: "we should consider memory pressure, so we should base on how metrics are collected
     # and processed."
+
+    Scenario: A burst within capacity is flushed whole
 
   Rule: A measurement identifies its query by hash, never by text
     # Owner: "can we correlate by hash?" — yes. search_quality already stores the query text keyed
@@ -90,16 +119,27 @@ Feature: Performance metrics for AiRaccoon's own development
     # repeat queries, and the join recovers the text where the search was also quality-recorded.
     # No user content is duplicated into the metrics table.
 
+    Scenario: Two runs of the same query share a hash
+    Scenario: No metric row contains query text
+
   Rule: The report is project-scoped by default and can be asked for the whole bank
     # Owner: "lets go with project scoped, but we want to have get all data access too."
     # RESOLVED, stage 04 batch 2, owner: "8 - yes." => the whole-bank report is GATED behind the
     # elevated access mode, not merely a parameter. Project scope is the default AND the boundary:
     # crossing it is an access decision, the same shape the other cross-project surfaces already use.
 
+    Scenario: A report defaults to the calling project
+    Scenario: A whole-bank report requires the elevated access mode
+
   Rule: A checkpoint keeps the full statistics, not just an average, and records the version
     # Owner: "lets calculate all useful statistics, and we should probably correlate them with
     # version too - so we can pin changes to version."
     # => the year of history can answer "did p99 move in 1.15.0", not only "did the mean move".
+
+    # The batch-1 leftover, ruled at last: "we discard the oldest, versions doesn't matter" — so the
+    # proposed 'A checkpoint is discarded while it is the only record of its commit' is DROPPED, not
+    # deferred. Discarding is by age alone; no commit or version protects a row from the cap.
+    Scenario: A checkpoint answers for p99, not only the mean
 
   # ---- Stage 03, round 3. ----
 
@@ -113,11 +153,15 @@ Feature: Performance metrics for AiRaccoon's own development
     # Channel.CreateBounded's itemDropped callback overload makes the drop counter a registration
     # rather than bookkeeping, which is how "drops must be visible" is satisfied.
 
+    Scenario: A burst beyond capacity drops, and the drop count reports how many
+
   # ---- Stage 03, round 4. ----
 
   Rule: The channel holds at most 1000 measurements
     # Owner: "items, lets start from 1000, we will need to tune those numbers." => a setting, not a
     # constant, because the owner has said twice that these numbers are expected to move.
+
+    Scenario: Exactly one thousand measurements arrive between two flushes
 
   Rule: A checkpoint records the commit, not the release
     # Owner: "commit." => ServerInfo's +sha suffix, so a regression pins to the change that caused
@@ -130,6 +174,9 @@ Feature: Performance metrics for AiRaccoon's own development
     # the ambiguity — a checkpoint starts at a version, so its commit is the one that version was
     # cut at, not an arbitrary one from the middle of the window.
 
+    Scenario: A checkpoint records the commit, its version, and the commit timestamp
+    Scenario: A new version starts a checkpoint before the fortnight is up
+
   Rule: The report window and bucket are the caller's choice, defaulting to the last 3 hours in 1-minute buckets
     # Owner: "let the client specify with a default for last 3h of data with 1 minute bucket."
     # => 180 points at the default, which is a plottable series rather than a raw dump.
@@ -138,6 +185,9 @@ Feature: Performance metrics for AiRaccoon's own development
     # rejected: it is CLAMPED to the window, and the report is a single point averaging it. The
     # caller always gets a series, never a validation failure, and never a partial trailing bucket
     # wider than the data it covers.
+
+    Scenario: A caller asking for nothing gets three hours in one-minute buckets
+    Scenario: A bucket wider than the window is clamped to one averaged point
 
   Rule: The background reader flushes on channel pressure, rate-limited to one flush per 4 seconds
     # Owner: "calculating the pressure in the channel with a time limit - we will aim at 60% of the
@@ -152,6 +202,10 @@ Feature: Performance metrics for AiRaccoon's own development
     # the channel can still fill, so the rate limit and the drop counter interact — a burst that
     # exceeds 1000 items in 4 seconds drops, by design, and the drop count is how that is seen.
 
+    Scenario: A second flush does not start within four seconds of the first
+    Scenario: Rising pressure lowers the aim, so a burst flushes below sixty percent
+    Scenario: An idle bank flushes after thirty seconds with the aim unreached
+
   Rule: The metrics subsystem measures itself, without going through itself
     # Owner: "also we want to save metrics for this system." => channel occupancy and pressure,
     # dropped count, flush duration and batch size, checkpoint duration, table growth.
@@ -160,82 +214,5 @@ Feature: Performance metrics for AiRaccoon's own development
     # itself through itself feeds itself, and the feedback is worst exactly when the channel is full
     # — the moment the numbers matter most and the drop counter starts lying about what filled it.
 
-  # ---- Stage 04, batch 1. Titles proposed by me at the owner's request, then corrected by them.
-  # Step-less on purpose: this is the queue stage 05 fills, and what spec_holes.py counts. ----
-
-  Rule: Retention scenarios
-    Scenario: A three-week-old bank still answers for its oldest measurement
-    Scenario: A bank holding more than four weeks is within contract, not over it
-    Scenario: A failed checkpoint leaves the hot table unpruned
-
-  Rule: Checkpoint cap scenarios
-    Scenario: The twenty-fourth checkpoint is written and none is discarded
-    Scenario: The twenty-fifth checkpoint discards the oldest, not the newest
-
-  Rule: Coverage scenarios
-    Scenario: Every tool on the MCP surface produces at least one measurement when called
-    Scenario: An operation added since the last release has recorded nothing yet
-    Scenario: A tool that records no measurement fails the coverage test
-
-  Rule: Channel scenarios
-    Scenario: A burst within capacity is flushed whole
-    Scenario: Exactly one thousand measurements arrive between two flushes
-    Scenario: A burst beyond capacity drops, and the drop count reports how many
-
-  # ---- Stage 04, batch 2. Same mode: titles proposed, owner shot down what was wrong.
-  # Owner answered 8 (gated) and 10 (clamped); the other ten stood as proposed. ----
-
-  Rule: Self-metrics scenarios
     Scenario: A flush records its own duration without enqueueing anything
     Scenario: Self-metrics are written even when the channel is full
-
-  Rule: Best-effort recording scenarios
-    Scenario: A search succeeds when the metric write throws
-    Scenario: A failed metric write is not retried into the caller's latency
-
-  Rule: Query identity scenarios
-    Scenario: Two runs of the same query share a hash
-    Scenario: No metric row contains query text
-
-  Rule: Report scope scenarios
-    Scenario: A report defaults to the calling project
-    Scenario: A whole-bank report requires the elevated access mode
-
-  Rule: Report window scenarios
-    Scenario: A caller asking for nothing gets three hours in one-minute buckets
-    Scenario: A bucket wider than the window is clamped to one averaged point
-
-  Rule: Correlation dimension scenarios
-    Scenario: A measurement carries no dimensions of its own
-    Scenario: Bank shape is sampled once per flush, not once per measurement
-
-  # ---- Stage 04, batch 3. Owner ruled on the two flagged guesses (2, 12) and shot none of the
-  # other ten down. The batch-1 leftover was ruled too — see below. ----
-
-  Rule: MCP output scenarios
-    Scenario: An agent calling memory_performance gets JSON, not prose
-    Scenario: A window with no measurements is an empty series, not an error
-
-  Rule: CLI report scenarios
-    Scenario: The CLI prints a path and the file exists at it
-    Scenario: The report lands in the invocation directory, not the data root
-
-  Rule: Always-on scenarios
-    Scenario: No setting turns measurement off
-
-  Rule: Hot-path scenarios
-    Scenario: A search returns before its measurement is written
-    Scenario: No measurement is written on the caller's thread
-
-  Rule: Flush cadence scenarios
-    Scenario: A second flush does not start within four seconds of the first
-    Scenario: Rising pressure lowers the aim, so a burst flushes below sixty percent
-    Scenario: An idle bank flushes after thirty seconds with the aim unreached
-
-  Rule: Checkpoint content scenarios
-    # The batch-1 leftover, ruled at last: "we discard the oldest, versions doesn't matter" — so the
-    # proposed 'A checkpoint is discarded while it is the only record of its commit' is DROPPED, not
-    # deferred. Discarding is by age alone; no commit or version protects a row from the cap.
-    Scenario: A checkpoint answers for p99, not only the mean
-    Scenario: A checkpoint records the commit, its version, and the commit timestamp
-    Scenario: A new version starts a checkpoint before the fortnight is up
