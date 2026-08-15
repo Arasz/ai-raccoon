@@ -226,20 +226,22 @@ bearing, a check has never actually been seen to fail. **Facts are the exception
 taken from documentation, an earlier run, or someone else's research gets re-checked against its
 source every time, because that is what goes stale while your reasoning stays put.
 
-### Limited gates — `--risk`
+### The slow suites
 
-Passing `--risk` to `start` puts the **automated** gates into limited mode: formatting, fast tests
-and the lint/rule check only. No end-to-end or integration suite fires automatically — they are
-slow, and one machine usually has several sessions running on it.
+The pre-push hook runs the checks that cost seconds. The slow ones — the full test suite, the
+lint pass, any end-to-end or integration journey — belong to CI, which runs them on every push
+to every branch on the project's declared floor rather than on whatever the developer's machine
+happens to have.
 
-The name is literal: you are buying speed with coverage, and the coverage is still owed.
+That makes the local hook fast feedback, not the pass condition:
 
-- Run the full suite yourself before integrating, and treat its result as this phase's pass
-  condition. `--risk` moves that run; it does not remove it.
+- **CI is the gate.** Treat its result as this phase's pass condition, not the green pre-push.
+- Run a slow lane yourself when you want it before pushing — the runner takes a lane by name.
 - Run it as the only session working at that moment — two full suites at once measure each other.
-- The switch is recorded on the task and stays on across a resume;
-  `python3 .ai-badger/skills/task/scripts/task_tracker.py status` prints `risk=on` for it. A task
-  that did not ask for it is unaffected.
+
+> There used to be a `--risk` switch here that put the automated gates into a limited mode. It
+> was removed in 0.123.0: once the slow lanes moved to CI it dropped nothing, while the push
+> still announced a trade it was no longer making.
 
 ## Phase 4 — Finish protocol
 

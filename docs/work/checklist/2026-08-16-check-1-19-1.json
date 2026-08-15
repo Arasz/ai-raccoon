@@ -1,0 +1,196 @@
+{
+  "run": {
+    "date": "2026-08-16",
+    "branch": "task/check-1.9.1-state-checklist",
+    "commit": "5fc1ddf30899825ed2a4f925abcc9dabf3e22427",
+    "data-root": "<scratchpad>/lane{A,B,C,D,E}/root — one scratch root per lane, never ~/.ai-raccoon",
+    "note": "Driven over stdio MCP by scratchpad/mcpcli.py against a binary packed from HEAD and installed to a scratch --tool-path. Five lanes ran in parallel, each with its own data root; no lane bound port 7721."
+  },
+  "derived": {
+    "version": "1.19.1",
+    "mcp-tool-count": "26",
+    "mcp-prompt-count": "2",
+    "note": "Read from the tree at run time per SKILL.md step 2 (PackageVersion, McpServerTool count, McpServerPrompt count), then CONFIRMED against the live server's serverInfo/tools/list/prompts/list. Neither number was copied from the other."
+  },
+  "scope-note": {
+    "added-since-1.15.0": "Three items were added beyond the template, covering what shipped between the last checklist run (1.15.0) and this one: write-embeds-the-chunk-it-stored (#344), over-window-query-warns-not-refuses (#339/#333), maintenance-job-ledger (#330/#335). A release checklist that never grows with the releases rots the same way hand-pinned facts do.",
+    "baseline-compared": "docs/work/checklist/2026-08-15-release-1-15-0.json, and the pre-skill run now at docs/work/checklist/2026-08-13-state-1-9-1-1558.json (moved out of .ai-raccoon/ by this PR — results do not belong in a bank directory)."
+  },
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
+      "command": "dotnet build -c Release; dotnet pack src/AiRaccoon/AiRaccoon.csproj -c Release; dotnet tool install ai-raccoon --version 1.19.1 --add-source <worktree>/.nupkg --tool-path <scratchpad>/tool; <scratchpad>/tool/ai-raccoon --version",
+      "evidence": "Build succeeded. 0 Warning(s) 0 Error(s) | 'Successfully created package' x9 covering all 7 RIDs plus the RID-agnostic package | Tool 'ai-raccoon' (version '1.19.1') was successfully installed. | 1.19.1+5fc1ddf30899825ed2a4f925abcc9dabf3e22427",
+      "observed-result": "Version and +sha both match `git rev-parse HEAD` exactly. Every lane below drove this binary.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "sha matches HEAD exactly. DEVIATION, recorded deliberately: installed to a scratch --tool-path rather than force-updating the user's global tool, because another session's perf-metrics task was live on this machine and the global tool was already at 1.19.1+85450038 (HEAD~1, a comment-only diff). Pack and install were exercised in full; only the install destination differs, and the binary under test is the one built from HEAD."
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+      "command": "ai-raccoon --data-root <laneC>/root serve --port 0  (bound 127.0.0.1:61651, pid 257)  THEN  ai-raccoon --data-root <laneC>/root serve --port 61651 --restart  (pid 2450)",
+      "evidence": "serve1.log: 'Now listening on: http://127.0.0.1:61651' / 'http://127.0.0.1:61651/mcp'\nserve2.log: 'ai-raccoon: asking the server on port 61651 to stop (pid 257, 1.19.1+5fc1ddf30899825ed2a4f925abcc9dabf3e22427)' -> 'ai-raccoon: the server on port 61651 (pid 257) stopped and the port is free' -> 'Now listening on: http://127.0.0.1:61651' (new pid 2450)",
+      "observed-result": "serve --port 0 bound a random free port and reported it at startup. --restart found the incumbent, named it by pid and version, stopped it, confirmed the port free, and rebound under a new pid. Port 7721 was never referenced in any command or log line; the user's own 7721 servers were untouched.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "Both halves observed directly from command output, not inferred. Cleanup confirmed: `kill 2450` succeeded and a follow-up `ps -p 2450` returned no process."
+    },
+    {
+      "item": "memory-write-stores-and-reports-truthfully",
+      "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
+      "command": "memory_write(projectId=laneA, content='laneA checklist canary: the quick brown fox...'); memory_write(projectId=laneA, content='received signal 15')",
+      "evidence": "good write -> {\"hash\":\"ddf181a2a409cbd90381de9ff56752d626462d3238ae3486f1df4c2cfb4643dd\",\"path\":\"620bea3e...c.md\",\"stored\":true}\nrejected write -> {\"hash\":\"\",\"path\":\"\",\"context\":\"\",\"stored\":false,\"reason\":\"rejected by noise policy 'HermesBackgroundProcessLog'\"}",
+      "observed-result": "A clean write returns a real hash/path and stored=true. Content matching the only registered noise policy is refused with stored=false, a reason naming the policy, and empty hash/path — no fabricated identity.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "Matches ADR-0032 exactly (Stored/Reason additive members, empty Hash/Path on rejection). Both halves exercised."
+    },
+    {
+      "item": "memory-search-hybrid-retrieval",
+      "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking",
+      "command": "memory_write(projectId=laneA, content=\"The astrolabe's brass rim catches lamplight in the observatory at dusk, marking star positions.\"); memory_search(projectId=laneA, query='an antique navigation instrument reflecting evening light in a stargazing room', scope=all)",
+      "evidence": "write hash: 7253bbf039b95ba601f8a96fb649955f81a6d4c07db16e9ceb5f2c304f5da23d\nsearch top hit: {\"hash\":\"7253bbf039b95ba601f8a96fb649955f81a6d4c07db16e9ceb5f2c304f5da23d\",\"ranking\":1}",
+      "observed-result": "The written entry came back ranked #1 for a query with zero literal keyword overlap with the stored content ('astrolabe/lamplight/observatory' vs 'navigation instrument/evening light/stargazing room'), which proves the vector leg carried the match rather than BM25 alone.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "Hit confirmed by hash, not by snippet text. The query was constructed to be unanswerable by keyword match, so the check can actually fail if the vector leg regresses."
+    },
+    {
+      "item": "memory-get-returns-content-by-hash",
+      "expected-result": "memory_get returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
+      "command": "memory_write(...); memory_get(projectId=laneA, hash=<that hash>); memory_get(projectId=laneA, hash='deadbeef00...')",
+      "evidence": "known hash -> {\"hash\":\"df066555b2...\",\"value\":\"laneA memory_get roundtrip canary: byte-exact 1.19.1 check-1.9.1 ADR-0035 payload\"}; byte-exact match: True\nunknown hash -> isError:true, text:\"unknown-hash: No entry with hash 'deadbeef00...' in project 'laneA'.\"",
+      "observed-result": "A known hash round-trips the exact stored bytes. An unknown hash produces a structured 'unknown-hash' refusal (isError=true), not an empty or silent result.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "Matches ADR-0035's GetAsync/UnknownHashException -> ToolRefusals mapping; both halves exercised, and the byte-exactness was compared against the string written in the same session."
+    },
+    {
+      "item": "source-path-anchor-resolves-its-chunk",
+      "expected-result": "a `file#section` query returns that exact chunk within the production result window",
+      "command": "memory_ingest_file(projectId=laneA, path=.../notes3.md) BEFORE scope add -> refusal; ai-raccoon --data-root <root> ingest scope add laneA <docs-dir>; memory_ingest_file again; memory_search(projectId=laneA, query='notes3.md#decision', scope=all, limit=20); memory_get on the chunkIndex=0 hash and its siblings",
+      "evidence": "pre-scope: {\"text\":\"path-outside-scope: Path '.../notes3.md' is outside the ingest scope.\",\"isError\":true}\npost-scope ingest: {\"indexed\":1}\nsearch result (position 2 of 11, within limit=20): {\"hash\":\"b98c90c5dc01...\",\"sourceFile\":\".../notes3.md\",\"chunkIndex\":0,\"totalChunks\":4}\nchunkIndex=0 contains 'turquoise' (the decision text)=True; chunkIndex=1=False; chunkIndex=2=False",
+      "observed-result": "Ingest correctly refuses an out-of-scope path before any scope exists — the documented precondition, not a workaround. After `ingest scope add`, the file indexes into 4 chunks and the anchor query surfaces chunkIndex=0, the only chunk of that file carrying the decision text, well within the default window.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "The anchor resolved the correct chunk AND was distinguished from the same file's other chunks. It ranked 3rd rather than 1st because two earlier same-session probe files with near-duplicate heading structure diluted the RRF ranking — a self-inflicted artifact of iterating on the check, not a defect; the criterion is 'within the production result window', not rank #1."
+    },
+    {
+      "item": "write-embeds-the-chunk-it-stored",
+      "expected-result": "a long write that chunks into several rows embeds each chunk's own text rather than the whole document, so a query matching only a late chunk retrieves that chunk (1.19.1, PR #344)",
+      "command": "git show 85450038 (SqliteMemoryStore.cs:149 embeds chunks[0], not request.Content); memory_write(2-chunk doc: Block A filler ending MARKERALPHA, Block B opening with 'narwhals circling the wreck' ending MARKERBETA); memory_get(write hash); FTS(MARKERBETA) -> late chunk hash; memory_get(late chunk); memory_embed_pending; memory_search(paraphrase query)",
+      "evidence": "write hash h0=4a045bf6e38d8913a3f75762d3d6409bbde5ff1770955f6d089b79f54ba19e51; memory_get(h0) value (452 chars) contains 'narwhals circling the wreck'=False\nlate chunk hash=6c6af7a4a69923e3a81887f24d7030b7dda4d22584d67b6b89ac12a61c7842db; memory_get(that hash) contains 'narwhals circling the wreck'=True\nmemory_embed_pending -> {\"processed\":1,\"pending\":0}\nsemantic query top hit: {\"hash\":\"6c6af7a4a699...\",\"ranking\":1} — the late chunk; h0 ranks 5th at 0.938",
+      "observed-result": "A paraphrase query with no literal term overlap returns the LATE chunk — whose stored text actually contains the phrase — as the #1 hit, while the row memory_write itself returned (chunk[0], text = Block A only) ranks well below and does not contain the phrase.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "Constructed to fail on the old code: Block A is only ~100 tokens, so the pre-1.19.1 path (embedding request.Content truncated to the 254-token window into chunk[0]'s row) would have carried ~150 tokens further and covered the distinctive phrase, making chunk[0]'s vector encode text its own row never contained. The clean separation observed here is the fixed behaviour (ADR-0073). The pre-fix failure is a specific, falsifiable account from reading the diff, not a re-run against the old binary."
+    },
+    {
+      "item": "write-path-noise-filtering",
+      "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
+      "command": "grep -rn 'NoiseFilterPolicy' src/ -> src/AiRaccoon/Setup/AppRegistrations.cs:187 registers INoiseFilterPolicy -> HermesProcessNoisePolicy, the only one; memory_write for its three shapes plus one clean control; ai-raccoon --data-root <root> noise entries; sqlite3 <root>/memory.db 'SELECT ... FROM noise_entries'",
+      "evidence": "hermes-notif -> {'stored': False, 'reason': \"rejected by noise policy 'HermesBackgroundProcessLog'\"}; async-batch -> same; received-signal -> same; clean-negative -> {'stored': True, 'hash': 'bb1f16b8...'}\n`noise entries` -> total: 3, HermesBackgroundProcessLog: 3\nsqlite3 noise_entries rows 1-3 hold the verbatim rejected request_content for each shape",
+      "observed-result": "Only HermesProcessNoisePolicy is registered. All three of its documented shapes were rejected with a reason naming the policy; unrelated clean content was stored; rejected content is retrievable verbatim both via the CLI summary and by reading noise_entries directly.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "Policy list DERIVED from AppRegistrations.cs, not assumed from memory or a prior checklist — which is what caught the stale baseline item below. The clean control is what makes this a filter test rather than a rejection test."
+    },
+    {
+      "item": "read-path-query-guard",
+      "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
+      "command": "read docs/adr/0040 and 0041; ai-raccoon --data-root <root> queryguard show; memory_search for two refuse shapes, two warn-tier markers, and a clean query; then queryguard structural enable + threshold set 0 and re-run",
+      "evidence": "Before arming: refuse shapes -> 'invalid-params: This looks like tool output rather than a question...'; warn markers -> results:[] plus warning 'This query contains what looks like log or stack-trace output...'; clean -> results, no warning. `queryguard show` -> 'structural: False'\nAfter arming: 'structural: True  threshold: 0'; an ordinary clean query now returns its result PLUS the structural warning; the refuse-shape query still refuses (not downgraded to Warn)",
+      "observed-result": "Refuse tier throws invalid-params before any search runs. Warn tier annotates and leaves clean queries untouched. The structural detector defaults to off, and once armed only ever promotes Clean->Warn — it never refuses and never overrides an existing Refuse verdict.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "All tiers exercised live against the actual binary and matched ADR-0040/0041. The default-off state was read from `queryguard show` rather than assumed."
+    },
+    {
+      "item": "over-window-query-warns-not-refuses",
+      "expected-result": "a query longer than the embedding window returns results plus a caller-visible warning rather than a refusal, and a deliberately trimmed query says it was trimmed (PRs #339 option B, #333)",
+      "command": "git show 8ec0e8a4; git show a56dd996; read QueryLengthGuard.cs, SearchWarnings.cs, EmbeddingService.cs, docs/adr/0071; ai-raccoon --data-root <root> model set local; memory_search with a 2,289-character prose query, capturing server stderr for EventId 416",
+      "evidence": "memory_search returned RESULTS (not an error) plus the verbatim QueryLengthGuard.WarnGuidance: 'This query is over 1,000 characters. Semantic search only embeds roughly the first 254 tokens of a query (~1,000 characters of English prose, approximate) — search for the identifying line instead of pasting the whole dump...'\nServer log: 'warn: AiRaccoon.Infrastructure.Embedding.EmbeddingService[416] / Search query was shortened to fit the embedding model: 360 tokens exceeded the 254-token window, so only the first 1609 of 2289 characters were used to find matches.'",
+      "observed-result": "An over-window query is never refused: it runs, returns results, and carries a caller-visible warning (#339 option B). The server-side trim log names the trimmed thing a 'Search query', not a 'chunk' — #333's fix, confirmed by the live log line and not only by the diff.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "Reproduced end to end through a real local embedding provider; warning text and trim log both captured verbatim from the running binary."
+    },
+    {
+      "item": "file-watch-status",
+      "expected-result": "memory_watch_status lists live registrations and their sync state",
+      "command": "memory_watch_status(laneD) before any watch; memory_watch_add -> refused; ai-raccoon --data-root <root> watch enable laneD true && ingest scope add laneD <watchdir>; memory_watch_add again; memory_watch_status again",
+      "evidence": "before: {\"data\":{\"watches\":[]}}\nwatch_add (before enable): \"watching-disabled: Watching is disabled for project 'laneD'.\"\nCLI: 'watch enabled for laneD' / 'added <watchdir> to ingest scope for laneD'\nwatch_add (after): {\"data\":{\"projectId\":\"laneD\",\"path\":\"<watchdir>\"}}\nstatus after: {\"data\":{\"watches\":[{\"projectId\":\"laneD\",\"path\":\"<watchdir>\",\"state\":\"Scanning\"}]}}",
+      "observed-result": "The whole loop works. Watching is disabled by default per project, and the disabled path refuses TYPED and informative rather than crashing or silently no-opping. After enabling and scoping, status lists the live registration with its path and sync state.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "Both paths (disabled refusal, enabled registration) exercised. The watch pointed at a directory created under the lane dir, never at the user's own tree."
+    },
+    {
+      "item": "promotion-queue-state",
+      "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately",
+      "command": "memory_promotion_list(laneD) baseline; memory_write(laneD, context='shared'); memory_promotion_list(includeFullValue=true); memory_stats(laneD); memory_search(scope=shared) and memory_search(scope=project)",
+      "evidence": "baseline: {\"data\":{\"rows\":[]}}\nwrite -> {\"stored\":true,\"context\":\"project:laneD\",\"reason\":\"queued-for-promotion: agent-requested-share\"}\npromotion_list -> one row, hash 223e0630..., score 1, reasons [\"agent-requested-share\"]\nmemory_stats -> {\"entries\":2,\"pending\":2,\"contexts\":[\"project:laneD\"]}, waitingPromotionsCount=1\nsearch scope=shared -> results:[]; scope=project -> the entry",
+      "observed-result": "The empty baseline was treated as too weak to distinguish a working queue from a broken one, so a candidate was created. ADR-0067 holds end to end: no shared row, storage in the caller's project, a queued candidate distinguishable by its reason, and a response that says what happened.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "Queue contents cross-checked against memory_stats AND memory_search on two scopes rather than trusting a single tool's self-report."
+    },
+    {
+      "item": "full-mcp-surface",
+      "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+      "command": "stdio session: initialize, tools/list, prompts/list, then tools/call for all 26 tools with minimal valid arguments, then prompts/get for both prompts",
+      "evidence": "serverInfo: {\"name\":\"AiRaccoon\",\"version\":\"1.19.1.0\"} (matches derived 1.19.1); tools: 26 (matches derived 26); prompts: 2 ['workspace-consolidation-guide','memory-usage-guide'] (matches derived 2)\ntool_results.json: 26/26 tool keys present, CRASHES: []\nTyped refusals (all reachable): memory_set_ttl/memory_delete_context/memory_delete -> 'access-denied: requires mode full (current rw)'; memory_watch_add -> 'watching-disabled'; memory_sync -> 'sync-not-configured'; memory_ingest_file/_directory -> 'path-outside-scope'\nprompts/get: 3062 bytes and 512 bytes of real guidance content",
+      "observed-result": "The live surface matches the tree-derived facts exactly — version, 26 tools, 2 prompts, no discrepancy. Every tool was actually invoked, not merely listed; none raised an unhandled exception, and every response was either a success payload or a typed refusal naming its reason.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "Counts derived FIRST from the tree and then confirmed live — neither copied from the other. Reachability was proven by calling all 26, not by reading the list."
+    },
+    {
+      "item": "observability-event-ids",
+      "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+      "command": "three stdio driver runs with stderr captured, each calling memory_write/search/stats/watch_status/embed_pending/get(valid)/get(bad hash)/promotion_list; then grep -oE 'AiRaccoon\\.[A-Za-z0-9_.]+\\[[0-9]+\\]' | sort -u",
+      "evidence": "Emitted: AppRunner[12], Observability.BankEngineReporter[13], Maintenance.BankMaintenanceHostedService[510] (x3, WAL checkpoint), Maintenance.MaintenanceJobRunner[525] (x3 per run), Tools.ToolRefusals[911]. All five resolve against documented ranges: 10-12 Program.cs, 13-14 BankEngineReporter.cs, 510-524 BankMaintenanceHostedService.cs, 525-526 MaintenanceJobRunner.cs, 910-912 ToolRefusals.cs. Zero drift — no emitted id fell outside a documented block.",
+      "observed-result": "Every id emitted this pass matches its documented file and range. Documented ids NOT observed (reported as not exercised, NOT as verified): 10-11, 14, 20, 30, 40-41, 100, 200-205, 300-302, 310-312, 320-321, 330, 400, 410-416, 500-509, 517-524, 530-537, 601-660, 700-709, 800-807 (CLI-only), 910, 912, 920, 950-951. CORRECTION to the 1.15.0 run: it marked this 'partial' and blamed the maintenance cadence for 522-524. BankMaintenanceHostedService.RunPassAsync:166-169 shows the noise and retention purges run UNCONDITIONALLY on every pass including the startup pass, which was observed firing on all three runs. They did not log because each logs at Info only when count>0 and a fresh scratch bank has nothing to purge. Same outcome, different mechanism — and the old reason would have discouraged seeding data to exercise them.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "The expected result is that emitted ids resolve against the doc, and they do, with zero drift across three independent live runs. The unexercised list is stated plainly rather than folded into the pass. The correction to the prior run's reasoning is evidence-based: source read plus live observation that the purge runs every pass."
+    },
+    {
+      "item": "maintenance-job-ledger",
+      "expected-result": "the maintenance pass runs as a list of jobs and records a ledger in the bank; a job that creates work causes the sweep to run again (1.17.0 PR #330, 1.18.0 PR #335)",
+      "command": "git show a299bbdf; git show 521e99ec; read docs/adr/0070 and Maintenance/{MaintenanceJobRunner,BankMaintenanceHostedService}.cs; live startup pass against <laneE>/root3; sqlite3 -header -column <root3>/memory.db 'SELECT name, last_run_at, run_count FROM maintenance_jobs ORDER BY name;'; dotnet test --filter 'FullyQualifiedName~EmbedSweepAfterJobsTests'",
+      "evidence": "stderr3.log: 'MaintenanceJobRunner[525] ai-raccoon: maintenance job ... (chunk-backfill) ran in 27 ms' / '(vec0-reclaim) ran in 3 ms' / '(vacuum) ran in 4 ms', bracketed by two BankMaintenanceHostedService[510] WAL-checkpoint lines matching RunPassAsync\nLedger: chunk-backfill|1786831719|1, vacuum|1786831719|1, vec0-reclaim|1786831719|1\ndotnet test: 'Passed! - Failed: 0, Passed: 3, Skipped: 0, Total: 3' for EmbedSweepAfterJobsTests",
+      "observed-result": "The ledger half is live-verified: a real server ran the three-job list on its startup pass and stamped all three rows into maintenance_jobs in exactly the (name, last_run_at, run_count) shape ADR-0070 specifies. The re-sweep half was NOT reproduced live and is not claimed as such: chunk-backfill is the only job returning CreatedWork=true, it is once-per-bank and consumed by the automatic startup pass before any client write can land, and memory_write already chunks to the same budget the backfill checks against — so no legitimately over-window row can be seeded in time without hand-crafting SQL into the bank.",
+      "status": "pass",
+      "accepted": true,
+      "acceptation-reason": "The primary claim is proven by a live pass plus a direct sqlite read of the ledger, not inferred from code. The secondary claim is proven by the project's own shipped regression suite (all three branches: job-created-work, no-job-ran, job-created-nothing) because live reproduction is structurally impractical within one scratch bank's lifetime. The substitution is named here rather than folded into an unqualified pass; 'skipped' would understate what was actually checked."
+    }
+  ],
+  "summary": {
+    "total": 15,
+    "pass": 15,
+    "fail": 0,
+    "skipped": 0,
+    "note": "All 15 items pass. Two carry a named, deliberate deviation rather than a silent one: build-and-install-global-package installed to a scratch tool-path instead of force-updating the global tool, and maintenance-job-ledger proved its re-sweep half by the shipped regression suite rather than live."
+  },
+  "findings-against-prior-runs": [
+    {
+      "finding": "The 1.9.1 run passed an item for a feature that does not exist.",
+      "detail": "docs/work/checklist/2026-08-13-state-1-9-1-1558.json carries 'noise-filtering-zero-shot-semantic-filter' as checked:true, accepted:true, reason 'ZeroShotEmbeddingNoisePolicy evaluated against bundled noise vectors'. ADR-0033 removed that policy; AppRegistrations.cs:187 registers only HermesProcessNoisePolicy. The run's own recorded evidence shows a normal stored hash — nothing was filtered — and it was accepted anyway. Caught here only because the policy list was derived from the tree."
+    },
+    {
+      "finding": "The 1.9.1 run pinned the tool count, and the pin went stale.",
+      "detail": "It asserts 'mcp-full-tool-surface-25-tools'. The tree and the live server both report 26. Deriving the count first and confirming it live is what surfaces this; a hand-typed number cannot."
+    },
+    {
+      "finding": "The 1.15.0 run's 'partial' verdict on observability had the wrong mechanism.",
+      "detail": "It blamed the maintenance cadence for retention-reaper ids 522-524 never firing. Those purges run unconditionally on every pass; they are silent because they log only when count>0 on a bank with nothing to purge. See the observability-event-ids item."
+    },
+    {
+      "finding": "A deleted skill is still installed and still discoverable.",
+      "detail": "ai-raccoon-manual-checklist's SKILL.md records that ai-raccoon-state-checklist was deleted on 2026-08-14. The deletion reached both .ai-badger/skills/learned/ copies but not the Hermes skill root: ~/.hermes/skills/ai-raccoon/ai-raccoon-state-checklist still exists with its templates. It was the first hit when searching for this checklist and would have been executed instead of the current skill. It pins '1.8.1+' as an expected version and carries Semantica/Prometheus items outside the current scope — the 'two drifting copies' failure its replacement was written to prevent, still live."
+    }
+  ]
+}

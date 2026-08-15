@@ -2,9 +2,8 @@
 """CLI for the /task skill: task lifecycle + token-usage tracking.
 
 Commands:
-  start <taskId> [--title T] [--branch B] [--no-cron] [--risk]
-      register task, start token checkpoint; --risk marks it as running automated gates in
-      limited mode (formatting, fast tests, lint only)
+  start <taskId> [--title T] [--branch B] [--no-cron]
+      register task, start token checkpoint
   finish <taskId>
       finish checkpoint + usage calc (requires .ai-badger/state.json updated)
   grade <taskId> <0-5>
@@ -276,9 +275,6 @@ def cmd_start(args) -> int:
                 "transcriptPath": session["transcriptPath"],
                 "cwd": str(lib.PROJECT_ROOT),
                 "branch": args.branch or entry.get("branch", ""),
-                # Sticky: a resumed task re-runs `start` without repeating its flags, and gates
-                # silently going back to full is the failure this switch exists to avoid.
-                "risk": bool(args.risk or entry.get("risk", False)),
                 "startedAt": entry.get("startedAt") or lib.now_iso(),
                 "finishedAt": None,
                 "state": entry.get("state") or lib.STATE_STARTED,
@@ -565,16 +561,13 @@ def cmd_status(_args) -> int:
         totals = usage_stats.get("grandTotal")
         cache_eff = usage_stats.get("cacheEfficiency")
         grade = usage_entry.get("grade")
-        # Only the reduced mode is named. A gate mode nobody can see is the dangerous one, and
-        # printing "risk=off" on every full-gate task would train readers to skip the column.
-        risk = " risk=on" if entry.get("risk") else ""
         print(
             f"{entry['taskId']:<12} {entry.get('state', '?'):<12} "
             f"started={entry.get('startedAt', '-')} finished={entry.get('finishedAt') or '-'} "
             f"tokens={totals if totals is not None else '-'} "
             f"cacheEff={cache_eff if cache_eff is not None else '-'} "
             f"mix={_format_mix(usage_stats.get('modelMix'))} "
-            f"grade={grade if grade is not None else '-'}{risk}"
+            f"grade={grade if grade is not None else '-'}"
         )
     return 0
 
@@ -705,12 +698,6 @@ def main() -> int:
     p_start.add_argument(
         "--no-cron", action="store_true",
         help="Deprecated no-op: cron installation is opt-in via --cron now.",
-    )
-    p_start.add_argument(
-        "--risk", action="store_true",
-        help="Run automated quality gates in limited mode: formatting, fast tests and lint "
-             "only, no e2e or integration suites. The full suite is still owed before "
-             "integrating — the agent runs it, alone.",
     )
     p_start.add_argument(
         "--no-worktree", action="store_true",
