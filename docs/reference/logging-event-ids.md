@@ -9,7 +9,7 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **117** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **119** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
@@ -28,6 +28,7 @@ One block per source file that owns a `Log` class or equivalent:
 | Ids | File |
 |---|---|
 | 10-12 | `src/AiRaccoon/Program.cs` |
+| 13-14 | `src/AiRaccoon/Observability/BankEngineReporter.cs` (added 2026-08-15: the startup line naming the running binary against the bank's embedding engine, WP3 step 5) |
 | 20 | `src/AiRaccoon/HostExtensions.cs` |
 | 30 | `src/AiRaccoon/Setup/McpServerSetup.cs` |
 | 40-41 | `src/AiRaccoon/Setup/EmbeddingAvailability.cs` |
