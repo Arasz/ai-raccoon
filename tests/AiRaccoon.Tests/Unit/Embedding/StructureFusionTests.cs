@@ -22,8 +22,33 @@ public sealed class StructureFusionTests
     [Fact]
     public void Fused_AlphaHalf_BlendsEqually() => StructureFusion.Fused(0.8, 0.2, 0.5).ShouldBe(0.5, 1e-9);
 
+    /// <summary>
+    ///     Adjudicated, not transcribed (docs/adr/0057). 65.4% of the gate corpus and 64% of the live
+    ///     bank have no structure embedding, so this default caps two thirds of every bank at alpha of
+    ///     what a headed row can reach — which reads as a defect and was proposed as one (WP12).
+    ///     Scoring absent structure as content-only instead was built and measured: S3 3→4, S4 3→6,
+    ///     S6 3→10, A2 1→2, held-out A10 0.170→0.146. The cap is the mechanism, not a bug.
+    /// </summary>
     [Fact]
-    public void Fused_MissingStructure_ContributesZero() => StructureFusion.Fused(0.8, null, 0.5).ShouldBe(0.4, 1e-9);
+    public void Fused_AbsentStructure_ContributesZero_WhichIsHowTheSignalFavoursHeadedChunks() =>
+        StructureFusion.Fused(0.8, null, 0.5).ShouldBe(0.4, 1e-9);
+
+    /// <summary>
+    ///     The load-bearing property, pinned: a headed row outranks a headless row of equal content
+    ///     similarity. Scoring absent structure as content-only makes these tie, and the section-targeted
+    ///     gates that depend on the difference go red (docs/adr/0057).
+    /// </summary>
+    [Fact]
+    public void Rank_HeadedRow_OutranksHeadlessRowOfEqualContentSimilarity()
+    {
+        var content = new[] { new VectorHit("headed", 0.6), new VectorHit("headless", 0.6) };
+        var structure = new[] { new VectorHit("headed", 0.6) };
+
+        var ranked = StructureFusion.Rank(content, structure, 0.5, 10);
+
+        ranked.Select(r => r.Hash).ShouldBe(["headed", "headless"]);
+        ranked[0].Score.ShouldBeGreaterThan(ranked[1].Score);
+    }
 
     [Fact]
     public void Fused_AlphaOutOfRange_Throws()
@@ -64,6 +89,11 @@ public sealed class StructureFusionTests
         ranked.Select(r => r.Hash).ShouldBe(["a", "b"]);
     }
 
+    /// <summary>
+    ///     The asymmetry is deliberate (docs/adr/0057): every row has a content embedding, so missing
+    ///     the content KNN window is a low similarity and stays worth zero. Only structure absence can
+    ///     mean "never measured".
+    /// </summary>
     [Fact]
     public void Rank_StructureOnlyCandidate_GetsZeroContentContribution()
     {

@@ -285,9 +285,19 @@ identical curves before the fix.
 intended contract, this package becomes "delete the redundant second fusion and document that `ranking`
 is positional", which is cheaper and still worth doing.*
 
-### WP12 · Stop penalising content that has no heading — **H4**
+### WP12 · Stop penalising content that has no heading — ❌ **REFUTED BY MEASUREMENT** — **H4**
 **Effort:** QUICK · **Surface:** `StructureFusion.cs:23-28,52-56`
 **Follows WP11. Found independently by two lanes.**
+
+> **Built, measured, rejected — ADR-0057.** The finding is correct and the fix makes retrieval worse.
+> The gate corpus was checked as representative first (65.4% headless, against the live bank's 64%).
+> Scoring absent structure as content-only regresses **S3 3→4, S4 3→6, S6 3→10, A2 1→2** and held-out
+> **A10 0.1696→0.1461**, leaves the held-out mean flat (0.2846→0.2818), and **inverts WP11's reversal
+> probe**: reversed 0.610 against 0.282 unreversed, i.e. the held-out ordering becomes anti-correlated
+> with relevance. The `?? 0.0` cap is the mechanism by which the dual-vector signal favours headed
+> chunks at all — remove it and a headed row wins only when `structureSim > contentSim`. `StructureFusion`
+> is unchanged; what ships is the adjudication and a gate pinning the property. A real fix is per-row
+> **renormalisation**, which is a new parameter needing held-out capacity the catalog does not have.
 
 `Fused = alpha * contentSim + (1-alpha) * (structureSim ?? 0.0)` with `alpha = 0.5`. A row with no
 `structure_embedding` never appears in the structure KNN list, so `structureSim` is **absent**, not

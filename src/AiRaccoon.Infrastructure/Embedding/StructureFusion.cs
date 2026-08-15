@@ -8,7 +8,9 @@ public sealed record FusedRank(string Hash, double Score);
 
 /// <summary>
 ///     Fixed-alpha fusion of content and structure similarities (see docs/adr/0004-dual-vector-structure-signal.md):
-///     score = alpha * content + (1 - alpha) * structure, alpha default 0.5.
+///     score = alpha * content + (1 - alpha) * structure, alpha default 0.5. A row with no structure
+///     similarity is scored against zero, which is what makes the signal favour headed chunks at all
+///     — measured, not incidental (docs/adr/0057).
 /// </summary>
 public static class StructureFusion
 {
@@ -20,6 +22,12 @@ public static class StructureFusion
     /// <summary>vec0 cosine distance in [0, 2] to cosine similarity in [-1, 1] (embeddings are L2-normalized).</summary>
     public static double SimFromDistance(double distance) => 1.0 - distance;
 
+    /// <summary>
+    ///     An absent <paramref name="structureSim" /> scores as zero, so a row with no structure
+    ///     embedding is capped at <paramref name="alpha" /> of what a headed row can reach. That
+    ///     cap is deliberate and measured: scoring absent structure as content-only instead
+    ///     regresses S3 3→4, S4 3→6, S6 3→10 and A2 1→2 (docs/adr/0057).
+    /// </summary>
     public static double Fused(double contentSim, double? structureSim, double alpha)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(alpha);
