@@ -89,7 +89,13 @@ method by reflection and asserting each one's guard requirement, mirroring the e
 `EveryTool_NamesTheProjectIdParameter`. Break it with a stub tool that omits the gate and watch it go
 red.
 
-### WP2 · Treat a write naming `shared` as a promotion request, not as a write — **H6**
+### WP2 · Treat a write naming `shared` as a promotion request, not as a write — ✅ **IN REVIEW** — **H6**
+
+> **Shipped as ADR-0067**, immediately after WP8 as the plan recommended. The cycle really was the
+> argument for the extraction rather than an obstacle: `MemoryWriteService` composes `IMemoryStore`
+> and `IPromotionQueue` from Core, which the store itself cannot. Watched red on the pre-fix path
+> (`Expected: 0 rows WHERE scope = 'shared'`). The rejected one-line `EntryBucket` variant is
+> recorded with its reason.
 **Effort:** SMALL · **Surface:** `EntryBucket.For`, `SqliteMemoryStore.WriteAsync`, `IPromotionQueue.ProposeAsync`
 **Owner ruling, 2026-08-15 — this package was redesigned, not withdrawn.**
 

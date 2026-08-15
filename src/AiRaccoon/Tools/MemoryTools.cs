@@ -20,6 +20,7 @@ public sealed partial class MemoryTools(
     IToolGate gate,
     ISearchQualityService qualityService,
     IQueryGuardService queryGuard,
+    IMemoryWriteService writes,
     ILogger<MemoryTools> logger)
 {
     private const string TnMemoryWrite = "memory_write";
@@ -61,7 +62,7 @@ public sealed partial class MemoryTools(
         var request = new MemoryWriteRequest(projectId, content, context, agentId, workspaceId, sourceFile, section);
         await MemoryWriteRequestValidator.ValidateAndThrowAsync(request, cancellationToken);
 
-        var entry = await store.WriteAsync(request, cancellationToken);
+        var entry = await writes.WriteAsync(request, cancellationToken);
         var result = new WriteResult(entry.Hash, entry.Path, entry.Context, entry.CreatedAt, entry.Stored, entry.Reason);
         var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
         return envelope;
