@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 namespace AiRaccoon.Infrastructure.Maintenance;
 
 /// <summary>What one pass of the runner did, per job.</summary>
-public sealed record MaintenanceJobOutcome(string Name, bool Ran, string? Error);
+public sealed record MaintenanceJobOutcome(string Name, bool Ran, string? Error, bool CreatedWork = false);
 
 /// <summary>
 ///     Runs the due maintenance jobs and records each run in the bank (ADR-0070).
@@ -47,9 +47,10 @@ public sealed partial class MaintenanceJobRunner(TimeProvider timeProvider, ILog
             }
 
             var started = Stopwatch.GetTimestamp();
+            bool createdWork;
             try
             {
-                await job.RunAsync(connection, cancellationToken).ConfigureAwait(false);
+                createdWork = await job.RunAsync(connection, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -69,7 +70,7 @@ public sealed partial class MaintenanceJobRunner(TimeProvider timeProvider, ILog
                 .ConfigureAwait(false);
             Log.JobRan(logger, job.DisplayName, job.Name,
                 Stopwatch.GetElapsedTime(started).TotalMilliseconds);
-            outcomes.Add(new MaintenanceJobOutcome(job.Name, true, null));
+            outcomes.Add(new MaintenanceJobOutcome(job.Name, true, null, createdWork));
         }
 
         return outcomes;

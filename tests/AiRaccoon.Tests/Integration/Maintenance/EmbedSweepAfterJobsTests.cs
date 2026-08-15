@@ -75,11 +75,41 @@ public sealed class EmbedSweepAfterJobsTests : IDisposable
         _memory.EmbedCalls.Count(id => id == ProjectId).ShouldBe(1);
     }
 
+    /// <summary>
+    ///     The gate. A job that ran but created nothing — vacuum, reclaim — must not earn a second
+    ///     sweep: it doubles the window in which a background embed races an in-flight write, which
+    ///     is what turned `Embeddings_ConfigureOpenAi_RoutesThroughTheConfiguredEndpoint` red on CI
+    ///     while passing locally.
+    /// </summary>
+    [Fact]
+    public async Task APassWhoseJobCreatedNothing_DoesNotSweepTwice()
+    {
+        _memory.PendingCounts[ProjectId] = 3;
+
+        await ServiceWith(new NoWorkJob()).RunOnceAsync(TestContext.Current.CancellationToken);
+
+        _memory.EmbedCalls.Count(id => id == ProjectId).ShouldBe(1,
+            "a job that made no work must not trigger a second sweep");
+    }
+
     private BankMaintenanceHostedService ServiceWith(params IMaintenanceJob[] jobs) =>
         new(_factory, _time, _probe.Telemetry, new FakeLogger<BankMaintenanceHostedService>(), _memory,
             NoOpNoiseEntryStore.Instance, new SqlitePromotionQueueStore(_factory, _time),
             new SqliteSearchQualityService(_factory),
             new MaintenanceJobRunner(_time, NullLogger<MaintenanceJobRunner>.Instance), jobs);
+
+    /// <summary>Stands in for vacuum and reclaim: runs, changes nothing that needs embedding.</summary>
+    private sealed class NoWorkJob : IMaintenanceJob
+    {
+        public string Name => "no-work";
+
+        public string DisplayName => "do nothing that needs embedding";
+
+        public TimeSpan? Interval => null;
+
+        public Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+            Task.FromResult(false);
+    }
 
     /// <summary>Stands in for chunk-backfill: makes rows pending only when it runs.</summary>
     private sealed class PendingCreatingJob(FakeWatchMemoryStore memory, string projectId) : IMaintenanceJob
@@ -90,10 +120,10 @@ public sealed class EmbedSweepAfterJobsTests : IDisposable
 
         public TimeSpan? Interval => null;
 
-        public Task RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
+        public Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
         {
             memory.PendingCounts[projectId] = 42;
-            return Task.CompletedTask;
+            return Task.FromResult(true);
         }
     }
 }
