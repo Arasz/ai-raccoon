@@ -3,7 +3,7 @@
 Date: 2026-08-13
 
 ## Status
-Accepted
+**Reversed** — 2026-08-14 by ADR-0034, which found the assigned TTL never reached the database and deleted the policy pipeline as dead code.
 
 ## Context
 Our existing background sweep service (ADR-0025) relies on entries having a `ttl_days` value to determine when to degrade them. By default, `memory_write` operations assign a `NULL` TTL, making the entries permanent unless explicitly aged by an agent.

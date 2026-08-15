@@ -18,7 +18,8 @@ using Xunit;
 namespace AiRaccoon.Tests.E2E;
 
 /// <summary>
-///     Tool-surface parity over the real HTTP MCP server: tools/list must surface all 25 tools,
+///     Tool-surface parity over the real HTTP MCP server: tools/list must surface exactly the tools
+///     the product declares, derived at test time rather than pinned,
 ///     and every tool not already round-tripped by <see cref="McpServerE2ETests"/> answers a
 ///     minimal call over the wire.
 /// </summary>
@@ -29,35 +30,6 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
 {
     private const string ProjectId = "surface-test";
 
-    private static readonly string[] ExpectedToolNames =
-    [
-        "memory_write",
-        "memory_get",
-        "memory_search",
-        "memory_list",
-        "memory_stats",
-        "memory_share",
-        "memory_share_extract",
-        "memory_delete",
-        "memory_delete_context",
-        "memory_ingest_file",
-        "memory_ingest_directory",
-        "memory_embed_pending",
-        "memory_workspace_begin",
-        "memory_workspace_status",
-        "memory_workspace_consolidate",
-        "memory_workspace_discard",
-        "memory_sweep",
-        "memory_set_ttl",
-        "memory_sync",
-        "memory_promotion_list",
-        "memory_promotion_discard",
-        "memory_watch_add",
-        "memory_watch_status",
-        "memory_watch_remove",
-        "memory_record_followthrough",
-        "memory_record_grade"
-    ];
 
     private McpClient _client = null!;
     private McpServerFactory _factory = null!;
@@ -79,12 +51,12 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ToolsList_SurfacesAllTwentyFourTools()
+    public async Task ToolsList_SurfacesEveryRegisteredTool()
     {
         var tools = await _client.ListToolsAsync((RequestOptions?)null, TestContext.Current.CancellationToken);
         var names = tools.Select(t => t.Name).ToArray();
 
-        names.OrderBy(n => n).ShouldBe(ExpectedToolNames.OrderBy(n => n));
+        names.OrderBy(n => n, StringComparer.Ordinal).ShouldBe(RegisteredTools.Names());
     }
 
     [Fact]

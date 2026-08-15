@@ -17,6 +17,9 @@ internal static class QuietLogging
     {
         loggingBuilder.ClearProviders();
         loggingBuilder.SetMinimumLevel(LogLevel.Trace);
+        // The file never rotates (D5), so a 10-second framework heartbeat is unbounded growth:
+        // DefaultHttpClientFactory logs a cleanup cycle at Debug whether or not a client is used.
+        loggingBuilder.AddFilter("Microsoft.Extensions.Http", LogLevel.Warning);
         loggingBuilder.AddProvider(new QuietFileLoggerProvider(LogFilePath(options)));
     }
 

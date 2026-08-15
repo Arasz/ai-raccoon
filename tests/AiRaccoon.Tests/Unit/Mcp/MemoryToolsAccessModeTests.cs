@@ -130,6 +130,44 @@ public sealed class MemoryToolsAccessModeTests
         _store.DeletedContexts.ShouldContain("workspace:ws-1");
     }
 
+    /// <summary>
+    ///     The workspace lifecycle is scoped to a sandbox the caller created and never committed —
+    ///     consolidate promotes into the caller's own project, discard removes only
+    ///     `workspace:&lt;id&gt;` filtered by project. Neither can reach committed memory, so gating them
+    ///     at `full` made workspaces unusable at the default mode for no containment benefit.
+    /// </summary>
+    [Fact]
+    public async Task RwMode_WorkspaceConsolidate_IsAllowed()
+    {
+        SetMode(global: "rw");
+        _store.EntriesByContext["workspace:ws-1"] = [];
+
+        await Should.NotThrowAsync(() => _workspace.WorkspaceConsolidate(
+            "acme-web", "ws-1", ["all"], TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task RwMode_WorkspaceDiscard_IsAllowed()
+    {
+        SetMode(global: "rw");
+        _store.EntriesByContext["workspace:ws-1"] = [];
+
+        await _workspace.WorkspaceDiscard("acme-web", "ws-1", TestContext.Current.CancellationToken);
+
+        _store.DeletedContexts.ShouldContain("workspace:ws-1");
+    }
+
+    [Fact]
+    public async Task RoMode_WorkspaceDiscard_IsStillRefused()
+    {
+        // Relaxing to Write must not relax all the way to Read.
+        SetMode(global: "ro");
+        _store.EntriesByContext["workspace:ws-1"] = [];
+
+        await Should.ThrowAsync<AccessDeniedException>(() => _workspace.WorkspaceDiscard(
+            "acme-web", "ws-1", TestContext.Current.CancellationToken));
+    }
+
     [Fact]
     public async Task GlobalMode_AppliesToProjectWithoutPerProjectOverride()
     {

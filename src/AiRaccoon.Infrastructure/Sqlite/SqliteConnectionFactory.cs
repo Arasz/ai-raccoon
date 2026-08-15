@@ -172,15 +172,17 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
 
     /// <summary>
     ///     True only when the legacy key opens the bank <em>and</em> quick_check reports "ok" — the
-    ///     sole thing that authorises a rekey. Read-only and pool-free, so a refusal leaves the file
-    ///     untouched; any SQLite failure means "no proof", never "corrupt" specifically (docs/plans/2026-08-07-hkdf-rekey-migration.md Decision 2).
+    ///     sole thing that authorises a rekey. Never creates, and pool-free, so a refusal leaves the
+    ///     file as it found it; any SQLite failure means "no proof", never "corrupt" specifically (docs/plans/2026-08-07-hkdf-rekey-migration.md Decision 2).
     /// </summary>
     private async Task<bool> LegacyKeyOpensHealthyBankAsync(string legacyKey, CancellationToken cancellationToken)
     {
         var csb = new SqliteConnectionStringBuilder
         {
             DataSource = BankPath,
-            Mode = SqliteOpenMode.ReadWriteCreate,
+            // Not ReadOnly: a WAL bank needs a writable -shm to open. Not Create either — this probe
+            // must never bring a bank into existence.
+            Mode = SqliteOpenMode.ReadWrite,
             Password = legacyKey,
             Pooling = false
         };

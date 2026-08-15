@@ -68,6 +68,42 @@ public class AdrIndexTests
             "but those ADRs exist");
     }
 
+    /// <summary>
+    ///     The index records supersession; the ADR's own Status line is what a reader who opens the
+    ///     file sees. When they disagree, the file wins the reader and loses the truth — ADR-0029 and
+    ///     ADR-0030 each read `Accepted` for a day while describing code that had been deleted.
+    /// </summary>
+    [Fact]
+    public void SupersededAdrs_DoNotStillCallThemselvesAccepted()
+    {
+        var (onDisk, _) = Read();
+        var directory = Path.GetDirectoryName(TestData.RepoFile("docs/adr/README.md"))!;
+
+        var lying = SupersededByIndex()
+            .Where(onDisk.ContainsKey)
+            .Where(number => Regex.IsMatch(
+                File.ReadAllText(Path.Combine(directory, onDisk[number])),
+                @"^(##\s*Status\s*\r?\n|Status:\s*)Accepted\s*$",
+                RegexOptions.Multiline))
+            .Order()
+            .ToList();
+
+        lying.ShouldBeEmpty(
+            $"the index records {string.Join(", ", lying.Select(n => n.ToString("D4")))} as superseded or " +
+            "reversed, but the ADR's own Status line still reads Accepted — a reader who opens the file " +
+            "directly sees a live decision. Follow ADR-0002's pattern and say so in the Status line");
+    }
+
+    /// <summary>ADRs whose own index row says they were superseded or reversed *by* something else.</summary>
+    private static HashSet<int> SupersededByIndex() =>
+    [
+        .. Regex.Matches(File.ReadAllText(TestData.RepoFile("docs/adr/README.md")),
+                @"^\| *\[(\d{4})[^|]*\|(?<body>[^|]*)\|", RegexOptions.Multiline)
+            .Where(m => Regex.IsMatch(m.Groups["body"].Value, @"(superseded|reversed)\b[^.;|]*\bby\b",
+                RegexOptions.IgnoreCase))
+            .Select(m => int.Parse(m.Groups[1].Value))
+    ];
+
     private static HashSet<int> RecordedSkips()
     {
         var section = Regex.Match(File.ReadAllText(TestData.RepoFile("docs/adr/README.md")),

@@ -3,7 +3,7 @@
 Date: 2026-08-13
 
 ## Status
-Accepted
+**Superseded in part** — 2026-08-14 by ADR-0033 (the zero-shot filter and its learning subsystem are deleted) and ADR-0039 (the substrate is restored without a scoring model). The deterministic Hermes policy survives.
 
 ## Context
 Analysis of graded search quality results (averaging ~2.6) revealed that AI agents frequently send raw tool output, such as background process completion logs, as memory search queries. This litters the search index with non-semantic noise, returning irrelevant results and dragging down retrieval quality. 

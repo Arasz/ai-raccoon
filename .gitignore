@@ -40,3 +40,6 @@ tests/AiRaccoon.Tests/Unit/Retrieval/Managed/
 
 # Generated logs (semantica, serve.log, quiet.log, etc.)
 *.log
+
+# Stray tool artifact, committed once by accident in 11df8313 (0 bytes).
+identifier.sqlite

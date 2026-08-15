@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using AiRaccoon.Prompts;
 using AiRaccoon.Tools;
 using ModelContextProtocol.Server;
+using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 
@@ -12,31 +13,23 @@ namespace AiRaccoon.Tests.Unit.Mcp;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public class ToolInventoryTests
 {
-    /// <summary>Every [McpServerTool] method in the Tools namespace — the split safety net.</summary>
-    private static IEnumerable<(Type Class, MethodInfo Method, McpServerToolAttribute Attr)> ToolMethods()
-    {
-        foreach (var type in typeof(MemoryTools).Assembly.GetTypes()
-                     .Where(t => t.Namespace == "AiRaccoon.Tools" && t.IsClass && !t.IsAbstract))
-        {
-            foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance))
-            {
-                var attr = method.GetCustomAttribute<McpServerToolAttribute>();
-                if (attr is not null)
-                {
-                    yield return (type, method, attr);
-                }
-            }
-        }
-    }
+    /// <summary>Derived from the product assembly — see TestHelpers/RegisteredTools.</summary>
+    private static IEnumerable<(Type Class, MethodInfo Method, McpServerToolAttribute Attr)> ToolMethods() =>
+        RegisteredTools.Methods();
 
+    /// <summary>
+    ///     Spec parity: every tool the spec names must exist. Deliberately no count assertion — the
+    ///     count would be derived from the same reflection as the actual, and a comparison whose two
+    ///     sides share a source can only ever pass. The count is guarded where it has an independent
+    ///     second source: the packaged README, below.
+    /// </summary>
     [Fact]
-    public void ToolsNamespace_ExposesAll24SpecTools()
+    public void ToolsNamespace_ExposesEverySpecTool()
     {
         var tools = ToolMethods()
             .Select(x => x.Attr.Name)
             .ToList();
 
-        tools.Count.ShouldBe(26);
         tools.ShouldContain("memory_write");
         tools.ShouldContain("memory_get");
         tools.ShouldContain("memory_search");

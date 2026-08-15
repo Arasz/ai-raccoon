@@ -208,7 +208,7 @@ public sealed partial class SqliteMemoryStore(
 
         foreach (var context in contexts)
         {
-            var (filter, values) = FilterFor(context, query.ProjectId, "e.");
+            var (filter, values) = ContextFilter.For(context, query.ProjectId, "e.");
             var ctx = MemorySql.ContextKeyFor(context, query.ProjectId);
             var limit = CandidateWindowFor(query.Limit, query.CandidateWindow);
 
@@ -390,7 +390,11 @@ public sealed partial class SqliteMemoryStore(
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(context);
 
-        var (filter, values) = FilterFor(context, projectId, "");
+        // The access gate authorises `projectId`; the context must not re-target the delete at
+        // another project or at the shared tier, which belongs to none.
+        ContextScope.RequireWithinProject(context, projectId);
+
+        var (filter, values) = ContextFilter.For(context, projectId, "");
         var parameters = new DynamicParameters();
         foreach (var (key, value) in values)
         {
@@ -684,7 +688,7 @@ public sealed partial class SqliteMemoryStore(
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(context);
 
-        var (filter, values) = FilterFor(context, projectId, "");
+        var (filter, values) = ContextFilter.For(context, projectId, "");
         var parameters = new DynamicParameters();
         foreach (var (key, value) in values)
         {
@@ -1041,50 +1045,6 @@ public sealed partial class SqliteMemoryStore(
                     Def(MemorySql.BumpAccess, new { hash, now, rating, projectId }, cancellationToken))
                 .ConfigureAwait(false);
         }
-    }
-
-    /// <summary>
-    ///     Maps a context string to a row filter. Built only from constant fragments; every value
-    ///     goes through parameters, so a user-supplied context string can never inject SQL.
-    /// </summary>
-    private static (string Filter, IReadOnlyDictionary<string, object?> Values) FilterFor(
-        string context, string projectId, string alias)
-    {
-        if (context == ContextNaming.SharedContext)
-        {
-            return ($"{alias}scope = 'shared'", new Dictionary<string, object?>());
-        }
-
-        if (context.StartsWith("project:", StringComparison.Ordinal))
-        {
-            return ($"{alias}scope = 'project' AND {alias}project_id = @projectId",
-                new Dictionary<string, object?> { ["projectId"] = context["project:".Length..] });
-        }
-
-        if (context.StartsWith("workspace:", StringComparison.Ordinal))
-        {
-            return ($"{alias}workspace_id = @workspaceId AND {alias}project_id = @projectId",
-                new Dictionary<string, object?> { ["workspaceId"] = context["workspace:".Length..], ["projectId"] = projectId });
-        }
-
-        if (context.StartsWith("label:", StringComparison.Ordinal))
-        {
-            // Label context (see docs/plans/retrieval-improvement-c.md §3 2e): contributes the
-            // label's custom-scoped rows only — project-scoped rows are already in the project batch (SearchContexts),
-            // and a union here would double-count them in RRF.
-            var rest = context["label:".Length..];
-            var colon = rest.IndexOf(':');
-            if (colon > 0)
-            {
-                var label = rest[(colon + 1)..];
-                return (
-                    $"{alias}scope = 'custom' AND {alias}context_label = @contextLabel AND {alias}project_id = @projectId",
-                    new Dictionary<string, object?> { ["projectId"] = projectId, ["contextLabel"] = label });
-            }
-        }
-
-        return ($"{alias}scope = 'custom' AND {alias}context_label = @contextLabel AND {alias}project_id = @projectId",
-            new Dictionary<string, object?> { ["contextLabel"] = context, ["projectId"] = projectId });
     }
 
     private static MemoryEntry ToEntry(EntryRow row) => new(row.Hash, row.Path, ContextStringOf(row), row.Value, row.CreatedAt);
