@@ -31,8 +31,12 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
     private IHost _backend = null!;
     private int _port;
 
+    private IAsyncDisposable? _envGate;
+
     public async ValueTask InitializeAsync()
     {
+        // Reader of the env gate (docs/adr/0066): this class stands up the real host.
+        _envGate = await TestData.HoldEnvGateAsync(TestContext.Current.CancellationToken);
         using var lease = LoopbackPort.Reserve();
         _port = lease.Port;
         _backend = McpServerSetup.CreateServerHost(new ServerConfig(_port, McpTransport.Http,
@@ -47,6 +51,12 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
 
     public async ValueTask DisposeAsync()
     {
+        if (_envGate is not null)
+        {
+            await _envGate.DisposeAsync();
+            _envGate = null;
+        }
+
         await _backend.StopAsync(CancellationToken.None);
         if (_backend is IAsyncDisposable disposable)
         {

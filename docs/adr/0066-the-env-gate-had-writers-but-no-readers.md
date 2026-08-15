@@ -63,9 +63,16 @@ own design, and naming it here is worth more than half-doing it — 18 test clas
 `EnvScope`, and every one of them is a writer that a future bank-opening test will have to know about.
 
 The honest statement of the residual: **any new test that opens a bank through the real host, and
-does not take this gate, reintroduces the defect.** Nothing mechanical enforces that today. A rule in
-`ToolMethodSizeTests`' spirit — "a class that calls `CreateServerHost` takes the gate" — is the
-obvious follow-up and is not written yet.
+does not take this gate, reintroduces the defect.**
+
+**Amended same day — the residual is closed.** `EnvGateReaderRuleTests` scans every test source for
+`CreateServerHost` and requires the file to take the gate, with a companion assertion that the scanned
+set is non-empty. Watched red: it named `ProxyLaunchE2ETests` and `ToolTelemetryCoverageTests`, the two
+`Speed=Slow` classes the first sweep had missed. Eight classes became readers.
+
+**Measured, because serialising tests is a real cost and the number decides it:** `Speed=Fast` ran
+145.7s and 137.2s before, 141.5s and 145.0s after — **+1.8s on ~141s, 1.3%**, against a run-to-run
+spread of 8.5s in the baseline pair alone. The cost is inside the noise.
 
 ## Consequences
 
