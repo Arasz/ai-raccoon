@@ -466,7 +466,14 @@ not by discipline.** Nothing to build here.
 *Kept in the plan rather than deleted, so the next reader can see this was checked and rejected rather
 than overlooked.*
 
-### WP19 · Fix the flaky test in the merge gate — **adversarial new finding 7, correcting QA F3**
+### WP19 · Fix the flaky test in the merge gate — 🔶 **HALF 1 IN REVIEW** — **adversarial new finding 7, correcting QA F3**
+
+> **Half 1 shipped as ADR-0061.** An unmapped exception now reaches the client as
+> `unexpected-error: <Type>` and is logged at Error with the exception attached (event 912), instead
+> of escaping to the SDK's eleven words. Watched red by removing the catch: the end-to-end case
+> reproduced `"An error occurred invoking 'memory_stats'."` on demand. **Half 2 — reproducing and
+> fixing the race — is unchanged and still open**; the flake was observed again during this work, on
+> a different case each run. What changed is that its next failure will name its exception type.
 **Effort:** SMALL · **Surface:** `tests/AiRaccoon.Tests/Integration/Mcp/ToolRefusalsTests.cs:218-229`
 
 The QA lane saw `KnownRefusal_ReturnsRefusal_WithoutAnSdkErrorLog` fail only when three `dotnet test`
