@@ -177,6 +177,14 @@ public sealed partial class BankMaintenanceHostedService(
             if (outcomes.Any(o => o.Ran))
             {
                 pass.Tag("jobs.ran", string.Join(',', outcomes.Where(o => o.Ran).Select(o => o.Name)));
+
+                // Sweep again: a job can CREATE pending rows, and the sweep above already ran before
+                // it did. chunk-backfill produced 13,578 unembedded rows on a real bank and they sat
+                // until the next pass, up to a checkpoint interval away, absent from vector search
+                // the whole time. Cheap when no job made work — the sweep skips a project whose
+                // pending count is zero.
+                await RetryPendingEmbedsAsync(cancellationToken).ConfigureAwait(false);
+
                 // A VACUUM rewrites the whole file through the WAL; truncate it now, not next tick.
                 await RunCheckpointAsync(connection, cancellationToken).ConfigureAwait(false);
             }
