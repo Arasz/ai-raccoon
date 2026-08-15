@@ -12,7 +12,7 @@
   ],
   "skillScope": "default",
   "pluginScope": "default",
-  "configHash": "c81b5108b07eb1a3f838720baa12e8458b4b926860a32b454570cef85002caa2",
+  "configHash": "6c658be234127bcc696713dfdfe19e6dea3c3be3092d2dd8de9ba280625e609e",
   "generatedConfig": [
     {
       "path": ".claude/settings.json",
@@ -1392,6 +1392,27 @@
       ]
     },
     {
+      "feature": "skills",
+      "stack": "common",
+      "name": "scripts-tooling-refactor",
+      "source": "features/common/skills/scripts-tooling-refactor",
+      "target": ".ai-badger/skills/scripts-tooling-refactor",
+      "frameworkVersion": "0.121.0",
+      "hash": "64ac0ebb7600db6346e0d72f63da56217cd910de57d0549001136abe39e98ed6",
+      "dirMeta": {
+        "file_count": 6,
+        "dir_count": 1
+      },
+      "sourceHash": "64ac0ebb7600db6346e0d72f63da56217cd910de57d0549001136abe39e98ed6",
+      "sourceMeta": {
+        "file_count": 6,
+        "dir_count": 1
+      },
+      "projectOwned": [
+        "project-local.md"
+      ]
+    },
+    {
       "feature": "templates",
       "stack": "common",
       "name": "agent-instructions/schema.json",
@@ -1833,6 +1854,15 @@
     {
       "feature": "adjustments",
       "stack": "claude",
+      "name": "adjustments/.claude/skills/scripts-tooling-refactor",
+      "source": "features/claude/adjustments/adjust_skills.py",
+      "target": ".claude/skills/scripts-tooling-refactor",
+      "frameworkVersion": "0.121.0",
+      "hash": "189a50a955ff7346727da38b4ff7cccd2c1d556c1ce468b894fb96360c9b207e"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "claude",
       "name": "adjustments/.ai-badger/skills/mcp-index/scripts/tokenizer.py",
       "source": "features/claude/adjustments/adjust_retrieval.py",
       "target": ".ai-badger/skills/mcp-index/scripts/tokenizer.py",
@@ -2205,6 +2235,15 @@
       "name": "adjustments/.github/skills/complete-project-scope-code-review",
       "source": "features/copilot/adjustments/adjust_skills.py",
       "target": ".github/skills/complete-project-scope-code-review",
+      "frameworkVersion": "0.121.0",
+      "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "copilot",
+      "name": "adjustments/.github/skills/scripts-tooling-refactor",
+      "source": "features/copilot/adjustments/adjust_skills.py",
+      "target": ".github/skills/scripts-tooling-refactor",
       "frameworkVersion": "0.121.0",
       "hash": "957952a7a244a3109158d98642e69b1fb89510ed5cc96958786e29fbfb2e406a"
     },

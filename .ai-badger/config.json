@@ -57,7 +57,8 @@
       "documentation-drift-audit",
       "worktree-agent-isolation",
       "sqlite-bank-space-diagnosis",
-      "sqlite-schema-review"
+      "sqlite-schema-review",
+      "scripts-tooling-refactor"
     ]
   },
   "docs": {},
