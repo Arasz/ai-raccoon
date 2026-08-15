@@ -397,6 +397,16 @@ recovers almost nothing.
 > corpus size is unmeasured. **The trade is now explicit — roughly 26.7 MB against +1.6 ms per KNN on
 > the search hot path — and that is an owner decision, not a technical one.**
 >
+> **OWNER RULING, 2026-08-15: option 1 — drop the `ctx` partition key.** The measurement above is
+> what it was decided on: ~26.7 MB against +1.6 ms per KNN, with option 2 struck as dominated. The v9
+> migration is now a mechanical package with its shape fixed; its acceptance criteria are unchanged
+> (KNN results identical against the pre-migration bank, idempotent on an already-migrated bank, and
+> the recovered figure stated against the measured number rather than a projection).
+>
+> **The +1.6 ms is also the argument for `docs/plans/2026-08-15-performance-observability-design.md`:**
+> nothing in the store times its own phases today, so this change's effect on a real bank would be
+> invisible after it ships.
+>
 > **So the real options are, in order of preference:**
 1. **Drop the `ctx` partition key and filter by context in the query instead.** Requires proving the KNN stays correctly scoped and measuring the latency cost — partitioning exists to prune before the `MATCH`, and `EXPLAIN QUERY PLAN` currently shows that pruning working. **Measure before choosing.**
 2. **Coarsen the partition key** — partition by `scope` rather than by full project/label/workspace identity, cutting 20 partitions to 3 or 4 while keeping most pruning.
