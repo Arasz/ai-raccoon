@@ -89,7 +89,7 @@ method by reflection and asserting each one's guard requirement, mirroring the e
 `EveryTool_NamesTheProjectIdParameter`. Break it with a stub tool that omits the gate and watch it go
 red.
 
-### WP2 · Treat a write naming `shared` as a promotion request, not as a write — ✅ **LANDED** — **H6**
+### WP2 · Treat a write naming `shared` as a promotion request, not as a write — ✅ **IN REVIEW** — **H6**
 
 > **Shipped as ADR-0067**, immediately after WP8 as the plan recommended. The cycle really was the
 > argument for the extraction rather than an obstacle: `MemoryWriteService` composes `IMemoryStore`
@@ -161,7 +161,7 @@ worth trading one silent behaviour for another to save a wave.
 **Recommendation:** sequence WP2 immediately after WP8's write-seam extraction, and treat the cycle as
 the argument for that extraction rather than an obstacle to this package.
 
-### WP3 · Make every write path budget its chunks, then restart and backfill — 🔶 **STEPS 1-2 LANDED (ADR-0064) · 3-5 FOR THE OWNER** — **BLOCKERS B2 + B3, H5, H24**
+### WP3 · Make every write path budget its chunks, then restart and backfill — 🔶 **STEPS 1-2 IN REVIEW · 3-5 FOR THE OWNER** — **BLOCKERS B2 + B3, H5, H24**
 
 > **Step 2 shipped as ADR-0063.** An unset `embedding.provider` now resolves to the bundled engine
 > instead of the o200k default, so ingest-then-configure stops writing permanently-truncated
@@ -236,7 +236,7 @@ answer is the whole bank.
 
 ## Wave 2 — Make the measurements honest before changing what they measure
 
-### WP11 · A retrieval gate that can fail, on a held-out family — ✅ **LANDED** — **H2 + H3**
+### WP11 · A retrieval gate that can fail, on a held-out family — ✅ **IN REVIEW** — **H2 + H3**
 **Effort:** MEDIUM · **Surface:** `tests/…/Integration/BaselineMetricsTests.cs`, `RrfParameterSweepTests.cs`, `scripts/baseline-queries.json`
 **Precedes WP4 and WP12.**
 
@@ -355,7 +355,7 @@ numbers.
 
 ## Wave 3 — Storage, retention and the boundary the container dissolved
 
-### WP5 · Reclaim the vec0 chunk waste — and it is the **partition key**, not `chunk_size` — ✅ **LANDED (#319, ladder step v9, ADR-0068)** — **H11**
+### WP5 · Reclaim the vec0 chunk waste — and it is the **partition key**, not `chunk_size` — ✅ **IN REVIEW** (ladder step v9, ADR-0068) — **H11**
 **Effort:** MEDIUM · **Surface:** `MemorySchema.Ddl`, `RebuildVecTableAsync`, a new **v9** ladder step
 
 > **Revised after the adversarial pass. The first draft of this package would have shipped, passed its
@@ -464,7 +464,7 @@ two values.
 
 *Retention windows are owner question 18.*
 
-### WP8 · Move the business logic out of the MCP layer — ✅ **LANDED (ADR-0065)** — **H22**
+### WP8 · Move the business logic out of the MCP layer — ✅ **IN REVIEW** — **H22**
 
 > **Shipped as ADR-0065.** A size gate over `[McpServerTool]` bodies was watched red naming both
 > offenders — `ShareExtract = 51 lines`, `Search = 34` — then `ShareExtractService` and
@@ -571,7 +571,7 @@ not by discipline.** Nothing to build here.
 *Kept in the plan rather than deleted, so the next reader can see this was checked and rejected rather
 than overlooked.*
 
-### WP19 · Fix the flaky test in the merge gate — ✅ **LANDED, BOTH HALVES (half 2 = ADR-0066)** — **adversarial new finding 7, correcting QA F3**
+### WP19 · Fix the flaky test in the merge gate — 🔶 **HALF 1 LANDED · HALF 2 SPLIT** — **adversarial new finding 7, correcting QA F3**
 
 > **Half 1 shipped as ADR-0061.** An unmapped exception now reaches the client as
 > `unexpected-error: <Type>` and is logged at Error with the exception attached (event 912), instead
@@ -687,7 +687,7 @@ is an architecture question, not a mechanical edit.
 WAL, which that page recommends instead, is already enabled (`SqliteConnectionFactory`), so the
 performance advice is satisfied — it is the "avoid calling them" half that is outstanding.
 
-### WP13 · Wire up the architecture test that is already paid for — ✅ **LANDED** — **H23**
+### WP13 · Wire up the architecture test that is already paid for — ✅ **IN REVIEW** — **H23**
 `tests/Directory.Packages.props:18` pins `TngTech.ArchUnitNET.xUnitV3` and no project references it.
 The only mechanical layering guard in the repo is a missing `ProjectReference`, which catches
 assembly-level leaks and nothing else — not the string-matched Infrastructure dependency in Core, not
@@ -713,7 +713,7 @@ reports the difference. 8 of 8 tool classes inject the concrete `ToolGate`. Regi
 interface and fix the compile errors — each one is a consumer that was bypassing a port. *Owner
 question 10.*
 
-### WP15 · Derive the tool list everywhere it is pinned — ✅ **LANDED (PR #291)** — **QA F1 + surface F5/F8/F9 + security F16**
+### WP15 · Derive the tool list everywhere it is pinned — ✅ **IN REVIEW (PR #291)** — **QA F1 + surface F5/F8/F9 + security F16**
 Nine stale or pinned copies of the 26-tool surface across four lanes' findings. The numeric assertions
 are all correct today; the names and prose are not (`ToolsNamespace_ExposesAll24SpecTools` asserts 26;
 one E2E file carries three different numbers; `SECURITY.md` says 23; `docs/reference/README.md` and
@@ -787,7 +787,7 @@ fixture-pinning workaround it forced. Six RIDs ship with no PR gate on four of t
 - ADR-0048 claims "a chunk is a well-formed markdown fragment"; what it delivers is fence balance. A 200-row table splits with 33 of 34 chunks carrying orphaned body rows. Narrow the claim or widen the guarantee.
 - `docs/reference/agent-memory-server.md` omits `memory_promotion_list`'s `includeFullValue` — the one existing route to a full entry body.
 
-### WP18 · Python packaging honesty — ✅ **LANDED (PR #322)** — **ci-docs F6 + F7**
+### WP18 · Python packaging honesty — ✅ **IN REVIEW (PR #322)** — **ci-docs F6 + F7**
 
 > **Shipped.** `[project.dependencies]` declares `httpx`, `numpy`, `scikit-learn` and `pytest`;
 > `uv.lock` regenerated 8 → 350 lines and verified end-to-end (`uv run pytest`, 115 passed);
@@ -825,40 +825,6 @@ fixture-pinning workaround it forced. Six RIDs ship with no PR gate on four of t
 `uv.lock` is 8 lines and locks none of them, so `uv sync` on a clean checkout cannot run the code it
 covers. Delete the three unreferenced version-pinned checklist scripts (~1,671 lines, forked per
 release and abandoned after 1.10.1) or generalise one.
-
----
-
-## Campaign status — verified against `main` at 7ed7b570, 2026-08-15
-
-**Every status line above was re-checked against the tree, not carried forward.** The eight that
-read *IN REVIEW* were all merged; each was confirmed by the artefact it produced existing on `main`
-(`MemoryWriteService.cs`, ADR-0068, ADR-0065, `QueryGuardService.cs`, `LayeringRulesTests.cs`,
-`EnvGateReaderRuleTests.cs` + ADR-0066, `HeldOutRetrievalGateTests.cs`, `RegisteredTools.cs`,
-`pyproject.toml`), not by trusting the label. This sweep exists because an earlier one found **WP6
-already complete while the plan called it unstarted** — a plan is a claim about the code and goes
-stale exactly like any other.
-
-| Outcome | Packages |
-|---|---|
-| **Landed** | WP1, WP2, WP3 (steps 1–2), WP5, WP6, WP7, WP8, WP9, WP10, WP11, WP13, WP15, WP17, WP18, WP19 |
-| **Declined / refuted** | WP4 (blocked on held-out capacity), WP12 (refuted by measurement), WP16 (owner ruling), WP9-F7-interface (declined, recorded as such) |
-| **Owner-held** | WP3 steps 3–5 (restart + backfill against the live bank — not revertible by git), WP21 (deferred) |
-| **Subsumed** | WP14 → WP13 |
-
-**`main` is red as of this commit**, and not because of anything above: PR #323's `build-fast`
-failed on the `SqliteMemoryStore` size ratchet (1239 lines vs a 1237 cap) and was merged anyway.
-The ratchet fired correctly and before the merge. **PR #324 fixes it by paying the cap down rather
-than raising it** — `BuildJsonTree` moved out to `FileTree.cs`, 1239 → 1214. Main's full run is
-otherwise clean: **2171 passed, 1 failed**, the one failure being that ratchet. So the multi-branch
-join produced exactly one defect, which is the number this phase exists to find.
-
-**Two things this campaign should be remembered for, because both were nearly missed:**
-
-- **Two packages were measured and deliberately NOT shipped.** WP12's fix made retrieval worse; WP4
-  was not adjudicable on a three-query held-out set. A finding being real is not an argument that
-  its fix is an improvement.
-- **The published retrieval figures were in-sample.** Out-of-sample performance is **42%** of them
-  (0.285 vs 0.673), and ADR-0005/0006 were relabelled rather than quietly left standing.
 
 ---
 
