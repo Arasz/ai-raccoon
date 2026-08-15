@@ -13,8 +13,7 @@ namespace AiRaccoon.Tools;
 public sealed class ShareTools(
     IMemoryStore store,
     IToolGate gate,
-    ISharedExtractionRunner extraction,
-    IPromotionQueue queue)
+    IShareExtractService shareExtract)
 {
     private const string TnMemoryShare = "memory_share";
     private const string TnMemoryShareExtract = "memory_share_extract";
@@ -55,66 +54,17 @@ public sealed class ShareTools(
         bool confirm = false,
         CancellationToken cancellationToken = default)
     {
-        if (projectIds is null || projectIds.Length == 0 || projectIds.Length > 8)
-        {
-            throw new McpException("invalid-params: projectIds must contain 1..8 project ids");
-        }
-
-        var extractMode = mode switch
-        {
-            "propose" => ExtractMode.Propose,
-            "promote" => ExtractMode.Promote,
-            _ => throw new McpException("invalid-params: mode must be 'propose' or 'promote'")
-        };
-        var resolvedLimit = limit ?? SharedExtractionService.DefaultCandidateLimit;
-        if (resolvedLimit is < 1 or > 50)
-        {
-            throw new McpException("invalid-params: limit must be between 1 and 50");
-        }
-
-        if (autoPromote && !confirm)
-        {
-            throw new McpException(
-                "confirm-required: autoPromote shares candidates with ALL projects — pass confirm=true to enable");
-        }
-
-        // The meta is one project's queue state: scope it when this call named exactly one,
-        // otherwise leave it bank-wide (a scalar count) rather than pick a project arbitrarily.
-        var metaProject = projectIds.Length == 1 ? projectIds[0] : null;
-        var promotes = extractMode == ExtractMode.Promote || autoPromote;
-        foreach (var projectId in projectIds)
+        var request = new ShareExtractRequest(projectIds ?? [], mode, limit, includeTtlRows, autoPromote, confirm);
+        foreach (var projectId in request.ProjectIds)
         {
             await gate.RequireAsync(projectId,
-                    promotes ? AccessRequirement.Write : AccessRequirement.Read,
+                    request.Promotes ? AccessRequirement.Write : AccessRequirement.Read,
                     TnMemoryShareExtract, cancellationToken)
                 .ConfigureAwait(false);
         }
 
-        if (promotes)
-        {
-            var outcome = await queue.PromoteAsync(projectIds, resolvedLimit, cancellationToken)
-                .ConfigureAwait(false);
-            var promoteResult = new ShareExtractResult([], outcome.PromotedHashes)
-            {
-                SkippedDuplicates = outcome.SkippedDuplicates, Absorbed = outcome.Absorbed,
-                Failures = outcome.Failures
-            };
-            var promoteEnvelope = await gate.WrapAsync(metaProject, promoteResult, cancellationToken);
-            return promoteEnvelope;
-        }
-
-        var sharedIndex = await store.GetSharedIndexAsync(cancellationToken).ConfigureAwait(false);
-        var candidates = new List<ShareCandidate>();
-        foreach (var projectId in projectIds)
-        {
-            candidates.AddRange(await extraction.ProposeAsync(projectId, sharedIndex,
-                    includeTtlRows, resolvedLimit, cancellationToken)
-                .ConfigureAwait(false));
-        }
-
-        var envelope = await gate.WrapAsync(metaProject, new ShareExtractResult(candidates, []), cancellationToken);
-
-        return envelope;
+        var result = await shareExtract.RunAsync(request, cancellationToken).ConfigureAwait(false);
+        return await gate.WrapAsync(request.MetaProjectId, result, cancellationToken);
     }
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]

@@ -480,6 +480,22 @@ internal static class MemorySql
                                                     LIMIT 1
                                                     """;
 
+    /// <summary>
+    ///     The write path's post-insert lookup. Scoped by hash as well as path because a chunked
+    ///     `memory_write` puts several rows under one path (docs/adr/0064), and the entry the caller
+    ///     is handed back must be the chunk whose hash it was told — not whichever row LIMIT 1 picks.
+    /// </summary>
+    public const string SelectEntryByPathAndHashInBucket = """
+                                                           SELECT id AS Id, hash AS Hash, path AS Path, value AS Value, scope AS Scope,
+                                                                  project_id AS ProjectId, context_label AS ContextLabel,
+                                                                  workspace_id AS WorkspaceId, created_at AS CreatedAt
+                                                           FROM entries
+                                                           WHERE path = @path AND hash = @hash AND scope IS @scope
+                                                             AND project_id = @projectId
+                                                             AND context_label IS @contextLabel AND workspace_id IS @workspaceId
+                                                           LIMIT 1
+                                                           """;
+
     // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): recomputes
     // chunk_index/total_chunks for one (ctx, source_file) group after a membership-changing write.
     public static readonly string RecomputeChunkColumnsForContext = $"""

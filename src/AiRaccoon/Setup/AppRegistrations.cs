@@ -3,6 +3,7 @@ using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Memory.Filtering.Policies;
 using AiRaccoon.Core.Observability;
@@ -65,6 +66,10 @@ public static partial class AppRegistrations
         {
             services.AddRequiredSingleton<ISharedExtractionService, SharedExtractionService>();
             services.AddRequiredSingleton<ISharedExtractionRunner, SharedExtractionRunner>();
+            // WP8 (docs/adr/0065): the share-extract pipeline and the read-path query guard are
+            // services now, so the CLI and the background loop can reach what only MCP could.
+            services.AddRequiredSingleton<IShareExtractService, ShareExtractService>();
+            services.AddRequiredSingleton<IQueryGuardService, QueryGuardService>();
             // WP2 (docs/adr/0067): composes the store and the queue, which the store itself cannot —
             // PromotionQueueService already takes IMemoryStore, so store -> queue -> store is a cycle.
             services.AddRequiredSingleton<IMemoryWriteService, MemoryWriteService>();

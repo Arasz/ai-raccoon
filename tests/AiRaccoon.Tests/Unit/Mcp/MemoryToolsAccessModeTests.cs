@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Isolation;
@@ -40,10 +41,10 @@ public sealed class MemoryToolsAccessModeTests
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
         var queue = new FakePromotionQueue();
         var gate = new ToolGate(access, queue);
-        _tools = new MemoryTools(_store, gate, new NoOpSearchQualityService(), new MemoryWriteService(_store, new FakePromotionQueue()), NullLogger<MemoryTools>.Instance);
-        _share = new ShareTools(_store, gate,
+        _tools = new MemoryTools(_store, gate, new NoOpSearchQualityService(), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), NullLogger<MemoryTools>.Instance);
+        _share = new ShareTools(_store, gate, new ShareExtractService(_store,
             new SharedExtractionRunner(_store, new SharedExtractionService(), queue,
-                new FakeTimeProvider(FixedNow)), queue);
+                new FakeTimeProvider(FixedNow)), queue));
         _workspace = new WorkspaceTools(workspaces, gate);
         _sweep = new SweepTools(sweeper, new ForgettingPolicyService(_store, access), gate);
         _promotion = new PromotionTools(queue, gate);

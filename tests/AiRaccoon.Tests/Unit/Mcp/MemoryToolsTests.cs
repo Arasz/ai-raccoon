@@ -1,3 +1,4 @@
+using FluentValidation;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AiRaccoon.Access;
@@ -43,10 +44,10 @@ public class MemoryToolsTests
         var workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
         var gate = new ToolGate(access, _queue);
-        _tools = new MemoryTools(_store, gate, new NoOpSearchQualityService(), new MemoryWriteService(_store, new FakePromotionQueue()), NullLogger<MemoryTools>.Instance);
-        _share = new ShareTools(_store, gate,
+        _tools = new MemoryTools(_store, gate, new NoOpSearchQualityService(), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), NullLogger<MemoryTools>.Instance);
+        _share = new ShareTools(_store, gate, new ShareExtractService(_store,
             new SharedExtractionRunner(_store, new SharedExtractionService(), _queue,
-                new FakeTimeProvider(FixedNow)), _queue);
+                new FakeTimeProvider(FixedNow)), _queue));
         _workspace = new WorkspaceTools(workspaces, gate);
         _sweep = new SweepTools(sweeper, new ForgettingPolicyService(_store, access), gate);
         _syncTools = new SyncTools(_sync,
@@ -194,33 +195,33 @@ public class MemoryToolsTests
     [Fact]
     public async Task ShareExtract_InvalidProjectIds_ThrowsTyped()
     {
-        var ex = await Should.ThrowAsync<McpException>(() =>
+        var ex = await Should.ThrowAsync<ValidationException>(() =>
             _share.ShareExtract([], cancellationToken: TestContext.Current.CancellationToken));
-        ex.Message.ShouldContain("invalid-params");
+        ToolRefusals.PrefixFor(ex).ShouldBe("invalid-params", "the wire prefix is the contract, not the exception type");
     }
 
     [Fact]
     public async Task ShareExtract_InvalidMode_ThrowsTyped()
     {
-        var ex = await Should.ThrowAsync<McpException>(() =>
+        var ex = await Should.ThrowAsync<ValidationException>(() =>
             _share.ShareExtract(["acme"], mode: "auto", cancellationToken: TestContext.Current.CancellationToken));
-        ex.Message.ShouldContain("invalid-params");
+        ToolRefusals.PrefixFor(ex).ShouldBe("invalid-params", "the wire prefix is the contract, not the exception type");
     }
 
     [Fact]
     public async Task ShareExtract_InvalidLimit_ThrowsTyped()
     {
-        var ex = await Should.ThrowAsync<McpException>(() =>
+        var ex = await Should.ThrowAsync<ValidationException>(() =>
             _share.ShareExtract(["acme"], limit: 0, cancellationToken: TestContext.Current.CancellationToken));
-        ex.Message.ShouldContain("invalid-params");
+        ToolRefusals.PrefixFor(ex).ShouldBe("invalid-params", "the wire prefix is the contract, not the exception type");
     }
 
     [Fact]
     public async Task ShareExtract_AutoPromote_WithoutConfirm_IsGated()
     {
-        var ex = await Should.ThrowAsync<McpException>(() =>
+        var ex = await Should.ThrowAsync<ConfirmationRequiredException>(() =>
             _share.ShareExtract(["acme"], autoPromote: true, cancellationToken: TestContext.Current.CancellationToken));
-        ex.Message.ShouldContain("confirm-required");
+        ToolRefusals.PrefixFor(ex).ShouldBe("confirm-required", "the wire prefix is the contract, not the exception type");
         ex.Message.ShouldContain("ALL projects");
         _store.Shared.ShouldBeNull();
     }
@@ -396,7 +397,7 @@ public class MemoryToolsTests
     {
         var logger = new FakeLogger<MemoryTools>();
         var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
-            new NoOpSearchQualityService(), new MemoryWriteService(_store, new FakePromotionQueue()), logger);
+            new NoOpSearchQualityService(), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), logger);
         _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
 
         var result = await tools.Search("acme", RealHermesProcessNotification,
@@ -412,7 +413,7 @@ public class MemoryToolsTests
     {
         var logger = new FakeLogger<MemoryTools>();
         var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
-            new NoOpSearchQualityService(), new MemoryWriteService(_store, new FakePromotionQueue()), logger);
+            new NoOpSearchQualityService(), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), logger);
         _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
 
         await tools.Search("acme", "why did the auth build start failing",
@@ -426,7 +427,7 @@ public class MemoryToolsTests
     {
         var logger = new FakeLogger<MemoryTools>();
         var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
-            new NoOpSearchQualityService(), new MemoryWriteService(_store, new FakePromotionQueue()), logger);
+            new NoOpSearchQualityService(), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), logger);
         _store.Settings[QueryGuardConfigKeys.EnabledGlobal] = "false";
         _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
 
@@ -497,7 +498,7 @@ public class MemoryToolsTests
     {
         var logger = new FakeLogger<MemoryTools>();
         var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
-            new NoOpSearchQualityService(), new MemoryWriteService(_store, new FakePromotionQueue()), logger);
+            new NoOpSearchQualityService(), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), logger);
         _store.Settings[QueryGuardConfigKeys.StructuralEnabledGlobal] = "true";
         _store.Settings[QueryGuardConfigKeys.StructuralThresholdGlobal] = "0.0";
         _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
