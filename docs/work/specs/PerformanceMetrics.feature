@@ -44,12 +44,39 @@ Feature: Performance metrics for AiRaccoon's own development
     # Consequence to carry forward: with a release-driven cadence, the 24-row cap is no longer
     # "~1 year" — that gloss assumed a fixed fortnight. How far back 24 checkpoints reach now
     # depends on release frequency, and that is a fact about the release train, not a bug.
+    # ADDED, stage 05 batch 1, owner: "retention should be a background maintenance pass." The gap
+    # was found by writing a step — `When the retention pass runs` named something no rule had
+    # decided. So: checkpoint-and-prune is a BACKGROUND MAINTENANCE PASS, not work the flusher does
+    # on its way past. This keeps it off the write path the flusher is already rate-limited on, and
+    # it is a different actor from the self-metrics writer (see the self-instrumentation rule),
+    # which does write directly.
 
     Scenario: A three-week-old bank still answers for its oldest measurement
+      Given a bank whose oldest measurement is 21 days old
+      When I call memory_performance for a window of 28 days
+      Then the report covers that measurement
     Scenario: A bank holding more than four weeks is within contract, not over it
+      Given a bank holding 40 days of measurements
+      When I call memory_performance for a window of 40 days
+      Then the report covers all 40 days
     Scenario: A failed checkpoint leaves the hot table unpruned
+      Given a hot table holding four weeks of measurements
+      And a checkpoint write that fails
+      When the background maintenance pass runs
+      Then a report over the oldest two weeks still returns them
     Scenario: The twenty-fourth checkpoint is written and none is discarded
+      # The trigger is deliberately unnamed. A checkpoint can start because a fortnight elapsed or
+      # because a version was cut, and the cap behaves identically either way — owner, stage 05:
+      # "keep the checkpoint step vague". Naming one trigger would pin behaviour nobody decided.
+      Given a checkpoint table holding 23 checkpoints
+      When a checkpoint is written
+      Then the report lists 24 checkpoints
     Scenario: The twenty-fifth checkpoint discards the oldest, not the newest
+      Given a checkpoint table holding 24 checkpoints
+      When a checkpoint is written
+      Then the report lists 24 checkpoints
+      And the checkpoint that was oldest is gone
+      And the one just written is present
 
   Rule: Every operation is measured, not a chosen subset
     # Owner: "in - we want a complete view."
