@@ -48,3 +48,36 @@ Feature: Performance metrics for AiRaccoon's own development
     # Measured cost per read on 2,518 rows (live bank ~6x): bank bytes 0.006 ms, entries 0.004 ms,
     # projects 0.075 ms, embedded 1.286 ms, over-window requires the tokenizer. Read once per flush
     # rather than per measurement, which is what makes the expensive ones affordable.
+
+  # ---- Stage 03, round 2. Owner-stated. ----
+
+  Rule: Metrics collection is always on
+    # Owner: "no, always on." Deliberately unlike noise/sweep/queryguard, which all have kill
+    # switches. A series with holes in it is worse than no series.
+
+  Rule: Recording is best effort and never fails the operation being measured
+    # Owner: "recording is a best effort only."
+
+  Rule: Measurements leave the hot path through a channel and are written by a background reader
+    # Owner: "use channels, save the metric to the channel then process them in the background. We
+    # need to process them so we will not lose a lot of data if the process fails but not too often
+    # so the hot paths are almost not affected."
+    # => two competing budgets, both owner-stated: durability on crash vs hot-path cost.
+
+  Rule: The channel is bounded and its memory cost is a stated budget
+    # Owner: "we should consider memory pressure, so we should base on how metrics are collected
+    # and processed."
+
+  Rule: A measurement identifies its query by hash, never by text
+    # Owner: "can we correlate by hash?" — yes. search_quality already stores the query text keyed
+    # by correlation_id, so the metric row carries the hash AND the correlation_id: the hash groups
+    # repeat queries, and the join recovers the text where the search was also quality-recorded.
+    # No user content is duplicated into the metrics table.
+
+  Rule: The report is project-scoped by default and can be asked for the whole bank
+    # Owner: "lets go with project scoped, but we want to have get all data access too."
+
+  Rule: A checkpoint keeps the full statistics, not just an average, and records the version
+    # Owner: "lets calculate all useful statistics, and we should probably correlate them with
+    # version too - so we can pin changes to version."
+    # => the year of history can answer "did p99 move in 1.15.0", not only "did the mean move".
