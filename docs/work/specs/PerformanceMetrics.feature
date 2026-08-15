@@ -38,11 +38,21 @@ Feature: Performance metrics for AiRaccoon's own development
     # AMENDED, stage 04: the checkpoint is written FIRST and the prune runs only if it succeeded —
     # owner: "we first do a checkpoint then prune only on success." Pruning on a failed checkpoint
     # destroys the only copy of the window it was summarising.
+    # AMENDED, stage 04 batch 3, owner: "I think we could align checkpoints with versions - so we
+    # always start checkpoint on the version." => the cadence is NOT purely fortnightly. A new
+    # version STARTS a checkpoint, so a checkpoint's window is bounded by version boundaries.
+    # Consequence to carry forward: with a release-driven cadence, the 24-row cap is no longer
+    # "~1 year" — that gloss assumed a fixed fortnight. How far back 24 checkpoints reach now
+    # depends on release frequency, and that is a fact about the release train, not a bug.
 
   Rule: Every operation is measured, not a chosen subset
     # Owner: "in - we want a complete view."
 
   Rule: The MCP tool returns the report as JSON to the calling agent
+    # RESOLVED, stage 04 batch 3, owner: "2. yes." => a window with no measurements in it is an
+    # EMPTY SERIES, not an error. An agent asking about a quiet bank gets a well-formed report
+    # saying nothing happened, which is an answer; an error would be indistinguishable from the
+    # tool being broken.
 
   Rule: The CLI writes the report to a file and returns its path
     # Owner: "CLI? return path to saved report file - probably in the dir where CLI was accessed."
@@ -112,6 +122,13 @@ Feature: Performance metrics for AiRaccoon's own development
   Rule: A checkpoint records the commit, not the release
     # Owner: "commit." => ServerInfo's +sha suffix, so a regression pins to the change that caused
     # it rather than to the release that shipped it.
+    # RESOLVED, stage 04 batch 3, owner: "we want commit, version and timestamp of the commit. And
+    # all entries per the window." => the checkpoint's identity is the TRIPLE (commit, version,
+    # commit timestamp), and it summarises every entry in its window.
+    # This dissolves the objection raised with the question: I argued "the commit" was ill-defined
+    # because a fortnight spans dozens of them. Version-alignment (see the retention rule) removes
+    # the ambiguity — a checkpoint starts at a version, so its commit is the one that version was
+    # cut at, not an arbitrary one from the middle of the window.
 
   Rule: The report window and bucket are the caller's choice, defaulting to the last 3 hours in 1-minute buckets
     # Owner: "let the client specify with a default for last 3h of data with 1 minute bucket."
@@ -191,3 +208,34 @@ Feature: Performance metrics for AiRaccoon's own development
   Rule: Correlation dimension scenarios
     Scenario: A measurement carries no dimensions of its own
     Scenario: Bank shape is sampled once per flush, not once per measurement
+
+  # ---- Stage 04, batch 3. Owner ruled on the two flagged guesses (2, 12) and shot none of the
+  # other ten down. The batch-1 leftover was ruled too — see below. ----
+
+  Rule: MCP output scenarios
+    Scenario: An agent calling memory_performance gets JSON, not prose
+    Scenario: A window with no measurements is an empty series, not an error
+
+  Rule: CLI report scenarios
+    Scenario: The CLI prints a path and the file exists at it
+    Scenario: The report lands in the invocation directory, not the data root
+
+  Rule: Always-on scenarios
+    Scenario: No setting turns measurement off
+
+  Rule: Hot-path scenarios
+    Scenario: A search returns before its measurement is written
+    Scenario: No measurement is written on the caller's thread
+
+  Rule: Flush cadence scenarios
+    Scenario: A second flush does not start within four seconds of the first
+    Scenario: Rising pressure lowers the aim, so a burst flushes below sixty percent
+    Scenario: An idle bank flushes after thirty seconds with the aim unreached
+
+  Rule: Checkpoint content scenarios
+    # The batch-1 leftover, ruled at last: "we discard the oldest, versions doesn't matter" — so the
+    # proposed 'A checkpoint is discarded while it is the only record of its commit' is DROPPED, not
+    # deferred. Discarding is by age alone; no commit or version protects a row from the cap.
+    Scenario: A checkpoint answers for p99, not only the mean
+    Scenario: A checkpoint records the commit, its version, and the commit timestamp
+    Scenario: A new version starts a checkpoint before the fortnight is up
