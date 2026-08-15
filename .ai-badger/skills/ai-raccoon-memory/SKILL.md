@@ -24,8 +24,8 @@ metadata:
 
 ## 1. Watch-on-docs ritual (do this first)
 
-On session start, run `memory_watch_status(project_id)` for this project. If the docs directory
-is not in the watched list, run `memory_watch_add(project_id, <absolute path to docs>)` to mirror
+On session start, run `memory_watch_status(projectId)` for this project. If the docs directory
+is not in the watched list, run `memory_watch_add(projectId, <absolute path to docs>)` to mirror
 it into memory. The watch starts `scanning` and settles to `healthy`; an already-watched path is
 a no-op.
 
@@ -37,8 +37,8 @@ all (older tool build on another machine), update the tool: `dotnet tool update 
 
 ## 2. Search-first workflow
 
-Always pass `project_id`. Before web search, code search, or asking the user, run
-`memory_search(project_id, scope=all)` with 2-3 formulations: exact phrase → keywords →
+Always pass `projectId`. Before web search, code search, or asking the user, run
+`memory_search(projectId, scope=all)` with 2-3 formulations: exact phrase → keywords →
 plain-English restatement. Entries carry source paths — cite them as evidence.
 
 ## 3. Escalation by result
@@ -76,5 +76,5 @@ size; `memory_sync` exchanges snapshots with cloud storage when configured.
 ## 8. Verification Checklist
 
 - [ ] `memory_watch_status` shows the docs dir `healthy`
-- [ ] `memory_search(project_id, scope=all)` returns docs-derived hits
+- [ ] `memory_search(projectId, scope=all)` returns docs-derived hits
 - [ ] A durable finding was written back with `memory_write`, source path included

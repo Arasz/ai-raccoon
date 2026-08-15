@@ -59,7 +59,7 @@ def is_memory_search(tool_name: Any) -> bool:
     return name == "memory_search"
 
 _REASON = (
-    "Memory-first gate: run memory_search (project_id={project_id}) before repo text "
+    "Memory-first gate: run memory_search (projectId={project_id}) before repo text "
     "search; re-issue this call if the bank has no relevant hit."
 )
 
