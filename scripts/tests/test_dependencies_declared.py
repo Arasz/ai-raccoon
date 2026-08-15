@@ -89,3 +89,18 @@ def test_every_third_party_import_is_declared_in_pyproject() -> None:
         f"{module} (used in {', '.join(str(f.relative_to(SCRIPTS_ROOT.parent)) for f in sorted(files))})"
         for module, files in sorted(missing.items())
     )
+
+
+def test_the_scan_sees_third_party_imports_at_all() -> None:
+    """An empty scan passes the check above for the same reason a correct one does.
+
+    If SCRIPTS_ROOT ever resolves wrong, or rglob stops matching, `missing` is
+    empty and the real check goes green while measuring nothing. This is the
+    Python half of the guard `EnvGateReaderRuleTests` carries on the C# side.
+    """
+    third_party = _third_party_imports()
+
+    assert len(third_party) >= 3, (
+        "the dependency check scans this set; if it empties, it stops being able to fail. "
+        f"Found: {sorted(third_party)}"
+    )
