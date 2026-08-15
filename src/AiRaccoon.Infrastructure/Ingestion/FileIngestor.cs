@@ -88,6 +88,23 @@ public sealed class FileIngestor(
         return indexed;
     }
 
+    /// <summary>
+    ///     The same chunker and the same budget resolution file ingest uses, for content that never
+    ///     came from a file (docs/adr/0064). Free-form notes are treated as markdown — that is what
+    ///     agents write, and it is the handler a `.md` ingest would pick for the same text.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> ChunkToBudgetAsync(SqliteConnection connection, string content,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+
+        var (maxTokens, overlayTokens, countTokens) = await ChunkSizeForAsync(connection, cancellationToken)
+            .ConfigureAwait(false);
+        return IsIndexableFile("note.md", out var handler)
+            ? handler.Chunker.Chunk(content, maxTokens, overlayTokens, countTokens)
+            : [content];
+    }
+
     /// <summary>Embeds one freshly inserted row when an engine is configured; deferred otherwise (FR-NM-3 s4; see docs/work/features-native-memory/native-memory.feature).</summary>
     private async Task<int> InsertChunksAsync(SqliteConnection connection, string projectId, string path,
         string content, IFileTypeHandler handler, string? context, CancellationToken cancellationToken, bool embedInline = true)
