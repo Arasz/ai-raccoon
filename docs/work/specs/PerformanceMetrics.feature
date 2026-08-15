@@ -202,25 +202,40 @@ Feature: Performance metrics for AiRaccoon's own development
     # and processed."
 
     Scenario: A burst within capacity is flushed whole
+      # The paused reader in these three is a fixture constraint doing real work, not scenery:
+      # without it the arithmetic is only true if nothing drained meanwhile, and the scenarios would
+      # be quietly timing-dependent.
+      Given a channel holding 1000 measurements at most
+      And the background reader is paused
+      When 600 measurements arrive
+      Then all 600 appear in the report after the next flush
 
   Rule: A measurement identifies its query by hash, never by text
     # Owner: "can we correlate by hash?" — yes. search_quality already stores the query text keyed
     # by correlation_id, so the metric row carries the hash AND the correlation_id: the hash groups
     # repeat queries, and the join recovers the text where the search was also quality-recorded.
     # No user content is duplicated into the metrics table.
+    # REPHRASED, stage 05 batch 4, owner: "we could rephrase the query text case to - metric can
+    # contain only (hash, correlationId) - this will be enforced on save."
+    # => the rule is a POSITIVE ALLOWLIST, not a prohibition: a measurement's query identity is
+    # EXACTLY {hash, correlation_id}, and the constraint is enforced where the row is written.
+    # This is strictly better than what stage 05 batch 3 recorded. That version asserted "no metric
+    # row contains query text" -- an unprovable negative that needed a table sweep, and the only
+    # scenario in this file to inspect internal state. It also failed OPEN: a sweep passes until the
+    # day something writes text, and then it has already been written. An allowlist enforced on save
+    # fails CLOSED and needs no exception. The batch 3 exception is retired.
 
     Scenario: Two runs of the same query share a hash
       Given I have run the same query twice
       When I call memory_performance
       Then both measurements carry the same query hash
-    Scenario: No metric row contains query text
-      # THE STATED EXCEPTION to "a Then must not inspect internal state". There is no report-shaped
-      # way to prove text is NOT stored -- a report that omits it proves only that the report omits
-      # it, which is exactly the failure this rule guards against. The table is the only honest
-      # witness, so this scenario reads it on purpose.
-      Given I have run a query containing "secret-token"
-      When I read every metrics row
-      Then none of them contains "secret-token"
+    Scenario: A measurement carries only the hash and the correlation id
+      When I record a measurement for a query
+      Then its query identity is exactly the hash and the correlation id
+
+    Scenario: A measurement carrying query text is rejected on save
+      When a measurement carrying query text is saved
+      Then the save is rejected
 
   Rule: The report is project-scoped by default and can be asked for the whole bank
     # Owner: "lets go with project scoped, but we want to have get all data access too."
@@ -254,6 +269,10 @@ Feature: Performance metrics for AiRaccoon's own development
     # rather than bookkeeping, which is how "drops must be visible" is satisfied.
 
     Scenario: A burst beyond capacity drops, and the drop count reports how many
+      Given a channel holding 1000 measurements at most
+      And the background reader is paused
+      When 1200 measurements arrive
+      Then the report counts 200 drops
 
   # ---- Stage 03, round 4. ----
 
@@ -262,6 +281,11 @@ Feature: Performance metrics for AiRaccoon's own development
     # constant, because the owner has said twice that these numbers are expected to move.
 
     Scenario: Exactly one thousand measurements arrive between two flushes
+      Given a channel holding 1000 measurements at most
+      And the background reader is paused
+      When 1000 measurements arrive
+      Then all 1000 appear in the report after the next flush
+      And no drop is counted
 
   Rule: A checkpoint records the commit, not the release
     # Owner: "commit." => ServerInfo's +sha suffix, so a regression pins to the change that caused
@@ -301,10 +325,24 @@ Feature: Performance metrics for AiRaccoon's own development
     # not a deadline on a pressured batch. Consequence to carry into scenarios: between two flushes
     # the channel can still fill, so the rate limit and the drop counter interact — a burst that
     # exceeds 1000 items in 4 seconds drops, by design, and the drop count is how that is seen.
+    # RESOLVED, stage 05 batch 4, owner: "pressure - arrival rate." Found by writing a step that
+    # could not be written: "measurements arrive fast enough to raise the pressure" is unimplementable
+    # until pressure is defined. It is the ARRIVAL RATE, not occupancy — which matters, because an
+    # occupancy-based pressure would make "pressure lowers the aim" partly circular, the aim already
+    # being an occupancy threshold. Arrival rate is a genuinely independent signal.
 
     Scenario: A second flush does not start within four seconds of the first
+      Given a flush has just run
+      When the channel reaches its aim one second later
+      Then no flush runs until four seconds have passed since the first
     Scenario: Rising pressure lowers the aim, so a burst flushes below sixty percent
+      Given an aim of sixty percent of capacity
+      When measurements arrive at a rising rate
+      Then the flush runs before the channel reaches sixty percent
     Scenario: An idle bank flushes after thirty seconds with the aim unreached
+      Given a channel holding fewer measurements than the aim
+      When thirty seconds pass with no further arrivals
+      Then a flush runs
 
   Rule: The metrics subsystem measures itself, without going through itself
     # Owner: "also we want to save metrics for this system." => channel occupancy and pressure,
@@ -315,4 +353,10 @@ Feature: Performance metrics for AiRaccoon's own development
     # — the moment the numbers matter most and the drop counter starts lying about what filled it.
 
     Scenario: A flush records its own duration without enqueueing anything
+      When a flush completes
+      Then the report carries its duration
+      And no measurement was enqueued to record it
     Scenario: Self-metrics are written even when the channel is full
+      Given a channel that is full
+      When a flush runs
+      Then the report carries the flush duration
