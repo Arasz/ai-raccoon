@@ -82,6 +82,9 @@ Feature: Performance metrics for AiRaccoon's own development
 
   Rule: The report is project-scoped by default and can be asked for the whole bank
     # Owner: "lets go with project scoped, but we want to have get all data access too."
+    # RESOLVED, stage 04 batch 2, owner: "8 - yes." => the whole-bank report is GATED behind the
+    # elevated access mode, not merely a parameter. Project scope is the default AND the boundary:
+    # crossing it is an access decision, the same shape the other cross-project surfaces already use.
 
   Rule: A checkpoint keeps the full statistics, not just an average, and records the version
     # Owner: "lets calculate all useful statistics, and we should probably correlate them with
@@ -113,6 +116,11 @@ Feature: Performance metrics for AiRaccoon's own development
   Rule: The report window and bucket are the caller's choice, defaulting to the last 3 hours in 1-minute buckets
     # Owner: "let the client specify with a default for last 3h of data with 1 minute bucket."
     # => 180 points at the default, which is a plottable series rather than a raw dump.
+    # RESOLVED, stage 04 batch 2, owner: "10 - we just limit bucket to the window - so we return one
+    # measurement averaged over window." => a bucket wider than the window is NOT an error and NOT
+    # rejected: it is CLAMPED to the window, and the report is a single point averaging it. The
+    # caller always gets a series, never a validation failure, and never a partial trailing bucket
+    # wider than the data it covers.
 
   Rule: The background reader flushes on channel pressure, rate-limited to one flush per 4 seconds
     # Owner: "calculating the pressure in the channel with a time limit - we will aim at 60% of the
@@ -156,3 +164,30 @@ Feature: Performance metrics for AiRaccoon's own development
     Scenario: A burst within capacity is flushed whole
     Scenario: Exactly one thousand measurements arrive between two flushes
     Scenario: A burst beyond capacity drops, and the drop count reports how many
+
+  # ---- Stage 04, batch 2. Same mode: titles proposed, owner shot down what was wrong.
+  # Owner answered 8 (gated) and 10 (clamped); the other ten stood as proposed. ----
+
+  Rule: Self-metrics scenarios
+    Scenario: A flush records its own duration without enqueueing anything
+    Scenario: Self-metrics are written even when the channel is full
+
+  Rule: Best-effort recording scenarios
+    Scenario: A search succeeds when the metric write throws
+    Scenario: A failed metric write is not retried into the caller's latency
+
+  Rule: Query identity scenarios
+    Scenario: Two runs of the same query share a hash
+    Scenario: No metric row contains query text
+
+  Rule: Report scope scenarios
+    Scenario: A report defaults to the calling project
+    Scenario: A whole-bank report requires the elevated access mode
+
+  Rule: Report window scenarios
+    Scenario: A caller asking for nothing gets three hours in one-minute buckets
+    Scenario: A bucket wider than the window is clamped to one averaged point
+
+  Rule: Correlation dimension scenarios
+    Scenario: A measurement carries no dimensions of its own
+    Scenario: Bank shape is sampled once per flush, not once per measurement
