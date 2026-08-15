@@ -3,8 +3,8 @@
 C# .NET 10 MCP server exposing agent memory management over sqlite-memory: project-scoped memory bank, workspace sandboxes, shared promotion tier, hybrid search, degradation, and optional cloud sync.
 
 > Domain: Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory.
-> Stacks: dotnet, mcp, python, github
-> Scaffolded by ai-badger 0.122.0. Source of truth for this file: `.ai-badger/CLAUDE.md`.
+> Stacks: dotnet, mcp, python, github, ai-raccoon
+> Scaffolded by ai-badger 0.125.0. Source of truth for this file: `.ai-badger/CLAUDE.md`.
 
 ## Non-negotiable invariants
 
