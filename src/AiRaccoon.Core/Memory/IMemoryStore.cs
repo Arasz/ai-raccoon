@@ -5,7 +5,7 @@ public interface IMemoryStore
 {
     Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
+    Task<SearchResults> SearchAsync(SearchQuery query,
         CancellationToken cancellationToken = default);
 
     /// <summary>

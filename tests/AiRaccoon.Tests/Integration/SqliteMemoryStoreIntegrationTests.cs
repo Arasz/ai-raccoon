@@ -108,9 +108,9 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
 
         await _store.ShareAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
 
-        var results = await _store.SearchAsync(
+        var results = (await _store.SearchAsync(
             new SearchQuery("acme", "cross project convention", Scope: SearchScope.Shared),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Results;
         results.ShouldContain(r => r.SourceFile == "docs/guide.md");
 
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -190,9 +190,9 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         var entry = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "semantic searchable fact"), TestContext.Current.CancellationToken);
 
-        var results = await _store.SearchAsync(
+        var results = (await _store.SearchAsync(
             new SearchQuery("acme", "semantic searchable"),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Results;
 
         results.ShouldContain(r => r.Hash == entry.Hash);
     }
@@ -256,14 +256,14 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         await ScopeDataRootAsync();
         await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
         (await _store.SearchAsync(new SearchQuery("acme", "magnetostrictive"),
-                TestContext.Current.CancellationToken))
+                TestContext.Current.CancellationToken)).Results
             .ShouldNotBeEmpty();
 
         var deleted = await _store.DeleteSourcePathAsync("acme", file, TestContext.Current.CancellationToken);
 
         deleted.ShouldBeGreaterThan(0);
         (await _store.SearchAsync(new SearchQuery("acme", "magnetostrictive"),
-                TestContext.Current.CancellationToken))
+                TestContext.Current.CancellationToken)).Results
             .ShouldBeEmpty();
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(0);
     }
@@ -283,7 +283,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(0);
         (await _store.GetStatsAsync("beta", TestContext.Current.CancellationToken)).EntryCount.ShouldBeGreaterThan(0);
         (await _store.SearchAsync(new SearchQuery("beta", "magnetostrictive"),
-                TestContext.Current.CancellationToken))
+                TestContext.Current.CancellationToken)).Results
             .ShouldNotBeEmpty();
     }
 
@@ -352,10 +352,10 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
 
         deleted.ShouldBeGreaterThan(0);
         (await _store.SearchAsync(new SearchQuery("acme", "magnetostrictive"),
-                TestContext.Current.CancellationToken))
+                TestContext.Current.CancellationToken)).Results
             .ShouldBeEmpty("the file's own mirror chunks must be removed");
         (await _store.SearchAsync(new SearchQuery("acme", "kaleidophrenic"),
-                TestContext.Current.CancellationToken))
+                TestContext.Current.CancellationToken)).Results
             .ShouldNotBeEmpty("a manual row citing the path as sourceFile must survive");
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(1);
     }
@@ -419,7 +419,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         (await reopened.ExecuteScalarAsync<long>("SELECT count(*) FROM entries_fts"))
             .ShouldBe(await reopened.ExecuteScalarAsync<long>("SELECT count(*) FROM entries"));
         (await _store.SearchAsync(new SearchQuery("acme", "pre feature"),
-                TestContext.Current.CancellationToken))
+                TestContext.Current.CancellationToken)).Results
             .ShouldNotBeEmpty();
     }
 
@@ -443,8 +443,8 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         sourceType.ShouldBe("file", "a SourceFile write must resolve to source_type='file'");
 
         // Search round-trip: the result must still carry SourceFile for backwards compatibility.
-        var results = await _store.SearchAsync(
-            new SearchQuery("acme", "canonical source identity"), TestContext.Current.CancellationToken);
+        var results = (await _store.SearchAsync(
+            new SearchQuery("acme", "canonical source identity"), TestContext.Current.CancellationToken)).Results;
         results.ShouldContain(r => r.SourceFile == "docs/architecture.md");
     }
 
@@ -466,9 +466,9 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         sharedSourceId.Value.ShouldBeGreaterThan(0);
 
         // The shared entry's SourceFile is carried into search results.
-        var results = await _store.SearchAsync(
+        var results = (await _store.SearchAsync(
             new SearchQuery("acme", "shareable source identity", Scope: SearchScope.Shared),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Results;
         results.ShouldContain(r => r.SourceFile == "docs/guide.md");
     }
 

@@ -137,9 +137,9 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
         return true;
     }
 
-    public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(string projectId, string query,
+    public async Task<IReadOnlyList<MemorySearchResult>> SearchAsync(string projectId, string query,
         CancellationToken cancellationToken = default) =>
-        Store.SearchAsync(new SearchQuery(projectId, query), cancellationToken);
+        (await Store.SearchAsync(new SearchQuery(projectId, query), cancellationToken)).Results;
 
     /// <summary>Writes a file (dirs created) and stamps its mtime at the current fake time.</summary>
     public void WriteFile(string path, string content)

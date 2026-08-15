@@ -77,8 +77,8 @@ public sealed class CustomContextDiscoverabilityTests : IDisposable
         await store.WriteAsync(
             new MemoryWriteRequest("proj-1", "The team adopted the chassis pattern.", Context: "adr"), ct);
 
-        var results = await store.SearchAsync(
-            new SearchQuery("proj-1", "chassis", scope, Limit: 5, MinRelativeScore: 0.0), ct);
+        var results = (await store.SearchAsync(
+            new SearchQuery("proj-1", "chassis", scope, Limit: 5, MinRelativeScore: 0.0), ct)).Results;
 
         results.ShouldNotBeEmpty(
             $"a write labelled with a context belongs to its project; scope {scope} must reach it");
@@ -94,8 +94,8 @@ public sealed class CustomContextDiscoverabilityTests : IDisposable
         await store.WriteAsync(
             new MemoryWriteRequest("proj-1", "The team adopted the chassis pattern.", Context: "adr"), ct);
 
-        var results = await store.SearchAsync(
-            new SearchQuery("proj-2", "chassis", SearchScope.All, Limit: 5, MinRelativeScore: 0.0), ct);
+        var results = (await store.SearchAsync(
+            new SearchQuery("proj-2", "chassis", SearchScope.All, Limit: 5, MinRelativeScore: 0.0), ct)).Results;
 
         results.ShouldBeEmpty("the project is the isolation boundary and must still hold");
     }
@@ -134,8 +134,8 @@ public sealed class CustomContextDiscoverabilityTests : IDisposable
             .First(c => c.Contains("adr", StringComparison.Ordinal));
         var label = reported.Contains(':') ? reported[(reported.LastIndexOf(':') + 1)..] : reported;
 
-        var results = await store.SearchAsync(
-            new SearchQuery("proj-1", "chassis", SearchScope.All, Limit: 5, MinRelativeScore: 0.0, ContextLabel: label), ct);
+        var results = (await store.SearchAsync(
+            new SearchQuery("proj-1", "chassis", SearchScope.All, Limit: 5, MinRelativeScore: 0.0, ContextLabel: label), ct)).Results;
 
         results.ShouldNotBeEmpty($"the label '{label}' reported by stats must be the one search accepts");
     }

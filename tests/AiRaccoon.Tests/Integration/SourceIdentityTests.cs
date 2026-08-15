@@ -76,9 +76,9 @@ public sealed class SourceIdentityTests : IDisposable
     {
         var expectedHash = _hashMap[Adr0011Decision];
 
-        var results = await _store.SearchAsync(new SearchQuery(ProjectId,
+        var results = (await _store.SearchAsync(new SearchQuery(ProjectId,
             "Why was shadcn/ui chosen over gluestack.io?",
-            SearchScope.Project, Limit: 10, MinRelativeScore: 0.0), TestContext.Current.CancellationToken);
+            SearchScope.Project, Limit: 10, MinRelativeScore: 0.0), TestContext.Current.CancellationToken)).Results;
 
         var hit = results.FirstOrDefault(r => r.Hash == expectedHash);
         hit.ShouldNotBeNull("the ADR-0011 decision chunk must appear in the top 10");
@@ -100,8 +100,8 @@ public sealed class SourceIdentityTests : IDisposable
     {
         var hashMap = _hashMap;
 
-        var results = await _store.SearchAsync(new SearchQuery(ProjectId, "What does ADR-0011 decide?",
-            SearchScope.Project, Limit: 20, MinRelativeScore: 0.0), TestContext.Current.CancellationToken);
+        var results = (await _store.SearchAsync(new SearchQuery(ProjectId, "What does ADR-0011 decide?",
+            SearchScope.Project, Limit: 20, MinRelativeScore: 0.0), TestContext.Current.CancellationToken)).Results;
 
         var (fileHit, fileRank) = FindRank(results, r => string.Equals(r.SourceFile, Adr0011Source, StringComparison.Ordinal));
         fileHit.ShouldNotBeNull("S2: a chunk of ADR-0011 must appear in the top 20");
@@ -117,9 +117,9 @@ public sealed class SourceIdentityTests : IDisposable
     {
         var hashMap = _hashMap;
 
-        var results = await _store.SearchAsync(new SearchQuery(ProjectId, "ADR-0070",
+        var results = (await _store.SearchAsync(new SearchQuery(ProjectId, "ADR-0070",
                 SearchScope.Project, Limit: 10, MinRelativeScore: 0.0, FtsWeight: 1, VectorWeight: 0),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Results;
 
         var (fileHit, fileRank) = FindRank(results, r => string.Equals(r.SourceFile, Adr0070Source, StringComparison.Ordinal));
         fileHit.ShouldNotBeNull("Q2: a chunk of ADR-0070 must appear in the FTS-only top 10");
@@ -139,9 +139,9 @@ public sealed class SourceIdentityTests : IDisposable
     {
         var hashMap = _hashMap;
 
-        var results = await _store.SearchAsync(new SearchQuery(ProjectId,
+        var results = (await _store.SearchAsync(new SearchQuery(ProjectId,
             "docs/adr/0011-frontend-chassis-stack.md#decision",
-            SearchScope.Project, Limit: 5, MinRelativeScore: 0.0), TestContext.Current.CancellationToken);
+            SearchScope.Project, Limit: 5, MinRelativeScore: 0.0), TestContext.Current.CancellationToken)).Results;
 
         var (hit, rank) = FindRank(results, r => r.Hash == hashMap[Adr0011Decision]);
         hit.ShouldNotBeNull("the anchored chunk must be found within the production Limit=5 window");
@@ -162,8 +162,8 @@ public sealed class SourceIdentityTests : IDisposable
     {
         var hashMap = _hashMap;
 
-        var results = await _store.SearchAsync(new SearchQuery(ProjectId, query,
-            SearchScope.Project, Limit: 5, MinRelativeScore: 0.0), TestContext.Current.CancellationToken);
+        var results = (await _store.SearchAsync(new SearchQuery(ProjectId, query,
+            SearchScope.Project, Limit: 5, MinRelativeScore: 0.0), TestContext.Current.CancellationToken)).Results;
 
         var (hit, rank) = FindRank(results, r => r.Hash == hashMap[expectedSource]);
         hit.ShouldNotBeNull($"{expectedSource} must appear in the top 5");
@@ -188,10 +188,10 @@ public sealed class SourceIdentityTests : IDisposable
     {
         var hashMap = _hashMap;
 
-        var results = await _store.SearchAsync(new SearchQuery(ProjectId,
+        var results = (await _store.SearchAsync(new SearchQuery(ProjectId,
                 "What is the screaming architecture rule?",
                 SearchScope.Project, Limit: 5, MinRelativeScore: 0.0, FtsWeight: 1, VectorWeight: 0),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Results;
 
         var (hit, rank) = FindRank(results, r => r.Hash == hashMap[InvariantScreaming]);
         hit.ShouldNotBeNull("the screaming-architecture invariant must appear in the FTS-only top 5");

@@ -107,8 +107,8 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
         await store.WriteAsync(new MemoryWriteRequest("acme", "fresh wave two content",
             SourceFile: "docs/adr/0001-legacy-migrated.md"), TestContext.Current.CancellationToken);
 
-        var results = await store.SearchAsync(new SearchQuery("acme", "wave two",
-            SearchScope.Project, Limit: 5, MinRelativeScore: 0.0), TestContext.Current.CancellationToken);
+        var results = (await store.SearchAsync(new SearchQuery("acme", "wave two",
+            SearchScope.Project, Limit: 5, MinRelativeScore: 0.0), TestContext.Current.CancellationToken)).Results;
         var hit = results.ShouldHaveSingleItem();
         hit.SourceFile.ShouldBe("docs/adr/0001-legacy-migrated.md");
         hit.TotalChunks.ShouldBe(1);

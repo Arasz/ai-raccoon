@@ -171,7 +171,7 @@ public sealed partial class SqliteMemoryStore(
         return ToEntry(row);
     }
 
-    public async Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
+    public async Task<SearchResults> SearchAsync(SearchQuery query,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
@@ -270,7 +270,7 @@ public sealed partial class SqliteMemoryStore(
         merged = await ResolveDeferredSnippetsAsync(connection, merged, valueByHash, ftsQueryByHash, idByHash,
             query.Query, cancellationToken).ConfigureAwait(false);
         await BumpAccessAsync(connection, merged, query.ProjectId, cancellationToken).ConfigureAwait(false);
-        return merged;
+        return new SearchResults(merged, SearchTimings.Empty);
     }
 
     /// <summary>memory_get (ADR-0035): the caller's own rows plus the cross-project shared tier; null when no such hash is reachable.</summary>

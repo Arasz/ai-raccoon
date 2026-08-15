@@ -739,11 +739,11 @@ public class MemoryToolsTests
             return WriteError is not null ? Task.FromException<MemoryEntry>(WriteError) : Task.FromResult(Entry);
         }
 
-        public override Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
+        public override Task<SearchResults> SearchAsync(SearchQuery query,
             CancellationToken cancellationToken = default)
         {
             LastQuery = query;
-            return Task.FromResult<IReadOnlyList<MemorySearchResult>>([]);
+            return Task.FromResult(new SearchResults([], SearchTimings.Empty));
         }
 
         public override Task<bool> DeleteAsync(string projectId, string hash,

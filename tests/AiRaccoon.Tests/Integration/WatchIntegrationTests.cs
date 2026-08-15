@@ -712,7 +712,7 @@ public sealed class WatchIntegrationTests
             System.IO.File.SetLastWriteTimeUtc(path, Time.GetUtcNow().Subtract(age).UtcDateTime);
         }
 
-        public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(string query, CancellationToken cancellationToken) => Memory.SearchAsync(new SearchQuery(Project, query), cancellationToken);
+        public async Task<IReadOnlyList<MemorySearchResult>> SearchAsync(string query, CancellationToken cancellationToken) => (await Memory.SearchAsync(new SearchQuery(Project, query), cancellationToken)).Results;
 
         public async Task<int> CountEntriesAsync(string path, string? valueContains,
             CancellationToken cancellationToken)

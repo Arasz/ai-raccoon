@@ -62,9 +62,9 @@ public sealed class LikePatternCascadeDeleteTests : IDisposable
         var deleted = await _store.DeleteSourcePathAsync("acme", targetDir, ct);
 
         deleted.ShouldBeGreaterThan(0, "the target directory's own chunk must be deleted");
-        (await _store.SearchAsync(new SearchQuery("acme", "phlogopite"), ct))
+        (await _store.SearchAsync(new SearchQuery("acme", "phlogopite"), ct)).Results
             .ShouldBeEmpty("the target directory's content must be gone");
-        (await _store.SearchAsync(new SearchQuery("acme", "vitrescent"), ct))
+        (await _store.SearchAsync(new SearchQuery("acme", "vitrescent"), ct)).Results
             .ShouldNotBeEmpty("the sibling directory's content — 'noteX1', a literal-wildcard near miss of 'note_1' — must survive");
         (await _store.GetStatsAsync("acme", ct)).EntryCount.ShouldBe(1,
             "exactly the sibling's chunk should remain");

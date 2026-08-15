@@ -79,10 +79,10 @@ public sealed class SqliteMemoryStoreVectorPartitionTests : IAsyncLifetime
             "distinctive workspace content about narwhals", ContextNaming.WorkspaceContext("ws-1"),
             cancellationToken: TestContext.Current.CancellationToken);
 
-        var results = await _store.SearchAsync(
+        var results = (await _store.SearchAsync(
             new SearchQuery("acme", "narwhals", WorkspaceId: "ws-1", Limit: 10,
                 MinRelativeScore: 0.0, FtsWeight: 0, VectorWeight: 1),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Results;
 
         results.Select(r => r.Hash).ShouldBe([workspace.Entry.Hash]);
     }
@@ -94,10 +94,10 @@ public sealed class SqliteMemoryStoreVectorPartitionTests : IAsyncLifetime
             "distinctive custom content about axolotls", "my-label",
             cancellationToken: TestContext.Current.CancellationToken);
 
-        var results = await _store.SearchAsync(
+        var results = (await _store.SearchAsync(
             new SearchQuery("acme", "axolotls", SearchScope.Project, ContextLabel: "my-label",
                 Limit: 10, MinRelativeScore: 0.0, FtsWeight: 0, VectorWeight: 1),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Results;
 
         results.Select(r => r.Hash).ShouldBe([labelled.Entry.Hash]);
     }
@@ -139,8 +139,8 @@ public sealed class SqliteMemoryStoreVectorPartitionTests : IAsyncLifetime
 
     private async Task<IReadOnlyList<MemorySearchResult>> VectorOnlySearchAsync(string query, SearchScope scope,
         int limit = 10) =>
-        await _store.SearchAsync(
+        (await _store.SearchAsync(
             new SearchQuery("acme", query, scope, Limit: limit, MinRelativeScore: 0.0, FtsWeight: 0, VectorWeight: 1),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Results;
 
 }

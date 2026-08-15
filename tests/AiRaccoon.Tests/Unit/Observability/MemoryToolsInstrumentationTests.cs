@@ -219,9 +219,9 @@ public class MemoryToolsInstrumentationTests
             return Task.FromResult(Entry ?? new MemoryEntry("h1", "p.md", "project:test", "content", 1));
         }
 
-        public override Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
+        public override Task<SearchResults> SearchAsync(SearchQuery query,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<MemorySearchResult>>([]);
+            Task.FromResult(new SearchResults([], SearchTimings.Empty));
 
         public override Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) =>
             Task.FromResult("{}");

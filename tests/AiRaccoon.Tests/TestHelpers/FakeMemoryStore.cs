@@ -19,7 +19,7 @@ public class FakeMemoryStore : IMemoryStore, ISettingsStore
         CancellationToken cancellationToken = default) =>
         throw NotOverridden(nameof(WriteAsync));
 
-    public virtual Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
+    public virtual Task<SearchResults> SearchAsync(SearchQuery query,
         CancellationToken cancellationToken = default) =>
         throw NotOverridden(nameof(SearchAsync));
 

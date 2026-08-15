@@ -81,7 +81,7 @@ public sealed class MemoryToolsAccessModeTests
     public async Task RoMode_WriteIsDenied_AndSearchStillWorks()
     {
         SetMode(perProject: "ro");
-        _store.SearchResults = [new MemorySearchResult("h1", 0.9, "p.md", "content")];
+        _store.StubResults = [new MemorySearchResult("h1", 0.9, "p.md", "content")];
 
         var writeEx = await Should.ThrowAsync<AccessDeniedException>(() =>
             _tools.Write("acme-web", "content", cancellationToken: TestContext.Current.CancellationToken));
@@ -257,15 +257,15 @@ public sealed class MemoryToolsAccessModeTests
 
         public Dictionary<string, IReadOnlyList<MemoryEntry>> EntriesByContext { get; } = [];
 
-        public IReadOnlyList<MemorySearchResult> SearchResults { get; set; } = [];
+        public IReadOnlyList<MemorySearchResult> StubResults { get; set; } = [];
 
         public override Task<MemoryEntry> WriteAsync(MemoryWriteRequest request,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(Entry);
 
-        public override Task<IReadOnlyList<MemorySearchResult>> SearchAsync(SearchQuery query,
+        public override Task<SearchResults> SearchAsync(SearchQuery query,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(SearchResults);
+            Task.FromResult(new SearchResults(StubResults, SearchTimings.Empty));
 
         public override Task<bool> DeleteAsync(string projectId, string hash,
             CancellationToken cancellationToken = default)

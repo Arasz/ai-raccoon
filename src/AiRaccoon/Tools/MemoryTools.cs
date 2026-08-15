@@ -144,7 +144,7 @@ public sealed partial class MemoryTools(
             throw new McpException($"invalid-params: {guard.Verdict.Guidance}");
         }
 
-        var results = await store.SearchAsync(searchQuery, cancellationToken);
+        var results = (await store.SearchAsync(searchQuery, cancellationToken)).Results;
 
         var correlationId = Guid.CreateVersion7().ToString("N");
         try

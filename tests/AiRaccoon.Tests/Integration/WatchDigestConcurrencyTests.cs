@@ -140,9 +140,9 @@ public sealed class WatchDigestConcurrencyTests
             process.Executor.DigestAsync(Project, WatchDir, FilePath, WatchEventKind.Changed, null,
                 cancellationToken);
 
-        public Task<IReadOnlyList<MemorySearchResult>> SearchAsync(Process process, string query,
+        public async Task<IReadOnlyList<MemorySearchResult>> SearchAsync(Process process, string query,
             CancellationToken cancellationToken) =>
-            process.Memory.SearchAsync(new SearchQuery(Project, query), cancellationToken);
+            (await process.Memory.SearchAsync(new SearchQuery(Project, query), cancellationToken)).Results;
 
         /// <summary>
         ///     What a search would retrieve for the file, read-only. The full SearchAsync also bumps
