@@ -144,7 +144,18 @@ Feature: Performance metrics for AiRaccoon's own development
     # rather than per measurement, which is what makes the expensive ones affordable.
 
     Scenario: A measurement carries no dimensions of its own
+      # Observable through the consequence rather than by inspecting a row: if the shape is sampled
+      # once per flush, every measurement in that flush necessarily reports the same shape.
+      Given several measurements recorded in one flush window
+      When I call memory_performance
+      Then they all carry the same bank shape
     Scenario: Bank shape is sampled once per flush, not once per measurement
+      # A COST claim, so it counts reads. The expensive dimension is the embedded fraction at
+      # 1.286 ms measured on 2,518 rows; sampling it per measurement instead of per flush is exactly
+      # the defect this rule exists to prevent, and only a count can see it.
+      Given 600 measurements arriving before one flush
+      When the flush runs
+      Then the bank shape was read once
 
   # ---- Stage 03, round 2. Owner-stated. ----
 
@@ -244,7 +255,13 @@ Feature: Performance metrics for AiRaccoon's own development
     # crossing it is an access decision, the same shape the other cross-project surfaces already use.
 
     Scenario: A report defaults to the calling project
+      Given measurements from two projects
+      When I call memory_performance without naming a scope
+      Then the report covers only the calling project
     Scenario: A whole-bank report requires the elevated access mode
+      Given measurements from two projects
+      When I call memory_performance for the whole bank without the elevated access mode
+      Then the tool errors with access-denied
 
   Rule: A checkpoint keeps the full statistics, not just an average, and records the version
     # Owner: "lets calculate all useful statistics, and we should probably correlate them with
@@ -255,6 +272,13 @@ Feature: Performance metrics for AiRaccoon's own development
     # proposed 'A checkpoint is discarded while it is the only record of its commit' is DROPPED, not
     # deferred. Discarding is by age alone; no commit or version protects a row from the cap.
     Scenario: A checkpoint answers for p99, not only the mean
+      # The expectation is computed OUTSIDE the code under test, deliberately. "p99 is between min
+      # and max" is true of every implementation including a broken one -- a percentile function is
+      # the classic place a gate passes on any input, and this campaign has shipped two vacuous gates
+      # already.
+      Given a window whose measurements have a known p99
+      When a checkpoint is written for it
+      Then the checkpoint's p99 equals that value
 
   # ---- Stage 03, round 3. ----
 
@@ -299,7 +323,12 @@ Feature: Performance metrics for AiRaccoon's own development
     # cut at, not an arbitrary one from the middle of the window.
 
     Scenario: A checkpoint records the commit, its version, and the commit timestamp
+      When a checkpoint is written
+      Then it carries the commit, its version, and the commit timestamp
     Scenario: A new version starts a checkpoint before the fortnight is up
+      Given the last checkpoint was written three days ago
+      When a new version is released
+      Then a checkpoint is written
 
   Rule: The report window and bucket are the caller's choice, defaulting to the last 3 hours in 1-minute buckets
     # Owner: "let the client specify with a default for last 3h of data with 1 minute bucket."
@@ -311,7 +340,13 @@ Feature: Performance metrics for AiRaccoon's own development
     # wider than the data it covers.
 
     Scenario: A caller asking for nothing gets three hours in one-minute buckets
+      When I call memory_performance with no window and no bucket
+      Then the report covers the last three hours
+      And it has 180 buckets
     Scenario: A bucket wider than the window is clamped to one averaged point
+      When I call memory_performance for a window of one hour in two-hour buckets
+      Then the report has one bucket
+      And it averages the whole hour
 
   Rule: The background reader flushes on channel pressure, rate-limited to one flush per 4 seconds
     # Owner: "calculating the pressure in the channel with a time limit - we will aim at 60% of the
@@ -360,3 +395,23 @@ Feature: Performance metrics for AiRaccoon's own development
       Given a channel that is full
       When a flush runs
       Then the report carries the flush duration
+
+  # ---- Stage 06 queue: what goes to the decision gate. Nothing is emitted while a card is open. ----
+  #
+  # CARD 1 (open, asked twice, not ruled). For a tool that has never been called, does the report
+  #   OMIT its series or carry it with a ZERO COUNT? Recorded as "omit" in the scenario above
+  #   because a draft needs a value, NOT because it was agreed. They are different products for a
+  #   consumer plotting a series: present-with-zero distinguishes "never called" from "not a tool",
+  #   absent does not. Fallback if unruled: omit, being the cheaper and more honest of the two.
+  #
+  # CARD 2 (proposed in stage 05 batch 5, not ruled). The two deliberate choices in that batch --
+  #   the p99 expectation computed outside the code under test, and the bank-shape sample asserted
+  #   by counting reads -- were flagged and drew no objection. Silence is not agreement; both are
+  #   cheap to reverse and are recorded as proposed-not-ruled.
+  #
+  # CARD 3 (carried from stage 05 batch 3). "No setting turns measurement off" is behavioural and
+  #   weak by construction: it proves one setting combination does not disable measurement, not that
+  #   none can. The strong form is structural and belongs beside the coverage gate in spec.json.
+  #
+  # GATE, for spec.json rather than for this file: a tool-call integration test asserting every tool
+  #   on the DERIVED inventory produces at least one measurement, watched red by silencing one tool.
