@@ -37,6 +37,7 @@ public sealed class ToolTelemetryMeasurementCoverageTests
             toolNames.ShouldNotBeEmpty();
 
             var buffer = host.Services.GetRequiredService<IMeasurementBuffer>();
+            var recorded = new HashSet<string>(StringComparer.Ordinal);
 
             lease.ReleaseForBind();
             await host.StartAsync(TestContext.Current.CancellationToken);
@@ -61,14 +62,17 @@ public sealed class ToolTelemetryMeasurementCoverageTests
             }
             finally
             {
+                // Drained BEFORE StopAsync: the flusher's own 30s interval will not have ticked, but
+                // its StopAsync override flushes what is left, so a drain after shutdown finds an
+                // empty buffer. Draining here reads exactly what the tool-level hook enqueued.
+                foreach (var measurement in buffer.DrainAll())
+                {
+                    recorded.Add(measurement.Name);
+                }
+
                 await host.StopAsync(TestContext.Current.CancellationToken);
             }
 
-            // The flusher's own interval (default 30s) will not have ticked yet, so the buffer
-            // still holds everything the tool-level hook enqueued.
-            var recorded = buffer.DrainAll()
-                .Select(measurement => measurement.Name)
-                .ToHashSet(StringComparer.Ordinal);
             var missing = toolNames.Where(name => !recorded.Contains(name)).ToList();
 
             missing.ShouldBeEmpty(
