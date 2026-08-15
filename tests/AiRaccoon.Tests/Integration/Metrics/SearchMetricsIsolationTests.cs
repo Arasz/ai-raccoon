@@ -82,6 +82,30 @@ public sealed class SearchMetricsIsolationTests : IDisposable
     }
 
     /// <summary>
+    ///     Spec scenario 20: "a search returns before its measurement is written" — the row-count
+    ///     assertion above proves nothing moved, but the scenario also claims the search itself still
+    ///     returns its results, and that the report does not yet include it. Both are asserted here,
+    ///     not just the count.
+    /// </summary>
+    [Fact]
+    public async Task Search_ReturnsItsResultsAndIsExcludedFromTheReport_BeforeTheBackgroundReaderRuns()
+    {
+        await _tools.Write("acme", "the chassis pattern decision", cancellationToken: TestContext.Current.CancellationToken);
+
+        var envelope = await _tools.Search("acme", "chassis", cancellationToken: TestContext.Current.CancellationToken);
+
+        envelope.Data.ShouldNotBeNull();
+        envelope.Data.Results.ShouldNotBeEmpty("the search must return its own results even though nothing has been flushed yet");
+
+        var reportService = new MetricsReportService(_factory, new FakeTimeProvider(FixedNow));
+        var report = await reportService.GetReportAsync("acme", [], TimeSpan.FromHours(1), TimeSpan.FromMinutes(1),
+            TestContext.Current.CancellationToken);
+
+        report.Series.Single(s => s.Tool == "search.fts").Count.ShouldBe(0,
+            "the background reader has not run yet, so this search must not appear in the report");
+    }
+
+    /// <summary>
     ///     AC1: a memory_search results in six phase measurements — enqueued synchronously (G4
     ///     forbids only the *table* write, never enqueueing) and reaching the `metrics` table once
     ///     flushed, each carrying the query hash and this call's own correlation id, and no query
@@ -111,6 +135,77 @@ public sealed class SearchMetricsIsolationTests : IDisposable
     }
 
     private sealed record PhaseRow(string Name, string? QueryHash, string? CorrelationId, string? Tags);
+
+    /// <summary>
+    ///     Spec scenario 23: "two runs of the same query share a hash" — nothing today runs the same
+    ///     query twice and inspects the stored rows. Two separate calls (two separate correlation
+    ///     ids) must still land under one shared query_hash.
+    /// </summary>
+    [Fact]
+    public async Task Search_CalledTwiceWithTheSameQuery_BothRunsShareTheSameQueryHash()
+    {
+        await _tools.Write("acme", "the chassis pattern decision", cancellationToken: TestContext.Current.CancellationToken);
+
+        var first = await _tools.Search("acme", "chassis", cancellationToken: TestContext.Current.CancellationToken);
+        var second = await _tools.Search("acme", "chassis", cancellationToken: TestContext.Current.CancellationToken);
+        var firstCorrelationId = first.Meta.CorrelationId.ShouldNotBeNull();
+        var secondCorrelationId = second.Meta.CorrelationId.ShouldNotBeNull();
+        firstCorrelationId.ShouldNotBe(secondCorrelationId, "two genuinely separate runs, not one call counted twice");
+
+        var flusher = new MetricsFlusher(_buffer, _metricsStore, new InMemorySettings(), new FakeTimeProvider(FixedNow),
+            TestTelemetry.None, NullLogger<MetricsFlusher>.Instance);
+        await flusher.FlushOnceAsync(TestContext.Current.CancellationToken);
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var rows = (await connection.QueryAsync<PhaseRow>(
+            "SELECT name AS Name, query_hash AS QueryHash, correlation_id AS CorrelationId, tags AS Tags " +
+            "FROM metrics WHERE name = 'search.fts'")).ToList();
+
+        rows.Count.ShouldBe(2, "one search.fts row per run");
+        rows.Select(r => r.QueryHash).Distinct().ShouldHaveSingleItem("both runs of the same query must share one query hash");
+        rows.Select(r => r.CorrelationId).ShouldBe([firstCorrelationId, secondCorrelationId], ignoreOrder: true);
+    }
+
+    /// <summary>
+    ///     Spec scenario 17 / spec.json O2: "no setting turns measurement off" — deliberately weak,
+    ///     as ruled: this proves one combination (every derived metrics setting at its most
+    ///     restrictive functioning value) does not disable measurement, not that no setting can.
+    ///     Settings are derived from <see cref="MetricsConfigKeys" />'s own *Global constants so a
+    ///     new setting joins this scenario automatically instead of needing a hand-added line.
+    /// </summary>
+    [Fact]
+    public async Task Search_EveryMetricsSettingAtItsMostRestrictiveValue_StillRecordsAMeasurement()
+    {
+        var settingKeys = typeof(MetricsConfigKeys)
+            .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(f => f.IsLiteral && f.FieldType == typeof(string) && f.Name.EndsWith("Global", StringComparison.Ordinal))
+            .Select(f => (string)f.GetRawConstantValue()!)
+            .ToList();
+        settingKeys.ShouldNotBeEmpty("the derivation itself must find the settings — an empty list would make this scenario vacuous");
+
+        var restrictiveValues = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [MetricsConfigKeys.BufferCapacityGlobal] = "1", // smallest functioning buffer
+            [MetricsConfigKeys.FlushIntervalSecondsGlobal] = "999999", // effectively never flushes
+            [MetricsConfigKeys.RetentionDaysGlobal] = "1" // shortest hot-table retention
+        };
+        settingKeys.ShouldBe([.. restrictiveValues.Keys], ignoreOrder: true,
+            "every derived settings key must be pinned to a restrictive value here, or a new setting silently escapes this scenario");
+
+        var restrictiveCapacity = MetricsConfigKeys.ParseBufferCapacity(restrictiveValues[MetricsConfigKeys.BufferCapacityGlobal]);
+        var restrictiveBuffer = new MeasurementBuffer(restrictiveCapacity);
+        var recorder = new MetricsRecorder(restrictiveBuffer, NullLogger<MetricsRecorder>.Instance);
+        var toolsUnderRestrictiveSettings = BuildTools(recorder);
+
+        await toolsUnderRestrictiveSettings.Write("acme", "the chassis pattern decision",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        await toolsUnderRestrictiveSettings.Search("acme", "chassis", cancellationToken: TestContext.Current.CancellationToken);
+
+        restrictiveBuffer.EnqueuedCount.ShouldBeGreaterThan(0, "no combination of restrictive settings may disable measurement");
+        restrictiveBuffer.DroppedCount.ShouldBeGreaterThan(0,
+            "capacity 1 against six phase measurements must actually bite, or the setting was not really restrictive");
+    }
 
     /// <summary>
     ///     The save-time allowlist fails closed for exactly the row shape RecordPhaseMeasurements

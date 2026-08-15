@@ -389,8 +389,12 @@ public sealed class RecordingMeasurementRecorder : IMeasurementRecorder
 
     public Exception? ThrowOnRecord { get; set; }
 
+    /// <summary>Every call, whether it throws or not — scenario 19's "not retried" seam.</summary>
+    public int CallCount { get; private set; }
+
     public void Record(Measurement measurement)
     {
+        CallCount++;
         if (ThrowOnRecord is { } exception)
         {
             throw exception;

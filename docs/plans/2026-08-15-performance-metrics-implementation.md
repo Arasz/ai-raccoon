@@ -632,6 +632,52 @@ package.** No scenario disappears silently.
 > exercises the synchronous recorder path its Given/When describes), #25 (passes, but against the
 > denylist the review found — the tests exercise only the five known keys, so they cannot catch the
 > gap).
+>
+> **Correction, 2026-08-16, from closing the seven.** All seven were re-driven through TDD (write,
+> watch red against unmodified production code, revert any mutation used to prove the test
+> non-vacuous). Test files only — no production code changed. **6 of 7 now hold; 1 is a genuine,
+> unresolved conflict.**
+>
+> - **#1** — closed. `MetricsReportServiceTests.GetReportAsync_OldestMeasurementIs21DaysOld_WindowOf28Days_ReportCoversIt`
+>   seeds a row 21 days old and asks for a 28-day window (exactly `PerformanceReportBuilder.MaxWindow`,
+>   so not clamped). Watched red by seeding at 29 days instead (`Count` 1→0), then reverted.
+> - **#2 — BLOCKED, not resolved.** `GetReportAsync_BankHolding40DaysOfMeasurements_WindowOf40Days_ReportCoversAll40Days`
+>   is written and genuinely fails against current production: seeding rows at 40/20/1 days old and
+>   asking for a 40-day window returns `Count == 2`, not 3 — the 40-day-old row is discarded by
+>   `PerformanceReportBuilder.MaxWindow` (`= MetricsConfigKeys.DefaultRetentionDays`, 28 days), which
+>   clamps `effectiveWindow` and re-filters samples against the clamped start regardless of what SQL
+>   fetched (PerformanceReportBuilder.cs:23,45). The scenario (stage 04: "we can hold more than four
+>   weeks, this is best effort limit") and the review-fix clamp cannot both hold. The test is committed
+>   `[Fact(Skip = ...)]`, naming the conflict and this section, so the gap is visible rather than either
+>   breaking the suite or vanishing silently. **This is an owner decision** (relax the clamp, or amend
+>   the scenario) — not resolved by this pass, per instruction.
+> - **#17** — closed. `SearchMetricsIsolationTests.Search_EveryMetricsSettingAtItsMostRestrictiveValue_StillRecordsAMeasurement`
+>   derives the settings keys from `MetricsConfigKeys`'s own `*Global` constants via reflection (a new
+>   setting joins automatically), pins each to its most restrictive functioning value, and shows a
+>   search still enqueues a measurement (and that capacity=1 genuinely bites — `DroppedCount > 0`).
+>   Passed immediately: production has no kill-switch setting today, matching spec.json O2's
+>   deliberately weak framing. No production change needed.
+> - **#19** — closed. `MemoryToolsTests.Search_WhenTheRecorderThrows_TheFailedWriteIsNotAttemptedAgain`
+>   exercises the caller's own path (`RecordPhaseMeasurements`'s synchronous loop inside
+>   `MemoryTools.Search`), not the async flusher, and asserts a call count of 1. Passed immediately
+>   against production; verified non-vacuous by temporarily adding a one-line retry to
+>   `RecordPhaseMeasurements` (call count 1→2, red), then reverting (confirmed clean via `git diff`).
+> - **#20** — closed. `SearchMetricsIsolationTests.Search_ReturnsItsResultsAndIsExcludedFromTheReport_BeforeTheBackgroundReaderRuns`
+>   asserts all three: the search enqueues nothing durable (existing test), returns its own non-empty
+>   results, and the `search.fts` series reads back at `Count == 0` before any flush — cross-validated
+>   by the sibling `MetricsReportServiceTests.GetReportAsync_PhaseMeasurements_AppearAsSeriesAlongsideTools`,
+>   which proves the same series shows `Count > 0` once the identical data is actually flushed, so the
+>   zero here is not a filter that always returns zero.
+> - **#23** — closed. `SearchMetricsIsolationTests.Search_CalledTwiceWithTheSameQuery_BothRunsShareTheSameQueryHash`
+>   runs `memory_search` twice (two distinct correlation ids, asserted), flushes, and reads back two
+>   `search.fts` rows sharing one distinct `query_hash`.
+> - **#25** — **already covered, correction was wrong about this one.** `SqliteMetricsStoreTests` already
+>   has `SaveBatchAsync_TagsKeyNotOnTheAllowlist_IsRejected` (an arbitrary unlisted key, `"prompt"`) and
+>   `SaveBatchAsync_AllowedTagKeyWithAnUnrecognisedValue_IsRejected` (free text under the allowed
+>   `"phase"` key) — both passing (15/15 in the file). These landed in `ac1244fa` ("fix: close the two
+>   review blockers — a real query-identity allowlist...") on `wp/review-fixes`, after this correction
+>   block was written and before this task's base commit merged it in. The plan's correction predates
+>   the fix; no new test was needed.
 
 Reqnroll binding is deferred (**D5**), so phase-one scenarios are proven as **ordinary unit and
 integration tests**. The `.feature` stays **unlinked**, which is what keeps the `Category=bdd` job

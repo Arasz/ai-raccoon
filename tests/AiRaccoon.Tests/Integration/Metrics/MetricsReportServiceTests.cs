@@ -109,6 +109,53 @@ public sealed class MetricsReportServiceTests : IDisposable
     }
 
     /// <summary>
+    ///     Spec scenario 1: "a three-week-old bank still answers for its oldest measurement" — 21
+    ///     days is inside the 28-day retention default AND exactly at PerformanceReportBuilder's
+    ///     MaxWindow, so a 28-day window must cover it. Nothing before this seeded beyond one hour.
+    /// </summary>
+    [Fact]
+    public async Task GetReportAsync_OldestMeasurementIs21DaysOld_WindowOf28Days_ReportCoversIt()
+    {
+        await SeedAsync("memory_search", 42, FixedNow - TimeSpan.FromDays(21), "acme");
+
+        var report = await _service.GetReportAsync("acme", ["memory_search"],
+            TimeSpan.FromDays(28), TimeSpan.FromDays(28), TestContext.Current.CancellationToken);
+
+        report.Series.Single(s => s.Tool == "memory_search").Count.ShouldBe(1, "a 21-day-old row is inside a 28-day window");
+    }
+
+    /// <summary>
+    ///     Spec scenario 2: "a bank holding more than four weeks is within contract, not over it" —
+    ///     the .feature is explicit that four weeks is a BEST-EFFORT limit, not a guarantee (stage 04
+    ///     amendment). This conflicts with a landed review fix: <see cref="PerformanceReportBuilder.MaxWindow" />
+    ///     hard-clamps every report to <see cref="MetricsConfigKeys.DefaultRetentionDays" /> (28 days)
+    ///     — see PerformanceReportBuilder.cs:23 and Build's `effectiveWindow = window > MaxWindow ?
+    ///     MaxWindow : window` at :45, which re-filters samples against the clamped start regardless
+    ///     of what SQL fetched. A bank holding 40 days can never have its 40th day answered for; the
+    ///     clamp and the scenario cannot both hold. GENUINE CONFLICT — not resolved here (test-engineer
+    ///     owns test files only, not production code, and this needs an owner ruling: relax the clamp,
+    ///     or amend the scenario). Skipped rather than left red, so the gap is visible and named
+    ///     instead of either breaking the suite or silently vanishing.
+    ///     RED evidence (captured before this was skipped, MaxWindow unchanged): seeding rows at 40,
+    ///     20 and 1 days old and asking for a 40-day window returns Count == 2, not 3 — the 40-day-old
+    ///     row is discarded by the clamp.
+    /// </summary>
+    [Fact(Skip = "Genuine conflict with PerformanceReportBuilder.MaxWindow's 28-day clamp (review fix) — " +
+                  "owner must rule: relax the clamp or amend the scenario. See docs/plans/2026-08-15-performance-metrics-implementation.md §4.")]
+    public async Task GetReportAsync_BankHolding40DaysOfMeasurements_WindowOf40Days_ReportCoversAll40Days()
+    {
+        await SeedAsync("memory_search", 1, FixedNow - TimeSpan.FromDays(40), "acme");
+        await SeedAsync("memory_search", 2, FixedNow - TimeSpan.FromDays(20), "acme");
+        await SeedAsync("memory_search", 3, FixedNow - TimeSpan.FromDays(1), "acme");
+
+        var report = await _service.GetReportAsync("acme", ["memory_search"],
+            TimeSpan.FromDays(40), TimeSpan.FromDays(40), TestContext.Current.CancellationToken);
+
+        report.Series.Single(s => s.Tool == "memory_search").Count.ShouldBe(3,
+            "a bank holding more than four weeks is within contract, not over it — the four-week limit is best effort");
+    }
+
+    /// <summary>
     ///     Finding 5: self-metrics (flush duration/batch size, drop count) are bank-wide, not
     ///     project-scoped, so they must not appear in an ordinary project's report — but they must
     ///     be readable from *somewhere*, or a drop count can never surface as a number.

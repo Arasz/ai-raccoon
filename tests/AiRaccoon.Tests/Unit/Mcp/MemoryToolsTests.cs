@@ -353,6 +353,26 @@ public class MemoryToolsTests
         recorder.Recorded.ShouldBeEmpty("the throwing recorder never got to append anything");
     }
 
+    /// <summary>
+    ///     Spec scenario 19: "a failed metric write is not retried into the caller's latency" —
+    ///     exercised on the caller's own path (RecordPhaseMeasurements' synchronous loop inside
+    ///     MemoryTools.Search), not the async flusher's batch write. The internal-state assertion is
+    ///     a call count, not just "no exception was thrown": one attempt total, never a retry loop.
+    /// </summary>
+    [Fact]
+    public async Task Search_WhenTheRecorderThrows_TheFailedWriteIsNotAttemptedAgain()
+    {
+        var recorder = new RecordingMeasurementRecorder { ThrowOnRecord = new InvalidOperationException("boom") };
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+            new NoOpSearchQualityService(), new QueryGuardService(_store),
+            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
+
+        await tools.Search("acme", "widgets", cancellationToken: TestContext.Current.CancellationToken);
+
+        recorder.CallCount.ShouldBe(1,
+            "the first phase measurement's write fails and RecordPhaseMeasurements' loop stops there — nothing retries it");
+    }
+
     [Fact]
     public async Task Search_WithFusionParameters_DelegatesThemOnTheQuery()
     {
