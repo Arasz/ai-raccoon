@@ -127,7 +127,10 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings) : IEntryEmbedder
         }
 
         var generator = embeddings.CreateGenerator(settings);
-        var embedding = await generator.GenerateAsync([query], cancellationToken: cancellationToken)
+        // Trim here, deliberately and reported, rather than letting the generator do it silently: it
+        // cannot tell a query from stored content, so it logged both as a truncated "chunk" (ADR-0071).
+        var embedded = embeddings.TrimQueryToWindow(settings, query);
+        var embedding = await generator.GenerateAsync([embedded], cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         return EmbeddingBlob.ToBytes(embedding[0].Vector);
     }

@@ -9,7 +9,7 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **119** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **120** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
@@ -42,7 +42,8 @@ One block per source file that owns a `Log` class or equivalent:
 | 330 | `src/AiRaccoon/Setup/Dependencies.cs` |
 | 400 | `src/AiRaccoon.Infrastructure/Watch/WatchDigestExecutor.cs` |
 | 410-413 | `src/AiRaccoon.Infrastructure/Embedding/BundledModel.cs` |
-| 414-415 | `src/AiRaccoon.Infrastructure/Embedding/OnnxEmbeddingGenerator.cs` (docs/adr/0036: embed-time truncation and possible-[UNK]-collapse detectors) |
+| 414-415 | `src/AiRaccoon.Infrastructure/Embedding/OnnxEmbeddingGenerator.cs` (docs/adr/0036: embed-time truncation and possible-[UNK]-collapse detectors — 414 is STORED CONTENT only since ADR-0071) |
+| 416 | `src/AiRaccoon.Infrastructure/Embedding/EmbeddingService.cs` (added 2026-08-15: a search query trimmed to the model window, ADR-0071 — split out of 414 so each is countable) |
 | 500-506, 508 | `src/AiRaccoon.Infrastructure/Extraction/ExtractionHostedService.cs` (507/509 removed 2026-08-11: per-element candidate/failure logs de-noised) |
 | 525-526 | `src/AiRaccoon.Infrastructure/Maintenance/MaintenanceJobRunner.cs` (added 2026-08-15: one line per maintenance job that ran or failed, ADR-0070 — 530+ was taken by SweepHostedService and the uniqueness gate caught it) |
 | 510-524 | `src/AiRaccoon.Infrastructure/Maintenance/BankMaintenanceHostedService.cs` (517-519 added 2026-08-14: the pending-embed retry sweep, .NET-F1 — a watch-driven embedding failure used to leave a row permanently pending; 520-521 added 2026-08-14: the noise-entry retention purge, ADR-0039; 522-524 added 2026-08-15: the promotion-discard and search-quality retention purges, ADR-0055) |

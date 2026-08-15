@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Chunking;
 using System.ClientModel;
 using System.Collections.Concurrent;
 using Microsoft.Extensions.AI;
@@ -12,7 +13,7 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     docs/work/features-native-memory/native-memory.feature): local → the bundled int8 ONNX model
 ///     in-process, openai → any OpenAI-compatible endpoint. A fingerprint change triggers a full re-embed.
 /// </summary>
-public sealed class EmbeddingService(ILogger<EmbeddingService> logger) : IEmbeddingService
+public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger) : IEmbeddingService
 {
     public const string DefaultOpenAiEndpoint = "https://api.openai.com/v1";
 
@@ -69,6 +70,29 @@ public sealed class EmbeddingService(ILogger<EmbeddingService> logger) : IEmbedd
     ///     real content tokens. Other providers' context window (<see cref="ContextTokensFor" />) is
     ///     the budget directly.
     /// </summary>
+    /// <inheritdoc />
+    public string TrimQueryToWindow(EmbeddingSettings settings, string query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        if (!string.Equals(settings.Provider, "local", StringComparison.OrdinalIgnoreCase))
+        {
+            return query;
+        }
+
+        var tokenizer = OnnxEmbeddingGenerator.CreateTokenizer(BundledModel.ResolveVocabPath());
+        var tokens = tokenizer.CountTokens(query);
+        if (tokens <= OnnxEmbeddingGenerator.MaxContentTokens)
+        {
+            return query;
+        }
+
+        var trimmed = TokenBudget.Trim(query, OnnxEmbeddingGenerator.MaxContentTokens,
+            text => tokenizer.CountTokens(text));
+        Log.QueryTrimmedToWindow(_logger, tokens, OnnxEmbeddingGenerator.MaxContentTokens, trimmed.Length, query.Length);
+        return trimmed;
+    }
+
     public static int SafeChunkBudgetFor(string provider, string? model) =>
         provider.ToLowerInvariant() switch
         {
@@ -123,4 +147,16 @@ public sealed class EmbeddingService(ILogger<EmbeddingService> logger) : IEmbedd
             new OpenAIClientOptions { Endpoint = new Uri(baseUrl) });
         return client.AsIEmbeddingGenerator();
     }
+
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 416, Level = LogLevel.Warning,
+            Message = "Search query was shortened to fit the embedding model: {Tokens} tokens exceeded the "
+                      + "{MaxTokens}-token window, so only the first {TrimmedChars} of {OriginalChars} characters "
+                      + "were used to find matches. Results may miss what the rest of the query asked for — "
+                      + "use a shorter, more specific query.")]
+        public static partial void QueryTrimmedToWindow(ILogger logger, int tokens, int maxTokens,
+            int trimmedChars, int originalChars);
+    }
+
 }
