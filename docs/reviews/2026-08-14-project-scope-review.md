@@ -377,6 +377,31 @@ These are findings too, and several of them saved work.
 
 ---
 
+## What WP11 measured — the size of the circular benchmark
+
+H2 and H3 said the retrieval numbers were in-sample and the headline gate could not fail. Both were
+right; **the plan's prescribed fix was not available.** Leave-one-family-out needs a family the
+tuning set never saw, and `jsaa-memory.db` has exactly two generators — `docs/` (112 source files)
+and `.ai-badger/` (78), no arasz-home-page — with the 11 tuning queries spanning both. Partitioning
+at the **document** instead leaves three genuinely unseen queries (A8, A9, A10); `S1`/`S3`/`S4`/`S5`
+and `S6` look held out and are not, because `S2` and `A4` tuned on their documents.
+
+| | mean nDCG@5 |
+|---|---|
+| In-sample — the 11 queries ADR-0005 and ADR-0006 both tuned and gated on | **0.673** |
+| Held out — three documents no sweep saw | **0.285** |
+
+Same store, same corpus, same pinned query vectors, same defaults, one code path.
+**Out-of-sample retrieval is 42% of every published figure.** ADR-0056.
+
+One thing the perturbation exposed that the finding did not predict: reversing the ranked list
+**improves** A8, 0.131 → 0.491 — its relevant chunks sit below the top 5, so destroying the order
+helps. A per-query floor a reversal survives is not a gate, so the discrimination proof runs on the
+mean and the per-query floors are demoted to regression pins. A8 is now a ranking finding in its own
+right rather than a number in a table.
+
+---
+
 ## Owner questions
 
 Routed as a decision list; each needs one ruling. Marked ● where work is blocked until answered; ✅ where the owner has ruled.
