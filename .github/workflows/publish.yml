@@ -91,6 +91,15 @@ jobs:
       contents: read
       id-token: write # enable GitHub OIDC token issuance for this job
     steps:
+      # Checkout for global.json ONLY: this job pushes prebuilt artifacts and needs no
+      # source, but setup-dotnet reads the SDK pin from a file that must be on disk.
+      # Without it: "The specified global.json file 'global.json' does not exist".
+      # Cheaper than duplicating the version here, which would be a second place to
+      # keep in sync with the pin it is supposed to be derived from.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          sparse-checkout: global.json
+          sparse-checkout-cone-mode: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: artifacts
