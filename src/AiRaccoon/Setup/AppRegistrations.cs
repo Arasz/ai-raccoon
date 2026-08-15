@@ -6,6 +6,7 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Memory.Filtering.Policies;
+using AiRaccoon.Core.Metrics;
 using AiRaccoon.Core.Observability;
 using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Core.Watch;
@@ -16,6 +17,7 @@ using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Extraction;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Maintenance;
+using AiRaccoon.Infrastructure.Metrics;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Promotion;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -58,6 +60,7 @@ public static partial class AppRegistrations
             services.RegisterExtractionServices();
             services.RegisterLongLivedBackgroundServices(mcpTransport);
             services.RegisterBankMaintenanceBackgrounbdService();
+            services.RegisterMetricsServices();
         }
 
         private void RegisterWorkspaceService() => services.AddSingleton<IWorkspaceService, WorkspaceService>();
@@ -149,6 +152,20 @@ public static partial class AppRegistrations
                 new VacuumJob()
             ]);
             services.AddHostedService<BankMaintenanceHostedService>();
+        }
+
+        /// <summary>
+        ///     The capped buffer, its best-effort recorder, the SQLite writer and the fixed-interval
+        ///     flusher (docs/plans/2026-08-15-performance-metrics-implementation.md, WP3). The buffer
+        ///     starts at the documented default; MetricsFlusher applies the configured setting once at
+        ///     startup, so nothing here blocks on a bank read.
+        /// </summary>
+        private void RegisterMetricsServices()
+        {
+            services.AddSingleton<IMeasurementBuffer>(_ => new MeasurementBuffer(MetricsConfigKeys.DefaultBufferCapacity));
+            services.AddRequiredSingleton<IMetricsStore, SqliteMetricsStore>();
+            services.AddRequiredSingleton<IMeasurementRecorder, MetricsRecorder>();
+            services.AddHostedService<MetricsFlusher>();
         }
 
         private void RegisterFileIngestionServices()
