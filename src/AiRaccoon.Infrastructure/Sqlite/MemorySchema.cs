@@ -37,12 +37,13 @@ internal static class MemorySchema
     ///     matching ladder step in <see cref="MigrateToV1Async" />/<see cref="MigrateToV2Async" />/
     ///     <see cref="MigrateToV3Async" />/<see cref="MigrateToV4Async" />/<see cref="MigrateToV5Async" />/<see cref="MigrateToV6Async" />/
     ///     <see cref="MigrateToV7Async" />/<see cref="MigrateToV8Async" />/
-    ///     <see cref="MigrateToV9Async" /> (ADR-0011). Not every schema
+    ///     <see cref="MigrateToV9Async" />/
+    ///     <see cref="MigrateToV10Async" /> (ADR-0011). Not every schema
     ///     change needs a ladder step: a trigger body replacement that is safely re-runnable on every
     ///     open belongs in the unconditional <see cref="Ddl" /> instead (ADR-0023 amendment) — the
     ///     ladder is for changes that need guarded, one-time work.
     /// </summary>
-    internal const int CurrentVersion = 9;
+    internal const int CurrentVersion = 10;
 
     /// <summary>
     ///     The promotion_queue_entries_ad body (ADR-0023, amended by H4 and again by ADR-0046):
@@ -106,6 +107,16 @@ internal static class MemorySchema
                                           CREATE TABLE IF NOT EXISTS settings (
                                               key TEXT PRIMARY KEY,
                                               value TEXT NOT NULL
+                                          );
+
+                                          -- Maintenance job ledger (ADR-0070). The clock lives in the BANK, not in the
+                                          -- process: the previous per-process timer was seeded on first run, so a bank
+                                          -- only ever opened by short-lived processes never vacuumed at all. A job with
+                                          -- no interval runs once ever, which is what `last_run_at` existing records.
+                                          CREATE TABLE IF NOT EXISTS maintenance_jobs (
+                                              name        TEXT PRIMARY KEY,
+                                              last_run_at INTEGER NOT NULL,
+                                              run_count   INTEGER NOT NULL DEFAULT 0
                                           );
 
                                           CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
@@ -436,6 +447,11 @@ internal static class MemorySchema
             await MigrateToV9Async(connection, cancellationToken).ConfigureAwait(false);
         }
 
+        if (healthy && storedVersion < 10)
+        {
+            await MigrateToV10Async(connection, cancellationToken).ConfigureAwait(false);
+        }
+
         if (healthy)
         {
             await StampAsync(connection, CurrentVersion, cancellationToken).ConfigureAwait(false);
@@ -592,7 +608,36 @@ internal static class MemorySchema
                 .ConfigureAwait(false);
             throw;
         }
+
+        // The rebuild frees pages into the free list; the FILE does not shrink until VACUUM, and the
+        // maintenance service's vacuum clock is per-process and seeded on first run, so a bank only
+        // ever opened by short-lived processes never reaches it. Measured on a 183 MB bank: the
+        // migration freed 42.0 MB and the file did not move; VACUUM returned 53.2 MB in 0.6 s.
+        // Outside the transaction because VACUUM cannot run inside one, and best-effort because a
+        // deferred reclaim is not a reason to fail a migration that already succeeded.
+        try
+        {
+            await connection.ExecuteAsync(new CommandDefinition("VACUUM;", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch (SqliteException ex) when (ex.SqliteErrorCode is 5 or 6) // SQLITE_BUSY / SQLITE_LOCKED
+        {
+            // Another connection holds the bank. The pages stay on the free list and the next
+            // maintenance vacuum collects them; nothing is lost but the disk saving is deferred.
+        }
     }
+
+    /// <summary>Ladder step 10 (ADR-0070): the maintenance job ledger, so the cadence clock lives in the bank.</summary>
+    private static async Task MigrateToV10Async(SqliteConnection connection, CancellationToken cancellationToken) =>
+        await connection.ExecuteAsync(new CommandDefinition(
+                """
+                CREATE TABLE IF NOT EXISTS maintenance_jobs (
+                    name        TEXT PRIMARY KEY,
+                    last_run_at INTEGER NOT NULL,
+                    run_count   INTEGER NOT NULL DEFAULT 0
+                )
+                """, cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
 
     /// <summary>
     ///     The scope allowlist bounds every disk-reading surface, not just watching, so its keys

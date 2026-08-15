@@ -145,6 +145,42 @@ public sealed class Vec0PartitionKeyDemotionTests
         (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
     }
 
+    /// <summary>
+    ///     The rebuild frees pages into SQLite's free list; the FILE does not shrink until VACUUM.
+    ///     Measured on a copy of the live bank: v9 freed 42.0 MB and the file stayed at exactly
+    ///     183,099,392 bytes. Without this the whole package returns no disk to anyone — the saving
+    ///     is real and permanently unrealised, because the maintenance service's vacuum clock is
+    ///     per-process and seeded on first run, so a short-lived process never reaches it.
+    /// </summary>
+    [Fact]
+    public async Task EnsureAsync_OnAV8Bank_DrainsTheFreeListTheRebuildCreated()
+    {
+        // FILE-BACKED and large enough on purpose. An in-memory bank reports a free list of 0
+        // whatever the migration does, so the same assertion there passes against an implementation
+        // with no VACUUM at all — measured, and the reason this test does not use OpenAsync().
+        var root = TestData.CreateTempRoot("v9-vacuum");
+        try
+        {
+            var options = TestData.CreateInfrastructureOptions(root);
+            var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+            await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+            await SeedV8OnOpenBankAsync(connection, 60);
+
+            await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+            var freelist = await connection.ExecuteScalarAsync<long>(
+                new CommandDefinition("PRAGMA freelist_count", cancellationToken: TestContext.Current.CancellationToken));
+            freelist.ShouldBe(0,
+                "v9 must VACUUM after the rebuild, or the pages it frees stay on the free list and no "
+                + "user ever gets the disk back — the maintenance vacuum clock is per-process and a "
+                + "short-lived process never reaches it");
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(root);
+        }
+    }
+
     /// <summary>A bank on a non-384 model keeps its declared dimension through the v9 rebuild.</summary>
     [Fact]
     public async Task EnsureAsync_OnAV8Bank_WithANonDefaultDimension_PreservesItThroughTheRebuild()
@@ -165,6 +201,7 @@ public sealed class Vec0PartitionKeyDemotionTests
     private static async Task SeedV8BankAsync(SqliteConnection connection,
         params (string ProjectId, int Seed)[] rows) =>
         await SeedV8BankAsync(connection, Dimension, rows);
+
 
     private static async Task SeedV8BankAsync(SqliteConnection connection, int dimension,
         (string ProjectId, int Seed)[] rows)
@@ -211,6 +248,39 @@ public sealed class Vec0PartitionKeyDemotionTests
 
     private static bool Has(string sql, string fragment) =>
         sql.Contains(fragment, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Fills an already-open bank with enough embedded rows that dropping the vec0 tables frees pages.</summary>
+    private static async Task SeedV8OnOpenBankAsync(SqliteConnection connection, int count)
+    {
+        await connection.ExecuteAsync(new CommandDefinition(
+            $"""
+             DROP TABLE IF EXISTS vec_entries;
+             DROP TABLE IF EXISTS vec_structure;
+             CREATE VIRTUAL TABLE vec_entries USING vec0(ctx TEXT partition key, embedding float[{Dimension}] distance_metric=cosine);
+             CREATE VIRTUAL TABLE vec_structure USING vec0(ctx TEXT partition key, embedding float[{Dimension}] distance_metric=cosine);
+             """, cancellationToken: TestContext.Current.CancellationToken));
+
+        for (var i = 0; i < count; i++)
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                """
+                INSERT INTO entries (hash, path, value, source_file, scope, project_id, context_label,
+                                     created_at, updated_at, embed_state, embedding)
+                VALUES (@hash, @path, 'seeded', @path, 'custom', 'acme', @ctx, 1, 1, 'pending', @vec);
+                UPDATE entries SET embed_state = 'embedded' WHERE hash = @hash;
+                UPDATE entries SET structure_embedding = @vec WHERE hash = @hash;
+                """,
+                // Many small partitions is the defect itself: vec0 chunks are fixed-capacity, so each
+                // distinct ctx allocates a whole chunk however few rows it holds. One ctx -- which the
+                // first draft of this fixture used -- wastes nothing, and the assertion below then
+                // passes against an implementation with no VACUUM at all.
+                new { hash = $"h{i}", path = $"doc-{i}.md", ctx = $"ctx-{i % 20}", vec = EmbeddingBlob.ToBytes(Vector(i)) },
+                cancellationToken: TestContext.Current.CancellationToken));
+        }
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            "PRAGMA user_version = 8", cancellationToken: TestContext.Current.CancellationToken));
+    }
 
     /// <summary>Vectors that are separated along one axis, so nearness is a function of the seed.</summary>
     private static float[] Vector(int seed, int dimension = Dimension)

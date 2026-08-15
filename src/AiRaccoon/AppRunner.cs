@@ -12,6 +12,7 @@ using AiRaccoon.Setup.Logging;
 using AiRaccoon.Setup.Models;
 using Microsoft.Data.Sqlite;
 using SQLitePCL;
+using AiRaccoon.Observability;
 
 namespace AiRaccoon;
 
@@ -82,6 +83,10 @@ public sealed partial class AppRunner
         {
             return ExitCode.FailedToOpenEncryptedBank;
         }
+
+        await new BankEngineReporter(factory,
+                app.Services.GetRequiredService<ILoggerFactory>().CreateLogger<BankEngineReporter>())
+            .ReportAsync(Token);
 
         await embeddingAvailability.EnsureEmbeddingAvailabilityAsync(Token);
 

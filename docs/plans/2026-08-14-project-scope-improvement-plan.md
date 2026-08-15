@@ -161,7 +161,23 @@ worth trading one silent behaviour for another to save a wave.
 **Recommendation:** sequence WP2 immediately after WP8's write-seam extraction, and treat the cycle as
 the argument for that extraction rather than an obstacle to this package.
 
-### WP3 · Make every write path budget its chunks, then restart and backfill — 🔶 **STEPS 1-2 LANDED (ADR-0064) · 3-5 FOR THE OWNER** — **BLOCKERS B2 + B3, H5, H24**
+### WP3 · Make every write path budget its chunks, then restart and backfill — 🔶 **1-2, 4-5 LANDED · 3 ABANDONED** — **BLOCKERS B2 + B3, H5, H24**
+
+> **Steps 4 and 5 landed, step 3 did not, and the reason step 3 did not is worth more than the step.**
+>
+> **Step 4** is `ChunkBackfill` (ADR-0069), now a once-ever maintenance job (ADR-0070) so every
+> user's bank heals rather than only the one where a tool was run by hand. Measured on a copy of the
+> live bank: **6,240 over-window rows → 0**, 377,431 unembedded tokens → 0, text preserved.
+>
+> **Step 5** is `BankEngineReporter`: one startup line naming the running binary against the bank's
+> embedding engine, so the drift that opened this package is visible without `ps`.
+>
+> **Step 3 — restarting the stale processes — was attempted and abandoned.** Only two of eight were
+> actually stale (started 2026-08-14 22:12, before the 1.15.0 binary landed at 16:19 the next day).
+> The blast-radius guard refused the kill, **correctly**: PID 54149 was a live agent lane and the
+> parent of one of them. The reasoning that it was "probably abandoned after 20 hours" was an
+> inference; the guard had better information. This is the concrete reason the step was owner-held —
+> its blast radius reaches other people's sessions, which no care from inside one session can bound.
 
 > **Step 2 shipped as ADR-0063.** An unset `embedding.provider` now resolves to the bundled engine
 > instead of the o200k default, so ingest-then-configure stops writing permanently-truncated
