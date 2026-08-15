@@ -24,4 +24,16 @@ public static class MetricsConfigKeys
 
     public static int ParseRetentionDays(string? value) =>
         int.TryParse(value, out var days) && days > 0 ? days : DefaultRetentionDays;
+
+    /// <summary>
+    ///     The sentinel project id self-metrics (flush duration/batch size, drop count) are tagged
+    ///     with — they are bank-wide, not scoped to any one project, so no real project id fits.
+    ///     Not a real project: reachable only by asking for a report on this id specifically, never
+    ///     leaking into an ordinary project's report (review-fixes finding 5).
+    /// </summary>
+    public const string SelfMetricsProjectId = "__self_metrics__";
+
+    /// <summary>The measurement names MetricsFlusher writes directly to the store on every flush pass.</summary>
+    public static readonly IReadOnlyList<string> SelfMetricNames =
+        ["metrics.flush.duration_ms", "metrics.flush.batch_size", "metrics.dropped"];
 }

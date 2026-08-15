@@ -82,6 +82,21 @@ public sealed class MetricsReportServiceTests : IDisposable
         series.Max.ShouldBe(20.0, "other-project's 999 must never leak in");
     }
 
+    /// <summary>
+    ///     Finding 9: seriesNames is toolNames + the six phase names, and PhaseNames is never empty,
+    ///     so seriesNames can never be empty either — an empty toolNames list still goes through the
+    ///     normal query path and still returns the six phase series, at count 0 on a quiet bank.
+    /// </summary>
+    [Fact]
+    public async Task GetReportAsync_NoToolNamesGiven_StillReturnsThePhaseSeries()
+    {
+        var report = await _service.GetReportAsync("acme", [], TimeSpan.FromHours(1), TimeSpan.FromMinutes(1),
+            TestContext.Current.CancellationToken);
+
+        report.Series.Select(s => s.Tool).ShouldBe(SearchTimings.PhaseNames, ignoreOrder: true);
+        report.Series.ShouldAllBe(s => s.Count == 0);
+    }
+
     [Fact]
     public async Task GetReportAsync_SampleOutsideTheWindow_IsExcluded()
     {
@@ -91,6 +106,37 @@ public sealed class MetricsReportServiceTests : IDisposable
             TimeSpan.FromHours(1), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
 
         report.Series.Single(s => s.Tool == "memory_search").Count.ShouldBe(0);
+    }
+
+    /// <summary>
+    ///     Finding 5: self-metrics (flush duration/batch size, drop count) are bank-wide, not
+    ///     project-scoped, so they must not appear in an ordinary project's report — but they must
+    ///     be readable from *somewhere*, or a drop count can never surface as a number.
+    /// </summary>
+    [Fact]
+    public async Task GetReportAsync_OrdinaryProject_NeverSeesSelfMetrics()
+    {
+        await SeedAsync("metrics.dropped", 7, FixedNow - TimeSpan.FromMinutes(1), MetricsConfigKeys.SelfMetricsProjectId);
+
+        var report = await _service.GetReportAsync("acme", ["memory_search"],
+            TimeSpan.FromHours(1), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
+
+        report.Series.ShouldNotContain(s => s.Tool == "metrics.dropped",
+            "self-metrics are bank-wide, not this project's — an ordinary report must not be polluted by them");
+    }
+
+    /// <summary>The self-metrics sentinel project id is the one surface that can show the drop count.</summary>
+    [Fact]
+    public async Task GetReportAsync_TheSelfMetricsProjectId_SurfacesTheDropCount()
+    {
+        await SeedAsync("metrics.dropped", 7, FixedNow - TimeSpan.FromMinutes(1), MetricsConfigKeys.SelfMetricsProjectId);
+
+        var report = await _service.GetReportAsync(MetricsConfigKeys.SelfMetricsProjectId, [],
+            TimeSpan.FromHours(1), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
+
+        var dropped = report.Series.Single(s => s.Tool == "metrics.dropped");
+        dropped.Count.ShouldBe(1);
+        dropped.Max.ShouldBe(7.0);
     }
 
     /// <summary>

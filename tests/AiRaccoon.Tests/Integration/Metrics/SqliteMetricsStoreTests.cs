@@ -40,11 +40,14 @@ public sealed class SqliteMetricsStoreTests : IDisposable
         return await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM metrics");
     }
 
+    private static readonly string ValidQueryHash = new('a', 64);
+    private static readonly string ValidCorrelationId = new('b', 32);
+
     [Fact]
     public async Task SaveBatchAsync_ValidMeasurements_PersistsEveryColumn()
     {
         var measurement = new Measurement("search.fts", MeasurementKind.Histogram, 12.5, "ms", FixedNow,
-            ProjectId: "acme", QueryHash: "hash1", CorrelationId: "corr1", Tags: """{"phase":"fts"}""");
+            ProjectId: "acme", QueryHash: ValidQueryHash, CorrelationId: ValidCorrelationId, Tags: """{"phase":"fts"}""");
 
         await _store.SaveBatchAsync([measurement], TestContext.Current.CancellationToken);
 
@@ -57,8 +60,8 @@ public sealed class SqliteMetricsStoreTests : IDisposable
         ((double)row.value).ShouldBe(12.5);
         ((string)row.unit).ShouldBe("ms");
         ((string)row.project_id).ShouldBe("acme");
-        ((string)row.query_hash).ShouldBe("hash1");
-        ((string)row.correlation_id).ShouldBe("corr1");
+        ((string)row.query_hash).ShouldBe(ValidQueryHash);
+        ((string)row.correlation_id).ShouldBe(ValidCorrelationId);
         ((string)row.tags).ShouldBe("""{"phase":"fts"}""");
         ((long)row.recorded_at).ShouldBe(FixedNow.ToUnixTimeSeconds());
     }
@@ -123,11 +126,57 @@ public sealed class SqliteMetricsStoreTests : IDisposable
     public async Task SaveBatchAsync_QueryIdentityIsExactlyHashAndCorrelationId_Allowed()
     {
         var measurement = new Measurement("search.fts", MeasurementKind.Histogram, 1, "ms", FixedNow,
-            QueryHash: "hash1", CorrelationId: "corr1");
+            QueryHash: ValidQueryHash, CorrelationId: ValidCorrelationId);
 
         await _store.SaveBatchAsync([measurement], TestContext.Current.CancellationToken);
 
         (await CountRowsAsync()).ShouldBe(1, "hash + correlation id are the allowed query-identity fields");
+    }
+
+    /// <summary>Denylist-by-key would miss this: "prompt" was never on the old forbidden-key list.</summary>
+    [Fact]
+    public async Task SaveBatchAsync_TagsKeyNotOnTheAllowlist_IsRejected()
+    {
+        var measurement = new Measurement("search.fts", MeasurementKind.Histogram, 1, "ms", FixedNow,
+            Tags: """{"prompt":"how do I rotate the prod DB password"}""");
+
+        await _store.SaveBatchAsync([measurement], TestContext.Current.CancellationToken);
+
+        (await CountRowsAsync()).ShouldBe(0, "an unlisted Tags key must be rejected, not merely a hand-picked few");
+    }
+
+    /// <summary>A key-only check would miss this: the value under an allowed key can still carry raw query text.</summary>
+    [Fact]
+    public async Task SaveBatchAsync_AllowedTagKeyWithAnUnrecognisedValue_IsRejected()
+    {
+        var measurement = new Measurement("search.fts", MeasurementKind.Histogram, 1, "ms", FixedNow,
+            Tags: """{"phase":"how do I rotate the prod DB password"}""");
+
+        await _store.SaveBatchAsync([measurement], TestContext.Current.CancellationToken);
+
+        (await CountRowsAsync()).ShouldBe(0, "phase's value must be one of the known phase suffixes, not free text");
+    }
+
+    [Fact]
+    public async Task SaveBatchAsync_QueryHashNotShapedLikeAHash_IsRejected()
+    {
+        var measurement = new Measurement("search.fts", MeasurementKind.Histogram, 1, "ms", FixedNow,
+            QueryHash: "how do I rotate the prod DB password");
+
+        await _store.SaveBatchAsync([measurement], TestContext.Current.CancellationToken);
+
+        (await CountRowsAsync()).ShouldBe(0, "QueryHash must be a SHA-256 hex digest, not arbitrary text");
+    }
+
+    [Fact]
+    public async Task SaveBatchAsync_CorrelationIdNotShapedLikeAnId_IsRejected()
+    {
+        var measurement = new Measurement("search.fts", MeasurementKind.Histogram, 1, "ms", FixedNow,
+            CorrelationId: "how do I rotate the prod DB password");
+
+        await _store.SaveBatchAsync([measurement], TestContext.Current.CancellationToken);
+
+        (await CountRowsAsync()).ShouldBe(0, "CorrelationId must be a Guid-v7 N-format id, not arbitrary text");
     }
 
     [Fact]

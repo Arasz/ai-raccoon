@@ -30,6 +30,7 @@ public sealed class ToolExecutionActivity : IDisposable
     private readonly ToolCallMetrics _metrics;
     private readonly IMeasurementRecorder? _recorder;
     private readonly Stopwatch _stopwatch;
+    private readonly TimeProvider _timeProvider;
     private readonly string _toolName;
     private bool _recorded;
 
@@ -39,15 +40,17 @@ public sealed class ToolExecutionActivity : IDisposable
     ///     callers whose span id is unbounded (e.g. a joined composite) must pass a bounded value.
     ///     <paramref name="recorder" /> is best-effort (<see cref="IMeasurementRecorder" />'s own
     ///     contract): a null recorder — telemetry disabled, or a host that never registered one —
-    ///     simply records nothing.
+    ///     simply records nothing. <paramref name="timeProvider" /> stamps the recorded measurement's
+    ///     RecordedAt, defaulting to the system clock like every other timed component here.
     /// </summary>
     public ToolExecutionActivity(ToolCallMetrics metrics, string toolName, string projectId, string? metricProjectId = null,
-        IMeasurementRecorder? recorder = null)
+        IMeasurementRecorder? recorder = null, TimeProvider? timeProvider = null)
     {
         _metrics = metrics;
         _recorder = recorder;
         _toolName = toolName;
         _metricProjectId = metricProjectId ?? projectId;
+        _timeProvider = timeProvider ?? TimeProvider.System;
         _activity = metrics.ActivitySource.StartActivity($"{ToolsCallMethodName} {toolName}");
         _activity?.SetTag(ToolActivityTag, toolName);
         _activity?.SetTag(ProjectIdActivityTag, projectId);
@@ -103,5 +106,5 @@ public sealed class ToolExecutionActivity : IDisposable
     /// <summary>The tool-level measurement family (WP8) — no correlation id; that belongs to the search-phase family MemoryTools tags itself.</summary>
     private void RecordMeasurement(string projectId) =>
         _recorder?.Record(new Measurement(_toolName, MeasurementKind.Histogram, _stopwatch.Elapsed.TotalMilliseconds,
-            DurationUnit, DateTimeOffset.UtcNow, projectId));
+            DurationUnit, _timeProvider.GetUtcNow(), projectId));
 }

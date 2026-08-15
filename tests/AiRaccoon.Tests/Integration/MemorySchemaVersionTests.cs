@@ -795,7 +795,7 @@ public sealed class MemorySchemaVersionTests
     // ── WP0: metrics table + indexes (docs/plans/2026-08-15-performance-metrics-implementation.md) ──
 
     [Fact]
-    public async Task EnsureAsync_FreshBank_HasMetricsTableAndBothIndexes()
+    public async Task EnsureAsync_FreshBank_HasMetricsTableAndAllThreeIndexes()
     {
         await using var connection = await OpenAsync();
 
@@ -804,17 +804,19 @@ public sealed class MemorySchemaVersionTests
         (await TableExistsAsync(connection, "metrics")).ShouldBeTrue("a fresh bank must have the metrics table");
         (await IndexExistsAsync(connection, "idx_metrics_name_time")).ShouldBeTrue();
         (await IndexExistsAsync(connection, "idx_metrics_project_time")).ShouldBeTrue();
+        (await IndexExistsAsync(connection, "idx_metrics_recorded_at")).ShouldBeTrue(
+            "review-fixes finding 4: the retention reaper deletes on recorded_at alone");
     }
 
     /// <summary>
     ///     The criterion finding B exists for (docs/plans/2026-08-15-performance-metrics-implementation.md,
     ///     WP0): a bank already stamped at CurrentVersion — the state every existing developer bank is
-    ///     in before this build's first open — must still gain the table and both indexes on reopen,
+    ///     in before this build's first open — must still gain the table and every index on reopen,
     ///     because they live in the unconditional Ddl string, not the fresh-only branch. Dropping the
     ///     table also drops its indexes, so this simulates "predates the metrics feature entirely".
     /// </summary>
     [Fact]
-    public async Task EnsureAsync_OnALegacyBankStampedAtCurrentVersion_WithMetricsTableAbsent_CreatesTheTableAndBothIndexes()
+    public async Task EnsureAsync_OnALegacyBankStampedAtCurrentVersion_WithMetricsTableAbsent_CreatesTheTableAndAllThreeIndexes()
     {
         await using var connection = await OpenAsync();
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
@@ -827,8 +829,30 @@ public sealed class MemorySchemaVersionTests
             "the metrics table lives in the unconditional Ddl string, so it must reach a legacy bank on reopen");
         (await IndexExistsAsync(connection, "idx_metrics_name_time")).ShouldBeTrue();
         (await IndexExistsAsync(connection, "idx_metrics_project_time")).ShouldBeTrue();
+        (await IndexExistsAsync(connection, "idx_metrics_recorded_at")).ShouldBeTrue(
+            "review-fixes finding 4: a legacy bank must gain the recorded_at index too, on reopen, not only a fresh bank");
         (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion,
             "no ladder step is needed or expected for the metrics table");
+    }
+
+    /// <summary>
+    ///     The mirror case to the one above: a bank that already has the metrics table (and its two
+    ///     original indexes) from before this fix, but predates idx_metrics_recorded_at, must gain it
+    ///     on reopen too — `CREATE INDEX IF NOT EXISTS` in the unconditional Ddl string reaches an
+    ///     existing table exactly the way it reaches an existing bank missing the table entirely.
+    /// </summary>
+    [Fact]
+    public async Task EnsureAsync_OnABankWithTheMetricsTable_ButMissingTheRecordedAtIndex_AddsItOnReopen()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "DROP INDEX idx_metrics_recorded_at", cancellationToken: TestContext.Current.CancellationToken));
+        (await IndexExistsAsync(connection, "idx_metrics_recorded_at")).ShouldBeFalse("simulates a bank from before this fix");
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        (await IndexExistsAsync(connection, "idx_metrics_recorded_at")).ShouldBeTrue();
     }
 
     /// <summary>Builds a v1-shaped bank (stamped user_version = 1) with vec_entries at the given dimension and the given rows.</summary>

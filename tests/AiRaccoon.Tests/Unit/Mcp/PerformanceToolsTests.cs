@@ -73,10 +73,17 @@ public sealed class PerformanceToolsTests
         result.Data.ShouldBe(_reportService.ReportToReturn);
     }
 
-    /// <summary>AC1: an agent calling memory_performance gets JSON, not prose.</summary>
+    /// <summary>
+    ///     AC1: an agent calling memory_performance gets JSON, not prose. A report with an empty
+    ///     Series list would make this assertion pass vacuously (0 == 0) regardless of whether the
+    ///     tool actually serialised anything, so the fake here returns a non-empty series.
+    /// </summary>
     [Fact]
     public async Task Performance_ResponseParsesAsJson_AndCarriesASeriesPerTool()
     {
+        _reportService.ReportToReturn = new PerformanceReport(DateTimeOffset.UtcNow, TimeSpan.FromHours(3),
+            TimeSpan.FromMinutes(1), 180, [new ToolPerformanceSeries("memory_write", 0, null, null, null, null, null, [])]);
+
         var result = await _tools.Performance("acme", cancellationToken: TestContext.Current.CancellationToken);
 
         var json = JsonSerializer.Serialize(result);
@@ -86,6 +93,8 @@ public sealed class PerformanceToolsTests
         // names, not the SDK wire's camelCase (McpToolContractTests exercises that path instead).
         parsed.RootElement.GetProperty("Data").GetProperty("Series").GetArrayLength()
             .ShouldBe(_reportService.ReportToReturn.Series.Count);
+        parsed.RootElement.GetProperty("Data").GetProperty("Series")[0].GetProperty("Tool").GetString()
+            .ShouldBe("memory_write");
     }
 
     private sealed class FakeToolGate : IToolGate
@@ -113,7 +122,7 @@ public sealed class PerformanceToolsTests
         public TimeSpan? LastWindow { get; private set; }
         public TimeSpan? LastBucket { get; private set; }
 
-        public PerformanceReport ReportToReturn { get; } =
+        public PerformanceReport ReportToReturn { get; set; } =
             new(DateTimeOffset.UtcNow, TimeSpan.FromHours(3), TimeSpan.FromMinutes(1), 180, []);
 
         public Task<PerformanceReport> GetReportAsync(string projectId, IReadOnlyList<string> toolNames,

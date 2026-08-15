@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Memory;
 using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Core.Metrics;
@@ -11,6 +12,15 @@ public static class PerformanceReportBuilder
 {
     public static readonly TimeSpan DefaultWindow = TimeSpan.FromHours(3);
     public static readonly TimeSpan DefaultBucket = TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    ///     A window wider than this can never hold more real data than the metrics-retention
+    ///     default already discards, so a wider request is clamped, not honoured — an agent-supplied
+    ///     windowMinutes with no upper bound otherwise allocates ceil(window/bucket) buckets per
+    ///     series unbounded (e.g. ~18.9M bucket objects across ~36 series at a 1-year window and the
+    ///     1-minute default bucket). Kinder than a throw, matching the existing bucket-vs-window clamp.
+    /// </summary>
+    public static readonly TimeSpan MaxWindow = TimeSpan.FromDays(MetricsConfigKeys.DefaultRetentionDays);
 
     /// <summary>
     ///     Builds one series per <paramref name="toolNames" /> entry — the derived tool inventory, not
@@ -32,23 +42,28 @@ public static class PerformanceReportBuilder
         Guard.IsNotNull(toolNames);
         Guard.IsNotNull(samples);
 
-        var effectiveBucket = bucket > window ? window : bucket;
-        var start = now - window;
-        var bucketCount = Math.Max(1, (int)Math.Ceiling(window / effectiveBucket));
+        var effectiveWindow = window > MaxWindow ? MaxWindow : window;
+        var effectiveBucket = bucket > effectiveWindow ? effectiveWindow : bucket;
+        var start = now - effectiveWindow;
+        var bucketCount = Math.Max(1, (int)Math.Ceiling(effectiveWindow / effectiveBucket));
 
         IReadOnlyList<string> seriesNames = phaseNames is { Count: > 0 } ? [.. toolNames, .. phaseNames] : toolNames;
         var series = seriesNames
             .Select(name => BuildSeries(name, samples, start, now, effectiveBucket, bucketCount))
             .ToList();
 
-        return new PerformanceReport(now, window, effectiveBucket, bucketCount, series);
+        return new PerformanceReport(now, effectiveWindow, effectiveBucket, bucketCount, series);
     }
 
     private static ToolPerformanceSeries BuildSeries(
         string tool, IReadOnlyList<MetricSample> samples, DateTimeOffset start, DateTimeOffset now,
         TimeSpan bucket, int bucketCount)
     {
-        var toolSamples = samples.Where(s => s.Name == tool).ToList();
+        // The caller's SQL boundary floors `start` to a whole second (the metrics table only stores
+        // whole-second recorded_at), so a sub-second `now` can hand this a row from just before the
+        // true window start. Filtering here — not trusting the caller's boundary — keeps
+        // sum(buckets[].Count) equal to Count always, not merely when now lands on a whole second.
+        var toolSamples = samples.Where(s => s.Name == tool && s.RecordedAt >= start && s.RecordedAt <= now).ToList();
         var buckets = new List<PerformanceBucket>(bucketCount);
         for (var i = 0; i < bucketCount; i++)
         {

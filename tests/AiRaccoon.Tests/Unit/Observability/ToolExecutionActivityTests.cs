@@ -237,7 +237,31 @@ public class ToolExecutionActivityTests
         measurement.ProjectId.ShouldBe("acme");
     }
 
-    /// <summary>WP8 AC1: the measurement is a duration histogram in milliseconds — percentiles apply.</summary>
+    /// <summary>
+    ///     Finding 6: every other timed component records RecordedAt off an injected TimeProvider;
+    ///     this one used DateTimeOffset.UtcNow, so a host on a fake clock writes rows a
+    ///     TimeProvider-windowed report can never see them in.
+    /// </summary>
+    [Fact]
+    public void RecordInvocation_StampsRecordedAt_FromTheInjectedTimeProvider()
+    {
+        var fixedNow = new DateTimeOffset(2026, 8, 15, 0, 0, 0, TimeSpan.Zero);
+        var time = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(fixedNow);
+        var metrics = new ToolCallMetrics();
+        var recorder = new RecordingRecorder();
+
+        using var activity = new ToolExecutionActivity(metrics, "memory_write", "acme", recorder: recorder, timeProvider: time);
+        activity.RecordInvocation();
+
+        recorder.Recorded.ShouldHaveSingleItem().RecordedAt.ShouldBe(fixedNow);
+    }
+
+    /// <summary>
+    ///     WP8 AC1: the measurement is a duration histogram in milliseconds — percentiles apply.
+    ///     A Stopwatch elapsed value can never be negative, so ">= 0" would pass even if the
+    ///     constructor never started the clock at all; sleeping past a real, non-zero duration
+    ///     before recording is what actually demands the clock ran.
+    /// </summary>
     [Fact]
     public void RecordInvocation_RecordsAHistogramMeasurement_InMilliseconds()
     {
@@ -245,12 +269,13 @@ public class ToolExecutionActivityTests
         var recorder = new RecordingRecorder();
 
         using var activity = new ToolExecutionActivity(metrics, "memory_stats", "acme", recorder: recorder);
+        Thread.Sleep(5);
         activity.RecordInvocation();
 
         var measurement = recorder.Recorded.ShouldHaveSingleItem();
         measurement.Kind.ShouldBe(MeasurementKind.Histogram);
         measurement.Unit.ShouldBe("ms");
-        measurement.Value.ShouldBeGreaterThanOrEqualTo(0);
+        measurement.Value.ShouldBeGreaterThan(0);
     }
 
     /// <summary>WP8 AC3: a refused call still records, tagged with the bounded refused sentinel — never the caller's project id.</summary>
