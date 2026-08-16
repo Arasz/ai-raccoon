@@ -55,10 +55,12 @@ These three protect the person running the checklist, not the checklist:
    `.ai-raccoon/`, which is a bank directory, not a reports directory.
 
 2. **Derive the facts the checklist compares against, before running anything**, and write them
-   into `derived`. Run `scripts/derive-facts.sh` from the repo root; it prints the version, the
-   MCP tool count and the prompt count, and it exits non-zero when any of them come back empty or
-   zero rather than handing you a confident `0`. A count typed from memory or copied from a
-   previous run is a second copy of a number that already exists, and it goes stale silently.
+   into `derived`. Run `python3 scripts/derive-facts.py <repo-root>` (the root defaults to the
+   current directory); it prints the version, the MCP tool count and the prompt count, and it
+   fails loudly — exit 1, with the reason and a standing instruction on stderr — when any of them
+   comes back empty or zero, rather than handing you a confident `0`. A count typed from memory
+   or copied from a previous run is a second copy of a number that already exists, and it goes
+   stale silently.
 
    The checklist then asserts that the *running binary* matches what the *tree* says. That
    comparison is the point: it is the only step that can catch a build that installed something
@@ -183,9 +185,15 @@ delete is not dormant; it is the one in use.
 
 ## Gotchas
 
-- `grep -c` across several files prints one count per file; summing them wrongly, or pointing the
-  glob at a path that no longer exists, both yield a plausible number instead of an error. That is
-  why step 2 goes through the script — it fails loudly on an empty match.
+- **A count that cannot fail is not a count.** Every counting primitive here has a silent zero
+  in it: `rglob` over a directory that no longer exists yields nothing, `sum(())` is `0`, and
+  `grep -c` across several files prints one number per file so a bad sum still looks like a
+  number. None of them raise. `derive-facts.py` closes that by treating zero as a failure rather
+  than a result — it exits 1 and says which fact it could not derive — and by counting only lines
+  that are code. Do not "simplify" either rule away: a file that documents `[McpServerTool]` in a
+  `///` comment already inflated the surface by one for three releases, and the number looked
+  derived the whole time. Both properties have tests in the framework; change the script there,
+  never by editing your copy.
 - `--port 0` binds an ephemeral port, so the port must be read back from the server's own output.
   Assuming a port here is how a checklist step ends up talking to somebody else's server.
 - Force-updating a global tool can silently keep the previous build if the pack step failed
