@@ -183,7 +183,37 @@ server surfaced a genuine race with `BankMaintenanceHostedService`'s unrelated s
 which the fix absorbs with a warm-up before any test takes its baseline — not a weakened assertion.
 Full `Speed=Fast` (2504), `Speed=Slow` (727) and `Category=bdd` (138) all green on the merged chain.
 
-*Still pending: the after-measurement rerun (§8) — a wall-clock latency comparison against the
-`docs/work/perf/2026-08-16-wp5-before-baseline.md` numbers above, now that every settings operation
-pays the acquisition this ADR adds. That is WP5's own remaining scope, not landed by this chain. The
-status stays Proposed until it exists — an ADR whose evidence is a promise has not earned Accepted.*
+**After** (`docs/work/perf/2026-08-16-wp5-after-measurement.md`, same counting-decorator method,
+same 193 MB backup bank, measured at `c2fd31f0`):
+
+| | Before | After | Delta |
+|---|---|---|---|
+| bank opens / operation | 4.5 (4 write, 5 search) | **3.5** (3 write, 4 search) | -22% |
+| settings reads / operation | 2 write, 2 search | **1 write, 1 search** | -50% |
+| statement volume / operation, steady state | 168 write, 210 search | **12 write, 16 search** | **-92/-93%** |
+
+The per-open statement count is unchanged where it should be unchanged (39 Ddl / 42 total on a
+digest-stale first open) and exactly as claimed where the gate applies (0 Ddl / 4 total once the
+digest matches, re-confirmed against the already-committed `MemorySchemaDdlStatementCountTests`).
+Opens-per-operation moved a real but modest 22%, driven by WP3's settings-call batching; the
+92-93% reduction in per-operation statement *volume* is where WP1's digest gate actually pays off —
+opens got a little less frequent, and each one got an order of magnitude cheaper.
+
+**Wall-clock could not be measured cleanly this session.** Three independent passes disagreed with
+each other by 28-93% on write/search medians — a machine load average that climbed from 12.8 to
+16.0 over the session, with 45 concurrent `dotnet`/`ai-raccoon` processes running (other lanes'
+scratch servers, this worktree's own test runs, the owner's live install), swamped the signal. The
+least-contended sample in each pass (the minimum) still lines up with before's minimums
+(49-61 ms vs. before's 48-52 ms write; 34-44 ms vs. before's 34-35 ms search), which argues against
+a regression, but a minimum is one sample, not a distribution — this is not a wall-clock win claim,
+it is an honest "inconclusive, re-run on a quieter machine" finding.
+
+**A new cost this ADR adds, and it was worth quantifying separately: settings CLI auto-start.**
+~785 ms cold (no server running, `BackendLauncher` mints a token and binds one), ~245 ms warm
+(server already running, CLI process start + one proxied HTTP round trip) — a floor the before tree
+never paid at all, because settings commands opened the bank directly, in-process, before this ADR.
+
+*The after-measurement rerun (§8) now exists. The mechanism claim (bank-open/statement cost) is
+proven by exact, deterministic counts immune to machine contention; the wall-clock claim is not —
+that half of §8's criteria stays open pending a rerun under less contention. Status change is the
+owner's call to make on integration, not asserted here.*
