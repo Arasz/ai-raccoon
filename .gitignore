@@ -43,3 +43,12 @@ tests/AiRaccoon.Tests/Unit/Retrieval/Managed/
 
 # Stray tool artifact, committed once by accident in 11df8313 (0 bytes).
 identifier.sqlite
+
+# Profiler output. Rider's dotTrace/dotMemory default to writing here, and a single
+# sampling snapshot of `ai-raccoon serve` is ~15 MB — the extensions are listed as well
+# because the save dialog remembers wherever you last pointed it.
+tmp/
+*.dtp
+*.dmw
+*.nettrace
+*.gcdump
