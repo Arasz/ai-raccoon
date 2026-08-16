@@ -154,7 +154,7 @@ public static partial class AppRegistrations
                 new VacuumJob(),
                 new MetricsRetentionJob(sp.GetRequiredService<TimeProvider>()),
                 // ADR-0076: on-demand — HasWorkAsync reads the outbox itself, not a cadence.
-                new ModelMigrationJob(sp.GetRequiredService<IEntryEmbedder>(), sp.GetRequiredService<TimeProvider>())
+                new ModelMigrationJob(sp.GetRequiredService<IEntryEmbedder>())
             ]);
             services.AddHostedService<BankMaintenanceHostedService>();
         }

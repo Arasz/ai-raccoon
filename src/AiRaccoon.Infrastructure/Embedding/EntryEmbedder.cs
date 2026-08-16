@@ -12,8 +12,8 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     re-embed everything when the engine changes. Takes an open connection rather than opening
 ///     its own, since every caller is already inside one and embedding is never its own transaction.
 /// </summary>
-public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationLease? migrationLease = null)
-    : IEntryEmbedder
+public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationLease? migrationLease = null,
+    TimeProvider? timeProvider = null) : IEntryEmbedder
 {
     private const int BatchSize = 32;
     private const string BundledModel = "bundled";
@@ -22,6 +22,11 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
     // directly, none of which touch StartMigrationAsync/DrainMigrationAsync) keeps compiling; a
     // caller that does reach either method without one gets a clear failure, not a silent no-op.
     private readonly IModelMigrationLease? _migrationLease = migrationLease;
+
+    // DrainMigrationAsync stamps finished_at from this, taken after the drain loop completes — never
+    // from a value a caller captured before calling in, which is what understated recorded migration
+    // duration by ~60x on a 25,917-entry bank (357s real drain, 6s recorded; ADR-0076).
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     /// <summary>Writes the engine settings and, when the engine fingerprint changed, re-embeds the whole bank.</summary>
     public async Task<EmbeddingConfig> ConfigureAsync(SqliteConnection connection, string provider, string? model,
@@ -125,8 +130,7 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
     }
 
     /// <inheritdoc />
-    public async Task<bool> DrainMigrationAsync(SqliteConnection connection, DateTimeOffset now,
-        CancellationToken cancellationToken)
+    public async Task<bool> DrainMigrationAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         if (_migrationLease is null)
         {
@@ -163,7 +167,7 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
             }
 
             await connection.ExecuteAsync(Def(MemorySql.FinishModelMigration,
-                    new { finishedAt = now.ToUnixTimeSeconds() }, cancellationToken))
+                    new { finishedAt = _timeProvider.GetUtcNow().ToUnixTimeSeconds() }, cancellationToken))
                 .ConfigureAwait(false);
             return true;
         }

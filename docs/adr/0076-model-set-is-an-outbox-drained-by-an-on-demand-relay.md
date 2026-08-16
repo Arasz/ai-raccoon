@@ -287,3 +287,14 @@ migration started by that process's own `model set` would be invisible to a cach
 a stale `false` would serve a search or write against a half-migrated bank, precisely the failure this
 ADR exists to prevent. No staleness window, bounded or not, was judged acceptable without the owner's
 explicit sign-off, so this amendment introduces none.
+
+## Correction 2026-08-16 — `finished_at` recorded the wrong duration until 1.21.1
+
+`DrainMigrationAsync` took its `now` as a parameter captured by the caller before the drain loop ran,
+then stamped `finished_at` with that stale value — so `finished_at - started_at` measured "time to
+enter the method", not "time to drain the bank". Invisible at small scale (a 200-entry bank drains in
+~13s, so a 6s stamp did not look wrong); a real 25,917-entry bank exposed it: 357s real wall-clock
+drain recorded as 6s, a ~60x understatement. `started_at` was unaffected — it is captured immediately
+before the short outbox transaction that writes it, not before a long-running loop. Fixed by giving
+`EntryEmbedder` its own `TimeProvider` and reading `finished_at` from it after the drain loop
+completes, not from a caller-supplied value.
