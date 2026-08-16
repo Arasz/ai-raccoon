@@ -46,7 +46,7 @@ public class MemoryPromptsTests
         var guide = _prompts.MemoryUsageGuide();
 
         guide.ShouldContain("memory_watch_add");
-        guide.ShouldContain("watch scope add");
+        guide.ShouldContain("settings ingest scope add");
         guide.ShouldContain("memory_watch_status");
         guide.ShouldContain("memory_watch_remove");
     }

@@ -272,18 +272,18 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     public Task GivenWatchingEnabled() => Ctx.SetWatchEnabledGlobalAsync(true);
 
     // ── Rule: Watch configuration is CLI-only and user-facing (real CLI via RunCliAsync) ──
-    [Given("^watch enable \\* true$")]
-    [When("^the user runs watch enable \\* true$")]
-    public Task WhenUserRunsWatchEnable() => RunCliAsync("watch", "enable", "*", "true");
+    [Given("^settings watch enable \\* true$")]
+    [When("^the user runs settings watch enable \\* true$")]
+    public Task WhenUserRunsWatchEnable() => RunCliAsync("settings", "watch", "enable", "*", "true");
 
-    [When("^the user runs watch scope add \\* ([^ ]*)$")]
-    public Task WhenUserRunsWatchScopeAdd(string path) => RunCliAsync("watch", "scope", "add", "*", Map(path));
+    [When("^the user runs settings ingest scope add \\* ([^ ]*)$")]
+    public Task WhenUserRunsIngestScopeAdd(string path) => RunCliAsync("settings", "ingest", "scope", "add", "*", Map(path));
 
-    [When("^the user runs watch disable ([^ ]*) (true|false)$")]
-    public Task WhenUserRunsWatchDisable(string projectId, string enabled) => RunCliAsync("watch", "disable", projectId, enabled);
+    [When("^the user runs settings watch disable ([^ ]*) (true|false)$")]
+    public Task WhenUserRunsWatchDisable(string projectId, string enabled) => RunCliAsync("settings", "watch", "disable", projectId, enabled);
 
-    [When("^the user runs watch concurrency ([^ ]*) ([0-9]+)$")]
-    public Task WhenUserRunsWatchConcurrency(string projectId, int value) => RunCliAsync("watch", "concurrency", projectId, value.ToString(CultureInfo.InvariantCulture));
+    [When("^the user runs settings watch concurrency ([^ ]*) ([0-9]+)$")]
+    public Task WhenUserRunsWatchConcurrency(string projectId, int value) => RunCliAsync("settings", "watch", "concurrency", projectId, value.ToString(CultureInfo.InvariantCulture));
 
     [When("^the user runs watch registered$")]
     public Task WhenUserRunsWatchRegistered() => RunCliAsync("watch", "registered");
