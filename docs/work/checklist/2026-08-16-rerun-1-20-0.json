@@ -1,0 +1,235 @@
+{
+  "run": {
+    "date": "2026-08-16",
+    "branch": "checklist/1-20-0-rerun",
+    "commit": "53bc1e340364ebe09766ff82425fb2dc6da99b58",
+    "data-root": "<scratchpad>/run2/lane{A..F}/root \u2014 one scratch root per lane, never ~/.ai-raccoon",
+    "note": "Second run against 1.20.0, using the corrected skill shipped in ai-badger 0.127.0. The product is byte-identical to the first run (only .ai-badger moved), so any item that changes verdict changed because of the checklist, not the code. The owner was profiling their own server on pid 81474/port 7721 throughout; lanes were staggered three at a time to limit CPU contention and 7721 was verified untouched."
+  },
+  "derived": {
+    "version": "1.20.0",
+    "mcp-tool-count": "27",
+    "mcp-prompt-count": "2",
+    "note": "Derived by scripts/derive-facts.py, the Python replacement for the bash script whose grep counted a /// doc comment as a tool. It now agrees with the live server at 27."
+  },
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
+      "command": "dotnet build -c Release; dotnet pack; dotnet tool install --tool-path <scratch>; ai-raccoon --version; git rev-parse HEAD",
+      "evidence": "Build succeeded. 0 Warning(s) 0 Error(s) | 1.20.0+53bc1e340364ebe09766ff82425fb2dc6da99b58 | HEAD = 53bc1e340364ebe09766ff82425fb2dc6da99b58",
+      "observed-result": "Version and +sha match HEAD exactly. Every lane drove this binary.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "sha compared against git rev-parse HEAD. DEVIATION: installed to a scratch --tool-path, not the global tool, because the owner was profiling their own server on this machine."
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+      "command": "serve --port 0; serve --port 58483 --restart; lsof -nP -iTCP:7721 before and after",
+      "evidence": "'Now listening on: http://127.0.0.1:58483' (pid 23761) | 'asking the server on port 58483 to stop (pid 23761, 1.20.0+53bc1e34...)' -> 'stopped and the port is free' -> rebound as pid 25183 | lsof 7721: pid 81474 before AND after, unchanged",
+      "observed-result": "--port 0 bound an ephemeral port and reported it. --restart cycled the incumbent by pid rather than attaching. 7721 stayed the owner's throughout.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Restart proven by pid change on an unchanged port. 7721 checked independently by lsof while the owner was actively profiling that process."
+    },
+    {
+      "item": "full-mcp-surface",
+      "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+      "command": "python3 scripts/derive-facts.py; stdio initialize + tools/list + prompts/list; tools/call x27; prompts/get x2",
+      "evidence": "derive-facts.py: version=1.20.0 mcp-tool-count=27 mcp-prompt-count=2 | serverInfo {\"name\":\"AiRaccoon\",\"version\":\"1.20.0.0\"} | tools: 27 | prompts: 2 | 27/27 called across 32 invocations, 0 crashes | typed refusals: path-outside-scope, watching-disabled, sync-not-configured, access-denied: requires mode full",
+      "observed-result": "Instrument and live server agree at 27/2 in both directions. Previous run FAILED this item because the old bash derive-facts.sh counted a /// doc comment as a tool (28 vs 27); the Python rewrite reports 27.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Flipped fail -> pass with the product unchanged, so the flip isolates the instrument repair. Verified rather than assumed: the count was re-derived and then confirmed live."
+    },
+    {
+      "item": "memory-write-stores-and-reports-truthfully",
+      "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
+      "command": "memory_write(clean prose); memory_write('[IMPORTANT: Background process ... completed normally]')",
+      "evidence": "clean -> {\"hash\":\"6921532311731563...\",\"stored\":true} | rejected -> {\"hash\":\"\",\"path\":\"\",\"stored\":false,\"reason\":\"rejected by noise policy 'HermesBackgroundProcessLog'\"}",
+      "observed-result": "Real hash on success; on rejection stored=false with the policy named and empty hash/path \u2014 no fabricated identity.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both halves of ADR-0032 exercised live against the packed binary."
+    },
+    {
+      "item": "memory-search-hybrid-retrieval",
+      "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking",
+      "command": "memory_write(astrolabe/lamplight/observatory prose); memory_search('an antique navigation instrument reflecting evening light in a stargazing room')",
+      "evidence": "write hash bbd7580f857fcc5b... | top hit {\"hash\":\"bbd7580f857fcc5b...\",\"ranking\":1}",
+      "observed-result": "Zero literal overlap between query and stored text, so BM25 alone cannot carry it; returned rank 1, matched by hash.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Query built per the skill's second rule so a dead vector leg fails the item; hit confirmed by hash, not snippet."
+    },
+    {
+      "item": "memory-get-returns-content-by-hash",
+      "expected-result": "memory_get returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
+      "command": "memory_get(known hash); memory_get('000...0' 64 hex)",
+      "evidence": "known -> value returned byte-for-byte, context project:lanea-release-check | unknown -> \"unknown-hash: No entry with hash '000...' in project 'lanea-release-check'.\"",
+      "observed-result": "Known hash round-trips exactly; unknown hash gives a structured refusal, not an empty result.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both halves exercised; positive case cross-checked against the write above."
+    },
+    {
+      "item": "source-path-anchor-resolves-its-chunk",
+      "expected-result": "a `file#section` query returns that exact chunk within the production result window",
+      "command": "memory_ingest_file(outside scope) -> refusal; ingest scope add; memory_ingest_file(two-heading file); memory_search('<path>#section-alpha'); memory_search('<path>#section-beta'); direct read of the section column",
+      "evidence": "precondition: \"path-outside-scope: Path ... is outside the ingest scope.\" | DB: BOTH chunk rows report section='section-beta'; SELECT count(*) WHERE section='section-alpha' -> 0 | #section-beta query top hit = chunk_index 0, the ALPHA-content chunk, with the true beta chunk demoted to rank 2 | INDEPENDENT REPRO by the coordinator on a 7-line fixture: single chunk holding alpha content, tagged section-beta",
+      "observed-result": "FileIngestor.HeadingSection derives the tag from HeadingPathParser.Parse over the chunk's own text, which returns the LAST heading present. Any chunk spanning a heading boundary is therefore mistagged: no row is ever tagged with the earlier heading, and an anchor for the later one resolves to content that is not under it.",
+      "status": "fail",
+      "accepted": false,
+      "acceptance-reason": "Real product defect, reproduced independently by the coordinator with a minimal fixture. Not tracked by any ADR or test found in the repo. Both prior runs PASSED this item because their fixtures were larger files that split one-heading-per-chunk, where last-heading-in-chunk coincides with the correct heading \u2014 they measured a fixture that dodged the bug."
+    },
+    {
+      "item": "write-embeds-the-chunk-it-stored",
+      "expected-result": "a long write that chunks into several rows embeds each chunk's own text rather than the whole document, so a query matching only a late chunk retrieves that chunk (1.19.1, PR #344, ADR-0073)",
+      "command": "memory_write(3208-char, 3 sections, distinctive sentence only in Section Three); memory_embed_pending; memory_search(paraphrase, ftsWeight=0); memory_get(top hit)",
+      "evidence": "embed_pending {\"processed\":4,\"pending\":0} | vector-only search (ftsWeight=0) top hit eefb83550a105ab6..., ranking 1 | memory_get -> 216-char value = Section Three's own text, not the 3208-char document",
+      "observed-result": "With the FTS leg switched off entirely, the vector leg alone surfaced the correct late chunk, and the stored row is that chunk's own text.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Stronger than prior runs: ftsWeight=0 removes the keyword leg, so only a correctly-embedded chunk vector can answer. A pre-1.19.1 whole-document embed would have surfaced an early chunk."
+    },
+    {
+      "item": "write-path-noise-filtering",
+      "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
+      "command": "derive policy list from AppRegistrations.cs; fresh root-clean; noise entries (baseline); memory_write x6 (1 clean control, 3 trigger shapes, 2 shape-negative controls); noise entries; sqlite3 SELECT from noise_entries",
+      "evidence": "AppRegistrations.cs:206 registers exactly one INoiseFilterPolicy \u2014 HermesProcessNoisePolicy; ZeroShotEmbeddingNoisePolicy absent (ADR-0033) | baseline 'total: 0' | 3 rejections, each reason \"rejected by noise policy 'HermesBackgroundProcessLog'\" | post-run 'total: 3 / HermesBackgroundProcessLog: 3' | controls STORED: 'received signal from the ops team...' (prefix, non-digit body) and 'Yesterday the service received signal 15 and restarted' (substring, wrong position)",
+      "observed-result": "The one registered policy rejects exactly the shapes it documents and stores both near-miss controls, proving shape matching rather than substring matching. Noise store total matches rejections 1:1 on a bank whose empty start was verified.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Re-run on a fresh data root after fork contamination was found in the lane's original bank \u2014 see findings. Two negative controls, one of which contains the trigger phrase but fails the shape."
+    },
+    {
+      "item": "read-path-query-guard",
+      "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
+      "command": "queryguard show (first command ever against root-clean); memory_search x5 across refuse/warn/clean; queryguard structural threshold set 0 && enable; queryguard show; 3 ordinary clean queries",
+      "evidence": "baseline (first command on a virgin root): 'enabled: True shadow: False structural: False threshold: 0.98939822280316' | refuse -> 'invalid-params: This looks like tool output rather than a question...' | warn -> results + 'This query contains what looks like log or stack-trace output...' | clean -> results, no warning | after arming: 'structural: True threshold: 0'; all 3 clean queries warned, none refused",
+      "observed-result": "Refuse throws before search runs; warn annotates; clean passes untouched. Default-off read on a virgin bank. At threshold 0 \u2014 guaranteed to trip on everything \u2014 the detector still only ever warned.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The never-refuse property was forced by a zero threshold rather than inferred from a detector that never fired. Baseline read as the first command against a root no other process had touched."
+    },
+    {
+      "item": "over-window-query-warns-not-refuses",
+      "expected-result": "a query longer than the embedding window returns results plus a caller-visible warning rather than a refusal, and a deliberately trimmed query says it was trimmed (PRs #339 option B, #333, ADR-0071)",
+      "command": "model show; memory_search with a 54-char control and a 10,977-char query, stderr captured",
+      "evidence": "long query -> results present plus warning 'This query is over 1,000 characters. Semantic search only embeds roughly the first 254 tokens...' | stderr: 'EmbeddingService[416] Search query was shortened to fit the embedding model: 4607 tokens exceeded the 254-token window, so only the first 719 of 10977 characters were used' | 54-char control -> results, no warning field",
+      "observed-result": "Over-window queries return results plus a caller-visible warning, never a refusal; EventId 416 reports true token/char counts. The control proves a real threshold rather than an always-on notice.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Not re-run after the contamination finding, and the reason is structural rather than convenient: this item's evidence is content-addressed and per-request (a unique write hash; a warning and log line computed from that call's own query length), so it reads no accumulated bank state."
+    },
+    {
+      "item": "file-watch-status",
+      "expected-result": "memory_watch_status lists live registrations and their sync state",
+      "command": "memory_watch_status (before); memory_watch_add (before enable); CLI watch enable + ingest scope add; memory_watch_add; status polled; drop a NEW file after registration; memory_search for both files",
+      "evidence": "before: {\"watches\":[]} | refusal: \"watching-disabled: Watching is disabled for project 'laneD-watch-proj'.\" isError=true | after: state=Scanning then state=Healthy with lastSync=2026-08-16T09:33:30Z | seed file AND a file dropped after registration both retrievable by semantic queries with no keyword overlap",
+      "observed-result": "Full lifecycle, and the registration does real work: both the initial scan and a live post-registration drop were ingested and retrievable.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Went past the item: a status endpoint can report a registration that does nothing, so ingestion was confirmed independently \u2014 and for the live-watch path, not just the startup scan."
+    },
+    {
+      "item": "promotion-queue-state",
+      "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately",
+      "command": "promotion_list (before); memory_write(context='shared'); promotion_list(includeFullValue); memory_stats on writer AND on an unrelated project; memory_search scope=shared from both",
+      "evidence": "write -> context=\"project:laneD-promo-writer\", reason=\"queued-for-promotion: agent-requested-share\" | list -> one row, score 1, reasons [\"agent-requested-share\"] | stats(writer) entries=1 contexts=[\"project:laneD-promo-writer\"] | stats(unrelated) entries=0 waitingPromotionsCount=0 | search scope=shared from BOTH projects -> []",
+      "observed-result": "ADR-0067 end to end: stored in the caller's project, no shared row, a queued candidate distinguishable by reason.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "A candidate was created rather than trusting an empty queue, and absence of a shared row was proven from two different projects rather than inferred from the write response."
+    },
+    {
+      "item": "observability-event-ids",
+      "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+      "command": "CLI-only 'maintenance list' to create schema without the hosted service; sqlite3 seed of backdated promotion_discards + search_quality rows; real stdio server with stderr captured; grep emitted ids; fresh grep for Log.Vacuum call sites",
+      "evidence": "emitted across 3 captures: 12, 13, 510, 518, 522, 523, 525, 910 \u2014 all inside documented blocks, none undocumented | '[522] Promotion-discard retention purge removed 1 row(s)' and '[523] Search-quality retention purge removed 1 row(s)' fired on the startup pass | grep 'Log\\.Vacuum\\b|Log\\.VacuumDeferred\\b' src -> zero call sites | duplicate-id check across src -> empty",
+      "observed-result": "Every id emitted resolves. 522/523 fired again from backdated seeds, reproducing the technique. 512/516 confirmed dead by fresh grep. Documented-but-unexercised ids are listed plainly as not verified.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Step 4 applied to my own briefing: I told the lane the 512/516 retirement note was on an unmerged branch; it checked and found PR #352 already merged at 09:01:44Z, so main was current and my premise stale."
+    },
+    {
+      "item": "maintenance-job-ledger",
+      "expected-result": "the maintenance pass runs as a list of jobs and records a ledger in the bank; a job that creates work causes the sweep to run again (1.17.0 PR #330, 1.18.0 PR #335, ADR-0070)",
+      "command": "CLI-only 'maintenance list' (schema without hosted service); sqlite3 INSERT of one oversized row before first pass; real server startup; sqlite3 SELECT from maintenance_jobs and entries",
+      "evidence": "'[518] Pending-embed retry: 0 processed, 1 still pending' -> '[525] chunk-backfill / vec0-reclaim / vacuum / metrics-retention ran' -> '[518] Pending-embed retry: 0 processed, 12 still pending' | maintenance_jobs: 4 rows, run_count=1 each | entries 1 -> 12",
+      "observed-result": "Four jobs ran as a list with a ledger row each. The re-sweep is directly observable: the second [518] line exists only because chunk-backfill returned CreatedWork=true.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Re-derived rather than inherited, and it explains the mechanism the previous run only demonstrated: chunk-backfill's Interval is null so IsDue is true only while the ledger has no row for it; the CLI-only path migrates the bank without running a pass, which is the window that lets an oversized row be seeded first."
+    },
+    {
+      "item": "perf-metrics-self-instrumentation",
+      "expected-result": "the 1.20.0 self-instrumentation records real per-operation metrics and the memory_performance tool reports them; every tool in the derived inventory appears in the report, at count 0 when unused, and measurements past the buffer cap are dropped with the dropped count recorded (1.20.0 #327; buffer per ADR-0074)",
+      "command": "4x memory_write, 3x memory_search, 1x memory_get, 2x memory_list then memory_performance; then set metrics.buffer-capacity.global=15 and burst 5 searches (35 measurements)",
+      "evidence": "report: memory_write=4, memory_search=3, memory_get=1, memory_list=2, memory_stats=0 (never called, still present); search phases each =3 | overflow: metrics.dropped max=20 = 35-15 exactly; surfaced series summed to exactly 15 | burst window 2026-08-16T11:59:06.897399+02:00 -> 11:59:07.182483+02:00",
+      "observed-result": "Counts match what was driven exactly, an untouched tool appears at count 0, and the capped buffer drops precisely attempted-minus-capacity.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The expected-result is the CORRECTED text: last run's version claimed an unused operation is absent and cited ADR-0074 for it, which was wrong twice over. Present-at-zero is the WP6 derived-inventory contract, confirmed in MetricsReportServiceTests.cs:203; ADR-0074 governs only the buffer."
+    },
+    {
+      "item": "perf-metrics-cli-surface",
+      "expected-result": "the 1.20.0 metrics feature exposes whatever operator-facing configuration it has through a CLI command family, consistent with every other configurable subsystem (1.20.0 #327, ADR-0074)",
+      "command": "ai-raccoon --help; ai-raccoon metrics --help; grep MetricsConfigKeys across src; read SettingsCommands.cs and CliCommandTree.cs; git show 709429b2",
+      "evidence": "--help on the tested binary lists 13 families, no performance/metrics | MetricsConfigKeys.cs defines buffer-capacity (1000), flush-interval (30), retention-days (28); MetricsFlusher.cs:179-199 re-reads two of them every flush tick; MaintenanceJobs.cs:160-164 reads the third | no SetSettingAsync for any of them, no generic settings setter | BUT main commit 709429b2 'Release engineering + the performance CLI family (1.20.1) (#350)' adds `performance buffer-capacity|flush-interval|retention|list`, message says 'fixes checklist defect #352'",
+      "observed-result": "Reproducible in the tested binary (packed from 53bc1e34, before that merge) and already fixed on main.",
+      "status": "fail",
+      "accepted": true,
+      "acceptance-reason": "Accepted because it is tracked AND resolved: the previous run recorded it in PR #352 and PR #350 landed the fix. The fail is against this artifact, which predates the merge; the next packed build should pass. This is the checklist finding a defect and the defect being closed."
+    },
+    {
+      "item": "semantica-graph-integration",
+      "expected-result": "the project's Semantica knowledge graph is reachable and its contents reflect the project \u2014 decisions and entities are queryable, or its emptiness has a named cause",
+      "command": "get_graph_summary; query_decisions; full semantica tool inventory; git log .ai-raccoon/semantica-graph.json; ls ~/.semantica; count docs/adr",
+      "evidence": "{\"node_count\":0,\"decision_count\":0,\"graph_ready\":true} | query_decisions -> [] | 11 semantica tools, NONE of them import/load/bulk-ingest | ~/.semantica holds only mcp.pid, no persisted store | .ai-raccoon/semantica-graph.json: single commit 7fa70e07, already empty at that commit, untouched since | docs/adr = 74 files",
+      "observed-result": "Reachable but structurally unable to hold cross-session content: session-scoped and in-memory with no import path, so a fresh session starts at zero regardless of 74 ADRs. The one bridging artifact was committed empty, so that tooling has never been run with real content.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The expected-result is disjunctive \u2014 queryable OR emptiness has a named cause \u2014 and the cause is named and source-verified, so this is a pass. NOTE: the lane returned status 'fail' while its own reason satisfied the fallback clause; I recorded pass and raised the ambiguity as a finding, since the same evidence produced pass last run and fail this run."
+    }
+  ],
+  "summary": {
+    "total": 18,
+    "pass": 16,
+    "fail": 2,
+    "skipped": 0,
+    "substituted": 0,
+    "note": "Two failures. source-path-anchor-resolves-its-chunk is a NEW product defect that two prior runs passed. perf-metrics-cli-surface is a known defect already fixed on main after the previous run reported it. No item was left with a null accepted."
+  },
+  "findings-against-prior-runs": [
+    {
+      "finding": "A product defect that two prior runs passed.",
+      "detail": "source-path-anchor-resolves-its-chunk. HeadingSection tags a chunk with the LAST heading in its text, so any chunk spanning a heading boundary is mistagged; an anchor for the earlier heading matches nothing and an anchor for the later one returns the wrong content. Reproduced independently by the coordinator on a 7-line fixture. Prior runs used larger fixtures that split one-heading-per-chunk, where the last heading happens to be the right one \u2014 they measured a fixture that dodged the bug, which is why 'test two anchors against ONE file' belongs in the skill."
+    },
+    {
+      "finding": "The checklist's previous failure was its own instrument, and repairing it flipped the item.",
+      "detail": "full-mcp-surface went fail -> pass with the product unchanged. The bash derive-facts.sh counted a /// doc comment in McpToolInventory.cs as a tool (28 vs 27); derive-facts.py reports 27, matching the live server."
+    },
+    {
+      "finding": "The skill's own Gotchas text overstates how long that miscount lasted.",
+      "detail": "It says a doc comment 'already inflated the surface by one for three releases'. McpToolInventory.cs was added by 4f494fc0 (1.20.0) and is absent at 1.19.1, so the inflation lasted ONE release. Three releases belongs to the older defect \u2014 the hand-pinned '25 tools' against a real 26. The sentence has fused two different rots, which matters because that section is the record of how fast this checklist decays."
+    },
+    {
+      "finding": "A defect this checklist reported has been fixed.",
+      "detail": "perf-metrics-cli-surface was recorded in PR #352 from the previous run; main commit 709429b2 (1.20.1, PR #350) adds the performance CLI family and says 'fixes checklist defect #352'. The tested binary predates it."
+    },
+    {
+      "finding": "A lane's own sub-forks corrupted its evidence, and the briefing was at fault.",
+      "detail": "Lane B dispatched research-only forks which drove the live binary against the shared laneB/root, adding noise_entries rows and transiently flipping queryguard structural to True \u2014 both readings the lane had already quoted. It flagged this itself and re-ran the two affected items on a fresh root. The gap was mine: lanes were told the data root is the isolation axis, but nothing bounded what THEIR sub-agents could touch. Wording that would have prevented it: 'Any sub-agent you dispatch, including research-only forks, must not invoke the packed binary or touch --data-root; if it needs a live check it reports what to run and you run it yourself.'"
+    },
+    {
+      "finding": "An item with a disjunctive expected-result produced opposite verdicts on identical evidence.",
+      "detail": "semantica-graph-integration reads 'queryable, OR its emptiness has a named cause'. The first run recorded pass, this run's lane recorded fail while its own acceptance-reason said the fallback clause was satisfied. Recorded here as pass. An OR-clause expected-result invites a split verdict and should be rewritten as two items or one unambiguous condition."
+    },
+    {
+      "finding": "My own briefing carried a stale fact and a lane caught it.",
+      "detail": "I told Lane E the 512/516 retirement note was on an unmerged branch. It checked instead of trusting me: PR #352 merged at 2026-08-16T09:01:44Z, and git diff main checklist/1-20-0 for that file was empty. The skill's discipline applied to its operator."
+    }
+  ]
+}
