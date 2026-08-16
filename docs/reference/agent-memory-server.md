@@ -537,8 +537,8 @@ Every family below lives under the top-level `settings` command
 (`ai-raccoon settings <family> …`), with four exceptions that stay top-level because they
 either read a table `settings` doesn't own or perform an operation that isn't a settings
 write: `ai-raccoon watch registered` (reads the watches table), `ai-raccoon extract prune`
-(deletes `promotion_queue` rows), `ai-raccoon model set` (re-embeds the whole bank), and
-`ai-raccoon encryption` / `ai-raccoon serve` (unaffected by this split).
+(deletes `promotion_queue` rows), `ai-raccoon model set` (starts re-embedding the whole bank in the
+background, ADR-0076), and `ai-raccoon encryption` / `ai-raccoon serve` (unaffected by this split).
 
 ```bash
 # settings access: who may do what per project
@@ -548,8 +548,8 @@ ai-raccoon settings access set {project-id|*} {ro|rw|full}
 ai-raccoon settings access unset {project-id|*}
 ai-raccoon settings access list
 
-# model: embedding engine ('set' stays top-level — it re-embeds the whole bank;
-# 'show'/'reset' move under settings)
+# model: embedding engine ('set' stays top-level — it starts re-embedding the whole bank in the
+# background, ADR-0076; 'show'/'reset' move under settings)
 ai-raccoon model set local [path]
 ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]
 ai-raccoon settings model reset
@@ -815,6 +815,7 @@ source of truth; a test cross-checks this table against it.
 | `invalid-params` | FluentValidation rejected the request (missing/blank `projectId`, invalid `scope`, out-of-range `limit`, etc.) | `invalid-params: project_id is required` |
 | `invalid-argument` | A call's JSON argument shape doesn't match the tool's declared parameter type (e.g. a scalar where an array is declared), a required parameter is missing, or a present-but-blank value fails a guard clause — caught at argument-binding time or by a guard clause at the top of the tool method, before its logic runs. Mapped from `JsonException`, `ArgumentException` and `ArgumentNullException`. `ArgumentOutOfRangeException` is deliberately **not** mapped: it is how .NET reports the server's own index arithmetic going wrong, so refusing it would mute Error-level alerting and tell the caller to retry an argument that was never at fault | `invalid-argument: The JSON value could not be converted to System.String[]. Path: $ \| LineNumber: 0 \| BytePositionInLine: 5.` |
 | `confirm-required` | `memory_share_extract` called with `autoPromote=true` but `confirm` not set to `true` — an explicit enable gate for a promotion that shares data across all listed projects | `confirm-required: autoPromote shares candidates with ALL projects — pass confirm=true to enable` |
+| `model-migration-in-progress` | Every bank operation is refused for the duration of an embedding-model migration (`model set`, ADR-0076) — a bank whose rows are half old-model and half new-model vectors is not detectably broken, it just retrieves worse, so the migration locks the bank rather than serving through it | `model-migration-in-progress: ai-raccoon: a model migration is in progress; try again once it finishes` |
 
 Anything `ToolRefusals` does not recognize — a remote embedding provider called without
 a key, or any other unmapped exception — is a genuine failure, not a refusal, and its message

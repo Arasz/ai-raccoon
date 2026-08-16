@@ -10,6 +10,7 @@ namespace AiRaccoon.Setup.Cli.Commands;
 /// </summary>
 internal sealed class ConfigCommands(
     IMemoryStore store,
+    IModelMigrationStore modelMigrations,
     SettingsCommands settings,
     SyncCommands sync,
     WatchCommands watch,
@@ -44,8 +45,8 @@ internal sealed class ConfigCommands(
                 ["settings", "access", "set"] => await settings.AccessSetAsync(parsedCliArgs, store, streams, ctx),
                 ["settings", "access", "unset"] => await settings.AccessUnsetAsync(parsedCliArgs, store, streams, ctx),
                 ["settings", "access", "list"] => await settings.AccessListAsync(store, streams, ctx),
-                ["model", "set", "local"] => await settings.ModelSetLocalAsync(parsedCliArgs, store, streams, ctx),
-                ["model", "set", "openai"] => await settings.ModelSetOpenAiAsync(parsedCliArgs, store, streams, ctx),
+                ["model", "set", "local"] => await settings.ModelSetLocalAsync(parsedCliArgs, store, modelMigrations, streams, ctx),
+                ["model", "set", "openai"] => await settings.ModelSetOpenAiAsync(parsedCliArgs, store, modelMigrations, streams, ctx),
                 ["settings", "model", "reset"] => await settings.ModelResetAsync(store, streams, ctx),
                 ["settings", "model", "show"] => await settings.ModelShowAsync(store, streams, ctx),
                 ["settings", "retrieval", "alpha", "set"] => await settings.RetrievalAlphaSetAsync(parsedCliArgs, store, streams, ctx),

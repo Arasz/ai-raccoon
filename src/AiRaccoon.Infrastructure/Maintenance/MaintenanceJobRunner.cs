@@ -40,7 +40,12 @@ public sealed partial class MaintenanceJobRunner(TimeProvider timeProvider, ILog
                     new { name = job.Name }, cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
 
-            if (!IsDue(job, lastRun, now))
+            // On-demand due-ness (ADR-0076) is independent of the clock-gated IsDue check below —
+            // it exists precisely so a job like ModelMigrationJob isn't run-once by the ledger stamp
+            // every success writes. Checked first since it is the cheaper of the two most passes.
+            var due = await job.HasWorkAsync(connection, cancellationToken).ConfigureAwait(false)
+                      || IsDue(job, lastRun, now);
+            if (!due)
             {
                 outcomes.Add(new MaintenanceJobOutcome(job.Name, false, null));
                 continue;

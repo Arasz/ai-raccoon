@@ -207,8 +207,11 @@ public sealed partial class AppRunner
         {
             settingsLoggerFactory = CreateCliLoggerFactory(cliInput.ServerConfig.Options);
             var loggerFactory = settingsLoggerFactory;
-            services.AddSingleton<ISettingsStore>(new LazyServerSettingsStore(
-                ctx => _acquireServerSettingsStore(cliInput.ServerConfig, loggerFactory, ctx)));
+            var lazyServerStore = new LazyServerSettingsStore(
+                ctx => _acquireServerSettingsStore(cliInput.ServerConfig, loggerFactory, ctx));
+            services.AddSingleton<ISettingsStore>(lazyServerStore);
+            // ADR-0076: model set routes the same way now — same instance, same acquired connection.
+            services.AddSingleton<IModelMigrationStore>(lazyServerStore);
         }
 
         try

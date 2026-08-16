@@ -64,10 +64,28 @@ public sealed partial class BankMaintenanceHostedService(
     /// <summary>Completed after each post-tick interval re-read; test seam.</summary>
     internal TickSignal IntervalReReads { get; } = new();
 
+    /// <summary>Completed after each on-demand poll; test seam (ADR-0076).</summary>
+    internal TickSignal OnDemandPolls { get; } = new();
+
+    /// <summary>
+    ///     How often the on-demand poll checks whether any job has outstanding work
+    ///     (<see cref="IMaintenanceJob.HasWorkAsync" />, ADR-0076) — independent of, and much
+    ///     shorter than, the heavy checkpoint/vacuum/purge pass's own cadence
+    ///     (<see cref="BankMaintenanceConfigKeys.CheckpointIntervalMinutesGlobal" />, default 60
+    ///     minutes). Without this split, an on-demand job's real latency was bounded by that hourly
+    ///     cadence — a model migration could sit undrained for up to an hour absent a restart. 15
+    ///     seconds is cheap: one indexed `maintenance_jobs` read per cadence-based job plus one
+    ///     indexed outbox read for the on-demand one, and nothing in this loop opens a transaction
+    ///     or writes unless a job is actually due.
+    /// </summary>
+    internal static readonly TimeSpan OnDemandPollInterval = TimeSpan.FromSeconds(15);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // Startup pass: one checkpoint before any traffic bounds the WAL for short-lived
-        // processes; a failure logs and must not abort startup.
+        // processes; a failure logs and must not abort startup. Also the crash-recovery guarantee
+        // for an on-demand job (ADR-0076): RunOnceAsync always calls _jobRunner.RunDueAsync, which
+        // always asks each job's HasWorkAsync, regardless of any cadence or poll interval below.
         try
         {
             await RunOnceAsync(stoppingToken).ConfigureAwait(false);
@@ -88,6 +106,18 @@ public sealed partial class BankMaintenanceHostedService(
         using var timer = new PeriodicTimer(await ReadCheckpointIntervalSafeAsync(stoppingToken).ConfigureAwait(false),
             timeProvider);
         TimerArmed.Increment();
+
+        // Two independent loops, one connection each: the heavy pass stays on its own (long,
+        // configurable) cadence exactly as before; the on-demand poll is new and short, and reuses
+        // the SAME MaintenanceJobRunner.RunDueAsync a heavy pass already calls — not a second relay,
+        // the same one invoked more often for the jobs that want that (ADR-0076).
+        await Task.WhenAll(
+            RunHeavyPassLoopAsync(timer, stoppingToken),
+            RunOnDemandPollLoopAsync(stoppingToken)).ConfigureAwait(false);
+    }
+
+    private async Task RunHeavyPassLoopAsync(PeriodicTimer timer, CancellationToken stoppingToken)
+    {
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
             try
@@ -110,6 +140,47 @@ public sealed partial class BankMaintenanceHostedService(
             // Re-read the interval so config changes apply without a restart.
             timer.Period = await ReadCheckpointIntervalSafeAsync(stoppingToken).ConfigureAwait(false);
             IntervalReReads.Increment();
+        }
+    }
+
+    /// <summary>
+    ///     Wakes every <see cref="OnDemandPollInterval" /> and asks the job runner whether anything
+    ///     is due — cadence-based jobs answer from their own unaffected <c>Interval</c>, so this
+    ///     cannot make vacuum/backfill/retention run any more often than before; only a job that
+    ///     answers <see cref="IMaintenanceJob.HasWorkAsync" />&#160;true gets picked up sooner than
+    ///     the heavy pass's own cadence would have found it.
+    /// </summary>
+    private async Task RunOnDemandPollLoopAsync(CancellationToken stoppingToken)
+    {
+        if (_jobRunner is null)
+        {
+            return; // no jobs configured (pre-ADR-0070 test shape) — nothing to poll for
+        }
+
+        using var poll = new PeriodicTimer(OnDemandPollInterval, timeProvider);
+        while (await poll.WaitForNextTickAsync(stoppingToken))
+        {
+            try
+            {
+                await using var connection = await factory.OpenBankAsync(stoppingToken).ConfigureAwait(false);
+                await _jobRunner.RunDueAsync(connection, _jobs, stoppingToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                // Same message as the heavy pass's own failure (513): both are "one maintenance
+                // loop iteration failed, retried next time" — a second, near-duplicate EventId
+                // for the on-demand loop would also have interleaved with MaintenanceJobRunner's
+                // adjacent 525-526 block (EventIdBlocks_DoNotInterleaveBetweenOwners).
+                Log.RunFailed(logger, ex);
+            }
+            finally
+            {
+                OnDemandPolls.Increment();
+            }
         }
     }
 

@@ -16,8 +16,12 @@ internal sealed class SettingsServerRefusedException(string message) : Exception
 ///     Reaches settings through the server rather than the bank (ADR-0075), so a CLI process never
 ///     writes the bank. Same <see cref="ISettingsStore" /> surface as the bank-backed store, so a
 ///     subsystem keeps one implementation and only the transport under it changes.
+///     <para>
+///         Also <see cref="IModelMigrationStore" /> (ADR-0076): <c>model set</c> reaches the same
+///         way, over the same connection — one class, one credential, one transport.
+///     </para>
 /// </summary>
-internal sealed class ServerSettingsStore : ISettingsStore
+internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
 {
     private readonly HttpClient _client;
 
@@ -68,6 +72,29 @@ internal sealed class ServerSettingsStore : ISettingsStore
         var response = await SendAsync(() => _client.DeleteAsync(SettingsProtocol.ForKey(key), cancellationToken));
         Ensure(response);
     }
+
+    /// <inheritdoc />
+    public async Task<EmbeddingConfig> StartModelMigrationAsync(string provider, string? model, string? baseUrl,
+        CancellationToken cancellationToken = default)
+    {
+        Guard.IsNotNullOrWhiteSpace(provider);
+        var response = await SendAsync(() =>
+            _client.PostAsJsonAsync(SettingsProtocol.ModelPath, new ModelMigrationRequest(provider, model, baseUrl),
+                cancellationToken));
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ModelMigrationInProgressException(await response.Content.ReadAsStringAsync(cancellationToken));
+        }
+
+        Ensure(response);
+        var body = await response.Content.ReadFromJsonAsync<ModelMigrationResponse>(cancellationToken);
+        return new EmbeddingConfig(body!.Provider, body.Model, body.Engine);
+    }
+
+    /// <summary>Never called from the CLI — no command asks "is a migration open" (ADR-0076: no progress channel); only ToolGate, server-side, needs this.</summary>
+    public Task<bool> HasOpenModelMigrationAsync(CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException(
+            "ai-raccoon: HasOpenModelMigrationAsync is a server-side check (ToolGate); the CLI never calls it");
 
     /// <summary>
     ///     A transport failure is reported as unavailable rather than surfacing a bare

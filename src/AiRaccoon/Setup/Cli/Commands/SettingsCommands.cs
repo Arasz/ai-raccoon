@@ -92,26 +92,29 @@ public sealed class SettingsCommands
     }
 
     public async Task<int> ModelSetLocalAsync(ParseResult parseResult, IMemoryStore store,
-        StandardStreams streams, CancellationToken cancellationToken)
+        IModelMigrationStore modelMigrations, StandardStreams streams, CancellationToken cancellationToken)
     {
         var path = parseResult.GetResult("path") is not null ? ExpandTilde(parseResult.GetValue<string>("path")) : null;
         // A remote API key is meaningless for the local engine; don't leave it in settings.
         await store.DeleteSettingAsync(EmbeddingSettingsKeys.ApiKey, cancellationToken);
-        await store.ConfigureEmbeddingAsync("local", path, null, cancellationToken);
+        await modelMigrations.StartModelMigrationAsync("local", path, null, cancellationToken);
         var modelLabel = path ?? "bundled ONNX model";
-        await streams.WriteOutputLineAsync($"embedding engine set to local ({modelLabel})");
+        // ADR-0076: the outbox commits synchronously; the re-embed itself runs on the server's
+        // maintenance loop, never reported here (ruled: no progress channel).
+        await streams.WriteOutputLineAsync(
+            $"embedding engine set to local ({modelLabel}); re-embedding in the background");
         return 0;
     }
 
     public async Task<int> ModelSetOpenAiAsync(ParseResult parseResult, IMemoryStore store,
-        StandardStreams streams, CancellationToken cancellationToken)
+        IModelMigrationStore modelMigrations, StandardStreams streams, CancellationToken cancellationToken)
     {
         var model = parseResult.GetValue<string>("model");
         var baseUrl = parseResult.GetResult("base-url") is not null ? parseResult.GetValue<string>("base-url") : null;
         var apiKey = parseResult.GetResult("--api-key") is not null ? parseResult.GetValue<string>("--api-key") : null;
 
-        // The key is persisted in settings; write it before the engine so a re-embed
-        // triggered by ConfigureEmbeddingAsync can resolve it.
+        // The key is persisted in settings; write it before the engine so the migration's own
+        // re-embed can resolve it once the relay picks the row up.
         if (apiKey is not null)
         {
             await store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, apiKey, cancellationToken);
@@ -122,8 +125,8 @@ public sealed class SettingsCommands
                 "ai-raccoon: warning — no API key set; run 'ai-raccoon model set openai <model> --api-key <key>' or embeddings will fail");
         }
 
-        await store.ConfigureEmbeddingAsync("openai", model, baseUrl, cancellationToken);
-        await streams.WriteOutputLineAsync($"embedding engine set to openai:{model}");
+        await modelMigrations.StartModelMigrationAsync("openai", model, baseUrl, cancellationToken);
+        await streams.WriteOutputLineAsync($"embedding engine set to openai:{model}; re-embedding in the background");
         return 0;
     }
 

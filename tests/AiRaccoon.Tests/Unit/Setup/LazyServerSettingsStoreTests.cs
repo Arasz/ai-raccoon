@@ -104,4 +104,33 @@ public sealed class LazyServerSettingsStoreTests
         await Should.ThrowAsync<SettingsServerUnavailableException>(
             () => store.GetSettingAsync("k", TestContext.Current.CancellationToken));
     }
+
+    /// <summary>ADR-0076: model set reaches the same acquired store as every other settings command.</summary>
+    [Fact]
+    public async Task StartModelMigrationAsync_DelegatesToTheAcquiredStore()
+    {
+        var inner = new InMemorySettings();
+        var store = new LazyServerSettingsStore(_ => Task.FromResult<ISettingsStore>(inner));
+
+        await store.StartModelMigrationAsync("local", "custom-path", null, TestContext.Current.CancellationToken);
+
+        inner.LastModelMigrationRequest.ShouldBe(("local", "custom-path", (string?)null));
+    }
+
+    [Fact]
+    public async Task StartModelMigrationAsync_TriggersTheSameAcquireAsASettingsCall()
+    {
+        var acquireCalls = 0;
+        var inner = new InMemorySettings();
+        var store = new LazyServerSettingsStore(_ =>
+        {
+            acquireCalls++;
+            return Task.FromResult<ISettingsStore>(inner);
+        });
+
+        await store.StartModelMigrationAsync("local", null, null, TestContext.Current.CancellationToken);
+        await store.GetSettingAsync("a", TestContext.Current.CancellationToken);
+
+        acquireCalls.ShouldBe(1);
+    }
 }

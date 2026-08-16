@@ -755,13 +755,10 @@ or liveness property.
 2. **`sync`'s both-halves pass.** Placed wholesale in §5.2 provisionally. If it has a verb that
    moves data rather than configuring the mover, it splits like `watch` and `extract`. Not read in
    this plan.
-3. **The `model set` progress shape** (§5.4) — streamed, polled, or something else. The constraint
-   (no fire-and-forget over a whole-bank re-embed) is settled; the mechanism is a WP7 design task
-   that would benefit from a ruling.
-4. **The rekey race**, independent of all of this: `ClearPool` (`SqliteConnectionFactory.cs:114`) is
+3. **The rekey race**, independent of all of this: `ClearPool` (`SqliteConnectionFactory.cs:114`) is
    process-local, so a live `serve` racing a CLI `encryption migrate` is unguarded today. The
    bank-writer lease does **not** close this — `encryption` is exempt from it. File separately.
-5. **Move `InfrastructureOptions` to Core?** (§11.4) — a small layering improvement worth deciding
+4. **Move `InfrastructureOptions` to Core?** (§11.4) — a small layering improvement worth deciding
    on its own merits, not as a side effect of a split nobody has committed to.
 
 **Closed since revision 1:**
@@ -772,6 +769,9 @@ or liveness property.
 - *How the version bump is recorded* — moot (no bump), and release recording is not the owner's call
   anyway: `.github/workflows/release.yml:22,46-60` triggers on a `VERSION` push, validates semver,
   tags and cuts a release automatically. **The CLI break must be described in the release body.**
+- *The `model set` progress shape* (§5.4) — ruled by the owner (issue #358, 2026-08-16): no progress
+  channel, an outbox transaction plus an on-demand relay job instead of streaming or polling. See
+  ADR-0076.
 
 ---
 

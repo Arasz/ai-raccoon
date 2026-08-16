@@ -63,6 +63,29 @@ internal static partial class SettingsEndpoint
                     Log.KeyDeleted(logger, key);
                     return Results.NoContent();
                 });
+
+            // ADR-0076: commits the outbox transaction and returns — no inline re-embed, no
+            // progress. The maintenance loop's on-demand relay (ModelMigrationJob) drains it.
+            webApplication.MapPost(SettingsProtocol.ModelPath,
+                async (ModelMigrationRequest request, IModelMigrationStore store, CancellationToken ctx) =>
+                {
+                    if (string.IsNullOrWhiteSpace(request.Provider))
+                    {
+                        return Results.BadRequest("ai-raccoon: a model migration needs a provider");
+                    }
+
+                    try
+                    {
+                        var config = await store.StartModelMigrationAsync(request.Provider, request.Model,
+                            request.BaseUrl, ctx);
+                        Log.ModelMigrationStarted(logger, config.Engine);
+                        return Results.Ok(new ModelMigrationResponse(config.Provider, config.Model, config.Engine));
+                    }
+                    catch (ModelMigrationInProgressException ex)
+                    {
+                        return Results.Conflict(ex.Message);
+                    }
+                });
         }
     }
 
@@ -80,5 +103,9 @@ internal static partial class SettingsEndpoint
 
         [LoggerMessage(EventId = 673, Level = LogLevel.Information, Message = "ai-raccoon: settings deleted {Key}")]
         public static partial void KeyDeleted(ILogger logger, string key);
+
+        [LoggerMessage(EventId = 674, Level = LogLevel.Information,
+            Message = "ai-raccoon: model migration to {Engine} committed; the maintenance loop's relay will finish it")]
+        public static partial void ModelMigrationStarted(ILogger logger, string engine);
     }
 }

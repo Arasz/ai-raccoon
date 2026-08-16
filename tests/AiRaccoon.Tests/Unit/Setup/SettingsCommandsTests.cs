@@ -30,7 +30,7 @@ public class SettingsCommandsTests
             {
                 ["settings", "access", "default", "show"] => commands.AccessDefaultShowAsync(store, streams, ct),
                 ["settings", "access", "list"] => commands.AccessListAsync(store, streams, ct),
-                ["model", "set", "local"] => commands.ModelSetLocalAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["model", "set", "local"] => commands.ModelSetLocalAsync(parsed.ParsedCliArgs, store, store, streams, ct),
                 ["settings", "model", "show"] => commands.ModelShowAsync(store, streams, ct),
                 ["settings", "retrieval", "alpha", "set"] => commands.RetrievalAlphaSetAsync(parsed.ParsedCliArgs, store, streams, ct),
                 ["settings", "retrieval", "alpha", "show"] => commands.RetrievalAlphaShowAsync(store, streams, ct),

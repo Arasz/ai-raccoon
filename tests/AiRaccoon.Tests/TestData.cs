@@ -104,8 +104,9 @@ public static class TestData
         MaintenanceCommands? maintenance = null,
         PerformanceCommands? performance = null,
         ServeCommands? serve = null,
-        NoiseEntriesCommands? noiseEntries = null) =>
-        new(store, settings!, sync!, watch!, encryptionCommands!, extract!, maintenance!, performance!, serve!, noiseEntries!);
+        NoiseEntriesCommands? noiseEntries = null,
+        IModelMigrationStore? modelMigrations = null) =>
+        new(store, modelMigrations!, settings!, sync!, watch!, encryptionCommands!, extract!, maintenance!, performance!, serve!, noiseEntries!);
 
     /// <summary>A <see cref="ServerProbe"/> backed by a plain loopback HttpClient (the pre-DI-refactor ForLoopback shape).</summary>
     public static ServerProbe CreateServerProbe() => new(new LoopbackHttpClientFactory());

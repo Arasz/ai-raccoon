@@ -152,7 +152,9 @@ public static partial class AppRegistrations
                 new ChunkBackfillJob(sp.GetRequiredService<IMarkdownChunker>(), sp.GetRequiredService<TimeProvider>()),
                 new Vec0ReclaimJob(),
                 new VacuumJob(),
-                new MetricsRetentionJob(sp.GetRequiredService<TimeProvider>())
+                new MetricsRetentionJob(sp.GetRequiredService<TimeProvider>()),
+                // ADR-0076: on-demand — HasWorkAsync reads the outbox itself, not a cadence.
+                new ModelMigrationJob(sp.GetRequiredService<IEntryEmbedder>(), sp.GetRequiredService<TimeProvider>())
             ]);
             services.AddHostedService<BankMaintenanceHostedService>();
         }
@@ -218,6 +220,9 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<INoiseShadowObserver, NoiseShadowObserver>();
 
             services.AddRequiredSingleton<IMemoryStore, SqliteMemoryStore>();
+            // ADR-0076: same instance as IMemoryStore — split out for the same reason ISettingsStore
+            // was (ADR-0075), so the CLI can route model-set through the server independently.
+            services.AddSingleton<IModelMigrationStore>(sp => sp.GetRequiredService<SqliteMemoryStore>());
             services.AddRequiredSingleton<IMemorySourceStore, SqliteMemorySourceStore>();
             services.AddRequiredSingleton<ISettingsStore, SqliteSettingsStore>();
             services.AddRequiredSingleton<IWorkspaceStore, SqliteWorkspaceStore>();
@@ -228,6 +233,9 @@ public static partial class AppRegistrations
         {
             services.AddRequiredSingleton<IBundledModel, BundledModel>();
             services.AddRequiredSingleton<IEmbeddingService, EmbeddingService>();
+            // ADR-0076: the migration lease EntryEmbedder's DrainMigrationAsync needs; registered
+            // before IEntryEmbedder so constructor injection resolves it.
+            services.AddRequiredSingleton<IModelMigrationLease, SqliteModelMigrationLease>();
             services.AddRequiredSingleton<IEntryEmbedder, EntryEmbedder>();
             services.AddRequiredSingleton<IEmbeddingAvailability, EmbeddingAvailability>();
         }

@@ -154,6 +154,14 @@ public sealed class SqliteMemoryStoreSearchTimingsTests : IDisposable
             string? baseUrl, CancellationToken cancellationToken) =>
             throw new NotSupportedException("Not exercised by SearchAsync.");
 
+        public Task<EmbeddingConfig> StartMigrationAsync(SqliteConnection connection, string provider,
+            string? model, string? baseUrl, DateTimeOffset now, CancellationToken cancellationToken) =>
+            throw new NotSupportedException("Not exercised by SearchAsync.");
+
+        public Task<bool> DrainMigrationAsync(SqliteConnection connection, DateTimeOffset now,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException("Not exercised by SearchAsync.");
+
         public Task EmbedIfConfiguredAsync(SqliteConnection connection, long id, string value,
             CancellationToken cancellationToken) => Task.CompletedTask;
 

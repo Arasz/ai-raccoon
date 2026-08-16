@@ -341,6 +341,52 @@ internal static class MemorySql
     public const string SelectAllEmbedded =
         "SELECT id AS Id, value AS Value FROM entries WHERE embed_state = 'embedded' ORDER BY id";
 
+    /// <summary>Bank-wide (not project-scoped) pending rows — the migration relay's own drain, distinct from the per-project memory_embed_pending path.</summary>
+    public const string SelectAllPendingForEmbed =
+        "SELECT id AS Id, value AS Value FROM entries WHERE embed_state = 'pending' ORDER BY id LIMIT @limit";
+
+    /// <summary>The outbox's own side effect: every currently-embedded row is stale under the new engine. Fires vec_entries_pending/vec_structure_pending, so the old vectors leave the searchable index the instant this commits.</summary>
+    public const string MarkAllEmbeddedPending =
+        "UPDATE entries SET embed_state = 'pending' WHERE embed_state = 'embedded'";
+
+    // ---- model_migration (ADR-0076) ----
+
+    public const string SelectModelMigration =
+        "SELECT provider AS Provider, model AS Model, base_url AS BaseUrl, engine AS Engine, " +
+        "started_at AS StartedAt, finished_at AS FinishedAt FROM model_migration WHERE id = 1";
+
+    public const string HasOpenModelMigration =
+        "SELECT count(*) FROM model_migration WHERE id = 1 AND finished_at IS NULL";
+
+    // The DO UPDATE's WHERE clause is the state-machine guard: Start only ever moves a closed (or
+    // absent) row to open, never overwrites one already open. When the row is open, the WHERE is
+    // false, SQLite treats the upsert as a no-op for it, and this affects 0 rows — the caller's
+    // signal to refuse rather than clobber (mirrors ADR-0037's claim-by-update pattern).
+    public const string StartModelMigration =
+        """
+        INSERT INTO model_migration (id, provider, model, base_url, engine, started_at, finished_at)
+        VALUES (1, @provider, @model, @baseUrl, @engine, @startedAt, NULL)
+        ON CONFLICT(id) DO UPDATE SET
+            provider = @provider, model = @model, base_url = @baseUrl, engine = @engine,
+            started_at = @startedAt, finished_at = NULL, lease_owner = NULL, lease_expires_at = NULL
+        WHERE model_migration.finished_at IS NOT NULL
+        """;
+
+    public const string FinishModelMigration =
+        "UPDATE model_migration SET finished_at = @finishedAt, lease_owner = NULL, lease_expires_at = NULL " +
+        "WHERE id = 1 AND finished_at IS NULL";
+
+    public const string AcquireModelMigrationLease =
+        "UPDATE model_migration SET lease_owner = @owner, lease_expires_at = @expiresAt " +
+        "WHERE id = 1 AND finished_at IS NULL AND (lease_owner IS NULL OR lease_expires_at < @now)";
+
+    public const string RenewModelMigrationLease =
+        "UPDATE model_migration SET lease_expires_at = @expiresAt " +
+        "WHERE id = 1 AND finished_at IS NULL AND lease_owner = @owner";
+
+    public const string ReleaseModelMigrationLease =
+        "UPDATE model_migration SET lease_owner = NULL, lease_expires_at = NULL WHERE id = 1 AND lease_owner = @owner";
+
     // Custom contexts are listed alongside shared/project because their label is the only key that
     // reaches their rows through memory_search (SearchContexts.For), and this is the only place a
     // caller can read it back. Omitting them made a context-scoped write unreachable by any means

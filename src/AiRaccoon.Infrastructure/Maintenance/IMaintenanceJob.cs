@@ -14,7 +14,7 @@ public interface IMaintenanceJob
     /// <summary>What to call this in a log line a human reads. Free to change; <see cref="Name" /> is not.</summary>
     string DisplayName { get; }
 
-    /// <summary>How often to run, or null to run exactly once per bank, ever.</summary>
+    /// <summary>How often to run, or null to run exactly once per bank, ever — unless <see cref="HasWorkAsync" /> overrides that (an on-demand job).</summary>
     TimeSpan? Interval { get; }
 
     /// <summary>
@@ -23,4 +23,14 @@ public interface IMaintenanceJob
     ///     doubles the window in which a background embed races an in-flight write.
     /// </summary>
     Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     On-demand due-ness: true when the job has outstanding work right now, independent of
+    ///     <see cref="Interval" />/<c>maintenance_jobs.last_run_at</c> — the runner stamps that
+    ///     ledger on every success, so a clock-gated on-demand job would run once and never fire
+    ///     again. Default false: every cadence-based job (vacuum, backfill, retention) is unaffected.
+    ///     Called every pass, so it must be cheap (one indexed read).
+    /// </summary>
+    Task<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+        Task.FromResult(false);
 }

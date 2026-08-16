@@ -140,13 +140,14 @@ internal static class CliCommandTree
     }
 
     /// <summary>
-    ///     `model set` re-embeds the whole bank (EntryEmbedder.ConfigureAsync), so it is an operation
-    ///     and stays top level; the provider rows it leaves behind are read and cleared under settings.
+    ///     `model set` re-embeds the whole bank in the background (ADR-0076: the CLI commits an
+    ///     outbox record and returns; a relay on the server drains it), so it is an operation and
+    ///     stays top level; the provider rows it leaves behind are read and cleared under settings.
     /// </summary>
     private static Command ModelCommand() =>
-        new("model", "Embedding engine selection — 'model set' re-embeds the bank; its configuration is shown and reset under 'settings model'")
+        new("model", "Embedding engine selection — 'model set' starts a re-embed of the bank in the background; its configuration is shown and reset under 'settings model'")
         {
-            new Command("set", "Sets the embedding engine and re-embeds the bank")
+            new Command("set", "Sets the embedding engine and starts re-embedding the bank in the background")
             {
                 new Command("local", "Embeds in-process with the bundled ONNX model; optional path overrides it") { new Argument<string?>("path") { HelpName = "path", Arity = ArgumentArity.ZeroOrOne } },
                 new Command("openai", "Routes through an OpenAI-compatible endpoint; key via --api-key (persisted in settings)")

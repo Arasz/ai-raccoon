@@ -12,10 +12,16 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     re-embed everything when the engine changes. Takes an open connection rather than opening
 ///     its own, since every caller is already inside one and embedding is never its own transaction.
 /// </summary>
-public sealed class EntryEmbedder(IEmbeddingService embeddings) : IEntryEmbedder
+public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationLease? migrationLease = null)
+    : IEntryEmbedder
 {
     private const int BatchSize = 32;
     private const string BundledModel = "bundled";
+
+    // Optional so every existing call site (production DI and every test that builds EntryEmbedder
+    // directly, none of which touch StartMigrationAsync/DrainMigrationAsync) keeps compiling; a
+    // caller that does reach either method without one gets a clear failure, not a silent no-op.
+    private readonly IModelMigrationLease? _migrationLease = migrationLease;
 
     /// <summary>Writes the engine settings and, when the engine fingerprint changed, re-embeds the whole bank.</summary>
     public async Task<EmbeddingConfig> ConfigureAsync(SqliteConnection connection, string provider, string? model,
@@ -45,6 +51,126 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings) : IEntryEmbedder
         await EmbedAsync(connection, reEmbed, cancellationToken).ConfigureAwait(false);
 
         return new EmbeddingConfig(provider, model ?? BundledModel, engine);
+    }
+
+    /// <inheritdoc />
+    public async Task<EmbeddingConfig> StartMigrationAsync(SqliteConnection connection, string provider,
+        string? model, string? baseUrl, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var previous = await ReadSettingAsync(connection, EmbeddingSettingsKeys.Engine, cancellationToken)
+            .ConfigureAwait(false);
+        var engine = EmbeddingService.EngineFingerprint(provider, model, baseUrl);
+
+        // A null `previous` is a bank being configured for the first time, not a migration: there is
+        // no prior engine's vectors to make stale, so there is nothing to owe and no lease to take.
+        if (previous is null || string.Equals(previous, engine, StringComparison.Ordinal))
+        {
+            // Nothing owed: still apply the discrete settings rows, no outbox row needed.
+            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.Provider, provider, cancellationToken)
+                .ConfigureAwait(false);
+            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.Model, model, cancellationToken)
+                .ConfigureAwait(false);
+            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.BaseUrl, baseUrl, cancellationToken)
+                .ConfigureAwait(false);
+            await connection.ExecuteAsync(Def(MemorySql.UpsertSetting,
+                    new { key = EmbeddingSettingsKeys.Engine, value = engine }, cancellationToken))
+                .ConfigureAwait(false);
+            return new EmbeddingConfig(provider, model ?? BundledModel, engine);
+        }
+
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.Provider, provider, cancellationToken, transaction)
+                .ConfigureAwait(false);
+            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.Model, model, cancellationToken, transaction)
+                .ConfigureAwait(false);
+            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.BaseUrl, baseUrl, cancellationToken, transaction)
+                .ConfigureAwait(false);
+            await connection.ExecuteAsync(Def(MemorySql.UpsertSetting,
+                    new { key = EmbeddingSettingsKeys.Engine, value = engine }, cancellationToken, transaction))
+                .ConfigureAwait(false);
+
+            var started = await connection.ExecuteAsync(Def(MemorySql.StartModelMigration,
+                    new { provider, model, baseUrl, engine, startedAt = now.ToUnixTimeSeconds() }, cancellationToken,
+                    transaction))
+                .ConfigureAwait(false);
+            if (started == 0)
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                throw new ModelMigrationInProgressException(
+                    "ai-raccoon: a model migration is already in progress; wait for it to finish before starting another");
+            }
+
+            // The outbox's payoff: every row this touches leaves the searchable vec0 index the
+            // instant this commits (vec_entries_pending/vec_structure_pending), so a crash right
+            // after COMMIT degrades to FTS5-only for those rows rather than mixing two models' vectors.
+            await connection.ExecuteAsync(Def(MemorySql.MarkAllEmbeddedPending, cancellationToken, transaction))
+                .ConfigureAwait(false);
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (ModelMigrationInProgressException)
+        {
+            throw; // already rolled back above
+        }
+        catch
+        {
+            await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
+
+        return new EmbeddingConfig(provider, model ?? BundledModel, engine);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> DrainMigrationAsync(SqliteConnection connection, DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (_migrationLease is null)
+        {
+            throw new InvalidOperationException(
+                "ai-raccoon: EntryEmbedder was built without an IModelMigrationLease; DrainMigrationAsync needs one");
+        }
+
+        if (!await _migrationLease.TryAcquireAsync(connection, cancellationToken).ConfigureAwait(false))
+        {
+            return false; // another relay already owns it
+        }
+
+        try
+        {
+            var open = await connection.QuerySingleOrDefaultAsync<long?>(
+                    Def(MemorySql.HasOpenModelMigration, cancellationToken)).ConfigureAwait(false) > 0;
+            if (!open)
+            {
+                return false; // finished by another relay between the caller's check and our lease
+            }
+
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var batch = (await connection.QueryAsync<EmbedRow>(Def(MemorySql.SelectAllPendingForEmbed,
+                        new { limit = BatchSize }, cancellationToken)).ConfigureAwait(false)).ToList();
+                if (batch.Count == 0)
+                {
+                    break;
+                }
+
+                await EmbedAsync(connection, batch, cancellationToken).ConfigureAwait(false);
+                await _migrationLease.TryRenewAsync(connection, cancellationToken).ConfigureAwait(false);
+            }
+
+            await connection.ExecuteAsync(Def(MemorySql.FinishModelMigration,
+                    new { finishedAt = now.ToUnixTimeSeconds() }, cancellationToken))
+                .ConfigureAwait(false);
+            return true;
+        }
+        finally
+        {
+            await _migrationLease.ReleaseAsync(connection, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>Embeds one row when an engine is configured; a bank with no engine is left pending.</summary>
@@ -253,14 +379,18 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings) : IEntryEmbedder
             Def(MemorySql.SelectSetting, new { key }, cancellationToken)).ConfigureAwait(false);
 
     private static async Task UpsertOrDeleteAsync(SqliteConnection connection, string key, string? value,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken, SqliteTransaction? transaction = null) =>
         await connection.ExecuteAsync(value is null
-            ? Def(MemorySql.DeleteSetting, new { key }, cancellationToken)
-            : Def(MemorySql.UpsertSetting, new { key, value }, cancellationToken)).ConfigureAwait(false);
+            ? Def(MemorySql.DeleteSetting, new { key }, cancellationToken, transaction)
+            : Def(MemorySql.UpsertSetting, new { key, value }, cancellationToken, transaction)).ConfigureAwait(false);
 
-    private static CommandDefinition Def(string sql, object? parameters, CancellationToken cancellationToken) => new(sql, parameters, cancellationToken: cancellationToken);
+    private static CommandDefinition Def(string sql, object? parameters, CancellationToken cancellationToken,
+        SqliteTransaction? transaction = null) =>
+        new(sql, parameters, transaction, cancellationToken: cancellationToken);
 
-    private static CommandDefinition Def(string sql, CancellationToken cancellationToken) => new(sql, cancellationToken: cancellationToken);
+    private static CommandDefinition Def(string sql, CancellationToken cancellationToken,
+        SqliteTransaction? transaction = null) =>
+        new(sql, transaction: transaction, cancellationToken: cancellationToken);
 
     internal sealed record EmbedRow
     {
