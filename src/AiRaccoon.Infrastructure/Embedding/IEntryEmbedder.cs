@@ -22,9 +22,10 @@ public interface IEntryEmbedder
     /// <summary>
     ///     The relay half (ADR-0076): under the migration lease, drains every bank-wide pending row
     ///     (not project-scoped, unlike <see cref="EmbedPendingAsync" />) and marks the open migration
-    ///     finished. False when no migration is open or another relay already holds the lease.
+    ///     finished, stamping <c>finished_at</c> from the clock read after the drain completes. False
+    ///     when no migration is open or another relay already holds the lease.
     /// </summary>
-    Task<bool> DrainMigrationAsync(SqliteConnection connection, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<bool> DrainMigrationAsync(SqliteConnection connection, CancellationToken cancellationToken);
 
     /// <summary>Embeds one row when an engine is configured; a bank with no engine is left pending.</summary>
     Task EmbedIfConfiguredAsync(SqliteConnection connection, long id, string value,
