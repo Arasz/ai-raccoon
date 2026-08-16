@@ -331,7 +331,7 @@ public sealed class OtlpExportTests : IDisposable
 
         await ConsoleCapture.RunAsync(async () =>
         {
-            var exit = await new AppRunner().Run(["--data-root", _dataRoot, "access", "default", "show"]);
+            var exit = await new AppRunner().Run(["--data-root", _dataRoot, "settings", "access", "default", "show"]);
             exit.ShouldBe(0);
         });
 

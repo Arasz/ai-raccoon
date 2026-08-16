@@ -25,7 +25,7 @@ public class ConfigCommandsAccessModelTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, stdout, _) = await Run(["access", "default", "set", "rw"], store);
+        var (exit, stdout, _) = await Run(["settings", "access", "default", "set", "rw"], store);
 
         exit.ShouldBe(0);
         store.Settings["access.mode.global"].ShouldBe("rw");
@@ -37,7 +37,7 @@ public class ConfigCommandsAccessModelTests
     {
         var store = new FakeConfigStore();
 
-        await Run(["access", "default", "set", "full"], store);
+        await Run(["settings", "access", "default", "set", "full"], store);
 
         store.Settings["access.mode.global"].ShouldBe("full");
     }
@@ -47,7 +47,7 @@ public class ConfigCommandsAccessModelTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, err) = await Run(["access", "default", "set", "bogus"], store);
+        var (exit, _, err) = await Run(["settings", "access", "default", "set", "bogus"], store);
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("bogus");
@@ -57,7 +57,7 @@ public class ConfigCommandsAccessModelTests
     [Fact]
     public async Task AccessDefaultShow_NoRow_PrintsEffectiveDefaultRw()
     {
-        var (exit, stdout, _) = await Run(["access", "default", "show"], new FakeConfigStore());
+        var (exit, stdout, _) = await Run(["settings", "access", "default", "show"], new FakeConfigStore());
 
         exit.ShouldBe(0);
         stdout.Trim().ShouldBe("rw");
@@ -74,7 +74,7 @@ public class ConfigCommandsAccessModelTests
             }
         };
 
-        var (_, stdout, _) = await Run(["access", "default", "show"], store);
+        var (_, stdout, _) = await Run(["settings", "access", "default", "show"], store);
 
         stdout.Trim().ShouldBe("ro");
     }
@@ -85,7 +85,7 @@ public class ConfigCommandsAccessModelTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, stdout, _) = await Run(["access", "set", "acme", "full"], store);
+        var (exit, stdout, _) = await Run(["settings", "access", "set", "acme", "full"], store);
 
         exit.ShouldBe(0);
         store.Settings["access.mode.project:acme"].ShouldBe("full");
@@ -97,7 +97,7 @@ public class ConfigCommandsAccessModelTests
     {
         var store = new FakeConfigStore();
 
-        await Run(["access", "set", "*", "ro"], store);
+        await Run(["settings", "access", "set", "*", "ro"], store);
 
         // The global row IS the wildcard for access (findings: `access set *` is spelled
         // `access default set`); a literal wildcard project row must not be written.
@@ -116,7 +116,7 @@ public class ConfigCommandsAccessModelTests
             }
         };
 
-        var (exit, _, _) = await Run(["access", "unset", "acme"], store);
+        var (exit, _, _) = await Run(["settings", "access", "unset", "acme"], store);
 
         exit.ShouldBe(0);
         store.Settings.ShouldNotContainKey("access.mode.project:acme");
@@ -133,7 +133,7 @@ public class ConfigCommandsAccessModelTests
             }
         };
 
-        await Run(["access", "unset", "*"], store);
+        await Run(["settings", "access", "unset", "*"], store);
 
         store.Settings.ShouldNotContainKey("access.mode.global");
     }
@@ -151,7 +151,7 @@ public class ConfigCommandsAccessModelTests
             }
         };
 
-        var (exit, stdout, _) = await Run(["access", "list"], store);
+        var (exit, stdout, _) = await Run(["settings", "access", "list"], store);
 
         exit.ShouldBe(0);
         stdout.ShouldContain("default: rw");
@@ -162,7 +162,7 @@ public class ConfigCommandsAccessModelTests
     [Fact]
     public async Task AccessList_NoRows_PrintsOnlyDefaultRw()
     {
-        var (_, stdout, _) = await Run(["access", "list"], new FakeConfigStore());
+        var (_, stdout, _) = await Run(["settings", "access", "list"], new FakeConfigStore());
 
         stdout.Trim().ShouldBe("default: rw");
     }
@@ -277,7 +277,7 @@ public class ConfigCommandsAccessModelTests
             }
         };
 
-        var (exit, stdout, _) = await Run(["model", "reset"], store);
+        var (exit, stdout, _) = await Run(["settings", "model", "reset"], store);
 
         exit.ShouldBe(0);
         store.Settings.Keys.ShouldNotContain(k => k.StartsWith("embedding.", StringComparison.Ordinal));
@@ -287,7 +287,7 @@ public class ConfigCommandsAccessModelTests
     [Fact]
     public async Task ModelShow_NoEngine_PrintsNone()
     {
-        var (exit, stdout, _) = await Run(["model", "show"], new FakeConfigStore());
+        var (exit, stdout, _) = await Run(["settings", "model", "show"], new FakeConfigStore());
 
         exit.ShouldBe(0);
         stdout.ShouldContain("provider: (none");
@@ -307,7 +307,7 @@ public class ConfigCommandsAccessModelTests
             }
         };
 
-        var (_, stdout, _) = await Run(["model", "show"], store);
+        var (_, stdout, _) = await Run(["settings", "model", "show"], store);
 
         stdout.ShouldContain("openai");
         stdout.ShouldContain("text-embedding-3-small");
@@ -334,7 +334,7 @@ public class ConfigCommandsAccessModelTests
         // user input (System.CommandLine would report a parse error first, and ConfigCommands
         // trusts that CliRendering already rendered it -- see ParseErrorPath_ReturnsInvalidArgumentWithoutPrinting).
         var store = new FakeConfigStore();
-        CliArgs.TryParse(["access", "default", "show"], out var validParse);
+        CliArgs.TryParse(["settings", "access", "default", "show"], out var validParse);
         var parsed = validParse! with { CommandPath = ["totally", "bogus"], Errors = [] };
 
         var stdout = new StringWriter();
@@ -353,7 +353,7 @@ public class ConfigCommandsAccessModelTests
     public async Task ParseErrorPath_ReturnsInvalidArgumentWithoutPrinting()
     {
         var store = new FakeConfigStore();
-        CliArgs.TryParse(["access"], out var parsed); // "access" alone: SCL reports "Required command was not provided."
+        CliArgs.TryParse(["settings", "access"], out var parsed); // "access" alone: SCL reports "Required command was not provided."
         parsed!.Errors.ShouldNotBeEmpty();
 
         var stdout = new StringWriter();

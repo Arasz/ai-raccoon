@@ -26,7 +26,7 @@ public class ConfigCommandsPerformanceTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, outp, _) = await Run(["performance", "buffer-capacity", "5000"], store);
+        var (exit, outp, _) = await Run(["settings", "performance", "buffer-capacity", "5000"], store);
 
         exit.ShouldBe(0);
         store.Settings[MetricsConfigKeys.BufferCapacityGlobal].ShouldBe("5000");
@@ -39,7 +39,7 @@ public class ConfigCommandsPerformanceTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, err) = await Run(["performance", "buffer-capacity", "lots"], store);
+        var (exit, _, err) = await Run(["settings", "performance", "buffer-capacity", "lots"], store);
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("positive number");
@@ -51,7 +51,7 @@ public class ConfigCommandsPerformanceTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, err) = await Run(["performance", "buffer-capacity", "0"], store);
+        var (exit, _, err) = await Run(["settings", "performance", "buffer-capacity", "0"], store);
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("positive number");
@@ -63,7 +63,7 @@ public class ConfigCommandsPerformanceTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, err) = await Run(["performance", "buffer-capacity", "-1"], store);
+        var (exit, _, err) = await Run(["settings", "performance", "buffer-capacity", "-1"], store);
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("positive number");
@@ -76,7 +76,7 @@ public class ConfigCommandsPerformanceTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, err) = await Run(["performance", "buffer-capacity", "20000000000"], store);
+        var (exit, _, err) = await Run(["settings", "performance", "buffer-capacity", "20000000000"], store);
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("measurements");
@@ -88,7 +88,7 @@ public class ConfigCommandsPerformanceTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, outp, _) = await Run(["performance", "flush-interval", "10"], store);
+        var (exit, outp, _) = await Run(["settings", "performance", "flush-interval", "10"], store);
 
         exit.ShouldBe(0);
         store.Settings[MetricsConfigKeys.FlushIntervalSecondsGlobal].ShouldBe("10");
@@ -101,7 +101,7 @@ public class ConfigCommandsPerformanceTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, err) = await Run(["performance", "flush-interval", "often"], store);
+        var (exit, _, err) = await Run(["settings", "performance", "flush-interval", "often"], store);
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("positive number");
@@ -113,7 +113,7 @@ public class ConfigCommandsPerformanceTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, err) = await Run(["performance", "flush-interval", "0"], store);
+        var (exit, _, err) = await Run(["settings", "performance", "flush-interval", "0"], store);
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("positive number");
@@ -125,7 +125,7 @@ public class ConfigCommandsPerformanceTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, err) = await Run(["performance", "flush-interval", "-30"], store);
+        var (exit, _, err) = await Run(["settings", "performance", "flush-interval", "-30"], store);
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("positive number");
@@ -137,7 +137,7 @@ public class ConfigCommandsPerformanceTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, outp, _) = await Run(["performance", "retention", "14"], store);
+        var (exit, outp, _) = await Run(["settings", "performance", "retention", "14"], store);
 
         exit.ShouldBe(0);
         store.Settings[MetricsConfigKeys.RetentionDaysGlobal].ShouldBe("14");
@@ -150,7 +150,7 @@ public class ConfigCommandsPerformanceTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, err) = await Run(["performance", "retention", "forever"], store);
+        var (exit, _, err) = await Run(["settings", "performance", "retention", "forever"], store);
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("positive number");
@@ -162,7 +162,7 @@ public class ConfigCommandsPerformanceTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, err) = await Run(["performance", "retention", "0"], store);
+        var (exit, _, err) = await Run(["settings", "performance", "retention", "0"], store);
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("positive number");
@@ -174,7 +174,7 @@ public class ConfigCommandsPerformanceTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, err) = await Run(["performance", "retention", "-7"], store);
+        var (exit, _, err) = await Run(["settings", "performance", "retention", "-7"], store);
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("positive number");
@@ -188,7 +188,7 @@ public class ConfigCommandsPerformanceTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, err) = await Run(["performance", "retention", "20000000000"], store);
+        var (exit, _, err) = await Run(["settings", "performance", "retention", "20000000000"], store);
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("days");
@@ -200,7 +200,7 @@ public class ConfigCommandsPerformanceTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, outp, _) = await Run(["performance", "list"], store);
+        var (exit, outp, _) = await Run(["settings", "performance", "list"], store);
 
         exit.ShouldBe(0);
         outp.ShouldContain(MetricsConfigKeys.DefaultBufferCapacity.ToString());
@@ -218,7 +218,7 @@ public class ConfigCommandsPerformanceTests
         store.Settings[MetricsConfigKeys.FlushIntervalSecondsGlobal] = "not-a-number";
         store.Settings[MetricsConfigKeys.RetentionDaysGlobal] = "not-a-number";
 
-        var (exit, outp, _) = await Run(["performance", "list"], store);
+        var (exit, outp, _) = await Run(["settings", "performance", "list"], store);
 
         exit.ShouldBe(0);
         outp.ShouldContain(MetricsConfigKeys.DefaultBufferCapacity.ToString());
@@ -234,7 +234,7 @@ public class ConfigCommandsPerformanceTests
         store.Settings[MetricsConfigKeys.FlushIntervalSecondsGlobal] = "15";
         store.Settings[MetricsConfigKeys.RetentionDaysGlobal] = "60";
 
-        var (exit, outp, _) = await Run(["performance", "list"], store);
+        var (exit, outp, _) = await Run(["settings", "performance", "list"], store);
 
         exit.ShouldBe(0);
         outp.ShouldContain("2500");
@@ -248,7 +248,7 @@ public class ConfigCommandsPerformanceTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, outp, _) = await Run(["performance", "list"], store);
+        var (exit, outp, _) = await Run(["settings", "performance", "list"], store);
 
         exit.ShouldBe(0);
         outp.ShouldContain("next server restart");
@@ -261,7 +261,7 @@ public class ConfigCommandsPerformanceTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, outp, _) = await Run(["performance", "show"], store);
+        var (exit, outp, _) = await Run(["settings", "performance", "show"], store);
 
         exit.ShouldBe(0);
         outp.ShouldContain(MetricsConfigKeys.DefaultBufferCapacity.ToString());

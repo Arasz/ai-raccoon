@@ -37,7 +37,7 @@ public sealed class AppRunnerShutdownCancellationTests : IDisposable
     [Fact]
     public async Task RunCliCommand_RegistersShutdownCancellation()
     {
-        var (exit, runner) = await Run(["--data-root", _dataRoot, "access", "default", "show"]);
+        var (exit, runner) = await Run(["--data-root", _dataRoot, "settings", "access", "default", "show"]);
 
         exit.ShouldBe(0);
         runner.ShutdownCancellationRegistrations.ShouldBe(1);

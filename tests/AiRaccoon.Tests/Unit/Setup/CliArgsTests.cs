@@ -196,29 +196,29 @@ public class CliArgsTests
     [Fact]
     public void Parse_AccessDefaultSet_ParsesCommandPathAndMode()
     {
-        CliArgs.TryParse(["access", "default", "set", "rw"], out var parsed);
+        CliArgs.TryParse(["settings", "access", "default", "set", "rw"], out var parsed);
 
         parsed!.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldBe(["access", "default", "set"]);
+        parsed.CommandPath.ShouldBe(["settings", "access", "default", "set"]);
         parsed.ParsedCliArgs.GetValue<string>("mode").ShouldBe("rw");
     }
 
     [Fact]
     public void Parse_AccessDefaultShow_ParsesCommandPath()
     {
-        CliArgs.TryParse(["access", "default", "show"], out var parsed);
+        CliArgs.TryParse(["settings", "access", "default", "show"], out var parsed);
 
         parsed!.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldBe(["access", "default", "show"]);
+        parsed.CommandPath.ShouldBe(["settings", "access", "default", "show"]);
     }
 
     [Fact]
     public void Parse_AccessSet_ParsesProjectIdAndMode()
     {
-        CliArgs.TryParse(["access", "set", "acme", "full"], out var parsed);
+        CliArgs.TryParse(["settings", "access", "set", "acme", "full"], out var parsed);
 
         parsed!.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldBe(["access", "set"]);
+        parsed.CommandPath.ShouldBe(["settings", "access", "set"]);
         parsed.ParsedCliArgs.GetValue<string>("project-id").ShouldBe("acme");
         parsed.ParsedCliArgs.GetValue<string>("mode").ShouldBe("full");
     }
@@ -226,7 +226,7 @@ public class CliArgsTests
     [Fact]
     public void Parse_AccessSetStar_ParsesWildcardProjectId()
     {
-        CliArgs.TryParse(["access", "set", "*", "ro"], out var parsed);
+        CliArgs.TryParse(["settings", "access", "set", "*", "ro"], out var parsed);
 
         parsed!.Errors.ShouldBeEmpty();
         parsed.ParsedCliArgs.GetValue<string>("project-id").ShouldBe("*");
@@ -235,20 +235,20 @@ public class CliArgsTests
     [Fact]
     public void Parse_AccessUnset_ParsesProjectId()
     {
-        CliArgs.TryParse(["access", "unset", "acme"], out var parsed);
+        CliArgs.TryParse(["settings", "access", "unset", "acme"], out var parsed);
 
         parsed!.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldBe(["access", "unset"]);
+        parsed.CommandPath.ShouldBe(["settings", "access", "unset"]);
         parsed.ParsedCliArgs.GetValue<string>("project-id").ShouldBe("acme");
     }
 
     [Fact]
     public void Parse_AccessList_ParsesCommandPath()
     {
-        CliArgs.TryParse(["access", "list"], out var parsed);
+        CliArgs.TryParse(["settings", "access", "list"], out var parsed);
 
         parsed!.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldBe(["access", "list"]);
+        parsed.CommandPath.ShouldBe(["settings", "access", "list"]);
     }
 
 
@@ -295,50 +295,50 @@ public class CliArgsTests
     [Fact]
     public void Parse_ModelReset_ParsesCommandPath()
     {
-        CliArgs.TryParse(["model", "reset"], out var parsed);
-        parsed!.CommandPath.ShouldBe(["model", "reset"]);
+        CliArgs.TryParse(["settings", "model", "reset"], out var parsed);
+        parsed!.CommandPath.ShouldBe(["settings", "model", "reset"]);
     }
 
     [Fact]
     public void Parse_ModelShow_ParsesCommandPath()
     {
-        CliArgs.TryParse(["model", "show"], out var parsed);
-        parsed!.CommandPath.ShouldBe(["model", "show"]);
+        CliArgs.TryParse(["settings", "model", "show"], out var parsed);
+        parsed!.CommandPath.ShouldBe(["settings", "model", "show"]);
     }
 
 
     [Fact]
     public void Parse_RetrievalAlphaSet_ParsesAlpha()
     {
-        CliArgs.TryParse(["retrieval", "alpha", "set", "0.3"], out var parsed);
+        CliArgs.TryParse(["settings", "retrieval", "alpha", "set", "0.3"], out var parsed);
 
         parsed!.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldBe(["retrieval", "alpha", "set"]);
+        parsed.CommandPath.ShouldBe(["settings", "retrieval", "alpha", "set"]);
         parsed.ParsedCliArgs.GetValue<string>("alpha").ShouldBe("0.3");
     }
 
     [Fact]
     public void Parse_RetrievalAlphaShow_ParsesCommandPath()
     {
-        CliArgs.TryParse(["retrieval", "alpha", "show"], out var parsed);
-        parsed!.CommandPath.ShouldBe(["retrieval", "alpha", "show"]);
+        CliArgs.TryParse(["settings", "retrieval", "alpha", "show"], out var parsed);
+        parsed!.CommandPath.ShouldBe(["settings", "retrieval", "alpha", "show"]);
     }
 
     [Fact]
     public void Parse_SweepThresholdSet_ParsesThreshold()
     {
-        CliArgs.TryParse(["sweep", "threshold", "set", "0.3"], out var parsed);
+        CliArgs.TryParse(["settings", "sweep", "threshold", "set", "0.3"], out var parsed);
 
         parsed!.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldBe(["sweep", "threshold", "set"]);
+        parsed.CommandPath.ShouldBe(["settings", "sweep", "threshold", "set"]);
         parsed.ParsedCliArgs.GetValue<string>("threshold").ShouldBe("0.3");
     }
 
     [Fact]
     public void Parse_SweepShow_ParsesCommandPath()
     {
-        CliArgs.TryParse(["sweep", "show"], out var parsed);
-        parsed!.CommandPath.ShouldBe(["sweep", "show"]);
+        CliArgs.TryParse(["settings", "sweep", "show"], out var parsed);
+        parsed!.CommandPath.ShouldBe(["settings", "sweep", "show"]);
     }
 
     [Fact]
@@ -346,7 +346,7 @@ public class CliArgsTests
     {
         // The GLOBAL sweep.ttl_days knob is REMOVED, not moved — no ttl command exists.
         // Per-entry ttl_days is live data, set by the memory_set_ttl tool, never by the CLI.
-        CliArgs.TryParse(["sweep", "ttl", "set", "30"], out var parsed);
+        CliArgs.TryParse(["settings", "sweep", "ttl", "set", "30"], out var parsed);
 
         parsed!.Errors.ShouldNotBeEmpty();
     }
@@ -357,12 +357,12 @@ public class CliArgsTests
     {
         CliArgs.TryParse(
         [
-            "sync", "add", "s3", "http://s3.example.com",
+            "settings", "sync", "add", "s3", "http://s3.example.com",
             "--bucket", "memories", "--region", "us-east-1", "--object-key", "bank.db"
         ], out var parsed);
 
         parsed!.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldBe(["sync", "add", "s3"]);
+        parsed.CommandPath.ShouldBe(["settings", "sync", "add", "s3"]);
         parsed.ParsedCliArgs.GetValue<string>("url").ShouldBe("http://s3.example.com");
         parsed.ParsedCliArgs.GetValue<string>("--bucket").ShouldBe("memories");
         parsed.ParsedCliArgs.GetValue<string>("--region").ShouldBe("us-east-1");
@@ -372,7 +372,7 @@ public class CliArgsTests
     [Fact]
     public void Parse_SyncAddS3_MissingBucket_ReturnsError()
     {
-        CliArgs.TryParse(["sync", "add", "s3", "http://s3.example.com"], out var parsed);
+        CliArgs.TryParse(["settings", "sync", "add", "s3", "http://s3.example.com"], out var parsed);
 
         parsed!.Errors.ShouldNotBeEmpty();
         parsed.Errors.ShouldContain(e => e.Contains("--bucket"));
@@ -381,10 +381,10 @@ public class CliArgsTests
     [Fact]
     public void Parse_SyncAddAzure_ParsesContainerAndOptions()
     {
-        CliArgs.TryParse(["sync", "add", "azure", "memories", "--object-key", "bank.db"], out var parsed);
+        CliArgs.TryParse(["settings", "sync", "add", "azure", "memories", "--object-key", "bank.db"], out var parsed);
 
         parsed!.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldBe(["sync", "add", "azure"]);
+        parsed.CommandPath.ShouldBe(["settings", "sync", "add", "azure"]);
         parsed.ParsedCliArgs.GetValue<string>("container").ShouldBe("memories");
         parsed.ParsedCliArgs.GetValue<string>("--object-key").ShouldBe("bank.db");
     }
@@ -392,7 +392,7 @@ public class CliArgsTests
     [Fact]
     public void Parse_SyncAddAzure_NoContainer_ReturnsError()
     {
-        CliArgs.TryParse(["sync", "add", "azure"], out var parsed);
+        CliArgs.TryParse(["settings", "sync", "add", "azure"], out var parsed);
 
         parsed!.Errors.ShouldNotBeEmpty();
     }
@@ -401,10 +401,10 @@ public class CliArgsTests
     public void Parse_SyncAddAzure_CliMode_ParsesAccountOption()
     {
         CliArgs.TryParse(
-            ["sync", "add", "azure", "memories", "--cli", "--account", "myacct", "--object-key", "bank.db"], out var parsed);
+            ["settings", "sync", "add", "azure", "memories", "--cli", "--account", "myacct", "--object-key", "bank.db"], out var parsed);
 
         parsed!.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldBe(["sync", "add", "azure"]);
+        parsed.CommandPath.ShouldBe(["settings", "sync", "add", "azure"]);
         parsed.ParsedCliArgs.GetValue<bool>("--cli").ShouldBeTrue();
         parsed.ParsedCliArgs.GetValue<string>("--account").ShouldBe("myacct");
     }
@@ -413,35 +413,35 @@ public class CliArgsTests
     public void Parse_SyncAddS3_CliMode_ParsesCliOption()
     {
         CliArgs.TryParse(
-            ["sync", "add", "s3", "http://s3.example.com", "--bucket", "memories", "--cli"], out var parsed);
+            ["settings", "sync", "add", "s3", "http://s3.example.com", "--bucket", "memories", "--cli"], out var parsed);
 
         parsed!.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldBe(["sync", "add", "s3"]);
+        parsed.CommandPath.ShouldBe(["settings", "sync", "add", "s3"]);
         parsed.ParsedCliArgs.GetValue<bool>("--cli").ShouldBeTrue();
     }
 
     [Fact]
     public void Parse_SyncRemove_ParsesCommandPath()
     {
-        CliArgs.TryParse(["sync", "remove"], out var parsed);
-        parsed!.CommandPath.ShouldBe(["sync", "remove"]);
+        CliArgs.TryParse(["settings", "sync", "remove"], out var parsed);
+        parsed!.CommandPath.ShouldBe(["settings", "sync", "remove"]);
     }
 
     [Fact]
     public void Parse_SyncShow_ParsesCommandPath()
     {
-        CliArgs.TryParse(["sync", "show"], out var parsed);
-        parsed!.CommandPath.ShouldBe(["sync", "show"]);
+        CliArgs.TryParse(["settings", "sync", "show"], out var parsed);
+        parsed!.CommandPath.ShouldBe(["settings", "sync", "show"]);
     }
 
 
     [Fact]
     public void Parse_WatchEnable_ParsesTargetAndBoolean()
     {
-        CliArgs.TryParse(["watch", "enable", "acme", "true"], out var parsed);
+        CliArgs.TryParse(["settings", "watch", "enable", "acme", "true"], out var parsed);
 
         parsed!.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldBe(["watch", "enable"]);
+        parsed.CommandPath.ShouldBe(["settings", "watch", "enable"]);
         parsed.ParsedCliArgs.GetValue<string>("target").ShouldBe("acme");
         parsed.ParsedCliArgs.GetValue<bool>("enabled").ShouldBeTrue();
     }
@@ -449,17 +449,17 @@ public class CliArgsTests
     [Fact]
     public void Parse_WatchDisableStar_ParsesWildcardTarget()
     {
-        CliArgs.TryParse(["watch", "disable", "*", "false"], out var parsed);
+        CliArgs.TryParse(["settings", "watch", "disable", "*", "false"], out var parsed);
 
         parsed!.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldBe(["watch", "disable"]);
+        parsed.CommandPath.ShouldBe(["settings", "watch", "disable"]);
         parsed.ParsedCliArgs.GetValue<string>("target").ShouldBe("*");
     }
 
     [Fact]
     public void Parse_WatchEnable_InvalidBoolean_ReturnsError()
     {
-        CliArgs.TryParse(["watch", "enable", "acme", "maybe"], out var parsed);
+        CliArgs.TryParse(["settings", "watch", "enable", "acme", "maybe"], out var parsed);
 
         parsed!.Errors.ShouldNotBeEmpty();
     }
@@ -467,10 +467,10 @@ public class CliArgsTests
     [Fact]
     public void Parse_WatchScopeAdd_ParsesTargetAndPath()
     {
-        CliArgs.TryParse(["watch", "scope", "add", "acme", "/a/b"], out var parsed);
+        CliArgs.TryParse(["settings", "ingest", "scope", "add", "acme", "/a/b"], out var parsed);
 
         parsed!.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldBe(["watch", "scope", "add"]);
+        parsed.CommandPath.ShouldBe(["settings", "ingest", "scope", "add"]);
         parsed.ParsedCliArgs.GetValue<string>("target").ShouldBe("acme");
         parsed.ParsedCliArgs.GetValue<string>("path").ShouldBe("/a/b");
     }
@@ -478,31 +478,31 @@ public class CliArgsTests
     [Fact]
     public void Parse_WatchScopeRemove_ParsesCommandPath()
     {
-        CliArgs.TryParse(["watch", "scope", "remove", "*", "/a"], out var parsed);
-        parsed!.CommandPath.ShouldBe(["watch", "scope", "remove"]);
+        CliArgs.TryParse(["settings", "ingest", "scope", "remove", "*", "/a"], out var parsed);
+        parsed!.CommandPath.ShouldBe(["settings", "ingest", "scope", "remove"]);
     }
 
     [Fact]
     public void Parse_WatchScopeList_ParsesCommandPath()
     {
-        CliArgs.TryParse(["watch", "scope", "list", "acme"], out var parsed);
-        parsed!.CommandPath.ShouldBe(["watch", "scope", "list"]);
+        CliArgs.TryParse(["settings", "ingest", "scope", "list", "acme"], out var parsed);
+        parsed!.CommandPath.ShouldBe(["settings", "ingest", "scope", "list"]);
     }
 
     [Fact]
     public void Parse_WatchConcurrency_ParsesTargetAndValue()
     {
-        CliArgs.TryParse(["watch", "concurrency", "acme", "8"], out var parsed);
+        CliArgs.TryParse(["settings", "watch", "concurrency", "acme", "8"], out var parsed);
 
         parsed!.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldBe(["watch", "concurrency"]);
+        parsed.CommandPath.ShouldBe(["settings", "watch", "concurrency"]);
         parsed.ParsedCliArgs.GetValue<int>("value").ShouldBe(8);
     }
 
     [Fact]
     public void Parse_WatchConcurrency_NonNumeric_ReturnsError()
     {
-        CliArgs.TryParse(["watch", "concurrency", "acme", "many"], out var parsed);
+        CliArgs.TryParse(["settings", "watch", "concurrency", "acme", "many"], out var parsed);
 
         parsed!.Errors.ShouldNotBeEmpty();
     }
@@ -510,8 +510,8 @@ public class CliArgsTests
     [Fact]
     public void Parse_WatchList_ParsesCommandPath()
     {
-        CliArgs.TryParse(["watch", "list"], out var parsed);
-        parsed!.CommandPath.ShouldBe(["watch", "list"]);
+        CliArgs.TryParse(["settings", "watch", "list"], out var parsed);
+        parsed!.CommandPath.ShouldBe(["settings", "watch", "list"]);
     }
 
     [Fact]
@@ -534,10 +534,10 @@ public class CliArgsTests
     [Fact]
     public void Parse_WatchRemove_ParsesTarget()
     {
-        CliArgs.TryParse(["watch", "remove", "acme"], out var parsed);
+        CliArgs.TryParse(["settings", "watch", "remove", "acme"], out var parsed);
 
         parsed!.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldBe(["watch", "remove"]);
+        parsed.CommandPath.ShouldBe(["settings", "watch", "remove"]);
         parsed.ParsedCliArgs.GetValue<string>("target").ShouldBe("acme");
     }
 
@@ -684,10 +684,10 @@ public class CliArgsTests
     [Fact]
     public void Parse_RootOptionBeforeVerb_ParsesForBankResolution()
     {
-        CliArgs.TryParse(["--data-root", "/x", "access", "list"], out var parsed);
+        CliArgs.TryParse(["--data-root", "/x", "settings", "access", "list"], out var parsed);
 
         parsed!.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldBe(["access", "list"]);
+        parsed.CommandPath.ShouldBe(["settings", "access", "list"]);
         parsed.Options.ShouldNotBeNull();
         parsed.Options.DataRoot.ShouldBe("/x");
     }
@@ -697,7 +697,7 @@ public class CliArgsTests
     {
         // Pinned against System.CommandLine 2.0.10: root options are not recognized
         // after a subcommand; launch flags must precede the verb.
-        CliArgs.TryParse(["access", "list", "--data-root", "/x"], out var parsed);
+        CliArgs.TryParse(["settings", "access", "list", "--data-root", "/x"], out var parsed);
 
         parsed!.Errors.ShouldNotBeEmpty();
     }
@@ -793,7 +793,7 @@ public class CliArgsTests
     [Fact]
     public void Parse_ValidTopLevelOptionsWithVerb_StillParseCleanly()
     {
-        var ok = CliArgs.TryParse(["--data-root", "/tmp/x", "--install-scope", "project", "access", "default", "show"], out var parsed);
+        var ok = CliArgs.TryParse(["--data-root", "/tmp/x", "--install-scope", "project", "settings", "access", "default", "show"], out var parsed);
 
         ok.ShouldBeTrue();
         parsed!.Errors.ShouldBeEmpty();
@@ -851,7 +851,7 @@ public class CliArgsTests
     [Fact]
     public void Parse_VerbWithoutSubcommand_ReturnsError()
     {
-        CliArgs.TryParse(["access"], out var parsed);
+        CliArgs.TryParse(["settings", "access"], out var parsed);
 
         parsed!.Errors.ShouldNotBeEmpty();
     }

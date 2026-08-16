@@ -24,14 +24,14 @@ public class WatchCommandsTests
             var commands = new WatchCommands(watchStore ?? new FakeWatchStore());
             return parsed.CommandPath switch
             {
-                ["watch", "enable"] or ["watch", "disable"] => commands.SetEnabledAsync(parsed.ParsedCliArgs, store, streams, ct),
-                ["watch", "scope", "add"] => commands.ScopeAddAsync(parsed.ParsedCliArgs, store, streams, ct),
-                ["watch", "scope", "remove"] => commands.ScopeRemoveAsync(parsed.ParsedCliArgs, store, streams, ct),
-                ["watch", "scope", "list"] => commands.ScopeListAsync(parsed.ParsedCliArgs, store, streams, ct),
-                ["watch", "concurrency"] => commands.ConcurrencyAsync(parsed.ParsedCliArgs, store, streams, ct),
-                ["watch", "list"] => commands.ListAsync(store, streams, ct),
+                ["settings", "watch", "enable"] or ["settings", "watch", "disable"] => commands.SetEnabledAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["settings", "ingest", "scope", "add"] => commands.ScopeAddAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["settings", "ingest", "scope", "remove"] => commands.ScopeRemoveAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["settings", "ingest", "scope", "list"] => commands.ScopeListAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["settings", "watch", "concurrency"] => commands.ConcurrencyAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["settings", "watch", "list"] => commands.ListAsync(store, streams, ct),
                 ["watch", "registered"] => commands.RegisteredAsync(parsed.ParsedCliArgs, streams, ct),
-                ["watch", "remove"] => commands.RemoveAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["settings", "watch", "remove"] => commands.RemoveAsync(parsed.ParsedCliArgs, store, streams, ct),
                 _ => throw new InvalidOperationException($"unhandled: {string.Join(' ', parsed.CommandPath)}")
             };
         });
@@ -72,7 +72,7 @@ public class WatchCommandsTests
             }
         };
 
-        var (exit, stdout, _) = await Run(["watch", "list"], store);
+        var (exit, stdout, _) = await Run(["settings", "watch", "list"], store);
 
         exit.ShouldBe(0);
         stdout.Trim().ShouldBe("target: global  enabled: true  concurrency: 4  scope: (none)");
@@ -83,7 +83,7 @@ public class WatchCommandsTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, _) = await Run(["watch", "scope", "add", "acme", "/a/../a/b.md"], store);
+        var (exit, _, _) = await Run(["settings", "ingest", "scope", "add", "acme", "/a/../a/b.md"], store);
 
         exit.ShouldBe(0);
         store.Settings["ingest.scope.acme"].ShouldContain("/a/b.md");
@@ -101,7 +101,7 @@ public class WatchCommandsTests
     [Fact]
     public void Enable_WithoutTheBoolArgument_IsAParseError()
     {
-        CliArgs.TryParse(["watch", "enable", "acme"], out var parsed);
+        CliArgs.TryParse(["settings", "watch", "enable", "acme"], out var parsed);
 
         parsed!.Errors.ShouldNotBeEmpty();
     }
@@ -112,7 +112,7 @@ public class WatchCommandsTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, stdout, _) = await Run(["watch", "enable", "acme", "true"], store);
+        var (exit, stdout, _) = await Run(["settings", "watch", "enable", "acme", "true"], store);
 
         exit.ShouldBe(0);
         stdout.ShouldContain("enabled");
