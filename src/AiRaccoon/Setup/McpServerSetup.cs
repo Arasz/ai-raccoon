@@ -5,6 +5,7 @@ using AiRaccoon.Hosting.Node;
 using AiRaccoon.Hosting.Watchdog;
 using AiRaccoon.Observability;
 using AiRaccoon.Prompts;
+using AiRaccoon.Settings;
 using AiRaccoon.Setup.Logging;
 using AiRaccoon.Tools;
 using CommunityToolkit.Diagnostics;
@@ -137,6 +138,9 @@ internal static partial class McpServerSetup
             if (gated is not null)
             {
                 webApplication.MapShutdown();
+                // Carries sync credentials and the embedding API key, so it is mapped only on a
+                // token-guarded host, like /shutdown.
+                webApplication.MapSettings();
             }
 
             return webApplication;

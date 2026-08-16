@@ -10,17 +10,12 @@ public sealed class MemoryAccessGuard(IMemoryStore store) : IMemoryAccessGuard
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
 
-        var perProjectRaw = await store.GetSettingAsync(
-                AccessModePolicy.ProjectSettingKey(projectId), cancellationToken)
+        var settings = await store.GetSettingsByPrefixAsync(AccessModePolicy.SettingKeyPrefix, cancellationToken)
             .ConfigureAwait(false);
-        if (AccessModePolicy.Parse(perProjectRaw) is { } perProject)
-        {
-            return perProject;
-        }
 
-        var globalRaw = await store.GetSettingAsync(AccessModePolicy.GlobalSettingKey, cancellationToken)
-            .ConfigureAwait(false);
-        return AccessModePolicy.Resolve(AccessModePolicy.Parse(globalRaw), null);
+        settings.TryGetValue(AccessModePolicy.GlobalSettingKey, out var globalRaw);
+        settings.TryGetValue(AccessModePolicy.ProjectSettingKey(projectId), out var perProjectRaw);
+        return AccessModePolicy.Resolve(AccessModePolicy.Parse(globalRaw), AccessModePolicy.Parse(perProjectRaw));
     }
 
     public async Task EnsureAsync(string projectId, AccessRequirement requirement, string toolName,

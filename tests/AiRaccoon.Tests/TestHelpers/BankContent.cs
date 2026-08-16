@@ -1,0 +1,112 @@
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
+using AiRaccoon.Infrastructure.Sqlite;
+using CommunityToolkit.Diagnostics;
+using Microsoft.Data.Sqlite;
+
+namespace AiRaccoon.Tests.TestHelpers;
+
+/// <summary>A digest per readable user table, plus the tables that could not be read.</summary>
+public sealed record BankSnapshot(IReadOnlyDictionary<string, string> Tables, IReadOnlyList<string> Unreadable);
+
+/// <summary>
+///     WP7-T1's seam (docs/plans/2026-08-16-bank-open-cost-implementation.md §6): what the bank
+///     holds, so a command can be asked whether it changed any of it.
+///     <para />
+///     Row content only, deliberately. The plan's wording is "no INSERT/UPDATE/DELETE/DDL", but
+///     <c>MemorySchema.EnsureAsync</c> executes the whole <c>Ddl</c> block and stamps
+///     <c>user_version</c> on every logical open, so a DDL-counting seam would fail the fallback
+///     *reads* §5.3 explicitly permits. Rows are the invariant that can actually hold.
+///     <para />
+///     The table list comes from <c>sqlite_master</c> rather than a list kept here, so a table
+///     added later is covered without an edit.
+/// </summary>
+public static class BankContent
+{
+    /// <summary>Marks a NULL column. Tagged, not substituted, so a column literally holding the
+    /// text "NULL" cannot hash the same as a NULL one.</summary>
+    private const string NullCell = "N";
+
+    private const string ValueCell = "V";
+
+    /// <summary>Control characters, so no cell value can forge a boundary.</summary>
+    private const char CellSeparator = '\u001F';
+
+    private const char RowSeparator = '\u001E';
+
+    public static async Task<BankSnapshot> SnapshotAsync(ISqliteConnectionFactory factory, CancellationToken cancellationToken)
+    {
+        Guard.IsNotNull(factory);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
+        var tables = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        var unreadable = new List<string>();
+        foreach (var table in await UserTablesAsync(connection, cancellationToken))
+        {
+            try
+            {
+                tables[table] = await DigestAsync(connection, table, cancellationToken);
+            }
+            catch (SqliteException)
+            {
+                // Virtual and shadow tables (vec0) do not answer a plain SELECT *; naming them
+                // keeps the skip visible instead of silently shrinking what this covers.
+                unreadable.Add(table);
+            }
+        }
+
+        return new BankSnapshot(tables, unreadable);
+    }
+
+    /// <summary>Tables whose content differs between two snapshots of the same bank.</summary>
+    public static IReadOnlyList<string> Changed(BankSnapshot before, BankSnapshot after)
+    {
+        Guard.IsNotNull(before);
+        Guard.IsNotNull(after);
+        return
+        [
+            .. before.Tables.Keys.Union(after.Tables.Keys, StringComparer.Ordinal)
+                .Where(table => before.Tables.GetValueOrDefault(table) != after.Tables.GetValueOrDefault(table))
+                .Order(StringComparer.Ordinal)
+        ];
+    }
+
+    private static async Task<IReadOnlyList<string>> UserTablesAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name";
+        var names = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            names.Add(reader.GetString(0));
+        }
+
+        return names;
+    }
+
+    private static async Task<string> DigestAsync(SqliteConnection connection, string table, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        // The table name comes from sqlite_master, so it is already an identifier this bank owns.
+        command.CommandText = $"SELECT * FROM \"{table.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
+        var rows = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var cells = new StringBuilder();
+            for (var i = 0; i < reader.FieldCount; i++)
+            {
+                cells.Append(reader.IsDBNull(i)
+                    ? NullCell
+                    : ValueCell + Convert.ToString(reader.GetValue(i), CultureInfo.InvariantCulture));
+                cells.Append(CellSeparator);
+            }
+
+            rows.Add(cells.ToString());
+        }
+
+        rows.Sort(StringComparer.Ordinal);
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join(RowSeparator, rows))));
+    }
+}

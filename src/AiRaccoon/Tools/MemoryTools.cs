@@ -235,7 +235,7 @@ public sealed partial class MemoryTools(
     }
 
     [McpServerTool(Name = TnMemoryIngestFile)]
-    [Description("Indexes one file from disk into memory. The path must lie inside the project's configured scope (ai-raccoon watch scope add); an unscoped project refuses every ingest.")]
+    [Description("Indexes one file from disk into memory. The path must lie inside the project's configured scope (ai-raccoon settings ingest scope add); an unscoped project refuses every ingest.")]
     public async Task<ApiEnvelope<IngestResult>> IngestFile(
         [Description("The project id.")] string projectId,
         [Description("Path of the file to index.")]
@@ -255,7 +255,7 @@ public sealed partial class MemoryTools(
 
     [McpServerTool(Name = TnMemoryIngestDirectory)]
     [Description(
-        "Recursively indexes a directory tree into memory, skipping unchanged files. The path must lie inside the project's configured scope (ai-raccoon watch scope add); an unscoped project refuses every ingest.")]
+        "Recursively indexes a directory tree into memory, skipping unchanged files. The path must lie inside the project's configured scope (ai-raccoon settings ingest scope add); an unscoped project refuses every ingest.")]
     public async Task<ApiEnvelope<ScannedResult>> IngestDirectory(
         [Description("The project id.")] string projectId,
         [Description("Path of the directory to index.")]

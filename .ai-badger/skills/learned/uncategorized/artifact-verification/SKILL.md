@@ -45,7 +45,7 @@ the branch tip, so **squash-ancestry is an invalid check for "does the installed
 build contain PR X"** (a data package wrongly claimed "installed 1.0.9 predates
 #55" this way; the feature was present and live). Valid checks, cheapest first:
 
-1. Probe the binary itself: `--help` / feature verbs (`ai-raccoon extract list` →
+1. Probe the binary itself: `--help` / feature verbs (`ai-raccoon settings extract list` →
    `enabled: True, mode: promote`) are the authoritative surface.
 2. Compare trees: `git rev-parse <version-hash>^{tree}` vs `<squash>^{tree}` —
    equal ⇒ same content, ancestry irrelevant.

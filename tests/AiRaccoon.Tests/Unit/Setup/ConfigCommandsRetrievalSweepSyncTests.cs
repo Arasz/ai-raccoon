@@ -26,7 +26,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, _) = await Run(["retrieval", "alpha", "set", "0.3"], store);
+        var (exit, _, _) = await Run(["settings", "retrieval", "alpha", "set", "0.3"], store);
 
         exit.ShouldBe(0);
         store.Settings["retrieval.structureAlpha"].ShouldBe("0.3");
@@ -39,7 +39,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
         {
             var store = new FakeConfigStore();
 
-            var (exit, _, err) = await Run(["retrieval", "alpha", "set", value], store);
+            var (exit, _, err) = await Run(["settings", "retrieval", "alpha", "set", value], store);
 
             exit.ShouldBe(ExitCode.InvalidArgument);
             err.ShouldContain("0..1");
@@ -50,7 +50,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
     [Fact]
     public async Task RetrievalAlphaSet_InvalidNumber_ReturnsError()
     {
-        var (exit, _, err) = await Run(["retrieval", "alpha", "set", "abc"], new FakeConfigStore());
+        var (exit, _, err) = await Run(["settings", "retrieval", "alpha", "set", "abc"], new FakeConfigStore());
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldNotBeEmpty();
@@ -59,7 +59,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
     [Fact]
     public async Task RetrievalAlphaShow_NoRow_PrintsDefault()
     {
-        var (exit, stdout, _) = await Run(["retrieval", "alpha", "show"], new FakeConfigStore());
+        var (exit, stdout, _) = await Run(["settings", "retrieval", "alpha", "show"], new FakeConfigStore());
 
         exit.ShouldBe(0);
         stdout.Trim().ShouldBe("0.5");
@@ -76,7 +76,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
             }
         };
 
-        var (_, stdout, _) = await Run(["retrieval", "alpha", "show"], store);
+        var (_, stdout, _) = await Run(["settings", "retrieval", "alpha", "show"], store);
 
         stdout.Trim().ShouldBe("0.8");
     }
@@ -88,13 +88,13 @@ public class ConfigCommandsRetrievalSweepSyncTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, stdout, _) = await Run(["sweep", "disable"], store);
+        var (exit, stdout, _) = await Run(["settings", "sweep", "disable"], store);
 
         exit.ShouldBe(0);
         store.Settings["sweep.enabled.global"].ShouldBe("false");
         stdout.ShouldContain("disabled");
 
-        var (_, shown, _) = await Run(["sweep", "show"], store);
+        var (_, shown, _) = await Run(["settings", "sweep", "show"], store);
         shown.ShouldContain("enabled: False");
     }
 
@@ -103,13 +103,13 @@ public class ConfigCommandsRetrievalSweepSyncTests
     {
         var store = new FakeConfigStore { Settings = { ["sweep.enabled.global"] = "false" } };
 
-        var (exit, stdout, _) = await Run(["sweep", "enable"], store);
+        var (exit, stdout, _) = await Run(["settings", "sweep", "enable"], store);
 
         exit.ShouldBe(0);
         store.Settings["sweep.enabled.global"].ShouldBe("true");
         stdout.ShouldContain("enabled");
 
-        var (_, shown, _) = await Run(["sweep", "show"], store);
+        var (_, shown, _) = await Run(["settings", "sweep", "show"], store);
         shown.ShouldContain("enabled: True");
     }
 
@@ -119,7 +119,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
     {
         var store = new FakeConfigStore();
 
-        await Run(["sweep", "disable"], store);
+        await Run(["settings", "sweep", "disable"], store);
 
         SweepConfigKeys.ParseEnabled(store.Settings["sweep.enabled.global"]).ShouldBeFalse();
     }
@@ -134,7 +134,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
     {
         var store = new FakeConfigStore { Settings = { ["sweep.enabled.global"] = raw } };
 
-        var (exit, stdout, _) = await Run(["sweep", "show"], store);
+        var (exit, stdout, _) = await Run(["settings", "sweep", "show"], store);
 
         exit.ShouldBe(0);
         stdout.ShouldContain("enabled: False");
@@ -147,7 +147,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, stdout, _) = await Run(["sweep", "interval-hours", "6"], store);
+        var (exit, stdout, _) = await Run(["settings", "sweep", "interval-hours", "6"], store);
 
         exit.ShouldBe(0);
         store.Settings["sweep.interval-hours.global"].ShouldBe("6");
@@ -161,7 +161,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
         {
             var store = new FakeConfigStore();
 
-            var (exit, _, err) = await Run(["sweep", "interval-hours", value], store);
+            var (exit, _, err) = await Run(["settings", "sweep", "interval-hours", value], store);
 
             exit.ShouldBe(ExitCode.InvalidArgument);
             err.ShouldContain("1..8760");
@@ -172,7 +172,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
     [Fact]
     public async Task SweepIntervalHours_InvalidNumber_ReturnsError()
     {
-        var (exit, _, err) = await Run(["sweep", "interval-hours", "soon"], new FakeConfigStore());
+        var (exit, _, err) = await Run(["settings", "sweep", "interval-hours", "soon"], new FakeConfigStore());
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("invalid interval");
@@ -185,7 +185,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, _) = await Run(["sweep", "threshold", "set", "0.2"], store);
+        var (exit, _, _) = await Run(["settings", "sweep", "threshold", "set", "0.2"], store);
 
         exit.ShouldBe(0);
         store.Settings["sweep.threshold"].ShouldBe("0.2");
@@ -194,7 +194,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
     [Fact]
     public async Task SweepThresholdSet_OutOfRange_ReturnsError()
     {
-        var (exit, _, err) = await Run(["sweep", "threshold", "set", "1.5"], new FakeConfigStore());
+        var (exit, _, err) = await Run(["settings", "sweep", "threshold", "set", "1.5"], new FakeConfigStore());
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("0..1");
@@ -203,7 +203,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
     [Fact]
     public async Task SweepThresholdSet_InvalidNumber_ReturnsError()
     {
-        var (exit, _, err) = await Run(["sweep", "threshold", "set", "bogus"], new FakeConfigStore());
+        var (exit, _, err) = await Run(["settings", "sweep", "threshold", "set", "bogus"], new FakeConfigStore());
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("invalid threshold");
@@ -214,7 +214,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
     [Fact]
     public async Task SweepShow_NoRows_PrintsTheDefaultPolicy()
     {
-        var (exit, stdout, _) = await Run(["sweep", "show"], new FakeConfigStore());
+        var (exit, stdout, _) = await Run(["settings", "sweep", "show"], new FakeConfigStore());
 
         exit.ShouldBe(0);
         stdout.Trim().ShouldBe("enabled: True  interval: 24 h  threshold: 0.3");
@@ -233,7 +233,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
             }
         };
 
-        var (_, stdout, _) = await Run(["sweep", "show"], store);
+        var (_, stdout, _) = await Run(["settings", "sweep", "show"], store);
 
         stdout.Trim().ShouldBe("enabled: False  interval: 72 h  threshold: 0.1");
     }
@@ -247,7 +247,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
 
         var (exit, stdout, stderr) = await Run(
             [
-                "sync", "add", "s3", "http://s3.example.com",
+                "settings", "sync", "add", "s3", "http://s3.example.com",
                 "--bucket", "memories", "--region", "us-east-1", "--object-key", "bank.db"
             ], store,
             new StringReader("ak1\nsk1\n"));
@@ -279,7 +279,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
         };
 
         var (exit, _, _) = await Run(
-            ["sync", "add", "s3", "http://s3.example.com", "--bucket", "memories", "--object-key", "bank.db"],
+            ["settings", "sync", "add", "s3", "http://s3.example.com", "--bucket", "memories", "--object-key", "bank.db"],
             store, new StringReader("ak1\nsk1\n"));
 
         exit.ShouldBe(0);
@@ -297,7 +297,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
         var store = new FakeConfigStore();
 
         var (exit, _, stderr) = await Run(
-            ["sync", "add", "s3", "http://s3.example.com", "--bucket", "memories"], store,
+            ["settings", "sync", "add", "s3", "http://s3.example.com", "--bucket", "memories"], store,
             new StringReader(""));
 
         exit.ShouldBe(ExitCode.InvalidArgument);
@@ -319,7 +319,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
             }
         };
 
-        await Run(["sync", "add", "s3", "http://s3.example.com", "--bucket", "memories"], store,
+        await Run(["settings", "sync", "add", "s3", "http://s3.example.com", "--bucket", "memories"], store,
             new StringReader("ak1\nsk1\n"));
 
         store.Settings["sync.endpoint"].ShouldBe("http://s3.example.com");
@@ -344,7 +344,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
         };
 
         var (exit, stdout, _) = await Run(
-            ["sync", "add", "azure", "memories", "--object-key", "bank.db"], store,
+            ["settings", "sync", "add", "azure", "memories", "--object-key", "bank.db"], store,
             new StringReader("connstr\n"));
 
         exit.ShouldBe(0);
@@ -375,7 +375,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
             }
         };
 
-        var (exit, _, stderr) = await Run(["sync", "add", "azure", "memories"], store, new StringReader(""));
+        var (exit, _, stderr) = await Run(["settings", "sync", "add", "azure", "memories"], store, new StringReader(""));
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         stderr.ShouldContain("connection string required");
@@ -395,7 +395,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
             Settings = { ["sync.objectKey"] = "old.db" }
         };
 
-        await Run(["sync", "add", "azure", "memories"], store, new StringReader("connstr\n"));
+        await Run(["settings", "sync", "add", "azure", "memories"], store, new StringReader("connstr\n"));
 
         store.Settings["sync.container"].ShouldBe("memories");
         store.Settings.ShouldNotContainKey("sync.objectKey");
@@ -419,7 +419,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
             }
         };
 
-        var (exit, stdout, _) = await Run(["sync", "remove"], store);
+        var (exit, stdout, _) = await Run(["settings", "sync", "remove"], store);
 
         exit.ShouldBe(0);
         store.Settings.Keys.ShouldNotContain(k => k.StartsWith("sync.", StringComparison.Ordinal));
@@ -429,7 +429,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
     [Fact]
     public async Task SyncShow_NotConfigured_PrintsMessage()
     {
-        var (exit, stdout, _) = await Run(["sync", "show"], new FakeConfigStore());
+        var (exit, stdout, _) = await Run(["settings", "sync", "show"], new FakeConfigStore());
 
         exit.ShouldBe(0);
         stdout.ShouldContain("not configured");
@@ -449,7 +449,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
             }
         };
 
-        var (exit, stdout, _) = await Run(["sync", "show"], store);
+        var (exit, stdout, _) = await Run(["settings", "sync", "show"], store);
 
         exit.ShouldBe(0);
         stdout.ShouldContain("provider: azure");
@@ -473,7 +473,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
             }
         };
 
-        var (exit, stdout, _) = await Run(["sync", "show"], store);
+        var (exit, stdout, _) = await Run(["settings", "sync", "show"], store);
 
         exit.ShouldBe(0);
         stdout.ShouldContain("provider: s3");
@@ -493,7 +493,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
             }
         };
 
-        var (exit, stdout, _) = await Run(["sync", "show"], store);
+        var (exit, stdout, _) = await Run(["settings", "sync", "show"], store);
 
         exit.ShouldBe(0);
         stdout.ShouldContain("provider: azure");
@@ -517,7 +517,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
             }
         };
 
-        var (exit, stdout, _) = await Run(["sync", "show"], store);
+        var (exit, stdout, _) = await Run(["settings", "sync", "show"], store);
 
         exit.ShouldBe(0);
         stdout.ShouldContain("provider: s3");
@@ -544,7 +544,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
             }
         };
 
-        var (exit, stdout, _) = await Run(["sync", "show"], store);
+        var (exit, stdout, _) = await Run(["settings", "sync", "show"], store);
 
         exit.ShouldBe(0);
         stdout.ShouldContain("provider: minio");
@@ -559,7 +559,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
         var store = new FakeConfigStore();
 
         var (exit, stdout, stderr) = await Run(
-            ["sync", "add", "azure", "memories", "--cli", "--account", "myacct", "--object-key", "bank.db"], store);
+            ["settings", "sync", "add", "azure", "memories", "--cli", "--account", "myacct", "--object-key", "bank.db"], store);
 
         exit.ShouldBe(0);
         store.Settings["sync.provider"].ShouldBe("azure");
@@ -576,7 +576,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, stderr) = await Run(["sync", "add", "azure", "memories", "--cli"], store);
+        var (exit, _, stderr) = await Run(["settings", "sync", "add", "azure", "memories", "--cli"], store);
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         stderr.ShouldContain("--account is required with --cli");
@@ -592,7 +592,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
         };
 
         var (exit, _, _) = await Run(
-            ["sync", "add", "azure", "memories", "--cli", "--account", "myacct"], store);
+            ["settings", "sync", "add", "azure", "memories", "--cli", "--account", "myacct"], store);
 
         exit.ShouldBe(0);
         store.Settings.ShouldNotContainKey("sync.connectionString");
@@ -606,7 +606,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
 
         var (exit, stdout, stderr) = await Run(
         [
-            "sync", "add", "s3", "http://s3.example.com", "--bucket", "memories",
+            "settings", "sync", "add", "s3", "http://s3.example.com", "--bucket", "memories",
             "--cli", "--region", "us-east-1", "--object-key", "bank.db"
         ], store);
 
@@ -637,7 +637,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
         };
 
         var (exit, _, _) = await Run(
-            ["sync", "add", "s3", "http://s3.example.com", "--bucket", "memories", "--cli"], store);
+            ["settings", "sync", "add", "s3", "http://s3.example.com", "--bucket", "memories", "--cli"], store);
 
         exit.ShouldBe(0);
         store.Settings.ShouldNotContainKey("sync.connectionString");
@@ -655,7 +655,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
         };
 
         var (exit, _, _) = await Run(
-            ["sync", "add", "s3", "http://s3.example.com", "--bucket", "memories", "--cli"], store);
+            ["settings", "sync", "add", "s3", "http://s3.example.com", "--bucket", "memories", "--cli"], store);
 
         exit.ShouldBe(0);
         store.Settings.ShouldNotContainKey("sync.accessKey");
@@ -671,7 +671,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
             Settings = { ["sync.azureAccount"] = "myacct" }
         };
 
-        var (exit, _, _) = await Run(["sync", "add", "azure", "memories"], store, new StringReader("connstr\n"));
+        var (exit, _, _) = await Run(["settings", "sync", "add", "azure", "memories"], store, new StringReader("connstr\n"));
 
         exit.ShouldBe(0);
         store.Settings.ShouldNotContainKey("sync.azureAccount");
@@ -687,7 +687,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
         };
 
         var (exit, _, _) = await Run(
-            ["sync", "add", "s3", "http://s3.example.com", "--bucket", "memories"], store,
+            ["settings", "sync", "add", "s3", "http://s3.example.com", "--bucket", "memories"], store,
             new StringReader("ak1\nsk1\n"));
 
         exit.ShouldBe(0);
@@ -709,7 +709,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
             }
         };
 
-        var (exit, stdout, _) = await Run(["sync", "show"], store);
+        var (exit, stdout, _) = await Run(["settings", "sync", "show"], store);
 
         exit.ShouldBe(0);
         stdout.ShouldContain("provider: azure");
@@ -730,7 +730,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
             }
         };
 
-        var (_, stdout, _) = await Run(["sync", "show"], store);
+        var (_, stdout, _) = await Run(["settings", "sync", "show"], store);
 
         stdout.ShouldContain("account: unset");
         stdout.ShouldContain("connectionString: set");
@@ -749,7 +749,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
             }
         };
 
-        var (exit, stdout, _) = await Run(["sync", "show"], store);
+        var (exit, stdout, _) = await Run(["settings", "sync", "show"], store);
 
         exit.ShouldBe(0);
         stdout.ShouldContain("chain: true");
@@ -771,7 +771,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
             }
         };
 
-        var (_, stdout, _) = await Run(["sync", "show"], store);
+        var (_, stdout, _) = await Run(["settings", "sync", "show"], store);
 
         stdout.ShouldContain("chain: false");
         stdout.ShouldContain("accessKey: set");

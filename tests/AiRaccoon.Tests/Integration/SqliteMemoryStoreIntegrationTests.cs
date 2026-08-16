@@ -406,7 +406,11 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
         {
             // Simulate a bank created before the watch feature: drop the watch tables only.
+            // A bank that genuinely predates the feature also predates ADR-0075's Ddl digest and
+            // reads application_id = 0, so the stamp has to say "legacy" too — otherwise the digest
+            // matches, Ddl is correctly skipped, and the drop no longer represents a legacy bank.
             await connection.ExecuteAsync("DROP TABLE IF EXISTS watches; DROP TABLE IF EXISTS watch_files;");
+            await connection.ExecuteAsync("PRAGMA application_id = 0");
         }
 
         await using var reopened = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);

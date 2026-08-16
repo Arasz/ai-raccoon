@@ -1,0 +1,165 @@
+{
+  "_note": "Copy to docs/work/checklist/<yyyy-mm-dd>-<subject>.json. Never fill this file in place. status is pass|fail|skipped|substituted; substituted means checked by a different instrument than the item names, and its reason must say which. accepted stays null until a human answers it, so an unfinished run is visibly unfinished. Delete any item whose feature no longer exists rather than skipping it.",
+  "run": {
+    "date": "2026-08-16",
+    "branch": "",
+    "commit": "",
+    "data-root": "",
+    "note": "Package version deliberately differs from VERSION (1.20.1): bumping VERSION on main auto-cuts a GitHub release via release.yml, which was not authorised. First attempt used 1.20.1-integration.1 and NuGet skipped it as LOWER than the released 1.20.1 (prerelease sorts first), leaving the OLD binary installed — caught by the --version SHA check, which is why that check exists.",
+    "what": "perf/single-writer-integration @ 8f644051 — WP1-WP7 bank-open cost + settings CLI restructure",
+    "package": "1.21.0-integration.1 (local pack, .nupkg/ai-raccoon.1.21.0-integration.1.nupkg)",
+    "binary-sha": "8f644051 (ai-raccoon --version reports 1.20.1+8f6440515142186a773bfe2fdf1325810c682f4b)"
+  },
+  "derived": {
+    "version": "1.20.1",
+    "mcp-tool-count": "27",
+    "mcp-prompt-count": "2",
+    "note": "Produced by scripts/derive-facts.py at run time, never typed from memory or a previous run."
+  },
+  "findings-against-prior-runs": [
+    {
+      "prior-claim": "Event ids 520/522/523 (retention purges) were blamed on the maintenance job's CADENCE for never firing, implying a longer-running server would eventually emit them.",
+      "what-is-actually-true": "Each log line is gated on the purge COUNT, not on any timer: `if (purged > 0) Log.NoiseEntriesPurged(...)`, `if (discards > 0) ...`, `if (quality > 0) ...` (BankMaintenanceHostedService.cs:327-346). A fresh bank has nothing past its TTL, so the count is 0 and the line never runs. Cadence is irrelevant.",
+      "evidence": "Reproduced live: `sqlite3 memory.db \"UPDATE noise_entries SET expires_at=1\"` then restart fired [520] on the FIRST maintenance pass — no interval elapsed.",
+      "so-what": "Do not wait out a timer to reproduce these ids. Seed expired rows and the next pass logs them. This is the same shape of error the doc already records for 512/516 — blaming timing for what is gated on data presence — and it would resurface for 522/523 if tested without seeding."
+    },
+    {
+      "prior-claim": "Source files cited ADR-0077 as the decision behind the control-plane settings resource.",
+      "what-is-actually-true": "No ADR-0077 exists in this repo; the highest is 0075, which IS that decision. The plan was drafted expecting ADR-0076/0077 and the ADR was written as 0075. Citations in SettingsEndpoint.cs, SettingsProtocol.cs, ServerSettingsStore.cs and logging-event-ids.md pointed at a document that does not exist.",
+      "evidence": "grep 'ADR-0077' across src/ and docs/ vs `ls docs/adr/0077*` -> no matches. Found by lane C while verifying event ids 670-673.",
+      "so-what": "Repointed all four to ADR-0075 in this run. The plan still refers to 0076/0077 as separate documents — a follow-up should reconcile the plan's numbering or write the missing sibling."
+    }
+  ],
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
+      "command": "ai-raccoon --version",
+      "evidence": "1.20.1+8f6440515142186a773bfe2fdf1325810c682f4b — matches HEAD of perf/single-writer-integration (8f644051), NOT the released 1.20.1+7cfaefca",
+      "observed-result": "Informational version matches derived 1.20.1; the SHA independently proves the installed tool is the integration build, not the shipped release.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Version AND SHA checked against the tree, not typed. The SHA is what distinguishes this from the released build — the first pack attempt (1.20.1-integration.1) was silently skipped by NuGet as lower than 1.20.1, leaving the released binary installed; only this check caught it."
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+      "command": "ai-raccoon --data-root <laneA> serve --port 0 (bound :50878, pid 74614); then serve --port 50878 --restart",
+      "evidence": "[650] asking the server on port 50878 to stop (pid 74614, 1.20.1+8f644051...) -> [651] the server on port 50878 (pid 74614) stopped and the port is free -> Now listening on: http://127.0.0.1:50878 (new pid 75108). ps -p 74614 empty; ps -p 75108 alive; curl :50878/mcp -> 401.",
+      "observed-result": "Genuine cycle on a non-default ephemeral port: old pid gone, same port rebound under a new pid, server answering. Edge case recorded: `--restart --port 0` does NOT cycle, because each ephemeral pick is unrelated, so restart correctly falls back to a plain start per its documented behaviour. Expected, not a defect; the item was retested by passing the actual bound port.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Verified from live process state and live HTTP, not log text alone. The --port 0 edge case was explained rather than presented as the cycle test."
+    },
+    {
+      "item": "memory-write-stores-and-reports-truthfully",
+      "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
+      "command": "memory_write (valid) then memory_write with the Hermes background-process-log signature",
+      "evidence": "valid -> {\"hash\":\"69bb6601f5af...\",\"stored\":true}; noise -> {\"hash\":\"\",\"path\":\"\",\"stored\":false,\"reason\":\"rejected by noise policy 'HermesBackgroundProcessLog'\"}",
+      "observed-result": "Both halves of ADR-0032 hold: a real write returns a real hash; a rejected write returns stored=false with EMPTY hash and path and a reason naming the exact policy — no fabricated identity. Reason string matches the ADR's specified format verbatim.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Truthful store and truthful rejection both exercised live. A write-only check would have passed whether or not truthful reporting works."
+    },
+    {
+      "item": "memory-search-hybrid-retrieval",
+      "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking",
+      "command": "memory_write 'An astrolabe rests on the observatory shelf, glinting under warm lamplight...'; memory_search query='an antique navigation instrument reflecting evening light in a stargazing room'",
+      "evidence": "{\"hash\":\"88162269eff1...\",\"ranking\":1,\"snippet\":\"An astrolabe rests on the observatory shelf...\"}",
+      "observed-result": "Query shares ZERO non-stopword tokens with the stored content, so BM25/FTS cannot explain the hit — only the vector leg bridges astrolabe->antique navigation instrument and observatory->stargazing room. Top and only result.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Query deliberately built with no literal overlap per the skill's guidance; a keyword-only engine returns nothing here. This is the form of the item that can actually fail."
+    },
+    {
+      "item": "memory-get-returns-content-by-hash",
+      "expected-result": "memory_get returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
+      "command": "memory_get {hash: 88162269eff12f85...}",
+      "evidence": "{\"value\":\"An astrolabe rests on the observatory shelf, glinting under warm lamplight it caught after dusk.\",\"context\":\"project:laneB-item2\"}",
+      "observed-result": "Returned the exact original content byte-for-byte for the hash written moments earlier (ADR-0035).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Hash round-trip against a real write, content matches verbatim."
+    },
+    {
+      "item": "source-path-anchor-resolves-its-chunk",
+      "expected-result": "a `file#section` query returns that exact chunk within the production result window",
+      "command": "two writes to sourceFile=guide/widgetforge.md sections setup/troubleshoot; memory_search 'guide/widgetforge.md#setup' and '#troubleshoot'",
+      "evidence": "#setup -> 1 result hash 094f3984..., chunkIndex 0/2; #troubleshoot -> 1 result hash 32d59bb3..., chunkIndex 1/2",
+      "observed-result": "Each anchor resolved to exactly its own chunk, not the sibling sharing the same sourceFile — file+section AND-matching works, ruling out a coarse file-only match.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Two chunks under one sourceFile disambiguated by section; a file-only match would have returned both."
+    },
+    {
+      "item": "write-path-noise-filtering",
+      "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
+      "command": "grep AddSingleton<INoiseFilterPolicy> (AppRegistrations.cs:208); memory_write x5 = 2 clean controls + 3 rejection shapes; `settings noise entries`; sqlite3 SELECT * FROM noise_entries",
+      "evidence": "clean -> stored:true. '[IMPORTANT: Background process 999 completed normally...]' -> stored:false, reason \"rejected by noise policy 'HermesBackgroundProcessLog'\". '[ASYNC DELEGATION BATCH 3 of 5 complete]' and 'received signal 15.' -> same. NEAR-MISS control ('...a background process that restarts nightly...') -> stored:true. CLI: 'total: 3  HermesBackgroundProcessLog: 3'. sqlite3: 3 rows, request_content verbatim.",
+      "observed-result": "Exactly one write-path policy is REGISTERED in this build (HermesProcessNoisePolicy; the learner substrate ships NoOpNoiseDetector and never rejects). It rejects its three documented shapes and nothing else; rejected bodies retrievable verbatim from noise_entries per ADR-0039.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Negative control included, and a NEAR-MISS one at that — clean content containing the trigger phrase 'background process' mid-sentence was stored. A policy that rejected everything would have failed this; a rejection-only test would not have caught it."
+    },
+    {
+      "item": "read-path-query-guard",
+      "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
+      "command": "`settings queryguard list`; memory_search x5 = 2 refuse shapes, 2 warn shapes, 1 clean control",
+      "evidence": "list -> 'enabled: True  shadow: False  structural: False  threshold: 0.98939822280316' (ONE batched call). refuse -> isError:true 'invalid-params: This looks like tool output rather than a question'. warn (stack frame, log prefix) -> results:[] plus warning text. clean control -> results:[] with NO warning key.",
+      "observed-result": "Refuse tier throws before search runs — no fabricated success (ADR-0032/0040). Warn tier annotates without refusing. Clean queries pass untouched. Structural detector (ADR-0041) confirmed still DISABLED by default. WP2's batching visible: one settings call returns enabled/shadow/structural/threshold together.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both tiers exercised with a clean control proving the guard is not simply annotating everything; ships-disabled detector verified still off."
+    },
+    {
+      "item": "file-watch-status",
+      "expected-result": "memory_watch_status lists live registrations and their sync state",
+      "command": "`settings ingest scope add laneC-watch <path>`; `settings watch enable laneC-watch true`; memory_watch_add; memory_watch_status; `watch registered`",
+      "evidence": "scope add -> 'added .../watchtarget to ingest scope'. enable -> 'watch enabled'. status -> state:'Healthy', lastSync 2026-08-16T14:34:33Z. CLI `watch registered` -> project/path/registered/lastChange all populated.",
+      "observed-result": "Registration reflected live on two independent surfaces (MCP status and CLI list), with real state and timestamps, not a stub. Exercised through the NEW settings-scoped path introduced by WP6.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "End-to-end through the restructured CLI surface, confirmed by two independent readers rather than one."
+    },
+    {
+      "item": "promotion-queue-state",
+      "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately",
+      "command": "memory_write; memory_share_extract mode=propose (pre-embed); `model set local`; memory_embed_pending; propose retry; memory_promotion_list",
+      "evidence": "1st propose (row embed-pending) -> candidates:[]. stats pending:1 -> after embed pending:0. 2nd propose -> candidates:[{hash:'fd72f9d0...',score:2.181111111111111,reasons:['organic-note','durable-fact-language','short-definitional-floor']}]. memory_promotion_list -> same hash/value/score/reasons.",
+      "observed-result": "Real content scored by PromotionScorer and persisted to the propose tier; the list reports that candidate's identity, score and reasons accurately. Also surfaced a real setup requirement: an unembedded (pending) row is silently excluded from candidacy until embedded.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Did NOT accept an empty list as proof, per the skill's guidance — created a candidate and asserted hash/score/reasons match between the propose call and the list call."
+    },
+    {
+      "item": "full-mcp-surface",
+      "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+      "command": "POST /mcp initialize | tools/list | prompts/list | prompts/get x2, bearer token from <laneA>/mcp-token, against 127.0.0.1:50878",
+      "evidence": "tools/list -> 27 tools; prompts/list -> 2 (workspace-consolidation-guide, memory-usage-guide); prompts/get on both -> 200 with populated messages[0].content.text.",
+      "observed-result": "Live counts (27 tools, 2 prompts) match derive-facts.py exactly. Both prompts reachable and non-empty. Tool names are declared via Name = TnXxx constants rather than string literals, so a grep-based name diff would reproduce the hand-typed-count anti-pattern; the authoritative comparison is derived count vs live count, and they agree.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Counts asserted against derived facts, full round-trip on a self-started server/data-root/token, both prompts individually confirmed non-empty."
+    },
+    {
+      "item": "observability-event-ids",
+      "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+      "command": "read logging-event-ids.md; grep for Log.Vacuum(/Log.VacuumDeferred( call sites; inspect live server log; force a purge via sqlite3 UPDATE noise_entries SET expires_at=1 + restart; direct HTTP GET/PUT/DELETE /settings",
+      "evidence": "grep for 512/516 call sites -> no output (genuinely dead, matching 'retired'). Live: [510] WAL checkpoint, [610] idle watchdog, [910] refusal. After forcing expiry: '[520] Noise entry retention purge removed 3 expired row(s)' on the very next pass. Direct /settings: '[672] settings wrote laneC.checklist.probe', '[673] settings deleted laneC.checklist.probe'.",
+      "observed-result": "Every id checked resolves against the doc. 512/516 confirmed dead by source, not just by the doc's claim. New 670-673 fire when /settings is actually hit; 670/671 are Debug level so their absence from an Information-level console is expected, not a gap.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Ids verified against SOURCE rather than only the reference doc, and triggered live where practical rather than merely read about."
+    },
+    {
+      "item": "schema-digest-fast-path-survives-reopen",
+      "why-this-item-exists": "Derived for this run, not in the template: WP1 (ADR-0075) makes a bank open skip the entire ~39-statement Ddl block when PRAGMA application_id matches a digest of Ddl. That is the single highest-blast-radius change in this build and no automated test exercises it through a real install. Lane B flagged it as uncovered rather than fabricating a result.",
+      "command": "start server on fresh --data-root/--port 0, write an entry, read PRAGMA application_id/user_version read-only, cycle the process with `serve --port <bound> --restart`, then search/get/write through the NEW process",
+      "evidence": "PRAGMA application_id=1230295233 (non-zero: digest stamped), user_version=10. Restart: [650] stop -> [651] port free -> Now listening on 127.0.0.1:52931, pid 85595 -> 86309. After reopen: semantic search 'a clockwork model of the solar system in a lobby lit by daylight' -> hash 418197a63e06, snippet 'A brass orrery turns slowly in the planetarium foyer...'; memory_get -> full original value; new memory_write -> stored=true.",
+      "observed-result": "A bank whose Ddl block is skipped entirely on open still reads by hash, retrieves semantically, and accepts new writes. The digest is stamped and matches, so the fast path was genuinely taken rather than the bank falling back to a full Ddl rerun.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The search query shares no literal tokens with the stored text, so the vector leg is proven live AFTER the reopen — not merely that the file opened. Digest stamp read directly from the bank read-only, confirming the fast path applied rather than assuming it."
+    }
+  ]
+}

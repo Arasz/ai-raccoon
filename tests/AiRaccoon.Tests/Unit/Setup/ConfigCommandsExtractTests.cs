@@ -23,7 +23,7 @@ public class ConfigCommandsExtractTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, outp, _) = await Run(["extract", "enable", "true"], store);
+        var (exit, outp, _) = await Run(["settings", "extract", "enable", "true"], store);
 
         exit.ShouldBe(0);
         store.Settings[ExtractionConfigKeys.EnabledGlobal].ShouldBe("true");
@@ -35,7 +35,7 @@ public class ConfigCommandsExtractTests
     {
         var store = new FakeConfigStore();
 
-        await Run(["extract", "enable", "false"], store);
+        await Run(["settings", "extract", "enable", "false"], store);
 
         store.Settings[ExtractionConfigKeys.EnabledGlobal].ShouldBe("false");
     }
@@ -45,7 +45,7 @@ public class ConfigCommandsExtractTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, outp, _) = await Run(["extract", "mode", "promote"], store);
+        var (exit, outp, _) = await Run(["settings", "extract", "mode", "promote"], store);
 
         exit.ShouldBe(0);
         store.Settings[ExtractionConfigKeys.ModeGlobal].ShouldBe("promote");
@@ -57,7 +57,7 @@ public class ConfigCommandsExtractTests
     {
         var store = new FakeConfigStore();
 
-        await Run(["extract", "mode", "propose"], store);
+        await Run(["settings", "extract", "mode", "propose"], store);
 
         store.Settings[ExtractionConfigKeys.ModeGlobal].ShouldBe("propose");
     }
@@ -67,7 +67,7 @@ public class ConfigCommandsExtractTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, err) = await Run(["extract", "mode", "auto"], store);
+        var (exit, _, err) = await Run(["settings", "extract", "mode", "auto"], store);
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("mode must be 'propose' or 'promote'");
@@ -79,7 +79,7 @@ public class ConfigCommandsExtractTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, outp, _) = await Run(["extract", "interval", "30"], store);
+        var (exit, outp, _) = await Run(["settings", "extract", "interval", "30"], store);
 
         exit.ShouldBe(0);
         store.Settings[ExtractionConfigKeys.IntervalMinutesGlobal].ShouldBe("30");
@@ -91,7 +91,7 @@ public class ConfigCommandsExtractTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, err) = await Run(["extract", "interval", "0"], store);
+        var (exit, _, err) = await Run(["settings", "extract", "interval", "0"], store);
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("interval must be a positive number of minutes");
@@ -103,7 +103,7 @@ public class ConfigCommandsExtractTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, err) = await Run(["extract", "interval", "often"], store);
+        var (exit, _, err) = await Run(["settings", "extract", "interval", "often"], store);
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("interval must be a positive number of minutes");
@@ -115,7 +115,7 @@ public class ConfigCommandsExtractTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, outp, _) = await Run(["extract", "capacity", "3"], store);
+        var (exit, outp, _) = await Run(["settings", "extract", "capacity", "3"], store);
 
         exit.ShouldBe(0);
         store.Settings[ExtractionConfigKeys.QueueCapacityGlobal].ShouldBe("3");
@@ -127,7 +127,7 @@ public class ConfigCommandsExtractTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, err) = await Run(["extract", "capacity", "0"], store);
+        var (exit, _, err) = await Run(["settings", "extract", "capacity", "0"], store);
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("capacity must be a positive number");
@@ -139,7 +139,7 @@ public class ConfigCommandsExtractTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, outp, _) = await Run(["extract", "list"], store);
+        var (exit, outp, _) = await Run(["settings", "extract", "list"], store);
 
         exit.ShouldBe(0);
         outp.ShouldContain("queue-capacity: 1000");
@@ -150,7 +150,7 @@ public class ConfigCommandsExtractTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, outp, _) = await Run(["extract", "list"], store);
+        var (exit, outp, _) = await Run(["settings", "extract", "list"], store);
 
         exit.ShouldBe(0);
         outp.ShouldContain("enabled: False");
@@ -166,7 +166,7 @@ public class ConfigCommandsExtractTests
         store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
         store.Settings[ExtractionConfigKeys.IntervalMinutesGlobal] = "30";
 
-        var (_, outp, _) = await Run(["extract", "list"], store);
+        var (_, outp, _) = await Run(["settings", "extract", "list"], store);
 
         outp.ShouldContain("enabled: True");
         outp.ShouldContain("mode: promote");
@@ -178,7 +178,7 @@ public class ConfigCommandsExtractTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, outp, _) = await Run(["extract", "exclude", "add", "hermes/"], store);
+        var (exit, outp, _) = await Run(["settings", "extract", "exclude", "add", "hermes/"], store);
 
         exit.ShouldBe(0);
         store.Settings[ExtractionConfigKeys.ExcludePrefixesGlobal].ShouldBe("hermes/");
@@ -191,7 +191,7 @@ public class ConfigCommandsExtractTests
         var store = new FakeConfigStore();
         store.Settings[ExtractionConfigKeys.ExcludePrefixesGlobal] = "hermes/,docs/";
 
-        var (exit, _, _) = await Run(["extract", "exclude", "add", "hermes/"], store);
+        var (exit, _, _) = await Run(["settings", "extract", "exclude", "add", "hermes/"], store);
 
         exit.ShouldBe(0);
         store.Settings[ExtractionConfigKeys.ExcludePrefixesGlobal].ShouldBe("hermes/,docs/");
@@ -203,7 +203,7 @@ public class ConfigCommandsExtractTests
         var store = new FakeConfigStore();
         store.Settings[ExtractionConfigKeys.ExcludePrefixesGlobal] = "hermes/,docs/";
 
-        var (exit, outp, _) = await Run(["extract", "exclude", "remove", "hermes/"], store);
+        var (exit, outp, _) = await Run(["settings", "extract", "exclude", "remove", "hermes/"], store);
 
         exit.ShouldBe(0);
         store.Settings[ExtractionConfigKeys.ExcludePrefixesGlobal].ShouldBe("docs/");
@@ -216,7 +216,7 @@ public class ConfigCommandsExtractTests
         var store = new FakeConfigStore();
         store.Settings[ExtractionConfigKeys.ExcludePrefixesGlobal] = "hermes/";
 
-        var (exit, _, _) = await Run(["extract", "exclude", "remove", "hermes/"], store);
+        var (exit, _, _) = await Run(["settings", "extract", "exclude", "remove", "hermes/"], store);
 
         exit.ShouldBe(0);
         store.Settings.ShouldNotContainKey(ExtractionConfigKeys.ExcludePrefixesGlobal);
@@ -227,7 +227,7 @@ public class ConfigCommandsExtractTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, outp, _) = await Run(["extract", "exclude", "list"], store);
+        var (exit, outp, _) = await Run(["settings", "extract", "exclude", "list"], store);
 
         exit.ShouldBe(0);
         outp.ShouldContain("none");
@@ -239,7 +239,7 @@ public class ConfigCommandsExtractTests
         var store = new FakeConfigStore();
         store.Settings[ExtractionConfigKeys.ExcludePrefixesGlobal] = "hermes/,docs/";
 
-        var (exit, outp, _) = await Run(["extract", "exclude", "list"], store);
+        var (exit, outp, _) = await Run(["settings", "extract", "exclude", "list"], store);
 
         exit.ShouldBe(0);
         outp.ShouldContain("hermes/");

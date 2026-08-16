@@ -19,7 +19,7 @@ public sealed class SyncTools(
     [McpServerTool(Name = TnMemorySync)]
     [Description(
         "Syncs the bank's committed contexts (shared + project:<id>) to cloud object storage. " +
-        "Configure with `ai-raccoon sync add s3 <url> --bucket <name>` or `ai-raccoon sync add azure " +
+        "Configure with `ai-raccoon settings sync add s3 <url> --bucket <name>` or `ai-raccoon settings sync add azure " +
         "<container>` (settings table); add `--cli` to use the machine's az/aws CLI login instead of " +
         "stored secrets.")]
     public async Task<ApiEnvelope<SyncToolResult>> Sync(

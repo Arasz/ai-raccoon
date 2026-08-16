@@ -18,11 +18,12 @@ internal static class CliArgs
     /// <summary>Parses args; never writes anything (stdout stays reserved for the stdio protocol).</summary>
     internal static bool TryParse(string[] args, out CliInput? result)
     {
-        var parseResult = CliCommandTree.BuildFullRootCommand().Parse(args, ParserConfiguration);
+        var fullRoot = CliCommandTree.BuildFullRootCommand();
+        var parseResult = fullRoot.Parse(args, ParserConfiguration);
         var errors = DistinctErrors(parseResult);
         var showHelp = parseResult.Action is HelpAction;
         var showVersion = parseResult.Action?.GetType().Name == VersionOptionAction;
-        if (!showHelp && !showVersion && errors.Count > 0 && !ContainsVerb(args))
+        if (!showHelp && !showVersion && errors.Count > 0 && !ContainsVerb(args, fullRoot))
         {
             parseResult = CliCommandTree.BuildLaunchRootCommand().Parse(args, ParserConfiguration);
             errors = DistinctErrors(parseResult);
@@ -46,9 +47,15 @@ internal static class CliArgs
     private static List<string> DistinctErrors(ParseResult parseResult) =>
         [.. parseResult.Errors.Select(e => e.Message).Distinct(StringComparer.Ordinal)];
 
-    /// <summary>True when the args name one of the config verbs (skipping options and their values).</summary>
-    private static bool ContainsVerb(string[] args)
+    /// <summary>
+    ///     True when the args name a top-level verb (skipping options and their values). The verb set
+    ///     is read off the root that was just parsed, so there is no list to keep in step with the tree.
+    /// </summary>
+    private static bool ContainsVerb(string[] args, Command root)
     {
+        var verbs = root.Children.OfType<Command>()
+            .SelectMany(command => command.Aliases.Append(command.Name))
+            .ToHashSet(StringComparer.Ordinal);
         for (var i = 0; i < args.Length; i++)
         {
             var token = args[i];
@@ -67,7 +74,7 @@ internal static class CliArgs
                 continue; // -h / -? / bundled short options
             }
 
-            if (CliCommandTree.Verbs.Contains(token))
+            if (verbs.Contains(token))
             {
                 return true;
             }

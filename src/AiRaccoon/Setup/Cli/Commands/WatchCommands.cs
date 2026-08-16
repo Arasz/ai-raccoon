@@ -31,7 +31,7 @@ public sealed class WatchCommands
             IngestScopeList.Parse(await store.GetSettingAsync(IngestScopeKeys.ScopeGlobal, cancellationToken)).Count == 0)
         {
             await streams.WriteErrorLineAsync(
-                "ai-raccoon: warning — no ingest scope configured; add at least one scope with 'ai-raccoon ingest scope add '*' <path>'. Nothing can be ingested or watched until you do.");
+                "ai-raccoon: warning — no ingest scope configured; add at least one scope with 'ai-raccoon settings ingest scope add '*' <path>'. Nothing can be ingested or watched until you do.");
         }
 
         await streams.WriteOutputLineAsync($"watch {(enabled ? "enabled" : "disabled")} for {target}");

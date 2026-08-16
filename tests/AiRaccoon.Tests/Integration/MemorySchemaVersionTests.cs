@@ -822,6 +822,11 @@ public sealed class MemorySchemaVersionTests
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
         await connection.ExecuteAsync(new CommandDefinition(
             "DROP TABLE metrics", cancellationToken: TestContext.Current.CancellationToken));
+        // ADR-0075: a real bank that predates this feature also predates the Ddl digest gate and
+        // reads application_id = 0, so the drop alone does not represent "legacy" once Ddl is
+        // gated — the digest must say so too, or the gate (correctly) skips Ddl and finds nothing to fix.
+        await connection.ExecuteAsync(new CommandDefinition(
+            "PRAGMA application_id = 0", cancellationToken: TestContext.Current.CancellationToken));
 
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
 
@@ -848,6 +853,10 @@ public sealed class MemorySchemaVersionTests
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
         await connection.ExecuteAsync(new CommandDefinition(
             "DROP INDEX idx_metrics_recorded_at", cancellationToken: TestContext.Current.CancellationToken));
+        // ADR-0075: see the sibling test above — the digest, not just the object, must reflect
+        // the pre-fix state or the gate correctly skips Ddl and never notices the dropped index.
+        await connection.ExecuteAsync(new CommandDefinition(
+            "PRAGMA application_id = 0", cancellationToken: TestContext.Current.CancellationToken));
         (await IndexExistsAsync(connection, "idx_metrics_recorded_at")).ShouldBeFalse("simulates a bank from before this fix");
 
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);

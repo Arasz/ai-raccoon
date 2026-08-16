@@ -1,10 +1,12 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Reflection;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Observability;
+using AiRaccoon.Settings;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Logging;
@@ -331,7 +333,10 @@ public sealed class OtlpExportTests : IDisposable
 
         await ConsoleCapture.RunAsync(async () =>
         {
-            var exit = await new AppRunner().Run(["--data-root", _dataRoot, "access", "default", "show"]);
+            // WP7 (ADR-0075 §5.3): a fast fake stands in for the settings server — this test is
+            // about the OTLP exporter never wiring up, not the settings transport.
+            var runner = new AppRunner((_, _, _) => Task.FromResult<ISettingsStore>(new InMemorySettings()));
+            var exit = await runner.Run(["--data-root", _dataRoot, "settings", "access", "default", "show"]);
             exit.ShouldBe(0);
         });
 

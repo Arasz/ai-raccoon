@@ -5,6 +5,9 @@ namespace AiRaccoon.Tests.TestHelpers;
 /// <summary>
 ///     Base fake for <see cref="IMemoryStore" />: every member throws until a test overrides it, so a
 ///     fake declares only the members its subject calls. Holds no state — behaviour belongs in the override.
+///     That includes <see cref="GetSettingsByPrefixAsync" />: an empty default would let a subject
+///     converted to a batched read see no settings instead of the ones its fake seeds via
+///     <see cref="GetSettingAsync" />, and pass for the wrong reason (ADR-0075).
 /// </summary>
 /// <remarks>
 ///     <see cref="IMemoryStore.DeleteInScopeAsync" /> is declared here and forwards to

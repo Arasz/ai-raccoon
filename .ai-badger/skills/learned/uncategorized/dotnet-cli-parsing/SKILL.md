@@ -218,7 +218,7 @@ tree):
   token with all-but-one of them existing entries of the current directory, OR
   a Boolean/Int32 parse failure on a cwd entry plus >=1 unrecognized token) and
   append a hint quoting the wildcard with the command reconstructed
-  (`ai-raccoon watch enable '*' true`). Test seam: the hint takes an injectable
+  (`ai-raccoon settings watch enable '*' true`). Test seam: the hint takes an injectable
   cwd-entries set (never mutate the real cwd under parallel xunit); one smoke
   test uses the real cwd. Docs and prompts must teach the quoted form — specs,
   README and BDD steps naturally show the unquoted form because in-process test

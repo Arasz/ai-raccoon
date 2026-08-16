@@ -59,10 +59,13 @@ public sealed class BackendSessions(IBackendLauncher backendLauncher, IHttpClien
 
     private async Task<BackendResult> AcuireBackend(CancellationToken ctx)
     {
+        var executable = BackendLaunchArguments.Executable() ?? throw new BackendUnavailableException(
+            Unavailable("the running executable path is unknown"));
+
         BackendResult acquired;
         try
         {
-            acquired = await backendLauncher.AcquireAsync(config.Port, Executable(), ServeArguments(config),
+            acquired = await backendLauncher.AcquireAsync(config.Port, executable, BackendLaunchArguments.ServeArguments(config),
                 ctx);
         }
         catch (BackendStartException ex)
@@ -118,29 +121,6 @@ public sealed class BackendSessions(IBackendLauncher backendLauncher, IHttpClien
             new McpClientOptions { ProtocolVersion = revision },
             cancellationToken: ctx);
     }
-
-    /// <summary>Launch identity forwarded to the spawned backend; the launch flags precede the verb.</summary>
-    private static string[] ServeArguments(ServerConfig config)
-    {
-        var arguments = new List<string>
-        {
-            "--data-root", config.Options.DataRoot,
-            "--install-scope", config.Options.Scope.ToString().ToLowerInvariant()
-        };
-        if (config.Options.Quiet)
-        {
-            arguments.Add("--quiet");
-        }
-
-        arguments.AddRange(["serve", "--port", config.Port.ToString(CultureInfo.InvariantCulture)]);
-        return [.. arguments];
-    }
-
-
-    /// <summary>This very binary: the backend is another ai-raccoon, started as `serve`.</summary>
-    private static string Executable() =>
-        Environment.ProcessPath ?? throw new BackendUnavailableException(
-            Unavailable("the running executable path is unknown"));
 
     /// <summary>Every way the backend can be unusable ends on the same line, with the same escape hatch.</summary>
     private static string Unavailable(string reason) => $"ai-raccoon: {reason}; to serve in-process instead, run: ai-raccoon --transport stdio";

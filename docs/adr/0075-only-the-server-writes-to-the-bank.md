@@ -1,0 +1,189 @@
+# 0075. Only the server writes to the bank
+
+Date: 2026-08-16
+
+Status: Proposed
+
+## Context
+
+A profiling pass over a live 193 MB bank asked why `memory_search` cost what it did. The trace named
+three things, and the third turned out to be the interesting one:
+
+1. **Schema-ensure per open.** `MemorySchema.EnsureAsync` ran the whole `Ddl` block on every bank
+   open, before the `storedVersion >= CurrentVersion` early return at `MemorySchema.cs:414` could
+   help. The early return was there; it was just downstream of the work. **Measured: 39 statements
+   in the block, 42 for the whole call** — the plan estimated "~30", and estimating is why this
+   number is now pinned by a test that traces the real connection handle rather than splitting the
+   `Ddl` string (which misparses the trigger bodies' embedded semicolons).
+2. **`ISettingsStore` opens a bank per read.** `SqliteSettingsStore.GetSettingAsync`
+   (`SqliteSettingsStore.cs:9-17`) opens a fresh bank for a single row, so one search paid the DDL cost
+   several times over.
+3. **`QueryGuardService` at ~43% of search.** Two settings reads typical, four worst case;
+   `EvaluateStructuralAsync` read `StructuralEnabledGlobal` on every Clean query only to learn it was
+   off.
+
+The initial hypothesis — *nothing pools, connections are the cost* — was **wrong**. Pooling was never
+broken. `Microsoft.Data.Sqlite` pools by default, `BuildConnectionString` never disables it, and the
+`efcore#28774` pooling defect was fixed in 6.0.11 against our pinned 10.0.11. What made opens expensive
+was what happened *on* each open, not the open itself. Recording that here because the wrong hypothesis
+is the one a future reader is most likely to re-derive from the same trace.
+
+Fixing (1)-(3) is arithmetic. But it left a structural question standing: **why is a CLI process opening
+the bank for a settings write at all?** Two processes writing the same SQLite file is a design choice
+nobody made deliberately — it accumulated one command family at a time.
+
+The owner's steer settled it, and the framing matters more than the performance win: *move all settings
+operations to the server; we don't want to implement one part on CLI and one on server.* The split is
+not read-versus-write. It is **CLI-only things stay on the CLI, everything else goes through the
+server** — with the CLI permitted to *read* the bank directly if it must, but never to write.
+
+## Decision
+
+**The MCP server is the only writer to the bank.**
+
+```
+CLI process                          server process
+  settings <anything>  ──HTTP──▶       reads AND writes the bank
+  encryption <...>     ──HTTP──▶       (WP9: logic moves here too)
+  serve                                 — CLI-only, it *is* the server
+```
+
+Three consequences fall out of that sentence:
+
+**The CLI surface does not shrink.** The owner was explicit: *the CLI command will stay, just the
+logic.* Every command a user types today still exists and still means the same thing. What changes is
+which process performs the work. No aliases, no deprecation shims — the release that introduced the
+current surface is hours old, so there is no installed base to keep compatible, and surface churn is
+free exactly once.
+
+**The many settings command families become one `settings` command.** `queryguard`, `noise`,
+`maintenance`, `performance`, `retrieval`, `extract`, `watch` and the rest each grew their own
+enable/disable/set verbs against the same settings table. One command, one transport, one place where
+a settings write can happen.
+
+**The server auto-starts.** A CLI invocation that needs the server starts it if it is not running,
+reusing `BackendLauncher` (30 s budget, 250 ms poll, existing concurrent-launch tolerance) rather than
+growing a second launcher. Reuse, not rewrite.
+
+**`encryption` moves too (WP9), and that closes a real race.** `encryption` looked like the obvious
+CLI-only holdout — it rekeys the file, so surely it must own the file. It is the opposite.
+`RekeyBankAsync` calls `SqliteConnection.ClearPool` (`SqliteConnectionFactory.cs:114`), and
+**`ClearPool` is process-local**: a CLI process clearing its own pool does nothing about the pooled
+connections the *server* is holding against the bank it just rekeyed. Moving the logic server-side is
+what makes the clear-pool meaningful. The performance work and the correctness fix are the same change.
+
+## What was rejected
+
+**"Writes go through the server, reads stay direct."** My own first framing, and the owner corrected
+it. It splits one concept across two processes and leaves every future settings operation needing a
+judgment call about which half it belongs to. "All settings operations go through the server" needs no
+such call.
+
+**A settings cache to make reads cheap (WP8).** Deliberately *not* taken as part of this decision. A
+cache is the obvious answer to "settings reads are expensive" and it is gated behind the cross-process
+liveness tests WP4 landed first — because a cache that goes stale across processes is worse than the
+cost it removes, and the only way to know it does not is a test that can observe staleness. That test
+was proven able to discriminate by building a naive caching decorator and watching it go stale.
+
+**Refusing to let the CLI read the bank at all.** Stronger and simpler to state, but it buys nothing:
+a read cannot corrupt, and forbidding it would force a server round-trip on genuinely local questions.
+The invariant that carries the weight is *zero bank **writes** from the CLI process*, and that is what
+the gate asserts.
+
+## Consequences
+
+- The gate is a **route-table guard**: zero bank writes originate from the CLI process. It is the check
+  the whole single-writer claim rests on, so it is the one that must be watched failing.
+- Two processes no longer contend for the same SQLite writer lock, which removes a class of
+  intermittent failure we have been paying for without naming.
+- `EncryptionCommands.cs` currently owns `EventId` 800-807 (`docs/reference/logging-event-ids.md`).
+  If WP9 moves that logic server-side, the allocations move with it and that table must move too — it
+  is a measurement, not a hand-maintained list, so regenerate rather than hand-edit.
+- **The digest gate narrows ADR-0026, and this is the one consequence that needs the owner's
+  ratification.** ADR-0026 put `promotion_discards` in "the unconditional `MemorySchema.Ddl`" so it
+  would reach every existing bank with no schema-version bump — same precedent as `watches` /
+  `watch_files`. **That requirement survives**: adding a table changes the `Ddl` string, which changes
+  the digest, which forces the rerun, so delivery to existing banks is unaffected. What is lost is
+  narrower and was never stated as a requirement — it was a free side effect of running `Ddl` every
+  time: a bank whose digest **matches** but is missing an object no longer self-heals on open. That is
+  manual surgery or corruption, not version skew. `PromotionQueueDiscardTests` now asserts **both**
+  halves so the narrowing is a recorded decision rather than a silent regression. Restoring the old
+  property would cost a per-open existence probe — precisely the cost this ADR exists to remove.
+
+- **Found only on the merged tree.** Each lane was green alone; the digest gate's interaction with two
+  `Speed=Slow` schema tests appeared only after WP1 and WP6/WP7 were merged together, because the lane
+  that wrote them ran `Slow` on a branch that predated WP1. Integration gates re-run on the merged
+  result for exactly this reason.
+
+- **Open, and deliberately not decided here:** whether `sync` moves now or after the route-table guard
+  is green. `sync` over HTTPS would solve the secret-passing problem, and accepting sync only via
+  existing credentials would mean no secret is passed at all — but that is a separate decision from
+  this one.
+
+## Evidence
+
+**Measured before, on the unoptimised tree** (`docs/work/perf/2026-08-16-wp5-before-baseline.md`).
+Counts come from a test-only decorator over `ISqliteConnectionFactory`/`ISettingsStore`, not from
+`dotnet-trace` — exact counts, no EventPipe sampling overhead to discount:
+
+| | Plan estimated | Measured |
+|---|---|---|
+| `Ddl` block statements | ~30 | **39** |
+| `EnsureAsync` on an already-current bank | — | **42** |
+| Bank opens per operation | 3.60 | **4.5** (4 write, 5 search) |
+| Settings reads per operation | ~2 | 2 write, 2 search |
+
+Wall clock, real out-of-process Release server over loopback: write median 56-60 ms / p95 92 ms;
+search median 42-44 ms / p95 68 ms. A-A noise floor 5-10%, so treat anything under 10% as no change.
+
+**The plan was wrong in two places and this records that rather than quietly restating it.** The
+statement count was underestimated by ~25% and opens per operation by 20%.
+
+The third apparent contradiction — two settings reads on every `memory_write` that the plan's
+write-path analysis did not account for — **resolved on inspection, and was terminological.**
+Pre-WP3 `MemoryAccessGuard` is declared `MemoryAccessGuard(IMemoryStore store)` and makes exactly two
+`GetSettingAsync` calls, per-project then global (`MemoryAccessGuard.cs:13,21` at `639284b9`). The
+plan filed it as an `IMemoryStore` cost because of the constructor parameter; a settings read is a
+settings read whichever port it arrives through. Those two calls are the two reads, and WP3 collapsed
+them into one batched `GetSettingsByPrefixAsync`.
+
+**After.** `MemorySchemaDdlStatementCountTests` pins both sides of the gate: **0 `Ddl` statements and
+4 total when the digest matches, 39 when it is stale.** So the per-open cost goes 42 → 4 on every
+install past its first run. `QueryGuardServiceTests` pins query-guard settings reads at 4 → 1 on the
+structural path and 2 → 1 elsewhere, watched red first (`CallCount should be 1 but was 2/2/2/4`).
+
+**The route-table guard, watched red then green (`37a67e53`).** `EndpointGuardTests` enumerates the
+server's route table and calls every route unauthenticated: mapping a bare `/falsify-the-guard` with
+no `McpTokenGate` entry made the test fail naming the route; reverting made it pass. `McpTokenGate`
+flipped from a default-*open* allowlist (`GuardedPaths`) to default-*closed* (`OpenPaths`, holding
+only `/observability`), so a forgotten entry now costs a 401 on the new endpoint instead of shipping
+it unauthenticated. Still green after the CLI composition-root flip below, alongside every other
+route the server maps, including `/settings`.
+
+**The CLI composition-root flip landed, and the end-to-end path is now real.** `AppRunner.RunCliCommand`
+binds `ISettingsStore` to a `LazyServerSettingsStore` for every command outside the two-entry write
+opt-out (`CliWriteOptOuts`: `encryption`, and `model set` — held back from the server pending §10.3's
+progress-shape ruling, not on principle). The store defers acquiring the backend
+(`CliSettingsBackend.AcquireAsync`, reusing `BackendLauncher` exactly as the stdio proxy does) to its
+first actual call, so a command that never touches settings — `serve` above all, which builds its own
+separate server DI graph — never probes or auto-starts anything.
+
+Proven against the real binary, not a fake: `CliContractTests` replays its recorded scenarios through
+a real `ai-raccoon` process that cold-starts a real backend for the first settings command and reuses
+it for the rest (`ai-raccoon: starting the backend on port {N}` appears exactly once, on the cold
+scenario), and adds the two rows that were owed — a settings command against a server that refuses a
+tampered token exits distinctly (`SettingsServerRefused`, 17) from one where nothing can be made to
+listen within the acquire budget (`SettingsServerUnavailable`, 18). `SqliteSettingsStoreTests`'
+cross-process liveness test (WP4-T3) is re-founded on this topology: the writer is still a distinct OS
+process from the reader, it just delegates the write to the server now rather than opening the bank
+itself — re-verified red-then-green by temporarily routing its reads through the existing
+naively-caching decorator (failed `should be "false" but was null`), then reverting. `CliBankWriteTests`
+needed a real fix, not a rewrite of its expectations: every settings command now auto-starting a full
+server surfaced a genuine race with `BankMaintenanceHostedService`'s unrelated startup checkpoint pass,
+which the fix absorbs with a warm-up before any test takes its baseline — not a weakened assertion.
+Full `Speed=Fast` (2504), `Speed=Slow` (727) and `Category=bdd` (138) all green on the merged chain.
+
+*Still pending: the after-measurement rerun (§8) — a wall-clock latency comparison against the
+`docs/work/perf/2026-08-16-wp5-before-baseline.md` numbers above, now that every settings operation
+pays the acquisition this ADR adds. That is WP5's own remaining scope, not landed by this chain. The
+status stays Proposed until it exists — an ADR whose evidence is a promise has not earned Accepted.*

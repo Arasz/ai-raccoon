@@ -22,10 +22,10 @@ public class SyncCommandsTests
             var commands = new SyncCommands();
             return parsed.CommandPath switch
             {
-                ["sync", "add", "s3"] => commands.AddS3Async(parsed.ParsedCliArgs, store, streams, ct),
-                ["sync", "add", "azure"] => commands.AddAzureAsync(parsed.ParsedCliArgs, store, streams, ct),
-                ["sync", "remove"] => commands.RemoveAsync(store, streams, ct),
-                ["sync", "show"] => commands.ShowAsync(store, streams, ct),
+                ["settings", "sync", "add", "s3"] => commands.AddS3Async(parsed.ParsedCliArgs, store, streams, ct),
+                ["settings", "sync", "add", "azure"] => commands.AddAzureAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["settings", "sync", "remove"] => commands.RemoveAsync(store, streams, ct),
+                ["settings", "sync", "show"] => commands.ShowAsync(store, streams, ct),
                 _ => throw new InvalidOperationException($"unhandled: {string.Join(' ', parsed.CommandPath)}")
             };
         }, stdin);
@@ -35,7 +35,7 @@ public class SyncCommandsTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, stdout, stderr) = await Run(["sync", "add", "s3", "https://s3.example.com", "--bucket", "b"],
+        var (exit, stdout, stderr) = await Run(["settings", "sync", "add", "s3", "https://s3.example.com", "--bucket", "b"],
             store, new StringReader("ak1\nsk1\n"));
 
         exit.ShouldBe(0);
@@ -52,7 +52,7 @@ public class SyncCommandsTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, stderr) = await Run(["sync", "add", "s3", "https://s3.example.com", "--bucket", "b"],
+        var (exit, _, stderr) = await Run(["settings", "sync", "add", "s3", "https://s3.example.com", "--bucket", "b"],
             store, new StringReader("\n"));
 
         exit.ShouldBe(ExitCode.InvalidArgument);
@@ -73,7 +73,7 @@ public class SyncCommandsTests
             }
         };
 
-        var (exit, stdout, _) = await Run(["sync", "remove"], store);
+        var (exit, stdout, _) = await Run(["settings", "sync", "remove"], store);
 
         exit.ShouldBe(0);
         store.Settings.ShouldBeEmpty();
@@ -83,7 +83,7 @@ public class SyncCommandsTests
     [Fact]
     public async Task Show_NotConfigured_PrintsMessage()
     {
-        var (exit, stdout, _) = await Run(["sync", "show"], new FakeConfigStore());
+        var (exit, stdout, _) = await Run(["settings", "sync", "show"], new FakeConfigStore());
 
         exit.ShouldBe(0);
         stdout.Trim().ShouldBe("sync not configured");
@@ -102,7 +102,7 @@ public class SyncCommandsTests
             }
         };
 
-        var (exit, stdout, _) = await Run(["sync", "show"], store);
+        var (exit, stdout, _) = await Run(["settings", "sync", "show"], store);
 
         exit.ShouldBe(0);
         stdout.ShouldContain("container: mem");

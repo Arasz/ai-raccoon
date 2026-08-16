@@ -1,6 +1,9 @@
 using System.Runtime.InteropServices;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
+using AiRaccoon.Settings;
 using AiRaccoon.Setup;
+using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 
@@ -37,7 +40,7 @@ public sealed class AppRunnerShutdownCancellationTests : IDisposable
     [Fact]
     public async Task RunCliCommand_RegistersShutdownCancellation()
     {
-        var (exit, runner) = await Run(["--data-root", _dataRoot, "access", "default", "show"]);
+        var (exit, runner) = await Run(["--data-root", _dataRoot, "settings", "access", "default", "show"]);
 
         exit.ShouldBe(0);
         runner.ShutdownCancellationRegistrations.ShouldBe(1);
@@ -59,7 +62,10 @@ public sealed class AppRunnerShutdownCancellationTests : IDisposable
             Console.SetOut(stdout);
             Console.SetError(stderr);
             var original = Environment.GetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName);
-            var runner = new AppRunner();
+            // WP7 (ADR-0075 §5.3): a fast fake stands in for the settings server — this class is
+            // about shutdown-signal wiring, not the transport, which is covered elsewhere
+            // (ServerSettingsStoreTests, CliContractTests, CliBankWriteTests).
+            var runner = new AppRunner((_, _, _) => Task.FromResult<ISettingsStore>(new InMemorySettings()));
             try
             {
                 Environment.SetEnvironmentVariable(EnvEncryptionKeyProvider.EnvVarName, null);

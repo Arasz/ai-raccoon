@@ -46,6 +46,38 @@ public sealed class AccessModeGuardTests
     public async Task Resolve_NothingConfigured_DefaultsToRw() => (await _guard.ResolveAsync("acme", TestContext.Current.CancellationToken)).ShouldBe(AccessMode.Rw);
 
     [Fact]
+    public async Task Resolve_UnparseablePerProjectValue_FallsThroughToGlobal()
+    {
+        _store.Settings[AccessModePolicy.GlobalSettingKey] = "ro";
+        _store.Settings[AccessModePolicy.ProjectSettingKey("acme")] = "garbage";
+
+        (await _guard.ResolveAsync("acme", TestContext.Current.CancellationToken)).ShouldBe(AccessMode.Ro);
+    }
+
+    /// <summary>
+    ///     Characterisation test: today's exact-key lookup cannot confuse projects by construction. It only
+    ///     guards a naive prefix implementation that picks any key under the prefix instead of the exact one.
+    /// </summary>
+    [Fact]
+    public async Task Resolve_DoesNotConfuseAnotherProjectsKey()
+    {
+        _store.Settings[AccessModePolicy.ProjectSettingKey("other")] = "ro";
+
+        (await _guard.ResolveAsync("acme", TestContext.Current.CancellationToken)).ShouldBe(AccessMode.Rw);
+    }
+
+    [Fact]
+    public async Task EnsureAsync_ForWrite_ReadsSettingsStoreOnce()
+    {
+        var counting = new CountingStore();
+
+        await new MemoryAccessGuard(counting).EnsureAsync("acme", AccessRequirement.Write, "memory_write",
+            TestContext.Current.CancellationToken);
+
+        counting.SettingsReadCount.ShouldBe(1);
+    }
+
+    [Fact]
     public async Task Ensure_Denied_ThrowsAccessDeniedWithRequiredAndCurrentMode()
     {
         _store.Settings[AccessModePolicy.ProjectSettingKey("acme")] = "rw";
@@ -119,6 +151,12 @@ public sealed class AccessModeGuardTests
             return Task.CompletedTask;
         }
 
+        public override Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyDictionary<string, string>>(Settings
+                .Where(kv => kv.Key.StartsWith(prefix, StringComparison.Ordinal))
+                .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal));
+
         public override Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
             CancellationToken cancellationToken = default)
         {
@@ -183,5 +221,25 @@ public sealed class AccessModeGuardTests
         public override Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<MemoryEntry>>([]);
+    }
+
+    /// <summary>Counts every settings read, regardless of shape, so a batched read is distinguishable from two single-key reads.</summary>
+    private sealed class CountingStore : FakeMemoryStore
+    {
+        public int SettingsReadCount { get; private set; }
+
+        public override Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default)
+        {
+            SettingsReadCount++;
+            return Task.FromResult<string?>(null);
+        }
+
+        public override Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
+            CancellationToken cancellationToken = default)
+        {
+            SettingsReadCount++;
+            return Task.FromResult<IReadOnlyDictionary<string, string>>(
+                new Dictionary<string, string>(StringComparer.Ordinal));
+        }
     }
 }

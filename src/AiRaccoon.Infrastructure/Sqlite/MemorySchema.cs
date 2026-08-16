@@ -1,4 +1,7 @@
+using System.Buffers.Binary;
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 using AiRaccoon.Core.Memory;
 using Dapper;
@@ -360,7 +363,24 @@ internal static class MemorySchema
 
                                           """;
 
+    /// <summary>
+    ///     First 32 bits of SHA-256(<see cref="Ddl" />), stored in <c>PRAGMA application_id</c>
+    ///     (ADR-0075) to gate the <see cref="Ddl" /> block without a <see cref="CurrentVersion" />
+    ///     bump. Derived from the same string the block executes, so the two cannot drift.
+    ///     Content addressing, not cryptography — truncated to 32 bits to fit the pragma; a
+    ///     collision costs a skipped rerun, not a security failure (accepted trade,
+    ///     docs/plans/2026-08-16-bank-open-cost-implementation.md §4.2).
+    /// </summary>
+    internal static readonly int SchemaDigest = ComputeSchemaDigest();
+
     private static readonly Regex VecDimensionPattern = new(@"float\[(\d+)\]", RegexOptions.Compiled);
+
+    private static int ComputeSchemaDigest()
+    {
+        Span<byte> hash = stackalloc byte[SHA256.HashSizeInBytes];
+        SHA256.HashData(Encoding.UTF8.GetBytes(Ddl), hash);
+        return BinaryPrimitives.ReadInt32BigEndian(hash);
+    }
 
     public static async Task EnsureAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -384,9 +404,17 @@ internal static class MemorySchema
                             "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
                             cancellationToken: cancellationToken)).ConfigureAwait(false) == 0;
 
-        await using var command = connection.CreateCommand();
-        command.CommandText = Ddl;
-        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        // ADR-0075: Ddl is a no-op read once every object exists (all CREATE ... IF NOT EXISTS),
+        // but it is still ~30 statements to reach that no-op, so it is gated on a digest of
+        // itself rather than run unconditionally on every open.
+        var storedDigest = await ReadApplicationIdAsync(connection, cancellationToken).ConfigureAwait(false);
+        if (storedDigest != SchemaDigest)
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = Ddl;
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            await StampSchemaDigestAsync(connection, cancellationToken).ConfigureAwait(false);
+        }
 
         // Runs on every open, version or not: it is a data move guarding a deny-by-default gate,
         // it costs one indexed count, and a bank that was stamped by a newer build and then
@@ -445,7 +473,8 @@ internal static class MemorySchema
         {
             // Hard step: ALTER TABLE ADD COLUMN is not idempotent, so it needs the version gate
             // (unlike promotion_queue_entries_ad above, which reaches every bank on every open —
-            // no version gate at all — because it reruns unconditionally inside Ddl).
+            // no version gate at all — because EnsurePromotionQueueTriggerScopeGuardAsync runs
+            // unconditionally, outside both the version ladder and the Ddl digest gate).
             await MigrateToV4Async(connection, cancellationToken).ConfigureAwait(false);
         }
 
@@ -705,9 +734,10 @@ internal static class MemorySchema
     ///     every other object in <see cref="Ddl" /> relies on — can only ever create, never replace. An
     ///     unconditional <c>DROP TRIGGER</c> + <c>CREATE TRIGGER</c> on every open was tried and
     ///     rejected: unlike the no-op <c>IF NOT EXISTS</c> statements around it, that pair is a real
-    ///     schema write every time, and <see cref="SqliteConnectionFactory" /> opens unpooled,
-    ///     per-operation connections — SweepService opens one per entry, so a large bank would turn
-    ///     one maintenance pass into thousands of schema writes, each bumping
+    ///     schema write every time, and <see cref="SqliteConnectionFactory" /> runs
+    ///     <see cref="EnsureAsync" /> on every checkout regardless of pooling — SweepService checks
+    ///     one out per entry, so a large bank would turn one maintenance pass into thousands of
+    ///     schema writes, each bumping
     ///     <c>PRAGMA schema_version</c> (forcing every other connection's prepared-statement cache to
     ///     re-prepare) and each opening a window between the DROP and the CREATE where the trigger
     ///     does not exist — a concurrent delete landing in that window would produce exactly the
@@ -758,6 +788,16 @@ internal static class MemorySchema
     private static async Task StampAsync(SqliteConnection connection, int version, CancellationToken cancellationToken) =>
         await connection.ExecuteAsync(
                 new CommandDefinition($"PRAGMA user_version = {version}", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+
+    private static async Task<int> ReadApplicationIdAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+        await connection.ExecuteScalarAsync<int>(
+            new CommandDefinition("PRAGMA application_id", cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+    /// <summary>PRAGMA application_id takes no parameter binding, hence the interpolation of an int constant.</summary>
+    private static async Task StampSchemaDigestAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+        await connection.ExecuteAsync(
+                new CommandDefinition($"PRAGMA application_id = {SchemaDigest}", cancellationToken: cancellationToken))
             .ConfigureAwait(false);
 
     /// <summary>

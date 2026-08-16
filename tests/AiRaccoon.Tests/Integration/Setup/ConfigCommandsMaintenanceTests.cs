@@ -78,7 +78,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
     {
         var store = new FakeConfigStore();
 
-        var (exit, outp, _) = await Run(["maintenance", "interval", "60"], store);
+        var (exit, outp, _) = await Run(["settings", "maintenance", "interval", "60"], store);
 
         exit.ShouldBe(0);
         store.Settings[BankMaintenanceConfigKeys.CheckpointIntervalMinutesGlobal].ShouldBe("60");
@@ -90,7 +90,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, err) = await Run(["maintenance", "interval", "0"], store);
+        var (exit, _, err) = await Run(["settings", "maintenance", "interval", "0"], store);
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("positive number of minutes");
@@ -102,7 +102,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, err) = await Run(["maintenance", "interval", "often"], store);
+        var (exit, _, err) = await Run(["settings", "maintenance", "interval", "often"], store);
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("positive number of minutes");
@@ -114,7 +114,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
     {
         var store = new FakeConfigStore();
 
-        var (exit, outp, _) = await Run(["maintenance", "vacuum-interval", "7"], store);
+        var (exit, outp, _) = await Run(["settings", "maintenance", "vacuum-interval", "7"], store);
 
         exit.ShouldBe(0);
         store.Settings[BankMaintenanceConfigKeys.VacuumIntervalDaysGlobal].ShouldBe("7");
@@ -126,7 +126,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, err) = await Run(["maintenance", "vacuum-interval", "-1"], store);
+        var (exit, _, err) = await Run(["settings", "maintenance", "vacuum-interval", "-1"], store);
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("positive number of days");
@@ -138,7 +138,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, err) = await Run(["maintenance", "vacuum-interval", "20000000"], store);
+        var (exit, _, err) = await Run(["settings", "maintenance", "vacuum-interval", "20000000"], store);
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         err.ShouldContain("days");
@@ -150,7 +150,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
     {
         var store = new FakeConfigStore();
 
-        var (exit, outp, _) = await Run(["maintenance", "list"], store);
+        var (exit, outp, _) = await Run(["settings", "maintenance", "list"], store);
 
         exit.ShouldBe(0);
         outp.ShouldContain("checkpoint interval: 60 min");
@@ -163,7 +163,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         var store = new FakeConfigStore();
         await SeedFreelistAsync();
 
-        var (exit, outp, _) = await Run(["maintenance", "list"], store);
+        var (exit, outp, _) = await Run(["settings", "maintenance", "list"], store);
 
         exit.ShouldBe(0);
         outp.ShouldContain("db file:");
@@ -178,13 +178,13 @@ public class ConfigCommandsMaintenanceTests : IDisposable
     public async Task MaintenanceList_SecondCall_ShowsDelta()
     {
         var store = new FakeConfigStore();
-        var (exit1, outp1, _) = await Run(["maintenance", "list"], store);
+        var (exit1, outp1, _) = await Run(["settings", "maintenance", "list"], store);
         exit1.ShouldBe(0);
         outp1.ShouldContain("no previous measurement");
 
         await WriteRowAsync("probe");
 
-        var (exit2, outp2, _) = await Run(["maintenance", "list"], store);
+        var (exit2, outp2, _) = await Run(["settings", "maintenance", "list"], store);
         exit2.ShouldBe(0);
         outp2.ShouldContain("since last check:");
     }
@@ -194,7 +194,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
     {
         var store = new FakeConfigStore();
 
-        await Run(["maintenance", "list"], store);
+        await Run(["settings", "maintenance", "list"], store);
 
         File.Exists(Path.Combine(_dataRoot, "maintenance-stats.json")).ShouldBeTrue();
     }
@@ -206,7 +206,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         store.Settings[BankMaintenanceConfigKeys.CheckpointIntervalMinutesGlobal] = "30";
         store.Settings[BankMaintenanceConfigKeys.VacuumIntervalDaysGlobal] = "3";
 
-        var (exit, outp, _) = await Run(["maintenance", "list"], store);
+        var (exit, outp, _) = await Run(["settings", "maintenance", "list"], store);
 
         exit.ShouldBe(0);
         outp.ShouldContain("checkpoint interval: 30 min");

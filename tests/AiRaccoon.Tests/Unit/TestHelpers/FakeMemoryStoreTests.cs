@@ -42,6 +42,16 @@ public sealed class FakeMemoryStoreTests
         deleted.ShouldBeTrue();
     }
 
+    /// <summary>The one member that does not throw by default (WP3): a subject batching settings reads must not force every fake to override it.</summary>
+    [Fact]
+    public async Task GetSettingsByPrefixAsync_WithNoOverride_ThrowsRatherThanReturningEmpty()
+    {
+        IMemoryStore store = new FakeMemoryStore();
+
+        await Should.ThrowAsync<NotSupportedException>(() =>
+            store.GetSettingsByPrefixAsync("access.mode.", TestContext.Current.CancellationToken));
+    }
+
     private sealed class StatsStore : FakeMemoryStore
     {
         public override Task<MemoryStats> GetStatsAsync(string projectId,

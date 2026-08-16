@@ -18,7 +18,7 @@ public sealed class CliRunTests
     [Fact]
     public async Task NonZeroExit_IsSurfaced()
     {
-        var (exit, _, _) = await CliRun.RunAsync(["access", "default", "show"],
+        var (exit, _, _) = await CliRun.RunAsync(["settings", "access", "default", "show"],
             (_, _, _) => Task.FromResult(7));
 
         exit.ShouldBe(7);
@@ -28,7 +28,7 @@ public sealed class CliRunTests
     [Fact]
     public async Task NonZeroExit_StillReturnsBothStreams()
     {
-        var (exit, stdout, stderr) = await CliRun.RunAsync(["access", "default", "show"],
+        var (exit, stdout, stderr) = await CliRun.RunAsync(["settings", "access", "default", "show"],
             (_, streams, _) =>
             {
                 streams.Output.Write("printed");
@@ -44,7 +44,7 @@ public sealed class CliRunTests
     [Fact]
     public async Task StdoutAndStderr_AreCapturedSeparately()
     {
-        var (_, stdout, stderr) = await CliRun.RunAsync(["access", "default", "show"],
+        var (_, stdout, stderr) = await CliRun.RunAsync(["settings", "access", "default", "show"],
             (_, streams, _) =>
             {
                 streams.Output.Write("out-text");
@@ -59,7 +59,7 @@ public sealed class CliRunTests
     [Fact]
     public async Task StderrText_DoesNotLeakIntoStdout()
     {
-        var (_, stdout, _) = await CliRun.RunAsync(["access", "default", "show"],
+        var (_, stdout, _) = await CliRun.RunAsync(["settings", "access", "default", "show"],
             (_, streams, _) =>
             {
                 streams.Error.Write("err-only");
@@ -72,7 +72,7 @@ public sealed class CliRunTests
     [Fact]
     public async Task StdoutText_DoesNotLeakIntoStderr()
     {
-        var (_, _, stderr) = await CliRun.RunAsync(["access", "default", "show"],
+        var (_, _, stderr) = await CliRun.RunAsync(["settings", "access", "default", "show"],
             (_, streams, _) =>
             {
                 streams.Output.Write("out-only");
@@ -85,7 +85,7 @@ public sealed class CliRunTests
     [Fact]
     public async Task Stdin_ReachesTheCommand()
     {
-        var (_, stdout, _) = await CliRun.RunAsync(["access", "default", "show"],
+        var (_, stdout, _) = await CliRun.RunAsync(["settings", "access", "default", "show"],
             (_, streams, _) =>
             {
                 streams.Output.Write(streams.Input.ReadLine());
@@ -100,7 +100,7 @@ public sealed class CliRunTests
     [Fact]
     public async Task NoStdin_GivesAnEmptyReader()
     {
-        var (_, stdout, _) = await CliRun.RunAsync(["access", "default", "show"],
+        var (_, stdout, _) = await CliRun.RunAsync(["settings", "access", "default", "show"],
             (_, streams, _) =>
             {
                 streams.Output.Write(streams.Input.ReadLine() ?? "(none)");
@@ -113,14 +113,14 @@ public sealed class CliRunTests
     [Fact]
     public async Task ParsedArgs_AreHandedToTheCommand()
     {
-        var (_, stdout, _) = await CliRun.RunAsync(["access", "default", "set", "rw"],
+        var (_, stdout, _) = await CliRun.RunAsync(["settings", "access", "default", "set", "rw"],
             (parsed, streams, _) =>
             {
                 streams.Output.Write(string.Join(' ', parsed.CommandPath));
                 return Task.FromResult(0);
             });
 
-        stdout.ShouldBe("access default set");
+        stdout.ShouldBe("settings access default set");
     }
 
     /// <summary>The ConfigCommands overload drives the real dispatcher end to end.</summary>
@@ -129,7 +129,7 @@ public sealed class CliRunTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, stdout, _) = await CliRun.RunAsync(["access", "default", "set", "rw"],
+        var (exit, stdout, _) = await CliRun.RunAsync(["settings", "access", "default", "set", "rw"],
             TestData.CreateConfigCommands(store, settings: new SettingsCommands()));
 
         exit.ShouldBe(0);

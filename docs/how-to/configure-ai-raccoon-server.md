@@ -137,10 +137,10 @@ Rejects machine-generated content before it reaches the bank; the rejected text 
 noise store rather than discarded ([ADR-0039](../adr/0039-noise-learning-substrate-and-shadow-mode.md)).
 
 ```bash
-ai-raccoon noise show        # enabled: True
-ai-raccoon noise disable     # accept every write, even ones a policy would reject
-ai-raccoon noise enable      # the default
-ai-raccoon noise entries     # summarize what has been rejected
+ai-raccoon settings noise show        # enabled: True
+ai-raccoon settings noise disable     # accept every write, even ones a policy would reject
+ai-raccoon settings noise enable      # the default
+ai-raccoon settings noise entries     # summarize what has been rejected
 ```
 
 ### Read-path query guard
@@ -149,9 +149,9 @@ Refuses a `memory_search` query that is itself machine output, and annotates one
 contains log-like content ([ADR-0040](../adr/0040-read-path-query-guard.md)). Armed by default.
 
 ```bash
-ai-raccoon queryguard show             # enabled: True  shadow: False  structural: False  threshold: 0.98939822280316
-ai-raccoon queryguard disable          # every query runs untouched
-ai-raccoon queryguard shadow enable    # record what the guard would have done, without acting on it
+ai-raccoon settings queryguard show             # enabled: True  shadow: False  structural: False  threshold: 0.98939822280316
+ai-raccoon settings queryguard disable          # every query runs untouched
+ai-raccoon settings queryguard shadow enable    # record what the guard would have done, without acting on it
 ```
 
 Shadow mode is the safe way to measure your own traffic before arming anything: verdicts are
@@ -162,9 +162,9 @@ to the *warn* tier only — pure shape statistics, no embedding, and never able 
 off:
 
 ```bash
-ai-raccoon queryguard structural enable
-ai-raccoon queryguard structural threshold set 0.95   # 0..1; lower annotates more
-ai-raccoon queryguard structural disable
+ai-raccoon settings queryguard structural enable
+ai-raccoon settings queryguard structural threshold set 0.95   # 0..1; lower annotates more
+ai-raccoon settings queryguard structural disable
 ```
 
 ### The sweep reaper
@@ -173,17 +173,17 @@ Deletes low-rated, aged project entries on a cadence ([ADR-0025](../adr/0025-the
 On by default; shared-tier entries are exempt, and a project not in `full` access mode is skipped.
 
 ```bash
-ai-raccoon sweep show                  # enabled: True  interval: 24 h  threshold: 0.3
-ai-raccoon sweep disable               # the kill switch
-ai-raccoon sweep interval-hours 168
-ai-raccoon sweep threshold set 0.55
+ai-raccoon settings sweep show                  # enabled: True  interval: 24 h  threshold: 0.3
+ai-raccoon settings sweep disable               # the kill switch
+ai-raccoon settings sweep interval-hours 168
+ai-raccoon settings sweep threshold set 0.55
 ```
 
 ### Retrieval fusion
 
 ```bash
-ai-raccoon retrieval alpha show        # 0.5
-ai-raccoon retrieval alpha set 0.7     # 0..1; weights the structure vector against the content vector
+ai-raccoon settings retrieval alpha show        # 0.5
+ai-raccoon settings retrieval alpha set 0.7     # 0..1; weights the structure vector against the content vector
 ```
 
 ### Self-instrumentation (metrics)
@@ -199,10 +199,10 @@ off — these three settings only tune the writer, not whether it runs.
 | Hot-table retention | `metrics.retention-days.global` (best-effort — holding more is not a violation) | `28` days |
 
 ```bash
-ai-raccoon performance list                  # buffer capacity, flush interval, retention — with take-effect timing
-ai-raccoon performance buffer-capacity 2000   # takes effect on the next server restart
-ai-raccoon performance flush-interval 10      # takes effect on the next flush tick
-ai-raccoon performance retention 60           # takes effect on the next maintenance pass
+ai-raccoon settings performance list                  # buffer capacity, flush interval, retention — with take-effect timing
+ai-raccoon settings performance buffer-capacity 2000   # takes effect on the next server restart
+ai-raccoon settings performance flush-interval 10      # takes effect on the next flush tick
+ai-raccoon settings performance retention 60           # takes effect on the next maintenance pass
 ```
 
 The three knobs take effect on different cadences, and each command's own output states which:

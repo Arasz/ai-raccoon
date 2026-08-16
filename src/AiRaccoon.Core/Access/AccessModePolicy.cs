@@ -6,6 +6,8 @@ namespace AiRaccoon.Core.Access;
 /// </summary>
 public static class AccessModePolicy
 {
+    public const string SettingKeyPrefix = "access.mode.";
+
     public const string GlobalSettingKey = "access.mode.global";
 
     public static string ProjectSettingKey(string projectId) => $"access.mode.project:{projectId}";
