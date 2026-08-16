@@ -14,33 +14,26 @@ namespace AiRaccoon.Tests.Unit.Setup.Cli;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public class CliCommandTreeTests
 {
-    [Fact]
-    public void Root_ExposesAllVerbFamilies()
-    {
-        var root = CliCommandTree.BuildFullRootCommand();
-
-        root.Children.OfType<Command>().Select(c => c.Name)
-            .ShouldBe(["access", "model", "retrieval", "sweep", "noise", "queryguard", "sync", "ingest", "watch", "encryption", "extract", "maintenance", "performance", "serve"]);
-        CliCommandTree.Verbs.ShouldBe(["access", "model", "retrieval", "sweep", "noise", "queryguard", "sync", "ingest", "watch", "encryption", "extract", "maintenance", "performance", "serve"]);
-    }
-
     /// <summary>
-    ///     AC1 — `ai-raccoon performance --help` lists the three set verbs (one per settings-backed
-    ///     knob: buffer capacity, flush interval, retention) plus list. Fixes the defect the 1.20.0
-    ///     manual checklist found (#352): metrics was the only settings-backed subsystem with no CLI
-    ///     family at all.
+    ///     AC1 — `ai-raccoon settings performance --help` lists the three set verbs (one per
+    ///     settings-backed knob: buffer capacity, flush interval, retention) plus list. Fixes the defect
+    ///     the 1.20.0 manual checklist found (#352): metrics was the only settings-backed subsystem with
+    ///     no CLI family at all.
     /// </summary>
     [Fact]
     public void PerformanceCommand_ExposesSetVerbsAndList()
     {
-        var root = CliCommandTree.BuildFullRootCommand();
+        var performance = SettingsFamily("performance");
 
-        var performance = root.Children.OfType<Command>().Single(c => c.Name == "performance");
         performance.Children.OfType<Command>().Select(c => c.Name)
             .ShouldBe(["buffer-capacity", "flush-interval", "retention", "list"]);
         var list = performance.Children.OfType<Command>().Single(c => c.Name == "list");
         list.Aliases.ShouldContain("show");
     }
+
+    private static Command SettingsFamily(string name) =>
+        CliCommandTree.BuildFullRootCommand().Children.OfType<Command>().Single(c => c.Name == "settings")
+            .Children.OfType<Command>().Single(c => c.Name == name);
 
     [Fact]
     public void ServeCommand_ExposesServeOptions()
@@ -99,30 +92,28 @@ public class CliCommandTreeTests
     ///     spelling must work under every one of the three verbs without changing the canonical name.
     /// </summary>
     [Theory]
-    [InlineData("model", "unset", "reset")]
-    [InlineData("model", "remove", "reset")]
+    [InlineData("settings model", "unset", "reset")]
+    [InlineData("settings model", "remove", "reset")]
     [InlineData("encryption", "reset", "unset")]
     [InlineData("encryption", "remove", "unset")]
-    [InlineData("sync", "reset", "remove")]
-    [InlineData("sync", "unset", "remove")]
-    public void RevertToDefaultAlias_ResolvesToTheCanonicalCommand(string verb, string alias, string canonicalName)
+    [InlineData("settings sync", "reset", "remove")]
+    [InlineData("settings sync", "unset", "remove")]
+    public void RevertToDefaultAlias_ResolvesToTheCanonicalCommand(string verbPath, string alias, string canonicalName)
     {
         var root = CliCommandTree.BuildFullRootCommand();
 
-        var parseResult = root.Parse([verb, alias]);
+        var parseResult = root.Parse([.. verbPath.Split(' '), alias]);
 
         parseResult.CommandResult.Command.Name.ShouldBe(canonicalName);
     }
 
     [Theory]
-    [InlineData("model", "reset", new[] { "unset", "remove" })]
+    [InlineData("settings model", "reset", new[] { "unset", "remove" })]
     [InlineData("encryption", "unset", new[] { "reset", "remove" })]
-    [InlineData("sync", "remove", new[] { "reset", "unset" })]
-    public void RevertToDefaultCommand_KeepsItsNameAndGainsTheOtherSpellingsAsAliases(string verb, string canonicalName, string[] expectedAliases)
+    [InlineData("settings sync", "remove", new[] { "reset", "unset" })]
+    public void RevertToDefaultCommand_KeepsItsNameAndGainsTheOtherSpellingsAsAliases(string verbPath, string canonicalName, string[] expectedAliases)
     {
-        var root = CliCommandTree.BuildFullRootCommand();
-        var group = root.Children.OfType<Command>().Single(c => c.Name == verb);
-        var canonical = group.Children.OfType<Command>().Single(c => c.Name == canonicalName);
+        var canonical = CommandAt(verbPath).Children.OfType<Command>().Single(c => c.Name == canonicalName);
 
         canonical.Name.ShouldBe(canonicalName);
         foreach (var alias in expectedAliases)
@@ -131,46 +122,56 @@ public class CliCommandTreeTests
         }
     }
 
+    /// <summary>Walks a space-separated command path from the root.</summary>
+    private static Command CommandAt(string path)
+    {
+        var current = (Command)CliCommandTree.BuildFullRootCommand();
+        foreach (var segment in path.Split(' '))
+        {
+            current = current.Children.OfType<Command>().Single(c => c.Name == segment);
+        }
+
+        return current;
+    }
+
     /// <summary>
     ///     "show current config" is spelled list in some verb groups and show in others; each
     ///     group's canonical verb gains the other spelling as an alias.
     /// </summary>
     [Theory]
-    [InlineData("access", "list", "show")]
-    [InlineData("watch", "list", "show")]
-    [InlineData("maintenance", "list", "show")]
-    [InlineData("performance", "list", "show")]
-    [InlineData("extract", "list", "show")]
-    [InlineData("model", "show", "list")]
-    [InlineData("sweep", "show", "list")]
-    [InlineData("sync", "show", "list")]
+    [InlineData("settings access", "list", "show")]
+    [InlineData("settings watch", "list", "show")]
+    [InlineData("settings maintenance", "list", "show")]
+    [InlineData("settings performance", "list", "show")]
+    [InlineData("settings extract", "list", "show")]
+    [InlineData("settings model", "show", "list")]
+    [InlineData("settings sweep", "show", "list")]
+    [InlineData("settings sync", "show", "list")]
     [InlineData("encryption", "show", "list")]
-    [InlineData("noise", "show", "list")]
-    public void ShowConfigAlias_ResolvesToTheCanonicalCommand(string verb, string canonicalName, string alias)
+    [InlineData("settings noise", "show", "list")]
+    public void ShowConfigAlias_ResolvesToTheCanonicalCommand(string verbPath, string canonicalName, string alias)
     {
         var root = CliCommandTree.BuildFullRootCommand();
 
-        var parseResult = root.Parse([verb, alias]);
+        var parseResult = root.Parse([.. verbPath.Split(' '), alias]);
 
         parseResult.CommandResult.Command.Name.ShouldBe(canonicalName);
     }
 
     [Theory]
-    [InlineData("access", "list", "show")]
-    [InlineData("watch", "list", "show")]
-    [InlineData("maintenance", "list", "show")]
-    [InlineData("performance", "list", "show")]
-    [InlineData("extract", "list", "show")]
-    [InlineData("model", "show", "list")]
-    [InlineData("sweep", "show", "list")]
-    [InlineData("sync", "show", "list")]
+    [InlineData("settings access", "list", "show")]
+    [InlineData("settings watch", "list", "show")]
+    [InlineData("settings maintenance", "list", "show")]
+    [InlineData("settings performance", "list", "show")]
+    [InlineData("settings extract", "list", "show")]
+    [InlineData("settings model", "show", "list")]
+    [InlineData("settings sweep", "show", "list")]
+    [InlineData("settings sync", "show", "list")]
     [InlineData("encryption", "show", "list")]
-    [InlineData("noise", "show", "list")]
-    public void ShowConfigCommand_KeepsItsNameAndGainsTheOtherSpellingAsAlias(string verb, string canonicalName, string expectedAlias)
+    [InlineData("settings noise", "show", "list")]
+    public void ShowConfigCommand_KeepsItsNameAndGainsTheOtherSpellingAsAlias(string verbPath, string canonicalName, string expectedAlias)
     {
-        var root = CliCommandTree.BuildFullRootCommand();
-        var group = root.Children.OfType<Command>().Single(c => c.Name == verb);
-        var canonical = group.Children.OfType<Command>().Single(c => c.Name == canonicalName);
+        var canonical = CommandAt(verbPath).Children.OfType<Command>().Single(c => c.Name == canonicalName);
 
         canonical.Name.ShouldBe(canonicalName);
         canonical.Aliases.ShouldContain(expectedAlias);

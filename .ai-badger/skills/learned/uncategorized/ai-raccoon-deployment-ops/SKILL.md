@@ -24,9 +24,11 @@ HTTP serve on this machine. All facts measured 2026-08-07 unless noted.
   maintenance service's startup/shutdown boundary checkpoints but no timers. The WAL bloat
   failure mode (431 MB of 100% checkpointable garbage, measured) happens when several
   stdio bridges linger and nothing truncates — fixed by the 1.1.1 maintenance service.
-- CLI config verbs are ROOT-LEVEL: `ai-raccoon extract enable true`, `ai-raccoon
-  maintenance list`. **There is NO `config` verb** — `ai-raccoon config extract ...` fails
-  with "Unrecognized command or argument 'config'" (hit 2026-08-07 in a rollout script).
+- CLI config verbs live under `settings`: `ai-raccoon settings extract enable true`, `ai-raccoon
+  settings maintenance list`. **There is NO `config` verb** — `ai-raccoon config extract ...` fails
+  with "Unrecognized command or argument 'config'" (hit 2026-08-07 in a rollout script). Pre-1.21.0
+  builds took these root-level (`ai-raccoon extract enable true`); WP6 of the bank-open-cost plan
+  moved them under `settings` with no compatibility alias.
 
 ## Version-rollout watchdog pattern
 
@@ -40,7 +42,7 @@ every 30 min) encode a reusable shape:
    kill whatever holds 7721 surgically (`lsof -ti :7721` → SIGTERM — never
    `pkill -f "ai-raccoon serve"`, that also kills scratch servers on other ports), start
    the new serve with `--idle-timeout 0`, assert auto-promotion settings ONCE
-   (`ai-raccoon extract enable true` + `extract mode promote` — marker keeps later manual
+   (`ai-raccoon settings extract enable true` + `settings extract mode promote` — marker keeps later manual
    changes un-fought), then VERIFY the release's new features (see below), write the
    marker, print a summary.
 3. **Steady state**: marker present → only ensure the serve is up (self-heal). Silent.
@@ -48,7 +50,7 @@ every 30 min) encode a reusable shape:
    CURRENT-version serve (no marker, no settings writes).
 
 Feature verification for a release (make it part of the rollout, don't trust the version
-string): the new CLI family answers (`ai-raccoon maintenance list` → exit 0), the
+string): the new CLI family answers (`ai-raccoon settings maintenance list` → exit 0), the
 service's startup checkpoint logs in serve.log ("Bank WAL checkpoint complete", EventId
 510) within ~60 s, and the WAL file is small after truncation.
 

@@ -122,7 +122,7 @@ is no longer an MCP tool — the CLI verbs are the single config channel (see
   settings table. Changing the engine re-embeds the bank. The `engine` field in the
   result is the stable fingerprint (`local:bundled`, `openai:text-embedding-3-small@<baseUrl>`,
   etc.) — a change triggers the re-embed.
-- **Structure alpha (CLI, not a tool):** `ai-raccoon retrieval alpha set {0..1}`
+- **Structure alpha (CLI, not a tool):** `ai-raccoon settings retrieval alpha set {0..1}`
   writes the dual-vector fusion alpha (`retrieval.structureAlpha`, 0..1; default 0.5)
   used by search as `score = alpha × content + (1 − alpha) × heading-path structure`.
   Applies to subsequent searches, no re-embedding.
@@ -157,8 +157,8 @@ is no longer an MCP tool — the CLI verbs are the single config channel (see
 - **Background reaper:** the same sweep also runs unattended on HTTP/S hosts, and it is
   **ON by default** — every 24 h it sweeps each project and *deletes* (never a dry run).
   It is the one background service that destroys data, so it has a kill switch:
-  `ai-raccoon sweep disable`. `ai-raccoon sweep show` reports the whole policy —
-  `enabled: True  interval: 24 h  threshold: 0.3` — and `sweep interval-hours {1..8760}`
+  `ai-raccoon settings sweep disable`. `ai-raccoon settings sweep show` reports the whole policy —
+  `enabled: True  interval: 24 h  threshold: 0.3` — and `settings sweep interval-hours {1..8760}`
   retunes the cadence live, no server restart needed. The kill switch fails safe: any
   casing of `false` in `sweep.enabled.global` disarms it, and only an explicit `false`
   does — an absent or unreadable row leaves the reaper armed. Nothing without a per-entry
@@ -175,19 +175,20 @@ is no longer an MCP tool — the CLI verbs are the single config channel (see
   project — is refused as `unknown-hash`. Side effect: an entry carrying a TTL leaves
   `memory_share_extract`'s candidate set unless that call passes `includeTtlRows`.
 - **File watching:** watching is enabled per project (or `*`) with
-  `ai-raccoon watch enable|disable {project-id|*} {true|false}`, restricted to a scope
-  allowlist (`ingest scope add|remove|list`) and a concurrency cap (`watch concurrency
-  {project-id|*} {1..16}`, default 4) — all CLI-only. Quote the `*` wildcard in the
+  `ai-raccoon settings watch enable|disable {project-id|*} {true|false}`, restricted to a scope
+  allowlist (`settings ingest scope add|remove|list`) and a concurrency cap (`settings watch
+  concurrency {project-id|*} {1..16}`, default 4) — all CLI-only, except `watch registered`,
+  which stays top-level. Quote the `*` wildcard in the
   shell (`'*'`); an unquoted `*` expands into the current directory's files and the CLI
-  reports each as an unrecognized argument. The `watch` family CONFIGURES watching —
-  registrations are created by agents via `memory_watch_add`; `watch list` prints the
+  reports each as an unrecognized argument. The `settings watch` family CONFIGURES watching —
+  registrations are created by agents via `memory_watch_add`; `settings watch list` prints the
   config per target in block format (`target: <id>  enabled: ..  concurrency: ..  scope:`,
   one path per line, `(none)` when empty — `enabled: true` means watching is enabled for
   that target, not that a watch is registered), `watch registered [{project-id}]` lists
   the persisted registrations (project, path, registered, lastChange; live state stays on
-  `memory_watch_status`), and `watch remove {project-id|*}` deletes a target's config rows
+  `memory_watch_status`), and `settings watch remove {project-id|*}` deletes a target's config rows
   (`'*'` clears only the global config; a file-name ghost row — written by an unquoted `*` —
-  is removed individually, e.g. `watch remove CLAUDE.md`). `memory_watch_add` registers a
+  is removed individually, e.g. `settings watch remove CLAUDE.md`). `memory_watch_add` registers a
   file or directory and returns immediately (the initial scan runs in the background —
   status reports `scanning`); already-watched paths are a no-op. `memory_watch_status`
   lists every registered watch with live state (`scanning`/`healthy`/`retrying`/`stopped`),
@@ -258,7 +259,7 @@ nobody pushes the total over cap.
 
 | Prompt | Purpose |
 |---|---|
-| `memory-usage-guide` | Protocol: always pass `project_id`; **search memory first** (2-3 query formulations) and escalate to web/code search only by result, writing findings back; watch setup (`ai-raccoon ingest scope add` + `watch enable`, then `memory_watch_add`/`status`/`remove`); workspace isolation, promotion via `memory_share`, search scopes, degradation, bulk ingest. |
+| `memory-usage-guide` | Protocol: always pass `project_id`; **search memory first** (2-3 query formulations) and escalate to web/code search only by result, writing findings back; watch setup (`ai-raccoon settings ingest scope add` + `settings watch enable`, then `memory_watch_add`/`status`/`remove`); workspace isolation, promotion via `memory_share`, search scopes, degradation, bulk ingest. |
 | `workspace-consolidation-guide` | Ritual: list the outbox, promote durable facts, drop noise. |
 
 ## Contexts
@@ -281,7 +282,7 @@ Three-tier access control (FR-NM-2), enforced at the tool boundary:
 | `full` | ✓ | ✓ | ✓ |
 
 - The **global default** is `rw`.
-- The global default is set with `ai-raccoon access default set {ro|rw|full}`
+- The global default is set with `ai-raccoon settings access default set {ro|rw|full}`
   (row `access.mode.global` in the settings table; unset resolves to `rw`).
 - A **per-project override** is stored in the settings table under
   `access.mode.project:<id>` — it takes precedence over the global setting.
@@ -532,52 +533,61 @@ meter, and the built-in `System.Runtime` meter. See
 Config verbs (each writes settings rows in the bank's settings table; the running
 server hot-reloads them):
 
-```bash
-# access: who may do what per project
-ai-raccoon access default set {ro|rw|full}
-ai-raccoon access default show
-ai-raccoon access set {project-id|*} {ro|rw|full}
-ai-raccoon access unset {project-id|*}
-ai-raccoon access list
+Every family below lives under the top-level `settings` command
+(`ai-raccoon settings <family> …`), with four exceptions that stay top-level because they
+either read a table `settings` doesn't own or perform an operation that isn't a settings
+write: `ai-raccoon watch registered` (reads the watches table), `ai-raccoon extract prune`
+(deletes `promotion_queue` rows), `ai-raccoon model set` (re-embeds the whole bank), and
+`ai-raccoon encryption` / `ai-raccoon serve` (unaffected by this split).
 
-# model: embedding engine
+```bash
+# settings access: who may do what per project
+ai-raccoon settings access default set {ro|rw|full}
+ai-raccoon settings access default show
+ai-raccoon settings access set {project-id|*} {ro|rw|full}
+ai-raccoon settings access unset {project-id|*}
+ai-raccoon settings access list
+
+# model: embedding engine ('set' stays top-level — it re-embeds the whole bank;
+# 'show'/'reset' move under settings)
 ai-raccoon model set local [path]
 ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]
-ai-raccoon model reset
-ai-raccoon model show
+ai-raccoon settings model reset
+ai-raccoon settings model show
 
-# retrieval: hybrid-search blend weight
-ai-raccoon retrieval alpha set {0..1}
-ai-raccoon retrieval alpha show
+# settings retrieval: hybrid-search blend weight
+ai-raccoon settings retrieval alpha set {0..1}
+ai-raccoon settings retrieval alpha show
 
-# sweep: the background reaper — ON by default, deletes expired entries on its
+# settings sweep: the background reaper — ON by default, deletes expired entries on its
 # cadence (default every 24 h). 'sweep disable' is the kill switch; 'sweep show'
 # reports the whole policy (enabled, interval, threshold). Interval changes apply
 # live, no server restart needed.
-ai-raccoon sweep enable
-ai-raccoon sweep disable
-ai-raccoon sweep interval-hours {1..8760}
-ai-raccoon sweep threshold set {0..1}
-ai-raccoon sweep show
+ai-raccoon settings sweep enable
+ai-raccoon settings sweep disable
+ai-raccoon settings sweep interval-hours {1..8760}
+ai-raccoon settings sweep threshold set {0..1}
+ai-raccoon settings sweep show
 
-# sync: cloud snapshot sync
-ai-raccoon sync add s3 {url} --bucket {name} [--region {name}] [--object-key {key}] [--cli]
-ai-raccoon sync add azure {container} [--object-key {key}] [--cli --account {name}]
-ai-raccoon sync remove
-ai-raccoon sync show
+# settings sync: cloud snapshot sync
+ai-raccoon settings sync add s3 {url} --bucket {name} [--region {name}] [--object-key {key}] [--cli]
+ai-raccoon settings sync add azure {container} [--object-key {key}] [--cli --account {name}]
+ai-raccoon settings sync remove
+ai-raccoon settings sync show
 
-# watch: file-watcher configuration (registers happen via memory_watch_add)
-ai-raccoon watch enable {project-id|*} {true|false}
-ai-raccoon watch disable {project-id|*} {true|false}
-ai-raccoon ingest scope add {project-id|*} {path}
-ai-raccoon watch scope remove {project-id|*} {path}
-ai-raccoon watch scope list {project-id|*}
-ai-raccoon watch concurrency {project-id|*} {1..16}
-ai-raccoon watch list
+# watch: file-watcher configuration (registers happen via memory_watch_add).
+# 'watch registered' stays top-level — it reads the watches table, not settings.
+ai-raccoon settings watch enable {project-id|*} {true|false}
+ai-raccoon settings watch disable {project-id|*} {true|false}
+ai-raccoon settings ingest scope add {project-id|*} {path}
+ai-raccoon settings ingest scope remove {project-id|*} {path}
+ai-raccoon settings ingest scope list {project-id|*}
+ai-raccoon settings watch concurrency {project-id|*} {1..16}
+ai-raccoon settings watch list
 ai-raccoon watch registered [{project-id}]
-ai-raccoon watch remove {project-id|*}
+ai-raccoon settings watch remove {project-id|*}
 
-# encryption: bank key source
+# encryption: bank key source (unaffected — the bootstrap path stays on the CLI)
 ai-raccoon encryption bitwarden [-t <token>]
 ai-raccoon encryption show
 ai-raccoon encryption unset
@@ -588,24 +598,25 @@ ai-raccoon encryption migrate
 # config changes apply live, no server restart needed; propose logs the ranked
 # candidates — path, preview, reasons — to the server log; prune reports/removes
 # promotion_queue rows orphaned by a deleted or re-chunked entries row (ADR-0023) —
-# read-only by default, --apply removes, idempotent)
-ai-raccoon extract enable {true|false}
-ai-raccoon extract mode {propose|promote}
-ai-raccoon extract interval {minutes}
-ai-raccoon extract capacity {capacity}
-ai-raccoon extract exclude add {prefix}
-ai-raccoon extract exclude remove {prefix}
-ai-raccoon extract exclude list
-ai-raccoon extract list
+# read-only by default, --apply removes, idempotent). 'extract prune' stays
+# top-level — it deletes promotion_queue rows, not a settings write.
+ai-raccoon settings extract enable {true|false}
+ai-raccoon settings extract mode {propose|promote}
+ai-raccoon settings extract interval {minutes}
+ai-raccoon settings extract capacity {capacity}
+ai-raccoon settings extract exclude add {prefix}
+ai-raccoon settings extract exclude remove {prefix}
+ai-raccoon settings extract exclude list
+ai-raccoon settings extract list
 ai-raccoon extract prune [--apply]
 
-# maintenance: bank housekeeping (every process checkpoints the WAL at startup
+# settings maintenance: bank housekeeping (every process checkpoints the WAL at startup
 # and shutdown — stdio included; the periodic timer runs on HTTP/S hosts,
 # default 60 min — and VACUUM + ANALYZE on the vacuum cadence, default 7 days;
 # config changes apply live, no server restart needed)
-ai-raccoon maintenance interval {minutes}
-ai-raccoon maintenance vacuum-interval {days}
-ai-raccoon maintenance list
+ai-raccoon settings maintenance interval {minutes}
+ai-raccoon settings maintenance vacuum-interval {days}
+ai-raccoon settings maintenance list
 ```
 
 **Encryption key sources.** Default: `AIRACCOON_DB_PASSPHRASE` (env). Alternative:

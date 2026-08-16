@@ -7,8 +7,8 @@ namespace AiRaccoon.Setup.Cli;
 
 /// <summary>
 ///     Defines the CLI surface: the verb families, the launch roots, and the options they
-///     accept. The only growth point for a new verb family (a builder + one root.Add +
-///     one Verbs entry).
+///     accept. A new settings-backed subsystem is a node under `settings` (ADR-0076), not a new
+///     top-level family.
 /// </summary>
 internal static class CliCommandTree
 {
@@ -17,8 +17,6 @@ internal static class CliCommandTree
     /// <summary>Derived from McpTransport so a new transport cannot leave the help name stale.</summary>
     private static readonly string TransportHelpName =
         string.Join('|', Enum.GetNames<McpTransport>().Select(name => name.ToLowerInvariant()));
-
-    internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "noise", "queryguard", "sync", "ingest", "watch", "encryption", "extract", "maintenance", "performance", "serve"];
 
     /// <summary>
     ///     The root launch --port (shared with the bare launch root); serve reads it instance-based
@@ -65,22 +63,35 @@ internal static class CliCommandTree
     {
         var root = new RootCommand(Description);
         AddLaunchOptions(root);
-        root.Add(AccessCommand());
+        root.Add(SettingsCommand());
         root.Add(ModelCommand());
-        root.Add(RetrievalCommand());
-        root.Add(SweepCommand());
-        root.Add(NoiseCommand());
-        root.Add(QueryGuardCommand());
-        root.Add(SyncCommand());
-        root.Add(IngestCommand());
         root.Add(WatchCommand());
-        root.Add(EncryptionCommand());
         root.Add(ExtractCommand());
-        root.Add(MaintenanceCommand());
-        root.Add(PerformanceCommand());
+        root.Add(EncryptionCommand());
         root.Add(ServeCommand());
         return root;
     }
+
+    /// <summary>
+    ///     Every subsystem's configuration, one node per subsystem (ADR-0076): a new settings-backed
+    ///     subsystem is a node here, not a new top-level family nobody remembers to add.
+    /// </summary>
+    private static Command SettingsCommand() =>
+        new("settings", "Runtime configuration, one node per subsystem. Operations live at the top level: 'watch registered', 'extract prune', 'model set', 'encryption', 'serve'.")
+        {
+            AccessCommand(),
+            SettingsModelCommand(),
+            RetrievalCommand(),
+            SweepCommand(),
+            NoiseCommand(),
+            QueryGuardCommand(),
+            SyncCommand(),
+            IngestCommand(),
+            SettingsWatchCommand(),
+            SettingsExtractCommand(),
+            MaintenanceCommand(),
+            PerformanceCommand()
+        };
 
     /// <summary>
     ///     Launch-only root for bare server invocations (no verb): System.CommandLine
@@ -127,19 +138,27 @@ internal static class CliCommandTree
         return access;
     }
 
-    private static Command ModelCommand()
-    {
-        var model = new Command("model", "Embedding engine configuration");
-        var set = new Command("set", "Sets the embedding engine")
+    /// <summary>
+    ///     `model set` re-embeds the whole bank (EntryEmbedder.ConfigureAsync), so it is an operation
+    ///     and stays top level; the provider rows it leaves behind are read and cleared under settings.
+    /// </summary>
+    private static Command ModelCommand() =>
+        new("model", "Embedding engine selection — 'model set' re-embeds the bank; its configuration is shown and reset under 'settings model'")
         {
-            new Command("local", "Embeds in-process with the bundled ONNX model; optional path overrides it") { new Argument<string?>("path") { HelpName = "path", Arity = ArgumentArity.ZeroOrOne } },
-            new Command("openai", "Routes through an OpenAI-compatible endpoint; key via --api-key (persisted in settings)")
+            new Command("set", "Sets the embedding engine and re-embeds the bank")
             {
-                new Argument<string>("model") { HelpName = "model-id" }, new Argument<string?>("base-url") { HelpName = "url", Arity = ArgumentArity.ZeroOrOne },
-                new Option<string>("--api-key") { Description = "API key persisted in the settings table", HelpName = "key" }
+                new Command("local", "Embeds in-process with the bundled ONNX model; optional path overrides it") { new Argument<string?>("path") { HelpName = "path", Arity = ArgumentArity.ZeroOrOne } },
+                new Command("openai", "Routes through an OpenAI-compatible endpoint; key via --api-key (persisted in settings)")
+                {
+                    new Argument<string>("model") { HelpName = "model-id" }, new Argument<string?>("base-url") { HelpName = "url", Arity = ArgumentArity.ZeroOrOne },
+                    new Option<string>("--api-key") { Description = "API key persisted in the settings table", HelpName = "key" }
+                }
             }
         };
-        model.Add(set);
+
+    private static Command SettingsModelCommand()
+    {
+        var model = new Command("model", "Embedding engine configuration (the engine itself is selected by 'model set')");
         var reset = new Command("reset", "Back to default: no engine (FTS5-only search)");
         reset.Aliases.Add("unset");
         reset.Aliases.Add("remove");
@@ -283,7 +302,6 @@ internal static class CliCommandTree
         return encryption;
     }
 
-    /// <summary>The scope allowlist subtree, mounted under both `ingest` (canonical) and `watch` (alias).</summary>
     private static Command ScopeCommand(string description) =>
         new("scope", description)
         {
@@ -294,30 +312,32 @@ internal static class CliCommandTree
             new Command("list", "Lists a target's scope allowlist") { new Argument<string>("target") { HelpName = "project-id|*" } }
         };
 
-    private static Command IngestCommand()
-    {
-        var ingest = new Command("ingest",
-                "Ingestion configuration (CLI-only channel). The scope allowlist bounds every path the server reads from disk — memory_ingest_file, memory_ingest_directory, memory_watch_add and the file watcher. It is empty by default, so a project ingests nothing until a scope is added.")
-            { ScopeCommand("Scope allowlist (absolute paths, covers dir + subdirs) — the paths this server may read") };
-        return ingest;
-    }
+    private static Command IngestCommand() =>
+        new("ingest",
+            "Ingestion configuration. The scope allowlist bounds every path the server reads from disk — memory_ingest_file, memory_ingest_directory, memory_watch_add and the file watcher. It is empty by default, so a project ingests nothing until a scope is added.")
+        {
+            ScopeCommand("Scope allowlist (absolute paths, covers dir + subdirs) — the paths this server may read")
+        };
 
-    private static Command WatchCommand()
+    /// <summary>The watches table is data, not configuration, so listing registrations stays top level.</summary>
+    private static Command WatchCommand() =>
+        new("watch", "Registered watches. Watching is CONFIGURED under 'settings watch'; registrations are created by agents via the memory_watch_add MCP tool.")
+        {
+            new Command("registered",
+                    "Lists every REGISTERED watch (project, path, registered at, last change) from the watches table. Registrations are created via memory_watch_add; live state (scanning/healthy/…) is reported by memory_watch_status, not the CLI.")
+                { new Argument<string?>("project-id") { HelpName = "project-id", Arity = ArgumentArity.ZeroOrOne } }
+        };
+
+    private static Command SettingsWatchCommand()
     {
         var watch = new Command("watch",
-            "Watch configuration (CLI-only channel): enable/disable, scope allowlist and concurrency per target. This family CONFIGURES watching — it does not register watches; registrations are created by agents via the memory_watch_add MCP tool.")
+            "Watch configuration: enable/disable and concurrency per target. This node CONFIGURES watching — it does not register watches; use 'watch registered' to list registrations.")
         {
             new Command("enable", "Enables or disables watching for a target (configuration only — does not register a watch; use memory_watch_add to register)")
                 { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<bool>("enabled") { HelpName = "true|false", Arity = ArgumentArity.ExactlyOne } },
             new Command("disable", "Alias for enable … false") { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<bool>("enabled") { HelpName = "true|false", Arity = ArgumentArity.ExactlyOne } },
-            // Kept as a deprecated alias: the scope moved to `ingest scope` when it stopped being
-            // watch-only, and breaking every existing setup script at the same time is gratuitous.
-            ScopeCommand("Deprecated alias for 'ingest scope' — the allowlist bounds all ingestion, not just watching"),
             new Command("concurrency", "Sets the watcher concurrency (1..16, default 4)")
                 { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<int>("value") { HelpName = "1..16" } },
-            new Command("registered",
-                    "Lists every REGISTERED watch (project, path, registered at, last change) from the watches table. Registrations are created via memory_watch_add; live state (scanning/healthy/…) is reported by memory_watch_status, not the CLI.")
-                { new Argument<string?>("project-id") { HelpName = "project-id", Arity = ArgumentArity.ZeroOrOne } },
             new Command("remove", "Removes all watch config rows for a target") { new Argument<string>("target") { HelpName = "project-id|*" } }
         };
         var list = new Command("list", "Lists each target's watch CONFIGURATION (enabled, concurrency, scope) — not registered watches; use 'watch registered' for those");
@@ -326,10 +346,19 @@ internal static class CliCommandTree
         return watch;
     }
 
-    private static Command ExtractCommand()
+    /// <summary>`extract prune` deletes promotion_queue rows (ADR-0023), so it is an operation.</summary>
+    private static Command ExtractCommand() =>
+        new("extract", "Shared-extraction operations. The service is CONFIGURED under 'settings extract'.")
+        {
+            new Command("prune",
+                    "Reports promotion_queue rows orphaned before the entries-delete trigger existed (ADR-0023) — a candidate whose backing entry is gone. Reports per-project counts by default; --apply removes them. Idempotent.")
+                { new Option<bool>("--apply") { Description = "Removes the orphaned rows instead of only reporting them" } }
+        };
+
+    private static Command SettingsExtractCommand()
     {
         var extract = new Command("extract",
-            "Background shared-extraction configuration (CLI-only channel): enables or disables the hosted service that periodically checks each project's committed memories and extracts the shared-worthy ones, and sets its mode (propose logs candidates; promote shares them).")
+            "Background shared-extraction configuration: enables or disables the hosted service that periodically checks each project's committed memories and extracts the shared-worthy ones, and sets its mode (propose logs candidates; promote shares them).")
         {
             new Command("enable", "Enables or disables the background shared-extraction service (disabled by default; promote mode shares data between projects)")
                 { new Argument<bool>("enabled") { HelpName = "true|false" } },
@@ -346,10 +375,7 @@ internal static class CliCommandTree
                 new Command("remove", "Removes a source_file prefix from the exclusion list")
                     { new Argument<string>("prefix") { HelpName = "prefix" } },
                 new Command("list", "Lists the excluded source_file prefixes")
-            },
-            new Command("prune",
-                    "Reports promotion_queue rows orphaned before the entries-delete trigger existed (ADR-0023) — a candidate whose backing entry is gone. Reports per-project counts by default; --apply removes them. Idempotent.")
-                { new Option<bool>("--apply") { Description = "Removes the orphaned rows instead of only reporting them" } }
+            }
         };
         var list = new Command("list", "Shows the extraction configuration (enabled, mode, interval minutes)");
         list.Aliases.Add("show");

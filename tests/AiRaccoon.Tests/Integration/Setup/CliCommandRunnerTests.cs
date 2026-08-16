@@ -45,7 +45,7 @@ public sealed class CliCommandRunnerTests : IDisposable
     [Fact]
     public async Task AccessDefaultShow_ReturnsConfigCommandsExitCode()
     {
-        var (exit, stdout, _, _) = await Run(["--data-root", _dataRoot, "access", "default", "show"]);
+        var (exit, stdout, _, _) = await Run(["--data-root", _dataRoot, "settings", "access", "default", "show"]);
 
         exit.ShouldBe(0);
         stdout.ShouldContain("rw");
@@ -54,7 +54,7 @@ public sealed class CliCommandRunnerTests : IDisposable
     [Fact]
     public async Task VerbError_ReturnsInvalidArgument_NotTheEncryptionKeyExitCode()
     {
-        var (exit, _, stderr, _) = await Run(["--data-root", _dataRoot, "access", "default", "set", "bogus"]);
+        var (exit, _, stderr, _) = await Run(["--data-root", _dataRoot, "settings", "access", "default", "set", "bogus"]);
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         exit.ShouldNotBe(ExitCode.FailedToResolveEncryptionKey);
@@ -64,7 +64,7 @@ public sealed class CliCommandRunnerTests : IDisposable
     [Fact]
     public async Task UserScope_WritesBankUnderDataRoot()
     {
-        var (exit, _, _, config) = await Run(["--data-root", _dataRoot, "access", "default", "set", "ro"]);
+        var (exit, _, _, config) = await Run(["--data-root", _dataRoot, "settings", "access", "default", "set", "ro"]);
 
         exit.ShouldBe(0);
         config.Options.Scope.ShouldBe(InstallScope.User);
@@ -75,7 +75,7 @@ public sealed class CliCommandRunnerTests : IDisposable
     public async Task ProjectScope_WritesBankUnderDotAiRaccoon()
     {
         var (exit, _, _, config) = await Run(
-            ["--data-root", _dataRoot, "--install-scope", "project", "access", "default", "set", "ro"]);
+            ["--data-root", _dataRoot, "--install-scope", "project", "settings", "access", "default", "set", "ro"]);
 
         exit.ShouldBe(0);
         config.Options.Scope.ShouldBe(InstallScope.Project);
@@ -88,7 +88,7 @@ public sealed class CliCommandRunnerTests : IDisposable
     [Fact]
     public async Task MissingArgument_PrintsTheErrorExactlyOnce()
     {
-        var (exit, _, stderr, _) = await Run(["--data-root", _dataRoot, "access", "set"], expectParseErrors: true);
+        var (exit, _, stderr, _) = await Run(["--data-root", _dataRoot, "settings", "access", "set"], expectParseErrors: true);
 
         exit.ShouldBe(ExitCode.InvalidArgument);
         CountOccurrences(stderr, "Required argument missing for command: 'set'.").ShouldBe(1);
@@ -143,7 +143,7 @@ public sealed class CliCommandRunnerTests : IDisposable
     public async Task EncryptionUnset_EnvKeyedBankNoPassphrase_WarnsAndExitsKeyResolutionFailure()
     {
         // Create the bank first: on a missing bank, unset takes the clean-reset path (exit 0).
-        var (seedExit, _, _, _) = await Run(["--data-root", _dataRoot, "access", "default", "show"]);
+        var (seedExit, _, _, _) = await Run(["--data-root", _dataRoot, "settings", "access", "default", "show"]);
         seedExit.ShouldBe(0);
 
         var (exit, _, stderr, _) = await Run(["--data-root", _dataRoot, "encryption", "unset"]);
@@ -158,7 +158,7 @@ public sealed class CliCommandRunnerTests : IDisposable
     [Fact]
     public async Task VerbHelp_ExitsZero_WithoutRunningTheVerb()
     {
-        var (exit, _, stderr, _) = await Run(["sync", "--help"]);
+        var (exit, _, stderr, _) = await Run(["settings", "sync", "--help"]);
 
         exit.ShouldBe(0);
         stderr.ShouldNotContain("unhandled command");

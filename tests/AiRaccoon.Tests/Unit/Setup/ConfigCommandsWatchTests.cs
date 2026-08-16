@@ -29,7 +29,7 @@ public class ConfigCommandsWatchTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, _) = await Run(["watch", "enable", "acme", "true"], store);
+        var (exit, _, _) = await Run(["settings", "watch", "enable", "acme", "true"], store);
 
         exit.ShouldBe(0);
         store.Settings[WatchConfigKeys.EnabledProject("acme")].ShouldBe("true");
@@ -40,7 +40,7 @@ public class ConfigCommandsWatchTests
     {
         var store = new FakeConfigStore();
 
-        await Run(["watch", "enable", "*", "true"], store);
+        await Run(["settings", "watch", "enable", "*", "true"], store);
 
         store.Settings[WatchConfigKeys.EnabledGlobal].ShouldBe("true");
     }
@@ -50,7 +50,7 @@ public class ConfigCommandsWatchTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, err) = await Run(["watch", "enable", "*", "true"], store);
+        var (exit, _, err) = await Run(["settings", "watch", "enable", "*", "true"], store);
 
         exit.ShouldBe(0);
         err.ShouldContain("ingest scope add '*'");
@@ -67,7 +67,7 @@ public class ConfigCommandsWatchTests
             }
         };
 
-        var (_, _, err) = await Run(["watch", "enable", "*", "true"], store);
+        var (_, _, err) = await Run(["settings", "watch", "enable", "*", "true"], store);
 
         err.ShouldBeEmpty();
     }
@@ -77,7 +77,7 @@ public class ConfigCommandsWatchTests
     {
         var store = new FakeConfigStore();
 
-        await Run(["watch", "disable", "acme", "false"], store);
+        await Run(["settings", "watch", "disable", "acme", "false"], store);
 
         store.Settings[WatchConfigKeys.EnabledProject("acme")].ShouldBe("false");
     }
@@ -89,7 +89,7 @@ public class ConfigCommandsWatchTests
         var store = new FakeConfigStore();
         var expected = Path.GetFullPath("rel/notes");
 
-        var (exit, stdout, _) = await Run(["watch", "scope", "add", "acme", "rel/notes"], store);
+        var (exit, stdout, _) = await Run(["settings", "ingest", "scope", "add", "acme", "rel/notes"], store);
 
         exit.ShouldBe(0);
         store.Settings[IngestScopeKeys.ScopeProject("acme")].ShouldBe($"[{JsonSerializer.Serialize(expected)}]");
@@ -107,8 +107,8 @@ public class ConfigCommandsWatchTests
             }
         };
 
-        await Run(["watch", "scope", "add", "acme", "/a"], store);
-        await Run(["watch", "scope", "add", "acme", "/b"], store);
+        await Run(["settings", "ingest", "scope", "add", "acme", "/a"], store);
+        await Run(["settings", "ingest", "scope", "add", "acme", "/b"], store);
 
         store.Settings[IngestScopeKeys.ScopeProject("acme")].ShouldBe("[\"/a\",\"/b\"]");
     }
@@ -118,7 +118,7 @@ public class ConfigCommandsWatchTests
     {
         var store = new FakeConfigStore();
 
-        await Run(["watch", "scope", "add", "*", "/a"], store);
+        await Run(["settings", "ingest", "scope", "add", "*", "/a"], store);
 
         store.Settings[IngestScopeKeys.ScopeGlobal].ShouldBe("[\"/a\"]");
     }
@@ -134,7 +134,7 @@ public class ConfigCommandsWatchTests
             }
         };
 
-        await Run(["watch", "scope", "remove", "acme", "/b"], store);
+        await Run(["settings", "ingest", "scope", "remove", "acme", "/b"], store);
 
         store.Settings[IngestScopeKeys.ScopeProject("acme")].ShouldBe("[\"/a\",\"/c\"]");
     }
@@ -150,7 +150,7 @@ public class ConfigCommandsWatchTests
             }
         };
 
-        await Run(["watch", "scope", "remove", "acme", "/a"], store);
+        await Run(["settings", "ingest", "scope", "remove", "acme", "/a"], store);
 
         store.Settings.ShouldNotContainKey(IngestScopeKeys.ScopeProject("acme"));
     }
@@ -166,7 +166,7 @@ public class ConfigCommandsWatchTests
             }
         };
 
-        var (exit, stdout, _) = await Run(["watch", "scope", "list", "acme"], store);
+        var (exit, stdout, _) = await Run(["settings", "ingest", "scope", "list", "acme"], store);
 
         exit.ShouldBe(0);
         stdout.Trim().ShouldBe("/a\n/b");
@@ -175,7 +175,7 @@ public class ConfigCommandsWatchTests
     [Fact]
     public async Task WatchScopeList_NoRow_PrintsNothing()
     {
-        var (exit, stdout, _) = await Run(["watch", "scope", "list", "acme"], new FakeConfigStore());
+        var (exit, stdout, _) = await Run(["settings", "ingest", "scope", "list", "acme"], new FakeConfigStore());
 
         exit.ShouldBe(0);
         stdout.ShouldBeEmpty();
@@ -187,7 +187,7 @@ public class ConfigCommandsWatchTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, _) = await Run(["watch", "concurrency", "acme", "8"], store);
+        var (exit, _, _) = await Run(["settings", "watch", "concurrency", "acme", "8"], store);
 
         exit.ShouldBe(0);
         store.Settings[WatchConfigKeys.ConcurrencyProject("acme")].ShouldBe("8");
@@ -198,7 +198,7 @@ public class ConfigCommandsWatchTests
     {
         var store = new FakeConfigStore();
 
-        await Run(["watch", "concurrency", "*", "4"], store);
+        await Run(["settings", "watch", "concurrency", "*", "4"], store);
 
         store.Settings[WatchConfigKeys.ConcurrencyGlobal].ShouldBe("4");
     }
@@ -210,7 +210,7 @@ public class ConfigCommandsWatchTests
         {
             var store = new FakeConfigStore();
 
-            var (exit, _, err) = await Run(["watch", "concurrency", "acme", value], store);
+            var (exit, _, err) = await Run(["settings", "watch", "concurrency", "acme", value], store);
 
             exit.ShouldBe(ExitCode.InvalidArgument);
             err.ShouldContain("1..16");
@@ -232,7 +232,7 @@ public class ConfigCommandsWatchTests
             }
         };
 
-        var (exit, stdout, _) = await Run(["watch", "list"], store);
+        var (exit, stdout, _) = await Run(["settings", "watch", "list"], store);
 
         exit.ShouldBe(0);
         stdout.Trim().ShouldBe(
@@ -254,7 +254,7 @@ public class ConfigCommandsWatchTests
             }
         };
 
-        var (_, stdout, _) = await Run(["watch", "list"], store);
+        var (_, stdout, _) = await Run(["settings", "watch", "list"], store);
 
         stdout.Trim().ShouldBe(
             "target: acme  enabled: true  concurrency: 8  scope: (none)\n" +
@@ -264,7 +264,7 @@ public class ConfigCommandsWatchTests
     [Fact]
     public async Task WatchList_NoRows_PrintsOnlyGlobalDefaults()
     {
-        var (exit, stdout, _) = await Run(["watch", "list"], new FakeConfigStore());
+        var (exit, stdout, _) = await Run(["settings", "watch", "list"], new FakeConfigStore());
 
         exit.ShouldBe(0);
         stdout.Trim().ShouldBe("target: global  enabled: false  concurrency: 4  scope: (none)");
@@ -283,7 +283,7 @@ public class ConfigCommandsWatchTests
             }
         };
 
-        var (_, stdout, _) = await Run(["watch", "list"], store);
+        var (_, stdout, _) = await Run(["settings", "watch", "list"], store);
 
         stdout.Trim().ShouldBe(
             "target: CLAUDE.md  enabled: true  concurrency: 4  scope: (none)\n" +
@@ -303,7 +303,7 @@ public class ConfigCommandsWatchTests
             }
         };
 
-        var (_, stdout, _) = await Run(["watch", "list"], store);
+        var (_, stdout, _) = await Run(["settings", "watch", "list"], store);
 
         stdout.Trim().ShouldBe(
             "target: CLAUDE.md  enabled: true  concurrency: 4  scope:\n  /x\n" +
@@ -394,7 +394,7 @@ public class ConfigCommandsWatchTests
             }
         };
 
-        var (exit, stdout, _) = await Run(["watch", "remove", "acme"], store);
+        var (exit, stdout, _) = await Run(["settings", "watch", "remove", "acme"], store);
 
         exit.ShouldBe(0);
         stdout.ShouldContain("removed");
@@ -417,7 +417,7 @@ public class ConfigCommandsWatchTests
             }
         };
 
-        var (exit, stdout, _) = await Run(["watch", "remove", "*"], store);
+        var (exit, stdout, _) = await Run(["settings", "watch", "remove", "*"], store);
 
         exit.ShouldBe(0);
         stdout.ShouldContain("removed");
@@ -431,7 +431,7 @@ public class ConfigCommandsWatchTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, stdout, _) = await Run(["watch", "remove", "acme"], store);
+        var (exit, stdout, _) = await Run(["settings", "watch", "remove", "acme"], store);
 
         exit.ShouldBe(0);
         stdout.ShouldContain("removed");

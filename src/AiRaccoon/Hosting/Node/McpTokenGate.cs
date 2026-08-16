@@ -1,15 +1,17 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using AiRaccoon.Observability;
 using CommunityToolkit.Diagnostics;
 using Microsoft.Net.Http.Headers;
 
 namespace AiRaccoon.Hosting.Node;
 
 /// <summary>
-///     Rejects /mcp and /shutdown requests that do not present the loopback token, either as
+///     Rejects every request that does not present the loopback token, either as
 ///     <c>X-AiRaccoon-Token</c> or as <c>Authorization: Bearer &lt;token&gt;</c>
-///     (docs/plans/2026-08-09-http-token-clients.md D3). /observability stays open by design.
+///     (docs/plans/2026-08-09-http-token-clients.md D3), except the paths in
+///     <see cref="OpenPaths" />.
 /// </summary>
 internal sealed class McpTokenGate
 {
@@ -22,8 +24,11 @@ internal sealed class McpTokenGate
     /// <summary>JSON-RPC implementation-defined server error (-32000..-32099).</summary>
     private const int UnauthorizedCode = -32001;
 
-    /// <summary>Every path the token guards; anything else is open (ADR-0022 added /shutdown).</summary>
-    private static readonly string[] GuardedPaths = [McpPath, ShutdownEndpoint.Path];
+    /// <summary>
+    ///     The gate is default-closed: every mapped path needs the token unless it is named here.
+    ///     Forgetting an entry now costs a 401 on a new endpoint, not an unauthenticated one.
+    /// </summary>
+    private static readonly string[] OpenPaths = [ObservabilityEndpoint.Path];
 
     private readonly string _absentBody;
     private readonly byte[] _expected;
@@ -70,7 +75,7 @@ internal sealed class McpTokenGate
         await context.Response.WriteAsync(diagnosable ? _mismatchBody : _absentBody, context.RequestAborted);
     }
 
-    private static bool IsGuarded(PathString path) => GuardedPaths.Any(guarded => path.StartsWithSegments(guarded));
+    private static bool IsGuarded(PathString path) => !OpenPaths.Any(open => path.StartsWithSegments(open));
 
     /// <summary>
     ///     One credential, two envelopes: each is checked independently so a wrong value in one

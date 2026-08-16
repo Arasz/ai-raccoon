@@ -56,7 +56,7 @@ public sealed class PerformanceCommandsRoundTripTests : IDisposable
     public async Task SetBufferCapacity_IsAppliedByMetricsFlusher_OnStartup()
     {
         var settings = new InMemorySettings();
-        var (exit, _, _) = await CliRun.RunAsync(["performance", "buffer-capacity", "17"],
+        var (exit, _, _) = await CliRun.RunAsync(["settings", "performance", "buffer-capacity", "17"],
             TestData.CreateConfigCommands(new DelegatingMemoryStore(settings), performance: new PerformanceCommands()));
         exit.ShouldBe(0);
 
@@ -80,7 +80,7 @@ public sealed class PerformanceCommandsRoundTripTests : IDisposable
     public async Task SetFlushInterval_IsAppliedByMetricsFlusher_OnTheNextTick()
     {
         var settings = new InMemorySettings();
-        var (exit, _, _) = await CliRun.RunAsync(["performance", "flush-interval", "5"],
+        var (exit, _, _) = await CliRun.RunAsync(["settings", "performance", "flush-interval", "5"],
             TestData.CreateConfigCommands(new DelegatingMemoryStore(settings), performance: new PerformanceCommands()));
         exit.ShouldBe(0);
 
@@ -131,7 +131,7 @@ public sealed class PerformanceCommandsRoundTripTests : IDisposable
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         var store = new DelegatingMemoryStore(new SqliteSettingsStore(factory));
 
-        var (exit, _, _) = await CliRun.RunAsync(["performance", "retention", "5"],
+        var (exit, _, _) = await CliRun.RunAsync(["settings", "performance", "retention", "5"],
             TestData.CreateConfigCommands(store, performance: new PerformanceCommands()));
         exit.ShouldBe(0);
 

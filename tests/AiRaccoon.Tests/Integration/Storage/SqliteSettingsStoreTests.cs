@@ -204,7 +204,7 @@ public sealed class SqliteSettingsStoreTests : IDisposable
     ///     catching the regression it exists to catch, not just a check that has only ever passed.
     ///     <para />
     ///     The write is a genuine second OS process: the built <c>ai-raccoon</c> binary run via
-    ///     <see cref="RaccoonProcess" />, invoking the real <c>queryguard disable</c> CLI verb, which
+    ///     <see cref="RaccoonProcess" />, invoking the real <c>settings queryguard disable</c> CLI verb, which
     ///     opens the same bank file through its own fresh DI graph and its own connection pool — not a
     ///     second <see cref="SqliteConnectionFactory" /> constructed in this test process. The read
     ///     before and the read after both go through <see cref="_store" />, the one instance this whole
@@ -225,7 +225,7 @@ public sealed class SqliteSettingsStoreTests : IDisposable
             .ShouldBeNull();
 
         var run = await RaccoonProcess.RunAsync(
-            ["--data-root", _dataRoot, "queryguard", "disable"],
+            ["--data-root", _dataRoot, "settings", "queryguard", "disable"],
             TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
         run.ExitCode.ShouldBe(0, $"the writer process must exit cleanly; stderr: {run.Stderr}");
 
@@ -259,7 +259,7 @@ public sealed class SqliteSettingsStoreTests : IDisposable
             .ShouldBeNull(); // populates the decorator's cache with "absent"
 
         var run = await RaccoonProcess.RunAsync(
-            ["--data-root", _dataRoot, "queryguard", "disable"],
+            ["--data-root", _dataRoot, "settings", "queryguard", "disable"],
             TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
         run.ExitCode.ShouldBe(0, $"the writer process must exit cleanly; stderr: {run.Stderr}");
 

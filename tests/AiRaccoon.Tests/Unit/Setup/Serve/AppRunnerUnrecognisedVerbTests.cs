@@ -62,7 +62,7 @@ public sealed class AppRunnerUnrecognisedVerbTests : IDisposable
     [Fact]
     public void KnownVerb_CarriesNoParseError()
     {
-        CliArgs.TryParse(["--data-root", _dataRoot, "noise", "show"], out var parsed).ShouldBeTrue();
+        CliArgs.TryParse(["--data-root", _dataRoot, "settings", "noise", "show"], out var parsed).ShouldBeTrue();
 
         parsed!.Errors.ShouldBeEmpty();
         parsed.IsCommandInput.ShouldBeTrue();

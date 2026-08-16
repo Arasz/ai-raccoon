@@ -17,4 +17,4 @@ public sealed class SyncProviderUnknownException(string written, string supporte
     : InvalidOperationException(
         $"sync.provider is set to '{written}', which is not a supported backend. Supported: {supported}. "
         + "An S3-compatible backend (MinIO, R2, Wasabi) is 's3' with its own endpoint: "
-        + "'ai-raccoon sync add s3 <endpoint-url> --bucket <name>'. For Azure: 'ai-raccoon sync add azure <container>'.");
+        + "'ai-raccoon settings sync add s3 <endpoint-url> --bucket <name>'. For Azure: 'ai-raccoon settings sync add azure <container>'.");

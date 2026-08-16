@@ -1,6 +1,6 @@
 namespace AiRaccoon.Infrastructure.Sync;
 
-/// <summary>Settings-table keys for cloud sync (written by `ai-raccoon sync add s3|azure`; read per memory_sync call).</summary>
+/// <summary>Settings-table keys for cloud sync (written by `ai-raccoon settings sync add s3|azure`; read per memory_sync call).</summary>
 public static class SyncSettingsKeys
 {
     /// <summary>Active backend (s3 or azure); absent or unknown rows behave as s3 (docs/plans/azure-blob-sync-plan.md R2).</summary>

@@ -550,7 +550,7 @@ every tool call — deny or not — additionally passes through the `ToolRefusal
 [`docs/reference/agent-memory-server.md#error-shapes`](../reference/agent-memory-server.md#error-shapes)
 for the full refusal-prefix table.
 
-The global default is `rw`. It is set with `ai-raccoon access default set {ro|rw|full}`
+The global default is `rw`. It is set with `ai-raccoon settings access default set {ro|rw|full}`
 (`access.mode.global` in the settings table); unset rows resolve to `rw`. A per-project
 override (`access.mode.project:<id>`) takes precedence over the global setting.
 

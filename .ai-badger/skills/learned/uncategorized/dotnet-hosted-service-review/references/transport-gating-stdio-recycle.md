@@ -49,7 +49,7 @@ Fix shape (shipped as PR #58): gate registration by host transport —
   (`s => s is ExtractionHostedService`) — three tests: stdio-only absent, http present,
   both-transports present. (Add `using Microsoft.Extensions.Hosting;` for IHostedService.)
 - CLI verbs never create a host: Program.cs routes a non-empty command path to
-  `CliCommandRunner` BEFORE any host is built. So `ai-raccoon extract enable true` while an
+  `CliCommandRunner` BEFORE any host is built. So `ai-raccoon settings extract enable true` while an
   HTTP server runs is a separate short-lived process that (a) never binds the port, (b) writes
   the shared settings table, (c) the running server picks up live (settings re-read per pass /
   per loop iteration). CLI interactions do NOT kill the server.
