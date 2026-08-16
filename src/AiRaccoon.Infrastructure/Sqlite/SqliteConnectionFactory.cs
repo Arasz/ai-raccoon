@@ -138,6 +138,26 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
         return await InitializeAsync(connection, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc cref="ISqliteConnectionFactory.OpenBankSkippingEnsureAsync" />
+    public async Task<SqliteConnection> OpenBankSkippingEnsureAsync(CancellationToken cancellationToken = default)
+    {
+        var resolvedKey = await keyResolver.ResolveAsync(cancellationToken).ConfigureAwait(false);
+        var connection = await OpenConnectionAsync(resolvedKey.Passphrase, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            // Free (no SQL statement) — only exercised if the caller falls back to EnsureAsync,
+            // which may CREATE VIRTUAL TABLE ... vec0(...) and needs the extension loaded first.
+            connection.EnableExtensions();
+            connection.LoadVector();
+            return connection;
+        }
+        catch
+        {
+            await connection.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
     /// <summary>Directory holding the bank: the data root for user scope, &lt;dataRoot&gt;/.ai-raccoon for project scope.</summary>
     private static string BankDirectoryFor(InfrastructureOptions options) =>
         options.Scope switch

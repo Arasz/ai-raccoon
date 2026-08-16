@@ -244,6 +244,16 @@ same 193 MB backup bank, measured at `c2fd31f0`):
 | settings reads / operation | 2 write, 2 search | **1 write, 1 search** | -50% |
 | statement volume / operation, steady state | 168 write, 210 search | **12 write, 16 search** | **-92/-93%** |
 
+**These "After" numbers describe `c2fd31f0` (WP1-WP7 merged), not the shipped 1.21.0.** ADR-0076
+(the model-migration outbox and its `ToolGate` lock) landed on top of this commit and added a check
+before every MCP tool call that this measurement never saw. As released, before a follow-up fix:
+bank opens/operation are 4 write / 5 search (not 3/4 above) and statement volume is 20 write / 24
+search (not 12/16 above); 17/21 after the fix. See this ADR's sibling,
+`docs/adr/0076-model-set-is-an-outbox-drained-by-an-on-demand-relay.md` §"Amendment 2026-08-16 —
+ToolGate's migration check cost", for the measured derivation. The table above is left as originally
+recorded — it was correct for the tree it measured — but must not be read as the current product's
+cost without that amendment.
+
 The per-open statement count is unchanged where it should be unchanged (39 Ddl / 42 total on a
 digest-stale first open) and exactly as claimed where the gate applies (0 Ddl / 4 total once the
 digest matches, re-confirmed against the already-committed `MemorySchemaDdlStatementCountTests`).
