@@ -173,9 +173,10 @@ because its absence already caused a silent failure:
 
 **Retiring a checklist skill means deleting it from every root it can load from**, not from the
 one you were looking at. The deletion that removed the two `.ai-badger/skills/learned/` copies
-missed `~/.hermes/skills/`, where a third copy is still installed, still carries its `templates/`,
-and still pins an expected version three minors stale. It was the *first* hit for someone
-searching for this checklist, and they began executing it. Enumerate the roots — the project's
+missed `~/.hermes/skills/`, where a third copy was found still installed long afterwards, still
+carrying its `templates/`, still pinning an expected version three minors stale. It was the
+*first* hit for someone searching for this checklist, and they began executing it; that copy has
+since been removed. Enumerate the roots — the project's
 `.ai-badger/skills/learned/`, `.claude/skills/`, `~/.claude/skills/`, `~/.hermes/skills/` — and
 confirm the removal in each. The stale copy wins whoever searches first, so a copy you did not
 delete is not dormant; it is the one in use.
