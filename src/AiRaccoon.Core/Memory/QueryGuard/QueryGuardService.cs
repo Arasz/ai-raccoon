@@ -19,19 +19,23 @@ public interface IQueryGuardService
 ///     The tiered read-path guard (docs/adr/0040, docs/adr/0041), lifted out of `MemoryTools`
 ///     where it read its own settings inside the tools file and no other caller could reach it.
 ///     <para>
-///         Disabled reads one setting and returns Clean untouched — byte-identical to no guard at
-///         all. The structural detector only ever runs when the regex tiers found nothing: it is a
+///         Disabled makes one settings-store call and returns Clean untouched — byte-identical to no
+///         guard at all. The structural detector only ever runs when the regex tiers found nothing: it is a
 ///         third input to the warn tier, never able to override a regex Refuse or Warn, and gated
 ///         by its own default-off setting. Shadow mode logs the verdict and returns Clean.
 ///     </para>
 /// </summary>
 public sealed class QueryGuardService(ISettingsStore settings) : IQueryGuardService
 {
+    /// <summary>Covers every queryGuard.* key this service reads (docs/plans/2026-08-16-bank-open-cost-implementation.md WP2).</summary>
+    private const string SettingsPrefix = "queryGuard.";
+
     public async Task<QueryGuardOutcome> EvaluateAsync(string projectId, string query,
         CancellationToken cancellationToken = default)
     {
-        var enabled = QueryGuardConfigKeys.ParseEnabled(
-            await settings.GetSettingAsync(QueryGuardConfigKeys.EnabledGlobal, cancellationToken).ConfigureAwait(false));
+        var values = await settings.GetSettingsByPrefixAsync(SettingsPrefix, cancellationToken).ConfigureAwait(false);
+
+        var enabled = QueryGuardConfigKeys.ParseEnabled(values.GetValueOrDefault(QueryGuardConfigKeys.EnabledGlobal));
         if (!enabled)
         {
             return new QueryGuardOutcome(QueryGuardVerdict.Clean);
@@ -40,7 +44,7 @@ public sealed class QueryGuardService(ISettingsStore settings) : IQueryGuardServ
         var verdict = QueryGuardPolicy.Evaluate(query);
         if (verdict.Tier == QueryGuardTier.Clean)
         {
-            verdict = await EvaluateStructuralAsync(query, cancellationToken).ConfigureAwait(false) ?? verdict;
+            verdict = EvaluateStructural(query, values) ?? verdict;
         }
 
         if (verdict.Tier == QueryGuardTier.Clean)
@@ -48,31 +52,28 @@ public sealed class QueryGuardService(ISettingsStore settings) : IQueryGuardServ
             return new QueryGuardOutcome(verdict);
         }
 
-        var shadow = QueryGuardConfigKeys.ParseShadow(
-            await settings.GetSettingAsync(QueryGuardConfigKeys.ShadowGlobal, cancellationToken).ConfigureAwait(false));
+        var shadow = QueryGuardConfigKeys.ParseShadow(values.GetValueOrDefault(QueryGuardConfigKeys.ShadowGlobal));
         return shadow
             ? new QueryGuardOutcome(QueryGuardVerdict.Clean, verdict)
             : new QueryGuardOutcome(verdict);
     }
 
     /// <summary>
-    ///     Default off (<see cref="QueryGuardConfigKeys.DefaultStructuralEnabled" />), so the settings
-    ///     read below only happens when an operator has explicitly opted in. Returns null — defer to
-    ///     the regex verdict — unless the score clears the calibrated threshold; never returns Refuse.
+    ///     Default off (<see cref="QueryGuardConfigKeys.DefaultStructuralEnabled" />). Returns null —
+    ///     defer to the regex verdict — unless the score clears the calibrated threshold; never
+    ///     returns Refuse.
     /// </summary>
-    private async Task<QueryGuardVerdict?> EvaluateStructuralAsync(string query, CancellationToken cancellationToken)
+    private static QueryGuardVerdict? EvaluateStructural(string query, IReadOnlyDictionary<string, string> values)
     {
         var structuralEnabled = QueryGuardConfigKeys.ParseStructuralEnabled(
-            await settings.GetSettingAsync(QueryGuardConfigKeys.StructuralEnabledGlobal, cancellationToken)
-                .ConfigureAwait(false));
+            values.GetValueOrDefault(QueryGuardConfigKeys.StructuralEnabledGlobal));
         if (!structuralEnabled)
         {
             return null;
         }
 
         var threshold = QueryGuardConfigKeys.ParseStructuralThreshold(
-            await settings.GetSettingAsync(QueryGuardConfigKeys.StructuralThresholdGlobal, cancellationToken)
-                .ConfigureAwait(false));
+            values.GetValueOrDefault(QueryGuardConfigKeys.StructuralThresholdGlobal));
 
         var verdict = StructuralQueryGuardPolicy.Evaluate(query, threshold);
         return verdict.Tier == QueryGuardTier.Warn ? verdict : null;
