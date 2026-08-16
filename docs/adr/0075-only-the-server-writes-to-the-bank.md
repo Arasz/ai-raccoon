@@ -9,9 +9,12 @@ Status: Proposed
 A profiling pass over a live 193 MB bank asked why `memory_search` cost what it did. The trace named
 three things, and the third turned out to be the interesting one:
 
-1. **Schema-ensure per open.** `MemorySchema.EnsureAsync` ran the whole ~30-statement `Ddl` block on
-   every bank open, before the `storedVersion >= CurrentVersion` early return at `MemorySchema.cs:414`
-   could help. The early return was there; it was just downstream of the work.
+1. **Schema-ensure per open.** `MemorySchema.EnsureAsync` ran the whole `Ddl` block on every bank
+   open, before the `storedVersion >= CurrentVersion` early return at `MemorySchema.cs:414` could
+   help. The early return was there; it was just downstream of the work. **Measured: 39 statements
+   in the block, 42 for the whole call** — the plan estimated "~30", and estimating is why this
+   number is now pinned by a test that traces the real connection handle rather than splitting the
+   `Ddl` string (which misparses the trigger bodies' embedded semicolons).
 2. **`ISettingsStore` opens a bank per read.** `SqliteSettingsStore.GetSettingAsync`
    (`SqliteSettingsStore.cs:9-17`) opens a fresh bank for a single row, so one search paid the DDL cost
    several times over.
@@ -103,8 +106,29 @@ the gate asserts.
 
 ## Evidence
 
-*Pending — this section is filled from the integration branch once the lanes land. It records the
-route-table guard watched red (CLI writing directly) and green (CLI writing through the server), the
-before/after bank-opens-per-operation figures from the §8 measurement, and the full-suite result on the
-merged tree. An ADR whose evidence section is a promise is not yet Accepted, which is why the status
-above says Proposed.*
+**Measured before, on the unoptimised tree** (`docs/work/perf/2026-08-16-wp5-before-baseline.md`).
+Counts come from a test-only decorator over `ISqliteConnectionFactory`/`ISettingsStore`, not from
+`dotnet-trace` — exact counts, no EventPipe sampling overhead to discount:
+
+| | Plan estimated | Measured |
+|---|---|---|
+| `Ddl` block statements | ~30 | **39** |
+| `EnsureAsync` on an already-current bank | — | **42** |
+| Bank opens per operation | 3.60 | **4.5** (4 write, 5 search) |
+| Settings reads per operation | ~2 | 2 write, 2 search |
+
+Wall clock, real out-of-process Release server over loopback: write median 56-60 ms / p95 92 ms;
+search median 42-44 ms / p95 68 ms. A-A noise floor 5-10%, so treat anything under 10% as no change.
+
+**The plan was wrong in three places and this records that rather than quietly restating it.** The
+statement count was underestimated by ~25%, opens per operation by 20%, and the two settings reads
+observed on every `memory_write` are not explained by the plan's own write-path analysis, which names
+only `MemoryAccessGuard` — an `IMemoryStore` cost, not an `ISettingsStore` one. **That gap is open.**
+
+**After.** `MemorySchemaDdlStatementCountTests` pins both sides of the gate: **0 `Ddl` statements and
+4 total when the digest matches, 39 when it is stale.** So the per-open cost goes 42 → 4 on every
+install past its first run. `QueryGuardServiceTests` pins query-guard settings reads at 4 → 1 on the
+structural path and 2 → 1 elsewhere, watched red first (`CallCount should be 1 but was 2/2/2/4`).
+
+*Still pending: the route-table guard watched red, and the after-measurement rerun. The status stays
+Proposed until both exist — an ADR whose evidence is a promise has not earned Accepted.*
