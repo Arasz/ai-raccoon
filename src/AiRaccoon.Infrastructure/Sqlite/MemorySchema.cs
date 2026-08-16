@@ -800,6 +800,21 @@ internal static class MemorySchema
                 .Split((char[])[' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
             .TrimEnd(';', ' ');
 
+    /// <summary>
+    ///     Cheaper than <see cref="EnsureAsync" /> for a hot, pre-every-call read that only needs the
+    ///     schema to already be current: one <c>application_id</c> read, falling back to the full
+    ///     <see cref="EnsureAsync" /> only when the digest does not match (ADR-0076's ToolGate
+    ///     migration check is the first caller — see the ADR's "ToolGate's migration check cost").
+    /// </summary>
+    public static async Task EnsureCheapAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var digest = await ReadApplicationIdAsync(connection, cancellationToken).ConfigureAwait(false);
+        if (digest != SchemaDigest)
+        {
+            await EnsureAsync(connection, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     private static async Task<long> ReadVersionAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
         await connection.ExecuteScalarAsync<long>(
             new CommandDefinition("PRAGMA user_version", cancellationToken: cancellationToken)).ConfigureAwait(false);

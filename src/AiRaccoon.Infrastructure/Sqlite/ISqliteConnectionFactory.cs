@@ -41,4 +41,13 @@ public interface ISqliteConnectionFactory
 
     /// <summary>Opens the bank with an explicit key (null = unencrypted): pragmas, vec0, schema.</summary>
     Task<SqliteConnection> OpenBankWithKeyAsync(string? key, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Opens the bank without <c>MemorySchema.EnsureAsync</c>'s per-open schema check — for a hot,
+    ///     pre-every-call read (ToolGate's migration check, ADR-0076) that does not need it repeated.
+    ///     Callers must compare <c>PRAGMA application_id</c> against <c>MemorySchema.SchemaDigest</c>
+    ///     themselves and fall back to <c>MemorySchema.EnsureAsync</c> on the same connection when it
+    ///     does not match.
+    /// </summary>
+    Task<SqliteConnection> OpenBankSkippingEnsureAsync(CancellationToken cancellationToken = default);
 }
