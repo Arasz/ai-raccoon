@@ -35,7 +35,7 @@ public sealed class NoiseEntriesCommandsTests : IDisposable
     [Fact]
     public async Task NoiseEntries_EmptyBank_ReportsZero()
     {
-        var (exit, outp, _) = await Run(["settings", "noise", "entries"]);
+        var (exit, outp, _) = await Run(["noise", "entries"]);
 
         exit.ShouldBe(0);
         outp.ShouldContain("total: 0");
@@ -49,7 +49,7 @@ public sealed class NoiseEntriesCommandsTests : IDisposable
         await _store.RecordAsync(new MemoryWriteRequest("proj-1", "[ASYNC DELEGATION BATCH COMPLETE]"),
             "HermesBackgroundProcessLog", expiresAtUnixSeconds: 2_000, nowUnixSeconds: 1_000, TestContext.Current.CancellationToken);
 
-        var (exit, outp, _) = await Run(["settings", "noise", "entries"]);
+        var (exit, outp, _) = await Run(["noise", "entries"]);
 
         exit.ShouldBe(0);
         outp.ShouldContain("total: 2");

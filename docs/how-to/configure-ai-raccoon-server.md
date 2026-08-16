@@ -171,7 +171,7 @@ noise store rather than discarded ([ADR-0039](../adr/0039-noise-learning-substra
 ai-raccoon settings noise show        # enabled: True
 ai-raccoon settings noise disable     # accept every write, even ones a policy would reject
 ai-raccoon settings noise enable      # the default
-ai-raccoon settings noise entries     # summarize what has been rejected
+ai-raccoon noise entries              # summarize what has been rejected — reads noise_entries, not settings
 ```
 
 ### Read-path query guard

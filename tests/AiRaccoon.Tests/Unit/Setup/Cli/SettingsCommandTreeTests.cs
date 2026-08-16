@@ -1,5 +1,6 @@
 using System.CommandLine;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
@@ -20,7 +21,7 @@ namespace AiRaccoon.Tests.Unit.Setup.Cli;
 public class SettingsCommandTreeTests
 {
     /// <summary>The end-state top level: one config noun plus the operations that are not configuration.</summary>
-    private static readonly string[] TopLevel = ["settings", "model", "watch", "extract", "encryption", "serve"];
+    private static readonly string[] TopLevel = ["settings", "model", "watch", "extract", "encryption", "serve", "noise"];
 
     /// <summary>
     ///     Every configuration leaf, with a sample argv that satisfies its arguments. The coverage test
@@ -46,7 +47,6 @@ public class SettingsCommandTreeTests
         ("settings noise enable", ["settings", "noise", "enable"]),
         ("settings noise disable", ["settings", "noise", "disable"]),
         ("settings noise show", ["settings", "noise", "show"]),
-        ("settings noise entries", ["settings", "noise", "entries"]),
         ("settings queryguard enable", ["settings", "queryguard", "enable"]),
         ("settings queryguard disable", ["settings", "queryguard", "disable"]),
         ("settings queryguard shadow enable", ["settings", "queryguard", "shadow", "enable"]),
@@ -174,6 +174,7 @@ public class SettingsCommandTreeTests
     [Theory]
     [InlineData("watch", "registered")]
     [InlineData("extract", "prune")]
+    [InlineData("noise", "entries")]
     public void OperationVerb_StaysTopLevel(string family, string verb)
     {
         var parseResult = CliCommandTree.BuildFullRootCommand().Parse([family, verb]);
@@ -212,7 +213,8 @@ public class SettingsCommandTreeTests
             var commands = TestData.CreateConfigCommands(
                 store,
                 watch: new WatchCommands(new FakeWatchStore()),
-                extract: new ExtractCommands(new EmptyOrphanQueueStore()));
+                extract: new ExtractCommands(new EmptyOrphanQueueStore()),
+                noiseEntries: new NoiseEntriesCommands(NoOpNoiseEntryStore.Instance));
 
             await CliRun.RunAsync(path.Split(' '), commands);
 

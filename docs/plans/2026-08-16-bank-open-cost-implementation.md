@@ -299,13 +299,14 @@ verb today. Nothing is invented to satisfy the pattern.
 
 | Family | Disposition | Evidence |
 |---|---|---|
-| `access`, `retrieval`, `sweep`, `noise`, `queryguard` | wholesale → `settings` | `ConfigCommands.cs` — settings-table writes only |
+| `access`, `retrieval`, `sweep`, `queryguard` | wholesale → `settings` | `ConfigCommands.cs` — settings-table writes only |
 | `maintenance` | wholesale | `CliCommandTree.cs:400` — two interval keys |
 | `performance` | wholesale | `:416` — three metrics keys |
 | `ingest` | **wholesale** | `:297-303` — its only child is `scope`, a settings allowlist |
 | `sync` | wholesale, pending the both-halves pass | not read in this plan; see §10.2 |
 | `watch` | **split** | `settings watch` = enable/scope/concurrency (`:308`, *"CONFIGURES watching — it does not register watches"*); `watch registered` (`:317-319`) reads the **watches table** — stays an operation |
 | `extract` | **split** | `settings extract` = mode, kill switch, interval, capacity (`:331-345`); `extract prune --apply` (`:352-354`) **deletes promotion_queue rows** (ADR-0023) — stays an operation |
+| `noise` | **split** | `settings noise` = enable/disable/show, the pre-write rejection kill switch (`ConfigCommands.cs`); `noise entries` (`NoiseEntriesCommands.SummarizeAsync` → `NoiseEntrySql.CountByPolicy`) reads the **noise_entries table**, not settings — stays an operation |
 | `model` | **split** | `settings model` = show + provider keys; **`model set` stays a top-level operation** — `EntryEmbedder.ConfigureAsync` → `SelectAllEmbedded` **re-embeds the entire bank**. It is not a settings command and cannot sit behind a fire-and-forget response (§5.4) |
 | `serve`, `encryption` | operations | starts a process / rekeys a file, and `encryption` is the bootstrap path |
 
@@ -313,9 +314,17 @@ verb today. Nothing is invented to satisfy the pattern.
 `memory_ingest_directory`) and stays there. `ingest` is an example of the plain wholesale move, not
 of the split.
 
+**Correction (follow-up, 2026-08-16):** the original table above listed `noise` as wholesale, on
+the evidence "settings-table writes only." That evidence was wrong: `noise entries` reads
+`noise_entries`, a data table, not the settings table. WP6 moved `noise` wholesale anyway on an
+explicit instruction to do so despite the lane flagging the discrepancy at the time; this is the
+follow-up that applies the both-halves rule as originally stated and splits it, matching `watch`
+and `extract`.
+
 **Resulting top level:** `settings`, `serve`, `encryption`, `watch` (registered only), `extract`
-(prune only), `model` (set only). No new noun is needed — the split families keep their names and
-shed their config children. Revision 1's `bank` verb and its open question are withdrawn.
+(prune only), `noise` (entries only), `model` (set only). No new noun is needed — the split
+families keep their names and shed their config children. Revision 1's `bank` verb and its open
+question are withdrawn.
 
 **Per the no-migration ruling: delete, do not alias.** `watch scope` is a deprecated alias for
 `ingest scope`, kept because *"breaking every existing setup script at the same time is gratuitous"*
