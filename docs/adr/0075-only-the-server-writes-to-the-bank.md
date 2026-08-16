@@ -120,10 +120,16 @@ Counts come from a test-only decorator over `ISqliteConnectionFactory`/`ISetting
 Wall clock, real out-of-process Release server over loopback: write median 56-60 ms / p95 92 ms;
 search median 42-44 ms / p95 68 ms. A-A noise floor 5-10%, so treat anything under 10% as no change.
 
-**The plan was wrong in three places and this records that rather than quietly restating it.** The
-statement count was underestimated by ~25%, opens per operation by 20%, and the two settings reads
-observed on every `memory_write` are not explained by the plan's own write-path analysis, which names
-only `MemoryAccessGuard` — an `IMemoryStore` cost, not an `ISettingsStore` one. **That gap is open.**
+**The plan was wrong in two places and this records that rather than quietly restating it.** The
+statement count was underestimated by ~25% and opens per operation by 20%.
+
+The third apparent contradiction — two settings reads on every `memory_write` that the plan's
+write-path analysis did not account for — **resolved on inspection, and was terminological.**
+Pre-WP3 `MemoryAccessGuard` is declared `MemoryAccessGuard(IMemoryStore store)` and makes exactly two
+`GetSettingAsync` calls, per-project then global (`MemoryAccessGuard.cs:13,21` at `639284b9`). The
+plan filed it as an `IMemoryStore` cost because of the constructor parameter; a settings read is a
+settings read whichever port it arrives through. Those two calls are the two reads, and WP3 collapsed
+them into one batched `GetSettingsByPrefixAsync`.
 
 **After.** `MemorySchemaDdlStatementCountTests` pins both sides of the gate: **0 `Ddl` statements and
 4 total when the digest matches, 39 when it is stale.** So the per-open cost goes 42 → 4 on every
