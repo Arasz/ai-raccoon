@@ -1,7 +1,7 @@
 namespace AiRaccoon.Core.Memory;
 
 /// <summary>Port over the sqlite-memory SQL surface; thin and SQL-shaped, implemented by the Infrastructure layer.</summary>
-public interface IMemoryStore
+public interface IMemoryStore : IModelMigrationStore
 {
     Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default);
 

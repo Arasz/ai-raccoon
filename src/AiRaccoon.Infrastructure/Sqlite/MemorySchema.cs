@@ -361,6 +361,26 @@ internal static class MemorySchema
                                           -- not the `if (fresh)` branch, for the same reason as the two indexes above.
                                           CREATE INDEX IF NOT EXISTS idx_metrics_recorded_at ON metrics(recorded_at);
 
+                                          -- Model-migration outbox (ADR-0076): a single-row lock+ledger for an in-flight
+                                          -- embedding-engine change. `model set` writes the new engine settings and this
+                                          -- row in ONE transaction — the outbox pattern, so no crash can produce the
+                                          -- settings change without the record of the re-embed it owes, or vice versa.
+                                          -- finished_at is null for exactly as long as a re-embed is owed; a separate
+                                          -- relay (ModelMigrationJob) drains it. lease_* let a running relay resist a
+                                          -- second one claiming the same row, with stale-lease reclamation mirroring
+                                          -- watches.scan_owner (ADR-0037).
+                                          CREATE TABLE IF NOT EXISTS model_migration (
+                                              id               INTEGER PRIMARY KEY CHECK (id = 1),
+                                              provider         TEXT NOT NULL,
+                                              model            TEXT NULL,
+                                              base_url         TEXT NULL,
+                                              engine           TEXT NOT NULL,
+                                              started_at       INTEGER NOT NULL,
+                                              finished_at      INTEGER NULL,
+                                              lease_owner      TEXT NULL,
+                                              lease_expires_at INTEGER NULL
+                                          );
+
                                           """;
 
     /// <summary>
