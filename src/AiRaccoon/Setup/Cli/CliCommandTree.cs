@@ -67,6 +67,7 @@ internal static class CliCommandTree
         root.Add(ModelCommand());
         root.Add(WatchCommand());
         root.Add(ExtractCommand());
+        root.Add(NoiseCommand());
         root.Add(EncryptionCommand());
         root.Add(ServeCommand());
         return root;
@@ -77,13 +78,13 @@ internal static class CliCommandTree
     ///     subsystem is a node here, not a new top-level family nobody remembers to add.
     /// </summary>
     private static Command SettingsCommand() =>
-        new("settings", "Runtime configuration, one node per subsystem. Operations live at the top level: 'watch registered', 'extract prune', 'model set', 'encryption', 'serve'.")
+        new("settings", "Runtime configuration, one node per subsystem. Operations live at the top level: 'watch registered', 'extract prune', 'noise entries', 'model set', 'encryption', 'serve'.")
         {
             AccessCommand(),
             SettingsModelCommand(),
             RetrievalCommand(),
             SweepCommand(),
-            NoiseCommand(),
+            SettingsNoiseCommand(),
             QueryGuardCommand(),
             SyncCommand(),
             IngestCommand(),
@@ -202,10 +203,10 @@ internal static class CliCommandTree
         return sweep;
     }
 
-    private static Command NoiseCommand()
+    private static Command SettingsNoiseCommand()
     {
         var noise = new Command("noise",
-            "Pre-write noise rejection: the kill switch for the deterministic Hermes background-process-log filter. Rejection is ON by default — 'noise disable' is how you disarm it.")
+            "Pre-write noise rejection: the kill switch for the deterministic Hermes background-process-log filter. Rejection is ON by default — 'noise disable' is how you disarm it. Entries the filter rejected are read via 'noise entries', not here — that reads the noise_entries data table, not settings.")
         {
             new Command("enable", "Arms pre-write noise rejection (the default)"),
             new Command("disable", "Disarms pre-write noise rejection — every write is stored, even ones a policy would otherwise refuse")
@@ -213,9 +214,15 @@ internal static class CliCommandTree
         var show = new Command("show", "Shows whether pre-write noise rejection is enabled");
         show.Aliases.Add("list");
         noise.Add(show);
-        noise.Add(new Command("entries", "Summarizes noise_entries — the training-data source for a future noise learner (ADR-0029/ADR-0039)"));
         return noise;
     }
+
+    /// <summary>The noise_entries table is data, not configuration, so summarizing it stays top level.</summary>
+    private static Command NoiseCommand() =>
+        new("noise", "Rejected-write training data. Rejection is CONFIGURED under 'settings noise'.")
+        {
+            new Command("entries", "Summarizes noise_entries — the training-data source for a future noise learner (ADR-0029/ADR-0039)")
+        };
 
     private static Command QueryGuardCommand()
     {
