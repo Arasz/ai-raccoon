@@ -152,5 +152,38 @@ them into one batched `GetSettingsByPrefixAsync`.
 install past its first run. `QueryGuardServiceTests` pins query-guard settings reads at 4 → 1 on the
 structural path and 2 → 1 elsewhere, watched red first (`CallCount should be 1 but was 2/2/2/4`).
 
-*Still pending: the route-table guard watched red, and the after-measurement rerun. The status stays
-Proposed until both exist — an ADR whose evidence is a promise has not earned Accepted.*
+**The route-table guard, watched red then green (`37a67e53`).** `EndpointGuardTests` enumerates the
+server's route table and calls every route unauthenticated: mapping a bare `/falsify-the-guard` with
+no `McpTokenGate` entry made the test fail naming the route; reverting made it pass. `McpTokenGate`
+flipped from a default-*open* allowlist (`GuardedPaths`) to default-*closed* (`OpenPaths`, holding
+only `/observability`), so a forgotten entry now costs a 401 on the new endpoint instead of shipping
+it unauthenticated. Still green after the CLI composition-root flip below, alongside every other
+route the server maps, including `/settings`.
+
+**The CLI composition-root flip landed, and the end-to-end path is now real.** `AppRunner.RunCliCommand`
+binds `ISettingsStore` to a `LazyServerSettingsStore` for every command outside the two-entry write
+opt-out (`CliWriteOptOuts`: `encryption`, and `model set` — held back from the server pending §10.3's
+progress-shape ruling, not on principle). The store defers acquiring the backend
+(`CliSettingsBackend.AcquireAsync`, reusing `BackendLauncher` exactly as the stdio proxy does) to its
+first actual call, so a command that never touches settings — `serve` above all, which builds its own
+separate server DI graph — never probes or auto-starts anything.
+
+Proven against the real binary, not a fake: `CliContractTests` replays its recorded scenarios through
+a real `ai-raccoon` process that cold-starts a real backend for the first settings command and reuses
+it for the rest (`ai-raccoon: starting the backend on port {N}` appears exactly once, on the cold
+scenario), and adds the two rows that were owed — a settings command against a server that refuses a
+tampered token exits distinctly (`SettingsServerRefused`, 17) from one where nothing can be made to
+listen within the acquire budget (`SettingsServerUnavailable`, 18). `SqliteSettingsStoreTests`'
+cross-process liveness test (WP4-T3) is re-founded on this topology: the writer is still a distinct OS
+process from the reader, it just delegates the write to the server now rather than opening the bank
+itself — re-verified red-then-green by temporarily routing its reads through the existing
+naively-caching decorator (failed `should be "false" but was null`), then reverting. `CliBankWriteTests`
+needed a real fix, not a rewrite of its expectations: every settings command now auto-starting a full
+server surfaced a genuine race with `BankMaintenanceHostedService`'s unrelated startup checkpoint pass,
+which the fix absorbs with a warm-up before any test takes its baseline — not a weakened assertion.
+Full `Speed=Fast` (2504), `Speed=Slow` (727) and `Category=bdd` (138) all green on the merged chain.
+
+*Still pending: the after-measurement rerun (§8) — a wall-clock latency comparison against the
+`docs/work/perf/2026-08-16-wp5-before-baseline.md` numbers above, now that every settings operation
+pays the acquisition this ADR adds. That is WP5's own remaining scope, not landed by this chain. The
+status stays Proposed until it exists — an ADR whose evidence is a promise has not earned Accepted.*
