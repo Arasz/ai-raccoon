@@ -103,5 +103,12 @@ removed as unused (docs/adr/0016-remove-the-extension-host.md).
   plus `memory_embed_pending` to become searchable. When an engine is
   already configured, writes embed synchronously.
 - Embedding engine changes (`ai-raccoon model set …` with a different provider/model/base-url)
-  re-embed the entire bank: previously embedded rows are re-processed with the new engine,
-  and the pending queue is left alone.
+  re-embed the entire bank, and since ADR-0076 they do it as an **outbox** rather than inline.
+  One transaction commits the new engine settings, a durable migration record, and marks every
+  embedded row pending; a relay drains it afterwards and marks the record finished. The command
+  itself returns as soon as that transaction commits.
+  Two consequences worth knowing: **every tool call is refused while a migration is open**
+  (`model-migration-in-progress`), and **a crash mid-migration is finished by the next server's
+  startup pass** rather than leaving the bank half-converted. Dropping the old vectors at commit
+  is deliberate — a bank mixing two models' vectors returns quietly worse results with no error,
+  whereas dropping them degrades search to keyword-only until the re-embed lands.

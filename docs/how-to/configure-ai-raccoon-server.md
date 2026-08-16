@@ -143,8 +143,29 @@ Two commands are exceptions and still act directly:
 | `serve` | it *is* the server |
 | `encryption …` | it rekeys the bank file itself, and moving it is tracked separately |
 
-`ai-raccoon model set` is also still a direct writer, for a reason that is a pending decision rather
-than a design choice — see issue #358.
+`ai-raccoon model set` used to be a third exception. It is not any more — it routes through the
+server like everything else, so `encryption` is now the only command that writes the bank directly.
+
+### Changing the embedding model
+
+`model set` is the one settings command that owes real work afterwards: changing the engine makes
+every stored vector stale. It is handled as an **outbox** (ADR-0076), which is worth knowing about
+because it is visible:
+
+1. One transaction commits the new engine settings, a durable migration record, **and** marks every
+   embedded row pending — so the old vectors leave the search index the moment it commits.
+2. The command returns. There is no progress output; re-embedding happens in the background.
+3. **While a migration is open, every tool call is refused** with `model-migration-in-progress`.
+   That is deliberate: the alternative is serving searches against a half-migrated bank.
+4. A relay finishes the re-embed and marks the record complete. Only then does the bank serve again.
+
+**If the server dies mid-migration, the next one finishes it** — the record survives the crash and
+the startup pass picks it up. You do not need to re-run `model set`.
+
+The reason the old vectors are dropped at commit rather than replaced one by one: a bank holding
+half one model's vectors and half another's returns quietly worse results with no error anywhere.
+Dropping them degrades search to keyword-only until the re-embed lands, which is visible and
+recoverable.
 
 If the server cannot be reached, a settings command **fails loudly rather than falling back to
 writing directly**, with distinct exit codes for *refused* and *unreachable*. A write that could not
