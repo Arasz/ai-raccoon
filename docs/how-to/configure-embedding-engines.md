@@ -76,16 +76,34 @@ sequenceDiagram
     participant Store as memory.db (SQLite)
     participant Engine as New Embedding Engine
     
+    participant Relay as Relay (on-demand job)
+
     Dev->>Server: `ai-raccoon model set ...`
-    Server->>Store: Update model configuration in settings
-    Server->>Store: Scan all stored memory entries
-    loop For each memory entry
-        Server->>Engine: Generate vector embedding
-        Engine-->>Server: Return float[] vector
-        Server->>Store: Update vec0 virtual table
+    rect rgb(240, 240, 240)
+        note over Server,Store: one transaction (ADR-0076)
+        Server->>Store: Write the new engine settings
+        Server->>Store: Write the migration record (the outbox row)
+        Server->>Store: Mark every embedded row pending — old vectors leave the index
     end
-    Server-->>Dev: Re-embedding complete
+    Server-->>Dev: Returns here. No progress output.
+    note over Server: every tool call now refused: model-migration-in-progress
+    Relay->>Store: Claim the migration (lease)
+    loop For each pending entry
+        Relay->>Engine: Generate vector embedding
+        Engine-->>Relay: Return float[] vector
+        Relay->>Store: Update vec0 virtual table
+    end
+    Relay->>Store: Mark the migration finished — the bank serves again
 ```
+
+The command returns before the re-embedding happens, so it is quick and silent. Three things follow:
+
+- **The bank refuses tool calls until the migration completes.** Searching a half-migrated bank
+  would return quietly worse results; refusing is the honest alternative.
+- **A crash does not lose the migration.** The record is durable, so the next server's startup pass
+  finishes it — you do not re-run `model set`.
+- **Search degrades to keyword-only in the meantime**, because the stale vectors are dropped when
+  the transaction commits rather than being overwritten one at a time.
 
 ---
 
