@@ -167,10 +167,21 @@ denormalized FTS-backing columns (see `docs/work/2026-08-11-memory-source-normal
 ### Schema versioning
 
 `MemorySchema.EnsureAsync` reads `PRAGMA user_version` before the DDL runs and walks an
-ordered ladder (`MigrateToV1Async` → `MigrateToV2Async` → `MigrateToV3Async` →
-`MigrateToV4Async` → `MigrateToV5Async`) up to `CurrentVersion` (currently 5) on every
+ordered ladder (`MigrateToV1Async` … `MigrateToV10Async`) up to `CurrentVersion` (currently
+**10**, corrected 2026-08-16 — this said 5 and had been stale for five ladder steps) on every
 read-write open (ADR 0011). A fresh bank is stamped at the current version directly and
 never walks the ladder; a stamped bank at the current version skips it entirely.
+
+**The DDL block is gated on a digest of itself** (ADR-0075). `PRAGMA application_id` holds the
+first 32 bits of `SHA-256(Ddl)`, stamped only *after* the block completes. When it matches, the
+whole block is skipped: an open on an existing bank executes **4 statements instead of 42**. The
+digest is derived from the same string the block runs, so it cannot drift — a `Ddl` edit changes
+it and forces the rerun, which is why additive DDL still reaches existing banks with no version
+bump (ADR-0026).
+
+Two repairs deliberately stay *outside* the digest gate and run on every open: the ingest-scope
+key migration, and the promotion-queue trigger's scope guard (ADR-0023). Both are data-shaped
+rather than DDL-shaped, so no digest of the DDL text would ever notice they were needed.
 
 The ladder only ever moves a bank forward. If the stored version is *ahead of* the
 binary's own `CurrentVersion` — an older binary opening a bank a newer one already

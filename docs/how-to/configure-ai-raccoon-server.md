@@ -126,6 +126,37 @@ curl -X POST http://127.0.0.1:7721/mcp \
 
 ---
 
+## Who writes to the bank
+
+**The server is the only process that writes to the bank** (ADR-0075). Every `ai-raccoon settings …`
+command you type below runs in the CLI, but the write itself is performed by the server.
+
+**This is invisible in normal use, with one thing worth knowing: a settings command starts the
+server if it is not already running.** So the first `settings` command after a reboot takes a
+moment longer than the rest, and it leaves a server running afterwards. That is deliberate — it is
+the same launcher `serve` uses, with a 30-second budget.
+
+Two commands are exceptions and still act directly:
+
+| command | why |
+|---|---|
+| `serve` | it *is* the server |
+| `encryption …` | it rekeys the bank file itself, and moving it is tracked separately |
+
+`ai-raccoon model set` is also still a direct writer, for a reason that is a pending decision rather
+than a design choice — see issue #358.
+
+If the server cannot be reached, a settings command **fails loudly rather than falling back to
+writing directly**, with distinct exit codes for *refused* and *unreachable*. A write that could not
+be delivered never reports success.
+
+**Why it works this way.** Two processes writing one SQLite file is a lock-contention problem nobody
+chose; it accumulated one command family at a time. Routing every settings write through the server
+removes that contention, and it is what makes the encryption rekey's connection-pool clear
+meaningful — clearing a pool only affects the process doing the clearing.
+
+---
+
 ## Tune what gets stored and what gets searched
 
 Four settings families gate the write path, the read path and the reaper. All are bank-global
