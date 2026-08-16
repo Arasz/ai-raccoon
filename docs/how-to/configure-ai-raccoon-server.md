@@ -198,13 +198,21 @@ off — these three settings only tune the writer, not whether it runs.
 | Flush interval | `metrics.flush-interval-seconds.global` | `30` seconds |
 | Hot-table retention | `metrics.retention-days.global` (best-effort — holding more is not a violation) | `28` days |
 
-**No CLI verb sets these yet** — unlike the families above, there is no `ai-raccoon metrics …`
-command. They live in the settings table with hard-coded defaults
-(`AiRaccoon.Core.Memory.MetricsConfigKeys`). A row written directly into `settings` is honoured:
-`MetricsFlusher` re-reads the flush interval before every tick (so a change applies on the next
-one, no restart needed) but reads buffer capacity only once at startup; `MetricsRetentionJob`
-re-reads the retention window on every maintenance pass. There is just no supported command that
-writes any of these rows today.
+```bash
+ai-raccoon performance list                  # buffer capacity, flush interval, retention — with take-effect timing
+ai-raccoon performance buffer-capacity 2000   # takes effect on the next server restart
+ai-raccoon performance flush-interval 10      # takes effect on the next flush tick
+ai-raccoon performance retention 60           # takes effect on the next maintenance pass
+```
+
+The three knobs take effect on different cadences, and each command's own output states which:
+`MetricsFlusher` re-reads the flush interval inside its periodic loop, so a change applies on the
+next tick with no restart needed, but reads buffer capacity only once, at the top of its startup
+loop — a change there needs the server restarted; `MetricsRetentionJob` re-reads the retention
+window on every maintenance pass. `buffer-capacity` and `retention` are bounded
+(`MetricsConfigKeys.MaxBufferCapacity`, `MaxRetentionDays`) — an unbounded buffer capacity is an
+allocation an operator could otherwise set arbitrarily large, and an unbounded retention window
+overflows the reaper's `DateTimeOffset.AddDays` arithmetic.
 
 ---
 

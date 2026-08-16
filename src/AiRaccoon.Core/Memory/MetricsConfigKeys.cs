@@ -7,6 +7,9 @@ public static class MetricsConfigKeys
 
     public const int DefaultBufferCapacity = 1000;
 
+    /// <summary>Ceiling the CLI enforces on write: buffer capacity is otherwise an allocation an operator could set arbitrarily large.</summary>
+    public const int MaxBufferCapacity = 1_000_000;
+
     public static int ParseBufferCapacity(string? value) =>
         int.TryParse(value, out var capacity) && capacity > 0 ? capacity : DefaultBufferCapacity;
 
@@ -21,6 +24,9 @@ public static class MetricsConfigKeys
     public const string RetentionDaysGlobal = "metrics.retention-days.global";
 
     public const int DefaultRetentionDays = 28;
+
+    /// <summary>Ceiling the CLI enforces on write: MetricsRetentionJob computes DateTimeOffset.AddDays(-days), which throws beyond a bound far smaller than int.MaxValue.</summary>
+    public const int MaxRetentionDays = 36500;
 
     public static int ParseRetentionDays(string? value) =>
         int.TryParse(value, out var days) && days > 0 ? days : DefaultRetentionDays;

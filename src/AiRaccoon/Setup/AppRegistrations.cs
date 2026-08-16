@@ -137,6 +137,8 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<ISearchQualityService, SqliteSearchQualityService>();
             services.AddSingleton<IOperationTelemetry, BackgroundTelemetry>();
             services.AddRequiredSingleton<IToolCallMetrics, ToolCallMetrics>();
+            // typeof(MemoryTools).Assembly matches VersionContractTests' convention for "the built AiRaccoon binary".
+            services.AddSingleton<IBuildStamp>(new AssemblyBuildStamp(typeof(MemoryTools).Assembly));
         }
 
         private void RegisterBankMaintenanceBackgrounbdService()

@@ -1,0 +1,97 @@
+name: release
+
+# Tags `main` and cuts a GitHub release the moment VERSION changes — the commit
+# BEFORE the manual publish.yml dispatch, so at pack time `git describe` resolves
+# to the tag for the version actually being published (see
+# docs/plans/2026-08-15-performance-metrics-implementation.md section 7, R3).
+# Exists for traceable-releases, not for the performance-metrics feature — no
+# metrics package depends on it.
+#
+# Trigger is `push` to `main` filtered to VERSION only. This is safe where
+# build.yml's header warns a `paths:` filter is NOT: that filter starves
+# required status checks when it sits on `pull_request:` — build-fast, build-bdd
+# and build-slow (see build.yml's header and PR #301, which only merged because
+# the account had ruleset bypass). Verified 2026-08-16 against the live ruleset
+# (`gh api repos/Arasz/ai-raccoon/rulesets/20445824`): those three are exactly
+# the required checks on `main`. This workflow triggers on `push`, not
+# `pull_request`, and its job name below must never be added to that required
+# list — a filtered `push` trigger gates nothing a PR needs to merge.
+on:
+  push:
+    branches: [main]
+    paths: ["VERSION"]
+
+permissions:
+  contents: read
+
+# Two merges landing close together on `main` must not race to tag/release the
+# same commit twice; never cancel a run that may already have pushed a tag.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  tag-and-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # The only job in this workflow, and the only one that writes: tagging and
+      # releasing both need `contents: write`. Scoped here, not at workflow
+      # level, matching build.yml/publish.yml's pattern of workflow-level
+      # `contents: read` with jobs escalating individually.
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Validate VERSION format
+        # R1's ValidateVersionFile MSBuild target enforces this shape at build
+        # time, but this workflow does not assume that ran — a re-check here is
+        # what fails loudly (not with an empty/garbage tag) if VERSION is ever
+        # malformed on main.
+        id: version
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::VERSION must be a bare semver (e.g. 1.2.3); found '$VERSION'." >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether the tag already exists
+        # Idempotence: a re-run of this workflow (retry, or any other push that
+        # doesn't change VERSION further) must be a no-op, never a move. Queried
+        # against the remote rather than the local checkout, so this doesn't
+        # depend on actions/checkout's tag-fetching behaviour.
+        id: check
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Tag ${{ steps.version.outputs.tag }} already exists; skipping (idempotent no-op)."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create and push the tag
+        # Lightweight tag pointing straight at the commit, matching all existing
+        # vX.Y.Z tags. Never `-f`: when the tag already exists the previous step
+        # skips this one, so this line never moves an existing tag. Branch
+        # protection's non_fast_forward rule blocks a force-push to `main`
+        # itself, but tags are not covered by it — this exists-check is the only
+        # thing standing between a re-run and a moved tag.
+        if: steps.check.outputs.exists != 'true'
+        run: |
+          set -euo pipefail
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+
+      - name: Create the GitHub release
+        # --generate-notes builds the changelog from merged PRs since the
+        # previous tag (GitHub's own compare view, not a hand-maintained notes
+        # file) — one PR per task means PR titles are already the changelog.
+        if: steps.check.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ steps.version.outputs.tag }}" --title "${{ steps.version.outputs.tag }}" --generate-notes

@@ -15,6 +15,7 @@ internal sealed class ConfigCommands(
     EncryptionCommands encryptionCommands,
     ExtractCommands extract,
     MaintenanceCommands maintenance,
+    PerformanceCommands performance,
     ServeCommands serve,
     NoiseEntriesCommands noiseEntries)
 {
@@ -114,6 +115,13 @@ internal sealed class ConfigCommands(
                 ["maintenance", "vacuum-interval"] => await maintenance.SetVacuumIntervalAsync(parsedCliArgs, store,
                     streams, ctx),
                 ["maintenance", "list"] => await maintenance.ListAsync(store, streams, ctx),
+                ["performance", "buffer-capacity"] => await performance.SetBufferCapacityAsync(parsedCliArgs, store,
+                    streams, ctx),
+                ["performance", "flush-interval"] => await performance.SetFlushIntervalAsync(parsedCliArgs, store,
+                    streams, ctx),
+                ["performance", "retention"] => await performance.SetRetentionDaysAsync(parsedCliArgs, store,
+                    streams, ctx),
+                ["performance", "list"] => await performance.ListAsync(store, streams, ctx),
                 ["serve", "observability"] => await serve.Observability(cliInput, streams, ctx),
                 ["serve"] => await serve.StartNode(cliInput, streams, ctx),
                 _ => throw new InvalidOperationException($"unhandled command: {string.Join(' ', commandPath)}")

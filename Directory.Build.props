@@ -1,5 +1,6 @@
 <Project>
     <PropertyGroup>
+        <Version>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)VERSION').Trim())</Version>
         <LangVersion>latest</LangVersion>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
@@ -10,4 +11,11 @@
         <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
         <PackageOutputPath>$(MSBuildThisFileDirectory).nupkg/</PackageOutputPath>
     </PropertyGroup>
+
+    <Import Project="$(MSBuildThisFileDirectory)GitStamp.targets" />
+
+    <Target Name="ValidateVersionFile" BeforeTargets="Restore;Build;Pack">
+        <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(Version)', '^\d+\.\d+\.\d+$'))"
+               Text="VERSION at the repo root must hold a bare semver (e.g. 1.2.3); found '$(Version)'." />
+    </Target>
 </Project>
