@@ -1,0 +1,162 @@
+{
+  "_note": "Copy to docs/work/checklist/<yyyy-mm-dd>-<subject>.json. Never fill this file in place. status is pass|fail|skipped|substituted; substituted means checked by a different instrument than the item names, and its reason must say which. accepted stays null until a human answers it, so an unfinished run is visibly unfinished. Delete any item whose feature no longer exists rather than skipping it.",
+  "run": {
+    "date": "2026-08-16",
+    "branch": "",
+    "commit": "",
+    "data-root": "",
+    "note": "A scratch --data-root, never ~/.ai-raccoon.",
+    "what": "release 1.21.0 — single-writer settings, model-set outbox (ADR-0076), CLI restructure",
+    "package": "ai-raccoon.1.21.0.nupkg, packed locally from the release tree",
+    "binary-sha": "1.21.0+1dccc02b51ac635f5cfeb8dcc29603281494347b — tree verified byte-identical to origin/main (d5eb9c02, the squash of the same change)",
+    "server": "user install restarted onto 1.21.0 at 22:17 (PID 40607); every lane used its own --data-root and --port 0"
+  },
+  "derived": {
+    "version": "1.21.0",
+    "mcp-tool-count": "27",
+    "mcp-prompt-count": "2",
+    "note": "Produced by scripts/derive-facts.py at run time, never typed from memory or a previous run."
+  },
+  "findings-against-prior-runs": [
+    {
+      "_example": "Delete this example. One entry per thing an earlier run got wrong — a verdict, a reason, or a step that could not have failed. A checklist that can only describe the current build cannot report that the last checklist lied.",
+      "prior-run": "",
+      "prior-claim": "",
+      "what-is-actually-true": "",
+      "evidence": "",
+      "so-what": ""
+    },
+    {
+      "finding": "`model set` silently skips the outbox entirely when the engine fingerprint does not actually change — including the first-ever configuration of a bank (`previous is null`). EntryEmbedder.StartMigrationAsync: `if (previous is null || string.Equals(previous, engine)) { ...no outbox row... }`.",
+      "why-it-matters": "The CLI reports success identically either way. Re-running `model set local` twice produces a 'committed' log line and a success message with NO migration row and NO refusal window — **indistinguishable from a real migration by the CLI's own output alone.** A checklist that naively re-ran `model set local` would have passed while the migration, refusal and relay machinery were entirely untested, and would have passed identically had that machinery been broken.",
+      "how-to-exercise-it": "Use a genuinely different EngineFingerprint — e.g. `model set local <explicit path to the bundled onnx>` after the bank is already on `local:bundled`.",
+      "is-it-a-defect": "No. The no-op path is a deliberate, correct optimisation — a bank with no prior engine has no stale vectors to owe. It is a TEST trap, not a product defect."
+    }
+  ],
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
+      "command": "ai-raccoon --version && git rev-parse HEAD",
+      "evidence": "1.21.0+1dccc02b51ac635f5cfeb8dcc29603281494347b == git HEAD 1dccc02b",
+      "observed-result": "Installed tool is the build under test; derive-facts.py re-run fresh gives version=1.21.0, 27 tools, 2 prompts.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Version AND SHA read from --version and compared to git HEAD. This is the step that catches testing the wrong binary — it caught exactly that earlier today, when a prerelease pack sorted BELOW the installed release and dotnet tool update silently no-opped."
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+      "command": "serve --port 0 (pid 42276 :55053); serve --port 0 --restart (pid 42737 :55076); serve --port 55053 --restart (pid 43110)",
+      "evidence": "--restart --port 0 -> new listener :55076 while pid 42276 stayed alive on :55053 (ps confirmed) — correctly did NOT cycle. --restart --port 55053 -> '[650] asking the server on port 55053 to stop (pid 42276)' -> '[651] stopped and the port is free' -> 'Now listening on :55053' (pid 43110); lsof confirms 43110 owns the port.",
+      "observed-result": "Genuine cycle on a non-default port. The ephemeral-port non-cycle is documented behaviour, not a defect, and was exercised separately rather than mistaken for the cycle test.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Verified from live logs plus ps/lsof, not log text alone; both the cycling and non-cycling cases exercised."
+    },
+    {
+      "item": "memory-write-stores-and-reports-truthfully",
+      "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
+      "command": "memory_write (clean) then memory_write with the Hermes background-process signature",
+      "evidence": "clean -> {\"hash\":\"2a64b64b...\",\"stored\":true}; noise -> {\"hash\":\"\",\"path\":\"\",\"stored\":false,\"reason\":\"rejected by noise policy 'HermesBackgroundProcessLog'\"}",
+      "observed-result": "Both halves of ADR-0032: a real write returns a real hash; a rejected write returns EMPTY hash and path with a reason naming the policy — no fabricated entry.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both paths driven live. A write-only check would pass whether or not truthful reporting works."
+    },
+    {
+      "item": "memory-search-hybrid-retrieval",
+      "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking",
+      "command": "write target + DISTRACTOR into an isolated project; memory_search 'an antique navigation instrument reflecting evening light in a stargazing room'",
+      "evidence": "results[0] = target astrolabe entry, ranking 1; the unrelated invoice distractor ranked 2nd at 0.984",
+      "observed-result": "Query shares zero literal tokens with the stored text, so FTS5 cannot explain the hit; the target ranked #1 ahead of a distractor. The vector leg is live.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Isolated project plus a distractor is a real negative control — a dead vector leg returns nothing here, since there is no lexical overlap to fall back on."
+    },
+    {
+      "item": "memory-get-returns-content-by-hash",
+      "expected-result": "memory_get returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
+      "command": "memory_write then memory_get by the returned hash; also memory_get with an all-zero hash",
+      "evidence": "get -> exact original value returned. Unknown hash -> isError=true, \"unknown-hash: No entry with hash '000...0' in project 'laneB-checklist'.\"",
+      "observed-result": "Exact content round-trip by hash, AND the unknown-hash case refuses explicitly rather than fabricating a result (ADR-0035).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Tested the negative too — a get that invents an answer for an unknown hash would have passed a round-trip-only check."
+    },
+    {
+      "item": "source-path-anchor-resolves-its-chunk",
+      "expected-result": "a `file#section` query returns that exact chunk within the production result window",
+      "command": "two writes to sourceFile=guide.md, sections intro/details; memory_search 'guide.md#details' and 'guide.md#intro'",
+      "evidence": "#details -> chunkIndex 1 ('Details: the widget pipeline retry policy...'); #intro -> chunkIndex 0 ('Introduction: this guide walks through onboarding...')",
+      "observed-result": "Sibling chunks of the same file, distinguishable only by section, separated correctly in both directions — ruling out a coarse file-only match.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both directions asserted; a file-only match would have returned both chunks for either query."
+    },
+    {
+      "item": "write-path-noise-filtering",
+      "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
+      "command": "grep INoiseFilterPolicy registrations; memory_write x5 (2 controls incl. a near-miss + 3 rejection shapes); `noise entries`; sqlite3 noise_entries",
+      "evidence": "AppRegistrations.cs:210 registers HermesProcessNoisePolicy only. Near-miss ('...a message like [IMPORTANT: Background process notification] can appear in logs...' — trigger phrase MID-sentence) -> stored:true. Three true shapes -> stored:false, reason names the policy. `noise entries` -> total:3. sqlite3: all 3 bodies verbatim.",
+      "observed-result": "One policy registered; matching is StartsWith-anchored, so a mid-sentence trigger phrase stores correctly. Rejected bodies retrievable verbatim (ADR-0039).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Registered set derived by grep, not a stale list. The near-miss control is what makes this able to fail — an over-broad StartsWith would have rejected it."
+    },
+    {
+      "item": "read-path-query-guard",
+      "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
+      "command": "`settings queryguard list`; memory_search x5 (2 refuse, 2 warn, 1 clean control)",
+      "evidence": "list -> enabled:True shadow:False structural:False threshold:0.9894. Refuse shapes -> isError. Warn shapes -> results returned PLUS a warning field. Clean control -> results, NO warning key at all.",
+      "observed-result": "Refuse throws before any embedding/search; warn annotates without blocking; the clean control has no warning key — the guard is not annotating everything. Structural detector confirmed still disabled.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The clean control distinguishes 'annotates only marked queries' from 'annotates everything', which a refuse+warn-only test cannot."
+    },
+    {
+      "item": "file-watch-status",
+      "expected-result": "memory_watch_status lists live registrations and their sync state",
+      "command": "`settings ingest scope add`; `settings watch enable`; `watch registered` before/after; memory_watch_add; memory_watch_status",
+      "evidence": "before -> 'no registered watches'; after memory_watch_add -> project/path/registered populated, lastChange updated on activity; memory_watch_status -> state Healthy.",
+      "observed-result": "Empty before, populated after, and the CLI's data view agrees with the MCP tool's live health view.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Empty-before is the control; two independent readers agreeing rules out one of them being a stub."
+    },
+    {
+      "item": "promotion-queue-state",
+      "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately",
+      "command": "memory_promotion_list (empty control); write a candidate; verify embed_state='embedded' via sqlite3; memory_share_extract propose; memory_promotion_list",
+      "evidence": "before -> rows:[]. After -> same hash 9c01a43f..., score 1.7055555555555555, reasons ['organic-note','tech-breadth'], sourceFile matching between extract's response and the list's independent read.",
+      "observed-result": "Real candidacy proven by identity/score/reasons matching across two independent calls, not by a non-empty list.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Checked embed_state='embedded' FIRST — an unembedded row is silently excluded from candidacy, so skipping that check yields a vacuous empty result."
+    },
+    {
+      "item": "full-mcp-surface",
+      "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+      "command": "POST /mcp tools/list | prompts/list | prompts/get x2, bearer token from <data-root>/mcp-token, on :55053",
+      "evidence": "tools/list -> 27 tools enumerated from the response itself; prompts/list -> 2 (workspace-consolidation-guide, memory-usage-guide); prompts/get on both -> non-error result.messages[0].content.text.",
+      "observed-result": "Live counts match derive-facts.py exactly. Both prompts individually retrievable with real content.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Tool names came from the server's own tools/list rather than grepping Tn* constants — grepping would reproduce the hand-typed-count anti-pattern the skill exists to prevent."
+    },
+    {
+      "item": "observability-event-ids",
+      "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+      "command": "count [LoggerMessage] + duplicate check against src; grep 674 in the doc; observe 674 live; seed expired noise/discard/quality rows and force a startup pass",
+      "evidence": "134 methods, zero duplicates. 674 fired live 3x on model-set commit. After seeding: [520] removed 3, [522] removed 1, [523] removed 45 — on the startup pass, no timer waited on.",
+      "observed-result": "Doc matches source exactly. Re-derived the count-gating cause from BankMaintenanceHostedService directly rather than reusing the prior run's stated reason, and found 522 has a SECOND gate the prior run never needed to surface: the backing entry must also be gone, not merely aged.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Counts reproduced against src, not copied from the doc; purge ids fired by seeding data rather than waiting on cadence; prior run's cause re-derived rather than inherited, and extended."
+    }
+  ],
+  "notes": [
+    "A fresh scratch bank has NO embedding provider configured, so memory_search silently returns nothing on a no-lexical-overlap query until `model set` runs and embedding completes. A semantic-retrieval item run against an unconfigured bank therefore FAILS for the wrong reason — or worse, is read as a dead vector leg. Configure the model and embed before asserting. Found by lane B, 1.21.0 run.",
+    "Implicit validation of ADR-0076's first-time-configuration early return: lane B ran `model set local` on fresh banks and was NOT blocked by a migration lock. That is the designed behaviour — a bank with no prior engine has no stale vectors to owe, so no outbox row and no lock. Had that early return been missing, every fresh-bank setup would have locked itself out."
+  ]
+}
