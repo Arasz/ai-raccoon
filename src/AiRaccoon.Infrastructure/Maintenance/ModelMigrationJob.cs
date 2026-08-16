@@ -11,7 +11,7 @@ namespace AiRaccoon.Infrastructure.Maintenance;
 ///     startup pass (the crash-recovery guarantee) and every later poll, never by a cadence that
 ///     could leave it waiting.
 /// </summary>
-public sealed class ModelMigrationJob(IEntryEmbedder embedder, TimeProvider timeProvider) : IMaintenanceJob
+public sealed class ModelMigrationJob(IEntryEmbedder embedder) : IMaintenanceJob
 {
     public const string JobName = "model-migration";
 
@@ -35,8 +35,7 @@ public sealed class ModelMigrationJob(IEntryEmbedder embedder, TimeProvider time
     /// </summary>
     public async Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
-        await embedder.DrainMigrationAsync(connection, timeProvider.GetUtcNow(), cancellationToken)
-            .ConfigureAwait(false);
+        await embedder.DrainMigrationAsync(connection, cancellationToken).ConfigureAwait(false);
 
         // Draining re-embeds everything itself; nothing is left pending for the general
         // memory_embed_pending sweep to pick up, so this never asks the pass to sweep again.

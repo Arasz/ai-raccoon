@@ -228,3 +228,13 @@ test and a CLI verb for a number nothing in this task's evidence suggests anyone
 method still does exactly what its name says — reads the checkpoint interval — and nothing more; it
 would have been misnamed only under the design this task rejected (repurposing the same timer/method
 to also govern the on-demand poll). The new poll loop reads its own constant, not this method.
+
+**Correction: `finished_at` recorded the wrong duration until 1.21.1.** `DrainMigrationAsync` took its
+`now` as a parameter captured by the caller before the drain loop ran, then stamped `finished_at` with
+that stale value — so `finished_at - started_at` measured "time to enter the method", not "time to
+drain the bank". Invisible at small scale (a 200-entry bank drains in ~13s, so a 6s stamp did not look
+wrong); a real 25,917-entry bank exposed it: 357s real wall-clock drain recorded as 6s, a ~60x
+understatement. `started_at` was unaffected — it is captured immediately before the short outbox
+transaction that writes it, not before a long-running loop. Fixed by giving `EntryEmbedder` its own
+`TimeProvider` and reading `finished_at` from it after the drain loop completes, not from a
+caller-supplied value.
