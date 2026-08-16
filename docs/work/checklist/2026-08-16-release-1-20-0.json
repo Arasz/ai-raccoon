@@ -1,0 +1,235 @@
+{
+  "run": {
+    "date": "2026-08-16",
+    "branch": "checklist/1-20-0",
+    "commit": "766106827ce5ddd7dd8961ce1b8b403ecfe5571f",
+    "data-root": "<scratchpad>/run120/lane{A,B,C,D,E,F}/root — one scratch root per lane, never ~/.ai-raccoon",
+    "note": "Six lanes in parallel over stdio MCP against one binary packed from HEAD and installed to a scratch --tool-path. No lane bound 7721; lane C confirmed by lsof that the user's own server (pid 93524) held it untouched throughout."
+  },
+  "derived": {
+    "version": "1.20.0",
+    "mcp-tool-count": "27",
+    "mcp-prompt-count": "2",
+    "note": "scripts/derive-facts.sh printed 28 and IS WRONG — see findings-against-prior-runs #1. The tree defines 27 [McpServerTool] attributes and the live server lists 27. The value recorded here is the measured one, not the script's."
+  },
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
+      "command": "dotnet build -c Release; dotnet pack src/AiRaccoon/AiRaccoon.csproj -c Release; dotnet tool install ai-raccoon --version 1.20.0 --add-source .nupkg --tool-path <scratchpad>/run120/tool; <tool>/ai-raccoon --version; git rev-parse HEAD",
+      "evidence": "Build succeeded. 0 Warning(s) 0 Error(s) | 7 'Successfully created package' lines | Tool 'ai-raccoon' (version '1.20.0') was successfully installed. | 1.20.0+766106827ce5ddd7dd8961ce1b8b403ecfe5571f | HEAD = 766106827ce5ddd7dd8961ce1b8b403ecfe5571f",
+      "observed-result": "Version and +sha both match HEAD exactly. Every lane below drove this binary.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "sha compared against `git rev-parse HEAD` character for character. DEVIATION recorded deliberately: installed to a scratch --tool-path rather than force-updating the user's global tool, because other sessions share this machine. Pack and install were exercised in full; only the destination differs, and the binary under test is the one built from HEAD."
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+      "command": "ai-raccoon --data-root <laneC>/root serve --port 0; then ai-raccoon --data-root <laneC>/root serve --port 59876 --restart; lsof -iTCP:7721 -sTCP:LISTEN -P before and after both runs",
+      "evidence": "Run 1: 'Now listening on: http://127.0.0.1:59876' (pid 33058).\nRun 2: 'ServerRestart[650] ai-raccoon: asking the server on port 59876 to stop (pid 33058, 1.20.0+76610682...)' -> '[651] the server on port 59876 (pid 33058) stopped and the port is free' -> 'Now listening on: http://127.0.0.1:59876' under new pid 33800.\nlsof 7721 before and after: 'AiRaccoon 93524 arasz ... TCP localhost:7721 (LISTEN)' — same pid throughout.",
+      "observed-result": "--port 0 bound an ephemeral port and reported it. --restart named the exact incumbent by pid and version, confirmed the port free, and rebound under a new pid. 7721 was never dialed, stopped or rebound.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both halves have direct command output. 7721's immunity was checked independently with lsof rather than assumed from the absence of an error."
+    },
+    {
+      "item": "full-mcp-surface",
+      "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+      "command": "scripts/derive-facts.sh; grep -rho '\\[McpServerTool(Name' src/AiRaccoon/Tools/*.cs | wc -l; git archive of v1.19.1 + grep; stdio session: initialize, tools/list, prompts/list, tools/call x27, prompts/get x2",
+      "evidence": "derive-facts.sh: mcp-tool-count=28. Precise grep '\\[McpServerTool(Name': 27. The 28th loose match is src/AiRaccoon/Tools/McpToolInventory.cs:7, a /// doc comment reading \"derived by reflection over this assembly's own `[McpServerTool]` methods\".\nLive: serverInfo {\"name\":\"AiRaccoon\",\"version\":\"1.20.0.0\"}; tools: 27; prompts: 2 ['workspace-consolidation-guide','memory-usage-guide'].\ngit diff v1.19.1..v1.20.0 -- src/AiRaccoon/Tools/: exactly one added attribute, '+ [McpServerTool(Name = TnMemoryPerformance)]'.\n27/27 tools called, 0 crashes. Typed refusals: 'access-denied: requires mode full (current rw)' (memory_set_ttl, memory_delete, memory_delete_context), 'path-outside-scope' (ingest_file, ingest_directory), 'watching-disabled' (watch_add), 'sync-not-configured' (sync).\nprompts/get: memory-usage-guide 2921 chars opening \"You are working in project 'laneC-project'\" — the projectId argument was genuinely interpolated; workspace-consolidation-guide 453 chars naming the workspace id.",
+      "observed-result": "The product surface is internally consistent and fully reachable at 27 tools and 2 prompts, with zero crashes and every refusal typed. The DISAGREEMENT is between the live server and the derivation script, not between the server and the tree: derive-facts.sh counts a doc comment as a tool. Consequently the run's premise of 'two new tools since 1.19.1' was also false — exactly one was added, memory_performance.",
+      "status": "fail",
+      "accepted": false,
+      "acceptance-reason": "Failed against the stated expected-result because derived.mcp-tool-count (28) did not match the live surface (27), and the checklist's own rule forbids adjusting the expectation to match. Not accepted because nothing tracks it yet — this run is the first to catch it. It is not a product defect; the fix belongs in the skill's derive-facts.sh, which is in flight as an ai-badger PR (see findings #1)."
+    },
+    {
+      "item": "memory-write-stores-and-reports-truthfully",
+      "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
+      "command": "memory_write(laneA, 'The astrolabe glinted under lamplight inside the old observatory.'); memory_write(laneA, '[IMPORTANT: Background process 4471 finished successfully]')",
+      "evidence": "clean: {\"hash\":\"f5c76a903d64fa16...\",\"path\":\"83c0e277...md\",\"stored\":true}\nrejected: {\"hash\":\"\",\"path\":\"\",\"stored\":false,\"reason\":\"rejected by noise policy 'HermesBackgroundProcessLog'\"}",
+      "observed-result": "A clean write returns a real content hash. A write matching the only registered policy returns stored:false with the policy named and empty hash/path — no fabricated identity.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Matches ADR-0032 exactly, run against the live binary rather than read from code. Both halves exercised."
+    },
+    {
+      "item": "memory-search-hybrid-retrieval",
+      "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking",
+      "command": "memory_search(laneA, 'an antique navigation instrument reflecting evening light in a stargazing room', scope=all)",
+      "evidence": "results[0]: {\"hash\":\"f5c76a903d64fa16...\",\"ranking\":1,\"snippet\":\"The astrolabe glinted under lamplight inside the old observatory.\"}",
+      "observed-result": "Zero literal overlap between query and stored text (instrument/light/stargazing-room vs astrolabe/lamplight/observatory), so BM25 alone cannot carry it. Returned at rank 1, matched by hash against the write above.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Query built per the skill's second rule so a dead vector leg would fail the item; hit confirmed by hash, not by reading the snippet."
+    },
+    {
+      "item": "memory-get-returns-content-by-hash",
+      "expected-result": "memory_get returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
+      "command": "memory_get(laneA, 'f5c76a90...'); memory_get(laneA, 'deadbeef...' 64 hex)",
+      "evidence": "known: {\"hash\":\"f5c76a90...\",\"value\":\"The astrolabe glinted under lamplight inside the old observatory.\",\"context\":\"project:laneA\",\"createdAt\":1786869920}\nunknown: \"unknown-hash: No entry with hash 'deadbeef...' in project 'laneA'.\"",
+      "observed-result": "A reachable hash round-trips the exact stored value. An unknown hash produces a structured refusal naming the hash and project, not a silent empty result.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both halves exercised; the positive case cross-checked against the exact write above."
+    },
+    {
+      "item": "source-path-anchor-resolves-its-chunk",
+      "expected-result": "a `file#section` query returns that exact chunk within the production result window",
+      "command": "memory_ingest_file(outside scope) -> refusal; CLI ingest scope add laneA <dir>; memory_ingest_file(notes2.md, 3 headings); memory_search('<path>#Rollback'); memory_search('<path>#Deployment')",
+      "evidence": "precondition: \"path-outside-scope: Path '.../outside/unreachable.md' is outside the ingest scope.\"\n#Rollback -> top hit 7e4f8114..., ranking 1, chunkIndex 2/4, stored section column = 'Rollback'\n#Deployment -> top hit 025692e9..., ranking 1, chunkIndex 1/4, stored section column = 'Deployment'\nBoth strictly above every other bank entry (next best <= 0.984).",
+      "observed-result": "Ingest refuses out-of-scope first, as documented. Once scoped, two different anchors resolve to two different chunks, each matching its own stored section column, both at rank 1.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Stronger than the item requires: two anchors were tested against one file so a resolver that always returned the same chunk would fail. Section values read directly from the lane's own scratch bank."
+    },
+    {
+      "item": "write-embeds-the-chunk-it-stored",
+      "expected-result": "a long write that chunks into several rows embeds each chunk's own text rather than the whole document, so a query matching only a late chunk retrieves that chunk (1.19.1, PR #344, ADR-0073)",
+      "command": "memory_write(60-paragraph document, distinctive sentence in paragraph 58); memory_embed_pending; memory_search('how a sea creature disguises itself beside ocean floor volcanoes'); memory_get(top hit)",
+      "evidence": "write returned chunks[0] hash 68d727ef81f3...; embed_pending {\"processed\":11,\"pending\":0}\nparaphrase search top hit: {\"hash\":\"809d21e49a5d...\",\"ranking\":1}\nmemory_get(809d21e4...).value contains 'A deep-sea octopus close to underwater volcanic vents changes the color of its skin to hide among the rocks.' and NOT the whole document\nmemory_get(68d727ef...).value = 'Paragraph 0. ...' — early filler only, no marine content",
+      "observed-result": "The distinctive sentence sat only in a late chunk. A paraphrase query with zero literal overlap retrieved that late chunk at rank 1, and the row's stored text is the late-paragraph window rather than the document. chunks[0] did not surface.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Regression check for the 1.19.1 fix, re-run on 1.20.0 with a fixture built so the pre-fix code would fail — a whole-document embed truncated to the window would have been dominated by the early paragraphs and surfaced chunks[0] instead."
+    },
+    {
+      "item": "write-path-noise-filtering",
+      "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
+      "command": "Derived the registered list from AppRegistrations.cs RegisterStores() first; then memory_write x6 (clean control, three rejected shapes, a 'received signal' near-miss control); ai-raccoon noise entries; sqlite3 'SELECT id, detected_by_policy, request_content FROM noise_entries'",
+      "evidence": "Only `AddSingleton<INoiseFilterPolicy, HermesProcessNoisePolicy>()` is registered; ZeroShotEmbeddingNoisePolicy is absent (ADR-0033).\nFour rejected shapes: {\"stored\":false,\"reason\":\"rejected by noise policy 'HermesBackgroundProcessLog'\",\"hash\":\"\"}\nCLI: 'total: 4 / HermesBackgroundProcessLog: 4'\nsqlite3: 4 rows, each detected_by_policy='HermesBackgroundProcessLog', full request_content intact.\nControls: ordinary prose STORED; prose merely containing the words 'received signal' without the exact-body shape STORED.",
+      "observed-result": "The one registered policy rejects exactly the shapes it documents, reports each rejection with its name, and every rejected body is retrievable from the noise store. Two negative controls stored normally.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Policy list derived from the tree, not from a prior checklist — the defence that stopped a previous run passing an item for a removed policy. The second control (a near-miss containing the trigger words but not the shape) proves the policy matches a shape rather than a substring."
+    },
+    {
+      "item": "read-path-query-guard",
+      "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
+      "command": "queryguard show (baseline); memory_search for two refuse shapes, two warn markers, one clean query; a JSON/hex machine-output query with structural off; then queryguard structural enable + threshold set 0; queryguard show; re-run",
+      "evidence": "baseline: 'enabled: True  shadow: False  structural: False  threshold: 0.98939822280316'\nrefuse shapes: 'invalid-params: This looks like tool output rather than a question...' (McpException, no results)\nwarn markers: results + 'This query contains what looks like log or stack-trace output...'\nclean: results, no warning. JSON/hex with structural OFF: no warning at all.\nAfter arming: 'structural: True  threshold: 0'; JSON/hex query -> results + \"This query's shape ... statistically resembles tool output...\"; a CLEAN prose query at threshold 0 also warned; no McpException in either case.",
+      "observed-result": "Refuse throws before search runs; warn annotates; clean passes untouched. The structural detector is off by default and, once armed at a threshold guaranteed to trip on everything, still only ever warns — it never produced a Refuse.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Default-off read from `queryguard show` before anything was touched. The never-refuse property was forced by setting threshold 0 rather than assumed from a detector that simply never fired."
+    },
+    {
+      "item": "over-window-query-warns-not-refuses",
+      "expected-result": "a query longer than the embedding window returns results plus a caller-visible warning rather than a refusal, and a deliberately trimmed query says it was trimmed (PRs #339 option B, #333, ADR-0071)",
+      "command": "ai-raccoon model set local; queryguard structural disable (to isolate from ADR-0041); memory_search with a 1305-character ordinary-prose query, stderr captured; plus a sub-1000-char control",
+      "evidence": "Response: 2 results (no McpException) plus warning 'This query is over 1,000 characters. Semantic search only embeds roughly the first 254 tokens...'\nstderr: 'warn: AiRaccoon.Infrastructure.Embedding.EmbeddingService[416] Search query was shortened to fit the embedding model: 255 tokens exceeded the 254-token window, so only the first 1304 of 1305 characters were used to find matches.'\n'memory_search\" completed. IsError = False.'\nControl (<1000 chars): results with no warning field at all.",
+      "observed-result": "An over-window query returns results plus the caller-visible warning rather than any refusal. EventId 416 names the trimmed thing a 'Search query' and reports true counts. The within-window control produced no warning.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Regression check for behaviour shipped before 1.20.0, reproduced unchanged with both artifacts quoted verbatim. The control proves this is a real threshold rather than an always-on notice."
+    },
+    {
+      "item": "file-watch-status",
+      "expected-result": "memory_watch_status lists live registrations and their sync state",
+      "command": "memory_watch_status (before); memory_watch_add (before enabling); CLI watch enable + ingest scope add; watch list; memory_watch_add; memory_watch_status (after); memory_list",
+      "evidence": "before: {\"watches\":[]}\nrefusal: \"watching-disabled: Watching is disabled for project 'laneD-proj'.\" isError:true\nwatch list: 'target: laneD-proj  enabled: true  concurrency: 4  scope: .../watchfiles'\nafter: {\"watches\":[{\"projectId\":\"laneD-proj\",\"path\":\".../watchfiles\",\"state\":\"Scanning\"}]}\ncorroboration: memory_list shows the seeded note.md was actually ingested",
+      "observed-result": "The whole loop works. Watching is off by default per project and the refusal is typed rather than a crash. After enabling and scoping, status lists the registration — and the watched file was genuinely picked up into the bank.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Went beyond the item: a status endpoint can report a registration that does nothing, so the lane confirmed the effect (ingestion) independently via memory_list rather than trusting the reported shape."
+    },
+    {
+      "item": "promotion-queue-state",
+      "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately",
+      "command": "memory_promotion_list (before); memory_write(context='shared'); memory_promotion_list(includeFullValue); memory_stats; memory_search at scope=project, scope=shared, and scope=shared from an unrelated project",
+      "evidence": "before: {\"rows\":[]}\nwrite: {\"context\":\"project:laneD-proj\",\"stored\":true,\"reason\":\"queued-for-promotion: agent-requested-share\"}, waitingPromotionsCount 1\nlist: one row, hash 1e374f..., score 1, reasons [\"agent-requested-share\"]\nstats: {\"entries\":2,\"pending\":2,\"contexts\":[\"project:laneD-proj\"]}\nsearch scope=project: 1 hit (semantic-only query, no keyword overlap); scope=shared same project: []; scope=shared other project: []",
+      "observed-result": "ADR-0067 holds end to end: stored in the caller's project, no shared context created, a candidate queued and distinguishable by its reason.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "A candidate was created rather than trusting an empty queue, and the absence of a shared row was proven by searching shared scope from two different projects — not inferred from the write's own response."
+    },
+    {
+      "item": "observability-event-ids",
+      "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+      "command": "maintenance list (CLI-only path: creates schema without starting the hosted service); seed backdated promotion_discards + search_quality rows past retention via sqlite3; run a real stdio server with stderr captured; grep '^(info|warn|fail): AiRaccoon'; grep for Log.Vacuum call sites",
+      "evidence": "Emitted: AppRunner[12], BankEngineReporter[13], BankMaintenanceHostedService[510] x3, [518], [522] 'Promotion-discard retention purge removed 1 row(s)', [523] 'Search-quality retention purge removed 1 row(s)', MaintenanceJobRunner[525] x4, ToolRefusals[910].\ngrep 'Log\\.Vacuum\\b|Log\\.VacuumDeferred\\b' src --include=*.cs -> zero matches.\nBankMaintenanceHostedService.cs:449-459 — 522/523 log only 'if (count > 0)'; 524 is the exception path, not a third count-gated line.",
+      "observed-result": "Every id emitted this run resolves against the reference, and the 1.20.0 additions present in the reference (13, 416, 525-526, 921, 960-961, 965, 970-974) include the two exercised (13, 525). Ids 522/523 FIRED for the first time in any run, by seeding backdated rows — confirming they gate on rows-removed, not on cadence. Two documented ids, 512 (Vacuum) and 516 (VacuumDeferred), are DEAD: no call site anywhere in src since ADR-0070 moved vacuuming into MaintenanceJobRunner, which logs 525. Ids 10-12 are documented as living in src/AiRaccoon/Program.cs but the [LoggerMessage] methods are in src/AiRaccoon/AppRunner.cs. Large blocks (sync 100/200-205, watch 300-321, degradation 530-537, node/restart 601-660, promotion 700s, encryption 800s, metrics 960-974) were NOT exercised by this lane's traffic and are reported as unexercised, not verified.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The item's claim — emitted ids resolve against the reference — holds for everything emitted. The two documentation defects found (dead ids 512/516, wrong file for 10-12) are recorded in findings and fixed in this PR. Step 4 was applied rather than skipped: the prior run's 'cadence' explanation for 522-524 was re-derived against source, found wrong, and the ids were then made to fire."
+    },
+    {
+      "item": "maintenance-job-ledger",
+      "expected-result": "the maintenance pass runs as a list of jobs and records a ledger in the bank; a job that creates work causes the sweep to run again (1.17.0 PR #330, 1.18.0 PR #335, ADR-0070)",
+      "command": "Create schema via CLI-only 'maintenance list'; seed one oversized entries row via sqlite3 before any pass runs; start a real stdio server; sqlite3 'SELECT name,last_run_at,run_count FROM maintenance_jobs'; sqlite3 'SELECT count(*) FROM entries'",
+      "evidence": "stderr in order: [510] checkpoint -> [518] 'Pending-embed retry: 0 processed, 1 still pending' -> [525] x4 (chunk-backfill, vec0-reclaim, vacuum, metrics-retention) -> [518] 'Pending-embed retry: 0 processed, 20 still pending' -> [510] checkpoint.\nmaintenance_jobs: chunk-backfill|1786869966|1, metrics-retention|1786869966|1, vacuum|1786869966|1, vec0-reclaim|1786869966|1.\nentries: 1 -> 22.",
+      "observed-result": "Four jobs ran as a list and each stamped a ledger row. The re-sweep is directly observable: the SECOND 'Pending-embed retry' line (20 pending, up from 1) exists only because chunk-backfill returned CreatedWork=true and RunPassAsync's 'if (outcomes.Any(o => o.CreatedWork))' branch re-invoked the sweep in the same pass.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "UPGRADED from the prior run's 'substituted'. That run could not drive the re-sweep live and used EmbedSweepAfterJobsTests instead, blaming chunk-backfill's once-per-bank nature. Re-derived per step 4: the CLI-only command path builds a DI container without the maintenance hosted service, so it migrates the bank without running a pass — leaving a window to seed an oversized row before the first real one. The blocker was circumstance, not a platform limit, so this is a genuine live pass."
+    },
+    {
+      "item": "perf-metrics-self-instrumentation",
+      "expected-result": "the 1.20.0 self-instrumentation records real per-operation metrics and the memory_performance tool reports them; an operation that never ran is absent rather than reported as zero (1.20.0 #327, ADR-0074)",
+      "command": "5x memory_write + 3x memory_search, then memory_performance(projectId); separately an overflow probe: 1300x memory_watch_status in 3.6s on a fresh bank, then memory_performance after the flush tick",
+      "evidence": "memory_write count=5 (p50 3.57ms); memory_search count=3 (p50 5.76ms); search.fts/fusion/affinity/snippets/bump all count=3 with distinct non-zero latencies; search.vector count=3 but zero latency ('provider: (none — FTS5-only search)' on this bank).\nEvery uncalled tool present at count:0 with a full 180-bucket array.\nOverflow: 1300 calls in 3.57s -> metrics.flush.batch_size=1000, metrics.dropped=300 (exactly 1300-1000), and the probe's own series count=1000 not 1300.",
+      "observed-result": "Counts and latencies are real, per-operation and accurate. The ADR-0074 capped buffer behaves exactly as designed at the boundary, verified with a genuine overflow rather than inferred. But the item's expected-result is WRONG on one point: an operation that never ran is NOT absent — it is deliberately reported present at count 0 (the WP6 derived-inventory contract, stated in the tool's own MCP description and in PerformanceReport's doc comment). The expected-result cited ADR-0074 for that claim; that ADR is about the buffer mechanism and does not address absent-vs-zero at all.",
+      "status": "fail",
+      "accepted": true,
+      "acceptance-reason": "Fails against the stated text, which is the honest outcome — but the defect is in the item, not the product. I authored this expected-result for this run and misattributed the absent-vs-zero claim to ADR-0074. The shipped behaviour is correct, intentional and gate-covered. Accepted as a known error in the checklist itself; the corrected expectation is recorded in findings #5 so the next run does not inherit the wrong text."
+    },
+    {
+      "item": "perf-metrics-cli-surface",
+      "expected-result": "the 1.20.0 metrics feature exposes whatever operator-facing configuration it has through a CLI command family, consistent with every other configurable subsystem (1.20.0 #327, ADR-0074)",
+      "command": "ai-raccoon --help; ai-raccoon performance; ai-raccoon metrics; ai-raccoon sweep show (control); read MetricsConfigKeys.cs, MetricsFlusher.cs, CliCommandTree.cs, SettingsCommands.cs, ConfigCommands.cs; grep -rn 'MetricsConfigKeys\\.' src",
+      "evidence": "--help lists 13 families (access, model, retrieval, sweep, noise, queryguard, sync, ingest, watch, encryption, extract, maintenance, serve) — no performance/metrics.\n'performance' and 'metrics' -> 'Unrecognized command or argument', exit=9. Control 'sweep show' -> 'enabled: True  interval: 24 h  threshold: 0.3', exit=0.\nMetricsConfigKeys.cs defines three live keys: metrics.buffer-capacity.global (1000), metrics.flush-interval-seconds.global (30), metrics.retention-days.global (28).\nMetricsFlusher.cs:41,49,179,197 re-read capacity and interval via GetSettingAsync on every flush tick; MaintenanceJobs.cs:163 reads retention the same way.\ngrep 'MetricsConfigKeys.': reads only — no SetSettingAsync anywhere in the tree. ConfigCommands.cs has no generic 'settings set <key>' escape hatch.",
+      "observed-result": "Metrics has three genuine, live-reconfigurable operator knobs — the same settings-table shape every other subsystem exposes through its own CLI family — and none of the three is reachable from the CLI at all.",
+      "status": "fail",
+      "accepted": false,
+      "acceptance-reason": "A real product defect, not a design choice: metrics is the only settings-backed configurable subsystem in the codebase with zero CLI exposure, so an operator who is not an agent cannot tune or inspect it short of writing to the settings table by hand. A `performance` family should expose at minimum buffer-capacity, flush-interval and retention set/show, mirroring the shape SettingsCommands.cs already uses for sweep, noise, queryguard, extract and maintenance. Not accepted because nothing tracks it yet; this run is the first to catch it."
+    },
+    {
+      "item": "semantica-graph-integration",
+      "expected-result": "the project's Semantica knowledge graph is reachable and its contents reflect the project — decisions and entities are queryable, or its emptiness has a named cause",
+      "command": "get_graph_summary(); query_decisions(limit=5); read .ai-raccoon/semantica-graph.json + its git history; read the semantica-knowledge-graph skill and export_semantica_graph.py; grep for any CI/hook wiring of semantica; count docs/adr",
+      "evidence": "get_graph_summary -> {\"node_count\":0,\"decision_count\":0,\"graph_ready\":true}; query_decisions -> {\"decisions\":[]}\n.ai-raccoon/semantica-graph.json (one commit, 7fa70e07) contains {\"nodes\":[],\"edges\":[],\"decisions\":[]} — the export script's DEFAULT_SEED. File and live graph AGREE; no disagreement to report.\nProject skill: 'session-scoped ... do not survive a process restart'; Gotchas: 'in-memory graph dies on process exit. No import_graph mechanism exists.'\ndocs/adr holds 74 files; no CI workflow or repo script populates Semantica.",
+      "observed-result": "The graph is reachable — both tools respond correctly — but structurally cannot hold cross-session content: it is in-memory and session-scoped by design with no import path, so any fresh session starts at zero regardless of the 74 ADRs. The one artifact meant to bridge sessions was itself committed already empty, so the export tooling has never been exercised with real content — and could not be loaded back even if it had been.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Emptiness is the correct state for this architecture and the cause is named rather than the symptom re-reported. Secondary observation for follow-up, not a failure of this item: graph_ready:true reads as 'server operational', not 'populated', so a never-used graph and a failed-to-load graph report identically — an operator cannot tell them apart from this flag alone."
+    }
+  ],
+  "summary": {
+    "total": 18,
+    "pass": 15,
+    "fail": 3,
+    "skipped": 0,
+    "substituted": 0,
+    "note": "Of the three failures, exactly one is a product defect: perf-metrics-cli-surface. One is a defect in the checklist's own tooling (full-mcp-surface, caused by derive-facts.sh miscounting), and one is a defect in an expected-result I wrote for this run (perf-metrics-self-instrumentation). No item was left with a null `accepted`."
+  },
+  "findings-against-prior-runs": [
+    {
+      "finding": "derive-facts.sh, the script that exists to stop hand-typed counts going stale, itself reports a wrong count.",
+      "detail": "Its grep for `\\[McpServerTool` matches a /// doc comment at src/AiRaccoon/Tools/McpToolInventory.cs:7 that names the attribute because that file implements the reflection-based inventory. Loose pattern: 28. Attribute-only pattern: 27. Live server: 27. A derived number that is wrong is more dangerous than a typed one because it carries the authority of having been measured. Fixed upstream in an ai-badger PR with a red-first regression test."
+    },
+    {
+      "finding": "That miscount manufactured a phantom feature.",
+      "detail": "Because the count moved 26 -> 28, this run's brief told a lane to find 'the two new tools since 1.19.1'. Only one was added: memory_performance (#327). The lane cross-checked the tree, a fresh v1.19.1 checkout, and the live server, and reported the premise as false rather than adjusting its expectation to fit — which is the behaviour the skill asks for."
+    },
+    {
+      "finding": "Two documented event ids are dead.",
+      "detail": "512 (Vacuum) and 516 (VacuumDeferred) have no call site anywhere in src: ADR-0070 moved vacuuming into MaintenanceJobRunner, which logs 525 instead. They can never fire. Documented ids that cannot fire are the same defect shape as a checklist step for a removed feature. Marked as retired in docs/reference/logging-event-ids.md by this PR rather than deleted, so the numbers are not silently reused."
+    },
+    {
+      "finding": "Event ids 10-12 are documented against the wrong file.",
+      "detail": "The reference names src/AiRaccoon/Program.cs; the [LoggerMessage] methods live in src/AiRaccoon/AppRunner.cs (Program.cs is a four-line shim). Pre-existing, unrelated to 1.20.0. Corrected by this PR."
+    },
+    {
+      "finding": "An expected-result written for this run was wrong, and the run recorded it as a failure rather than quietly fixing it.",
+      "detail": "perf-metrics-self-instrumentation asserted 'an operation that never ran is absent rather than reported as zero' and cited ADR-0074. The shipped contract is the opposite and deliberate — every tool always appears at count 0 (WP6 derived-inventory gate) — and ADR-0074 does not address the question at all. CORRECTED TEXT for the next run: 'the 1.20.0 self-instrumentation records real per-operation metrics and the memory_performance tool reports them; every tool in the derived inventory appears in the report, at count 0 when unused, and measurements past the buffer cap are dropped with the dropped count recorded (1.20.0 #327; buffer per ADR-0074)'."
+    },
+    {
+      "finding": "The 1.19.1 run's 'substituted' verdict on the maintenance re-sweep was defeatable.",
+      "detail": "It reported that chunk-backfill is once-per-bank and consumed by the automatic startup pass, so the re-sweep could not be driven live. Re-derived per step 4: the CLI-only command path builds a DI container without the maintenance hosted service, so `maintenance list` migrates the bank without running a pass. Seeding an oversized row in that window let this run observe the re-sweep directly. The blocker was circumstance, not a platform limit."
+    },
+    {
+      "finding": "The Semantica export bridge has never been run with real content.",
+      "detail": ".ai-raccoon/semantica-graph.json is tracked and was committed containing the export script's empty DEFAULT_SEED. Combined with the skill's own 'no import_graph mechanism exists', the project has tooling to carry decisions across Semantica sessions that has neither been exercised nor could be loaded back if it were."
+    }
+  ]
+}
