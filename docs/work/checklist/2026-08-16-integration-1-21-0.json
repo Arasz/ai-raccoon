@@ -18,12 +18,16 @@
   },
   "findings-against-prior-runs": [
     {
-      "_example": "Delete this example. One entry per thing an earlier run got wrong — a verdict, a reason, or a step that could not have failed. A checklist that can only describe the current build cannot report that the last checklist lied.",
-      "prior-run": "",
-      "prior-claim": "",
-      "what-is-actually-true": "",
-      "evidence": "",
-      "so-what": ""
+      "prior-claim": "Event ids 520/522/523 (retention purges) were blamed on the maintenance job's CADENCE for never firing, implying a longer-running server would eventually emit them.",
+      "what-is-actually-true": "Each log line is gated on the purge COUNT, not on any timer: `if (purged > 0) Log.NoiseEntriesPurged(...)`, `if (discards > 0) ...`, `if (quality > 0) ...` (BankMaintenanceHostedService.cs:327-346). A fresh bank has nothing past its TTL, so the count is 0 and the line never runs. Cadence is irrelevant.",
+      "evidence": "Reproduced live: `sqlite3 memory.db \"UPDATE noise_entries SET expires_at=1\"` then restart fired [520] on the FIRST maintenance pass — no interval elapsed.",
+      "so-what": "Do not wait out a timer to reproduce these ids. Seed expired rows and the next pass logs them. This is the same shape of error the doc already records for 512/516 — blaming timing for what is gated on data presence — and it would resurface for 522/523 if tested without seeding."
+    },
+    {
+      "prior-claim": "Source files cited ADR-0077 as the decision behind the control-plane settings resource.",
+      "what-is-actually-true": "No ADR-0077 exists in this repo; the highest is 0075, which IS that decision. The plan was drafted expecting ADR-0076/0077 and the ADR was written as 0075. Citations in SettingsEndpoint.cs, SettingsProtocol.cs, ServerSettingsStore.cs and logging-event-ids.md pointed at a document that does not exist.",
+      "evidence": "grep 'ADR-0077' across src/ and docs/ vs `ls docs/adr/0077*` -> no matches. Found by lane C while verifying event ids 670-673.",
+      "so-what": "Repointed all four to ADR-0075 in this run. The plan still refers to 0076/0077 as separate documents — a follow-up should reconcile the plan's numbering or write the missing sibling."
     }
   ],
   "items": [
@@ -90,42 +94,42 @@
     {
       "item": "write-path-noise-filtering",
       "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "grep AddSingleton<INoiseFilterPolicy> (AppRegistrations.cs:208); memory_write x5 = 2 clean controls + 3 rejection shapes; `settings noise entries`; sqlite3 SELECT * FROM noise_entries",
+      "evidence": "clean -> stored:true. '[IMPORTANT: Background process 999 completed normally...]' -> stored:false, reason \"rejected by noise policy 'HermesBackgroundProcessLog'\". '[ASYNC DELEGATION BATCH 3 of 5 complete]' and 'received signal 15.' -> same. NEAR-MISS control ('...a background process that restarts nightly...') -> stored:true. CLI: 'total: 3  HermesBackgroundProcessLog: 3'. sqlite3: 3 rows, request_content verbatim.",
+      "observed-result": "Exactly one write-path policy is REGISTERED in this build (HermesProcessNoisePolicy; the learner substrate ships NoOpNoiseDetector and never rejects). It rejects its three documented shapes and nothing else; rejected bodies retrievable verbatim from noise_entries per ADR-0039.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Negative control included, and a NEAR-MISS one at that — clean content containing the trigger phrase 'background process' mid-sentence was stored. A policy that rejected everything would have failed this; a rejection-only test would not have caught it."
     },
     {
       "item": "read-path-query-guard",
       "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "`settings queryguard list`; memory_search x5 = 2 refuse shapes, 2 warn shapes, 1 clean control",
+      "evidence": "list -> 'enabled: True  shadow: False  structural: False  threshold: 0.98939822280316' (ONE batched call). refuse -> isError:true 'invalid-params: This looks like tool output rather than a question'. warn (stack frame, log prefix) -> results:[] plus warning text. clean control -> results:[] with NO warning key.",
+      "observed-result": "Refuse tier throws before search runs — no fabricated success (ADR-0032/0040). Warn tier annotates without refusing. Clean queries pass untouched. Structural detector (ADR-0041) confirmed still DISABLED by default. WP2's batching visible: one settings call returns enabled/shadow/structural/threshold together.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both tiers exercised with a clean control proving the guard is not simply annotating everything; ships-disabled detector verified still off."
     },
     {
       "item": "file-watch-status",
       "expected-result": "memory_watch_status lists live registrations and their sync state",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "`settings ingest scope add laneC-watch <path>`; `settings watch enable laneC-watch true`; memory_watch_add; memory_watch_status; `watch registered`",
+      "evidence": "scope add -> 'added .../watchtarget to ingest scope'. enable -> 'watch enabled'. status -> state:'Healthy', lastSync 2026-08-16T14:34:33Z. CLI `watch registered` -> project/path/registered/lastChange all populated.",
+      "observed-result": "Registration reflected live on two independent surfaces (MCP status and CLI list), with real state and timestamps, not a stub. Exercised through the NEW settings-scoped path introduced by WP6.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "End-to-end through the restructured CLI surface, confirmed by two independent readers rather than one."
     },
     {
       "item": "promotion-queue-state",
       "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "memory_write; memory_share_extract mode=propose (pre-embed); `model set local`; memory_embed_pending; propose retry; memory_promotion_list",
+      "evidence": "1st propose (row embed-pending) -> candidates:[]. stats pending:1 -> after embed pending:0. 2nd propose -> candidates:[{hash:'fd72f9d0...',score:2.181111111111111,reasons:['organic-note','durable-fact-language','short-definitional-floor']}]. memory_promotion_list -> same hash/value/score/reasons.",
+      "observed-result": "Real content scored by PromotionScorer and persisted to the propose tier; the list reports that candidate's identity, score and reasons accurately. Also surfaced a real setup requirement: an unembedded (pending) row is silently excluded from candidacy until embedded.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Did NOT accept an empty list as proof, per the skill's guidance — created a candidate and asserted hash/score/reasons match between the propose call and the list call."
     },
     {
       "item": "full-mcp-surface",
@@ -140,12 +144,12 @@
     {
       "item": "observability-event-ids",
       "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "read logging-event-ids.md; grep for Log.Vacuum(/Log.VacuumDeferred( call sites; inspect live server log; force a purge via sqlite3 UPDATE noise_entries SET expires_at=1 + restart; direct HTTP GET/PUT/DELETE /settings",
+      "evidence": "grep for 512/516 call sites -> no output (genuinely dead, matching 'retired'). Live: [510] WAL checkpoint, [610] idle watchdog, [910] refusal. After forcing expiry: '[520] Noise entry retention purge removed 3 expired row(s)' on the very next pass. Direct /settings: '[672] settings wrote laneC.checklist.probe', '[673] settings deleted laneC.checklist.probe'.",
+      "observed-result": "Every id checked resolves against the doc. 512/516 confirmed dead by source, not just by the doc's claim. New 670-673 fire when /settings is actually hit; 670/671 are Debug level so their absence from an Information-level console is expected, not a gap.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Ids verified against SOURCE rather than only the reference doc, and triggered live where practical rather than merely read about."
     },
     {
       "item": "schema-digest-fast-path-survives-reopen",

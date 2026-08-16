@@ -13,7 +13,7 @@ internal sealed class SettingsServerUnavailableException(string message, Excepti
 internal sealed class SettingsServerRefusedException(string message) : Exception(message);
 
 /// <summary>
-///     Reaches settings through the server rather than the bank (ADR-0077), so a CLI process never
+///     Reaches settings through the server rather than the bank (ADR-0075), so a CLI process never
 ///     writes the bank. Same <see cref="ISettingsStore" /> surface as the bank-backed store, so a
 ///     subsystem keeps one implementation and only the transport under it changes.
 /// </summary>

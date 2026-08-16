@@ -4,7 +4,7 @@ using AiRaccoon.Hosting.Node;
 namespace AiRaccoon.Settings;
 
 /// <summary>
-///     Serves the control-plane settings resource (ADR-0077): the server is the only process that
+///     Serves the control-plane settings resource (ADR-0075): the server is the only process that
 ///     writes the bank, so the CLI reaches settings through here rather than opening it. Guarded by
 ///     <see cref="McpTokenGate" /> like every other route — it carries sync credentials and the
 ///     embedding API key.
