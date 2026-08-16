@@ -9,7 +9,7 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **129** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **133** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
@@ -56,7 +56,8 @@ One block per source file that owns a `Log` class or equivalent:
 | 636-639 | `src/AiRaccoon/Setup/Serve/ProxyForwarder.cs` (ADR-0020) |
 | 640 | `src/AiRaccoon/Observability/OtlpExport.cs` (ADR-0009; OTLP export disabled warning) |
 | 650-656 | `src/AiRaccoon/Hosting/Node/ServerRestart.cs` (ADR-0022; 656 is the unanswered probe, ADR-0043) |
-| 660 | `src/AiRaccoon/Setup/Serve/ShutdownEndpoint.cs` (ADR-0022) |
+| 660 | `src/AiRaccoon/Hosting/Node/ShutdownEndpoint.cs` (ADR-0022) |
+| 670-673 | `src/AiRaccoon/Settings/SettingsEndpoint.cs` (ADR-0077: the control-plane settings resource; 672/673 log the key only, never the value — sync credentials and the embedding API key go through here) |
 | 700, 702-704, 707-709 | `src/AiRaccoon.Infrastructure/Promotion/PromotionQueueService.cs` (701/705/706 removed 2026-08-11: per-element eviction/failure logs de-noised; 708 = prune summary; 709 added 2026-08-14 = stale promotion claims reclaimed, ADR-0037) |
 | 800-807 | `src/AiRaccoon/Setup/Cli/Commands/EncryptionCommands.cs` |
 | 900 | `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs` |

@@ -14,8 +14,11 @@ namespace AiRaccoon.Tests.Integration.Setup;
 ///     The scenarios run in order against one data root: several read back what an earlier one
 ///     wrote, which is what makes this a contract rather than a set of independent smoke tests.
 ///     <para />
-///     Two rows are still missing and belong to WP7's transport: server-refused and
-///     server-unreachable. Neither can be recorded yet — no settings command talks to a server.
+///     Two rows are owed and cannot be recorded yet, because no settings command talks to a
+///     server. <see cref="OwedWhenTheTransportIsWired" /> names them, so they are visibly pending
+///     rather than quietly absent; the transport half of each is already pinned by
+///     <c>ServerSettingsStoreTests</c>, so what is missing is only the exit code and message a
+///     script sees.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -27,6 +30,14 @@ public sealed class CliContractTests : IDisposable
 
     /// <summary>One recorded scenario. Empty expected output means the stream must be empty.</summary>
     private sealed record Scenario(string[] Argv, int Exit, string Stdout, string Stderr);
+
+    /// <summary>
+    ///     The scenarios this table still owes. Each needs a settings command that goes through the
+    ///     server, so neither can be recorded until the CLI composition root is wired; both must be
+    ///     added — with a distinct exit code — before WP7 is done.
+    /// </summary>
+    public static readonly string[] OwedWhenTheTransportIsWired =
+        ["a settings command whose server refuses the token", "a settings command with no server reachable"];
 
     private static readonly Scenario[] Recorded =
     [
