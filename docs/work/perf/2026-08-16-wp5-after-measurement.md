@@ -11,6 +11,17 @@ exactly where the before doc specified one: the same counting-decorator techniqu
 `ISqliteConnectionFactory`/`ISettingsStore`, no `dotnet-trace`; the same real out-of-process
 Release server for wall-clock; the same 193 MB backup bank, copied, never written to.
 
+**Scope note, added 2026-08-16 (later the same day) — this report does not describe the shipped
+1.21.0 product.** Every number below is `c2fd31f0` only: WP1-WP7, merged, *before* ADR-0076 (the
+model-migration outbox and its `ToolGate` lock, commits `e2fc23ee`..`23281944`) landed on top of it.
+ADR-0076 added a check before every MCP tool call that this report never measured, because it did
+not exist yet on the tree this report was taken from. As released in 1.21.0, before a follow-up fix:
+**4 bank opens / operation write (not 3), 5 search (not 4); 20 statements / operation write steady
+state (not 12), 24 search (not 16)** — and 17/21 after the fix. See
+`docs/adr/0076-model-set-is-an-outbox-drained-by-an-on-demand-relay.md` §"Amendment 2026-08-16 —
+ToolGate's migration check cost" for the derivation and the currently correct numbers. Treat every
+table below as "WP1-WP7 only", not as the current product.
+
 ## Headline
 
 | metric | before | after | delta |

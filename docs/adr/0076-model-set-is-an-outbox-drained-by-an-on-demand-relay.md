@@ -229,12 +229,72 @@ method still does exactly what its name says — reads the checkpoint interval �
 would have been misnamed only under the design this task rejected (repurposing the same timer/method
 to also govern the on-demand poll). The new poll loop reads its own constant, not this method.
 
-**Correction: `finished_at` recorded the wrong duration until 1.21.1.** `DrainMigrationAsync` took its
-`now` as a parameter captured by the caller before the drain loop ran, then stamped `finished_at` with
-that stale value — so `finished_at - started_at` measured "time to enter the method", not "time to
-drain the bank". Invisible at small scale (a 200-entry bank drains in ~13s, so a 6s stamp did not look
-wrong); a real 25,917-entry bank exposed it: 357s real wall-clock drain recorded as 6s, a ~60x
-understatement. `started_at` was unaffected — it is captured immediately before the short outbox
-transaction that writes it, not before a long-running loop. Fixed by giving `EntryEmbedder` its own
-`TimeProvider` and reading `finished_at` from it after the drain loop completes, not from a
-caller-supplied value.
+## Amendment 2026-08-16 — ToolGate's migration check cost
+
+A suspected regression, checked rather than assumed: ADR-0075's own "after" baseline (WP5, 3.5 bank
+opens / 12-16 statements per operation steady state) was measured at `c2fd31f0` — before this ADR's
+commits (`e2fc23ee`..`23281944`) landed on top of it. It never included `ToolGate.RequireAsync`'s
+migration check, which runs before every MCP tool call. Reading the code confirmed why it would cost
+real money: `IModelMigrationStore.HasOpenModelMigrationAsync` opened a second, full bank connection
+(`SqliteConnectionFactory.OpenBankAsync`, paying `MemorySchema.EnsureAsync`'s whole digest-matches
+path — 3 connection pragmas + 4 EnsureAsync statements) on top of its own 1-statement query, every
+single call.
+
+**Measured, steady state (digest already matches — every install past its first open):**
+
+| | before ADR-0076 (WP5's baseline) | ADR-0076 as shipped (1.21.0) | after this amendment |
+|---|---|---|---|
+| bank opens / operation | 3 write, 4 search | **4 write, 5 search** (+33%/+25%) | 4 write, 5 search (unchanged) |
+| migration check's own statement cost | n/a | **8** (3 pragmas + 4 EnsureAsync + 1 query) | **5** (3 pragmas + 1 digest read + 1 query) |
+| statement volume / operation, steady state | 12 write, 16 search | **20 write, 24 search** (+67%/+50%) | **17 write, 21 search** (+42%/+31%) |
+
+The migration check's own statement cost is traced statement-for-statement against a real connection
+handle (`ModelMigrationCheckStatementCountTests`, the same `sqlite3_trace` technique
+`MemorySchemaDdlStatementCountTests` already uses), watched red (asserting the post-fix cost) against
+the pre-fix code before the fix landed. The opens/volume rows combine that exact number with WP5's own
+measured opens-per-operation arithmetically — the same way WP5's own report derived its statement
+volume (opens × per-open cost), because the factory's own connection pragmas run before an external
+trace can attach to the connection it returns.
+
+**The fix: `MemorySchema.EnsureCheapAsync`.** `HasOpenModelMigrationAsync` now opens via a new
+`OpenBankSkippingEnsureAsync` (same key resolution and pragmas; skips `EnsureAsync`'s DDL/version
+dance) and calls `EnsureCheapAsync` on the returned connection: one `PRAGMA application_id` read,
+falling back to the full `EnsureAsync` only when the digest does not match — the same rare,
+self-healing path every other bank open already takes. A digest match proves `model_migration`
+already exists, because its `CREATE TABLE` lives in the same digest-gated `Ddl` block ADR-0075
+already gates on this exact check. No new risk: a digest match/mismatch is the identical signal
+`EnsureAsync` itself already trusts (ADR-0075 §"the digest-matches-object-missing gap"), read one
+call earlier for a check that does not need the rest of `EnsureAsync`'s work.
+
+**What this does not fix, and why.** Opens/operation stays +1 (write 3→4, search 4→5): the check
+still opens a connection separate from whatever the guarded tool operation opens next. Eliminating
+that would mean sharing one connection between `ToolGate.RequireAsync` and the ~30 `RequireAsync` call
+sites across every guarded tool class (`MemoryTools`, `SweepTools`, `WatchTools`, `PerformanceTools`,
+`ShareTools`, `PromotionTools`, `QualityTools`, `SyncTools`, `WorkspaceTools` — nine today, not the
+seven this ADR's own "one choke point" line above counted; that number has drifted and is corrected
+here rather than silently) and every store method underneath them — a connection-threading refactor
+disproportionate to a patch release, not attempted here.
+
+**Correctness is unweakened.** The check still reads live `model_migration` state on every call — no
+caching, no staleness, identical to the pre-amendment guarantee: a migration open in this or any other
+process is visible to the very next check, not eventually. `ModelMigrationCrashRecoveryE2ETests` and
+`ToolGateTests` are unchanged and still green.
+
+**Rejected: an in-process cached flag.** ADR-0020 keeps `--transport stdio` as "the escape hatch" — a
+complete, independently-composed second server process against the same bank, tested
+(`ServeRunnerTests`), reachable by anyone whose client config names it — not a theoretical concern. A
+migration started by that process's own `model set` would be invisible to a cached flag in this one:
+a stale `false` would serve a search or write against a half-migrated bank, precisely the failure this
+ADR exists to prevent. No staleness window, bounded or not, was judged acceptable without the owner's
+explicit sign-off, so this amendment introduces none.
+
+## Correction 2026-08-16 — `finished_at` recorded the wrong duration until 1.21.1
+
+`DrainMigrationAsync` took its `now` as a parameter captured by the caller before the drain loop ran,
+then stamped `finished_at` with that stale value — so `finished_at - started_at` measured "time to
+enter the method", not "time to drain the bank". Invisible at small scale (a 200-entry bank drains in
+~13s, so a 6s stamp did not look wrong); a real 25,917-entry bank exposed it: 357s real wall-clock
+drain recorded as 6s, a ~60x understatement. `started_at` was unaffected — it is captured immediately
+before the short outbox transaction that writes it, not before a long-running loop. Fixed by giving
+`EntryEmbedder` its own `TimeProvider` and reading `finished_at` from it after the drain loop
+completes, not from a caller-supplied value.
