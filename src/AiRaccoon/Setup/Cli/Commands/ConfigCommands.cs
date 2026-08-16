@@ -58,7 +58,7 @@ internal sealed class ConfigCommands(
                 ["settings", "noise", "enable"] => await settings.NoiseEnabledSetAsync(true, store, streams, ctx),
                 ["settings", "noise", "disable"] => await settings.NoiseEnabledSetAsync(false, store, streams, ctx),
                 ["settings", "noise", "show"] => await settings.NoiseShowAsync(store, streams, ctx),
-                ["settings", "noise", "entries"] => await noiseEntries.SummarizeAsync(streams, ctx),
+                ["noise", "entries"] => await noiseEntries.SummarizeAsync(streams, ctx),
                 ["settings", "queryguard", "enable"] => await settings.QueryGuardEnabledSetAsync(true, store, streams, ctx),
                 ["settings", "queryguard", "disable"] => await settings.QueryGuardEnabledSetAsync(false, store, streams, ctx),
                 ["settings", "queryguard", "shadow", "enable"] => await settings.QueryGuardShadowSetAsync(true, store, streams, ctx),

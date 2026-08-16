@@ -59,7 +59,7 @@ public sealed class CliBankWriteTests : IAsyncLifetime
             }
         }
 
-        data.Add("settings noise entries", ["settings", "noise", "entries"]);
+        data.Add("noise entries", ["noise", "entries"]);
         data.Add("watch registered", ["watch", "registered"]);
         data.Add("extract prune", ["extract", "prune"]);
         return data;
