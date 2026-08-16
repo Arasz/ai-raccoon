@@ -703,6 +703,19 @@ cross-process detection, which ADR-0020 shows is not theoretical); leaving `Ensu
 zero-digest hazard, the alternating-binary re-run, and the loss of `application_id` as a magic
 number.
 
+> **What actually shipped, recorded 2026-08-16.** All three planned ADRs landed as **one**:
+> `docs/adr/0075-only-the-server-writes-to-the-bank.md`, status Accepted. The numbering below was
+> written before it existed, and the source once cited a non-existent `ADR-0077` — repointed to
+> 0075 in `SettingsEndpoint.cs`, `SettingsProtocol.cs`, `ServerSettingsStore.cs` and
+> `docs/reference/logging-event-ids.md` after a checklist run caught it.
+>
+> **The argument for splitting them is preserved below and is still good** — *"the CLI shape is
+> defensible on its own and should not be re-litigated whenever the transport is."* It was not
+> acted on because the two were decided in the same conversation, implemented in the same lane and
+> ratified together, so a split would have recorded a separation that never happened. If the CLI
+> shape ever needs defending independently, lift the `Decision` section's second and third
+> paragraphs out of 0075 into their own ADR — that is the seam.
+
 **ADR-0076: `settings <subsystem>`, and a family splits only when it already has both kinds of
 verb.** The CLI break, the deleted `watch scope` alias, the `watch`/`extract`/`model` splits, the
 decision *not* to create a top-level `ingest`, and the 1.20.0 metrics-family defect as motivation.
