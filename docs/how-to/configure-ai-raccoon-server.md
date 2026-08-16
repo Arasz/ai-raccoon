@@ -156,11 +156,22 @@ because it is visible:
    embedded row pending — so the old vectors leave the search index the moment it commits.
 2. The command returns. There is no progress output; re-embedding happens in the background.
 3. **While a migration is open, every tool call is refused** with `model-migration-in-progress`.
+   **Budget for this: it is minutes, not seconds, on a real bank.** Measured on a 25,917-entry
+   bank, the re-embed took **~6 minutes**, and the bank refused every read and write for all of it.
+   Plan a model change like a maintenance window rather than a settings tweak.
    That is deliberate: the alternative is serving searches against a half-migrated bank.
 4. A relay finishes the re-embed and marks the record complete. Only then does the bank serve again.
 
 **If the server dies mid-migration, the next one finishes it** — the record survives the crash and
-the startup pass picks it up. You do not need to re-run `model set`.
+the startup pass picks it up. You do not need to re-run `model set`. Verified on a real bank: a
+`kill -9` at 12,288 of 25,917 rows recovered on restart and finished exactly the remainder, with no
+duplicates and nothing lost.
+
+One thing that will not do what you expect: **`model set` with the engine you are already on does
+nothing.** It reports success, but there is no migration, no re-embed and no refusal window —
+correctly, since nothing has been made stale. The same is true of the first-ever `model set` on a
+bank that never had an engine. If you are trying to force a re-embed, changing the engine to an
+identical model by a different path is what actually triggers one.
 
 The reason the old vectors are dropped at commit rather than replaced one by one: a bank holding
 half one model's vectors and half another's returns quietly worse results with no error anywhere.
