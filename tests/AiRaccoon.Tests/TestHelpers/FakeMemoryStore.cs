@@ -5,6 +5,10 @@ namespace AiRaccoon.Tests.TestHelpers;
 /// <summary>
 ///     Base fake for <see cref="IMemoryStore" />: every member throws until a test overrides it, so a
 ///     fake declares only the members its subject calls. Holds no state — behaviour belongs in the override.
+///     <see cref="GetSettingsByPrefixAsync" /> is the one exception: it defaults to an empty dictionary
+///     instead of throwing, so a subject that batches settings reads does not force every fake that only
+///     cares about <see cref="GetSettingAsync" />/<see cref="SetSettingAsync" /> to also override it. A
+///     fake that needs the batched read to see seeded settings must still override it itself.
 /// </summary>
 /// <remarks>
 ///     <see cref="IMemoryStore.DeleteInScopeAsync" /> is declared here and forwards to
@@ -111,7 +115,7 @@ public class FakeMemoryStore : IMemoryStore, ISettingsStore
 
     public virtual Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
         CancellationToken cancellationToken = default) =>
-        throw NotOverridden(nameof(GetSettingsByPrefixAsync));
+        Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>(StringComparer.Ordinal));
 
     public virtual Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) =>
         throw NotOverridden(nameof(DeleteSettingAsync));
