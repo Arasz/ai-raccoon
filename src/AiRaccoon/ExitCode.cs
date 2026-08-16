@@ -44,5 +44,11 @@ public static class ExitCode
     /// <summary>A CLI verb's own argument failed validation (bad enum value, out-of-range number, missing prompt input, etc.) — distinct from the specific failure codes above so a script can tell "you mistyped" from "the bank/server is broken". Was 10 until #286 claimed 10-14 for restart reasons.</summary>
     public const int InvalidArgument = 15;
 
+    /// <summary>A settings command (ADR-0075 §5.3) reached a server that refused the loopback token — it serves another data root.</summary>
+    public const int SettingsServerRefused = 17;
+
+    /// <summary>A settings command could neither reach nor auto-start a settings server within the acquire budget.</summary>
+    public const int SettingsServerUnavailable = 18;
+
     public const int Success = 0;
 }
