@@ -210,14 +210,37 @@ public sealed class PromotionQueueDiscardTests : IDisposable
                 "a discarded candidate must not return through the replace round-trip");
     }
 
-    /// <summary>The table is additive DDL in the unconditional Ddl (docs/adr/0026): dropping it
-    /// must be healed by the next bank open, not require a schema-version ladder step.</summary>
+    /// <summary>
+    ///     ADR-0026's requirement — the table reaches existing banks with no schema-version bump —
+    ///     survives ADR-0075: adding it changes <c>Ddl</c>, which changes the digest, which forces the
+    ///     rerun. What no longer heals is a digest-matched bank missing the table, which is manual
+    ///     surgery or corruption, not a version skew. Both halves are asserted so the narrowing is a
+    ///     recorded decision rather than a silent regression.
+    /// </summary>
     [Fact]
-    public async Task FreshBank_RecreatesPromotionDiscardsAfterDrop()
+    public async Task PromotionDiscards_HealsOnADigestSkewedBank_ButNotOnADigestMatchedOne()
     {
         await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
         {
             await connection.ExecuteAsync(new CommandDefinition("DROP TABLE IF EXISTS promotion_discards",
+                cancellationToken: TestContext.Current.CancellationToken));
+        }
+
+        // Digest still matches, so Ddl is skipped and the table stays missing. This is the property
+        // ADR-0075 trades away for a 39-statement-to-4 fast path on every bank open.
+        await using (var stillMissing = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            (await stillMissing.ExecuteScalarAsync<long>(new CommandDefinition(
+                    "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'promotion_discards'",
+                    cancellationToken: TestContext.Current.CancellationToken)))
+                .ShouldBe(0, "a digest-matched bank skips Ddl — see ADR-0075");
+        }
+
+        // Any real delivery path — a build whose Ddl gained the table, or a pre-digest bank — reads a
+        // different application_id, and the heal ADR-0026 depends on still happens.
+        await using (var skewed = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await skewed.ExecuteAsync(new CommandDefinition("PRAGMA application_id = 0",
                 cancellationToken: TestContext.Current.CancellationToken));
         }
 

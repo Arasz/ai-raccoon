@@ -99,6 +99,22 @@ the gate asserts.
 - `EncryptionCommands.cs` currently owns `EventId` 800-807 (`docs/reference/logging-event-ids.md`).
   If WP9 moves that logic server-side, the allocations move with it and that table must move too — it
   is a measurement, not a hand-maintained list, so regenerate rather than hand-edit.
+- **The digest gate narrows ADR-0026, and this is the one consequence that needs the owner's
+  ratification.** ADR-0026 put `promotion_discards` in "the unconditional `MemorySchema.Ddl`" so it
+  would reach every existing bank with no schema-version bump — same precedent as `watches` /
+  `watch_files`. **That requirement survives**: adding a table changes the `Ddl` string, which changes
+  the digest, which forces the rerun, so delivery to existing banks is unaffected. What is lost is
+  narrower and was never stated as a requirement — it was a free side effect of running `Ddl` every
+  time: a bank whose digest **matches** but is missing an object no longer self-heals on open. That is
+  manual surgery or corruption, not version skew. `PromotionQueueDiscardTests` now asserts **both**
+  halves so the narrowing is a recorded decision rather than a silent regression. Restoring the old
+  property would cost a per-open existence probe — precisely the cost this ADR exists to remove.
+
+- **Found only on the merged tree.** Each lane was green alone; the digest gate's interaction with two
+  `Speed=Slow` schema tests appeared only after WP1 and WP6/WP7 were merged together, because the lane
+  that wrote them ran `Slow` on a branch that predated WP1. Integration gates re-run on the merged
+  result for exactly this reason.
+
 - **Open, and deliberately not decided here:** whether `sync` moves now or after the route-table guard
   is green. `sync` over HTTPS would solve the secret-passing problem, and accepting sync only via
   existing credentials would mean no secret is passed at all — but that is a separate decision from
