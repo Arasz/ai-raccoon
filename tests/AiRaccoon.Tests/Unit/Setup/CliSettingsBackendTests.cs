@@ -1,0 +1,115 @@
+using AiRaccoon.Hosting.Common;
+using AiRaccoon.Hosting.Proxy;
+using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Settings;
+using AiRaccoon.Setup;
+using AiRaccoon.Tests.TestHelpers;
+using Shouldly;
+using Xunit;
+
+namespace AiRaccoon.Tests.Unit.Setup;
+
+/// <summary>
+///     WP7 §5.1: the CLI's half of "auto-start reuses BackendLauncher as-is". Exercised against a
+///     fake <see cref="IBackendLauncher" /> so the acquire/token/wrap logic is pinned without a real
+///     process spawn — the real spawn is covered end to end by
+///     <see cref="AiRaccoon.Tests.Integration.Setup.ServerSettingsStoreTests" /> and the CLI-contract
+///     suites.
+/// </summary>
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
+public sealed class CliSettingsBackendTests
+{
+    private static ServerConfig Config(int port, string dataRoot) =>
+        new(port, McpTransport.Http, new InfrastructureOptions { DataRoot = dataRoot, Scope = InstallScope.User });
+
+    [Fact]
+    public async Task AcquireAsync_WhenTheLauncherFindsAUrlAndTheTokenFileMatches_ReturnsAWorkingStore()
+    {
+        var dataRoot = TestData.CreateTempRoot("cli-settings-backend-ok");
+        try
+        {
+            await new McpTokenFile(dataRoot).EnsureAsync(TestContext.Current.CancellationToken);
+            var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:1/mcp", null));
+
+            var store = await CliSettingsBackend.AcquireAsync(launcher, Config(1, dataRoot),
+                TestContext.Current.CancellationToken);
+
+            store.ShouldBeOfType<ServerSettingsStore>();
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(dataRoot);
+        }
+    }
+
+    [Fact]
+    public async Task AcquireAsync_WhenThePortIsOutOfRange_ThrowsUnavailable_WithoutCallingTheLauncher()
+    {
+        var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:0/mcp", null));
+
+        var error = await Should.ThrowAsync<SettingsServerUnavailableException>(() =>
+            CliSettingsBackend.AcquireAsync(launcher, Config(0, "/tmp/unused"), TestContext.Current.CancellationToken));
+
+        error.Message.ShouldContain("--port 0");
+        launcher.Calls.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task AcquireAsync_WhenTheLauncherFindsNoUrl_ThrowsUnavailable_NamingThePort()
+    {
+        var launcher = new FakeBackendLauncher(new BackendResult(null, 3));
+
+        var error = await Should.ThrowAsync<SettingsServerUnavailableException>(() =>
+            CliSettingsBackend.AcquireAsync(launcher, Config(54217, "/tmp/unused"), TestContext.Current.CancellationToken));
+
+        error.Message.ShouldContain("54217");
+    }
+
+    [Fact]
+    public async Task AcquireAsync_WhenTheLauncherThrowsBackendStart_WrapsAsUnavailable()
+    {
+        var launcher = new FakeBackendLauncher(new BackendStartException("could not start it", new InvalidOperationException()));
+
+        var error = await Should.ThrowAsync<SettingsServerUnavailableException>(() =>
+            CliSettingsBackend.AcquireAsync(launcher, Config(54218, "/tmp/unused"), TestContext.Current.CancellationToken));
+
+        error.Message.ShouldContain("could not start it");
+    }
+
+    [Fact]
+    public async Task AcquireAsync_WhenTheDataRootHoldsNoToken_ThrowsUnavailable_NamingTheTokenPath()
+    {
+        var dataRoot = TestData.CreateTempRoot("cli-settings-backend-no-token");
+        try
+        {
+            var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:1/mcp", null));
+
+            var error = await Should.ThrowAsync<SettingsServerUnavailableException>(() =>
+                CliSettingsBackend.AcquireAsync(launcher, Config(1, dataRoot), TestContext.Current.CancellationToken));
+
+            error.Message.ShouldContain(McpTokenFile.FileName);
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(dataRoot);
+        }
+    }
+
+    private sealed class FakeBackendLauncher : IBackendLauncher
+    {
+        private readonly Exception? _throws;
+        private readonly BackendResult _result;
+
+        public FakeBackendLauncher(BackendResult result) => _result = result;
+        public FakeBackendLauncher(Exception throws) => _throws = throws;
+
+        public int Calls { get; private set; }
+
+        public Task<BackendResult> AcquireAsync(int port, string fileName, IReadOnlyList<string> arguments, CancellationToken ctx)
+        {
+            Calls++;
+            return _throws is null ? Task.FromResult(_result) : Task.FromException<BackendResult>(_throws);
+        }
+    }
+}

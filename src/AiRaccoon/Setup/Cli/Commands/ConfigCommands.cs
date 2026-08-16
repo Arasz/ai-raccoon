@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Settings;
 
 namespace AiRaccoon.Setup.Cli.Commands;
 
@@ -103,6 +104,19 @@ internal sealed class ConfigCommands(
                 ["serve"] => await serve.StartNode(cliInput, streams, ctx),
                 _ => throw new InvalidOperationException($"unhandled command: {string.Join(' ', commandPath)}")
             };
+        }
+        catch (SettingsServerRefusedException ex)
+        {
+            // The exception message already carries the "ai-raccoon: " prefix (ServerSettingsStore),
+            // so it goes to stderr unreformatted rather than through CliFailureFormatting, which
+            // would double it.
+            await streams.WriteErrorLineAsync(ex.Message);
+            return ExitCode.SettingsServerRefused;
+        }
+        catch (SettingsServerUnavailableException ex)
+        {
+            await streams.WriteErrorLineAsync(ex.Message);
+            return ExitCode.SettingsServerUnavailable;
         }
         catch (Exception ex)
         {

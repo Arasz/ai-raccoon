@@ -7,7 +7,7 @@ using CommunityToolkit.Diagnostics;
 namespace AiRaccoon.Settings;
 
 /// <summary>The settings server could not be reached; nothing was read or written.</summary>
-internal sealed class SettingsServerUnavailableException(string message, Exception inner) : Exception(message, inner);
+internal sealed class SettingsServerUnavailableException(string message, Exception? inner = null) : Exception(message, inner);
 
 /// <summary>The settings server answered but refused the credential.</summary>
 internal sealed class SettingsServerRefusedException(string message) : Exception(message);

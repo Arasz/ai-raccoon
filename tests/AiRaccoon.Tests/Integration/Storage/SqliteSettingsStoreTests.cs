@@ -1,3 +1,4 @@
+using System.Globalization;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Infrastructure.Options;
@@ -21,10 +22,12 @@ namespace AiRaccoon.Tests.Integration.Storage;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
-public sealed class SqliteSettingsStoreTests : IDisposable
+public sealed class SqliteSettingsStoreTests : IAsyncLifetime
 {
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-settings-store");
     private readonly SqliteConnectionFactory _factory;
+    private readonly LoopbackPort _portLease;
+    private readonly int _port;
 
     /// <summary>
     ///     The one store instance every test in this class reads and writes through — standing in for
@@ -42,9 +45,20 @@ public sealed class SqliteSettingsStoreTests : IDisposable
         var options = TestData.CreateInfrastructureOptions(_dataRoot);
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _store = new SqliteSettingsStore(_factory);
+        _portLease = LoopbackPort.Reserve();
+        _port = _portLease.Port;
+        _portLease.ReleaseForBind();
     }
 
-    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
+    public ValueTask InitializeAsync() => ValueTask.CompletedTask;
+
+    public async ValueTask DisposeAsync()
+    {
+        // The writer process (ADR-0075 §5.3) auto-starts a server for this data root/port; ask it
+        // to stop rather than leave it running for its multi-hour default idle timeout.
+        await RaccoonBackendCleanup.ShutdownIfRunningAsync(_dataRoot, _port, CancellationToken.None);
+        TestData.DeleteTempRoot(_dataRoot);
+    }
 
     // ---- Ordinary contract: characterisation tests, green from the start by design ----
 
@@ -204,8 +218,11 @@ public sealed class SqliteSettingsStoreTests : IDisposable
     ///     catching the regression it exists to catch, not just a check that has only ever passed.
     ///     <para />
     ///     The write is a genuine second OS process: the built <c>ai-raccoon</c> binary run via
-    ///     <see cref="RaccoonProcess" />, invoking the real <c>settings queryguard disable</c> CLI verb, which
-    ///     opens the same bank file through its own fresh DI graph and its own connection pool — not a
+    ///     <see cref="RaccoonProcess" />, invoking the real <c>settings queryguard disable</c> CLI verb.
+    ///     Under write-exclusivity (ADR-0075/ADR-0077, WP7) the CLI process itself opens no bank
+    ///     connection for this verb — it delegates the write over HTTP to the server, and it is the
+    ///     server's own fresh DI graph and connection pool that opens the bank file. Reader and writer
+    ///     are still distinct OS processes either way, which is the property this test needs: not a
     ///     second <see cref="SqliteConnectionFactory" /> constructed in this test process. The read
     ///     before and the read after both go through <see cref="_store" />, the one instance this whole
     ///     test class holds, standing in for the DI singleton (see its field remarks).
@@ -225,7 +242,7 @@ public sealed class SqliteSettingsStoreTests : IDisposable
             .ShouldBeNull();
 
         var run = await RaccoonProcess.RunAsync(
-            ["--data-root", _dataRoot, "settings", "queryguard", "disable"],
+            ["--data-root", _dataRoot, "--port", _port.ToString(CultureInfo.InvariantCulture), "settings", "queryguard", "disable"],
             TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
         run.ExitCode.ShouldBe(0, $"the writer process must exit cleanly; stderr: {run.Stderr}");
 
@@ -259,7 +276,7 @@ public sealed class SqliteSettingsStoreTests : IDisposable
             .ShouldBeNull(); // populates the decorator's cache with "absent"
 
         var run = await RaccoonProcess.RunAsync(
-            ["--data-root", _dataRoot, "settings", "queryguard", "disable"],
+            ["--data-root", _dataRoot, "--port", _port.ToString(CultureInfo.InvariantCulture), "settings", "queryguard", "disable"],
             TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
         run.ExitCode.ShouldBe(0, $"the writer process must exit cleanly; stderr: {run.Stderr}");
 
