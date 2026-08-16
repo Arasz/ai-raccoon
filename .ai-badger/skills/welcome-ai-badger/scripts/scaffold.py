@@ -269,6 +269,9 @@ class Scaffolder:
         wanted = bl.expand_skill_groups(self.included["skills"])
         asked_for = [n for n in sorted(wanted) if n in self.addable_skills]
         offered = list(dict.fromkeys(list(skills) + asked_for))
+        # Whether the delivered list is evidence of what the project wants: empty means
+        # "unchanged" (#129), which discover_stack_local hides. See adjust_skills.may_prune.
+        self.prune_discovery = bool(skills)
         index = bl.read_index(root)
         self.generated_config = GeneratedConfigRecords(target, index["frameworkVersion"])
         self.ctx = ScaffoldContext(
@@ -616,11 +619,11 @@ class Scaffolder:
                     spec.loader.exec_module(mod)
 
                     # Filter the *delivered* skills to those this agent's stacks own — by
-                    # directory membership, not by scope. `skills_for_stack` answers "what
-                    # ships by default", which silently dropped every `optIn` skill the project
-                    # asked for: delivered to .ai-badger/skills/ and linked nowhere the agent
-                    # looks, with the run still reporting success (#261).
-                    agent_stacks = [s for s in self.stacks if s in ("common", agent_name)]
+                    # directory membership, not by scope, and over stacks derived from the
+                    # config rather than named in a literal. Both narrowings delivered skills
+                    # to .ai-badger/skills/ and linked them nowhere the agent looks, with the
+                    # run still reporting success (#261).
+                    agent_stacks = bl.discovery_stacks_for_agent(self.config, agent_name)
                     agent_skills = [s for s in self.skills
                                     if any(s in bl.catalog_skills_for_stack(self.root, st)
                                            for st in agent_stacks)]
@@ -635,6 +638,7 @@ class Scaffolder:
                         # (~/.hermes/plugins) is never written when it is set.
                         "install": self.install,
                         "skills": agent_skills,
+                        "prune": self.prune_discovery,
                         "personas": [item for _stack, item in bl.applicable_feature_items(
                             self.index, self.config, "personas")],
                         "index": self.index,

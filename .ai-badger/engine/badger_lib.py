@@ -943,6 +943,18 @@ def delivering_stacks(config: Dict[str, Any]) -> List[str]:
             if not (s in seen or seen.add(s))]
 
 
+def discovery_stacks_for_agent(config: Dict[str, Any], agent: str) -> List[str]:
+    """Catalog stacks whose delivered skills belong in `agent`'s discovery directory.
+
+    Every stack the project draws from, minus the stacks that *are* the other agents: a
+    dotnet or ai-raccoon skill is this agent's to discover, a copilot skill is not. Naming
+    the qualifying stacks in a literal instead left every non-common stack's skills
+    delivered to `.ai-badger/skills/` and linked nowhere (#261 one stack over).
+    """
+    others = {a for a in config.get("agents", []) if a != agent}
+    return [s for s in delivering_stacks(config) if s not in others]
+
+
 def applicable_feature_items(index: Dict[str, Any], config: Dict[str, Any],
                              feature: str) -> List[Tuple[str, Dict[str, Any]]]:
     """(stack, item) pairs the resolved stacks deliver for `feature`, minus `config.exclude`.
