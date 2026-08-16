@@ -1,0 +1,36 @@
+<Project>
+
+    <!--
+        Stamps the commit timestamp the .NET SDK does not provide on its own (SourceRevisionId
+        already carries the commit sha into AssemblyInformationalVersionAttribute — see
+        docs/plans/2026-08-15-performance-metrics-implementation.md section 7 R2). Runs before
+        GetAssemblyAttributes so the AssemblyMetadata item it adds is picked up by the same
+        machinery that turns @(AssemblyMetadata) into [assembly: AssemblyMetadata(...)].
+
+        Never fails the build: no .git, no git binary, or a shallow/tagless checkout all leave
+        `git log` failing or unable to launch. IgnoreExitCode absorbs the former with zero
+        warnings; ContinueOnError absorbs the latter as a last-resort safety net. Either way the
+        CommitTimestamp attribute is simply not emitted — never an empty string, which would read
+        downstream as a real value (the unavailable-stamp contract; see AiRaccoon.Core.Observability.BuildStamp).
+    -->
+    <Target Name="ComputeGitCommitTimestamp" BeforeTargets="GetAssemblyAttributes">
+        <Exec Command="git log -1 --format=%25cI"
+              WorkingDirectory="$(MSBuildThisFileDirectory)"
+              ConsoleToMSBuild="true"
+              StandardOutputImportance="Low"
+              IgnoreExitCode="true"
+              ContinueOnError="WarnAndContinue">
+            <Output TaskParameter="ConsoleOutput" ItemName="_GitCommitTimestampLines" />
+            <Output TaskParameter="ExitCode" PropertyName="_GitCommitTimestampExitCode" />
+        </Exec>
+
+        <PropertyGroup>
+            <GitCommitTimestamp Condition="'$(_GitCommitTimestampExitCode)' == '0'">@(_GitCommitTimestampLines)</GitCommitTimestamp>
+        </PropertyGroup>
+
+        <ItemGroup Condition="'$(GitCommitTimestamp)' != ''">
+            <AssemblyMetadata Include="CommitTimestamp" Value="$(GitCommitTimestamp)" />
+        </ItemGroup>
+    </Target>
+
+</Project>
