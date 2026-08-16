@@ -39,6 +39,11 @@ internal sealed class FakeConfigStore : FakeMemoryStore
             EmbeddingService.EngineFingerprint(provider, model, baseUrl)));
     }
 
+    /// <summary>ADR-0076: model set now reaches this via IModelMigrationStore, not ConfigureEmbeddingAsync — same recording shape.</summary>
+    public override Task<EmbeddingConfig> StartModelMigrationAsync(string provider, string? model, string? baseUrl,
+        CancellationToken cancellationToken = default) =>
+        ConfigureEmbeddingAsync(provider, model, baseUrl, cancellationToken);
+
     public override Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
         Task.FromResult(Settings.TryGetValue(key, out var value) ? value : null);
 

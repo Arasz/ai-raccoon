@@ -63,21 +63,28 @@ public sealed class AppRunnerSettingsRoutingTests : IDisposable
         acquireCalls.ShouldBe(0);
     }
 
+    /// <summary>
+    ///     ADR-0076 moved with the rule: `model set` used to be the one command asserted to never
+    ///     call acquire (CliWriteOptOuts). Now it is routed exactly like every other settings
+    ///     command, so this is the mirror of ANonOptedOutCommand_UsesTheInjectedAcquireFunction, not
+    ///     a deletion of the old assertion.
+    /// </summary>
     [Fact]
-    public async Task AModelSetCommand_NeverCallsTheAcquireFunction()
+    public async Task AModelSetCommand_UsesTheInjectedAcquireFunction()
     {
         var acquireCalls = 0;
+        var fake = new InMemorySettings();
 
         var (exit, _) = await Run(
             (_, _, _) =>
             {
                 acquireCalls++;
-                return Task.FromResult<ISettingsStore>(new InMemorySettings());
+                return Task.FromResult<ISettingsStore>(fake);
             },
             ["--data-root", _dataRoot, "model", "set", "local"]);
 
         exit.ShouldBe(0);
-        acquireCalls.ShouldBe(0);
+        acquireCalls.ShouldBe(1);
     }
 
     /// <summary>A failed acquire surfaces as the command's own failure, not a crash.</summary>

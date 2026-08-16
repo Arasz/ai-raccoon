@@ -17,7 +17,8 @@ namespace AiRaccoon.Tests.Unit.Setup;
 public class ConfigCommandsAccessModelTests
 {
     private static Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store) =>
-        CliRun.RunAsync(args, TestData.CreateConfigCommands(store, settings: new SettingsCommands()));
+        CliRun.RunAsync(args,
+            TestData.CreateConfigCommands(store, settings: new SettingsCommands(), modelMigrations: store));
 
 
     [Fact]
