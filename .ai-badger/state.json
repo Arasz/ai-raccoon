@@ -1,8 +1,16 @@
 {
-  "lastUpdated": "2026-08-15T23:10:00.000000+00:00",
+  "lastUpdated": "2026-08-16T10:40:00.000000+00:00",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "release-engineering",
+      "title": "Release engineering: VERSION single-sourcing, build stamping, tag automation",
+      "pr": 350,
+      "merged": null,
+      "outcome": "VERSION at the repo root is the single source of truth, read by Directory.Build.props; the build stamps the commit timestamp and the SDK already stamps the sha; a release workflow tags main and cuts a GitHub release when VERSION changes.",
+      "notes": "Measurement cut R2 roughly in half: a --depth 1 --no-tags clone (what publish.yml does) still emits InformationalVersion 'x.y.z+<sha>' with no SourceLink and no config, so the planned GITHUB_SHA -> SourceRevisionId target was unnecessary; and git log -1 --format=%cI works at depth 1, so the handoff's 'add fetch-depth: 0 to publish.yml' trap does not apply to the timestamp (only git describe --tags needs tags, and nothing uses it). R3 verified against the live ruleset that the required checks are exactly build-fast/build-bdd/build-slow, and that non_fast_forward protects the branch but NOT tags, so the tag-exists check is the only thing preventing a moved tag. Left ready for review, not merged: the admin grant covered PR 327 only."
+    },
     {
       "id": "perf-metrics",
       "title": "Performance metrics: phase one (self-instrumentation), 1.20.0",
@@ -125,7 +133,7 @@
       "summary": "Live test of the 7721 serve + hermes bridge against the real bank. 23/23 tools exercised on an isolated test project with zero residue verified; watch cycle proven end-to-end; metrics = memory_stats + queue meta + maintenance-stats (OTLP export off, /metrics 404). DB: 13,523 entries all embedded, 0 TTLs, 8 stale Active workspaces. Promotion queue: 998 bank-wide vs reserved ~200, borrowing, shared tier = 1 row, extraction propose-only. BUG (code+experiment): DeleteBySourcePath matches source_file not path, so the watch digest deletes manual memory_write rows citing a watched file (2/2 collateral victims in the test). Full report: docs/work/2026-08-09-ai-raccoon-mem-test.md."
     }
   ],
-  "next": "Release engineering, split out of perf-metrics and ready to start: a VERSION file as the single source of truth read by MSBuild (six copies of the version live across three files today), build stamping for commit sha + commit timestamp (nothing sets SourceRevisionId; the checkpoint triple cannot be recorded without it), and tag/GitHub-release automation triggered on VERSION changing on main. Handoff is section 6 of docs/plans/2026-08-15-performance-metrics-implementation.md. Also open: the six deferred metrics items (adaptive flush aim, bounded-channel drop machinery, checkpoint rollups, the CLI verb, whole-bank scope, Reqnroll bindings), and PromotionTools.List's ungated whole-queue read.",
+  "next": "Owner review and merge of PR #350 (release engineering). Then, from the perf-metrics deferrals: the adaptive flush aim, the bounded-channel drop machinery, checkpoint rollups (the first real consumer of IBuildStamp, which R2 has now supplied), the `ai-raccoon performance` CLI verb, whole-bank report scope, and the Reqnroll step bindings. Also open: PromotionTools.List's ungated whole-queue read, and ~20 stale auto-wm project entries in ~/.claude/awm/state.json.",
   "filedNotStarted": [],
   "research": [],
   "stillTrue": [
