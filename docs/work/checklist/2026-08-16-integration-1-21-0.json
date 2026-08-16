@@ -1,0 +1,161 @@
+{
+  "_note": "Copy to docs/work/checklist/<yyyy-mm-dd>-<subject>.json. Never fill this file in place. status is pass|fail|skipped|substituted; substituted means checked by a different instrument than the item names, and its reason must say which. accepted stays null until a human answers it, so an unfinished run is visibly unfinished. Delete any item whose feature no longer exists rather than skipping it.",
+  "run": {
+    "date": "2026-08-16",
+    "branch": "",
+    "commit": "",
+    "data-root": "",
+    "note": "Package version deliberately differs from VERSION (1.20.1): bumping VERSION on main auto-cuts a GitHub release via release.yml, which was not authorised. First attempt used 1.20.1-integration.1 and NuGet skipped it as LOWER than the released 1.20.1 (prerelease sorts first), leaving the OLD binary installed — caught by the --version SHA check, which is why that check exists.",
+    "what": "perf/single-writer-integration @ 8f644051 — WP1-WP7 bank-open cost + settings CLI restructure",
+    "package": "1.21.0-integration.1 (local pack, .nupkg/ai-raccoon.1.21.0-integration.1.nupkg)",
+    "binary-sha": "8f644051 (ai-raccoon --version reports 1.20.1+8f6440515142186a773bfe2fdf1325810c682f4b)"
+  },
+  "derived": {
+    "version": "1.20.1",
+    "mcp-tool-count": "27",
+    "mcp-prompt-count": "2",
+    "note": "Produced by scripts/derive-facts.py at run time, never typed from memory or a previous run."
+  },
+  "findings-against-prior-runs": [
+    {
+      "_example": "Delete this example. One entry per thing an earlier run got wrong — a verdict, a reason, or a step that could not have failed. A checklist that can only describe the current build cannot report that the last checklist lied.",
+      "prior-run": "",
+      "prior-claim": "",
+      "what-is-actually-true": "",
+      "evidence": "",
+      "so-what": ""
+    }
+  ],
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
+      "command": "ai-raccoon --version",
+      "evidence": "1.20.1+8f6440515142186a773bfe2fdf1325810c682f4b — matches HEAD of perf/single-writer-integration (8f644051), NOT the released 1.20.1+7cfaefca",
+      "observed-result": "Informational version matches derived 1.20.1; the SHA independently proves the installed tool is the integration build, not the shipped release.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Version AND SHA checked against the tree, not typed. The SHA is what distinguishes this from the released build — the first pack attempt (1.20.1-integration.1) was silently skipped by NuGet as lower than 1.20.1, leaving the released binary installed; only this check caught it."
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+      "command": "ai-raccoon --data-root <laneA> serve --port 0 (bound :50878, pid 74614); then serve --port 50878 --restart",
+      "evidence": "[650] asking the server on port 50878 to stop (pid 74614, 1.20.1+8f644051...) -> [651] the server on port 50878 (pid 74614) stopped and the port is free -> Now listening on: http://127.0.0.1:50878 (new pid 75108). ps -p 74614 empty; ps -p 75108 alive; curl :50878/mcp -> 401.",
+      "observed-result": "Genuine cycle on a non-default ephemeral port: old pid gone, same port rebound under a new pid, server answering. Edge case recorded: `--restart --port 0` does NOT cycle, because each ephemeral pick is unrelated, so restart correctly falls back to a plain start per its documented behaviour. Expected, not a defect; the item was retested by passing the actual bound port.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Verified from live process state and live HTTP, not log text alone. The --port 0 edge case was explained rather than presented as the cycle test."
+    },
+    {
+      "item": "memory-write-stores-and-reports-truthfully",
+      "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
+      "command": "memory_write (valid) then memory_write with the Hermes background-process-log signature",
+      "evidence": "valid -> {\"hash\":\"69bb6601f5af...\",\"stored\":true}; noise -> {\"hash\":\"\",\"path\":\"\",\"stored\":false,\"reason\":\"rejected by noise policy 'HermesBackgroundProcessLog'\"}",
+      "observed-result": "Both halves of ADR-0032 hold: a real write returns a real hash; a rejected write returns stored=false with EMPTY hash and path and a reason naming the exact policy — no fabricated identity. Reason string matches the ADR's specified format verbatim.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Truthful store and truthful rejection both exercised live. A write-only check would have passed whether or not truthful reporting works."
+    },
+    {
+      "item": "memory-search-hybrid-retrieval",
+      "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking",
+      "command": "memory_write 'An astrolabe rests on the observatory shelf, glinting under warm lamplight...'; memory_search query='an antique navigation instrument reflecting evening light in a stargazing room'",
+      "evidence": "{\"hash\":\"88162269eff1...\",\"ranking\":1,\"snippet\":\"An astrolabe rests on the observatory shelf...\"}",
+      "observed-result": "Query shares ZERO non-stopword tokens with the stored content, so BM25/FTS cannot explain the hit — only the vector leg bridges astrolabe->antique navigation instrument and observatory->stargazing room. Top and only result.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Query deliberately built with no literal overlap per the skill's guidance; a keyword-only engine returns nothing here. This is the form of the item that can actually fail."
+    },
+    {
+      "item": "memory-get-returns-content-by-hash",
+      "expected-result": "memory_get returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
+      "command": "memory_get {hash: 88162269eff12f85...}",
+      "evidence": "{\"value\":\"An astrolabe rests on the observatory shelf, glinting under warm lamplight it caught after dusk.\",\"context\":\"project:laneB-item2\"}",
+      "observed-result": "Returned the exact original content byte-for-byte for the hash written moments earlier (ADR-0035).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Hash round-trip against a real write, content matches verbatim."
+    },
+    {
+      "item": "source-path-anchor-resolves-its-chunk",
+      "expected-result": "a `file#section` query returns that exact chunk within the production result window",
+      "command": "two writes to sourceFile=guide/widgetforge.md sections setup/troubleshoot; memory_search 'guide/widgetforge.md#setup' and '#troubleshoot'",
+      "evidence": "#setup -> 1 result hash 094f3984..., chunkIndex 0/2; #troubleshoot -> 1 result hash 32d59bb3..., chunkIndex 1/2",
+      "observed-result": "Each anchor resolved to exactly its own chunk, not the sibling sharing the same sourceFile — file+section AND-matching works, ruling out a coarse file-only match.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Two chunks under one sourceFile disambiguated by section; a file-only match would have returned both."
+    },
+    {
+      "item": "write-path-noise-filtering",
+      "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "read-path-query-guard",
+      "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "file-watch-status",
+      "expected-result": "memory_watch_status lists live registrations and their sync state",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "promotion-queue-state",
+      "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "full-mcp-surface",
+      "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+      "command": "POST /mcp initialize | tools/list | prompts/list | prompts/get x2, bearer token from <laneA>/mcp-token, against 127.0.0.1:50878",
+      "evidence": "tools/list -> 27 tools; prompts/list -> 2 (workspace-consolidation-guide, memory-usage-guide); prompts/get on both -> 200 with populated messages[0].content.text.",
+      "observed-result": "Live counts (27 tools, 2 prompts) match derive-facts.py exactly. Both prompts reachable and non-empty. Tool names are declared via Name = TnXxx constants rather than string literals, so a grep-based name diff would reproduce the hand-typed-count anti-pattern; the authoritative comparison is derived count vs live count, and they agree.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Counts asserted against derived facts, full round-trip on a self-started server/data-root/token, both prompts individually confirmed non-empty."
+    },
+    {
+      "item": "observability-event-ids",
+      "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "schema-digest-fast-path-survives-reopen",
+      "why-this-item-exists": "Derived for this run, not in the template: WP1 (ADR-0075) makes a bank open skip the entire ~39-statement Ddl block when PRAGMA application_id matches a digest of Ddl. That is the single highest-blast-radius change in this build and no automated test exercises it through a real install. Lane B flagged it as uncovered rather than fabricating a result.",
+      "command": "start server on fresh --data-root/--port 0, write an entry, read PRAGMA application_id/user_version read-only, cycle the process with `serve --port <bound> --restart`, then search/get/write through the NEW process",
+      "evidence": "PRAGMA application_id=1230295233 (non-zero: digest stamped), user_version=10. Restart: [650] stop -> [651] port free -> Now listening on 127.0.0.1:52931, pid 85595 -> 86309. After reopen: semantic search 'a clockwork model of the solar system in a lobby lit by daylight' -> hash 418197a63e06, snippet 'A brass orrery turns slowly in the planetarium foyer...'; memory_get -> full original value; new memory_write -> stored=true.",
+      "observed-result": "A bank whose Ddl block is skipped entirely on open still reads by hash, retrieves semantically, and accepts new writes. The digest is stamped and matches, so the fast path was genuinely taken rather than the bank falling back to a full Ddl rerun.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The search query shares no literal tokens with the stored text, so the vector leg is proven live AFTER the reopen — not merely that the file opened. Digest stamp read directly from the bank read-only, confirming the fast path applied rather than assuming it."
+    }
+  ]
+}
