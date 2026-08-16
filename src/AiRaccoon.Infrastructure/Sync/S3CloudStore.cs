@@ -62,13 +62,13 @@ public sealed partial class S3CloudStore : ICloudStore
         {
             Log.AuthFailed(_logger, ex.Message);
             throw new SyncAuthFailedException(
-                "AWS auth failed — run 'aws configure' or 'aws sso login', or verify the keys with 'ai-raccoon sync show'.", ex);
+                "AWS auth failed — run 'aws configure' or 'aws sso login', or verify the keys with 'ai-raccoon settings sync show'.", ex);
         }
         catch (AmazonServiceException ex) when (ex.StatusCode == HttpStatusCode.Forbidden)
         {
             Log.AuthFailed(_logger, ex.Message);
             throw new SyncAuthFailedException(
-                "AWS auth failed — run 'aws configure' or 'aws sso login', or verify the keys with 'ai-raccoon sync show'.", ex);
+                "AWS auth failed — run 'aws configure' or 'aws sso login', or verify the keys with 'ai-raccoon settings sync show'.", ex);
         }
         catch (AmazonS3Exception ex)
         {
@@ -113,13 +113,13 @@ public sealed partial class S3CloudStore : ICloudStore
         {
             Log.AuthFailed(_logger, ex.Message);
             throw new SyncAuthFailedException(
-                "AWS auth failed — run 'aws configure' or 'aws sso login', or verify the keys with 'ai-raccoon sync show'.", ex);
+                "AWS auth failed — run 'aws configure' or 'aws sso login', or verify the keys with 'ai-raccoon settings sync show'.", ex);
         }
         catch (AmazonServiceException ex) when (ex.StatusCode == HttpStatusCode.Forbidden)
         {
             Log.AuthFailed(_logger, ex.Message);
             throw new SyncAuthFailedException(
-                "AWS auth failed — run 'aws configure' or 'aws sso login', or verify the keys with 'ai-raccoon sync show'.", ex);
+                "AWS auth failed — run 'aws configure' or 'aws sso login', or verify the keys with 'ai-raccoon settings sync show'.", ex);
         }
         catch (AmazonS3Exception ex)
         {

@@ -102,7 +102,7 @@ server reads it with its own privileges — without containment, a malicious cli
 read any file the process can and turn it into searchable memory that cloud sync may then
 push. All three refuse a path outside `ingest.scope.<project>` (falling back to
 `ingest.scope.global`), and the scope is **empty by default**, so a project refuses every
-path until an operator declares one with `ai-raccoon ingest scope add`. Containment is
+path until an operator declares one with `ai-raccoon settings ingest scope add`. Containment is
 enforced in the store, not in the tool layer, so the CLI and the file watcher are bound by
 it too.
 

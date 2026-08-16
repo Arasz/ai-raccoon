@@ -125,7 +125,7 @@ stateDiagram-v2
 
 - **Retrieval boost:** Hits in `memory_search` raise an entry's rating.
 - **TTL expiration:** Entries given a TTL via `memory_set_ttl` become eligible for sweeps once aged.
-- **Sweep reaper:** The background reaper (`ai-raccoon sweep`) periodically purges low-rated, aged project entries. Shared entries are protected.
+- **Sweep reaper:** The background reaper (`ai-raccoon settings sweep`) periodically purges low-rated, aged project entries. Shared entries are protected.
 
 ---
 

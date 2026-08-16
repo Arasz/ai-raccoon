@@ -37,9 +37,14 @@ Sequence per tick: read installed version → below target: run the update comma
 
 ## Pitfall: verify CLI verb paths BEFORE the rollout branch can execute them
 
-Draft scripts often assume a `config` parent verb (`ai-raccoon config extract enable true`). Verb families are frequently ROOT-level (`ai-raccoon extract enable true`) — there is no `config` command at all, and the mistake only surfaces
+Draft scripts often assume a `config` parent verb (`ai-raccoon config extract enable true`). There
+is no `config` command at all — settings-writing verb families live under `settings`
+(`ai-raccoon settings extract enable true`), and the mistake only surfaces
 when the rollout branch actually runs ("Unrecognized command or argument 'config'"). Caught this way 2026-08-07: the settings-arming verbs were wrong from the first commit and the error stayed invisible through smoke tests that never
-reached the rollout branch. Fix: during the foreground verification pass, run EVERY command the script will execute (or its `--help`) against the real binary — a wrong verb path fails silently in a log-only watchdog.
+reached the rollout branch. Fix: during the foreground verification pass, run EVERY command the script will execute (or its `--help`) against the real binary — a wrong verb path fails silently in a log-only watchdog. Pre-1.21.0 builds took
+these verbs root-level instead (`ai-raccoon extract enable true`); WP6 of the bank-open-cost plan
+moved settings-writing families under `settings` with no compatibility alias, so a script pinned to
+the old spelling now fails the same way the `config` guess did.
 
 ## Pitfall: the scheduler may never tick — run the script manually when the trigger condition is met
 

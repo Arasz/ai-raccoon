@@ -16,7 +16,7 @@ public sealed class WatchTools(
 
     [McpServerTool(Name = TnWatchAdd)]
     [Description(
-        "Registers a file or directory to be mirrored into the project's memory. Watching must be enabled and the path inside the scope allowlist — both configured via the CLI ('ai-raccoon watch enable' / 'watch scope add'). Already-watched paths are a no-op. Returns immediately — the initial scan runs in the background (status reports scanning).")]
+        "Registers a file or directory to be mirrored into the project's memory. Watching must be enabled and the path inside the scope allowlist — both configured via the CLI ('ai-raccoon settings watch enable' / 'settings ingest scope add'). Already-watched paths are a no-op. Returns immediately — the initial scan runs in the background (status reports scanning).")]
     public async Task<ApiEnvelope<WatchAddResult>> Add(
         [Description("The project id; watches are scoped to a project.")]
         string projectId,
