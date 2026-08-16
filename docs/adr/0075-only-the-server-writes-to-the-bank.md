@@ -140,8 +140,27 @@ the gate asserts.
   bootstrap depend on a table the fast path exists to avoid creating.
 
   Separately and **not** caused by this ADR: `CREATE TABLE IF NOT EXISTS` silently keeps a
-  pre-existing table of the wrong shape (verified). That hole was equally open when `Ddl` ran on
-  every open — the digest neither widens nor narrows it.
+  pre-existing table of the wrong shape (verified, issue #357). That hole was equally open when
+  `Ddl` ran on every open — the digest neither widens nor narrows it.
+
+- **The zero-digest hazard.** A fresh SQLite file reads `application_id = 0`. If `SHA-256(Ddl)`
+  ever truncated to `0`, a fresh bank would falsely *match* and skip `Ddl` on its first open —
+  creating no schema at all. It is a 1-in-4-billion property of whatever `Ddl` happens to say, so
+  it is not a live concern; it is a tripwire for a future `Ddl` edit, and
+  `MemorySchemaDigestTests.SchemaDigest_IsNotZero` is that tripwire.
+
+- **Alternating binaries defeat the gate on a shared bank.** Two builds whose `Ddl` differs, opening
+  the same bank in turn, each see a mismatch: each reruns the full block and restamps, so the bank
+  pays *more* than before — every rerun is also a `PRAGMA schema_version` bump, which invalidates
+  every other connection's prepared-statement cache. This is a developer-machine and partial-upgrade
+  scenario, not a production one, but it is the case where this optimisation is a pessimisation, and
+  it is worth recognising rather than debugging from scratch.
+
+- **`application_id` is no longer a file-type magic number.** SQLite's convention is that
+  `application_id` identifies what kind of file this is — `file(1)` and forensic tooling read it that
+  way. It now holds a schema digest that changes with every `Ddl` edit. Nothing in this repo relied
+  on it (verified: zero hits before it was claimed), but anything outside that identified a bank by
+  its `application_id` no longer can.
 
 - **Found only on the merged tree.** Each lane was green alone; the digest gate's interaction with two
   `Speed=Slow` schema tests appeared only after WP1 and WP6/WP7 were merged together, because the lane
