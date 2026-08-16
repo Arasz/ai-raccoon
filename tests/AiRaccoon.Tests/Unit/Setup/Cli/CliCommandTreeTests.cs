@@ -20,8 +20,26 @@ public class CliCommandTreeTests
         var root = CliCommandTree.BuildFullRootCommand();
 
         root.Children.OfType<Command>().Select(c => c.Name)
-            .ShouldBe(["access", "model", "retrieval", "sweep", "noise", "queryguard", "sync", "ingest", "watch", "encryption", "extract", "maintenance", "serve"]);
-        CliCommandTree.Verbs.ShouldBe(["access", "model", "retrieval", "sweep", "noise", "queryguard", "sync", "ingest", "watch", "encryption", "extract", "maintenance", "serve"]);
+            .ShouldBe(["access", "model", "retrieval", "sweep", "noise", "queryguard", "sync", "ingest", "watch", "encryption", "extract", "maintenance", "performance", "serve"]);
+        CliCommandTree.Verbs.ShouldBe(["access", "model", "retrieval", "sweep", "noise", "queryguard", "sync", "ingest", "watch", "encryption", "extract", "maintenance", "performance", "serve"]);
+    }
+
+    /// <summary>
+    ///     AC1 — `ai-raccoon performance --help` lists the three set verbs (one per settings-backed
+    ///     knob: buffer capacity, flush interval, retention) plus list. Fixes the defect the 1.20.0
+    ///     manual checklist found (#352): metrics was the only settings-backed subsystem with no CLI
+    ///     family at all.
+    /// </summary>
+    [Fact]
+    public void PerformanceCommand_ExposesSetVerbsAndList()
+    {
+        var root = CliCommandTree.BuildFullRootCommand();
+
+        var performance = root.Children.OfType<Command>().Single(c => c.Name == "performance");
+        performance.Children.OfType<Command>().Select(c => c.Name)
+            .ShouldBe(["buffer-capacity", "flush-interval", "retention", "list"]);
+        var list = performance.Children.OfType<Command>().Single(c => c.Name == "list");
+        list.Aliases.ShouldContain("show");
     }
 
     [Fact]
@@ -121,6 +139,7 @@ public class CliCommandTreeTests
     [InlineData("access", "list", "show")]
     [InlineData("watch", "list", "show")]
     [InlineData("maintenance", "list", "show")]
+    [InlineData("performance", "list", "show")]
     [InlineData("extract", "list", "show")]
     [InlineData("model", "show", "list")]
     [InlineData("sweep", "show", "list")]
@@ -140,6 +159,7 @@ public class CliCommandTreeTests
     [InlineData("access", "list", "show")]
     [InlineData("watch", "list", "show")]
     [InlineData("maintenance", "list", "show")]
+    [InlineData("performance", "list", "show")]
     [InlineData("extract", "list", "show")]
     [InlineData("model", "show", "list")]
     [InlineData("sweep", "show", "list")]

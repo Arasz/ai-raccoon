@@ -19,6 +19,7 @@ public static class CommandsRegistration
             serviceCollection.AddSingleton<EncryptionCommands>();
             serviceCollection.AddSingleton<ExtractCommands>();
             serviceCollection.AddSingleton<MaintenanceCommands>();
+            serviceCollection.AddSingleton<PerformanceCommands>();
             serviceCollection.AddSingleton<ServeCommands>();
             serviceCollection.AddSingleton<NoiseEntriesCommands>();
             serviceCollection.AddSingleton(sp => new EncryptionCommands(

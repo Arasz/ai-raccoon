@@ -1,4 +1,5 @@
 using System.CommandLine;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Hosting.Node;
 using AiRaccoon.Infrastructure.Options;
 
@@ -17,7 +18,7 @@ internal static class CliCommandTree
     private static readonly string TransportHelpName =
         string.Join('|', Enum.GetNames<McpTransport>().Select(name => name.ToLowerInvariant()));
 
-    internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "noise", "queryguard", "sync", "ingest", "watch", "encryption", "extract", "maintenance", "serve"];
+    internal static readonly string[] Verbs = ["access", "model", "retrieval", "sweep", "noise", "queryguard", "sync", "ingest", "watch", "encryption", "extract", "maintenance", "performance", "serve"];
 
     /// <summary>
     ///     The root launch --port (shared with the bare launch root); serve reads it instance-based
@@ -76,6 +77,7 @@ internal static class CliCommandTree
         root.Add(EncryptionCommand());
         root.Add(ExtractCommand());
         root.Add(MaintenanceCommand());
+        root.Add(PerformanceCommand());
         root.Add(ServeCommand());
         return root;
     }
@@ -406,6 +408,27 @@ internal static class CliCommandTree
         list.Aliases.Add("show");
         maintenance.Add(list);
         return maintenance;
+    }
+
+    private static Command PerformanceCommand()
+    {
+        var performance = new Command("performance",
+            "Metrics subsystem configuration (CLI-only channel): buffer capacity and flush interval tune the background writer, hot-table retention tunes the reaper. Each takes effect on a different cadence — buffer capacity on the next server restart, flush interval on the next flush tick, retention on the next maintenance pass — every command below states its own.")
+        {
+            new Command("buffer-capacity",
+                    $"Sets the measurement buffer capacity (positive integer, max {MetricsConfigKeys.MaxBufferCapacity}; default {MetricsConfigKeys.DefaultBufferCapacity}) — takes effect on the next server restart")
+                { new Argument<string>("capacity") { HelpName = "capacity" } },
+            new Command("flush-interval",
+                    $"Sets the metrics flush interval in seconds (positive integer; default {MetricsConfigKeys.DefaultFlushIntervalSeconds}) — takes effect on the next flush tick")
+                { new Argument<string>("seconds") { HelpName = "seconds" } },
+            new Command("retention",
+                    $"Sets the hot metrics-table retention in days (positive integer, max {MetricsConfigKeys.MaxRetentionDays}; default {MetricsConfigKeys.DefaultRetentionDays}) — takes effect on the next maintenance pass")
+                { new Argument<string>("days") { HelpName = "days" } }
+        };
+        var list = new Command("list", "Shows the metrics subsystem configuration (buffer capacity, flush interval, retention)");
+        list.Aliases.Add("show");
+        performance.Add(list);
+        return performance;
     }
 
     private static Command ServeCommand()
