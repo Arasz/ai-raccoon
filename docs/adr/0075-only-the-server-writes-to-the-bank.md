@@ -267,5 +267,25 @@ never paid at all, because settings commands opened the bank directly, in-proces
 
 *The after-measurement rerun (§8) now exists. The mechanism claim (bank-open/statement cost) is
 proven by exact, deterministic counts immune to machine contention; the wall-clock claim is not —
-that half of §8's criteria stays open pending a rerun under less contention. Status change is the
-owner's call to make on integration, not asserted here.*
+that half of §8's criteria stayed open pending a rerun under less contention.*
+
+**Wall-clock, settled** (`docs/work/perf/2026-08-16-wp5-interleaved-ab.md`): instead of waiting for
+a quiet machine — which never fully arrives, and didn't fix the problem above — this pass built
+both trees and interleaved them (A B A B …, order alternated, 16 rounds, first round of each arm
+discarded as warm-up), pairing each round's B−A difference so machine-load drift (this session's
+own load climbed 9.6→20+ mid-run) cancels out of the *difference* even though it doesn't cancel out
+of either arm's absolute number. Result is a split, not one number:
+
+| Operation | Paired result (n=15 rounds) | Sign test |
+|---|---|---|
+| `memory_write` | B faster, median −2.4 ms / mean −11.9 ms, growing to 40-55 ms under this session's higher-load rounds | 12/15 favour B, **p = 0.035** |
+| `memory_search` | No reliable difference | 8/15 vs 7/15, **p = 1.000** (a coin flip) |
+
+Writes get a real, small, statistically significant win, consistent with the settled 168→12
+statement-volume drop. **Search gets no measurable wall-clock difference despite paying the same
+210→16 statement-volume drop** — search medians in this data run 130-300 ms against write's
+15-85 ms, so search latency is evidently dominated by something the schema-open gate never touched
+(embedding/vector-scoring cost is the visible candidate, not measured directly here). That is
+reported as a genuine, useful finding about where search's cost actually lives, not as a weaker
+version of the write result. §8's wall-clock criterion is closed by this measurement, not by a
+quieter re-run.
