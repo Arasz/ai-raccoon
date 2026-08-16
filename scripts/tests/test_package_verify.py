@@ -1,4 +1,4 @@
-"""package_verify: csproj version parse, RID detection, nupkg entry checks (hermetic; no dotnet)."""
+"""package_verify: VERSION lookup, RID detection, nupkg entry checks (hermetic; no dotnet)."""
 
 import hashlib
 import io
@@ -9,10 +9,9 @@ import pytest
 import bundle
 import package_verify
 
-CSPROJ_WITH_VERSION = """<Project Sdk="Microsoft.NET.Sdk">
+CSPROJ = """<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <PackageId>ai-raccoon</PackageId>
-    <PackageVersion>1.0.10</PackageVersion>
   </PropertyGroup>
 </Project>
 """
@@ -31,16 +30,20 @@ def _zip_bytes(entries):
     return buf
 
 
-def test_parse_csproj_version_found(tmp_path):
-    csproj = tmp_path / "AiRaccoon.csproj"
-    csproj.write_text(CSPROJ_WITH_VERSION)
-    assert package_verify.parse_csproj_version(csproj) == "1.0.10"
+def test_read_version_walks_up_to_the_repo_root(tmp_path):
+    """The csproj lives at src/AiRaccoon/; VERSION lives at the repo root above it."""
+    proj_dir = tmp_path / "src" / "AiRaccoon"
+    proj_dir.mkdir(parents=True)
+    csproj = proj_dir / "AiRaccoon.csproj"
+    csproj.write_text(CSPROJ)
+    (tmp_path / "VERSION").write_text("1.0.10\n")
+    assert package_verify.read_version(csproj) == "1.0.10"
 
 
-def test_parse_csproj_version_missing(tmp_path):
+def test_read_version_missing_file_returns_none(tmp_path):
     csproj = tmp_path / "AiRaccoon.csproj"
-    csproj.write_text('<Project Sdk="Microsoft.NET.Sdk"></Project>')
-    assert package_verify.parse_csproj_version(csproj) is None
+    csproj.write_text(CSPROJ)
+    assert package_verify.read_version(csproj) is None
 
 
 @pytest.mark.parametrize(

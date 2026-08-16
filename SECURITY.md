@@ -14,7 +14,7 @@ private reporting is unavailable, email **araszkiewiczrafal@gmail.com** with
 - What an attacker can do, and what they need in order to do it (a malicious MCP client?
   a crafted tool argument? a hostile package in the local NuGet feed?).
 - The affected file and, where possible, a failing test or a reproduction command.
-- The version — the `PackageVersion` in `src/AiRaccoon/AiRaccoon.csproj`, or the commit.
+- The version — the repo-root `VERSION` file, or the commit.
 
 ### What to expect
 

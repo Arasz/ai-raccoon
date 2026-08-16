@@ -2,7 +2,6 @@
 
 import hashlib
 import platform
-import re
 import subprocess
 import sys
 import zipfile
@@ -20,11 +19,17 @@ _RID_BY_UNAME = {
 }
 
 
-def parse_csproj_version(path):
-    """Return the first <PackageVersion> value in the csproj, or None when absent."""
-    text = Path(path).read_text()
-    match = re.search(r"<PackageVersion>([^<]*)</PackageVersion>", text)
-    return match.group(1) if match else None
+def read_version(csproj_path):
+    """Return the repo-root VERSION for a csproj, or None when no VERSION is above it.
+
+    The version moved out of the csproj into a single repo-root VERSION file; walking up
+    from the project keeps this working wherever the checkout is rooted.
+    """
+    for directory in Path(csproj_path).resolve().parents:
+        version_file = directory / "VERSION"
+        if version_file.is_file():
+            return version_file.read_text().strip() or None
+    return None
 
 
 def rid_from_uname(system, machine):
@@ -88,9 +93,9 @@ def verify_nupkg(nupkg, version):
 
 def pack_and_verify(csproj, rid, out_dir):
     """dotnet pack csproj into out_dir, then verify the produced nupkg; return the exit code."""
-    version = parse_csproj_version(csproj)
+    version = read_version(csproj)
     if version is None:
-        print("FAIL: <PackageVersion> not found in %s" % csproj, file=sys.stderr)
+        print("FAIL: no VERSION file above %s" % csproj, file=sys.stderr)
         return 1
     try:
         subprocess.run(

@@ -13,7 +13,7 @@ name: publish
 # docs/work/features-native-memory/native-memory.feature). scripts/verify-tool-package.py
 # checks the same contract locally.
 #
-# Before dispatching: bump PackageVersion in src/AiRaccoon/AiRaccoon.csproj and
+# Before dispatching: bump the repo-root VERSION file (scripts/version-bump.py) and
 # merge it — the pack step publishes whatever version the csproj carries, so a
 # second dispatch without a bump is a no-op (--skip-duplicate).
 #
@@ -75,8 +75,9 @@ jobs:
         # linux-musl-x64 only and was uninstallable on macOS). The RID list must stay
         # in sync with the matrix above.
         run: |
-          VER=$(python3 -c 'import re;m=re.search(r"<PackageVersion>([^<]+)</PackageVersion>",open("src/AiRaccoon/AiRaccoon.csproj").read());print(m.group(1))')
-          python3 scripts/patch-tool-shell.py artifacts/ai-raccoon.$VER.nupkg win-x64 win-arm64 osx-arm64 linux-x64 linux-arm64 linux-musl-x64
+          VER=$(tr -d '[:space:]' < VERSION)
+          if [ -z "$VER" ]; then echo "::error::VERSION at the repo root is empty or missing." >&2; exit 1; fi
+          python3 scripts/patch-tool-shell.py "artifacts/ai-raccoon.$VER.nupkg" win-x64 win-arm64 osx-arm64 linux-x64 linux-arm64 linux-musl-x64
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: nupkg-${{ matrix.rid }}
