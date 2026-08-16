@@ -1,8 +1,11 @@
 using System.Runtime.InteropServices;
+using AiRaccoon.Core.Memory;
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
+using AiRaccoon.Settings;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
@@ -20,6 +23,16 @@ public sealed partial class AppRunner
 {
     private readonly CancellationTokenSource _cts = new();
     private readonly StandardStreams _streams = new(Console.In, Console.Out, Console.Error);
+    private readonly Func<ServerConfig, ILoggerFactory, CancellationToken, Task<ISettingsStore>> _acquireServerSettingsStore;
+
+    public AppRunner() : this(CliSettingsBackend.AcquireAsync)
+    {
+    }
+
+    /// <summary>Test seam: substitutes the settings-server acquisition (ADR-0075 §5.1) with a fake, so a
+    /// command routed through the server never needs a real backend to answer.</summary>
+    internal AppRunner(Func<ServerConfig, ILoggerFactory, CancellationToken, Task<ISettingsStore>> acquireServerSettingsStore) =>
+        _acquireServerSettingsStore = acquireServerSettingsStore;
 
     internal CancellationToken Token => _cts.Token;
 
@@ -182,6 +195,19 @@ public sealed partial class AppRunner
         ConfigureConsoleLogging(services, cliInput.ServerConfig.Options);
         services.RegisterCoreMemoryServices(cliInput.ServerConfig.Options);
         services.RegisterCommands();
+
+        // Write-exclusivity (ADR-0075 §5.3): every command except the declared opt-out list is
+        // bound to the server-backed store instead of the direct one RegisterCoreMemoryServices
+        // just registered — this overrides that registration, the same pattern
+        // SettingsStoreInjectionTests uses. The opt-out list never resolves this, so it never
+        // pays for a probe or an auto-start.
+        if (!CliWriteOptOuts.WritesDirectly(cliInput.CommandPath))
+        {
+            using var loggerFactory = CreateCliLoggerFactory(cliInput.ServerConfig.Options);
+            services.AddSingleton<ISettingsStore>(new LazyServerSettingsStore(
+                ctx => _acquireServerSettingsStore(cliInput.ServerConfig, loggerFactory, ctx)));
+        }
+
         await using var providder = services.BuildServiceProvider();
         var configCommands = providder.GetRequiredService<ConfigCommands>();
         return await configCommands.RunAsync(cliInput, _streams, Token);
@@ -201,19 +227,24 @@ public sealed partial class AppRunner
 
     /// <summary>One-shot graphs get no host logging pipeline; quiet mode must still reach them
     /// or a quiet stdio bridge prints per-request HttpClient lines to the terminal (QA-4).</summary>
-    private static void ConfigureConsoleLogging(IServiceCollection services, InfrastructureOptions options)
+    private static void ConfigureConsoleLogging(IServiceCollection services, InfrastructureOptions options) =>
+        services.AddLogging(builder => ConfigureCliLogging(builder, options));
+
+    /// <summary>Standalone twin of <see cref="ConfigureConsoleLogging" />: the settings-server acquire
+    /// (ADR-0075 §5.1) needs an <see cref="ILoggerFactory" /> before the CLI-command DI graph exists.</summary>
+    private static ILoggerFactory CreateCliLoggerFactory(InfrastructureOptions options) =>
+        LoggerFactory.Create(builder => ConfigureCliLogging(builder, options));
+
+    private static void ConfigureCliLogging(ILoggingBuilder builder, InfrastructureOptions options)
     {
-        services.AddLogging(builder =>
+        if (options.Quiet)
         {
-            if (options.Quiet)
-            {
-                QuietLogging.Configure(builder, options);
-            }
-            else
-            {
-                builder.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
-            }
-        });
+            QuietLogging.Configure(builder, options);
+        }
+        else
+        {
+            builder.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
+        }
     }
 
     private static partial class Log
