@@ -204,8 +204,11 @@ public sealed class SqliteSettingsStoreTests : IDisposable
     ///     catching the regression it exists to catch, not just a check that has only ever passed.
     ///     <para />
     ///     The write is a genuine second OS process: the built <c>ai-raccoon</c> binary run via
-    ///     <see cref="RaccoonProcess" />, invoking the real <c>settings queryguard disable</c> CLI verb, which
-    ///     opens the same bank file through its own fresh DI graph and its own connection pool — not a
+    ///     <see cref="RaccoonProcess" />, invoking the real <c>settings queryguard disable</c> CLI verb.
+    ///     Under write-exclusivity (ADR-0075/ADR-0077, WP7) the CLI process itself opens no bank
+    ///     connection for this verb — it delegates the write over HTTP to the server, and it is the
+    ///     server's own fresh DI graph and connection pool that opens the bank file. Reader and writer
+    ///     are still distinct OS processes either way, which is the property this test needs: not a
     ///     second <see cref="SqliteConnectionFactory" /> constructed in this test process. The read
     ///     before and the read after both go through <see cref="_store" />, the one instance this whole
     ///     test class holds, standing in for the DI singleton (see its field remarks).
