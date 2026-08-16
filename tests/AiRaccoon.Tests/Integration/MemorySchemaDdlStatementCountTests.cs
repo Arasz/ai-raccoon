@@ -11,7 +11,7 @@ namespace AiRaccoon.Tests.Integration;
 ///     Counts the SQLite statements <see cref="MemorySchema.EnsureAsync" /> executes, via
 ///     <c>sqlite3_trace</c> on the real connection handle — not by splitting the <c>Ddl</c> source
 ///     string, which would misparse the trigger bodies' embedded semicolons. Pins both sides of
-///     ADR-0075's digest gate: 4 statements when the digest matches, 39 in the block when it does not.
+///     ADR-0075's digest gate: 4 statements when the digest matches, 40 in the block when it does not.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -33,7 +33,7 @@ public sealed class MemorySchemaDdlStatementCountTests
     }
 
     [Fact]
-    public async Task EnsureAsync_WhenTheDigestIsStale_RunsTheThirtyNineStatementDdlBlock()
+    public async Task EnsureAsync_WhenTheDigestIsStale_RunsTheFortyStatementDdlBlock()
     {
         await using var connection = await OpenAsync();
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
@@ -45,9 +45,9 @@ public sealed class MemorySchemaDdlStatementCountTests
 
         var statements = await TraceAsync(connection);
 
-        // 39, not the plan's "~30"/"roughly thirty-two" (§4.2) — WP5 measured it and manually
-        // recounting the top-level CREATE statements in Ddl agrees. The plan undercounted.
-        CountDdl(statements).ShouldBe(39, Report(statements));
+        // 39 measured at ADR-0075 (not the plan's "~30"/"roughly thirty-two", §4.2 — the plan
+        // undercounted), +1 for ADR-0076's model_migration table.
+        CountDdl(statements).ShouldBe(40, Report(statements));
     }
 
     private static async Task<List<string>> TraceAsync(SqliteConnection connection)
