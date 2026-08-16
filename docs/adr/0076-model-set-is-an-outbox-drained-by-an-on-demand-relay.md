@@ -82,6 +82,33 @@ that was removed (see below), the kick added nothing the periodic tick doesn't a
 process-local kick is precisely the dual-write fragility the outbox exists to avoid. `model set`
 commits and returns; the relay picks the row up on its own schedule.
 
+### The backstop's own cadence, split from the heavy pass's
+
+`BankMaintenanceHostedService` ran one `PeriodicTimer` for everything: the WAL checkpoint, the
+pending-embed retry sweep, the noise/retention purges, and — via `MaintenanceJobRunner.RunDueAsync` —
+every job's due-ness check, cadence-based and on-demand alike. That timer's period was
+`maintenance.checkpoint-interval-minutes` (default 60). Left as the only trigger, the backstop's real
+latency would have been bounded by that hour, not by anything about the migration itself — a `model
+set` that outran the startup-pass race (no restart happens to pick it up) could sit undrained for up
+to an hour, which is not migration latency, it is an outage-shaped wait with the same cause.
+
+The fix is not a second relay — that would be exactly the competing-mechanism trap this design
+otherwise avoids — it is recognizing that "how often do we wake up to check what's due" and "how
+often does the expensive stuff actually run" are two different questions the single timer had
+conflated. They now have separate cadences from the same hosted service: the existing heavy-pass loop
+is untouched (same `PeriodicTimer`, same period, same `RunOnceAsync`), and a second, independent loop
+wakes every `OnDemandPollInterval` (15 seconds, hardcoded rather than a settings key — the tests this
+task's own regression check demanded pin the number, and a setting nobody would tune during
+development is not worth the surface) and calls the **same** `MaintenanceJobRunner.RunDueAsync` with
+the **same** job list. This is safe for cadence-based jobs by construction: `IsDue` still gates them
+on their own `Interval`, so checking fifteen seconds apart instead of an hour apart cannot make vacuum
+or chunk-backfill run any more often — it just means the check itself (one indexed
+`maintenance_jobs` read per job) now happens far more often, which is what "obviously cheap" describes.
+`BankMaintenanceHostedServiceOnDemandPollTests` pins both halves of that claim directly: an on-demand
+job is picked up on the very next 15-second poll, and an hourly-interval job's run count is unchanged
+after forty of those polls (ten minutes) — the regression the owner asked to see caught if this
+refactor got it wrong.
+
 ### No inline re-embed in the settings endpoint
 
 The first version of this design ran the migration synchronously inside the HTTP request that started
@@ -172,11 +199,19 @@ a silent one, but an operational one an administrator has to be able to recogniz
 message and the server's own logs (`ModelMigrationStarted`/the job runner's `JobFailed` at Warning,
 retried every pass) rather than from any dashboard, since none exists.
 
-**Not addressed here, and worth naming so nobody assumes it was considered and rejected:**
-`BankMaintenanceHostedService`'s single `PeriodicTimer` still paces the on-demand job's poll at the
-same cadence as the heavy checkpoint/vacuum/purge pass (`maintenance.checkpoint-interval-minutes`,
-default 60). Separating "how often do we check for on-demand work" from "how often do we run the
-expensive stuff" — so a migration is picked up within seconds of a restart rather than within an hour
-— is a real improvement this task did not make, to keep the blast radius on an already large change
-bounded to one well-tested loop. The startup pass is unaffected by this and remains the correctness
-guarantee regardless of poll cadence.
+**The backstop's latency is now bounded by 15 seconds, not an hour** — `BankMaintenanceHostedService`
+gained a second, independent poll loop for exactly this (see above); the heavy checkpoint/vacuum/purge
+pass keeps its own separate, configurable cadence untouched. The startup pass remains the correctness
+guarantee regardless of either cadence — this only shortens how long the *backstop* trigger can take
+when no restart happens to invoke the startup pass instead.
+
+**The on-demand poll interval is a hardcoded constant, not a settings key.** `checkpoint-interval-minutes`
+and `vacuum-interval-days` are configurable because an operator plausibly wants to trade their cost
+against their benefit on a specific bank. Fifteen seconds of "read one indexed row per job" has no
+comparable cost to trade — making it configurable would add a settings key, a parser, a default-value
+test and a CLI verb for a number nothing in this task's evidence suggests anyone needs to change.
+
+**`ReadCheckpointIntervalSafeAsync` keeps its name.** Splitting the poll from the cadence means that
+method still does exactly what its name says — reads the checkpoint interval — and nothing more; it
+would have been misnamed only under the design this task rejected (repurposing the same timer/method
+to also govern the on-demand poll). The new poll loop reads its own constant, not this method.

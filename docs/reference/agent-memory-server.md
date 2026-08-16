@@ -537,8 +537,8 @@ Every family below lives under the top-level `settings` command
 (`ai-raccoon settings <family> …`), with four exceptions that stay top-level because they
 either read a table `settings` doesn't own or perform an operation that isn't a settings
 write: `ai-raccoon watch registered` (reads the watches table), `ai-raccoon extract prune`
-(deletes `promotion_queue` rows), `ai-raccoon model set` (re-embeds the whole bank), and
-`ai-raccoon encryption` / `ai-raccoon serve` (unaffected by this split).
+(deletes `promotion_queue` rows), `ai-raccoon model set` (starts re-embedding the whole bank in the
+background, ADR-0076), and `ai-raccoon encryption` / `ai-raccoon serve` (unaffected by this split).
 
 ```bash
 # settings access: who may do what per project
@@ -548,8 +548,8 @@ ai-raccoon settings access set {project-id|*} {ro|rw|full}
 ai-raccoon settings access unset {project-id|*}
 ai-raccoon settings access list
 
-# model: embedding engine ('set' stays top-level — it re-embeds the whole bank;
-# 'show'/'reset' move under settings)
+# model: embedding engine ('set' stays top-level — it starts re-embedding the whole bank in the
+# background, ADR-0076; 'show'/'reset' move under settings)
 ai-raccoon model set local [path]
 ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]
 ai-raccoon settings model reset
