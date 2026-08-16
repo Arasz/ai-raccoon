@@ -11,7 +11,7 @@
     "version": "",
     "mcp-tool-count": "",
     "mcp-prompt-count": "",
-    "note": "Produced by scripts/derive-facts.sh at run time, never typed from memory or a previous run."
+    "note": "Produced by scripts/derive-facts.py at run time, never typed from memory or a previous run."
   },
   "findings-against-prior-runs": [
     {
