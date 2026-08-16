@@ -2,7 +2,7 @@
 
 Date: 2026-08-16
 
-Status: Proposed
+Status: Accepted
 
 ## Context
 
@@ -109,6 +109,39 @@ the gate asserts.
   manual surgery or corruption, not version skew. `PromotionQueueDiscardTests` now asserts **both**
   halves so the narrowing is a recorded decision rather than a silent regression. Restoring the old
   property would cost a per-open existence probe — precisely the cost this ADR exists to remove.
+
+  **Ratified after enumerating how that state is actually reachable, verified against a scratch
+  database rather than reasoned about.** The digest is stamped only *after* `Ddl` completes, so
+  every automated path self-heals:
+
+  | path | `application_id` after | outcome |
+  |---|---|---|
+  | `Ddl` fails part-way (statement *n* of 39) | stays `0` — the stamp never runs | next open reruns `Ddl` — **safe** |
+  | `.dump` → restore | `0` — a dump emits no `application_id` | next open reruns `Ddl` — **safe** |
+  | `VACUUM INTO` backup | preserved, *with* every object copied | consistent — **safe** |
+  | a new `Ddl` adds an object | digest changes | rerun forced — **safe**, ADR-0026 intact |
+
+  Only two routes reach digest-matches-object-missing:
+
+  1. **Manual `DROP` after a successful stamp** — surgery, debugging, a stray script. This is the
+     one property the gate genuinely gives up.
+  2. **A 32-bit digest collision**: a bank stamped by `Ddl`-A opened by a binary whose `Ddl`-B
+     truncates to the same 32 bits, so B's new objects are never created. This is the only *new*
+     failure mode. `P(any collision)` across every `Ddl` version this project will ever ship is
+     **~1e-8 at 10 versions, ~1e-6 at 100**. It is also self-limiting: the `user_version` ladder
+     runs regardless of the digest, so a change that bumps `CurrentVersion` is immune. Bumping the
+     version is therefore the escape hatch for any additive change important enough to want
+     certainty — at the cost of the very thing ADR-0026 avoided.
+
+  Eliminating the collision entirely would mean storing the full SHA-256 in a row rather than the
+  32-bit `application_id` header slot, costing one extra read on the fast path (5 statements
+  instead of 4, against 42 before). Not taken: a 1-in-a-million risk that only bites additive
+  changes which deliberately skip the version ladder does not justify making the fast path's
+  bootstrap depend on a table the fast path exists to avoid creating.
+
+  Separately and **not** caused by this ADR: `CREATE TABLE IF NOT EXISTS` silently keeps a
+  pre-existing table of the wrong shape (verified). That hole was equally open when `Ddl` ran on
+  every open — the digest neither widens nor narrows it.
 
 - **Found only on the merged tree.** Each lane was green alone; the digest gate's interaction with two
   `Speed=Slow` schema tests appeared only after WP1 and WP6/WP7 were merged together, because the lane
