@@ -16,13 +16,17 @@ namespace AiRaccoon.Settings;
 /// </summary>
 internal static class CliSettingsBackend
 {
-    /// <summary>The production entry point: builds a real launcher, probe client and logger.</summary>
-    internal static Task<ISettingsStore> AcquireAsync(ServerConfig config, ILoggerFactory loggerFactory, CancellationToken ctx)
+    /// <summary>
+    ///     The production entry point: builds a real launcher, probe client and logger. Must stay
+    ///     <c>async</c> rather than tail-return the inner call — the probe client has to live for the
+    ///     whole poll loop BackendLauncher runs, not just until this method's synchronous return.
+    /// </summary>
+    internal static async Task<ISettingsStore> AcquireAsync(ServerConfig config, ILoggerFactory loggerFactory, CancellationToken ctx)
     {
         using var probeClient = new HttpClient();
         var launcher = new BackendLauncher(new ServerProbe(probeClient), BackendLauncher.DefaultBudget,
             TimeProvider.System, loggerFactory.CreateLogger<BackendLauncher>());
-        return AcquireAsync(launcher, config, ctx);
+        return await AcquireAsync(launcher, config, ctx);
     }
 
     /// <summary>The testable core: takes the launcher as a seam so a fake can stand in for a real spawn.</summary>

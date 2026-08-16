@@ -200,17 +200,27 @@ public sealed partial class AppRunner
         // bound to the server-backed store instead of the direct one RegisterCoreMemoryServices
         // just registered — this overrides that registration, the same pattern
         // SettingsStoreInjectionTests uses. The opt-out list never resolves this, so it never
-        // pays for a probe or an auto-start.
+        // pays for a probe or an auto-start. loggerFactory's lifetime must outlast the dispatch
+        // below — LazyServerSettingsStore may not call the acquire closure until then.
+        ILoggerFactory? settingsLoggerFactory = null;
         if (!CliWriteOptOuts.WritesDirectly(cliInput.CommandPath))
         {
-            using var loggerFactory = CreateCliLoggerFactory(cliInput.ServerConfig.Options);
+            settingsLoggerFactory = CreateCliLoggerFactory(cliInput.ServerConfig.Options);
+            var loggerFactory = settingsLoggerFactory;
             services.AddSingleton<ISettingsStore>(new LazyServerSettingsStore(
                 ctx => _acquireServerSettingsStore(cliInput.ServerConfig, loggerFactory, ctx)));
         }
 
-        await using var providder = services.BuildServiceProvider();
-        var configCommands = providder.GetRequiredService<ConfigCommands>();
-        return await configCommands.RunAsync(cliInput, _streams, Token);
+        try
+        {
+            await using var providder = services.BuildServiceProvider();
+            var configCommands = providder.GetRequiredService<ConfigCommands>();
+            return await configCommands.RunAsync(cliInput, _streams, Token);
+        }
+        finally
+        {
+            settingsLoggerFactory?.Dispose();
+        }
     }
 
     private async Task<int> RunProxy(CliInput cliInput)
