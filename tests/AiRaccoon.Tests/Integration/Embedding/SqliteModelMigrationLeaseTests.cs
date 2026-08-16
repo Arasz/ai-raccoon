@@ -118,10 +118,14 @@ public sealed class SqliteModelMigrationLeaseTests : IDisposable
         var holder = NewLease();
         await holder.TryAcquireAsync(connection, TestContext.Current.CancellationToken);
 
-        _time.Advance(TimeSpan.FromMinutes(1));
+        // Renew at the TTL's halfway point, then advance past where the ORIGINAL (unrenewed)
+        // expiry would have fallen — proves the renewal, not the original acquire, is what still
+        // holds the rival off.
+        var halfway = TimeSpan.FromTicks(SqliteModelMigrationLease.LeaseTtl.Ticks / 2);
+        _time.Advance(halfway);
         (await holder.TryRenewAsync(connection, TestContext.Current.CancellationToken)).ShouldBeTrue();
 
-        _time.Advance(SqliteModelMigrationLease.LeaseTtl - TimeSpan.FromMinutes(1));
+        _time.Advance(halfway + TimeSpan.FromSeconds(1));
         var granted = await NewLease().TryAcquireAsync(connection, TestContext.Current.CancellationToken);
 
         granted.ShouldBeFalse();

@@ -15,14 +15,22 @@ using Xunit;
 namespace AiRaccoon.Tests.E2E;
 
 /// <summary>
-///     ADR-0076's own proof: a real ai-raccoon server is killed for real (not a mocked exception)
-///     between the outbox transaction committing and the maintenance relay's first chance to touch
-///     it, and a fresh server started against the same bank finishes the migration on its startup
-///     pass alone — no kick, no inline execution, nothing but the outbox row and the relay job. This
-///     is the check the whole feature exists to make pass, and the one the owner asked to see fail
-///     too: <see cref="AnInterruptedMigration_LeavesTheBankHalfMigratedForever_WhenTheRelayIsRemoved" />
+///     ADR-0076's own proof: a real ai-raccoon server is killed for real (not a mocked exception),
+///     in two different windows —
+///     <see cref="AnInterruptedMigration_IsFinishedByTheNextServersStartupPass_WithNoKickEverHavingRun" />
+///     between the outbox commit and the relay's first chance to touch it,
+///     <see cref="AnInterruptedMigration_KilledMidDrain_IsFinishedByTheNextServersStartupPass" /> while
+///     the relay is actively draining it — and a fresh server started against the same bank finishes
+///     the migration on its startup pass alone both times, no kick, no inline execution, nothing but
+///     the outbox row and the relay job. This is the check the whole feature exists to make pass, and
+///     the one the owner asked to see fail too:
+///     <see cref="AnInterruptedMigration_LeavesTheBankHalfMigratedForever_WhenTheRelayIsRemoved" />
 ///     records how that negative was produced, since the defect it demonstrates cannot stay live in
-///     the tree without removing the feature it is testing.
+///     the tree without removing the feature it is testing. The mid-drain variant also caught a real
+///     defect during development — see <c>IModelMigrationLease.LeaseTtl</c>'s doc comment and
+///     ADR-0076's "The lease" section: a first draft's 10-minute lease TTL turned a mid-drain kill
+///     into a 10-minute full-bank outage, not just deferred work, because <c>ToolGate</c> refuses
+///     every operation while the migration is open.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.E2E)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -37,6 +45,13 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
     /// killed" — the case under test needs zero rows re-embedded before the kill, not many, but this
     /// also proves the migration is real work and not a no-op that happened to finish before the kill.</summary>
     private const int RowCount = 50;
+
+    /// <summary>Large enough that real local-ONNX batches of 32 span several seconds — a window this
+    /// test can reliably observe and interrupt mid-way, not just before or after the whole drain.
+    /// Kept modest (not hundreds) because a shared, contended machine can make even this many
+    /// batches take minutes, and the drain remaining after the kill is what the completion wait
+    /// has to outlast.</summary>
+    private const int MidDrainRowCount = 128;
 
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-model-migration-crash");
     private ISqliteConnectionFactory _factory = null!;
@@ -131,6 +146,73 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
         // Proves the rows are not just marked embedded but genuinely searchable under the new engine.
         var searchResult = await CallMemorySearchAsync("embedded row");
         searchResult.ShouldContain("embedded row number");
+    }
+
+    /// <summary>
+    ///     The other half of "kill it for real": <see cref="AnInterruptedMigration_IsFinishedByTheNextServersStartupPass_WithNoKickEverHavingRun" />
+    ///     kills before the relay ever ran; this kills the relay itself mid-drain — some rows already
+    ///     re-embedded under the new engine, others still owed — and shows the next start finishes
+    ///     exactly the remainder, with no duplicate rows and no row left behind.
+    /// </summary>
+    [Fact]
+    public async Task AnInterruptedMigration_KilledMidDrain_IsFinishedByTheNextServersStartupPass()
+    {
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EnvEncryptionKeyProvider.EnvVarName, null));
+
+        _serverA = StartServeProcess();
+        await WaitForServerAsync();
+        await WaitForStartupCheckpointAsync();
+
+        (await RunCliAsync("model", "set", "local")).ExitCode.ShouldBe(0);
+        // Seeded directly (not through memory_write): this test's subject is the relay's drain, not
+        // the write path, and MidDrainRowCount real embeds must happen twice over (seed, then
+        // migrate) if seeded through MCP — this way only the migration itself pays for real inference,
+        // which is what needs to take long enough to interrupt mid-way.
+        await SeedFakeEmbeddedRowsAsync(MidDrainRowCount);
+        (await CountByStateAsync("embedded")).ShouldBe(MidDrainRowCount);
+
+        var otherModelPath = CopyBundledModelToATempPath();
+        (await RunCliAsync("model", "set", "local", otherModelPath)).ExitCode.ShouldBe(0);
+        (await CountByStateAsync("pending")).ShouldBe(MidDrainRowCount); // the outbox's own atomic move
+
+        // Wait for the on-demand relay to actually start draining (real local-ONNX batches of 32
+        // over MidDrainRowCount rows), then kill the instant some rows have moved but not all —
+        // proof the kill lands inside the batch loop, not before or after it. The kill happens
+        // INSIDE the predicate, immediately after the read that observed the partial state: any
+        // gap here (a second round-trip, then kill) is exactly the window a fast drain can finish
+        // in, which is what turned the first version of this test into a false negative.
+        var embeddedAtKill = -1;
+        var caughtMidDrain = await TryWaitUntilAsync(async () =>
+        {
+            var embedded = await CountByStateAsync("embedded");
+            if (embedded <= 0 || embedded >= MidDrainRowCount)
+            {
+                return false;
+            }
+
+            embeddedAtKill = embedded;
+            KillIfAlive(_serverA);
+            return true;
+        }, TimeSpan.FromSeconds(90), pollMs: 5);
+
+        caughtMidDrain.ShouldBeTrue(
+            "never observed a partial drain — the relay likely finished before this test could catch " +
+            "it mid-way; not evidence of a bug, just a race this specific assertion lost");
+        embeddedAtKill.ShouldBeInRange(1, MidDrainRowCount - 1);
+        (await IsMigrationOpenAsync()).ShouldBeTrue();
+
+        // A fresh server against the same bank finishes exactly the remainder. Generous timeout:
+        // depending on how early the kill landed, this may still owe most of MidDrainRowCount rows
+        // of real local-ONNX inference.
+        _serverB = StartServeProcess();
+        await WaitForServerAsync();
+        await WaitUntilAsync(() => IsMigrationOpenAsync().ContinueWith(t => !t.Result), TimeSpan.FromSeconds(300));
+
+        (await IsMigrationOpenAsync()).ShouldBeFalse();
+        (await CountByStateAsync("embedded")).ShouldBe(MidDrainRowCount);
+        (await CountByStateAsync("pending")).ShouldBe(0);
+        (await TotalRowCountAsync()).ShouldBe(MidDrainRowCount); // nothing duplicated, nothing lost
     }
 
     /// <summary>
@@ -233,18 +315,27 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
 
     private async Task WaitUntilAsync(Func<Task<bool>> predicate, TimeSpan timeout)
     {
+        if (!await TryWaitUntilAsync(predicate, timeout))
+        {
+            throw new TimeoutException($"condition not met within {timeout}");
+        }
+    }
+
+    /// <summary>Same polling loop as <see cref="WaitUntilAsync" />, but reports the outcome instead of throwing — for a wait whose failure is itself part of what the caller wants to assert on.</summary>
+    private async Task<bool> TryWaitUntilAsync(Func<Task<bool>> predicate, TimeSpan timeout, int pollMs = 100)
+    {
         var deadline = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < deadline)
         {
             if (await predicate())
             {
-                return;
+                return true;
             }
 
-            await Task.Delay(250, TestContext.Current.CancellationToken);
+            await Task.Delay(pollMs, TestContext.Current.CancellationToken);
         }
 
-        throw new TimeoutException($"condition not met within {timeout}");
+        return false;
     }
 
     private async Task SeedEmbeddedRowsAsync(int count)
@@ -256,6 +347,38 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
                 new Dictionary<string, object?> { ["projectId"] = "acme", ["content"] = $"embedded row number {i}" });
             result.ShouldBe(false, "memory_write must not error while seeding");
         }
+    }
+
+    /// <summary>
+    ///     Writes rows directly as already-embedded, bypassing memory_write and the running server
+    ///     entirely — legitimate test setup (mirrors CliBankWriteTests' direct bank creation), since
+    ///     this test's subject is the relay's drain, not the write path. The vec0 population trigger
+    ///     only fires on UPDATE, not INSERT, so these rows never reach vec_entries at seed time — fine,
+    ///     since nothing here asserts on the pre-migration vector index; the migration's own re-embed
+    ///     (a real UPDATE) populates it correctly regardless.
+    /// </summary>
+    private async Task SeedFakeEmbeddedRowsAsync(int count)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var fakeEmbedding = EmbeddingBlob.ToBytes(new float[384]);
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        await using var transaction = await connection.BeginTransactionAsync(TestContext.Current.CancellationToken);
+        for (var i = 0; i < count; i++)
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                """
+                INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at, embed_state, embedding)
+                VALUES (@hash, @path, @value, 'project', @projectId, @now, @now, 'embedded', @embedding)
+                """,
+                new
+                {
+                    hash = $"mid-drain-seed-{i:D6}", path = $"/mid-drain-seed-{i:D6}",
+                    value = $"mid-drain seeded row {i}", projectId = "acme", now, embedding = fakeEmbedding
+                },
+                transaction, cancellationToken: TestContext.Current.CancellationToken));
+        }
+
+        await transaction.CommitAsync(TestContext.Current.CancellationToken);
     }
 
     private async Task<string> CallMemorySearchAsync(string query)
@@ -315,6 +438,14 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         return await connection.QuerySingleAsync<int>(new CommandDefinition(
             "SELECT count(*) FROM entries WHERE embed_state = @state", new { state },
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    private async Task<int> TotalRowCountAsync()
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.QuerySingleAsync<int>(new CommandDefinition(
+            "SELECT count(*) FROM entries WHERE project_id = 'acme'",
             cancellationToken: TestContext.Current.CancellationToken));
     }
 

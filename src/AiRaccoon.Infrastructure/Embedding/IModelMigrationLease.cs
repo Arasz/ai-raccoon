@@ -22,12 +22,16 @@ public interface IModelMigrationLease
 public sealed class SqliteModelMigrationLease(TimeProvider timeProvider) : IModelMigrationLease
 {
     /// <summary>
-    ///     Generous on purpose: a full-bank re-embed is the one operation this codebase expects to
-    ///     run long, and there is no mid-drain renewal (ask if a simpler shape would do — there is:
-    ///     a second pass that out-waits this TTL just re-acquires and continues from wherever pending
-    ///     rows remain; re-embedding an already-embedded row wastes inference, it does not corrupt).
+    ///     Renewed after every batch (<see cref="EntryEmbedder.DrainMigrationAsync" />, 32 rows), so
+    ///     this only has to outlast one batch's real embedding latency, not the whole drain — a first
+    ///     draft set this to 10 minutes on the (wrong) belief there was no mid-drain renewal, and a
+    ///     real kill-mid-drain test caught it: every bank operation is refused while the migration is
+    ///     open (ToolGate), so a stale lease from a dead holder is a full-bank outage for as long as
+    ///     it survives, not just wasted inference. 60 seconds matches
+    ///     <see cref="AiRaccoon.Infrastructure.Watch.SqliteWatchScanLease.LeaseTtl" />'s own value and
+    ///     is generous for one batch while capping that outage at a minute instead of ten.
     /// </summary>
-    public static TimeSpan LeaseTtl { get; } = TimeSpan.FromMinutes(10);
+    public static TimeSpan LeaseTtl { get; } = TimeSpan.FromSeconds(60);
 
     /// <summary>Per-process identity, not the PID alone: PIDs recycle, and without this a fresh process could inherit a dead one's lease (ADR-0037).</summary>
     internal string Owner { get; } = $"{Environment.MachineName}:{Environment.ProcessId}:{Guid.NewGuid():N}";

@@ -136,14 +136,27 @@ Two server processes could both observe an open migration and both try to drain 
 `serve --restart` swap, or if two processes are pointed at the same bank file by mistake.
 `SqliteModelMigrationLease` guards the drain with the same shape as `SqliteWatchScanLease`
 (`lease_owner`/`lease_expires_at` columns on the row itself, a per-process GUID identity so a
-recycled PID cannot inherit a dead lease, stale-lease reclamation by expiry alone). The TTL (10
-minutes) is generous and is not renewed mid-drain by a heartbeat, unlike the watch lease's 20-second
-renewal: re-embedding the whole bank is the one operation in this codebase expected to run long, and a
-second pass that out-waits the TTL simply re-acquires and continues from wherever pending rows remain
-— re-embedding an already-embedded row wastes inference, it does not corrupt anything. Measure only
-when the measurement pays: a heartbeat would need its own test and its own failure mode, for a
-scenario (a single migration exceeding ten minutes on hardware fast enough to run this codebase's own
-test suite) nothing so far has shown reason to expect.
+recycled PID cannot inherit a dead lease, stale-lease reclamation by expiry alone, renewal after every
+batch — `DrainMigrationAsync` calls `TryRenewAsync` once per 32-row batch, the same cadence a
+heartbeat would use).
+
+**A real kill-mid-drain test caught a defect in this design's first draft, and the fix is recorded
+here rather than smoothed over.** The first version set the TTL to 10 minutes on the reasoning that
+re-embedding is the one operation expected to run long and "there is no mid-drain renewal" — both
+half-true (re-embedding can run long) and half-wrong (renewal was already wired per-batch; the
+comment describing the design had drifted from the code implementing it). The consequence was not
+caught by any unit test, because none of them kill a real process mid-batch — it took
+`AnInterruptedMigration_KilledMidDrain_IsFinishedByTheNextServersStartupPass` doing exactly that: a
+relay killed while it holds the lease leaves `lease_expires_at` frozen at whatever the last renewal
+set it to, and **every bank operation is refused for as long as that lease survives** (ToolGate, see
+above) — so a stale 10-minute lease is not "wasted inference deferred a bit", it is a **10-minute
+full-bank outage** on top of the crash that caused it. The test hung for over five minutes against the
+10-minute TTL before this was diagnosed and fixed; the fix is the TTL alone, dropped to 60 seconds
+(matching `SqliteWatchScanLease.LeaseTtl` exactly) — generous for one batch's real embedding latency,
+and a bound the whole point of this ADR (a crash must not leave the bank silently or indefinitely
+degraded) actually requires. Re-embedding an already-embedded row after a premature theft still only
+wastes inference, never corrupts anything, which is the trade this TTL is allowed to make in the
+theft-too-early direction; there is no equivalent safe direction for "outage lasts ten minutes".
 
 ### Per-row progress is the existing pending flag, not a new mechanism
 
