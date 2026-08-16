@@ -34,6 +34,8 @@ internal static partial class ToolRefusals
         [typeof(SyncNetworkException)] = "sync-network",
         [typeof(SyncCorruptFileException)] = "sync-corrupt-file",
         [typeof(AccessDeniedException)] = "access-denied",
+        // ADR-0076: refuses every bank operation for the duration of a model migration.
+        [typeof(ModelMigrationInProgressException)] = "model-migration-in-progress",
         [typeof(ContextOutsideProjectException)] = "context-outside-project",
         // Moved out of DirectThrowPrefixes by docs/adr/0065: the consent gate now lives in
         // ShareExtractService, so it raises a domain exception instead of a bare McpException.

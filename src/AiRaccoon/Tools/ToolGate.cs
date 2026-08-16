@@ -6,16 +6,26 @@ using ModelContextProtocol;
 namespace AiRaccoon.Tools;
 
 /// <summary>
-///     What every MCP tool does around its call: reject a blank project id, enforce the
-///     project's access mode, and wrap the result in the envelope carrying the propose
-///     tier's meta. One copy, so the seven tool classes cannot drift apart.
+///     What every MCP tool does around its call: refuse while a model migration is open
+///     (ADR-0076 — "lock all DB operations for the duration"), reject a blank project id, enforce
+///     the project's access mode, and wrap the result in the envelope carrying the propose tier's
+///     meta. One copy, so the seven tool classes cannot drift apart.
 /// </summary>
-public sealed class ToolGate(IMemoryAccessGuard access, IPromotionQueue queue) : IToolGate
+public sealed class ToolGate(IMemoryAccessGuard access, IPromotionQueue queue, IModelMigrationStore? migrations = null) : IToolGate
 {
-    /// <summary>Rejects a blank project id, then throws access-denied when the mode is too low.</summary>
+    /// <summary>Refuses while a migration is open, then rejects a blank project id, then throws access-denied when the mode is too low.</summary>
     public async Task RequireAsync(string? projectId, AccessRequirement requirement, string toolName,
         CancellationToken cancellationToken)
     {
+        // Optional so every existing two-argument fake construction across the test suite keeps
+        // compiling; production DI always resolves the real IModelMigrationStore (RegisterStores).
+        if (migrations is not null &&
+            await migrations.HasOpenModelMigrationAsync(cancellationToken).ConfigureAwait(false))
+        {
+            throw new ModelMigrationInProgressException(
+                "ai-raccoon: a model migration is in progress; try again once it finishes");
+        }
+
         if (string.IsNullOrWhiteSpace(projectId))
         {
             throw new McpException("invalid-params: project_id is required");

@@ -85,6 +85,9 @@ public class FakeMemoryStore : IMemoryStore, ISettingsStore
         CancellationToken cancellationToken = default) =>
         throw NotOverridden(nameof(StartModelMigrationAsync));
 
+    public virtual Task<bool> HasOpenModelMigrationAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(false);
+
     public virtual Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
         CancellationToken cancellationToken = default) =>
         throw NotOverridden(nameof(EmbedPendingAsync));

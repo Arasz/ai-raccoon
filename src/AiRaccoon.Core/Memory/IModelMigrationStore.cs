@@ -16,4 +16,10 @@ public interface IModelMigrationStore
     /// </summary>
     Task<EmbeddingConfig> StartModelMigrationAsync(string provider, string? model, string? baseUrl,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     True while a migration's outbox row is open — the lock for "all DB operations refused for
+    ///     the duration" (ADR-0076). Cheap: one indexed read.
+    /// </summary>
+    Task<bool> HasOpenModelMigrationAsync(CancellationToken cancellationToken = default);
 }
