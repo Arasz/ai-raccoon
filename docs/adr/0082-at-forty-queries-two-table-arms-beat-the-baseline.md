@@ -1,12 +1,12 @@
-# 0081. At forty queries, two table arms beat the baseline — and ADR-0080's verdict was a width artefact
+# 0082. At forty queries, two table arms beat the baseline — and ADR-0081's verdict was a width artefact
 
 Date: 2026-08-17
 
 Status: Accepted
 
 Supersedes the *conclusion* of
-[ADR-0080](0080-the-table-chunking-correctness-properties-cost-retrieval.md) — "no arm wins" — while
-keeping its measurements, which were correct at the width they were taken. ADR-0080 named the risk
+[ADR-0081](0081-the-table-chunking-correctness-properties-cost-retrieval.md) — "no arm wins" — while
+keeping its measurements, which were correct at the width they were taken. ADR-0081 named the risk
 itself: *"11 of 16 queries at zero is what lets two arms tie to six decimals. Do not act on a gap of
 0.02 at this width."* Acting on that warning changed the answer.
 
@@ -17,7 +17,7 @@ still verified unique and inside a table row. The integrity gate rejected three 
 one that had drifted into prose while the new queries were authored — three of the four would have
 silently distorted the numbers.
 
-Then the untried arm ADR-0080 named was built: **a table chunk that carries its section heading**.
+Then the untried arm ADR-0081 named was built: **a table chunk that carries its section heading**.
 The mechanism is confirmed at the source, not assumed — `FileIngestor.HeadingSection` derives
 `section` and `heading_path` by parsing the *chunk's own text* through `HeadingPathParser`, so a
 table chunk with no `#` line of its own gets `section = null`, can never satisfy a `file#section`
@@ -46,7 +46,7 @@ Four readings:
 2. **The section heading is worth having on every shape** — whole table +0.051, per-row +0.031,
    linearised +0.049 nDCG@5. It is the cheapest single change measured in this whole line of work,
    and it is the one ADR-0077 predicted from the bm25 weighting without ever testing it.
-3. **The correctness properties alone still lose** (0.146 against 0.227). ADR-0080's central finding
+3. **The correctness properties alone still lose** (0.146 against 0.227). ADR-0081's central finding
    survives: separating prose from tables, on its own, costs retrieval. What it lacked was the
    context to put back.
 4. **Per-row versus whole-table was invisible at the old width.** 0.261 against 0.146 here; 0.058
@@ -59,7 +59,7 @@ multiplying the units containing the answer.
 ## Decision
 
 **Still nothing ships in this record.** Two arms now have a positive case, which is a different
-state from ADR-0080's, but a chunking change rewrites every stored hash and the arms are measured on
+state from ADR-0081's, but a chunking change rewrites every stored hash and the arms are measured on
 one corpus of 22 documents against one embedding model.
 
 What this record fixes is the *decision basis*: "no arm wins" is withdrawn, "the section heading is
@@ -79,11 +79,11 @@ than from the whole-table shape currently implemented on the branch.
 
 ## Consequences
 
-- **Positive:** ADR-0080's warning about width was correct and acting on it changed the verdict —
+- **Positive:** ADR-0081's warning about width was correct and acting on it changed the verdict —
   the cheapest lesson in this line of work, and the one most worth keeping.
 - **Positive:** the section heading is established as a real, cheap gain, independent of which table
   shape is eventually chosen.
-- **Negative:** ADR-0080's headline reads as settled and is not; anyone citing "no arm wins" must be
+- **Negative:** ADR-0081's headline reads as settled and is not; anyone citing "no arm wins" must be
   pointed here. Its measurements stand, its conclusion does not.
 - **Negative:** the widened set makes the two leading arms indistinguishable from each other
   (0.2924 against 0.2946 nDCG@5, and the reverse ordering on MRR@10). Choosing between per-row and

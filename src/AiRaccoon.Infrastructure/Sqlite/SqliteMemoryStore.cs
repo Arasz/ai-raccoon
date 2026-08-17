@@ -160,10 +160,16 @@ public sealed partial class SqliteMemoryStore(
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        var totalStart = timeProvider.GetTimestamp();
 
+        var openStart = timeProvider.GetTimestamp();
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        var openElapsed = timeProvider.GetElapsedTime(openStart);
+
+        var embedStart = timeProvider.GetTimestamp();
         var queryVector = await _embedder.EmbedQueryAsync(connection, query.Query, cancellationToken)
             .ConfigureAwait(false);
+        var embedElapsed = timeProvider.GetElapsedTime(embedStart);
 
         var plan = FtsQueryNormalizer.BuildPlan(query.Query);
         var isPathQuery = SourcePathQuery.TryBuild(query.Query, out var pathExpression);
@@ -297,7 +303,9 @@ public sealed partial class SqliteMemoryStore(
         await BumpAccessAsync(connection, merged, query.ProjectId, cancellationToken).ConfigureAwait(false);
         var bumpElapsed = timeProvider.GetElapsedTime(bumpStart);
 
-        var timings = new SearchTimings(ftsElapsed, vectorElapsed, fusionElapsed, affinityElapsed, snippetsElapsed, bumpElapsed);
+        var totalElapsed = timeProvider.GetElapsedTime(totalStart);
+        var timings = new SearchTimings(openElapsed, embedElapsed, ftsElapsed, vectorElapsed, fusionElapsed,
+            affinityElapsed, snippetsElapsed, bumpElapsed, totalElapsed);
         return new SearchResults(merged, timings, fusionDiff);
     }
 

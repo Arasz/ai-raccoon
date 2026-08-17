@@ -1,4 +1,4 @@
-# 0080. The table-chunking correctness properties cost retrieval, and no arm wins
+# 0081. The table-chunking correctness properties cost retrieval, and no arm wins
 
 Date: 2026-08-17
 

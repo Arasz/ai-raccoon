@@ -23,7 +23,6 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <None Include=".mcp\server.json" Pack="true" PackagePath="/.mcp/"/>
         <None Include="..\..\README.md" Pack="true" PackagePath="/"/>
     </ItemGroup>
 
@@ -56,6 +55,26 @@
     <ItemGroup>
         <InternalsVisibleTo Include="AiRaccoon.Tests"/>
     </ItemGroup>
+
+    <!-- server.json's two version slots hold the token __VERSION__; VERSION is the only hand-written
+         marker (docs/plans/2026-08-17-search-phase-attribution.md §S4). This substitutes $(Version)
+         into a generated copy before the nuspec is built, so the packed manifest (not just the repo
+         copy) carries the real version. -->
+    <Target Name="GenerateMcpServerJson" BeforeTargets="_GetPackageFiles">
+        <PropertyGroup>
+            <_McpServerJsonSource>$(MSBuildProjectDirectory)\.mcp\server.json</_McpServerJsonSource>
+            <_McpServerJsonGenerated>$(IntermediateOutputPath)mcp\server.json</_McpServerJsonGenerated>
+        </PropertyGroup>
+        <ReadLinesFromFile File="$(_McpServerJsonSource)">
+            <Output TaskParameter="Lines" ItemName="_McpServerJsonLine"/>
+        </ReadLinesFromFile>
+        <MakeDir Directories="$(IntermediateOutputPath)mcp"/>
+        <WriteLinesToFile File="$(_McpServerJsonGenerated)" Overwrite="true"
+                           Lines="@(_McpServerJsonLine->Replace('__VERSION__', '$(Version)'))"/>
+        <ItemGroup>
+            <None Include="$(_McpServerJsonGenerated)" Pack="true" PackagePath="/.mcp/"/>
+        </ItemGroup>
+    </Target>
 
     <Target Name="DeployToLocalSource" AfterTargets="Build"
             Condition="'$(DOTNET_ENV)' == 'local' and '$(SuppressDeployToLocalSource)' != 'true'"

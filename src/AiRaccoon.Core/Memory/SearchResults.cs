@@ -13,36 +13,58 @@ public sealed record SearchResults(
     SearchTimings Timings,
     FusionDiff? Fusion = null);
 
-/// <summary>Per-phase durations for one <see cref="IMemoryStore.SearchAsync" /> call.</summary>
+/// <summary>Per-phase durations for one <see cref="IMemoryStore.SearchAsync" /> call, plus the measured total (docs/adr/0079).</summary>
 public sealed record SearchTimings(
+    TimeSpan Open,
+    TimeSpan Embed,
     TimeSpan Fts,
     TimeSpan Vector,
     TimeSpan Fusion,
     TimeSpan Affinity,
     TimeSpan Snippets,
-    TimeSpan Bump)
+    TimeSpan Bump,
+    TimeSpan Total)
 {
     /// <summary>All-zero timings, for a caller that has not measured phases yet (WP1, before WP2 lands).</summary>
-    public static SearchTimings Empty { get; } = new(TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero);
+    public static SearchTimings Empty { get; } = new(TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero,
+        TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero);
 
     /// <summary>
     ///     The metric names a search records — `search.&lt;phase&gt;`, one per constructor parameter
-    ///     above, in declaration order. Declared explicitly, not derived by reflecting over "every
-    ///     TimeSpan property" (F11): that would have silently minted a series for any future computed
-    ///     property (e.g. a <c>Total</c>). Adding a seventh phase means adding it here <em>and</em> to
-    ///     the test that pins these six names (SearchResultsTests) — deliberate, not an oversight.
+    ///     above except <see cref="Total" />, in declaration order. Declared explicitly, not derived
+    ///     by reflecting over "every TimeSpan property" (F11): that would have silently minted a
+    ///     series for <see cref="Total" /> too. Adding a phase means adding it here <em>and</em> to
+    ///     the test that pins these names (SearchResultsTests) — deliberate, not an oversight.
     /// </summary>
     public static IReadOnlyList<string> PhaseNames { get; } =
-        ["search.fts", "search.vector", "search.fusion", "search.affinity", "search.snippets", "search.bump"];
+    [
+        "search.open", "search.embed", "search.fts", "search.vector",
+        "search.fusion", "search.affinity", "search.snippets", "search.bump"
+    ];
+
+    /// <summary>
+    ///     The metric name <see cref="Total" /> records under. Not in <see cref="PhaseNames" /> (F11):
+    ///     it is a measured member of this record, not a decomposition entry, so a consumer that ever
+    ///     sums <see cref="PhaseNames" /> can never double-count it.
+    /// </summary>
+    public const string TotalName = "search.total";
+
+    /// <summary>Every series a search records — <see cref="PhaseNames" /> plus <see cref="TotalName" /> — derived once, so downstream readers never keep a second hand-written copy (derive-or-delete-the-list).</summary>
+    public static IReadOnlyList<string> SeriesNames { get; } = [.. PhaseNames, TotalName];
 
     /// <summary>This instance's phases as name/value pairs, in the same order as <see cref="PhaseNames" />.</summary>
     public IReadOnlyList<(string Name, TimeSpan Value)> Phases() =>
         [
-            (PhaseNames[0], Fts),
-            (PhaseNames[1], Vector),
-            (PhaseNames[2], Fusion),
-            (PhaseNames[3], Affinity),
-            (PhaseNames[4], Snippets),
-            (PhaseNames[5], Bump)
+            (PhaseNames[0], Open),
+            (PhaseNames[1], Embed),
+            (PhaseNames[2], Fts),
+            (PhaseNames[3], Vector),
+            (PhaseNames[4], Fusion),
+            (PhaseNames[5], Affinity),
+            (PhaseNames[6], Snippets),
+            (PhaseNames[7], Bump)
         ];
+
+    /// <summary>This instance's series as name/value pairs — <see cref="Phases" /> plus <see cref="Total" /> under <see cref="TotalName" /> — mirroring <see cref="FusionDiff.Measurements" />.</summary>
+    public IReadOnlyList<(string Name, TimeSpan Value)> Measurements() => [.. Phases(), (TotalName, Total)];
 }

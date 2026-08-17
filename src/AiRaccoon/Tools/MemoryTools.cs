@@ -321,18 +321,18 @@ public sealed partial class MemoryTools(
     public sealed record EmbedResult(int Processed, int Pending);
 
     /// <summary>
-    ///     Tags each of the six search phases — plus the fusion diff, present only when the
-    ///     no-fusion-regression flag is on (docs/adr/0078) — with the query hash and correlation id
-    ///     and hands them to the recorder; never the query text itself (SqliteMetricsStore's
-    ///     save-time allowlist rejects it). Best-effort: a throwing recorder must never fail or slow
-    ///     the search (WP3).
+    ///     Tags each of the eight search phases plus the measured total — plus the fusion diff,
+    ///     present only when the no-fusion-regression flag is on (docs/adr/0078) — with the query
+    ///     hash and correlation id and hands them to the recorder; never the query text itself
+    ///     (SqliteMetricsStore's save-time allowlist rejects it). Best-effort: a throwing recorder
+    ///     must never fail or slow the search (WP3).
     /// </summary>
     private void RecordSearchMeasurements(SearchResults results, string queryHash, string correlationId, string projectId)
     {
         try
         {
             var recordedAt = _timeProvider.GetUtcNow();
-            foreach (var (name, value) in results.Timings.Phases())
+            foreach (var (name, value) in results.Timings.Measurements())
             {
                 measurements.Record(new Measurement(name, MeasurementKind.Histogram, value.TotalMilliseconds,
                     "ms", recordedAt, projectId, queryHash, correlationId));

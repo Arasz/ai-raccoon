@@ -29,14 +29,14 @@ public sealed partial class SqliteMetricsStore(ISqliteConnectionFactory factory,
     ///     exclude. Derived from every current caller of the Measurement constructor: production
     ///     code (ToolExecutionActivity, MemoryTools) sets no Tags at all today; "phase" is the one
     ///     key any caller uses (MemoryTools' search-phase measurements, exercised by
-    ///     SqliteMetricsStoreTests), and its value must be one of SearchTimings' own phase suffixes —
+    ///     SqliteMetricsStoreTests), and its value must be one of SearchTimings' own series suffixes —
     ///     checked below, not just the key.
     /// </summary>
     private static readonly HashSet<string> AllowedTagKeys = new(StringComparer.Ordinal) { "phase" };
 
-    /// <summary>The phase suffixes "phase" may legitimately hold — derived from SearchTimings, not a second hand-kept list.</summary>
+    /// <summary>The series suffixes "phase" may legitimately hold — derived from SearchTimings, not a second hand-kept list.</summary>
     private static readonly HashSet<string> AllowedPhaseValues =
-        SearchTimings.PhaseNames.Select(name => name["search.".Length..]).ToHashSet(StringComparer.Ordinal);
+        SearchTimings.SeriesNames.Select(name => name["search.".Length..]).ToHashSet(StringComparer.Ordinal);
 
     /// <summary>QueryHash's real shape: SHA-256 lowercase hex, matching ContentHash.OfValue's output.</summary>
     private static readonly Regex QueryHashShape = new("^[0-9a-f]{64}$", RegexOptions.Compiled);
