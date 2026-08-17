@@ -33,6 +33,8 @@
 
     <ItemGroup>
         <InternalsVisibleTo Include="AiRaccoon.Tests"/>
+        <!-- doctor (GH #357) diagnoses the bank's schema shape from the CLI project via MemorySchema/SchemaDoctor, both internal. -->
+        <InternalsVisibleTo Include="AiRaccoon"/>
     </ItemGroup>
 
 </Project>
