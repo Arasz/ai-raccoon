@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Bump the ai-raccoon tool version across all markers.
+"""Bump VERSION, the single hand-written version marker for the ai-raccoon tool.
+Everything else (assembly version, server.json) derives from it at build/pack time.
 
 Usage:
     python3 scripts/version-bump.py <patch|minor|major>
@@ -10,7 +11,6 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 VERSION_FILE = REPO_ROOT / "VERSION"
-SERVER_JSON = REPO_ROOT / "src" / "AiRaccoon" / ".mcp" / "server.json"
 
 
 def read_current() -> str:
@@ -43,7 +43,6 @@ def main() -> None:
     new = bump(old, args.level)
 
     replace_version(VERSION_FILE, old, new, 1)  # the single hand-written version marker
-    replace_version(SERVER_JSON, old, new, 2)   # top-level version + packages[0].version
 
     print(f"version-bump: {old} -> {new}")
     print("Verify: dotnet test tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj --filter FullyQualifiedName~VersionContractTests")
