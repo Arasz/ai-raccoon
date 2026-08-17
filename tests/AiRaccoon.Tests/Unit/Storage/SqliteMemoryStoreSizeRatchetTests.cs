@@ -70,7 +70,14 @@ public sealed class SqliteMemoryStoreSizeRatchetTests
     //              main's ADR-0073 comment sweep (1181) and this branch's move of the nine
     //              Dapper row DTOs to SqliteMemoryStore.Rows.cs, which made room for the search
     //              phase timings (1146). Measured on the merge of both, not on either alone.
-    private const int MaxLines = 1112;
+    //   1066 / 27  LOWERED again, and this cap caught the change that provoked it: the
+    //              no-fusion-regression flag (docs/adr/0078) pushed the file to 1144 against the
+    //              1112 cap. Taking the note above at its word for the sixth time, the *search*
+    //              seam came out instead of a raise — CandidateWindowFor, QueryFtsBatchAsync,
+    //              BuildFtsResults, ReadStructureAlphaAsync and the flag's own settings read moved
+    //              to SqliteMemoryStore.Search.cs, the same partial-file seam SqliteMemoryStore.Rows.cs
+    //              already established. Net −46 against the pre-change file.
+    private const int MaxLines = 1066;
     private const int MaxMembers = 27;
 
     [Fact]

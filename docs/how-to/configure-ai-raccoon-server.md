@@ -249,6 +249,36 @@ ai-raccoon settings retrieval alpha show        # 0.5
 ai-raccoon settings retrieval alpha set 0.7     # 0..1; weights the structure vector against the content vector
 ```
 
+#### The no-fusion-regression rule (off by default)
+
+[ADR-0006](../adr/0006-rrf-parameter-optimization.md) declares that the hybrid never ranks the
+expected chunk below the best single modality. It holds across the tuning queries — and
+[#367](https://github.com/Arasz/ai-raccoon/issues/367) found a real bank where it does not: a chunk
+ranked **1st** by keyword search alone came back **18th** under the default hybrid.
+
+This setting enforces that rule as an ordering. It has **no tunable parameter** — it is on or off:
+
+```bash
+ai-raccoon settings retrieval fusion show       # enabled: False  (default: False — off serves the baseline fusion)
+ai-raccoon settings retrieval fusion enable
+ai-raccoon settings retrieval fusion disable
+```
+
+**It ships off, deliberately.** The offline query corpus cannot adjudicate a fusion change —
+[ADR-0072](../adr/0072-a-term-budget-for-long-queries-is-not-adjudicable.md) records a change that
+was measured and *not* shipped for exactly this reason, because choosing from a three-query held-out
+set is fitting noise. So enabling it is how the evidence gets collected, not a setting you are
+expected to leave alone.
+
+**When enabled it records what it changed.** Each search computes both the baseline ordering and the
+adjusted one, serves the adjusted one, and writes three measurements to the `metrics` table:
+whether the top result changed, how far the baseline's top result moved, and how much of the top 5
+shifted. `metrics.correlation_id` joins back to `search_quality`, so a run can be scored against the
+usefulness grades it produced. That extra work is why it is gated rather than always on.
+
+Turning it off restores the previous behaviour exactly — the baseline path is unchanged when the
+flag is absent or false.
+
 ### Self-instrumentation (metrics)
 
 Controls the background writer for AiRaccoon's own performance measurements (see
