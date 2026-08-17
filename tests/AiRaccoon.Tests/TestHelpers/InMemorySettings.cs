@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Sqlite;
 
 namespace AiRaccoon.Tests.TestHelpers;
 
@@ -9,7 +10,8 @@ namespace AiRaccoon.Tests.TestHelpers;
 ///     above all. Unset keys return null, which is what an unconfigured bank returns, so every
 ///     `Parse*` helper falls to its documented default.
 /// </summary>
-public sealed class InMemorySettings : ISettingsStore, IModelMigrationStore, IRepairStore
+public sealed class InMemorySettings : ISettingsStore, IModelMigrationStore, IRepairStore,
+    IPromotionQueuePruneStore, IMaintenanceStatsStore
 {
     public Dictionary<string, string> Values { get; } = new(StringComparer.Ordinal);
 
@@ -23,6 +25,13 @@ public sealed class InMemorySettings : ISettingsStore, IModelMigrationStore, IRe
 
     public ChunkIndexRepairReport ChunkIndexReport { get; set; } = new(0, 0, 0);
 
+    /// <summary>Set when RequestPruneOrphansAsync was called, for a test to assert routing without a real bank (ADR-0075 amendment).</summary>
+    public bool PruneRequested { get; private set; }
+
+    public PromotionQueueOrphanReport PruneReport { get; set; } = new(0, new Dictionary<string, int>(StringComparer.Ordinal));
+
+    public BankStats Stats { get; set; } = new(0, 0, 0, 0, 0);
+
     public Task<ReingestRepairReport> ReportReingestAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(ReingestReport);
 
@@ -34,6 +43,17 @@ public sealed class InMemorySettings : ISettingsStore, IModelMigrationStore, IRe
         LastRepairRequest = kind;
         return Task.CompletedTask;
     }
+
+    public Task<PromotionQueueOrphanReport> ReportPruneOrphansAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(PruneReport);
+
+    public Task RequestPruneOrphansAsync(CancellationToken cancellationToken = default)
+    {
+        PruneRequested = true;
+        return Task.CompletedTask;
+    }
+
+    public Task<BankStats> GetStatsAsync(CancellationToken cancellationToken = default) => Task.FromResult(Stats);
 
     public Task<EmbeddingConfig> StartModelMigrationAsync(string provider, string? model, string? baseUrl,
         CancellationToken cancellationToken = default)

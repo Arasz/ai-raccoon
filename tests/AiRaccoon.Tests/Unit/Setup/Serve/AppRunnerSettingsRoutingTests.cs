@@ -112,6 +112,55 @@ public sealed class AppRunnerSettingsRoutingTests : IDisposable
         stdout.ShouldContain("reingest repair:");
     }
 
+    /// <summary>
+    ///     ADR-0075 amendment: `extract prune` used to write the bank directly from the CLI process
+    ///     (IPromotionQueueStore bound unconditionally, never routed through CliWriteOptOuts's
+    ///     mechanism at all) — the defect this task fixes. It now routes through the same acquired
+    ///     IPromotionQueuePruneStore as every other non-opted-out command.
+    /// </summary>
+    [Fact]
+    public async Task AnExtractPruneCommand_UsesTheInjectedAcquireFunction()
+    {
+        var acquireCalls = 0;
+        var fake = new InMemorySettings();
+
+        var (exit, stdout) = await Run(
+            (_, _, _) =>
+            {
+                acquireCalls++;
+                return Task.FromResult<ISettingsStore>(fake);
+            },
+            ["--data-root", _dataRoot, "extract", "prune"]);
+
+        exit.ShouldBe(0);
+        acquireCalls.ShouldBe(1);
+        stdout.ShouldContain("no orphaned candidates found");
+    }
+
+    /// <summary>
+    ///     ADR-0075 amendment: `settings maintenance list` used to open the bank directly from the
+    ///     CLI process to read pragma stats, unconditionally, on every invocation. It now routes
+    ///     through the same acquired IMaintenanceStatsStore as every other non-opted-out command.
+    /// </summary>
+    [Fact]
+    public async Task ASettingsMaintenanceListCommand_UsesTheInjectedAcquireFunction()
+    {
+        var acquireCalls = 0;
+        var fake = new InMemorySettings();
+
+        var (exit, stdout) = await Run(
+            (_, _, _) =>
+            {
+                acquireCalls++;
+                return Task.FromResult<ISettingsStore>(fake);
+            },
+            ["--data-root", _dataRoot, "settings", "maintenance", "list"]);
+
+        exit.ShouldBe(0);
+        acquireCalls.ShouldBe(1);
+        stdout.ShouldContain("db file:");
+    }
+
     /// <summary>A failed acquire surfaces as the command's own failure, not a crash.</summary>
     [Fact]
     public async Task WhenTheAcquireFunctionFails_TheCommandReportsItAndDoesNotThrow()
