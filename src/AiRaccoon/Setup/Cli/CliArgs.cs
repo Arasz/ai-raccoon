@@ -13,7 +13,10 @@ namespace AiRaccoon.Setup.Cli;
 internal static class CliArgs
 {
     private const string VersionOptionAction = "VersionOptionAction";
-    private static readonly ParserConfiguration ParserConfiguration = new() { EnablePosixBundling = true };
+
+    /// <summary>Shared with CliRendering, which re-parses the resolved command path plus
+    /// "--help" to render help for a recognised-but-incomplete command.</summary>
+    internal static readonly ParserConfiguration ParserConfiguration = new() { EnablePosixBundling = true };
 
     /// <summary>Parses args; never writes anything (stdout stays reserved for the stdio protocol).</summary>
     internal static bool TryParse(string[] args, out CliInput? result)
