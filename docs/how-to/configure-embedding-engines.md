@@ -96,9 +96,13 @@ sequenceDiagram
     Relay->>Store: Mark the migration finished — the bank serves again
 ```
 
-The command returns before the re-embedding happens, so it is quick and silent. Three things follow:
+The command returns before the re-embedding happens — but that is not the same as the *change* being
+quick. Three things follow, and the first is the one that catches people out:
 
-- **The bank refuses tool calls until the migration completes.** Searching a half-migrated bank
+- **The bank refuses tool calls until the migration completes — for minutes, not seconds.** Measured
+  on a 25,917-entry bank: **~6 minutes**, refusing every read and write throughout. Plan a model
+  change as a maintenance window rather than a settings tweak; it scales with the size of the bank.
+  Searching a half-migrated bank
   would return quietly worse results; refusing is the honest alternative.
 - **A crash does not lose the migration.** The record is durable, so the next server's startup pass
   finishes it — you do not re-run `model set`.

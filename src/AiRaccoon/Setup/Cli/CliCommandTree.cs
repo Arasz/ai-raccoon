@@ -140,14 +140,17 @@ internal static class CliCommandTree
     }
 
     /// <summary>
-    ///     `model set` re-embeds the whole bank in the background (ADR-0076: the CLI commits an
-    ///     outbox record and returns; a relay on the server drains it), so it is an operation and
-    ///     stays top level; the provider rows it leaves behind are read and cleared under settings.
+    ///     `model set` re-embeds the whole bank (ADR-0076: the CLI commits an outbox record and
+    ///     returns; a relay on the server drains it), so it is an operation and stays top level;
+    ///     the provider rows it leaves behind are read and cleared under settings. The help says
+    ///     "blocks", not "in the background": the command returns immediately, but the bank refuses
+    ///     every tool call until the re-embed finishes, and "background" told users the opposite.
     /// </summary>
     private static Command ModelCommand() =>
-        new("model", "Embedding engine selection — 'model set' starts a re-embed of the bank in the background; its configuration is shown and reset under 'settings model'")
+        new("model", "Embedding engine selection; configuration is under 'settings model'")
         {
-            new Command("set", "Sets the embedding engine and starts re-embedding the bank in the background")
+            new Command("set",
+                "Sets the engine and re-embeds the bank. Blocks all reads and writes until done — minutes on a large bank")
             {
                 new Command("local", "Embeds in-process with the bundled ONNX model; optional path overrides it") { new Argument<string?>("path") { HelpName = "path", Arity = ArgumentArity.ZeroOrOne } },
                 new Command("openai", "Routes through an OpenAI-compatible endpoint; key via --api-key (persisted in settings)")
