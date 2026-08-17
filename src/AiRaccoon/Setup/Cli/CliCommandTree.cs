@@ -69,6 +69,7 @@ internal static class CliCommandTree
         root.Add(ExtractCommand());
         root.Add(NoiseCommand());
         root.Add(EncryptionCommand());
+        root.Add(RepairCommand());
         root.Add(ServeCommand());
         root.Add(DoctorCommand());
         return root;
@@ -323,6 +324,21 @@ internal static class CliCommandTree
         encryption.Add(new Command("migrate", "Rekeys a bank still encrypted under the pre-ADR-0012 key derivation (ADR-0012)"));
         return encryption;
     }
+
+    /// <summary>
+    ///     Explicit-only repair operations (GH #371) — never part of the maintenance job list a bank
+    ///     open runs automatically; an operator invokes these by hand.
+    /// </summary>
+    private static Command RepairCommand() =>
+        new("repair", "Explicit-only repair operations. Nothing here runs automatically — every repair is invoked by hand.")
+        {
+            new Command("chunk-index",
+                "Re-derives chunk_index/total_chunks per source_file from the document itself, instead of the row-insertion order an older binary may have left behind (GH #371). " +
+                "A source_file that no longer exists gets chunk_index = -1 (position unknown), never a guess. Pure UPDATE — never inserts or deletes a row. Reports by default; --apply writes.")
+            {
+                new Option<bool>("--apply") { Description = "Writes the repositioned values instead of only reporting them" }
+            }
+        };
 
     /// <summary>
     ///     Verifies the bank's schema shape (tables/columns/indexes) against what this binary's DDL

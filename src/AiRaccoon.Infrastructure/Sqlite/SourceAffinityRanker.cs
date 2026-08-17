@@ -71,10 +71,18 @@ internal static class SourceAffinityRanker
             return 0;
         }
 
+        // GH #371: chunk_index = -1 means "document position unknown" — -1 and 0 differ by exactly 1,
+        // so without this guard an unknown-position row would read as adjacent to the first chunk.
+        if (candidate.ChunkIndex < 0)
+        {
+            return 0;
+        }
+
         var count = 0;
         foreach (var sibling in bySource[candidate.SourceFile])
         {
-            if (Math.Abs(sibling.ChunkIndex - candidate.ChunkIndex) == 1
+            if (sibling.ChunkIndex >= 0
+                && Math.Abs(sibling.ChunkIndex - candidate.ChunkIndex) == 1
                 && sibling.Ranking >= maxRaw - threshold)
             {
                 count++;
@@ -107,9 +115,12 @@ internal static class SourceAffinityRanker
         var merged = new HashSet<string>(StringComparer.Ordinal);
         foreach (var result in order)
         {
+            // GH #371: the same -1-vs-0 near-miss SiblingCount guards against — an unknown-position
+            // row (chunk_index = -1) must never merge into another as if it were the neighbour.
             if (result.SourceFile is null
                 || !bestBySource.TryGetValue(result.SourceFile, out var best)
                 || ReferenceEquals(best, result)
+                || best.ChunkIndex < 0 || result.ChunkIndex < 0
                 || Math.Abs(best.ChunkIndex - result.ChunkIndex) != 1)
             {
                 continue;

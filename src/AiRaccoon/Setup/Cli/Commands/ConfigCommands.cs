@@ -20,6 +20,7 @@ internal sealed class ConfigCommands(
     PerformanceCommands performance,
     ServeCommands serve,
     NoiseEntriesCommands noiseEntries,
+    ChunkIndexRepairCommands chunkIndexRepair,
     DoctorCommands doctor)
 {
     public async Task<int> RunAsync(CliInput cliInput,
@@ -95,6 +96,7 @@ internal sealed class ConfigCommands(
                 ["settings", "extract", "exclude", "remove"] => await extract.ExcludeRemoveAsync(parsedCliArgs, store, streams, ctx),
                 ["settings", "extract", "exclude", "list"] => await extract.ExcludeListAsync(store, streams, ctx),
                 ["extract", "prune"] => await extract.PruneAsync(parsedCliArgs, streams, ctx),
+                ["repair", "chunk-index"] => await chunkIndexRepair.RunAsync(parsedCliArgs, streams, ctx),
                 ["encryption", "show"] => await encryptionCommands.ShowAsync(store, streams, ctx),
                 ["encryption", "unset"] => await encryptionCommands.UnsetAsync(store, streams, ctx),
                 ["encryption", "migrate"] => await encryptionCommands.MigrateAsync(streams, ctx),

@@ -48,6 +48,26 @@ public sealed class SourceAffinityRankerTests
         ranked[2].Ranking.ShouldBe(0.9 / 1.1, 1e-9);
     }
 
+    /// <summary>
+    ///     GH #371: chunk_index = -1 is the "document position unknown" sentinel — -1 and 0 differ by
+    ///     exactly 1, so without an explicit chunk_index &lt; 0 guard, SiblingCount would read them as
+    ///     adjacent and award the boost anyway.
+    /// </summary>
+    [Fact]
+    public void Rank_UnknownPositionSibling_IsNotTreatedAsAdjacent()
+    {
+        var candidates = new[]
+        {
+            Hit("h0", 1.0, "a.md", -1),
+            Hit("h1", 0.9, "a.md", 0)
+        };
+
+        var ranked = SourceAffinityRanker.Rank(candidates, lambda: 0.1, double.PositiveInfinity, DocScoreFormula.Max);
+
+        ranked[0].Ranking.ShouldBe(1.0);
+        ranked[1].Ranking.ShouldBe(0.9);
+    }
+
     [Fact]
     public void Rank_NonAdjacentChunks_AreNotBoosted()
     {
@@ -109,6 +129,21 @@ public sealed class SourceAffinityRankerTests
         var ranked = SourceAffinityRanker.Rank(candidates, lambda: 0.1, 0.1, DocScoreFormula.Max);
 
         ranked.Select(r => r.Hash).ShouldBe(["h0", "h2"]);
+    }
+
+    /// <summary>GH #371: the same -1-vs-0 near-miss, in Consolidate's own adjacency check.</summary>
+    [Fact]
+    public void Rank_Consolidation_DoesNotMergeAnUnknownPositionSibling()
+    {
+        var candidates = new[]
+        {
+            Hit("h0", 1.0, "a.md", -1),
+            Hit("h1", 0.7, "a.md", 0)
+        };
+
+        var ranked = SourceAffinityRanker.Rank(candidates, lambda: 0.1, 0.1, DocScoreFormula.Max);
+
+        ranked.Select(r => r.Hash).ShouldBe(["h0", "h1"]);
     }
 
     [Fact]

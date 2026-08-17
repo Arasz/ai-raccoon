@@ -667,7 +667,11 @@ public sealed partial class SqliteMemoryStore(
                         agentId = (string?)null,
                         createdAt = now,
                         updatedAt = now,
-                        sourceId = source.Id
+                        sourceId = source.Id,
+                        // Position unknown here — appended to a (ctx, source_file) group; the
+                        // recompute below fills it in.
+                        chunkIndex = -1,
+                        totalChunks = 0
                     },
                     cancellationToken))
             .ConfigureAwait(false);
@@ -798,8 +802,8 @@ public sealed partial class SqliteMemoryStore(
             {
                 var context = ContextStringOf(recomputeContext.Scope, recomputeContext.ContextLabel,
                     recomputeContext.WorkspaceId, projectId);
-                await RecomputeChunkColumnsAsync(connection, context, projectId, recomputeContext.SourceFile,
-                    cancellationToken).ConfigureAwait(false);
+                await CompactChunkColumnsAfterDeleteAsync(connection, context, projectId,
+                    recomputeContext.SourceFile, (int)recomputeContext.ChunkIndex, cancellationToken).ConfigureAwait(false);
             }
 
             await connection.ExecuteAsync(
@@ -1008,19 +1012,6 @@ public sealed partial class SqliteMemoryStore(
             "custom" => contextLabel ?? "",
             _ => ""
         };
-    }
-
-    /// <summary>
-    ///     Recomputes chunk_index/total_chunks for one (ctx, sourceFile) group after a write that
-    ///     can change its membership (docs/plans/2026-08-08-search-knn-perf.md §3.3).
-    /// </summary>
-    private static async Task RecomputeChunkColumnsAsync(SqliteConnection connection, string context,
-        string projectId, string sourceFile, CancellationToken cancellationToken)
-    {
-        var ctx = MemorySql.ContextKeyFor(context, projectId);
-        await connection.ExecuteAsync(
-                Def(MemorySql.RecomputeChunkColumnsForContext, new { ctx, sourceFile }, cancellationToken))
-            .ConfigureAwait(false);
     }
 
     /// <summary>memory_write has no caller path; a content-derived name keeps the slot stable (FR-NM-7; see docs/work/features-native-memory/native-memory.feature).</summary>
