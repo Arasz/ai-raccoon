@@ -102,8 +102,21 @@ units is visible rather than silently rewarded.
   MRR@10 ≥ 0.070) and the discriminating checks are the relational ones — mispairing, budget
   movement, relevance bounding — rather than the absolute floors.
 - **Negative:** identity retrieval is 0.6875, not 1.0 — searching a chunk's own text does not always
-  return it, because a chunk-length query is truncated to the embedding budget and dilutes FTS. It
-  is gated as a smoke check (> 0.5) and is not a ranking claim.
+  return that chunk first. It is gated as a smoke check (> 0.5) and is not a ranking claim.
+
+  **Not truncation.** A chunk is built to fit `MaxContentTokens` (254 = the bundled model's
+  256-token window less `[CLS]`/`[SEP]`, [ADR-0036](0036-engine-aware-chunk-token-budget.md)), so a
+  chunk used as a query sits at or under the window, and
+  [ADR-0071](0071-a-query-is-trimmed-deliberately-and-said-so.md) pins that a query exactly on the
+  limit is untouched. The anchors here are 714–1151 characters; none is trimmed.
+
+  **Not a narrow relevance set either.** Scored against the exact anchor hash alone, mean MRR is
+  0.687500 — identical to the span-set figure, digit for digit. The anchor is simply outranked: in
+  11 of 16 cases by a sibling chunk of the same document, in 3 (T1, T8, T9) by a chunk of a
+  different file. That is consistent with the two mechanisms
+  [ADR-0078](0078-the-no-fusion-regression-rule-is-an-order-and-ships-default-off.md) already
+  measured — RRF paying consensus over a decisive single leg, and `SourceAffinityRanker` promoting
+  adjacent siblings by roughly seven rank positions each — rather than anything about this corpus.
 - **Unchanged:** no production behaviour. ADR-0077's two correctness properties (prose and tables
   never share a chunk; no header-orphaned body row) remain unbuilt. They are unblocked by
   replacement semantics, deterministic, and gateable without any of this — but this corpus is what
