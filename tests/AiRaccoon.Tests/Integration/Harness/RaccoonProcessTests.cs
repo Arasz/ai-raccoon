@@ -10,7 +10,7 @@ namespace AiRaccoon.Tests.Integration.Harness;
 ///     a dead process is not an error to kill, and a missing build output names the path it wanted.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class RaccoonProcessTests : IDisposable
 {
     private static readonly TimeSpan HardCap = TimeSpan.FromSeconds(2);

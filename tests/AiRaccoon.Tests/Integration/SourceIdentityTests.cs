@@ -17,7 +17,7 @@ namespace AiRaccoon.Tests.Integration;
 ///     hold their pinned hybrid ranks.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class SourceIdentityTests : IDisposable
 {
     private const string ProjectId = "job-search-ai-assistant"; // matches PROJECT_ID in scripts/ingest-jsaa-docs.py

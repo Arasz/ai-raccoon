@@ -6,7 +6,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 [Trait(TestCategories.Category, TestCategories.Integration)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class HarnessSmokeTests
 {
     /// <summary>Fixed small query set covering the doc-derived, cluster and remember judgment tiers.</summary>

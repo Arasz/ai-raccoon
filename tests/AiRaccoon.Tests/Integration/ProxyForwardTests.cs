@@ -20,7 +20,7 @@ namespace AiRaccoon.Tests.Integration;
 ///     McpServer with no tools of its own must answer entirely out of the live HTTP backend.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.E2E)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 [Collection(E2ETestCollection.Name)]
 public sealed class ProxyForwardTests : IAsyncLifetime
 {

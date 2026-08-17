@@ -20,7 +20,7 @@ namespace AiRaccoon.Tests.Integration;
 ///     defaults) to the Wave 3 gates. Full matrix in docs/work/2026-08-04-wave3-source-affinity-sweep.md.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class SourceAffinitySweepTests : IDisposable
 {
     private const string ProjectId = "job-search-ai-assistant";

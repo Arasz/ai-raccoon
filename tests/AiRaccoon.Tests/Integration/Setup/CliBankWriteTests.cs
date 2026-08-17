@@ -39,7 +39,7 @@ namespace AiRaccoon.Tests.Integration.Setup;
 ///     without an edit here.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class CliBankWriteTests : IAsyncLifetime
 {
     private static readonly TimeSpan HardCap = TimeSpan.FromSeconds(60);

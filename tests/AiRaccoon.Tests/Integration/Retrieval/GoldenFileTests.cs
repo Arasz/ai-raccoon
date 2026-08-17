@@ -5,7 +5,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration.Retrieval;
 
 [Trait(TestCategories.Category, TestCategories.Integration)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class GoldenFileTests
 {
     // GoldenFile_MatchesFreshReferenceRun deleted (docs/plans/2026-08-14-code-quality-improvement-plan.md

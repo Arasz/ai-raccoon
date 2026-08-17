@@ -11,7 +11,7 @@ namespace AiRaccoon.Tests.Integration.Retrieval;
 ///     a span anchor bounds inflation without freezing it (docs/adr/0079).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class TableChunkingArmComparison(ITestOutputHelper output)
 {
     private static readonly (string Name, Func<TokenCount, IMarkdownChunker>? Arm)[] Arms =

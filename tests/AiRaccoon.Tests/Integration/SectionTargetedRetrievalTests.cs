@@ -20,7 +20,7 @@ namespace AiRaccoon.Tests.Integration;
 ///     corpus; limits in docs/adr/0004-dual-vector-structure-signal.md.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class SectionTargetedRetrievalTests : IDisposable
 {
     private const string ProjectId = "job-search-ai-assistant"; // matches scripts/ingest-jsaa-docs.py

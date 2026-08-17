@@ -10,7 +10,7 @@ namespace AiRaccoon.Tests.Integration.Retrieval;
 ///     than read from a committed fixture, and a response variable anchored on the answer span.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class TableRetrievalGateTests(TableCorpusFixture fixture, ITestOutputHelper output)
     : IClassFixture<TableCorpusFixture>
 {

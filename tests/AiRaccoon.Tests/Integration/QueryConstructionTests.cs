@@ -17,7 +17,7 @@ namespace AiRaccoon.Tests.Integration;
 ///     and the FTS-only guard on the committed corpus.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class QueryConstructionTests : IDisposable
 {
     private const string ProjectId = "job-search-ai-assistant"; // matches PROJECT_ID in scripts/ingest-jsaa-docs.py

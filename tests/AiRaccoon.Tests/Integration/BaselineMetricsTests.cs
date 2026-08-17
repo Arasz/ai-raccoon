@@ -20,7 +20,7 @@ namespace AiRaccoon.Tests.Integration;
 ///     baseline across hybrid/FTS-only/vector-only per-query runs, scored via RetrievalMetrics.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class BaselineMetricsTests : IDisposable
 {
     private const string ProjectId = "job-search-ai-assistant"; // matches PROJECT_ID in scripts/ingest-jsaa-docs.py

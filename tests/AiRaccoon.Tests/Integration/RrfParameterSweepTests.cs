@@ -21,7 +21,7 @@ namespace AiRaccoon.Tests.Integration;
 ///     configuration (docs/adr/0006-rrf-parameter-optimization.md) to the Wave 4 gates.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class RrfParameterSweepTests : IDisposable
 {
     private const string ProjectId = "job-search-ai-assistant";

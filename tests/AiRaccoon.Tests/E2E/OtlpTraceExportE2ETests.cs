@@ -17,7 +17,7 @@ namespace AiRaccoon.Tests.E2E;
 ///     a real OTLP collector stand-in — not a hand-built Activity or an in-memory exporter.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.E2E)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 [Collection(E2ETestCollection.Name)]
 public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
 {

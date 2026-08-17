@@ -15,7 +15,7 @@ namespace AiRaccoon.Tests.Integration.Retrieval;
 ///     floors discriminate by scoring a deliberately reversed ranking through the same path.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class HeldOutRetrievalGateTests : IDisposable
 {
     private const string ProjectId = "job-search-ai-assistant";

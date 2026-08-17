@@ -22,7 +22,7 @@ namespace AiRaccoon.Tests.E2E;
 ///     stays open, and the 401 keeps ServeRunner's probe recognizing the server.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.E2E)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 [Collection(E2ETestCollection.Name)]
 public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve) : IClassFixture<McpTokenGateE2ETests.ServeFixture>
 {

@@ -19,7 +19,7 @@ namespace AiRaccoon.Tests.E2E;
 ///     resolving a key, opening the bank or loading a model of its own.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.E2E)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 [Collection(E2ETestCollection.Name)]
 public sealed class ProxyLaunchE2ETests : IAsyncLifetime
 {
