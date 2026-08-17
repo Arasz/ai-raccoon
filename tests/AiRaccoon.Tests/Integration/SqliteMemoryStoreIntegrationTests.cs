@@ -378,11 +378,89 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
             TestContext.Current.CancellationToken);
 
         await File.WriteAllTextAsync(file, "oscillatory queued revised", TestContext.Current.CancellationToken);
-        await _store.ReplaceFileAsync("acme", file, "revised-hash", TestContext.Current.CancellationToken);
+        await _store.ReplaceIfFileChangedAsync("acme", file, "revised-hash", TestContext.Current.CancellationToken);
 
         (await _queue.ListAsync("acme", TestContext.Current.CancellationToken))
             .ShouldContain(r => r.Hash == manual.Hash,
                 "a candidate backed only by a manual row citing the path must survive the digest replace");
+    }
+
+    /// <summary>
+    ///     repair reingest's own promotion-queue requirement (MemorySql.cs:202-204): a replace deletes
+    ///     every chunk of the path and re-inserts, so the promotion_queue_entries_ad trigger (ADR-0023)
+    ///     fires even for chunks whose text is unchanged. <see cref="ReplaceAsync" /> shares
+    ///     <see cref="ReplaceIfFileChangedAsync" />'s capture/restore round trip via the same core, so
+    ///     the mirror of <see cref="ReplaceFile_KeepsPromotionCandidateBackedOnlyByManualRow" /> above
+    ///     holds for it too — proved directly rather than only inferred from the shared implementation.
+    /// </summary>
+    [Fact]
+    public async Task ReplaceAsync_KeepsPromotionCandidateBackedOnlyByManualRow()
+    {
+        var file = Path.Combine(_dataRoot, "cited-queue-forced.md");
+        await File.WriteAllTextAsync(file, "oscillatory forced source", TestContext.Current.CancellationToken);
+        await ScopeDataRootAsync();
+        await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
+
+        var manual = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "thixotropic forced manual", SourceFile: file),
+            TestContext.Current.CancellationToken);
+        await _queue.UpsertAsync("acme",
+            [new QueueCandidate(manual.Hash, $"{manual.Hash}.md", manual.Value, file, 1.0, [])],
+            TestContext.Current.CancellationToken);
+
+        // Content unchanged: repair reingest's own scenario. ReplaceAsync must still run the
+        // delete-and-reingest round trip that the queue capture/restore depends on.
+        await _store.ReplaceAsync("acme", file, "forced-hash", TestContext.Current.CancellationToken);
+
+        (await _queue.ListAsync("acme", TestContext.Current.CancellationToken))
+            .ShouldContain(r => r.Hash == manual.Hash,
+                "a candidate backed only by a manual row citing the path must survive the forced replace");
+    }
+
+    /// <summary>
+    ///     The gate the ReplaceFileAsync split exists to prove: with the same fingerprint the store
+    ///     already has on file, the two callers behave differently by design.
+    /// </summary>
+    [Fact]
+    public async Task ReplaceIfFileChangedAsync_DoesNothing_WhenTheStoredFingerprintMatches()
+    {
+        var file = Path.Combine(_dataRoot, "unchanged.md");
+        await File.WriteAllTextAsync(file, "steadfast unchanged content", TestContext.Current.CancellationToken);
+        await ScopeDataRootAsync();
+        await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
+        await SeedWatchFingerprintAsync("acme", file, "same-hash");
+
+        var replaced = await _store.ReplaceIfFileChangedAsync(
+            "acme", file, "same-hash", TestContext.Current.CancellationToken);
+
+        replaced.ShouldBeFalse("the watch-digest gate must skip a fingerprint it already has on file");
+    }
+
+    [Fact]
+    public async Task ReplaceAsync_ReplacesEvenWhenTheStoredFingerprintMatches()
+    {
+        var file = Path.Combine(_dataRoot, "forced.md");
+        await File.WriteAllTextAsync(file, "adamant original content", TestContext.Current.CancellationToken);
+        await ScopeDataRootAsync();
+        await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
+        await SeedWatchFingerprintAsync("acme", file, "same-hash");
+
+        // The file itself changed (a re-chunk-driven repair, not a content edit, would keep it
+        // identical) — rewritten here only so a real replace is observable in search results.
+        await File.WriteAllTextAsync(file, "adamant revised content", TestContext.Current.CancellationToken);
+        await _store.ReplaceAsync("acme", file, "same-hash", TestContext.Current.CancellationToken);
+
+        (await _store.SearchAsync(new SearchQuery("acme", "adamant revised"), TestContext.Current.CancellationToken))
+            .Results.ShouldNotBeEmpty(
+                "ReplaceAsync must replace unconditionally — the given fingerprint already matched what was stored");
+    }
+
+    private async Task SeedWatchFingerprintAsync(string projectId, string path, string fileHash)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(
+            "INSERT INTO watch_files (project_id, path, file_hash, updated_at) VALUES (@projectId, @path, @fileHash, 1)",
+            new { projectId, path, fileHash });
     }
 
     [Fact]

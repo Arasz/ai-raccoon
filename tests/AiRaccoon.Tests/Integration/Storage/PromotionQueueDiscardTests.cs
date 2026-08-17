@@ -203,7 +203,7 @@ public sealed class PromotionQueueDiscardTests : IDisposable
 
         // Unchanged content: the chunk returns under the same hash after the replace.
         await File.WriteAllTextAsync(path, "stable adr content", TestContext.Current.CancellationToken);
-        await _store.ReplaceFileAsync("acme", path, "file-hash-2", TestContext.Current.CancellationToken);
+        await _store.ReplaceIfFileChangedAsync("acme", path, "file-hash-2", TestContext.Current.CancellationToken);
 
         (await _queueStore.ListAsync("acme", TestContext.Current.CancellationToken))
             .Select(r => r.Hash).ShouldNotContain(hash,

@@ -278,7 +278,7 @@ internal sealed class FakeWatchMemoryStore : FakeMemoryStore
     }
 
     /// <summary>Mirrors the real transaction: re-check the fingerprint, then delete, ingest and store it.</summary>
-    public override async Task<bool> ReplaceFileAsync(string projectId, string path, string fileHash,
+    public override async Task<bool> ReplaceIfFileChangedAsync(string projectId, string path, string fileHash,
         CancellationToken cancellationToken = default)
     {
         if (string.Equals(ReadFingerprint?.Invoke(projectId, path), fileHash, StringComparison.Ordinal))

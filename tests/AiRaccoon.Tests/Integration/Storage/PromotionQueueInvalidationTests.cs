@@ -82,7 +82,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
             TestContext.Current.CancellationToken);
 
         await File.WriteAllTextAsync(path, "revised adr content", TestContext.Current.CancellationToken);
-        await _store.ReplaceFileAsync("acme", path, "file-hash-2", TestContext.Current.CancellationToken);
+        await _store.ReplaceIfFileChangedAsync("acme", path, "file-hash-2", TestContext.Current.CancellationToken);
 
         (await _queueStore.ListAsync("acme", TestContext.Current.CancellationToken))
             .Select(r => r.Hash).ShouldNotContain(oldHash,
@@ -329,7 +329,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
 
         await File.WriteAllTextAsync(path, "stable paragraph\n\nrevised second paragraph",
             TestContext.Current.CancellationToken);
-        await _store.ReplaceFileAsync("acme", path, "file-hash-2", TestContext.Current.CancellationToken);
+        await _store.ReplaceIfFileChangedAsync("acme", path, "file-hash-2", TestContext.Current.CancellationToken);
 
         (await HashOfAsync("acme", "stable paragraph")).ShouldBe(stableHash,
             "the unchanged chunk is re-inserted under the same content hash");

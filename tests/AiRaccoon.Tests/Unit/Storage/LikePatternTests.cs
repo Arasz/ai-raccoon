@@ -7,7 +7,7 @@ namespace AiRaccoon.Tests.Unit.Storage;
 
 /// <summary>
 ///     LikePattern.Escape guards the path-prefix cascade deletes (SqliteMemoryStore.DeleteSourcePathAsync,
-///     ReplaceFileAsync, WatchStore.RemoveWatchAsync): an unescaped '_' or '%' in a path turns a
+///     ReplaceCoreAsync, WatchStore.RemoveWatchAsync): an unescaped '_' or '%' in a path turns a
 ///     literal prefix into a wildcard and deletes sibling rows.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]

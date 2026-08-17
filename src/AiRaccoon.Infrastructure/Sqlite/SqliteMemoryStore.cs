@@ -468,74 +468,6 @@ public sealed partial class SqliteMemoryStore(
         }
     }
 
-    /// <summary>
-    ///     Watch-digest replace-by-path, all in one transaction so no reader ever sees the file
-    ///     chunkless and a crash rolls the whole replace back: fingerprint re-check (the write lock
-    ///     makes it the authoritative one, so a concurrent process re-does no chunking or embedding),
-    ///     delete, re-ingest, fingerprint write. Embedding is left pending for the caller to run
-    ///     after the commit — the engine is far too slow to hold the bank's write lock through.
-    /// </summary>
-    public async Task<bool> ReplaceFileAsync(string projectId, string path, string fileHash,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        ArgumentException.ThrowIfNullOrWhiteSpace(fileHash);
-
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-
-        await connection.ExecuteAsync(
-                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
-        try
-        {
-            var stored = await connection.ExecuteScalarAsync<string?>(
-                    Def(MemorySql.SelectWatchFile, new { projectId, path }, cancellationToken))
-                .ConfigureAwait(false);
-            var replaced = !string.Equals(stored, fileHash, StringComparison.Ordinal);
-            if (replaced)
-            {
-                var pathPrefix = LikePattern.Escape(path) + "/%";
-                await connection.ExecuteAsync(
-                        Def(MemorySql.CreateQueueRestoreTable, null, cancellationToken))
-                    .ConfigureAwait(false);
-                await connection.ExecuteAsync(
-                        Def(MemorySql.CaptureQueueRowsForSourcePath, new { projectId, path, pathPrefix },
-                            cancellationToken))
-                    .ConfigureAwait(false);
-                await connection.ExecuteAsync(
-                        Def(MemorySql.DeleteBySourcePath, new { projectId, path, pathPrefix }, cancellationToken))
-                    .ConfigureAwait(false);
-                await fileIngestor
-                    .IngestFileAsync(connection, projectId, path, null, cancellationToken, false)
-                    .ConfigureAwait(false);
-                await connection.ExecuteAsync(
-                        Def(MemorySql.RestoreQueueRowsStillBacked, null, cancellationToken))
-                    .ConfigureAwait(false);
-                await connection.ExecuteAsync(
-                        Def(MemorySql.UpsertWatchFile,
-                            new
-                            {
-                                projectId, path, fileHash,
-                                updatedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds()
-                            }, cancellationToken))
-                    .ConfigureAwait(false);
-            }
-
-            await connection.ExecuteAsync(
-                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
-            return replaced;
-        }
-        catch
-        {
-            await connection.ExecuteAsync(
-                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
-            throw;
-        }
-    }
-
     public async Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
@@ -767,7 +699,7 @@ public sealed partial class SqliteMemoryStore(
     ///     Entry-delete and sync tombstone in one transaction (ADR-0035/WP5a): a crash between the
     ///     two used to leave the content deleted locally with no tombstone, resurrecting it on the
     ///     next sync. Same BEGIN IMMEDIATE/COMMIT/ROLLBACK shape as <see cref="DeleteSourcePathAsync" />
-    ///     and <see cref="ReplaceFileAsync" />; both callers are top-level, so there is no nested-transaction hazard.
+    ///     and <see cref="ReplaceCoreAsync" />; both callers are top-level, so there is no nested-transaction hazard.
     /// </summary>
     private async Task<bool> DeleteCoreAsync(SqliteConnection connection, string projectId, string hash,
         string? scope, CancellationToken cancellationToken)

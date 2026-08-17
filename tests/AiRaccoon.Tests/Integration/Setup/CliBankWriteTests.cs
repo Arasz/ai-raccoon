@@ -63,6 +63,7 @@ public sealed class CliBankWriteTests : IAsyncLifetime
         data.Add("watch registered", ["watch", "registered"]);
         data.Add("extract prune", ["extract", "prune"]);
         data.Add("repair chunk-index", ["repair", "chunk-index"]);
+        data.Add("repair reingest", ["repair", "reingest"]);
         return data;
     }
 
