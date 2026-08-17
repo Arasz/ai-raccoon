@@ -13,6 +13,7 @@ internal sealed record TableQuery(string Id, string Query, string ExpectedSource
 internal static partial class TableCorpusCatalog
 {
     public const string QueriesRelativePath = "scripts/table-corpus-queries.json";
+    public const string SourcesRelativePath = "scripts/table-corpus-sources.json";
     public const string CorpusRelativePath = "tests/AiRaccoon.Tests/Resources/TableCorpus";
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
@@ -38,6 +39,20 @@ internal static partial class TableCorpusCatalog
 
     public static IReadOnlyList<string> CorpusFiles() =>
         [.. Directory.EnumerateFiles(CorpusRoot(), "*.md", SearchOption.AllDirectories).Order(StringComparer.Ordinal)];
+
+    /// <summary>The corpus-relative paths scripts/table-corpus-sources.json declares, as
+    /// "&lt;source-id&gt;/&lt;path&gt;" — the shape scripts/vendor-table-corpus.py writes them in.</summary>
+    public static IReadOnlyList<string> DeclaredFiles()
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(TestData.RepoFile(SourcesRelativePath)));
+        return
+        [
+            .. document.RootElement.GetProperty("sources").EnumerateArray()
+                .SelectMany(source => source.GetProperty("files").EnumerateArray()
+                    .Select(file => $"{source.GetProperty("id").GetString()}/{file.GetString()}"))
+                .Order(StringComparer.Ordinal)
+        ];
+    }
 
     /// <summary>The lines of <paramref name="text" /> that belong to a markdown table: a separator row,
     /// the header directly above it, and the body rows directly below.</summary>

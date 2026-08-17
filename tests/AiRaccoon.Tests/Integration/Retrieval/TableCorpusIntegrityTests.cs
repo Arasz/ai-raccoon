@@ -104,6 +104,25 @@ public sealed class TableCorpusIntegrityTests
         leaking.ShouldBeEmpty();
     }
 
+    /// <summary>
+    ///     The manifest and the vendored directory are two lists of the same thing, so nothing but a
+    ///     comparison keeps them together: a file added to one side and not the other leaves either an
+    ///     ungraded document in the corpus or a pin describing something that is not there.
+    /// </summary>
+    [Fact]
+    public void TheVendoredCorpus_IsExactlyWhatTheManifestDeclares()
+    {
+        var root = TableCorpusCatalog.CorpusRoot();
+        var onDisk = TableCorpusCatalog.CorpusFiles()
+            .Select(path => Path.GetRelativePath(root, path).Replace(Path.DirectorySeparatorChar, '/'))
+            .Order(StringComparer.Ordinal)
+            .ToList();
+
+        onDisk.ShouldBe(TableCorpusCatalog.DeclaredFiles(),
+            "scripts/table-corpus-sources.json and tests/AiRaccoon.Tests/Resources/TableCorpus disagree; " +
+            "re-run scripts/vendor-table-corpus.py");
+    }
+
     [Fact]
     public void QueryIds_AreUnique()
     {
