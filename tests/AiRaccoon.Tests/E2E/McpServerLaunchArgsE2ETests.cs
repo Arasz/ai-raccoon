@@ -13,7 +13,7 @@ namespace AiRaccoon.Tests.E2E;
 ///     bank for the project scope, not via env vars.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.E2E)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 [Collection(E2ETestCollection.Name)]
 public class McpServerLaunchArgsE2ETests : IAsyncLifetime
 {

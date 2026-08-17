@@ -21,7 +21,7 @@ namespace AiRaccoon.Tests.E2E;
 ///     both the bundled ONNX model (local) and an in-process fake OpenAI-compatible endpoint.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.E2E)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 [Collection(E2ETestCollection.Name)]
 public class McpServerE2ETests : IAsyncLifetime
 {

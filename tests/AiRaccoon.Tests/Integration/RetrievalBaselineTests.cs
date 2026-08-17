@@ -14,7 +14,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class RetrievalBaselineTests : IDisposable
 {
     private const string ProjectId = "job-search-ai-assistant"; // matches PROJECT_ID in scripts/ingest-jsaa-docs.py

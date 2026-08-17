@@ -15,7 +15,7 @@ namespace AiRaccoon.Tests.Integration;
 ///     This is asserted as a hard ceiling, not a percentage improvement.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class ChunkingCorpusGuaranteeTests
 {
     private const int MaxTokens = OnnxEmbeddingGenerator.MaxContentTokens;

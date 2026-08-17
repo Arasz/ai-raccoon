@@ -21,7 +21,7 @@ namespace AiRaccoon.Tests.Integration.Setup;
 ///     off the environment's default (7721) and off every other test's port.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class CliContractTests : IAsyncLifetime
 {
     private static readonly TimeSpan HardCap = TimeSpan.FromSeconds(60);

@@ -16,7 +16,7 @@ namespace AiRaccoon.Tests.E2E;
 ///     this — it is the one path where the gate is really in the way.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.E2E)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 [Collection(E2ETestCollection.Name)]
 public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
 {

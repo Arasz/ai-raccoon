@@ -21,7 +21,7 @@ namespace AiRaccoon.Tests.E2E;
 ///     backend on a real loopback socket, headers captured before the endpoint runs.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.E2E)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 [Collection(E2ETestCollection.Name)]
 public sealed class ProxyWireE2ETests : IAsyncLifetime
 {

@@ -20,7 +20,7 @@ namespace AiRaccoon.Tests.Integration;
 ///     each file's chunks appear in the source text.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class ChunkIndexCorpusGuaranteeTests : IDisposable
 {
     private const string ProjectId = "acme";

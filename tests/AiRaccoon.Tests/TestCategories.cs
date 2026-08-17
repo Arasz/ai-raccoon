@@ -6,7 +6,9 @@ namespace AiRaccoon.Tests;
 /// <summary>
 ///     Trait values for filtering: `dotnet test --filter "Category=Unit&Speed=Fast"`.
 ///     Category: Unit (pure logic / fakes), Integration (real SQLite or native extensions),
-///     E2E (full server over HTTP via WebApplicationFactory). Speed: Fast vs Slow.
+///     E2E (full server over HTTP via WebApplicationFactory). Speed: Fast, Slow or Nightly —
+///     Nightly is excluded from every push-gate filter and runs only via nightly.yml's
+///     unfiltered `dotnet test`.
 /// </summary>
 public static class TestCategories
 {
@@ -19,6 +21,7 @@ public static class TestCategories
     public const string Speed = "Speed";
     public const string Fast = "Fast";
     public const string Slow = "Slow";
+    public const string Nightly = "Nightly";
 }
 
 /// <summary>Never resolves a passphrase — no encryption. Use for existing unencrypted-DB tests.</summary>

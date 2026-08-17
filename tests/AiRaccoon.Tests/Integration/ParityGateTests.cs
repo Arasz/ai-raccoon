@@ -13,7 +13,7 @@ namespace AiRaccoon.Tests.Integration;
 ///     point and p95 latency within budget (docs/work/features-native-memory/native-memory.feature).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 [Collection("managed-parity")]
 public sealed class ParityGateTests(ManagedHarnessFixture fixture, ITestOutputHelper output)
 {

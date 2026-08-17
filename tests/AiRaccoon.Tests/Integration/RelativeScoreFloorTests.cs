@@ -14,7 +14,7 @@ namespace AiRaccoon.Tests.Integration;
 ///     for, and the relative floor is a rank-shaped control that carries no absolute match quality.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class RelativeScoreFloorTests : IDisposable
 {
     private const string ProjectId = "job-search-ai-assistant";

@@ -14,7 +14,7 @@ namespace AiRaccoon.Tests.E2E;
 ///     ungated backend or presents the right token, so this is the only one where the gate refuses.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.E2E)]
-[Trait(TestCategories.Speed, TestCategories.Slow)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
 [Collection(E2ETestCollection.Name)]
 public sealed class ProxyTokenRefusedE2ETests : IAsyncLifetime
 {
