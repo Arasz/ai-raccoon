@@ -4,6 +4,7 @@ using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
+using AiRaccoon.Tests.Integration.Setup;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tests.Unit.Watch;
 using Shouldly;
@@ -144,7 +145,28 @@ public class SettingsCommandTreeTests
     {
         var settings = CliCommandTree.BuildFullRootCommand().Children.OfType<Command>().Single(c => c.Name == "settings");
 
-        LeafPaths(settings, ["settings"]).ShouldBe(SettingsLeaves.Select(l => l.Path), ignoreOrder: true);
+        LeafPaths(settings, ["settings"]).Select(l => l.Path).ShouldBe(SettingsLeaves.Select(l => l.Path), ignoreOrder: true);
+    }
+
+    /// <summary>
+    ///     ADR-0075's route-table guard is a check that must be able to fail (item 3 of the
+    ///     CLI-off-the-bank task): a leaf offering --apply is exactly the shape whose write path a
+    ///     new command could silently reintroduce a direct bank write on. Deriving this from the
+    ///     tree, rather than hand-listing it in <see cref="CliBankWriteTests" />, means a new --apply
+    ///     leaf fails this test the moment it is added without a matching write-mode row there.
+    /// </summary>
+    [Fact]
+    public void ApplyLeaves_MatchCliBankWriteTestsCoverage()
+    {
+        var root = CliCommandTree.BuildFullRootCommand();
+
+        var applyLeaves = LeafPaths(root, [])
+            .Where(leaf => leaf.Command.Options.Any(o => o.Name == "--apply"))
+            .Select(leaf => leaf.Path)
+            .ToArray();
+
+        applyLeaves.ShouldBe(CliBankWriteTests.ApplyCommandPaths, ignoreOrder: true,
+            "a new --apply leaf needs a CliBankWriteTests.ApplyCommands() row proving its write is server-routed, not a direct bank write");
     }
 
     [Theory]
@@ -205,6 +227,7 @@ public class SettingsCommandTreeTests
     {
         var root = CliCommandTree.BuildFullRootCommand();
         var outside = LeafPaths(root, [])
+            .Select(l => l.Path)
             .Where(path => !path.StartsWith("settings", StringComparison.Ordinal))
             .Except(WriteOptOuts, StringComparer.Ordinal)
             .ToArray();
@@ -230,12 +253,12 @@ public class SettingsCommandTreeTests
     ///     Every executable path under the command, as space-joined argv. A command with its own
     ///     action is a path too, even when it also has children (`serve`).
     /// </summary>
-    private static IEnumerable<string> LeafPaths(Command command, IReadOnlyList<string> path)
+    private static IEnumerable<(string Path, Command Command)> LeafPaths(Command command, IReadOnlyList<string> path)
     {
         var children = command.Children.OfType<Command>().ToArray();
         if (path.Count > 0 && (children.Length == 0 || command.Action is not null))
         {
-            yield return string.Join(' ', path);
+            yield return (string.Join(' ', path), command);
         }
 
         foreach (var child in children)
@@ -247,21 +270,11 @@ public class SettingsCommandTreeTests
         }
     }
 
-    private sealed class EmptyOrphanQueueStore : IPromotionQueueStore
+    private sealed class EmptyOrphanQueueStore : IPromotionQueuePruneStore
     {
-        public Task<int> PurgeOldDiscardsAsync(long nowUnixSeconds, int retentionDays, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<IReadOnlyList<PromotionQueueRow>> ListAsync(string? projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<IReadOnlyList<PromotionQueueRow>> DiscardAsync(string projectId, string? hash, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<PromotionQueueRow?> ClaimAsync(string projectId, string hash, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<PromotionQueueStats> GetStatsAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<PromotionWaitStats> GetWaitStatsAsync(string? projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<PromotionQueueRow?> EvictVictimAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<int> ClearStaleAsync(string projectId, int currentScorerVersion, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task RememberDiscardsAsync(string projectId, IReadOnlyList<string> hashes, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<int> PruneRejectedAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-        public Task<PromotionQueueOrphanReport> PruneOrphansAsync(bool apply, CancellationToken cancellationToken = default) =>
+        public Task<PromotionQueueOrphanReport> ReportPruneOrphansAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(new PromotionQueueOrphanReport(0, new Dictionary<string, int>(StringComparer.Ordinal)));
+
+        public Task RequestPruneOrphansAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 }

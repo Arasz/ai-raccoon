@@ -117,6 +117,9 @@ public static class TestData
     /// <summary>Unreachable <see cref="IPromotionQueueStore"/> for command tests that never touch the queue (extract settings keys).</summary>
     internal static IPromotionQueueStore UnusedPromotionQueueStore() => new UnreachablePromotionQueueStore();
 
+    /// <summary>Unreachable <see cref="IPromotionQueuePruneStore"/> for command tests that never touch prune (extract settings keys).</summary>
+    internal static IPromotionQueuePruneStore UnusedPromotionQueuePruneStore() => new UnreachablePromotionQueuePruneStore();
+
     /// <summary>Resolves an <see cref="INodeRunner"/> from the real DI graph — serve tests start an actual HTTP host through it.</summary>
     public static INodeRunner CreateNodeRunner(InfrastructureOptions options)
     {
@@ -246,6 +249,12 @@ public static class TestData
         public Task RememberDiscardsAsync(string projectId, IReadOnlyList<string> hashes, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<int> PruneRejectedAsync(string projectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<PromotionQueueOrphanReport> PruneOrphansAsync(bool apply, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+
+    private sealed class UnreachablePromotionQueuePruneStore : IPromotionQueuePruneStore
+    {
+        public Task<PromotionQueueOrphanReport> ReportPruneOrphansAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task RequestPruneOrphansAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class LoopbackHttpClientFactory : IHttpClientFactory

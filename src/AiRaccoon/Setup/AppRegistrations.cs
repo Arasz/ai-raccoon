@@ -169,6 +169,11 @@ public static partial class AppRegistrations
                     sp.GetRequiredService<TimeProvider>()),
                 new ReingestRepairJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<ILocalTokenizer>(),
                     sp.GetRequiredService<IMemoryStore>(), sp.GetRequiredService<TimeProvider>()),
+                // ADR-0075 amendment: on-demand, same shape as the two repair jobs above —
+                // HasWorkAsync reads the promotion_queue_prune_requests row `extract prune --apply`
+                // submitted through the server. Pure DELETE — never leaves anything pending for
+                // PendingEmbedJob, so its position relative to it does not matter.
+                new PromotionQueuePruneJob(sp.GetRequiredService<TimeProvider>()),
                 // .NET-F1: on-demand — HasWorkAsync reads entries.embed_state itself, not a cadence.
                 new PendingEmbedJob(sp.GetRequiredService<IEntryEmbedder>())
             ]);
@@ -246,6 +251,11 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<IRepairStore, SqliteRepairStore>();
             services.AddRequiredSingleton<IWorkspaceStore, SqliteWorkspaceStore>();
             services.AddRequiredSingleton<IPromotionQueueStore, SqlitePromotionQueueStore>();
+            // ADR-0075 amendment: the server-side default for `extract prune` — overridden by
+            // LazyServerSettingsStore for the CLI graph, exactly like ISettingsStore above.
+            services.AddSingleton<IPromotionQueuePruneStore>(sp => sp.GetRequiredService<SqlitePromotionQueueStore>());
+            // ADR-0075 amendment: the server-side default for `settings maintenance list`.
+            services.AddRequiredSingleton<IMaintenanceStatsStore, SqliteMaintenanceStatsStore>();
         }
 
         private void RegisterEmbeddingServices()

@@ -11,7 +11,7 @@ namespace AiRaccoon.Tests.Integration;
 ///     Counts the SQLite statements <see cref="MemorySchema.EnsureAsync" /> executes, via
 ///     <c>sqlite3_trace</c> on the real connection handle — not by splitting the <c>Ddl</c> source
 ///     string, which would misparse the trigger bodies' embedded semicolons. Pins both sides of
-///     ADR-0075's digest gate: 4 statements when the digest matches, 41 in the block when it does not.
+///     ADR-0075's digest gate: 4 statements when the digest matches, 42 in the block when it does not.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -47,8 +47,8 @@ public sealed class MemorySchemaDdlStatementCountTests
 
         // 39 measured at ADR-0075 (not the plan's "~30"/"roughly thirty-two", §4.2 — the plan
         // undercounted), +1 for ADR-0076's model_migration table, +1 for the ADR-0075 amendment's
-        // repair_requests table.
-        CountDdl(statements).ShouldBe(41, Report(statements));
+        // repair_requests table, +1 for this amendment's promotion_queue_prune_requests table.
+        CountDdl(statements).ShouldBe(42, Report(statements));
     }
 
     private static async Task<List<string>> TraceAsync(SqliteConnection connection)

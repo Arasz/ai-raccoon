@@ -2,18 +2,22 @@ using System.CommandLine;
 using System.Globalization;
 using System.Text.Json;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 
 namespace AiRaccoon.Setup.Cli.Commands;
 
 /// <summary>
 ///     One-shot bank-maintenance verb handlers: interval, vacuum-interval, list — the CLI-only
-///     channel for the maintenance service. list additionally reports live bank disk stats
-///     (db/WAL sizes, reclaimable bytes, delta vs the previous check via a stats sidecar).
+///     channel for the maintenance service. `list` additionally reports live bank disk stats
+///     (db/WAL sizes, reclaimable bytes, delta vs the previous check via a stats sidecar) — a thin
+///     client over <see cref="IMaintenanceStatsStore" /> (ADR-0075 amendment): the stats are
+///     computed server-side and the CLI never opens the bank for them.
 /// </summary>
-public sealed class MaintenanceCommands(ISqliteConnectionFactory factory)
+public sealed class MaintenanceCommands(IMaintenanceStatsStore maintenanceStats, InfrastructureOptions options)
 {
-    private string StatsSidecarPath => Path.Combine(Path.GetDirectoryName(factory.BankPath)!, "maintenance-stats.json");
+    private string StatsSidecarPath =>
+        Path.Combine(Path.GetDirectoryName(SqliteConnectionFactory.BankPathFor(options))!, "maintenance-stats.json");
 
     public async Task<int> SetCheckpointIntervalAsync(ParseResult parseResult, IMemoryStore store,
         StandardStreams streams, CancellationToken cancellationToken)
@@ -61,7 +65,7 @@ public sealed class MaintenanceCommands(ISqliteConnectionFactory factory)
         var vacuum = BankMaintenanceConfigKeys.ParseVacuumIntervalDays(
             await store.GetSettingAsync(BankMaintenanceConfigKeys.VacuumIntervalDaysGlobal, cancellationToken));
 
-        var current = await ReadStatsAsync(cancellationToken);
+        var current = await maintenanceStats.GetStatsAsync(cancellationToken);
         var previous = ReadPreviousStats();
         var delta = previous is null
             ? "no previous measurement"
@@ -80,58 +84,6 @@ public sealed class MaintenanceCommands(ISqliteConnectionFactory factory)
 
         WriteSidecar(current);
         return 0;
-    }
-
-    private async Task<BankStats> ReadStatsAsync(CancellationToken cancellationToken)
-    {
-        await using var connection = await factory.OpenBankAsync(cancellationToken);
-
-        long PageSize()
-        {
-            return Convert.ToInt64(Scalar("PRAGMA page_size"));
-        }
-
-        long PageCount()
-        {
-            return Convert.ToInt64(Scalar("PRAGMA page_count"));
-        }
-
-        long FreelistCount()
-        {
-            return Convert.ToInt64(Scalar("PRAGMA freelist_count"));
-        }
-
-        object? Scalar(string sql)
-        {
-            using var command = connection.CreateCommand();
-            command.CommandText = sql;
-            return command.ExecuteScalar();
-        }
-
-        var pageSize = PageSize();
-        var pageCount = PageCount();
-        var freelistCount = FreelistCount();
-
-        // PASSIVE checkpoint: non-blocking, reports busy|log|checkpointed without truncating;
-        // log = frames not yet checkpointed, i.e. the WAL content a TRUNCATE would still apply.
-        long uncheckpointedFrames;
-        await using (var checkpoint = connection.CreateCommand())
-        {
-            checkpoint.CommandText = "PRAGMA wal_checkpoint(PASSIVE)";
-            await using var reader = await checkpoint.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-            await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
-            uncheckpointedFrames = reader.GetInt64(1);
-        }
-
-        var dbPath = factory.BankPath;
-        var walPath = dbPath + "-wal";
-        var shmPath = dbPath + "-shm";
-        return new BankStats(
-            pageCount * pageSize,
-            File.Exists(walPath) ? new FileInfo(walPath).Length : 0,
-            File.Exists(shmPath) ? new FileInfo(shmPath).Length : 0,
-            freelistCount * pageSize,
-            uncheckpointedFrames * pageSize);
     }
 
     private (long TotalBytes, string Timestamp)? ReadPreviousStats()
@@ -189,15 +141,4 @@ public sealed class MaintenanceCommands(ISqliteConnectionFactory factory)
                 $"{(bytes / (1024.0 * 1024)).ToString("0.0", CultureInfo.InvariantCulture)} MB",
             _ => $"{(bytes / (1024.0 * 1024 * 1024)).ToString("0.0", CultureInfo.InvariantCulture)} GB"
         };
-
-    private sealed record BankStats(
-        long DbBytes,
-        long WalBytes,
-        long ShmBytes,
-        long FreelistBytes,
-        long UncheckpointedWalBytes)
-    {
-        public long TotalBytes => DbBytes + WalBytes + ShmBytes;
-        public long ReclaimableBytes => FreelistBytes + UncheckpointedWalBytes;
-    }
 }

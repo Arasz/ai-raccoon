@@ -31,7 +31,8 @@ public class ConfigCommandsMaintenanceTests : IDisposable
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store) =>
-        CliRun.RunAsync(args, TestData.CreateConfigCommands(store, maintenance: new MaintenanceCommands(_factory)));
+        CliRun.RunAsync(args, TestData.CreateConfigCommands(store,
+            maintenance: new MaintenanceCommands(new SqliteMaintenanceStatsStore(_factory), TestData.CreateInfrastructureOptions(_dataRoot))));
 
     /// <summary>Writes then deletes rows so the bank's freelist grows.</summary>
     private async Task SeedFreelistAsync()

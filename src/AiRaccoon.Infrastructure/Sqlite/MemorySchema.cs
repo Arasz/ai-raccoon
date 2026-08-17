@@ -393,6 +393,17 @@ internal static class MemorySchema
                                               finished_at  INTEGER NULL
                                           );
 
+                                          -- Promotion-queue-prune outbox (ADR-0075 amendment): `extract prune --apply`
+                                          -- commits a request row through the server instead of deleting the orphaned
+                                          -- rows itself. A single id=1 row, like model_migration — there is only ever
+                                          -- one prune operation, not independent kinds the way repair has. finished_at
+                                          -- is null for exactly as long as PromotionQueuePruneJob owes the apply.
+                                          CREATE TABLE IF NOT EXISTS promotion_queue_prune_requests (
+                                              id           INTEGER PRIMARY KEY CHECK (id = 1),
+                                              requested_at INTEGER NOT NULL,
+                                              finished_at  INTEGER NULL
+                                          );
+
                                           """;
 
     /// <summary>

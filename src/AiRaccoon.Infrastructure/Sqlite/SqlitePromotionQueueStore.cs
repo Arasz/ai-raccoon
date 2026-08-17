@@ -10,8 +10,22 @@ public sealed record PromotionQueueOrphanReport(int TotalOrphans, IReadOnlyDicti
 /// <summary>Propose-tier persistence in the memory.db promotion_queue table; never synced (waiting rows are per-machine by design).</summary>
 public sealed class SqlitePromotionQueueStore(
     ISqliteConnectionFactory factory,
-    TimeProvider timeProvider) : IPromotionQueueStore
+    TimeProvider timeProvider) : IPromotionQueueStore, IPromotionQueuePruneStore
 {
+    /// <inheritdoc cref="IPromotionQueuePruneStore.ReportPruneOrphansAsync" />
+    public Task<PromotionQueueOrphanReport> ReportPruneOrphansAsync(CancellationToken cancellationToken = default) =>
+        PruneOrphansAsync(apply: false, cancellationToken);
+
+    /// <inheritdoc cref="IPromotionQueuePruneStore.RequestPruneOrphansAsync" />
+    public async Task RequestPruneOrphansAsync(CancellationToken cancellationToken = default)
+    {
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await connection.ExecuteAsync(new CommandDefinition(MemorySql.RequestPromotionQueuePrune,
+                new { requestedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
+
     public async Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
         CancellationToken cancellationToken = default)
     {
