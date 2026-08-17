@@ -143,6 +143,22 @@ per-request flag would produce a stream of measurements with no consistent popul
 which is the opposite of what the record needs. It takes no `CliWriteOptOuts` exception —
 `encryption` remains the only one (ADR-0076).
 
+**It IS on the CLI**, under `settings` per ADR-0076, because a flag with no sanctioned way to
+toggle it ships dark — and the release checklist has to exercise search both ways against a copy
+of the real bank. There is no generic `settings set <key> <value>` verb, and ADR-0075 makes the
+server the only writer, so without a verb the setting is reachable by no supported path at all:
+
+    ai-raccoon settings retrieval fusion enable
+    ai-raccoon settings retrieval fusion disable
+    ai-raccoon settings retrieval fusion show
+
+`enable`/`disable` rather than `set on|off` follows the convention every other boolean in this
+tree already uses (`sweep`, `noise`, `queryguard`), so there is no argument to validate — an
+unknown verb is refused by the parser. `show` names the default in its own output
+(`enabled: False  (default: False — off serves the baseline fusion)`): reading `False` alone
+cannot distinguish an unset bank from a deliberately disabled one, and at 2am that is the
+difference between trusting a result and re-running it.
+
 ### Leg availability ships regardless of the rule
 
 `ModalityLeg` (Core) records, per leg, whether it was **queried** and what it returned.
@@ -224,6 +240,10 @@ Every one was watched red against the built change, with the perturbation named.
 | Absent-from-window ≠ ranked-poorly, and neither is a penalty | absence scored as `windowSize + 1`, `max` over legs instead of `min` | **3 red**, incl. `Reorder_AbsentFromAWindow_AndRankedPoorlyInIt_AreBothNeutral` |
 | Telemetry only when the flag is on | both perturbations above | red, as above |
 | No ties introduced | `ScoreInjectionTests` pins the failure mode directly (below) | see appendix |
+| The CLI verb exists at all | the three rows added to `SettingsLeaves` before the tree node | **7 red**, incl. `SettingsLeaves_CoverEverySettingsPath` |
+| `show` reports the stored value, and off by default | `show` hardcoded to `enabled = true` | **2 red** |
+| `disable` actually disables | `disable` writes `"true"` | **1 red** |
+| `show` writes nothing | `show` back-writes the value it just read | **1 red** |
 
 The opposed pair is deliberate: gate 2 alone is satisfied by a rule that fires on everything, and
 gate 3 is what refuses that.

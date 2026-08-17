@@ -183,6 +183,16 @@ internal static class CliCommandTree
             new Command("show", "Shows the current alpha (row value, else 0.5)")
         };
         retrieval.Add(alpha);
+        var fusion = new Command("fusion",
+            "No-fusion-regression reorder (docs/adr/0078): keeps a result from ranking below where its best single modality put it. OFF by default and unproven — 'fusion enable' arms it and starts recording how it differs from the baseline.")
+        {
+            new Command("enable", "Arms the reorder and its evidence collection (not the default)"),
+            new Command("disable", "Back to the baseline fusion (the default)")
+        };
+        var fusionShow = new Command("show", "Shows whether the reorder is armed, and names the default");
+        fusionShow.Aliases.Add("list");
+        fusion.Add(fusionShow);
+        retrieval.Add(fusion);
         return retrieval;
     }
 
