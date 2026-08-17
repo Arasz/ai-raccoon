@@ -1,0 +1,114 @@
+[
+  {
+    "id": "T1",
+    "query": "Which automated check noticed that a generated script had gone out of date after its template was edited?",
+    "expectedSource": "ai-badger/README.md",
+    "answerSpan": "a scaffolded script left stale by an edit to its source",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T2",
+    "query": "How strict is the code-style score this project demands from its Python, and are tests held to it?",
+    "expectedSource": "ai-badger/CONTRIBUTING.md",
+    "answerSpan": "Anything below 10.00 on non-test Python. Tests keep their own conventions and are excluded.",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T3",
+    "query": "What condition makes the generated release-history table check refuse to pass?",
+    "expectedSource": "ai-badger/CONTRIBUTING.md",
+    "answerSpan": "does not match the entry files",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T4",
+    "query": "What took over from the routine that combined server declarations, and how was it simplified?",
+    "expectedSource": "ai-badger/docs/changelog/0.51.0-the-legacy-mcp-reader-is-gone.md",
+    "answerSpan": "now a one-reader dict comprehension over",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T5",
+    "query": "Where should a tunable cutoff value live when modelling a domain in this style?",
+    "expectedSource": "ai-badger/features/dotnet/skills/dotnet-domain-modeling/SKILL.md",
+    "answerSpan": "with `AutoApplyConfidenceThreshold`",
+    "relevanceGrade": 4
+  },
+  {
+    "id": "T6",
+    "query": "How do you keep property names lower-cased when an object is turned into JSON?",
+    "expectedSource": "ai-badger/features/dotnet/skills/dotnet-domain-modeling/SKILL.md",
+    "answerSpan": "if serialized",
+    "relevanceGrade": 4
+  },
+  {
+    "id": "T7",
+    "query": "What should a test set up and assert when a second run could start while one is already going?",
+    "expectedSource": "ai-badger/features/dotnet/skills/dotnet-domain-modeling/references/durable-functions-testing-patterns.md",
+    "answerSpan": "to return active instance, assert exception",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T8",
+    "query": "What catches a core project that has started depending on infrastructure, and how do you run it?",
+    "expectedSource": "ai-badger/features/dotnet/skills/dotnet-domain-modeling/references/project-gotchas.md",
+    "answerSpan": "purity test catches this",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T9",
+    "query": "How do you swap out a single element of a read-only list held by an immutable type?",
+    "expectedSource": "ai-badger/features/dotnet/skills/dotnet-domain-modeling/references/project-gotchas.md",
+    "answerSpan": "use index-based replacement",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T10",
+    "query": "Why did the comparison meant to spot divergence never report anything at all?",
+    "expectedSource": "arasz-home-page/content/articles/every-check-must-be-able-to-fail.md",
+    "answerSpan": "both sides the project's own state",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T11",
+    "query": "Which operation moves a remembered item up into the tier every project can see?",
+    "expectedSource": "arasz-home-page/content/articles/introducing-ai-raccoon.md",
+    "answerSpan": "Promote a hash into the cross-project",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T12",
+    "query": "Which capability pulls newer framework changes down into a project that was already set up?",
+    "expectedSource": "arasz-home-page/content/articles/introducing-ai-badger.md",
+    "answerSpan": "Pull framework updates into an already-scaffolded project",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T13",
+    "query": "Why can filtering a build by which paths changed leave a pull request impossible to merge?",
+    "expectedSource": "arasz-home-page/docs/adr/0013-ci-cost-per-job-minimum-and-local-pre-push-gate.md",
+    "answerSpan": "forever and the PR is permanently unmergeable",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T14",
+    "query": "What visually changes on a button while the pointer rests over it?",
+    "expectedSource": "arasz-home-page/docs/design-direction.md",
+    "answerSpan": "fill, `accent-invert-fg` text",
+    "relevanceGrade": 4
+  },
+  {
+    "id": "T15",
+    "query": "Which capability shows how far the effect of an edit spreads through the code that calls it?",
+    "expectedSource": "arasz-home-page/content/articles/code-review-graph-review.md",
+    "answerSpan": "blast radius from changed files through callers and dependents",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T16",
+    "query": "How many automated checks came back clean, and was anything left out of the run?",
+    "expectedSource": "arasz-home-page/content/articles/agent-cost-comparison.md",
+    "answerSpan": "2,302 passed, 0 failed",
+    "relevanceGrade": 4
+  }
+]
