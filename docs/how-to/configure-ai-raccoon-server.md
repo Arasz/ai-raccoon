@@ -403,8 +403,9 @@ rows, which is a different behaviour from having a correct one. Whether that is 
 your bank is not something the repair can tell you, and it has not been measured across a query set.
 
 So: **run the dry run, read the two numbers, and decide.** If most of your bank would go to `-1`,
-re-ingesting the affected sources under the current chunker is the more thorough fix, and the repair
-is not a substitute for it.
+re-ingesting the affected sources under the current chunker is the more thorough fix — that is what
+[`repair reingest`](#re-ingesting-files-chunk-index-repair-could-only-mark-unknown) below does, and
+this repair is not a substitute for it.
 
 Run it against a **copy** first if you want to see the scale of the change on your own data:
 
