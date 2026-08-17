@@ -412,6 +412,39 @@ Run it against a **copy** first if you want to see the scale of the change on yo
 ai-raccoon --data-root /path/to/copy --port 7799 repair chunk-index
 ```
 
+## Re-ingesting files chunk-index repair could only mark unknown
+
+`repair chunk-index` never guesses: a row an older chunker produced gets `chunk_index = -1` because
+its content hash does not match anything the current chunker emits. That is honest, but it leaves
+those chunks with no adjacency signal at all. `repair reingest` is the thorough fix for that
+subset — it re-ingests the file itself, so the affected chunks get real positions instead of `-1`.
+
+```bash
+ai-raccoon repair reingest            # dry run: reports what it would re-ingest, changes nothing
+ai-raccoon repair reingest --apply    # performs the re-ingest
+```
+
+**When to reach for this instead of `repair chunk-index`.** Use `repair chunk-index` first — it is
+cheap (a pure `UPDATE`) and fixes every row it can. Reach for `repair reingest` only for the files
+`repair chunk-index`'s dry run reported as `-1`, and only if you want those chunks to have a real
+position rather than being skipped by the adjacency boost. It targets exactly that subset: a source
+file that still exists on disk with at least one stored row the current chunker cannot reproduce by
+hash. A `memory_write` entry that merely cites a file as its source, and a row whose source file is
+gone, are never touched — there is nothing to re-ingest from either.
+
+**Per-row metadata is discarded for every row it replaces, on purpose.** Re-ingesting deletes a
+file's chunks and re-inserts them under the current chunker, which cuts new chunk boundaries, so the
+new chunks hash differently from the old ones. There is no 1:1 row to carry `rating`, `access_count`,
+or `last_accessed_at` onto — this is an accepted consequence of a real re-chunk, not a bug, and there
+is deliberately no fuzzy carry-over. Both the dry run and `--apply` print how many rows this affects
+before it happens.
+
+**Cost.** Re-ingesting re-embeds every affected chunk. On a large bank this can be thousands of
+chunks; the dry run reports the scale (files, rows, chunks to embed) before you commit to it.
+Embedding is left pending after `--apply` commits, the same way the file watcher's own replace does —
+run `memory_embed_pending` afterward rather than holding the bank's write lock through the embedding
+engine.
+
 ## Related documentation
 
 - [ADR-0020: Always-on HTTP stdio proxy](../adr/0020-always-on-http-stdio-proxy.md)

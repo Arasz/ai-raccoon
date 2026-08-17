@@ -1,7 +1,4 @@
-using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
-using AiRaccoon.Core.Memory;
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -25,14 +22,14 @@ public sealed record ChunkIndexRepairReport(
 /// </summary>
 public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher)
 {
-    private const int DefaultMaxTokens = 256;
+    private readonly ChunkPositionScanner _scanner = new(fileTypeMatcher);
 
     public async Task<ChunkIndexRepairReport> RunAsync(SqliteConnection connection, bool apply,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(connection);
 
-        var (maxTokens, overlayTokens, countTokens) = await BudgetAsync(connection, cancellationToken)
+        var (maxTokens, overlayTokens, countTokens) = await ChunkPositionScanner.BudgetAsync(connection, cancellationToken)
             .ConfigureAwait(false);
 
         var groups = (await connection.QueryAsync<GroupKey>(new CommandDefinition(
@@ -61,40 +58,12 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher)
                 .ConfigureAwait(false)).ToList();
             var totalChunks = rows.Count;
 
-            IReadOnlyDictionary<long, int> positionById;
-            if (group.SourceFile is null
-                || !fileTypeMatcher.TryGetHandler(group.SourceFile, out var handler)
-                || !TryReadFile(group.SourceFile, out var content))
-            {
-                positionById = rows.ToDictionary(row => row.Id, _ => -1);
-            }
-            else
-            {
-                var chunks = handler.Chunker.Chunk(content, maxTokens, overlayTokens, countTokens);
-                var byHash = rows.ToDictionary(row => row.Hash, row => row.Id, StringComparer.Ordinal);
-                var byId = new Dictionary<long, int>(rows.Count);
-                for (var ordinal = 0; ordinal < chunks.Count; ordinal++)
-                {
-                    var hash = ContentHash.Of(group.SourceFile, chunks[ordinal]);
-                    if (byHash.TryGetValue(hash, out var id))
-                    {
-                        byId[id] = ordinal;
-                    }
-                }
-
-                // A row this pass's re-chunk did not reproduce (stale content, a boundary shift) has
-                // no document position to report — unknown, not a guess.
-                foreach (var row in rows.Where(row => !byId.ContainsKey(row.Id)))
-                {
-                    byId[row.Id] = -1;
-                }
-
-                positionById = byId;
-            }
+            var scan = _scanner.Scan(group.SourceFile, rows.Select(row => (row.Id, row.Hash)).ToList(),
+                maxTokens, overlayTokens, countTokens);
 
             foreach (var row in rows)
             {
-                var newIndex = positionById[row.Id];
+                var newIndex = scan.PositionById[row.Id];
                 if (newIndex == row.ChunkIndex)
                 {
                     continue;
@@ -119,38 +88,6 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher)
         }
 
         return new ChunkIndexRepairReport(groupsExamined, repositioned, setUnknown);
-    }
-
-    private static bool TryReadFile(string path, out string content)
-    {
-        try
-        {
-            content = File.ReadAllText(path);
-            return true;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            content = "";
-            return false;
-        }
-    }
-
-    /// <summary>The same resolution the ingest path uses, read from the same settings (mirrors <see cref="Ingestion.ChunkBackfill" />'s BudgetAsync).</summary>
-    private static async Task<(int Budget, int Overlay, TokenCount CountTokens)> BudgetAsync(
-        SqliteConnection connection, CancellationToken cancellationToken)
-    {
-        var provider = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
-                "SELECT value FROM settings WHERE key = 'embedding.provider'", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
-        var model = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
-                "SELECT value FROM settings WHERE key = 'embedding.model'", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
-        provider = string.IsNullOrWhiteSpace(provider) ? "local" : provider;
-
-        var budget = Math.Min(DefaultMaxTokens, EmbeddingService.SafeChunkBudgetFor(provider, model));
-        var overlay = Math.Min(ChunkingDefaults.OverlayTokens, Math.Max(0, budget - 1));
-        var tokenizer = OnnxEmbeddingGenerator.CreateTokenizer(BundledModel.ResolveVocabPath());
-        return (budget, overlay, text => tokenizer.CountTokens(text));
     }
 
     // Plain classes, not records: Ctx is a computed SQL expression with no declared column type, and

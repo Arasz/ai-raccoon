@@ -14,9 +14,10 @@ namespace AiRaccoon.Tests.Integration.Storage;
 
 /// <summary>
 ///     QA-F2 (docs/reviews/2026-08-14-moe-codebase-review.md): the <c>catch { ROLLBACK; throw; }</c>
-///     branch in <c>DeleteSourcePathAsync</c> and <c>ReplaceFileAsync</c> was never exercised. These
-///     tests force a real statement failure partway through each method's transaction — a trigger that
-///     raises, not a production seam — and assert the bank is left exactly as it was before the call.
+///     branch in <c>DeleteSourcePathAsync</c> and <c>ReplaceCoreAsync</c> (reached here through
+///     <c>ReplaceIfFileChangedAsync</c>) was never exercised. These tests force a real statement
+///     failure partway through each method's transaction — a trigger that raises, not a production
+///     seam — and assert the bank is left exactly as it was before the call.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -105,7 +106,7 @@ public sealed class DeleteReplaceRollbackTests : IDisposable
         try
         {
             var thrown = await Should.ThrowAsync<SqliteException>(
-                () => _store.ReplaceFileAsync("acme", file, "revised-hash", ct));
+                () => _store.ReplaceIfFileChangedAsync("acme", file, "revised-hash", ct));
             thrown.Message.ShouldContain(InducedFailureMessage);
         }
         finally
@@ -126,6 +127,49 @@ public sealed class DeleteReplaceRollbackTests : IDisposable
                 new { projectId = "acme" }))
             .ShouldBe(0, "the revised content must not have been committed");
         (await verify.ExecuteScalarAsync<int>(
+                "SELECT count(*) FROM watch_files WHERE project_id = @projectId AND path = @path",
+                new { projectId = "acme", path = file }))
+            .ShouldBe(0, "the aborted watch_files insert must not have landed either");
+    }
+
+    /// <summary>
+    ///     repair reingest's own crash-safety requirement: <c>ReplaceAsync</c> shares
+    ///     <c>ReplaceCoreAsync</c> with <c>ReplaceIfFileChangedAsync</c> above, but is a distinct
+    ///     public entry point with its own callers — worth its own direct proof that a failure
+    ///     mid-transaction leaves the file's chunks exactly as they were, not just an inference from
+    ///     the gated caller's test.
+    /// </summary>
+    [Fact]
+    public async Task ReplaceAsync_WhenTheWatchFingerprintUpsertFailsMidTransaction_RollsBackTheWholeReplace()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var file = Path.Combine(_dataRoot, "rollback-replace-forced.md");
+        await File.WriteAllTextAsync(file, "gallimaufry original forced content", ct);
+        await _store.SetSettingAsync(IngestScopeKeys.ScopeGlobal, IngestScopeKeys.Serialize([_dataRoot]), ct);
+        await _store.IngestFileAsync("acme", file, null, ct);
+        var preEntries = await CountEntriesAsync("acme", ct);
+        preEntries.ShouldBeGreaterThan(0, "the file must actually be ingested before the forced-failure call");
+
+        // Content unchanged: repair reingest's own scenario is a chunker change, not a file edit —
+        // ReplaceAsync must still attempt the replace (and here, still roll it back) regardless.
+        await InstallFailureTriggerAsync("INSERT", "watch_files", ct);
+        try
+        {
+            var thrown = await Should.ThrowAsync<SqliteException>(
+                () => _store.ReplaceAsync("acme", file, "forced-hash", ct));
+            thrown.Message.ShouldContain(InducedFailureMessage);
+        }
+        finally
+        {
+            await DropFailureTriggerAsync(ct);
+        }
+
+        (await CountEntriesAsync("acme", ct)).ShouldBe(preEntries,
+            "the delete-and-reingest must have been rolled back — the row count must be exactly what it was before the failed replace");
+        (await _store.SearchAsync(new SearchQuery("acme", "gallimaufry original"), ct)).Results
+            .ShouldNotBeEmpty("the original content must still be there — the replace never committed");
+        await using var verifyForced = await _factory.OpenBankAsync(ct);
+        (await verifyForced.ExecuteScalarAsync<int>(
                 "SELECT count(*) FROM watch_files WHERE project_id = @projectId AND path = @path",
                 new { projectId = "acme", path = file }))
             .ShouldBe(0, "the aborted watch_files insert must not have landed either");

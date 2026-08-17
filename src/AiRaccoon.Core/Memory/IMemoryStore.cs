@@ -92,11 +92,20 @@ public interface IMemoryStore : IModelMigrationStore
     Task<int> DeleteSourcePathAsync(string projectId, string path, CancellationToken cancellationToken = default);
 
     /// <summary>
-    ///     Atomic replace-by-path for the watch digest: in one transaction, skips when the stored
-    ///     fingerprint already equals <paramref name="fileHash" />, else deletes the path's chunks,
-    ///     re-ingests the file and stores the fingerprint. False means another writer got there first.
+    ///     Watch-digest replace-by-path: skips when the stored fingerprint already equals
+    ///     <paramref name="fileHash" />, else atomically deletes the path's chunks, re-ingests the
+    ///     file and stores the fingerprint. False means the fingerprint already matched and nothing
+    ///     changed.
     /// </summary>
-    Task<bool> ReplaceFileAsync(string projectId, string path, string fileHash,
+    Task<bool> ReplaceIfFileChangedAsync(string projectId, string path, string fileHash,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Unconditional replace-by-path: the same atomic delete/re-ingest/fingerprint-write as
+    ///     <see cref="ReplaceIfFileChangedAsync" />, but runs regardless of the stored fingerprint —
+    ///     for a repair that must re-chunk a file whose content has not changed.
+    /// </summary>
+    Task ReplaceAsync(string projectId, string path, string fileHash,
         CancellationToken cancellationToken = default);
 
     /// <summary>Reads every settings row whose key starts with the prefix (config listing commands).</summary>

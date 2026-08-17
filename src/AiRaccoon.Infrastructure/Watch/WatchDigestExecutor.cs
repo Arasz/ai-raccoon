@@ -49,7 +49,7 @@ public sealed partial class WatchDigestExecutor(
         // Delete + re-ingest + fingerprint are one transaction in the store: the pre-check above is
         // only a cheap filter, and a concurrent process either loses the race and skips or, on a
         // crash mid-digest, rolls back — the file is never left chunkless behind a matching hash.
-        var replaced = await store.ReplaceFileAsync(projectId, normalized, hash, cancellationToken)
+        var replaced = await store.ReplaceIfFileChangedAsync(projectId, normalized, hash, cancellationToken)
             .ConfigureAwait(false);
         if (replaced)
         {

@@ -337,6 +337,14 @@ internal static class CliCommandTree
                 "A source_file that no longer exists gets chunk_index = -1 (position unknown), never a guess. Pure UPDATE — never inserts or deletes a row. Reports by default; --apply writes.")
             {
                 new Option<bool>("--apply") { Description = "Writes the repositioned values instead of only reporting them" }
+            },
+            new Command("reingest",
+                "Re-ingests source files chunk-index repair could only mark chunk_index = -1 for — a chunker change made their stored rows unreproducible by hash. " +
+                "Deletes and re-inserts each file's chunks (never a memory_write row that merely cites the path, never a file that no longer exists) and discards their per-row " +
+                "metadata (rating, access_count, last_accessed_at) in the process — a re-chunk moves boundaries, so there is no 1:1 row to carry it onto. Embedding is left pending; " +
+                "run memory_embed_pending afterward. Reports by default; --apply writes.")
+            {
+                new Option<bool>("--apply") { Description = "Performs the reingest instead of only reporting what it would do" }
             }
         };
 

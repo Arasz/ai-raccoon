@@ -115,9 +115,13 @@ public class FakeMemoryStore : IMemoryStore, ISettingsStore
         CancellationToken cancellationToken = default) =>
         throw NotOverridden(nameof(DeleteSourcePathAsync));
 
-    public virtual Task<bool> ReplaceFileAsync(string projectId, string path, string fileHash,
+    public virtual Task<bool> ReplaceIfFileChangedAsync(string projectId, string path, string fileHash,
         CancellationToken cancellationToken = default) =>
-        throw NotOverridden(nameof(ReplaceFileAsync));
+        throw NotOverridden(nameof(ReplaceIfFileChangedAsync));
+
+    public virtual Task ReplaceAsync(string projectId, string path, string fileHash,
+        CancellationToken cancellationToken = default) =>
+        throw NotOverridden(nameof(ReplaceAsync));
 
     public virtual Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
         CancellationToken cancellationToken = default) =>

@@ -201,7 +201,7 @@ internal static class MemorySql
 
     // A replace deletes every chunk of the path and re-inserts them, so promotion_queue_entries_ad
     // (ADR-0023) fires even for chunks whose text is unchanged and which return under the same hash.
-    // These three hold the candidates across that round trip; see ReplaceFileAsync.
+    // These three hold the candidates across that round trip; see SqliteMemoryStore.ReplaceCoreAsync.
     public const string CreateQueueRestoreTable = """
                                                   CREATE TEMP TABLE IF NOT EXISTS queue_restore (
                                                       project_id TEXT NOT NULL, hash TEXT NOT NULL, path TEXT NULL,
