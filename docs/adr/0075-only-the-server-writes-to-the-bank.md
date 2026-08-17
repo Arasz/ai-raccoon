@@ -369,6 +369,9 @@ not as a claim that every CLI command is clean — the gate this ADR's Consequen
 (a route-table guard asserting zero bank writes from the CLI process) does not yet cover
 `maintenance list` or `extract prune`.
 
+**Both landed** — see "Amendment 2026-08-17 (continued)" below; `CliWriteOptOuts`'s claim is now
+true without qualification.
+
 **Evidence**: `RepairEndpointTests` (route-table + auth), `SqliteRepairStoreTests`/
 `ReingestRepairJobTests`/`ChunkIndexRepairJobTests` (server-side read and apply, red-then-green),
 `AppRunnerSettingsRoutingTests.ARepairCommand_UsesTheInjectedAcquireFunction` (watched red by
@@ -376,3 +379,55 @@ temporarily removing the `IRepairStore` DI override — reproduces the original 
 fake acquire function is never called, `acquireCalls` stays 0), `CliWriteOptOutsTests` (repair is
 `WritesDirectly: false`), and `RepairCommandsTests` (the CLI's own text no longer contains
 `memory_embed_pending`/"no server running", watched red against the pre-fix string).
+
+## Amendment 2026-08-17 (continued) — `extract prune` and `settings maintenance list` close the two remaining violations
+
+The two follow-ups the previous amendment queued and deliberately left unfixed are fixed now, the
+same shape as `repair`:
+
+- **`extract prune --apply`** routes through a new `IPromotionQueuePruneStore`
+  (`ReportPruneOrphansAsync`/`RequestPruneOrphansAsync`), split out of `IPromotionQueueStore` the
+  same way `IRepairStore` was split out of `IMemoryStore` — the CLI needs only the report/request
+  shape, not the whole promotion-queue surface most of which stays server-internal (eviction,
+  claims, discards). The write is a new singleton outbox row, `promotion_queue_prune_requests`
+  (`id = 1`, mirroring `model_migration`'s shape rather than `repair_requests`'s per-kind shape,
+  since there is only one prune operation, not independent kinds) — drained by a new on-demand
+  `PromotionQueuePruneJob` (`Interval` is null, `HasWorkAsync` reads the outbox row, same as
+  `ReingestRepairJob`/`ChunkIndexRepairJob`).
+- **`settings maintenance list`** routes through a new `IMaintenanceStatsStore.GetStatsAsync`,
+  exactly the shape §"What was rejected" ruled out for reads in general and this ADR's own
+  Consequences section explicitly still permits for a genuinely local question — except this read
+  was never local: it opened the bank via `MemorySchema.EnsureAsync`, which can write on a
+  digest-stale bank, so the fix moves it server-side rather than leaving it as a CLI-side read. No
+  outbox: the read has no `--apply` gate to begin with, so there is nothing to defer.
+
+Both new server-side stores are additional interfaces on `ServerSettingsStore`/
+`LazyServerSettingsStore`, over the same acquired connection every other control-plane resource
+already shares — no second `BackendLauncher`, no new credential.
+
+**`CliWriteOptOuts`'s doc comment claim is now literally true, not just true for the commands
+addressed so far**: `encryption` is the only CLI command that opens the bank directly. The two
+routes named as open in the previous amendment are closed.
+
+**Watched red before the fix, not just asserted**: `CliBankWriteTests.ApplyCommand_OnlyCommitsAnOutboxRequest_NeverTheDomainTableDirectly`,
+run against `ExtractCommands` reverted to its pre-fix direct-store shape with a seeded orphaned
+`promotion_queue` row, failed with `changed` = `["promotion_queue"]` instead of the expected
+`["promotion_queue_prune_requests"]` — the exact violation this amendment closes, reproduced by a
+real out-of-process `ai-raccoon` invocation rather than inferred. Reverted to the fixed shape
+afterward; the same theory row is green there. `repair chunk-index --apply`/`repair reingest
+--apply` were added to the same theory as coverage completion, not a red/green pair, since they
+were already fixed by the previous amendment.
+
+**The gate that let `repair` slip through in the first place is now a gate that can fail again.**
+`CliBankWriteTests.ReadCommands()` previously listed `extract prune`/`repair chunk-index`/`repair
+reingest` bare-only — dry run never writes by construction, so those rows could only ever pass, and
+nothing forced a matching `--apply` row to exist. `SettingsCommandTreeTests.ApplyLeaves_MatchCliBankWriteTestsCoverage`
+now derives every `--apply` leaf from `CliCommandTree.BuildFullRootCommand()` and asserts it against
+`CliBankWriteTests.ApplyCommandPaths`, so a new `--apply` leaf added without a matching write-mode
+row fails immediately rather than silently inheriting the same blind spot.
+
+**Evidence**: `PromotionQueuePruneEndpointTests`/`MaintenanceStatsEndpointTests` (route-table +
+auth), `SqlitePromotionQueueStoreOutboxTests`/`SqliteMaintenanceStatsStoreTests`/
+`PromotionQueuePruneJobTests` (server-side read/apply), `ExtractPruneCommandTests` (the CLI's own
+text — "queued for the server to remove", "request committed", "maintenance poll" — mirroring
+`RepairCommandsTests`), and the red-then-green `CliBankWriteTests` run described above.
