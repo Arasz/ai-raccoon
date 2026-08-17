@@ -110,6 +110,12 @@ units is visible rather than silently rewarded.
   [ADR-0071](0071-a-query-is-trimmed-deliberately-and-said-so.md) pins that a query exactly on the
   limit is untouched. The anchors here are 714–1151 characters; none is trimmed.
 
+  **Not the read-path query guard.** The natural next guess, since a chunk of markdown pasted as a
+  query resembles the machine output [ADR-0040](0040-read-path-query-guard.md) exists to refuse. It
+  does not apply: `IQueryGuardService` and `QueryLengthGuard` are invoked only in
+  `src/AiRaccoon/Tools/MemoryTools.cs`, the MCP tool layer, and this gate calls
+  `SqliteMemoryStore.SearchAsync` directly, which references neither.
+
   **Not a narrow relevance set either.** Scored against the exact anchor hash alone, mean MRR is
   0.687500 — identical to the span-set figure, digit for digit. The anchor is simply outranked: in
   11 of 16 cases by a sibling chunk of the same document, in 3 (T1, T8, T9) by a chunk of a

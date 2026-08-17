@@ -8,6 +8,8 @@ namespace AiRaccoon.Tests.Unit.Retrieval;
 ///     change under test. Anchoring on an answer span rather than a chunk id keeps the ground truth
 ///     defined when an arm deletes the chunk, and keeps it from growing when an arm fragments a file.
 /// </summary>
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class SpanAnchoredRelevanceTests
 {
     private const string Expected = "docs/retrieval.md";
