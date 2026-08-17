@@ -23,7 +23,7 @@ namespace AiRaccoon.Tests.Integration.Metrics;
 ///     gap WP1-WP8 left open, recorded in this file's earlier revision. This test now constructs
 ///     the real chain (<see cref="MetricsRecorder" /> over a real <see cref="MeasurementBuffer" />,
 ///     deliberately with no <see cref="MetricsFlusher" /> running — "paused" means it is never
-///     constructed), so a search's six phase measurements really do enqueue, and the assertion
+///     constructed), so a search's nine series measurements really do enqueue, and the assertion
 ///     below is a genuine proof that they land in the buffer, not the table, before the call
 ///     returns — not vacuous by absence of a wired recorder, as it was before WP10.
 /// </summary>
@@ -106,13 +106,14 @@ public sealed class SearchMetricsIsolationTests : IDisposable
     }
 
     /// <summary>
-    ///     AC1: a memory_search results in six phase measurements — enqueued synchronously (G4
-    ///     forbids only the *table* write, never enqueueing) and reaching the `metrics` table once
-    ///     flushed, each carrying the query hash and this call's own correlation id, and no query
-    ///     text anywhere in the row (SqliteMetricsStore's save-time allowlist).
+    ///     AC1: a memory_search results in nine series measurements (eight phases plus the measured
+    ///     total) — enqueued synchronously (G4 forbids only the *table* write, never enqueueing) and
+    ///     reaching the `metrics` table once flushed, each carrying the query hash and this call's
+    ///     own correlation id, and no query text anywhere in the row (SqliteMetricsStore's save-time
+    ///     allowlist).
     /// </summary>
     [Fact]
-    public async Task Search_RecordsSixPhaseMeasurements_ReachingTheMetricsTable_TaggedWithHashAndCorrelationId_NeverQueryText()
+    public async Task Search_RecordsNineSeriesMeasurements_ReachingTheMetricsTable_TaggedWithHashAndCorrelationId_NeverQueryText()
     {
         await _tools.Write("acme", "the chassis pattern decision", cancellationToken: TestContext.Current.CancellationToken);
 
@@ -128,7 +129,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
             "SELECT name AS Name, query_hash AS QueryHash, correlation_id AS CorrelationId, tags AS Tags " +
             "FROM metrics WHERE name LIKE 'search.%'")).ToList();
 
-        rows.Select(r => r.Name).ShouldBe(SearchTimings.PhaseNames, ignoreOrder: true);
+        rows.Select(r => r.Name).ShouldBe(SearchTimings.SeriesNames, ignoreOrder: true);
         rows.ShouldAllBe(r => r.QueryHash == ContentHash.OfValue("chassis"));
         rows.ShouldAllBe(r => r.CorrelationId == correlationId);
         rows.ShouldAllBe(r => r.Tags == null, "no row may carry the query text anywhere, including Tags");
@@ -204,7 +205,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
 
         restrictiveBuffer.EnqueuedCount.ShouldBeGreaterThan(0, "no combination of restrictive settings may disable measurement");
         restrictiveBuffer.DroppedCount.ShouldBeGreaterThan(0,
-            "capacity 1 against six phase measurements must actually bite, or the setting was not really restrictive");
+            "capacity 1 against nine series measurements must actually bite, or the setting was not really restrictive");
     }
 
     /// <summary>

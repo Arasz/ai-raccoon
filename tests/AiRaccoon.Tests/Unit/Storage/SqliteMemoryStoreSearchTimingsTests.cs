@@ -1,10 +1,5 @@
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Memory.Filtering;
-using AiRaccoon.Infrastructure.Embedding;
-using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
-using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
@@ -12,9 +7,11 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Storage;
 
 /// <summary>
-///     WP2 (docs/plans/2026-08-15-performance-metrics-implementation.md): <c>SearchAsync</c>'s six
-///     phase timings, previously <c>SearchTimings.Empty</c>. <c>fts</c>/<c>vector</c> accumulate
-///     across the per-context loop (and the FTS fallback re-query); the rest are single spans.
+///     WP2 (docs/plans/2026-08-15-performance-metrics-implementation.md) plus S1
+///     (docs/plans/2026-08-17-search-phase-attribution.md): <c>SearchAsync</c>'s eight phase timings
+///     and its measured total, previously <c>SearchTimings.Empty</c>. <c>fts</c>/<c>vector</c>
+///     accumulate across the per-context loop (and the FTS fallback re-query); the rest are single
+///     spans, and <c>Total</c> brackets the whole method body.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -32,36 +29,31 @@ public sealed class SqliteMemoryStoreSearchTimingsTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    private SqliteMemoryStore CreateStore(TimeProvider timeProvider, IEntryEmbedder? embedder = null)
-    {
-        embedder ??= new EntryEmbedder(TestData.CreateEmbeddingService());
-        return new SqliteMemoryStore(_factory, new SqliteMemorySourceStore(_factory),
-            new FileIngestor(new FileTypeMatcher([]), embedder, new SqliteMemorySourceStore(_factory), timeProvider,
-                new LocalTokenizer()),
-            embedder, timeProvider, NullLogger<SqliteMemoryStore>.Instance,
-            new NoiseFilteringService([]), new SqliteSettingsStore(_factory));
-    }
-
     [Fact]
     public async Task Search_PopulatesEveryPhaseThatRan_AndLeavesTheSkippedModalityAtZero()
     {
-        var store = CreateStore(new FakeTimeProvider(FixedNow) { AutoAdvanceAmount = TimeSpan.FromTicks(1) });
+        var store = SearchTimingsHarness.CreateStore(_factory,
+            new FakeTimeProvider(FixedNow) { AutoAdvanceAmount = TimeSpan.FromTicks(1) });
         var ct = TestContext.Current.CancellationToken;
 
         var result = await store.SearchAsync(new SearchQuery("proj-1", "widgets", VectorWeight: 0), ct);
 
+        result.Timings.Open.ShouldBeGreaterThan(TimeSpan.Zero, "every search opens a bank connection");
+        result.Timings.Embed.ShouldBeGreaterThan(TimeSpan.Zero, "every search calls EmbedQueryAsync");
         result.Timings.Fts.ShouldBeGreaterThan(TimeSpan.Zero);
         result.Timings.Vector.ShouldBe(TimeSpan.Zero, "VectorWeight is 0, so the vector modality never queries");
         result.Timings.Fusion.ShouldBeGreaterThan(TimeSpan.Zero);
         result.Timings.Affinity.ShouldBeGreaterThan(TimeSpan.Zero);
         result.Timings.Snippets.ShouldBeGreaterThan(TimeSpan.Zero);
         result.Timings.Bump.ShouldBeGreaterThan(TimeSpan.Zero);
+        result.Timings.Total.ShouldBeGreaterThan(TimeSpan.Zero, "Total brackets the whole SearchAsync body");
     }
 
     [Fact]
     public async Task Search_FtsStaysZero_WhenFtsWeightIsZero()
     {
-        var store = CreateStore(new FakeTimeProvider(FixedNow) { AutoAdvanceAmount = TimeSpan.FromTicks(1) });
+        var store = SearchTimingsHarness.CreateStore(_factory,
+            new FakeTimeProvider(FixedNow) { AutoAdvanceAmount = TimeSpan.FromTicks(1) });
         var ct = TestContext.Current.CancellationToken;
 
         var result = await store.SearchAsync(new SearchQuery("proj-1", "widgets", FtsWeight: 0, VectorWeight: 0), ct);
@@ -72,7 +64,8 @@ public sealed class SqliteMemoryStoreSearchTimingsTests : IDisposable
     [Fact]
     public async Task Search_FtsAccumulatesAcrossContexts_IncludingTheFallbackReQuery()
     {
-        var store = CreateStore(new FakeTimeProvider(FixedNow) { AutoAdvanceAmount = TimeSpan.FromTicks(1) });
+        var store = SearchTimingsHarness.CreateStore(_factory,
+            new FakeTimeProvider(FixedNow) { AutoAdvanceAmount = TimeSpan.FromTicks(1) });
         var ct = TestContext.Current.CancellationToken;
 
         // Two tokens, no matches anywhere: FtsQueryNormalizer.BuildPlan gives a non-null Fallback,
@@ -91,93 +84,82 @@ public sealed class SqliteMemoryStoreSearchTimingsTests : IDisposable
     [Fact]
     public async Task Search_AttributesEachPhasesElapsedTime_ToThatPhaseAndNoOther()
     {
-        // A distinct elapsed value per phase, in the exact order SearchAsync measures them: fts,
-        // vector, fusion, affinity, snippets, bump. A single-token query scoped to the project has
-        // exactly one context and no FTS fallback (FtsQueryNormalizer gives Fallback = null for a
-        // one-token query), so each phase brackets exactly once.
-        var timeProvider = new ScriptedTimeProvider(
-        [
-            TimeSpan.FromMilliseconds(11), // fts
-            TimeSpan.FromMilliseconds(22), // vector
-            TimeSpan.FromMilliseconds(33), // fusion
-            TimeSpan.FromMilliseconds(44), // affinity
-            TimeSpan.FromMilliseconds(55), // snippets
-            TimeSpan.FromMilliseconds(66) // bump
-        ]);
-        var store = CreateStore(timeProvider, new FixedVectorEmbedder());
+        // A distinct elapsed value per phase, in the exact order SearchAsync measures them: open,
+        // embed, fts, vector, fusion, affinity, snippets, bump — every gap between brackets (and the
+        // gap before Total's own closing read) scripted at zero, so Total's nesting around every
+        // phase does not perturb any individual phase's own value. A single-token query scoped to
+        // the project has exactly one context and no FTS fallback (FtsQueryNormalizer gives
+        // Fallback = null for a one-token query), so each phase brackets exactly once.
+        var timeProvider = ScriptedTimeProvider.ForPhases(
+            TimeSpan.FromMilliseconds(10), // open
+            TimeSpan.FromMilliseconds(11), // embed
+            TimeSpan.FromMilliseconds(22), // fts
+            TimeSpan.FromMilliseconds(33), // vector
+            TimeSpan.FromMilliseconds(44), // fusion
+            TimeSpan.FromMilliseconds(55), // affinity
+            TimeSpan.FromMilliseconds(66), // snippets
+            TimeSpan.FromMilliseconds(77) // bump
+        );
+        var store = SearchTimingsHarness.CreateStore(_factory, timeProvider, new SearchTimingsHarness.VectorEmbedderStub());
         var ct = TestContext.Current.CancellationToken;
 
         var result = await store.SearchAsync(new SearchQuery("proj-1", "widget", Scope: SearchScope.Project), ct);
 
-        result.Timings.Fts.ShouldBe(TimeSpan.FromMilliseconds(11));
-        result.Timings.Vector.ShouldBe(TimeSpan.FromMilliseconds(22));
-        result.Timings.Fusion.ShouldBe(TimeSpan.FromMilliseconds(33));
-        result.Timings.Affinity.ShouldBe(TimeSpan.FromMilliseconds(44));
-        result.Timings.Snippets.ShouldBe(TimeSpan.FromMilliseconds(55));
-        result.Timings.Bump.ShouldBe(TimeSpan.FromMilliseconds(66));
+        result.Timings.Open.ShouldBe(TimeSpan.FromMilliseconds(10));
+        result.Timings.Embed.ShouldBe(TimeSpan.FromMilliseconds(11));
+        result.Timings.Fts.ShouldBe(TimeSpan.FromMilliseconds(22));
+        result.Timings.Vector.ShouldBe(TimeSpan.FromMilliseconds(33));
+        result.Timings.Fusion.ShouldBe(TimeSpan.FromMilliseconds(44));
+        result.Timings.Affinity.ShouldBe(TimeSpan.FromMilliseconds(55));
+        result.Timings.Snippets.ShouldBe(TimeSpan.FromMilliseconds(66));
+        result.Timings.Bump.ShouldBe(TimeSpan.FromMilliseconds(77));
     }
 
     /// <summary>
-    ///     Returns one scripted elapsed <see cref="TimeSpan" /> per <c>GetTimestamp</c> +
-    ///     <c>GetElapsedTime</c> bracket, in call order. A real clock cannot pin a specific delay to
-    ///     a specific phase deterministically, and <see cref="FakeTimeProvider" />'s elapsed time is
-    ///     always zero unless the fake clock is advanced between the two calls — this advances it by
-    ///     exactly the next scripted amount, once per bracket, so a swapped phase assignment shows up
-    ///     as a swapped assertion failure instead of vanishing into noise.
+    ///     Returns a monotonic cursor from <c>GetTimestamp</c>, advancing it by the next scripted
+    ///     delta after every call. <see cref="TimeProvider.GetElapsedTime(long)" /> calls
+    ///     <c>GetTimestamp()</c> internally, so a simple bracket's elapsed is exactly the delta
+    ///     consumed between its own start and end calls — and because <c>Total</c> nests around
+    ///     every phase (its own start is the first call, its own end is the last), the same
+    ///     mechanism sums correctly for it too, unlike an alternating start/end toggle which
+    ///     desynchronises the moment a bracket nests inside another one.
     /// </summary>
-    private sealed class ScriptedTimeProvider(IReadOnlyList<TimeSpan> perBracket) : TimeProvider
+    private sealed class ScriptedTimeProvider(IReadOnlyList<TimeSpan> deltas) : TimeProvider
     {
-        private int _bracket;
+        private int _index;
         private long _cursor;
-        private bool _pendingElapsed;
 
         public override long TimestampFrequency => TimeSpan.TicksPerSecond;
 
         public override long GetTimestamp()
         {
-            if (!_pendingElapsed)
+            var value = _cursor;
+            if (_index < deltas.Count)
             {
-                _pendingElapsed = true;
-                return _cursor;
+                _cursor += deltas[_index++].Ticks;
             }
 
-            _pendingElapsed = false;
-            var delta = _bracket < perBracket.Count ? perBracket[_bracket++] : TimeSpan.Zero;
-            _cursor += delta.Ticks;
-            return _cursor;
+            return value;
         }
-    }
 
-    /// <summary>A fixed 384-float vector, so the vector modality actually queries without a live embedding endpoint.</summary>
-    private sealed class FixedVectorEmbedder : IEntryEmbedder
-    {
-        public Task<EmbeddingConfig> ConfigureAsync(SqliteConnection connection, string provider, string? model,
-            string? baseUrl, CancellationToken cancellationToken) =>
-            throw new NotSupportedException("Not exercised by SearchAsync.");
+        /// <summary>
+        ///     Builds the interleaved delta sequence <c>SearchAsync</c>'s call order needs for a
+        ///     single-context, no-fallback search: a zero gap before every phase's own start/end
+        ///     pair (the untimed work between brackets), then that phase's scripted value, for each
+        ///     of the eight phases in measurement order, plus a trailing zero gap before Total's
+        ///     own closing read.
+        /// </summary>
+        public static ScriptedTimeProvider ForPhases(params TimeSpan[] phaseValues)
+        {
+            var deltas = new List<TimeSpan>();
+            foreach (var value in phaseValues)
+            {
+                deltas.Add(TimeSpan.Zero);
+                deltas.Add(value);
+            }
 
-        public Task<EmbeddingConfig> StartMigrationAsync(SqliteConnection connection, string provider,
-            string? model, string? baseUrl, DateTimeOffset now, CancellationToken cancellationToken) =>
-            throw new NotSupportedException("Not exercised by SearchAsync.");
-
-        public Task<bool> DrainMigrationAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
-            throw new NotSupportedException("Not exercised by SearchAsync.");
-
-        public Task EmbedIfConfiguredAsync(SqliteConnection connection, long id, string value,
-            CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task<int> EmbedPendingAsync(SqliteConnection connection, string projectId, int? limit,
-            CancellationToken cancellationToken) =>
-            throw new NotSupportedException("Not exercised by SearchAsync.");
-
-        public Task<int> EmbedPendingBatchAsync(SqliteConnection connection, int limit,
-            CancellationToken cancellationToken) =>
-            throw new NotSupportedException("Not exercised by SearchAsync.");
-
-        public Task<byte[]?> EmbedQueryAsync(SqliteConnection connection, string query,
-            CancellationToken cancellationToken) => Task.FromResult<byte[]?>(EmbeddingBlob.ToBytes(new float[384]));
-
-        public Task<EmbeddingSettings> ReadSettingsAsync(SqliteConnection connection,
-            CancellationToken cancellationToken) =>
-            throw new NotSupportedException("Not exercised by SearchAsync.");
+            deltas.Add(TimeSpan.Zero);
+            return new ScriptedTimeProvider(deltas);
+        }
     }
 }

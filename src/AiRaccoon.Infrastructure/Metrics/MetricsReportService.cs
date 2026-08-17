@@ -10,9 +10,9 @@ namespace AiRaccoon.Infrastructure.Metrics;
 ///     Reads the bank's `metrics` table (WP0 schema, WP3's writer) for one project and hands the raw
 ///     samples to <see cref="PerformanceReportBuilder" /> — this class owns the I/O, the builder owns
 ///     the aggregation (WP6, docs/plans/2026-08-15-performance-metrics-implementation.md). Also folds
-///     in <see cref="SearchTimings.PhaseNames" /> (WP10) so the search-phase measurements the tool
-///     layer records reach the report the same way the tool series do — the SQL filter has to know
-///     about them too, not just the builder, or they never leave the table.
+///     in <see cref="SearchTimings.SeriesNames" /> (WP10, docs/adr/0079) so the search-phase and
+///     -total measurements the tool layer records reach the report the same way the tool series do —
+///     the SQL filter has to know about them too, not just the builder, or they never leave the table.
 /// </summary>
 public sealed class MetricsReportService(ISqliteConnectionFactory factory, TimeProvider timeProvider) : IMetricsReportService
 {
@@ -41,9 +41,10 @@ public sealed class MetricsReportService(ISqliteConnectionFactory factory, TimeP
         // which would misattribute a bank-wide number to whichever project happened to ask first.
         var isSelfMetricsReport = string.Equals(projectId, MetricsConfigKeys.SelfMetricsProjectId, StringComparison.Ordinal);
         var selfMetricNames = isSelfMetricsReport ? MetricsConfigKeys.SelfMetricNames : [];
-        // toolNames + phaseNames can never be empty: SearchTimings.PhaseNames always holds six
-        // entries, so this always goes through the query below — no separate empty-list branch.
-        var phaseNames = (IReadOnlyList<string>) [.. SearchTimings.PhaseNames, .. selfMetricNames];
+        // toolNames + phaseNames can never be empty: SearchTimings.SeriesNames always holds at
+        // least the phases plus the total, so this always goes through the query below — no
+        // separate empty-list branch.
+        var phaseNames = (IReadOnlyList<string>) [.. SearchTimings.SeriesNames, .. selfMetricNames];
         var seriesNames = (IReadOnlyList<string>) [.. toolNames, .. phaseNames];
         var from = now - effectiveWindow;
 

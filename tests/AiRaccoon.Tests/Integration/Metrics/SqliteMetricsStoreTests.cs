@@ -157,6 +157,37 @@ public sealed class SqliteMetricsStoreTests : IDisposable
         (await CountRowsAsync()).ShouldBe(0, "phase's value must be one of the known phase suffixes, not free text");
     }
 
+    /// <summary>
+    ///     S1 AC6 (docs/plans/2026-08-17-search-phase-attribution.md): AllowedPhaseValues now derives
+    ///     from SearchTimings.SeriesNames, not PhaseNames, so "total" — Total's own suffix, deliberately
+    ///     excluded from PhaseNames (F11) — must still survive the allowlist alongside the two new
+    ///     phases it was added for.
+    /// </summary>
+    [Theory]
+    [InlineData("open")]
+    [InlineData("embed")]
+    [InlineData("total")]
+    public async Task SaveBatchAsync_PhaseTaggedOpenEmbedOrTotal_Survives(string phase)
+    {
+        var measurement = new Measurement("search.fts", MeasurementKind.Histogram, 1, "ms", FixedNow,
+            Tags: $$"""{"phase":"{{phase}}"}""");
+
+        await _store.SaveBatchAsync([measurement], TestContext.Current.CancellationToken);
+
+        (await CountRowsAsync()).ShouldBe(1, $"'{phase}' is a real SearchTimings series suffix and must survive the allowlist");
+    }
+
+    [Fact]
+    public async Task SaveBatchAsync_PhaseTaggedWithAnInventedSuffix_IsRejected()
+    {
+        var measurement = new Measurement("search.fts", MeasurementKind.Histogram, 1, "ms", FixedNow,
+            Tags: """{"phase":"invented"}""");
+
+        await _store.SaveBatchAsync([measurement], TestContext.Current.CancellationToken);
+
+        (await CountRowsAsync()).ShouldBe(0, "an invented phase suffix must never be admitted, even though it looks like a real one");
+    }
+
     [Fact]
     public async Task SaveBatchAsync_QueryHashNotShapedLikeAHash_IsRejected()
     {

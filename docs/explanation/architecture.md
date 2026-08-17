@@ -397,11 +397,24 @@ run from (ADR-0070) — every 2 hours it deletes `metrics` rows older than
 window is within contract, not a defect (docs/work/specs/PerformanceMetrics.feature).
 
 **`memory_performance`** derives its series list from the server's own tool inventory
-(`McpToolInventory.Names()`) plus the six search-phase names (`SearchTimings.PhaseNames`) —
-never from `SELECT DISTINCT name FROM metrics` — so a tool or phase nothing has called yet still
-appears, at count zero, rather than being silently omitted (derive-or-delete-the-list). The
-report is project-scoped only; the whole-bank scope is deferred (D6,
-docs/plans/2026-08-15-performance-metrics-implementation.md §5).
+(`McpToolInventory.Names()`) plus `SearchTimings.SeriesNames` — the eight `search.*` phase names
+(`SearchTimings.PhaseNames`) plus the measured `search.total` — never from
+`SELECT DISTINCT name FROM metrics`, so a tool or phase nothing has called yet still appears, at
+count zero, rather than being silently omitted (derive-or-delete-the-list). `search.total` is a
+measured total, not a phase, and is deliberately excluded from `PhaseNames` so a caller that sums
+the phase series cannot silently double-count it; the phases close against `search.total`, never
+against `memory_search`'s own reported duration — see
+[ADR-0080](../adr/0080-the-phases-close-against-search-total-not-the-tool-total.md) for why a gate
+against `memory_search` cannot be built at all. The report is project-scoped only; the whole-bank
+scope is deferred (D6, docs/plans/2026-08-15-performance-metrics-implementation.md §5).
+
+**Buffer pressure moves with phase count.** Phase rows per search go 6 → 9: each `memory_search`
+call now enqueues eight phase measurements plus `search.total`, alongside the one tool-level
+`memory_search` duration `ToolExecutionActivity` already records. Against `DefaultBufferCapacity`
+(1000, `MetricsConfigKeys.cs:8`) and the default 30 s flush (`DefaultFlushIntervalSeconds`,
+`MetricsConfigKeys.cs:18`), the searches-per-flush-window before the buffer starts dropping moves
+from roughly 142 to roughly 100. Not a risk at any realistic search rate — recorded here so a
+future `metrics.dropped` uptick has an explanation on hand rather than a fresh investigation.
 
 > **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:332-353` (schema, in `Ddl` so
 > it reaches legacy banks), `src/AiRaccoon.Infrastructure/Metrics/MeasurementBuffer.cs`,
@@ -693,7 +706,8 @@ src/AiRaccoon/              Thin MCP server — tool definitions, transport, DI
 
 src/AiRaccoon.Core/         Pure domain layer — zero framework deps
   Memory/                   IMemoryStore port, records, ContentHash, SearchQuery, ContextNaming,
-                            SearchResults/SearchTimings (six search-phase durations),
+                            SearchResults/SearchTimings (eight search-phase durations plus a
+                            measured search.total, not itself a phase — ADR-0080),
                             MetricsConfigKeys (buffer/flush/retention settings)
   Metrics/                  Measurement, MeasurementKind, IMeasurementRecorder,
                             Statistics (pure percentile/min/max/mean), PerformanceReport/Builder

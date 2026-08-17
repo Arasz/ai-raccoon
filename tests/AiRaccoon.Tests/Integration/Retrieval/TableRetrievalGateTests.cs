@@ -18,16 +18,26 @@ public sealed class TableRetrievalGateTests(TableCorpusFixture fixture, ITestOut
     private const int SearchLimit = 10;
 
     /// <summary>
-    ///     Measured 2026-08-17 on the production chunk budget: mean nDCG@5 0.070683, mean MRR@10
-    ///     0.089658. Pinned below the measurement because this gate embeds live rather than replaying
-    ///     pinned vectors, so the number carries hardware variance the jsaa gates do not.
+    ///     Measured 2026-08-17 over 40 graded queries: mean nDCG@5 0.227007, mean MRR@10 0.237599.
+    ///     Pinned below the measurement because this gate embeds live rather than replaying pinned
+    ///     vectors, so the number carries hardware variance the jsaa gates do not — and above both
+    ///     perturbations (reversal 0.102/0.113, mispairing 0.079/0.080), which is what makes them
+    ///     able to fail. The earlier 0.050/0.070 pair was derived from a 16-query set and could not
+    ///     be compared against this one (docs/adr/0081).
     /// </summary>
-    private const double MeanNdcg5Floor = 0.050;
+    private const double MeanNdcg5Floor = 0.160;
 
-    private const double MeanMrr10Floor = 0.070;
+    private const double MeanMrr10Floor = 0.170;
 
     /// <summary>A per-query score must move by more than this to count as moved rather than jittered.</summary>
     private const double MovementTolerance = 0.01;
+
+    /// <summary>
+    ///     A quarter of the graded set. A chunking change that moves fewer scores than this is one
+    ///     this corpus cannot really see, which is the blindness docs/adr/0077 recorded. Derived from
+    ///     the set size, not fitted to the 19 of 40 a 128-token re-ingest actually moves.
+    /// </summary>
+    private static int MinimumMovedQueries => Math.Max(3, TableCorpusCatalog.Load().Count / 4);
 
     [Fact]
     public async Task ParaphraseRetrieval_HoldsItsPinnedFloors()
@@ -73,17 +83,21 @@ public sealed class TableRetrievalGateTests(TableCorpusFixture fixture, ITestOut
     }
 
     /// <summary>
-    ///     Records the observation behind <see cref="MismatchedPairing_FailsTheFloors" />: on this
-    ///     corpus a reversed top-10 outscores the real order. Kept as a reported number, not a gate.
+    ///     A second, independent perturbation. At 16 queries a reversed top-10 *outscored* the real
+    ///     order, so reversal was demoted to a report; over 40 it degrades as it should
+    ///     (0.102/0.113 against 0.227/0.238), which is itself evidence the old width could not
+    ///     resolve this corpus (docs/adr/0081).
     /// </summary>
     [Fact]
-    public async Task ReportReversedRankingComparison()
+    public async Task ReversedRanking_FailsTheFloors()
     {
         var (ndcg, mrr) = await ScoreAllAsync(fixture.Bank, reverse: false);
         var (reversedNdcg, reversedMrr) = await ScoreAllAsync(fixture.Bank, reverse: true);
 
         output.WriteLine($"as ranked:  nDCG@5={ndcg.Average():F6} MRR@10={mrr.Average():F6}");
         output.WriteLine($"reversed:   nDCG@5={reversedNdcg.Average():F6} MRR@10={reversedMrr.Average():F6}");
+        reversedNdcg.Average().ShouldBeLessThan(MeanNdcg5Floor, "a floor a reversal survives is not a gate");
+        reversedMrr.Average().ShouldBeLessThan(MeanMrr10Floor, "a floor a reversal survives is not a gate");
     }
 
     /// <summary>
@@ -108,7 +122,7 @@ public sealed class TableRetrievalGateTests(TableCorpusFixture fixture, ITestOut
 
         output.WriteLine($"{fixture.Bank.Chunks.Count} chunks -> {rechunked.Chunks.Count} chunks; " +
                          $"{moved}/{baseline.Ndcg.Count} per-query nDCG@5 scores moved");
-        moved.ShouldBeGreaterThanOrEqualTo(3,
+        moved.ShouldBeGreaterThanOrEqualTo(MinimumMovedQueries,
             "a chunking change must move this corpus's scores — a gate that cannot see the change " +
             "under test measures nothing (docs/adr/0077)");
     }
