@@ -17,19 +17,30 @@ python3 scripts/version-bump.py <patch|minor|major>
 - `minor` — a user-facing feature (1.8.0 → 1.9.0).
 - `major` — a breaking change (1.8.0 → 2.0.0).
 
-The script reads the current version from `src/AiRaccoon/AiRaccoon.csproj` (`PackageVersion`), bumps it, and writes the five markers in sync — failing loudly if they've drifted:
+`VERSION` at the repo root is the **only** hand-written version marker. The script bumps it and
+fails loudly if it doesn't hold exactly one occurrence of the current version.
 
-- `src/AiRaccoon/AiRaccoon.csproj` — `PackageVersion`, `InformationalVersion`, `AssemblyVersion`.
-- `src/AiRaccoon/.mcp/server.json` — top-level `version` + `packages[0].version`.
-- `tests/AiRaccoon.Tests/Unit/Setup/VersionContractTests.cs` — `ExpectedVersion`.
+Everything else derives from `VERSION`, not from the script:
+
+- `Directory.Build.props` sets `$(Version)` by reading the `VERSION` file, so the built assembly's
+  `AssemblyVersion`/`InformationalVersion` follow automatically.
+- `src/AiRaccoon/.mcp/server.json` is tracked with the literal token `__VERSION__` in both version
+  slots (top-level `version` and `packages[0].version`) — never a real semver. A csproj target
+  (`GenerateMcpServerJson`, hooked to `BeforeTargets="_GetPackageFiles"`) substitutes `$(Version)`
+  into a generated copy and packs that copy, not the tracked file.
 
 ## Gate
 
-`VersionContractTests` assert the markers agree and carry no prerelease suffix. Prove the bump:
+`VersionContractTests` prove the derivation, including the packed artifact (not just the repo copy
+or the `obj/` intermediate — a manifest correct in the repo but wrong in the package is the failure
+mode this exists to catch):
 
 ```bash
 dotnet test tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj --filter FullyQualifiedName~VersionContractTests
 ```
+
+`PackedMcpServerJson_CarriesTheVersionFileVersion` runs `dotnet pack` itself and opens the resulting
+`.nupkg` (a zip) to read `.mcp/server.json` out of it, so this one test run is the full proof.
 
 ## Release notes
 
