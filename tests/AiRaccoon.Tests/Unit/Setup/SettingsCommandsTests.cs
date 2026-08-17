@@ -3,6 +3,7 @@ using AiRaccoon.Access;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon;
 using AiRaccoon.Core.Memory.Filtering;
+using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
@@ -34,6 +35,9 @@ public class SettingsCommandsTests
                 ["settings", "model", "show"] => commands.ModelShowAsync(store, streams, ct),
                 ["settings", "retrieval", "alpha", "set"] => commands.RetrievalAlphaSetAsync(parsed.ParsedCliArgs, store, streams, ct),
                 ["settings", "retrieval", "alpha", "show"] => commands.RetrievalAlphaShowAsync(store, streams, ct),
+                ["settings", "retrieval", "fusion", "enable"] => commands.RetrievalFusionSetAsync(true, store, streams, ct),
+                ["settings", "retrieval", "fusion", "disable"] => commands.RetrievalFusionSetAsync(false, store, streams, ct),
+                ["settings", "retrieval", "fusion", "show"] => commands.RetrievalFusionShowAsync(store, streams, ct),
                 ["settings", "sweep", "enable"] => commands.SweepEnabledSetAsync(true, store, streams, ct),
                 ["settings", "sweep", "disable"] => commands.SweepEnabledSetAsync(false, store, streams, ct),
                 ["settings", "sweep", "interval-hours"] => commands.SweepIntervalHoursSetAsync(parsed.ParsedCliArgs, store, streams, ct),
@@ -203,6 +207,61 @@ public class SettingsCommandsTests
         enableExit.ShouldBe(0);
         enabledOut.ShouldContain("enabled: True");
         NoiseConfigKeys.ParseEnabled(store.Settings[NoiseConfigKeys.EnabledGlobal]).ShouldBeTrue();
+    }
+
+    /// <summary>
+    ///     docs/adr/0078 ships the no-fusion-regression reorder default-off. `show` has to say so
+    ///     unprompted: someone reading it at 2am must be able to tell the baseline path from the
+    ///     adjusted one without going to look the default up.
+    /// </summary>
+    [Fact]
+    public async Task RetrievalFusionShow_NoRow_PrintsOffAndSaysThatIsTheDefault()
+    {
+        var (exit, stdout, _) = await Run(["settings", "retrieval", "fusion", "show"], new FakeConfigStore());
+
+        exit.ShouldBe(0);
+        stdout.ShouldContain("enabled: False");
+        stdout.ShouldContain("default");
+        FusionConfigKeys.DefaultNoRegressionEnabled.ShouldBeFalse();
+    }
+
+    /// <summary>
+    ///     The flag round-trips through the same parse SqliteMemoryStore.SearchAsync reads it with —
+    ///     the owner's release checklist has to exercise search with it on and off, and without a
+    ///     verb the setting is unreachable through any sanctioned path (ADR-0075: the server is the
+    ///     only writer).
+    /// </summary>
+    [Fact]
+    public async Task RetrievalFusionEnableThenDisable_RoundTripsThroughCliShowAndFusionConfigKeys()
+    {
+        var store = new FakeConfigStore();
+
+        var (enableExit, _, _) = await Run(["settings", "retrieval", "fusion", "enable"], store);
+        var (_, enabledOut, _) = await Run(["settings", "retrieval", "fusion", "show"], store);
+
+        enableExit.ShouldBe(0);
+        enabledOut.ShouldContain("enabled: True");
+        FusionConfigKeys.ParseNoRegressionEnabled(store.Settings[FusionConfigKeys.NoRegressionEnabledGlobal])
+            .ShouldBeTrue();
+
+        var (disableExit, _, _) = await Run(["settings", "retrieval", "fusion", "disable"], store);
+        var (_, disabledOut, _) = await Run(["settings", "retrieval", "fusion", "show"], store);
+
+        disableExit.ShouldBe(0);
+        disabledOut.ShouldContain("enabled: False");
+        FusionConfigKeys.ParseNoRegressionEnabled(store.Settings[FusionConfigKeys.NoRegressionEnabledGlobal])
+            .ShouldBeFalse();
+    }
+
+    /// <summary>`show` must never be the thing that turns it on.</summary>
+    [Fact]
+    public async Task RetrievalFusionShow_WritesNothing()
+    {
+        var store = new FakeConfigStore();
+
+        await Run(["settings", "retrieval", "fusion", "show"], store);
+
+        store.Settings.ShouldNotContainKey(FusionConfigKeys.NoRegressionEnabledGlobal);
     }
 
     [Fact]

@@ -1,11 +1,17 @@
+using AiRaccoon.Core.Memory.Fusion;
+
 namespace AiRaccoon.Core.Memory;
 
 /// <summary>
 ///     The envelope <see cref="IMemoryStore.SearchAsync" /> returns (owner ruling; WP1 wires it).
 ///     <see cref="Timings" /> rides out with the results so the host can tag and record them
-///     without a side channel back into the store.
+///     without a side channel back into the store. <see cref="Fusion" /> is null on every default
+///     search — it is set only when the no-fusion-regression flag is on (docs/adr/0078).
 /// </summary>
-public sealed record SearchResults(IReadOnlyList<MemorySearchResult> Results, SearchTimings Timings);
+public sealed record SearchResults(
+    IReadOnlyList<MemorySearchResult> Results,
+    SearchTimings Timings,
+    FusionDiff? Fusion = null);
 
 /// <summary>Per-phase durations for one <see cref="IMemoryStore.SearchAsync" /> call.</summary>
 public sealed record SearchTimings(

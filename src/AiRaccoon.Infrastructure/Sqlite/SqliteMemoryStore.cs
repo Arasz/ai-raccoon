@@ -4,6 +4,7 @@ using System.Text;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
+using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.Rating;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
@@ -177,6 +178,11 @@ public sealed partial class SqliteMemoryStore(
             alpha = await ReadStructureAlphaAsync(connection, cancellationToken).ConfigureAwait(false);
         }
 
+        // Derived once from the same conditions the two query sites below take, so the leg-availability
+        // signal can never disagree with whether the leg actually ran (docs/adr/0078).
+        var ftsQueried = plan.Expression.Length > 0 && query.FtsWeight != 0;
+        var vectorQueried = queryVector is not null && query.VectorWeight != 0;
+
         var ftsBatches = new List<IReadOnlyList<MemorySearchResult>>();
         var vectorBatches = new List<IReadOnlyList<MemorySearchResult>>();
         var contexts = (await SearchContexts.ResolveAsync(connection, query, cancellationToken)
@@ -198,7 +204,7 @@ public sealed partial class SqliteMemoryStore(
             var limit = CandidateWindowFor(query.Limit, query.CandidateWindow);
 
             IReadOnlyList<MemorySearchResult> ftsResults = [];
-            if (plan.Expression.Length > 0 && query.FtsWeight != 0)
+            if (ftsQueried)
             {
                 var ftsStart = timeProvider.GetTimestamp();
                 ftsResults = await QueryFtsBatchAsync(connection, filter, plan.Expression,
@@ -216,7 +222,7 @@ public sealed partial class SqliteMemoryStore(
             }
 
             IReadOnlyList<MemorySearchResult> vectorResults = [];
-            if (queryVector is not null && query.VectorWeight != 0)
+            if (vectorQueried)
             {
                 var vectorStart = timeProvider.GetTimestamp();
                 vectorResults = await QueryDualVectorBatchAsync(connection,
@@ -257,11 +263,10 @@ public sealed partial class SqliteMemoryStore(
         }
 
         var fusionStart = timeProvider.GetTimestamp();
+        var ftsCandidates = ModalityCandidates.ByBm25(ftsBatches, valueByHash);
+        var vectorCandidates = ModalityCandidates.ByCosine(vectorBatches, valueByHash);
         var fused = ReciprocalRankFusion.Fuse(
-            [
-                (ModalityCandidates.ByBm25(ftsBatches, valueByHash), query.FtsWeight),
-                (ModalityCandidates.ByCosine(vectorBatches, valueByHash), query.VectorWeight)
-            ],
+            [(ftsCandidates, query.FtsWeight), (vectorCandidates, query.VectorWeight)],
             query.RrfK, 0, int.MaxValue);
         var fusionElapsed = timeProvider.GetElapsedTime(fusionStart);
 
@@ -269,6 +274,19 @@ public sealed partial class SqliteMemoryStore(
         var merged = SearchResultMerger.Merge([fused], query.Limit, query.MinRelativeScore, query.RrfK,
             isPathQuery ? 0.0 : query.SourceLambda, query.ConsolidationThreshold, query.DocScoreFormula);
         var affinityElapsed = timeProvider.GetElapsedTime(affinityStart);
+
+        // Left outside the affinity bracket on purpose: the enabled path does the merge twice, and
+        // timing only the baseline keeps search.affinity comparable across flag states.
+        var legs = LegsFor(ftsCandidates, vectorCandidates, ftsQueried, vectorQueried);
+        FusionDiff? fusionDiff = null;
+        if (await NoFusionRegressionEnabledAsync(connection, legs, cancellationToken).ConfigureAwait(false))
+        {
+            var adjusted = SearchResultMerger.Merge([NoFusionRegression.Reorder(fused, legs)], query.Limit,
+                query.MinRelativeScore, query.RrfK, isPathQuery ? 0.0 : query.SourceLambda,
+                query.ConsolidationThreshold, query.DocScoreFormula);
+            fusionDiff = FusionDiff.Between(merged, adjusted);
+            merged = adjusted;
+        }
 
         var snippetsStart = timeProvider.GetTimestamp();
         merged = await ResolveDeferredSnippetsAsync(connection, merged, valueByHash, ftsQueryByHash, idByHash,
@@ -280,7 +298,7 @@ public sealed partial class SqliteMemoryStore(
         var bumpElapsed = timeProvider.GetElapsedTime(bumpStart);
 
         var timings = new SearchTimings(ftsElapsed, vectorElapsed, fusionElapsed, affinityElapsed, snippetsElapsed, bumpElapsed);
-        return new SearchResults(merged, timings);
+        return new SearchResults(merged, timings, fusionDiff);
     }
 
     /// <summary>memory_get (ADR-0035): the caller's own rows plus the cross-project shared tier; null when no such hash is reachable.</summary>
@@ -805,58 +823,6 @@ public sealed partial class SqliteMemoryStore(
             .ConfigureAwait(false);
 
     /// <summary>
-    ///     Per-modality candidate window before RRF fusion (see docs/adr/0006-rrf-parameter-optimization.md):
-    ///     the default max(limit*3, 100) keeps overlap candidates ranked 20-100 from being
-    ///     starved by a per-modality LIMIT.
-    /// </summary>
-    internal static int CandidateWindowFor(int limit, CandidateWindowMode mode = CandidateWindowMode.Max3X100) =>
-        mode == CandidateWindowMode.Max5X50
-            ? (int)Math.Clamp((long)limit * 5, 50, int.MaxValue)
-            : (int)Math.Clamp((long)limit * 3, 100, int.MaxValue);
-
-    /// <summary>
-    ///     Keyword modality: FTS5 candidates without snippet() — deferred (see <see cref="BuildFtsResults" />).
-    ///     <paramref name="valueByHash" />, <paramref name="ftsQueryByHash" /> and <paramref name="idByHash" />
-    ///     carry each candidate's raw value, matching @query text and row id, for snippet resolution after ranking.
-    /// </summary>
-    private async Task<IReadOnlyList<MemorySearchResult>> QueryFtsBatchAsync(
-        SqliteConnection connection, string filter, string ftsExpression, DynamicParameters parameters,
-        IDictionary<string, string> valueByHash, IDictionary<string, string> ftsQueryByHash,
-        IDictionary<string, long> idByHash, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var rows = (await connection.QueryAsync<SearchRow>(
-                    new CommandDefinition(
-                        MemorySql.SearchByFilter.Replace("{filter}", filter), parameters,
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false)).ToList();
-
-            foreach (var row in rows)
-            {
-                valueByHash[row.Hash] = row.Value;
-                ftsQueryByHash[row.Hash] = ftsExpression;
-                idByHash[row.Hash] = row.Id;
-            }
-
-            return BuildFtsResults(rows);
-        }
-        catch (SqliteException ex)
-        {
-            Log.KeywordModalityFailed(logger, ex);
-            return [];
-        }
-    }
-
-    /// <summary>Maps FTS candidate rows to results with <see cref="MemorySearchResult.Snippet" /> left unresolved.</summary>
-    internal static IReadOnlyList<MemorySearchResult> BuildFtsResults(IReadOnlyList<SearchRow> rows) =>
-    [
-        .. rows.Select(row => new MemorySearchResult(
-            row.Hash, row.Ranking, row.Path, string.Empty,
-            row.SourceFile, row.ChunkIndex, row.TotalChunks))
-    ];
-
-    /// <summary>
     ///     A workspace row survives discard/consolidate as a Closed record (see IWorkspaceStore); only
     ///     Active is a valid write target, so a missing row and a closed one are the same failure to a caller.
     /// </summary>
@@ -994,18 +960,6 @@ public sealed partial class SqliteMemoryStore(
         }
 
         return snippetByHash;
-    }
-
-    private async Task<double> ReadStructureAlphaAsync(SqliteConnection connection,
-        CancellationToken cancellationToken)
-    {
-        var raw = await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key = StructureFusion.AlphaSettingKey }, cancellationToken))
-            .ConfigureAwait(false);
-        return double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var alpha)
-               && alpha is >= 0.0 and <= 1.0
-            ? alpha
-            : StructureFusion.DefaultAlpha;
     }
 
     /// <summary>

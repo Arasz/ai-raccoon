@@ -6,6 +6,7 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Metrics;
 using AiRaccoon.Core.Sync;
@@ -317,6 +318,46 @@ public class MemoryToolsTests
         recorder.Recorded.ShouldAllBe(m => m.QueryHash == ContentHash.OfValue("widgets"));
         recorder.Recorded.ShouldAllBe(m => m.CorrelationId == correlationId);
         recorder.Recorded.ShouldAllBe(m => m.Tags == null);
+    }
+
+    /// <summary>
+    ///     docs/adr/0078: the fusion evidence is recorded only when the store reports a diff — which
+    ///     it does only on the flag-enabled path — and it joins back to `search_quality` on the same
+    ///     correlation id, which is what turns movement into a verdict.
+    /// </summary>
+    [Fact]
+    public async Task Search_StoreReportsAFusionDiff_RecordsItAlongsideThePhases_OnTheSameCorrelationId()
+    {
+        var recorder = new RecordingMeasurementRecorder();
+        _store.Fusion = new FusionDiff(1, 2, 3);
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+            new NoOpSearchQualityService(), new QueryGuardService(_store),
+            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
+
+        var envelope = await tools.Search("acme", "widgets", cancellationToken: TestContext.Current.CancellationToken);
+        var correlationId = envelope.Meta.CorrelationId.ShouldNotBeNull();
+
+        var fusion = recorder.Recorded.Where(m => FusionDiff.MetricNames.Contains(m.Name)).ToList();
+        fusion.Select(m => m.Name).ShouldBe(FusionDiff.MetricNames);
+        fusion.Select(m => m.Value).ShouldBe([1, 2, 3]);
+        fusion.ShouldAllBe(m => m.CorrelationId == correlationId);
+        fusion.ShouldAllBe(m => m.QueryHash == ContentHash.OfValue("widgets"));
+        fusion.ShouldAllBe(m => m.Tags == null);
+    }
+
+    /// <summary>The default path records the six phases and nothing else — the flag must not leak into it.</summary>
+    [Fact]
+    public async Task Search_StoreReportsNoFusionDiff_RecordsNoFusionMeasurement()
+    {
+        var recorder = new RecordingMeasurementRecorder();
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+            new NoOpSearchQualityService(), new QueryGuardService(_store),
+            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
+
+        await tools.Search("acme", "widgets", cancellationToken: TestContext.Current.CancellationToken);
+
+        _store.Fusion.ShouldBeNull();
+        recorder.Recorded.ShouldNotContain(m => FusionDiff.MetricNames.Contains(m.Name));
     }
 
     /// <summary>
@@ -849,11 +890,14 @@ public class MemoryToolsTests
             return WriteError is not null ? Task.FromException<MemoryEntry>(WriteError) : Task.FromResult(Entry);
         }
 
+        /// <summary>Null on the default path; set only to exercise the flag-enabled fusion evidence (docs/adr/0078).</summary>
+        public FusionDiff? Fusion { get; set; }
+
         public override Task<SearchResults> SearchAsync(SearchQuery query,
             CancellationToken cancellationToken = default)
         {
             LastQuery = query;
-            return Task.FromResult(new SearchResults([], SearchTimings.Empty));
+            return Task.FromResult(new SearchResults([], SearchTimings.Empty, Fusion));
         }
 
         public override Task<bool> DeleteAsync(string projectId, string hash,
