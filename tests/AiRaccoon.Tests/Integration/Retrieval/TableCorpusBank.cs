@@ -46,14 +46,24 @@ internal sealed class TableCorpusBank : IAsyncDisposable
     ///     production budget when null. The override is how a test perturbs chunking without touching
     ///     production configuration.
     /// </summary>
-    public static async Task<TableCorpusBank> BuildAsync(int? maxTokensOverride, CancellationToken cancellationToken)
+    public static Task<TableCorpusBank> BuildAsync(int? maxTokensOverride, CancellationToken cancellationToken) =>
+        BuildAsync(maxTokensOverride, arm: null, cancellationToken);
+
+    /// <summary>
+    ///     Builds the corpus under a chunking <paramref name="arm" /> — a factory taking the real
+    ///     tokenizer and returning the chunker to ingest with — so ADR-0077's tuning arms can be
+    ///     scored against the same documents, queries and search path.
+    /// </summary>
+    public static async Task<TableCorpusBank> BuildAsync(int? maxTokensOverride,
+        Func<TokenCount, IMarkdownChunker>? arm, CancellationToken cancellationToken)
     {
         var dataRoot = TestData.CreateTempRoot("ai-raccoon-table-corpus");
         var bert = OnnxEmbeddingGenerator.CreateTokenizer(BundledModel.ResolveVocabPath());
+        TokenCount count = text => bert.CountTokens(text);
         // Mirrors FileIngestor.ChunkSizeForAsync for an unconfigured bank (docs/adr/0063).
         var productionMaxTokens = Math.Min(256, EmbeddingService.SafeChunkBudgetFor("local", null));
         var maxTokens = maxTokensOverride ?? productionMaxTokens;
-        IMarkdownChunker chunker = new MarkdownChunker(text => bert.CountTokens(text));
+        var chunker = arm is null ? new MarkdownChunker(count) : arm(count);
         if (maxTokensOverride is not null)
         {
             chunker = new RebudgetedChunker(chunker, maxTokensOverride.Value);
