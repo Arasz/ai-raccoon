@@ -35,6 +35,31 @@ internal static class CliRendering
         {
             streams.WriteErrorLine(hint);
         }
+
+        // A recognised verb whose own parse is incomplete (missing subcommand/argument, a bad
+        // option value, ...) gets help for the command it got as far as, same as if the caller
+        // had typed --help there themselves. docs/adr/0060 keeps an unrecognised verb out of this
+        // branch on purpose: that case never resolves a CommandPath, so IsCommandInput is false
+        // and it falls through with only its error — no help, no launch.
+        if (cliInput.Errors.Count > 0 && cliInput.IsCommandInput)
+        {
+            RenderHelpForResolvedCommand(cliInput, streams);
+        }
+    }
+
+    /// <summary>
+    ///     Re-parses the resolved command path with --help appended, which System.CommandLine
+    ///     always resolves to HelpAction with zero errors regardless of what was wrong — so this
+    ///     renders the exact same help --help itself would, without re-implementing it and without
+    ///     repeating the (already deduped) error text above via System.CommandLine's own
+    ///     error+help combo, which prints the raw, undeduped errors (see the class doc comment).
+    /// </summary>
+    private static void RenderHelpForResolvedCommand(CliInput cliInput, StandardStreams streams)
+    {
+        var helpResult = CliCommandTree.BuildFullRootCommand()
+            .Parse([.. cliInput.CommandPath, "--help"], CliArgs.ParserConfiguration);
+        streams.WriteErrorLine(string.Empty);
+        helpResult.Invoke(new InvocationConfiguration { Output = streams.Error, Error = streams.Error });
     }
 
     /// <summary>
