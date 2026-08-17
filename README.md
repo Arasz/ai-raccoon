@@ -31,6 +31,7 @@ flowchart LR
 
 ## What's new
 
+- **A repair now finishes on its own — it embeds what it re-ingested, instead of leaving it unsearchable.** (1.26.0) [ADR-0075](docs/adr/0075-only-the-server-writes-to-the-bank.md)
 - **The memory now measures its own performance, and you can ask it.** (1.20.0) [ADR-0074](docs/adr/0074-a-capped-buffer-satisfies-the-channel-rule-and-reshapes-g4.md) · [How-to](docs/how-to/read-performance-metrics.md)
 - **A long memory_write now matches on the chunk it stored, not the first page of the document.** (1.19.1) [ADR-0073](docs/adr/0073-a-write-embeds-the-chunk-it-stored.md)
 - **The bank now compacts itself, and repairs entries too long to be searchable.** (1.17.0) [ADR-0070](docs/adr/0070-maintenance-is-a-list-of-jobs-with-a-ledger.md)
