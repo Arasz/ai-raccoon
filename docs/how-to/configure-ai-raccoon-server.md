@@ -321,6 +321,39 @@ a backup. Exit code is `0` when healthy and non-zero on a mismatch, so it compos
 If the bank is encrypted and the passphrase cannot be resolved, that is reported as a *read* failure
 and is distinguishable from a shape problem — a locked bank is not a broken one.
 
+## Repair chunk ordering on an existing bank
+
+`chunk_index` records where a chunk sits **in its document**. Until 1.23.0 it was derived from row
+insertion order instead, and ingest only ever inserted — so a paragraph edited into the *middle* of a
+watched file was numbered *last*. Measured on a real 25,995-entry bank: 908 of 1,343 source files had
+been re-ingested incrementally, and every one checked was out of document order.
+
+That matters because the adjacent-chunk boost ([ADR-0005](../adr/0005-source-affinity-ranking.md))
+tests whether two results are neighbours. Wrong ordering means it rewards chunks that are not.
+
+New ingests are correct from 1.23.0 onward. Rows already in your bank are not — repair them
+explicitly:
+
+```bash
+ai-raccoon repair chunk-index            # dry run: reports what it would change, writes nothing
+ai-raccoon repair chunk-index --apply    # performs the repair
+```
+
+**Nothing repairs itself.** This is not in the maintenance job list, so upgrading does not silently
+rewrite your bank — you choose when it runs, and the default is a report.
+
+It is **UPDATE-only**: it never inserts or deletes a row. Where a chunk's position genuinely cannot
+be known — the source file has been moved or deleted, or the entry was written directly by
+`memory_write` and has no file — it sets `chunk_index = -1`, meaning *position unknown*, rather than
+guessing. The ranker skips those rows when testing adjacency instead of treating `-1` as a neighbour
+of `0`.
+
+Run it against a **copy** first if you want to see the scale of the change on your own data:
+
+```bash
+ai-raccoon --data-root /path/to/copy --port 7799 repair chunk-index
+```
+
 ## Related documentation
 
 - [ADR-0020: Always-on HTTP stdio proxy](../adr/0020-always-on-http-stdio-proxy.md)
