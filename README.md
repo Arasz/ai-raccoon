@@ -31,12 +31,9 @@ flowchart LR
 
 ## What's new
 
-- **AiRaccoon now measures its own performance, and you can ask it.** Per-tool and per-search-phase durations, persisted and read back with `memory_performance` — no OTLP collector required. (1.20.0) [ADR-0074](docs/adr/0074-a-capped-buffer-satisfies-the-channel-rule-and-reshapes-g4.md) · [How-to](docs/how-to/read-performance-metrics.md)
+- **ai-raccoon now measures its own performance, and you can ask it.** [ADR-0074](docs/adr/0074-a-capped-buffer-satisfies-the-channel-rule-and-reshapes-g4.md) · [How-to](docs/how-to/read-performance-metrics.md)
 - **A long memory_write now matches on the chunk it stored, not the first page of the document.** (1.19.1) [ADR-0073](docs/adr/0073-a-write-embeds-the-chunk-it-stored.md)
-- **A search query too long for the model now says so in the response, and the tool explains the limit.** (1.19.0) [ADR-0071](docs/adr/0071-a-query-is-trimmed-deliberately-and-said-so.md)
-- **A search query too long for the model is trimmed openly, and the log says so.** (1.18.0) [ADR-0071](docs/adr/0071-a-query-is-trimmed-deliberately-and-said-so.md)
 - **The bank now compacts itself, and repairs entries too long to be searchable.** (1.17.0) [ADR-0070](docs/adr/0070-maintenance-is-a-list-of-jobs-with-a-ledger.md)
-- **The bank reclaims most of its vector storage.** (1.16.0) [ADR-0068](docs/adr/0068-ctx-is-a-vec0-metadata-column-not-a-partition-key.md)
 - **A long `memory_write` is now searchable across its whole length.** (1.15.0) [ADR-0064](docs/adr/0064-memory-write-chunks-like-everything-else.md)
 - **Naming `shared` on a write asks for promotion instead of bypassing review.** (1.15.0) [ADR-0067](docs/adr/0067-naming-shared-asks-for-promotion.md)
 - **Workspaces no longer require `full`.** (1.13.0) [ADR-0052](docs/adr/0052-the-workspace-lifecycle-is-a-write-not-a-destruction.md)
