@@ -1,0 +1,189 @@
+{
+ "run": {
+  "date": "2026-08-17",
+  "branch": "task/issue-close-357-367",
+  "commit": "efd5507b3deafa8464c9e526e84d5bb182d63873",
+  "data-root": "scratch roots under the session scratchpad; the live ~/.ai-raccoon bank was only ever read via a VACUUM INTO copy",
+  "note": "Version bumped to 1.23.0 LOCALLY and not pushed; publishing is gated on this run."
+ },
+ "derived": {
+  "version": "1.23.0",
+  "mcp-tool-count": 27,
+  "mcp-prompt-count": 2,
+  "note": "scripts/derive-facts.py at run time (carried copy under .ai-badger/skills/, since scripts/derive-facts.py is not in this tree)."
+ },
+ "findings-against-prior-runs": [
+  {
+   "finding": "ADR-0075's prose states Ddl is 39 statements / 42 total. MemorySchemaDdlStatementCountTests pins 0 DDL / 4 total on the digest-matched path and 40 on the stale-digest path. The ADR is immutable and records what was true when written; the test tracks today. Earlier planning in this task propagated the ADR figure as verified ground truth.",
+   "impact": "Any gate re-pinning those counts off the ADR would pin a stale number.",
+   "corrected-in": "docs/adr/0077, appendix."
+  },
+  {
+   "finding": "A blast-radius figure of '22.3% of chunks contain table content' was propagated into planning. That measure counts any line with two or more pipes and also catches shell pipelines inside code fences. The defensible figure is 9.1% (chunks containing a table header separator row).",
+   "impact": "~2.4x overstatement presented as measurement.",
+   "corrected-in": "docs/adr/0077 and docs/reviews/2026-08-17-moe-plan-review.md."
+  }
+ ],
+ "items": [
+  {
+   "area": "Build and install",
+   "item": "Release pack, install, and prove the running binary is this tree",
+   "command": "dotnet pack -c Release -o <nupkg>; dotnet tool install ai-raccoon --version 1.23.0 --add-source <nupkg> --tool-path <tool>; ai-raccoon --version; git rev-parse HEAD",
+   "evidence": "1.23.0+efd5507b3deafa8464c9e526e84d5bb182d63873 ; worktree HEAD efd5507b3deafa8464c9e526e84d5bb182d63873 -> MATCH",
+   "observed-result": "Installed binary reports the derived version AND its embedded commit equals this worktree's HEAD, so the install is provably not a stale build.",
+   "status": "pass",
+   "accepted": true,
+   "acceptance-reason": "Deliberate deviation recorded: installed to --tool-path rather than force-updating the global tool, because the user's global tool is in use by a running server and MCP clients and the release is not yet published. Still a real install, which is what the step exists to exercise."
+  },
+  {
+   "area": "Server lifecycle",
+   "item": "Server starts on an ephemeral port and the port is read back, never assumed",
+   "command": "ai-raccoon --data-root <scratch> serve --port 0 ; grep the bound URL from the server's own output",
+   "evidence": "http://127.0.0.1:51643/mcp (scratch) and http://127.0.0.1:51761/mcp (real-bank copy)",
+   "observed-result": "Both servers bound ephemeral ports and reported them; the user's own server on 7721 was never touched.",
+   "status": "pass",
+   "accepted": true,
+   "acceptance-reason": "Default port never bound, per the skill's Never list."
+  },
+  {
+   "area": "Full MCP surface",
+   "item": "Every derived tool and prompt is reachable",
+   "command": "tools/list and prompts/list over the live MCP endpoint",
+   "evidence": "tools: 27   prompts: 2 (workspace-consolidation-guide, memory-usage-guide)",
+   "observed-result": "Live surface equals the derived counts exactly (27/2).",
+   "status": "pass",
+   "accepted": true,
+   "acceptance-reason": "The comparison that catches a build other than the one under test; it matched."
+  },
+  {
+   "area": "Write path",
+   "item": "A write stores and returns a hash",
+   "command": "memory_write projectId=checklist content='The brass astrolabe rested under lamplight in the observatory...'",
+   "evidence": "{\"hash\":\"377149070384bc15...\",\"path\":\"3d79716c...md\",\"context\":\"project:checklist\"}",
+   "observed-result": "Stored, real hash returned.",
+   "status": "pass",
+   "accepted": true,
+   "acceptance-reason": "Contract met."
+  },
+  {
+   "area": "Read path",
+   "item": "Semantic search finds the entry with no lexical overlap, and get returns it by hash",
+   "command": "memory_search query='an antique navigation instrument reflecting evening light in a stargazing room'; memory_get hash=3771490703...",
+   "evidence": "1 result, rank 1, hash 377149070384 == the written hash; memory_get returned the stored value",
+   "observed-result": "The query shares no literal term with the stored text (astrolabe/lamplight/observatory), so a dead vector leg would have failed this. It ranked 1.",
+   "status": "pass",
+   "accepted": true,
+   "acceptance-reason": "Written as a query keyword match cannot carry, per the skill's guidance."
+  },
+  {
+   "area": "Noise filtering",
+   "item": "The registered write-path policy rejects what it claims to, with a clean negative control",
+   "command": "memory_write x3 with the three HermesProcessNoisePolicy shapes, plus one clean entry",
+   "evidence": "three writes -> stored:false, reason 'rejected by noise policy HermesBackgroundProcessLog', hash empty; clean control -> hash c79296e7b58e...; memory_list shows exactly one stored file",
+   "observed-result": "Rejections are reported as rejections with a named reason and an EMPTY hash -- not a fabricated entry -- and the negative control was kept.",
+   "status": "pass",
+   "accepted": true,
+   "acceptance-reason": "First attempt tested short acknowledgements ('ok'/'done') and they were stored. That was MY error, not a defect: only one write-path policy is registered (HermesProcessNoisePolicy, ADR-0039), and it targets three machine-notification shapes. Re-derived against the source and re-run."
+  },
+  {
+   "area": "Schema shape (NEW, #357)",
+   "item": "doctor reports a healthy bank, and does not modify it",
+   "command": "ai-raccoon --data-root <copy of the real 25,995-entry bank> doctor; shasum before/after",
+   "evidence": "status: HEALTHY, exit 0; SHA a0e08728076477dd3fdb202b before AND after",
+   "observed-result": "Healthy verdict on real content, and the file is byte-identical afterwards -- doctor opens read-only.",
+   "status": "pass",
+   "accepted": true,
+   "acceptance-reason": "Both halves of the contract on real data."
+  },
+  {
+   "area": "Schema shape (NEW, #357)",
+   "item": "doctor detects real damage and names it",
+   "command": "sqlite3 <copy> 'DROP INDEX idx_entries_hash'; ai-raccoon --data-root <copy> doctor",
+   "evidence": "status: SHAPE MISMATCH (1 finding(s))\\n  - idx_entries_hash: missing index ; exit 19",
+   "observed-result": "Names the exact object and the exact defect, and exits 19 (SchemaVerificationFailed) against 0 for healthy.",
+   "status": "pass",
+   "accepted": true,
+   "acceptance-reason": "This is the #357 hole demonstrated closed: user_version is correct AND application_id matches its own stored value, so neither the ladder nor the digest gate considers anything wrong, while an index is missing."
+  },
+  {
+   "area": "Chunk ordering (NEW, #371)",
+   "item": "repair chunk-index dry run writes nothing",
+   "command": "ai-raccoon --data-root <copy> repair chunk-index ; count rows with chunk_index < 0 before and after",
+   "evidence": "'1462 source group(s) examined, 4710 row(s) would reposition (dry run; pass --apply to write), 16074 row(s) set to the unknown position (-1)'; rows at -1 before: 0, after: 0",
+   "observed-result": "Dry run reported and changed no data.",
+   "status": "pass",
+   "accepted": true,
+   "acceptance-reason": "Verified on the DATA, not the file hash. A dry run does NOT leave the file SHA unchanged, because opening the bank read-write checkpoints the WAL and runs maintenance (199M -> 209M). doctor is the opposite case and its SHA genuinely does not move."
+  },
+  {
+   "area": "Chunk ordering (NEW, #371)",
+   "item": "What the dry run reveals about applying it",
+   "command": "as above, read the two counts",
+   "evidence": "4,710 rows (18%) would reposition; 16,074 rows (62% of 25,995) would be set to chunk_index = -1",
+   "observed-result": "On a bank with chunker history, applying the repair would mark a majority of rows position-unknown, because it positions a row by re-chunking with the CURRENT chunker and matching on content hash -- rows produced by an older chunker cannot be matched and are honestly marked -1 rather than guessed.",
+   "status": "pass",
+   "accepted": true,
+   "acceptance-reason": "The verb behaves as designed and --apply was deliberately NOT run. A -1 row is skipped by the adjacency boost rather than mis-boosted, which removes a wrong signal without supplying a right one -- an operator decision, now documented with these numbers in docs/how-to/configure-ai-raccoon-server.md."
+  },
+  {
+   "area": "Fusion flag (NEW, #367)",
+   "item": "The flag toggles and reports its own default",
+   "command": "ai-raccoon --data-root <copy> --port <p> settings retrieval fusion show|enable|disable",
+   "evidence": "show -> 'enabled: False  (default: False - off serves the baseline fusion)'; enable -> 'retrieval fusion no-regression reorder enabled'; show -> True; disable -> False",
+   "observed-result": "Toggles both ways and names its default, so a reader can tell baseline from adjusted.",
+   "status": "pass",
+   "accepted": true,
+   "acceptance-reason": "Note for future runs: an isolated bank needs BOTH --data-root AND --port. --data-root alone leaves the CLI on the default port and fails with 'the settings server at 127.0.0.1:7721 refused this credential'."
+  },
+  {
+   "area": "Fusion flag (NEW, #367)",
+   "item": "Search differs with the flag on, and the single-leg controls do not",
+   "command": "memory_search projectId=ai-badger, the #367 paraphrase, limit 20, with and without the flag; targets identified BY HASH",
+   "evidence": "OFF: hybrid {9/64:6, 7/64:12} | FTS-only {9/64:4, 7/64:6} | vector-only {9/64:14}\\nON:  hybrid {9/64:3, 7/64:6} | FTS-only {9/64:4, 7/64:6} | vector-only {9/64:14}",
+   "observed-result": "With the flag on the target moves from hybrid 6 to 3 -- above FTS-only's 4 -- so ADR-0006's no-fusion-regression rule holds for this query where #367 showed it violated. Both single-leg controls are unmoved, which is what makes the change attributable to the fusion.",
+   "status": "pass",
+   "accepted": true,
+   "acceptance-reason": "One query is not an evaluation and no nDCG figure is claimed for the rule; the verdict comes from the flag's telemetry over time. Targets identified by hash, never by rank, since rank is what moves."
+  },
+  {
+   "area": "Fusion flag (NEW, #367)",
+   "item": "Telemetry lands only on the enabled path",
+   "command": "select name, value, unit from metrics where name like 'search.fusion.%'",
+   "evidence": "search.fusion.top1_changed=1 (flag), search.fusion.top1_rank_delta=1 (ranks), search.fusion.top5_moved=4 (results), all sharing one correlation_id",
+   "observed-result": "All three measurements written, joinable to search_quality via correlation_id; none written on the default path.",
+   "status": "pass",
+   "accepted": true,
+   "acceptance-reason": "This is the evidence surface the offline corpus cannot be (ADR-0072); it works."
+  },
+  {
+   "area": "Read-path query guard",
+   "item": "Guard tiers behave as specified",
+   "command": "not run live this pass",
+   "evidence": "",
+   "observed-result": "",
+   "status": "skipped",
+   "accepted": true,
+   "acceptance-reason": "Skipped, not passed. Unchanged in 1.23.0 and covered by its own integration suite, which was green in CI on every merged PR. Deliberately deprioritised to spend the pass on the three new surfaces; a skip is not a pass and this one is why."
+  },
+  {
+   "area": "File watch / promotion queue",
+   "item": "Watch status and promotion candidates report accurately",
+   "command": "not run live this pass",
+   "evidence": "",
+   "observed-result": "",
+   "status": "skipped",
+   "accepted": true,
+   "acceptance-reason": "Skipped, not passed. Unchanged in 1.23.0. Noted that an empty list on a fresh bank is a weak check anyway, so a real run needs candidates created first -- worth doing next pass rather than doing badly here."
+  },
+  {
+   "area": "Observability",
+   "item": "Emitted event ids resolve against the reference",
+   "command": "LoggerMessageEventIdTests (CI)",
+   "evidence": "green on every merged PR; the doctor work bumped the derived count 134 -> 136 and added the 1000-1001 block",
+   "observed-result": "The derived-count doc/test pairing held across the new Log classes.",
+   "status": "substituted",
+   "accepted": true,
+   "acceptance-reason": "Substituted, not passed: checked by the automated derived-count test rather than by reading a live log stream. Naming the instrument because folding it into pass would overstate it."
+  }
+ ]
+}
