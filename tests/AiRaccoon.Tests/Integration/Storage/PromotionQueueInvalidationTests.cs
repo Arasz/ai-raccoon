@@ -286,8 +286,11 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
     }
 
     /// <summary>
-    ///     The verb as a user runs it. The store-level test above passes a bool straight to
-    ///     PruneOrphansAsync and so cannot see the argv-to-handler wiring, which is where this shipped broken.
+    ///     The verb as a user runs it. The store-level test above calls ReportPruneOrphansAsync/
+    ///     RequestPruneOrphansAsync directly and so cannot see the argv-to-handler wiring, which is
+    ///     where this shipped broken. ADR-0075 amendment: --apply commits an outbox request rather
+    ///     than deleting inline, so the queue itself is unchanged immediately after either form —
+    ///     the actual delete is PromotionQueuePruneJob's job, exercised separately.
     /// </summary>
     [Theory]
     [InlineData(false)]
@@ -308,7 +311,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
         exit.ShouldBe(0);
         stdout.ToString().ShouldContain("1 orphaned candidate(s)");
         var remaining = (await _queueStore.ListAsync(null, TestContext.Current.CancellationToken)).Count;
-        remaining.ShouldBe(apply ? 0 : 1);
+        remaining.ShouldBe(1, "the report/request split never deletes synchronously; PromotionQueuePruneJob does");
     }
 
     /// <summary>

@@ -414,6 +414,23 @@ internal static class MemorySql
     public const string FinishRepairRequest =
         "UPDATE repair_requests SET finished_at = @finishedAt WHERE kind = @kind AND finished_at IS NULL";
 
+    // ---- promotion_queue_prune_requests (ADR-0075 amendment) ----
+
+    // Same ON CONFLICT reasoning as RequestRepair: a second request after the first finished must
+    // reopen it; a second request while one is still open just refreshes requested_at.
+    public const string RequestPromotionQueuePrune =
+        """
+        INSERT INTO promotion_queue_prune_requests (id, requested_at, finished_at)
+        VALUES (1, @requestedAt, NULL)
+        ON CONFLICT(id) DO UPDATE SET requested_at = @requestedAt, finished_at = NULL
+        """;
+
+    public const string HasOpenPromotionQueuePruneRequest =
+        "SELECT count(*) FROM promotion_queue_prune_requests WHERE id = 1 AND finished_at IS NULL";
+
+    public const string FinishPromotionQueuePruneRequest =
+        "UPDATE promotion_queue_prune_requests SET finished_at = @finishedAt WHERE id = 1 AND finished_at IS NULL";
+
     // Custom contexts are listed alongside shared/project because their label is the only key that
     // reaches their rows through memory_search (SearchContexts.For), and this is the only place a
     // caller can read it back. Omitting them made a context-scoped write unreachable by any means

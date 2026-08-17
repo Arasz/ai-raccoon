@@ -143,6 +143,10 @@ internal static partial class McpServerSetup
                 webApplication.MapSettings();
                 // ADR-0075 amendment: repair reaches the server entirely, same token-guarded host.
                 webApplication.MapRepair();
+                // ADR-0075 amendment: extract prune and settings maintenance list reach the server
+                // entirely too, same token-guarded host.
+                webApplication.MapPromotionQueuePrune();
+                webApplication.MapMaintenanceStats();
             }
 
             return webApplication;

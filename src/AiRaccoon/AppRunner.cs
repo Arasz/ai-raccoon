@@ -214,6 +214,9 @@ public sealed partial class AppRunner
             services.AddSingleton<IModelMigrationStore>(lazyServerStore);
             // ADR-0075 amendment: repair routes the same way — same instance, same acquired connection.
             services.AddSingleton<IRepairStore>(lazyServerStore);
+            // ADR-0075 amendment: extract prune and settings maintenance list route the same way too.
+            services.AddSingleton<IPromotionQueuePruneStore>(lazyServerStore);
+            services.AddSingleton<IMaintenanceStatsStore>(lazyServerStore);
         }
 
         try

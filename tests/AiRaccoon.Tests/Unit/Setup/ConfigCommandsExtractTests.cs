@@ -16,7 +16,7 @@ public class ConfigCommandsExtractTests
 {
     private static Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store) =>
         CliRun.RunAsync(args,
-            TestData.CreateConfigCommands(store, extract: new ExtractCommands(TestData.UnusedPromotionQueueStore())));
+            TestData.CreateConfigCommands(store, extract: new ExtractCommands(TestData.UnusedPromotionQueuePruneStore())));
 
     [Fact]
     public async Task ExtractEnableTrue_WritesGlobalRow()

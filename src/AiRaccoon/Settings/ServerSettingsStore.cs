@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Hosting.Node;
+using AiRaccoon.Infrastructure.Sqlite;
 using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Settings;
@@ -18,12 +19,16 @@ internal sealed class SettingsServerRefusedException(string message) : Exception
 ///     writes the bank. Same <see cref="ISettingsStore" /> surface as the bank-backed store, so a
 ///     subsystem keeps one implementation and only the transport under it changes.
 ///     <para>
-///         Also <see cref="IModelMigrationStore" /> (ADR-0076) and <see cref="IRepairStore" />
-///         (ADR-0075 amendment): <c>model set</c> and <c>repair</c> reach the same way, over the same
-///         connection — one class, one credential, one transport for every control-plane resource.
+///         Also <see cref="IModelMigrationStore" /> (ADR-0076), <see cref="IRepairStore" />
+///         (ADR-0075 amendment), <see cref="IPromotionQueuePruneStore" /> and
+///         <see cref="IMaintenanceStatsStore" /> (both this same amendment): <c>model set</c>,
+///         <c>repair</c>, <c>extract prune</c> and <c>settings maintenance list</c> all reach the
+///         same way, over the same connection — one class, one credential, one transport for every
+///         control-plane resource.
 ///     </para>
 /// </summary>
-internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore, IRepairStore
+internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore, IRepairStore,
+    IPromotionQueuePruneStore, IMaintenanceStatsStore
 {
     private readonly HttpClient _client;
 
@@ -120,6 +125,30 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
         var response = await SendAsync(() =>
             _client.PostAsJsonAsync(RepairProtocol.Path, new RepairRequest(kind.ToKey()), cancellationToken));
         Ensure(response);
+    }
+
+    /// <inheritdoc />
+    public async Task<PromotionQueueOrphanReport> ReportPruneOrphansAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await SendAsync(() => _client.GetAsync(PromotionQueuePruneProtocol.Path, cancellationToken));
+        Ensure(response);
+        return (await response.Content.ReadFromJsonAsync<PromotionQueueOrphanReport>(cancellationToken))!;
+    }
+
+    /// <inheritdoc />
+    public async Task RequestPruneOrphansAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await SendAsync(() =>
+            _client.PostAsync(PromotionQueuePruneProtocol.Path, null, cancellationToken));
+        Ensure(response);
+    }
+
+    /// <inheritdoc />
+    public async Task<BankStats> GetStatsAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await SendAsync(() => _client.GetAsync(MaintenanceStatsProtocol.Path, cancellationToken));
+        Ensure(response);
+        return (await response.Content.ReadFromJsonAsync<BankStats>(cancellationToken))!;
     }
 
     /// <summary>

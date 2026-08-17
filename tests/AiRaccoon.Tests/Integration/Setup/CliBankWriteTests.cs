@@ -1,10 +1,12 @@
 using System.Globalization;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tests.Unit.Setup.Cli;
+using Dapper;
 using Shouldly;
 using Xunit;
 
@@ -66,6 +68,29 @@ public sealed class CliBankWriteTests : IAsyncLifetime
         data.Add("repair reingest", ["repair", "reingest"]);
         return data;
     }
+
+    /// <summary>
+    ///     Every leaf CliCommandTree exposes with an --apply option, derived and cross-checked
+    ///     against <c>SettingsCommandTreeTests.ApplyLeaves_MatchCliBankWriteTestsCoverage</c> — a new
+    ///     --apply leaf added without a row below fails that test, not this one, so the gate cannot
+    ///     silently stay a no-op the way it did for `repair` before this task.
+    /// </summary>
+    public static readonly string[] ApplyCommandPaths = ["extract prune", "repair chunk-index", "repair reingest"];
+
+    /// <summary>
+    ///     The --apply form of each leaf above, paired with the outbox table its request must (and
+    ///     must only) land in. Asserted via <see cref="BankContent.Changed" /> table digests, not
+    ///     <c>PRAGMA data_version</c> (<see cref="BankCommitObserver" />) — a data_version read
+    ///     cannot distinguish "the CLI's request landed in the outbox table" (correct) from "the CLI
+    ///     synchronously mutated the domain table itself" (the ADR-0075 violation this gate exists to
+    ///     catch), because both commit a write to the same file.
+    /// </summary>
+    public static TheoryData<string, string[], string> ApplyCommands() => new()
+    {
+        { "extract prune --apply", ["extract", "prune", "--apply"], "promotion_queue_prune_requests" },
+        { "repair chunk-index --apply", ["repair", "chunk-index", "--apply"], "repair_requests" },
+        { "repair reingest --apply", ["repair", "reingest", "--apply"], "repair_requests" }
+    };
 
     public async ValueTask InitializeAsync()
     {
@@ -158,5 +183,82 @@ public sealed class CliBankWriteTests : IAsyncLifetime
         run.ExitCode.ShouldBe(0, $"the writer must exit cleanly; stderr: {run.Stderr}");
 
         (await observer.HasCommittedSinceMarkAsync(TestContext.Current.CancellationToken)).ShouldBeTrue();
+    }
+
+    /// <summary>
+    ///     The most important assertion in this file: an --apply verb's own synchronous call must
+    ///     commit only its outbox request, never the domain table the eventual mutation targets —
+    ///     that table changes later, inside the server's maintenance loop, not inside this CLI
+    ///     invocation. Each row is seeded with data the mutation can actually act on (item 3 of the
+    ///     CLI-off-the-bank task): an empty bank would let `extract prune --apply` short-circuit
+    ///     before ever reaching the outbox write, making the assertion a no-op that could not fail.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(ApplyCommands))]
+    public async Task ApplyCommand_OnlyCommitsAnOutboxRequest_NeverTheDomainTableDirectly(
+        string label, string[] argv, string expectedOutboxTable)
+    {
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EnvEncryptionKeyProvider.EnvVarName, null));
+        await SeedForAsync(label, TestContext.Current.CancellationToken);
+        var before = await BankContent.SnapshotAsync(_factory, TestContext.Current.CancellationToken);
+
+        var run = await RaccoonProcess.RunAsync(
+            ["--data-root", _dataRoot, "--port", _port.ToString(CultureInfo.InvariantCulture), .. argv],
+            HardCap, TestContext.Current.CancellationToken);
+        run.ExitCode.ShouldBe(0, $"'{label}' failed; stderr: {run.Stderr}");
+
+        var after = await BankContent.SnapshotAsync(_factory, TestContext.Current.CancellationToken);
+        var changed = BankContent.Changed(before, after);
+        changed.ShouldBe([expectedOutboxTable],
+            $"'{label}' must commit only its outbox request ({expectedOutboxTable}); changed instead: {string.Join(", ", changed)}");
+    }
+
+    private Task SeedForAsync(string label, CancellationToken cancellationToken) => label switch
+    {
+        "extract prune --apply" => SeedOrphanedPromotionQueueRowAsync(cancellationToken),
+        "repair chunk-index --apply" => SeedMisorderedChunkIndexSourceAsync(cancellationToken),
+        "repair reingest --apply" => SeedStaleReingestSourceAsync(cancellationToken),
+        _ => throw new ArgumentOutOfRangeException(nameof(label), label, "no seeding recipe for this --apply leaf")
+    };
+
+    /// <summary>A promotion_queue row whose hash has no backing entries row — the same "orphan" shape PromotionQueueInvalidationTests uses.</summary>
+    private async Task SeedOrphanedPromotionQueueRowAsync(CancellationToken cancellationToken)
+    {
+        var queueStore = new SqlitePromotionQueueStore(_factory, TimeProvider.System);
+        var hash = "orphan-" + Guid.NewGuid().ToString("N");
+        await queueStore.UpsertAsync("acme", [new QueueCandidate(hash, $"{hash}.md", "gone", null, 1.0, ["organic-write"])],
+            cancellationToken);
+    }
+
+    /// <summary>A row whose hash a chunker rescan cannot reproduce — ReingestRepairJobTests.SeedStaleFileAsync's technique, direct-SQL since this seeds a separate OS process's bank.</summary>
+    private async Task SeedStaleReingestSourceAsync(CancellationToken cancellationToken)
+    {
+        var file = Path.Combine(_dataRoot, "stale.md");
+        await File.WriteAllTextAsync(file, "para one\n\npara two", cancellationToken);
+        await using var connection = await _factory.OpenBankAsync(cancellationToken);
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO entries (hash, path, value, source_file, scope, project_id, created_at, updated_at, embed_state, chunk_index, total_chunks)
+            VALUES (@hash, @path, @value, @sourceFile, 'project', 'acme', 0, 0, 'embedded', -1, 1)
+            """,
+            new { hash = "stale-" + Guid.NewGuid().ToString("N"), path = file, value = "stale content", sourceFile = file });
+    }
+
+    /// <summary>Three chunks seeded out of the order a fresh chunk of the file would produce — ChunkIndexRepairJobTests.OpenSeededAsync's technique.</summary>
+    private async Task SeedMisorderedChunkIndexSourceAsync(CancellationToken cancellationToken)
+    {
+        var file = Path.Combine(_dataRoot, "doc.md");
+        await File.WriteAllTextAsync(file, "para one\n\npara two\n\npara three", cancellationToken);
+        await using var connection = await _factory.OpenBankAsync(cancellationToken);
+        foreach (var (value, chunkIndex) in new[] { ("para one", 0), ("para three", 1), ("para two", 2) })
+        {
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO entries (hash, path, value, source_file, scope, project_id, created_at, updated_at, embed_state, chunk_index, total_chunks)
+                VALUES (@hash, @path, @value, @sourceFile, 'project', 'acme', 0, 0, 'embedded', @chunkIndex, 3)
+                """,
+                new { hash = ContentHash.Of(file, value), path = file, value, sourceFile = file, chunkIndex });
+        }
     }
 }

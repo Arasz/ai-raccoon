@@ -1,12 +1,17 @@
 using System.CommandLine;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Sqlite;
-using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Setup.Cli.Commands;
 
-/// <summary>One-shot extract-config verb handlers: enable, mode, list, prune — the CLI-only channel for the background extraction service.</summary>
-public sealed class ExtractCommands(IPromotionQueueStore promotionQueueStore)
+/// <summary>
+///     One-shot extract-config verb handlers: enable, mode, list, exclude — the CLI-only channel
+///     for the background extraction service. `prune` is a thin client over
+///     <see cref="IPromotionQueuePruneStore" /> (ADR-0075 amendment) — the report is scanned
+///     server-side and never opens the bank from the CLI process; --apply commits a request the
+///     server applies, rather than deleting here.
+/// </summary>
+public sealed class ExtractCommands(IPromotionQueuePruneStore promotionQueuePrune)
 {
     public async Task<int> SetEnabledAsync(ParseResult parseResult, IMemoryStore store, StandardStreams streams,
         CancellationToken cancellationToken)
@@ -158,9 +163,8 @@ public sealed class ExtractCommands(IPromotionQueueStore promotionQueueStore)
     public async Task<int> PruneAsync(ParseResult parseResult, StandardStreams streams,
         CancellationToken cancellationToken)
     {
-        Guard.IsNotNull(promotionQueueStore);
         var apply = parseResult.GetValue<bool>("--apply");
-        var report = await promotionQueueStore.PruneOrphansAsync(apply, cancellationToken);
+        var report = await promotionQueuePrune.ReportPruneOrphansAsync(cancellationToken);
 
         if (report.TotalOrphans == 0)
         {
@@ -168,13 +172,21 @@ public sealed class ExtractCommands(IPromotionQueueStore promotionQueueStore)
             return 0;
         }
 
-        var verb = apply ? "removed" : "found (dry run; pass --apply to remove)";
+        var verb = apply ? "queued for the server to remove" : "found (dry run; pass --apply to remove)";
         foreach (var (projectId, count) in report.PerProject.OrderBy(kv => kv.Key, StringComparer.Ordinal))
         {
             await streams.WriteOutputLineAsync($"{projectId}: {count} orphaned candidate(s) {verb}");
         }
 
         await streams.WriteOutputLineAsync($"total: {report.TotalOrphans} orphaned candidate(s) {verb}");
+
+        if (apply)
+        {
+            await promotionQueuePrune.RequestPruneOrphansAsync(cancellationToken);
+            await streams.WriteOutputLineAsync(
+                "promotion queue: request committed; the server removes the orphaned candidates on its next maintenance poll (~15s).");
+        }
+
         return 0;
     }
 }

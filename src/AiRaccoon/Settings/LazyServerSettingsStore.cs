@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Sqlite;
 using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Settings;
@@ -11,7 +12,8 @@ namespace AiRaccoon.Settings;
 ///     probes or auto-starts anything. The acquire result is cached for the lifetime of this
 ///     instance; a failed acquire is not cached and is retried on the next call.
 /// </summary>
-internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationStore, IRepairStore
+internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationStore, IRepairStore,
+    IPromotionQueuePruneStore, IMaintenanceStatsStore
 {
     private readonly Func<CancellationToken, Task<ISettingsStore>> _acquire;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -58,6 +60,18 @@ internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationS
     public async Task RequestRepairAsync(RepairKind kind, CancellationToken cancellationToken = default) =>
         await AsRepairStore(await InnerAsync(cancellationToken)).RequestRepairAsync(kind, cancellationToken);
 
+    /// <inheritdoc />
+    public async Task<PromotionQueueOrphanReport> ReportPruneOrphansAsync(CancellationToken cancellationToken = default) =>
+        await AsPruneStore(await InnerAsync(cancellationToken)).ReportPruneOrphansAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public async Task RequestPruneOrphansAsync(CancellationToken cancellationToken = default) =>
+        await AsPruneStore(await InnerAsync(cancellationToken)).RequestPruneOrphansAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<BankStats> GetStatsAsync(CancellationToken cancellationToken = default) =>
+        await AsMaintenanceStatsStore(await InnerAsync(cancellationToken)).GetStatsAsync(cancellationToken);
+
     /// <summary>
     ///     Every store the acquire function can resolve to in production (<see cref="ServerSettingsStore" />)
     ///     implements both interfaces over the same connection; a cast failure here means a caller
@@ -71,6 +85,16 @@ internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationS
     private static IRepairStore AsRepairStore(ISettingsStore store) =>
         store as IRepairStore ?? throw new NotSupportedException(
             $"ai-raccoon: {store.GetType().Name} does not support repair requests");
+
+    /// <summary>Same reasoning as <see cref="AsMigrationStore" />, for the promotion-queue-prune capability.</summary>
+    private static IPromotionQueuePruneStore AsPruneStore(ISettingsStore store) =>
+        store as IPromotionQueuePruneStore ?? throw new NotSupportedException(
+            $"ai-raccoon: {store.GetType().Name} does not support promotion-queue prune requests");
+
+    /// <summary>Same reasoning as <see cref="AsMigrationStore" />, for the maintenance-stats capability.</summary>
+    private static IMaintenanceStatsStore AsMaintenanceStatsStore(ISettingsStore store) =>
+        store as IMaintenanceStatsStore ?? throw new NotSupportedException(
+            $"ai-raccoon: {store.GetType().Name} does not support maintenance stats");
 
     private async Task<ISettingsStore> InnerAsync(CancellationToken cancellationToken)
     {
