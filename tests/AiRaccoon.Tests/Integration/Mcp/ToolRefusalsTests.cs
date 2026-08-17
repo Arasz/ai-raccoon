@@ -153,6 +153,10 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
             {
                 new UnsupportedSchemaVersionException("bank schema v4 is newer than this binary supports (v3); update ai-raccoon"),
                 "schema-version-unsupported"
+            },
+            {
+                new BundledModelInstallReplacedException("embedding model", "model_qint8_arm64.onnx", "/replaced/install/dir"),
+                "embedding-install-replaced"
             }
         };
 
@@ -413,6 +417,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
     [InlineData("sync-network", LogLevel.Warning)]
     [InlineData("sync-corrupt-file", LogLevel.Warning)]
     [InlineData("unknown-hash", LogLevel.Warning)]
+    [InlineData("embedding-install-replaced", LogLevel.Warning)]
     [InlineData("path-outside-scope", LogLevel.Information)]
     [InlineData("access-denied", LogLevel.Information)]
     [InlineData("invalid-params", LogLevel.Information)]
