@@ -1,0 +1,32 @@
+{
+  "$comment": "Provenance for the table-bearing retrieval corpus (docs/adr/0077 follow-up). Vendored into tests/AiRaccoon.Tests/Resources/TableCorpus by scripts/vendor-table-corpus.py, and ingested at test time through the production FileIngestor so a chunking change actually moves the numbers. Sources are deliberately external to ai-raccoon: no retrieval parameter has ever been swept against these documents.",
+  "sources": [
+    {
+      "id": "ai-badger",
+      "root": "/Users/arasz/RiderProjects/ai-badger",
+      "pinnedCommit": "43e6df5b2b4e6c4afa957f05ac0e60114f1a44e2",
+      "files": [
+        "README.md",
+        "CONTRIBUTING.md",
+        "docs/changelog/0.51.0-the-legacy-mcp-reader-is-gone.md",
+        "features/dotnet/skills/dotnet-domain-modeling/references/project-gotchas.md",
+        "features/dotnet/skills/dotnet-domain-modeling/references/durable-functions-testing-patterns.md",
+        "features/dotnet/skills/dotnet-domain-modeling/SKILL.md"
+      ]
+    },
+    {
+      "id": "arasz-home-page",
+      "root": "/Users/arasz/RiderProjects/arasz-home-page",
+      "pinnedCommit": "b6c8459c1c7040b734a18d6b69b8ae2a66177fe1",
+      "files": [
+        "content/articles/introducing-ai-badger.md",
+        "content/articles/introducing-ai-raccoon.md",
+        "content/articles/every-check-must-be-able-to-fail.md",
+        "content/articles/code-review-graph-review.md",
+        "content/articles/agent-cost-comparison.md",
+        "docs/adr/0013-ci-cost-per-job-minimum-and-local-pre-push-gate.md",
+        "docs/design-direction.md"
+      ]
+    }
+  ]
+}
