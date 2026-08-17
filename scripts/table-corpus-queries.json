@@ -110,5 +110,173 @@
     "expectedSource": "arasz-home-page/content/articles/agent-cost-comparison.md",
     "answerSpan": "2,302 passed, 0 failed",
     "relevanceGrade": 4
+  },
+  {
+    "id": "T17",
+    "query": "Which check refuses to pass when the published copy of the skills folder no longer matches its source?",
+    "expectedSource": "ai-badger/CONTRIBUTING.md",
+    "answerSpan": "copy has drifted from",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T18",
+    "query": "What makes the catalog validation step fail?",
+    "expectedSource": "ai-badger/CONTRIBUTING.md",
+    "answerSpan": "violates its schema in",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T19",
+    "query": "Which gate fires when the code imports a package that is not declared as a dependency?",
+    "expectedSource": "ai-badger/CONTRIBUTING.md",
+    "answerSpan": "Code imports a third-party module that",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T20",
+    "query": "Which capability sets up a brand new repository from scratch?",
+    "expectedSource": "ai-badger/README.md",
+    "answerSpan": "Bootstrap a new project",
+    "relevanceGrade": 4
+  },
+  {
+    "id": "T21",
+    "query": "Which capability runs a backlog item end to end and gives it an isolated checkout?",
+    "expectedSource": "ai-badger/README.md",
+    "answerSpan": "owns a git worktree per task",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T22",
+    "query": "Which document explains how the tool index is ranked and why its gate is a ratio?",
+    "expectedSource": "ai-badger/docs/README.md",
+    "answerSpan": "BM25 over fused fields",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T23",
+    "query": "Where is the framework's terminology mapped onto each agent it supports?",
+    "expectedSource": "ai-badger/docs/README.md",
+    "answerSpan": "maps onto each supported",
+    "relevanceGrade": 4
+  },
+  {
+    "id": "T24",
+    "query": "Which release stopped the push from repeating work the pipeline already does?",
+    "expectedSource": "ai-badger/docs/changelog/README.md",
+    "answerSpan": "The Push Stops Re-Proving What CI Proves",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T25",
+    "query": "Which release moved the long journey into the pipeline and deleted a risk switch?",
+    "expectedSource": "ai-badger/docs/changelog/README.md",
+    "answerSpan": "The Journey Moves To CI",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T26",
+    "query": "What is recorded when every candidate scored too low to be suggested?",
+    "expectedSource": "ai-badger/features/common/skills/call-behaviorist/references/record-format.md",
+    "answerSpan": "fell below the threshold",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T27",
+    "query": "What is logged when the tokenizer finds nothing worth scoring in what was typed?",
+    "expectedSource": "ai-badger/features/common/skills/call-behaviorist/references/record-format.md",
+    "answerSpan": "read nothing scoreable from the query",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T28",
+    "query": "Which outcome means neither index file exists at all?",
+    "expectedSource": "ai-badger/features/common/skills/call-behaviorist/references/record-format.md",
+    "answerSpan": "there is nothing to migrate",
+    "relevanceGrade": 4
+  },
+  {
+    "id": "T29",
+    "query": "What is reported when the server behind a called tool appears nowhere in the index?",
+    "expectedSource": "ai-badger/features/common/skills/call-behaviorist/references/record-format.md",
+    "answerSpan": "is named by no source in the index at all",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T30",
+    "query": "When should the provenance reference be consulted, per the rewritten wording?",
+    "expectedSource": "ai-badger/docs/work/2026-08-07-opt-skills-plan.md",
+    "answerSpan": "when a grade is in doubt",
+    "relevanceGrade": 4
+  },
+  {
+    "id": "T31",
+    "query": "What should be used instead of the equality guard when the values may be null?",
+    "expectedSource": "ai-badger/features/dotnet/skills/dotnet-domain-modeling/SKILL.md",
+    "answerSpan": "Use `if` + `ThrowHelper.ThrowInvalidOperationException`",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T32",
+    "query": "How should an automatic change explain where it came from?",
+    "expectedSource": "ai-badger/features/dotnet/skills/dotnet-domain-modeling/SKILL.md",
+    "answerSpan": "Auto-applied from signal",
+    "relevanceGrade": 4
+  },
+  {
+    "id": "T33",
+    "query": "What state should a test check after a step fails and waits for a person?",
+    "expectedSource": "ai-badger/features/dotnet/skills/dotnet-domain-modeling/references/durable-functions-testing-patterns.md",
+    "answerSpan": "`Intervention.IsRequired == true`",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T34",
+    "query": "How many invocations should a test expect when something fails once and then succeeds?",
+    "expectedSource": "ai-badger/features/dotnet/skills/dotnet-domain-modeling/references/durable-functions-testing-patterns.md",
+    "answerSpan": "Activity called N+1 times",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T35",
+    "query": "How should code get the current time so it stays testable?",
+    "expectedSource": "ai-badger/features/dotnet/skills/dotnet-domain-modeling/references/project-gotchas.md",
+    "answerSpan": "Inject `TimeProvider`",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T36",
+    "query": "How do you tell what is staged apart from what is merely edited?",
+    "expectedSource": "ai-badger/features/dotnet/skills/dotnet-domain-modeling/references/project-gotchas.md",
+    "answerSpan": "shows index vs working tree",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T37",
+    "query": "Which write-up covers the performance telemetry that went missing during the framework rewrite?",
+    "expectedSource": "arasz-home-page/docs/README.md",
+    "answerSpan": "integration dropped in the Angular 22 rewrite",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T38",
+    "query": "Which runbook covers the app that confirms who a requester is on their code host?",
+    "expectedSource": "arasz-home-page/docs/README.md",
+    "answerSpan": "verifies a beta requester's login",
+    "relevanceGrade": 5
+  },
+  {
+    "id": "T39",
+    "query": "Where does the category vocabulary for posts live?",
+    "expectedSource": "arasz-home-page/content/articles/ARTICLE-PIPELINE.md",
+    "answerSpan": "taxonomy + derived",
+    "relevanceGrade": 4
+  },
+  {
+    "id": "T40",
+    "query": "When may the piece stop being a draft?",
+    "expectedSource": "arasz-home-page/docs/plans/ai-raccoon-article-plan.md",
+    "answerSpan": "only after build+lint pass",
+    "relevanceGrade": 4
   }
 ]

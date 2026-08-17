@@ -18,7 +18,10 @@ public sealed class TableChunkingArmComparison(ITestOutputHelper output)
     [
         ("shipped (whole table, header carry-over)", null),
         ("per-row + header carry-over", TableChunkingArms.PerRow),
-        ("row linearised into sentences", TableChunkingArms.Linearised)
+        ("row linearised into sentences", TableChunkingArms.Linearised),
+        ("whole table + section heading", TableChunkingArms.WholeTableWithHeading),
+        ("per-row + section heading", TableChunkingArms.PerRowWithHeading),
+        ("linearised + section heading", TableChunkingArms.LinearisedWithHeading)
     ];
 
     [Fact]

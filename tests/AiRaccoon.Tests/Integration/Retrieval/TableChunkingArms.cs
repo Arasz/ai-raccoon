@@ -13,11 +13,28 @@ internal static class TableChunkingArms
 {
     /// <summary>One chunk per body row, each carrying the header — the shape ADR-0077 said the
     /// evidence points at, expressing "for this column and this row, the value is X".</summary>
-    public static IMarkdownChunker PerRow(TokenCount count) => new TableRewritingChunker(count, RenderRows);
+    public static IMarkdownChunker PerRow(TokenCount count) => new TableRewritingChunker(count, RenderRows, false);
 
     /// <summary>One chunk per body row, rendered as sentences instead of pipe syntax — ADR-0077's
     /// most promising arm, since an embedding model handles a sentence better than `| a | b |`.</summary>
-    public static IMarkdownChunker Linearised(TokenCount count) => new TableRewritingChunker(count, RenderSentences);
+    public static IMarkdownChunker Linearised(TokenCount count) => new TableRewritingChunker(count, RenderSentences, false);
+
+    /// <summary>The whole table as one chunk, prefixed with the section heading it sits under. A table
+    /// carrying no `#` line of its own gets a null section and forfeits the 4x bm25 section weight
+    /// (FileIngestor.HeadingSection parses the heading out of the chunk text) — this puts one back.</summary>
+    public static IMarkdownChunker WholeTableWithHeading(TokenCount count) =>
+        new TableRewritingChunker(count, RenderWholeTable, true);
+
+    /// <summary>Per-row with the section heading restored.</summary>
+    public static IMarkdownChunker PerRowWithHeading(TokenCount count) =>
+        new TableRewritingChunker(count, RenderRows, true);
+
+    /// <summary>Linearised rows with the section heading restored.</summary>
+    public static IMarkdownChunker LinearisedWithHeading(TokenCount count) =>
+        new TableRewritingChunker(count, RenderSentences, true);
+
+    private static IReadOnlyList<string> RenderWholeTable(IReadOnlyList<string> header, IReadOnlyList<string> rows) =>
+        [string.Concat(header[0], header[1], string.Concat(rows))];
 
     private static IReadOnlyList<string> RenderRows(IReadOnlyList<string> header, IReadOnlyList<string> rows) =>
         [.. rows.Select(row => string.Concat(header[0], header[1], row))];
@@ -60,7 +77,8 @@ internal static class TableChunkingArms
     /// </summary>
     private sealed class TableRewritingChunker(
         TokenCount count,
-        Func<IReadOnlyList<string>, IReadOnlyList<string>, IReadOnlyList<string>> render) : IMarkdownChunker
+        Func<IReadOnlyList<string>, IReadOnlyList<string>, IReadOnlyList<string>> render,
+        bool withHeading) : IMarkdownChunker
     {
         private readonly MarkdownChunker _inner = new(count);
 
@@ -71,6 +89,7 @@ internal static class TableChunkingArms
             List<string> chunks = [];
             var prose = new StringBuilder();
             var inFence = false;
+            var heading = string.Empty;
 
             for (var i = 0; i < lines.Length; i++)
             {
@@ -78,6 +97,11 @@ internal static class TableChunkingArms
                 if (IsFence(line))
                 {
                     inFence = !inFence;
+                }
+
+                if (!inFence && line.TrimStart().StartsWith('#'))
+                {
+                    heading = WithNewline(line.Trim());
                 }
 
                 if (!inFence && StartsTable(lines, i))
@@ -91,8 +115,10 @@ internal static class TableChunkingArms
 
                     IReadOnlyList<string> header = [WithNewline(lines[i]), WithNewline(lines[i + 1])];
                     var rows = lines[(i + 2)..end].Select(WithNewline).ToList();
-                    foreach (var piece in render(header, rows))
+                    var prefix = withHeading && heading.Length > 0 ? heading : string.Empty;
+                    foreach (var rendered in render(header, rows))
                     {
+                        var piece = prefix + rendered;
                         chunks.AddRange(counter(piece) <= maxTokens ? [piece] : _inner.Chunk(piece, maxTokens, 0, counter));
                     }
 
