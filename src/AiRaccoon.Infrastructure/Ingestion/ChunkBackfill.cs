@@ -84,7 +84,10 @@ public sealed class ChunkBackfill(IMarkdownChunker chunker, TimeProvider timePro
                             agentId = (string?)null,
                             createdAt = now,
                             updatedAt = now,
-                            sourceId = row.SourceId
+                            sourceId = row.SourceId,
+                            // Position unknown here — the bank-wide recompute below fills it in.
+                            chunkIndex = -1,
+                            totalChunks = 0
                         }, cancellationToken: cancellationToken))
                     .ConfigureAwait(false);
             }

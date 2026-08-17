@@ -100,7 +100,7 @@ internal static class MemorySchema
                                               embedding BLOB NULL,
                                               heading_path TEXT NULL,
                                               structure_embedding BLOB NULL,
-                                              chunk_index INTEGER NOT NULL DEFAULT 0,
+                                              chunk_index INTEGER NOT NULL DEFAULT -1,
                                               total_chunks INTEGER NOT NULL DEFAULT 0,
                                               source_id INTEGER NULL,
                                               FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT,
@@ -1092,7 +1092,10 @@ internal static class MemorySchema
         {
             await connection.ExecuteAsync(
                     new CommandDefinition(
-                        "ALTER TABLE entries ADD COLUMN chunk_index INTEGER NOT NULL DEFAULT 0",
+                        // GH #371: -1, not 0 — 0 is a real, meaningful first-chunk position; a row
+                        // this migration cannot yet order needs its own "unknown" default so the
+                        // bank-wide recompute below (fill-unknown-only) actually fills it in.
+                        "ALTER TABLE entries ADD COLUMN chunk_index INTEGER NOT NULL DEFAULT -1",
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
         }

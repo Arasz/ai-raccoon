@@ -125,54 +125,22 @@ public sealed class FileIngestor(
         var source = await sourceStore.ResolveOrCreateOnConnectionAsync(
             connection, SourceType.File, path, null, null, cancellationToken).ConfigureAwait(false);
 
+        // Document position is authoritative here (GH #371): the chunker just produced `chunks` in
+        // document order, so every chunk's ordinal is written straight to chunk_index — for a
+        // freshly inserted row and for one this pass merely rediscovers unchanged (dedup) alike.
+        // Deriving it later from row-id order would put an edited-then-reinserted middle chunk last,
+        // since dedup gives unchanged siblings the old (low) id and the edit the newest (highest) one.
         var inserted = 0;
-        foreach (var chunk in chunks)
+        for (var ordinal = 0; ordinal < chunks.Count; ordinal++)
         {
+            var chunk = chunks[ordinal];
             var hash = ContentHash.Of(path, chunk);
             // SourcePathQuery ANDs a "file#section" anchor against the FTS {source_file section}
             // columns, so a chunk with a null section can never satisfy one. Derived from the
             // chunk's own heading rather than left null; heading_path carries the full trail and
             // the anchor only ever names its leaf.
             var section = HeadingSection(chunk);
-            var exists = await connection.ExecuteScalarAsync<long?>(
-                    Def(MemorySql.EntryExistsByPathAndHashInBucket,
-                        new
-                        {
-                            hash,
-                            path,
-                            scope = bucket.Scope,
-                            projectId = bucket.ProjectId,
-                            contextLabel = bucket.ContextLabel,
-                            workspaceId = bucket.WorkspaceId
-                        }, cancellationToken))
-                .ConfigureAwait(false) is not null;
-            if (exists)
-            {
-                continue;
-            }
-
-            await connection.ExecuteAsync(
-                    Def(MemorySql.InsertEntry,
-                        new
-                        {
-                            hash,
-                            path,
-                            value = chunk,
-                            sourceFile = path,
-                            section,
-                            scope = bucket.Scope,
-                            projectId = bucket.ProjectId,
-                            contextLabel = bucket.ContextLabel,
-                            workspaceId = bucket.WorkspaceId,
-                            agentId = (string?)null,
-                            createdAt = now,
-                            updatedAt = now,
-                            sourceId = source.Id
-                        },
-                        cancellationToken))
-                .ConfigureAwait(false);
-
-            var chunkId = await connection.ExecuteScalarAsync<long?>(
+            var existingId = await connection.ExecuteScalarAsync<long?>(
                     Def(MemorySql.SelectChunkIdByPathAndHashInBucket,
                         new
                         {
@@ -184,24 +152,70 @@ public sealed class FileIngestor(
                             workspaceId = bucket.WorkspaceId
                         }, cancellationToken))
                 .ConfigureAwait(false);
-            if (chunkId is null)
+
+            long chunkId;
+            if (existingId is not null)
             {
+                chunkId = existingId.Value;
+            }
+            else
+            {
+                await connection.ExecuteAsync(
+                        Def(MemorySql.InsertEntry,
+                            new
+                            {
+                                hash,
+                                path,
+                                value = chunk,
+                                sourceFile = path,
+                                section,
+                                scope = bucket.Scope,
+                                projectId = bucket.ProjectId,
+                                contextLabel = bucket.ContextLabel,
+                                workspaceId = bucket.WorkspaceId,
+                                agentId = (string?)null,
+                                createdAt = now,
+                                updatedAt = now,
+                                sourceId = source.Id,
+                                chunkIndex = ordinal,
+                                totalChunks = chunks.Count
+                            },
+                            cancellationToken))
+                    .ConfigureAwait(false);
+
+                var newId = await connection.ExecuteScalarAsync<long?>(
+                        Def(MemorySql.SelectChunkIdByPathAndHashInBucket,
+                            new
+                            {
+                                hash,
+                                path,
+                                scope = bucket.Scope,
+                                projectId = bucket.ProjectId,
+                                contextLabel = bucket.ContextLabel,
+                                workspaceId = bucket.WorkspaceId
+                            }, cancellationToken))
+                    .ConfigureAwait(false);
+                if (newId is null)
+                {
+                    continue;
+                }
+
+                chunkId = newId.Value;
+                if (embedInline)
+                {
+                    await embedder.EmbedIfConfiguredAsync(connection, chunkId, chunk, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+
+                inserted++;
                 continue;
             }
 
-            if (embedInline)
-            {
-                await embedder.EmbedIfConfiguredAsync(connection, chunkId.Value, chunk, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-
-            inserted++;
+            await connection.ExecuteAsync(
+                    Def(MemorySql.SetChunkPosition, new { id = chunkId, chunkIndex = ordinal, totalChunks = chunks.Count },
+                        cancellationToken))
+                .ConfigureAwait(false);
         }
-
-        var ctx = MemorySql.ContextKeyFor(resolvedContext, projectId);
-        await connection.ExecuteAsync(
-                Def(MemorySql.RecomputeChunkColumnsForContext, new { ctx, sourceFile = path }, cancellationToken))
-            .ConfigureAwait(false);
 
         return inserted > 0 ? 1 : 0;
     }

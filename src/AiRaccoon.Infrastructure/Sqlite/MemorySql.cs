@@ -8,11 +8,15 @@ internal static class MemorySql
     // ON CONFLICT DO NOTHING is bare — expression/partial indexes can't be a conflict target — so
     // concurrent same-bucket inserts converge; the loser re-reads by bucket key
     // (docs/work/archive/2026-08-06-extraction-followups-plan.md).
+    // chunkIndex/totalChunks are written by the caller, not derived here (GH #371): a caller that
+    // knows the row's real document position (FileIngestor) passes it directly; one that doesn't
+    // passes -1 (docs/plans/2026-08-08-search-knn-perf.md §3.3 sentinel), leaving it for
+    // RecomputeChunkColumnsForContext/BankWide to fill in.
     public const string InsertEntry = """
                                       INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, context_label,
-                                                           workspace_id, agent_id, created_at, updated_at, source_id)
+                                                           workspace_id, agent_id, created_at, updated_at, source_id, chunk_index, total_chunks)
                                       VALUES (@hash, @path, @value, @sourceFile, @section, @scope, @projectId, @contextLabel,
-                                              @workspaceId, @agentId, @createdAt, @updatedAt, @sourceId)
+                                              @workspaceId, @agentId, @createdAt, @updatedAt, @sourceId, @chunkIndex, @totalChunks)
                                       ON CONFLICT DO NOTHING
                                       """;
 
@@ -172,7 +176,8 @@ internal static class MemorySql
     // SelectScopeByHashAndProject, before the delete, so the row's group can be recomputed afterward.
     public const string SelectDeleteRecomputeContext = """
                                                        SELECT scope AS Scope, context_label AS ContextLabel,
-                                                              workspace_id AS WorkspaceId, source_file AS SourceFile
+                                                              workspace_id AS WorkspaceId, source_file AS SourceFile,
+                                                              chunk_index AS ChunkIndex
                                                        FROM entries
                                                        WHERE hash = @hash AND project_id = @projectId
                                                          AND (@scope IS NULL OR scope IS @scope)
@@ -542,34 +547,81 @@ internal static class MemorySql
                                                            LIMIT 1
                                                            """;
 
-    // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): recomputes
-    // chunk_index/total_chunks for one (ctx, source_file) group after a membership-changing write.
+    // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3, GH #371): total_chunks
+    // is a pure count, always safe to refresh; chunk_index is filled ONLY where it is still the -1
+    // "unknown" sentinel (id order is a best-effort fallback for a row nothing has positioned yet) —
+    // a row an authoritative writer (FileIngestor) already gave a real, document-order position is
+    // never touched, so this can run after that writer without undoing its work.
     public static readonly string RecomputeChunkColumnsForContext = $"""
-                                                                     WITH numbered AS (
-                                                                         SELECT id,
+                                                                     WITH grp AS (
+                                                                         SELECT id, chunk_index,
                                                                                 ROW_NUMBER() OVER (PARTITION BY {ContextKeyExpression("")}, source_file ORDER BY id) - 1 AS ci,
                                                                                 COUNT(*)     OVER (PARTITION BY {ContextKeyExpression("")}, source_file)              AS tc
                                                                          FROM entries
                                                                          WHERE source_file IS NOT NULL AND ({ContextKeyExpression("")}) = @ctx AND source_file = @sourceFile)
                                                                      UPDATE entries
-                                                                        SET chunk_index  = (SELECT ci FROM numbered n WHERE n.id = entries.id),
-                                                                            total_chunks = (SELECT tc FROM numbered n WHERE n.id = entries.id)
-                                                                      WHERE entries.id IN (SELECT id FROM numbered)
+                                                                        SET total_chunks = (SELECT tc FROM grp g WHERE g.id = entries.id),
+                                                                            chunk_index  = CASE WHEN entries.chunk_index < 0
+                                                                                                 THEN (SELECT ci FROM grp g WHERE g.id = entries.id)
+                                                                                                 ELSE entries.chunk_index END
+                                                                      WHERE entries.id IN (SELECT id FROM grp)
                                                                      """;
 
-    /// <summary>Bank-wide form of <see cref="RecomputeChunkColumnsForContext" /> — no ctx/source_file predicate, used by the v2 migration backfill and after a sync merge.</summary>
+    /// <summary>Bank-wide form of <see cref="RecomputeChunkColumnsForContext" /> — no ctx/source_file predicate, used by the v2/v3 migrations and the chunk-oversize backfill (GH #371: both can re-run on a live bank next to groups a document-order write already positioned correctly, so this fills the -1 sentinel only, same as the scoped form).</summary>
     public static readonly string RecomputeChunkColumnsBankWide = $"""
-                                                                   WITH numbered AS (
-                                                                       SELECT id,
+                                                                   WITH grp AS (
+                                                                       SELECT id, chunk_index,
                                                                               ROW_NUMBER() OVER (PARTITION BY {ContextKeyExpression("")}, source_file ORDER BY id) - 1 AS ci,
                                                                               COUNT(*)     OVER (PARTITION BY {ContextKeyExpression("")}, source_file)              AS tc
                                                                        FROM entries
                                                                        WHERE source_file IS NOT NULL)
                                                                    UPDATE entries
-                                                                      SET chunk_index  = (SELECT ci FROM numbered n WHERE n.id = entries.id),
-                                                                          total_chunks = (SELECT tc FROM numbered n WHERE n.id = entries.id)
-                                                                    WHERE entries.id IN (SELECT id FROM numbered)
+                                                                      SET total_chunks = (SELECT tc FROM grp g WHERE g.id = entries.id),
+                                                                          chunk_index  = CASE WHEN entries.chunk_index < 0
+                                                                                               THEN (SELECT ci FROM grp g WHERE g.id = entries.id)
+                                                                                               ELSE entries.chunk_index END
+                                                                    WHERE entries.id IN (SELECT id FROM grp)
                                                                    """;
+
+    /// <summary>
+    ///     The pre-GH-#371 bank-wide recompute, unconditional id order — kept, under its own name,
+    ///     for <see cref="AiRaccoon.Infrastructure.Sync.SyncService" />'s post-merge pass alone. A
+    ///     merge pulls rows from a second bank whose row ids carry no relationship to this bank's, so
+    ///     there is no position to protect by skipping already-assigned rows the way the other
+    ///     bank-wide form does; a tombstone-driven delete needs the SAME survivors renumbered.
+    ///     Explicit `memory_sync`, not something <c>MaintenanceJobRunner</c> can start unattended, so
+    ///     it does not carry the "must never run within seconds of bank open" risk the sentinel-guarded
+    ///     forms exist for. Re-deriving real document order across a sync is a separate design
+    ///     question (transmitting position with the row) — out of scope here.
+    /// </summary>
+    public static readonly string RecomputeChunkColumnsBankWideFromIdOrder = $"""
+                                                                              WITH numbered AS (
+                                                                                  SELECT id,
+                                                                                         ROW_NUMBER() OVER (PARTITION BY {ContextKeyExpression("")}, source_file ORDER BY id) - 1 AS ci,
+                                                                                         COUNT(*)     OVER (PARTITION BY {ContextKeyExpression("")}, source_file)              AS tc
+                                                                                  FROM entries
+                                                                                  WHERE source_file IS NOT NULL)
+                                                                              UPDATE entries
+                                                                                 SET chunk_index  = (SELECT ci FROM numbered n WHERE n.id = entries.id),
+                                                                                     total_chunks = (SELECT tc FROM numbered n WHERE n.id = entries.id)
+                                                                               WHERE entries.id IN (SELECT id FROM numbered)
+                                                                              """;
+
+    /// <summary>Sets one row's document position directly — the authoritative-at-insert write (GH #371) FileIngestor uses instead of the id-order recompute.</summary>
+    public const string SetChunkPosition =
+        "UPDATE entries SET chunk_index = @chunkIndex, total_chunks = @totalChunks WHERE id = @id";
+
+    // Renumbers survivors after a row is removed from a (ctx, source_file) group: shifts every
+    // later chunk_index down by one and shrinks total_chunks — never re-derives from id order, so it
+    // cannot scramble a group whose positions are already correct. @deletedIndex < 0 means the
+    // removed row's own position was unknown, so nothing shifts (only the count shrinks).
+    public static readonly string CompactChunkColumnsAfterDelete = $"""
+                                                                     UPDATE entries
+                                                                        SET chunk_index = CASE WHEN @deletedIndex >= 0 AND chunk_index > @deletedIndex
+                                                                                                THEN chunk_index - 1 ELSE chunk_index END,
+                                                                            total_chunks = MAX(total_chunks - 1, 0)
+                                                                      WHERE source_file IS NOT NULL AND ({ContextKeyExpression("")}) = @ctx AND source_file = @sourceFile
+                                                                     """;
 
     // The vec0 `ctx` column — a partition key until v9, a metadata column since (ADR-0068).
     // Length-prefixed, not

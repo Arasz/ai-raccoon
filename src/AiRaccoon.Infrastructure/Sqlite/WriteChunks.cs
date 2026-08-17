@@ -49,7 +49,11 @@ internal static class WriteChunks
                         agentId = request.AgentId,
                         createdAt = now,
                         updatedAt = now,
-                        sourceId = source.Id
+                        sourceId = source.Id,
+                        // Position unknown here — this is an append to a (ctx, source_file) group, not
+                        // a re-chunk of a whole document; RecomputeChunkColumnsForContext fills it in.
+                        chunkIndex = -1,
+                        totalChunks = 0
                     },
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);

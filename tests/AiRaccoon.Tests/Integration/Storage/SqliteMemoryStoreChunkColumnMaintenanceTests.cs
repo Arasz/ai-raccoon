@@ -121,6 +121,39 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
         rows.ShouldAllBe(r => r.TotalChunks == 2);
     }
 
+    /// <summary>
+    ///     GH #371: chunk_index was derived from row-id order, not document order. Editing a middle
+    ///     paragraph deletes nothing — the unchanged chunks dedup and keep their old (low) ids, while
+    ///     the edited paragraph is inserted fresh with the HIGHEST id — so an id-order recompute puts
+    ///     the edited paragraph last, not where it actually sits in the document.
+    /// </summary>
+    [Fact]
+    public async Task IngestFile_EditingAParagraphIntoTheMiddle_KeepsChunkIndexInDocumentOrder()
+    {
+        var file = Path.Combine(_dataRoot, "four-paragraphs.md");
+        await File.WriteAllTextAsync(file, "para one\n\npara two\n\npara three\n\npara four",
+            TestContext.Current.CancellationToken);
+        await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
+
+        // Edit the second paragraph in place — it keeps its document position (index 1) but its
+        // content, and therefore its hash, changes.
+        await File.WriteAllTextAsync(file, "para one\n\npara two EDITED\n\npara three\n\npara four",
+            TestContext.Current.CancellationToken);
+        await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
+
+        var rows = await ChunkRowsForAsync(ContextNaming.ProjectContext("acme"), "acme", file);
+        // FileIngestor never purges the row a superseded edit leaves behind (a separate, pre-existing
+        // gap outside GH #371) — assert only on the CURRENT document's four chunks, so a stale
+        // "para two" row left over from the first ingest cannot mask the ordering assertion below.
+        var currentIndexes = new[] { "para one", "para two EDITED", "para three", "para four" }
+            .Select(text => rows.Single(r => r.Hash == ContentHash.Of(file, text)).ChunkIndex)
+            .ToList();
+
+        currentIndexes.ShouldBe([.. currentIndexes.OrderBy(i => i)],
+            "chunk_index must increase in document order, not insertion order");
+        currentIndexes.Distinct().Count().ShouldBe(currentIndexes.Count, "no two chunks of the current document share a position");
+    }
+
     [Fact]
     public async Task DeleteAsync_OfAMiddleChunk_RenumbersSurvivorsContiguously()
     {
@@ -163,8 +196,13 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
         (await ChunkRowsForAsync(ContextNaming.ProjectContext("acme"), "acme", file)).ShouldBeEmpty();
     }
 
+    /// <summary>
+    ///     GH #371: a sourceless row's default moved from (0, 0) to (-1, 0) — 0 is a real, meaningful
+    ///     first-chunk position, so a row nothing has ever positioned needs its own "unknown" value,
+    ///     not one indistinguishable from a genuine position 0 (docs/plans/2026-08-08-search-knn-perf.md §3.3).
+    /// </summary>
     [Fact]
-    public async Task ConsolidateAsync_PromotesWithoutASourceFile_LeavingChunkColumnsAtTheirDefault()
+    public async Task ConsolidateAsync_PromotesWithoutASourceFile_LeavingChunkColumnsAtTheUnknownSentinel()
     {
         var workspaceService = new WorkspaceService(_store, _workspaces, new FakeTimeProvider(FixedNow));
         var workspace = await workspaceService.BeginAsync("acme", cancellationToken: TestContext.Current.CancellationToken);
@@ -176,7 +214,7 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
 
         var promoted = await connectionQuerySingleAsync(entry.Hash);
         promoted.SourceFile.ShouldBeNull();
-        (promoted.ChunkIndex, promoted.TotalChunks).ShouldBe((0, 0));
+        (promoted.ChunkIndex, promoted.TotalChunks).ShouldBe((-1, 0));
 
         async Task<ChunkRow> connectionQuerySingleAsync(string hash)
         {
