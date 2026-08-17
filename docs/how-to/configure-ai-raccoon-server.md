@@ -348,6 +348,34 @@ be known — the source file has been moved or deleted, or the entry was written
 guessing. The ranker skips those rows when testing adjacency instead of treating `-1` as a neighbour
 of `0`.
 
+### Read the dry run before you apply it
+
+**On a bank with any history, the repair will mark a large fraction of rows *position unknown*, and
+you should decide whether that is the trade you want.**
+
+It positions a row by re-chunking the source file with the **current** chunker and matching on
+content hash. A row produced by an *older* chunker has different boundaries, so its hash does not
+match anything the current chunker produces, and it is honestly marked `-1` rather than guessed at.
+This project has changed chunk boundaries several times ([ADR-0036](../adr/0036-engine-aware-chunk-token-budget.md),
+[ADR-0048](../adr/0048-a-chunk-is-a-well-formed-markdown-fragment.md), and others), so most rows on
+an older bank predate the boundaries in force today.
+
+Measured on a real 25,995-entry bank:
+
+| | rows | share |
+|---|---|---|
+| would be repositioned | 4,710 | 18% |
+| would be marked position-unknown (`-1`) | 16,074 | 62% |
+
+A row at `-1` is **skipped** by the adjacent-chunk boost rather than mis-boosted. That removes the
+wrong adjacency this fix exists to eliminate — but it also removes any adjacency signal for those
+rows, which is a different behaviour from having a correct one. Whether that is an improvement on
+your bank is not something the repair can tell you, and it has not been measured across a query set.
+
+So: **run the dry run, read the two numbers, and decide.** If most of your bank would go to `-1`,
+re-ingesting the affected sources under the current chunker is the more thorough fix, and the repair
+is not a substitute for it.
+
 Run it against a **copy** first if you want to see the scale of the change on your own data:
 
 ```bash
