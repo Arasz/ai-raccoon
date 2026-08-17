@@ -70,6 +70,7 @@ internal static class CliCommandTree
         root.Add(NoiseCommand());
         root.Add(EncryptionCommand());
         root.Add(ServeCommand());
+        root.Add(DoctorCommand());
         return root;
     }
 
@@ -322,6 +323,15 @@ internal static class CliCommandTree
         encryption.Add(new Command("migrate", "Rekeys a bank still encrypted under the pre-ADR-0012 key derivation (ADR-0012)"));
         return encryption;
     }
+
+    /// <summary>
+    ///     Verifies the bank's schema shape (tables/columns/indexes) against what this binary's DDL
+    ///     produces and reports — it never repairs (GH #357). An operation, not settings-backed
+    ///     configuration, so it stays top level like `watch`/`extract`/`noise`/`encryption`/`serve`.
+    /// </summary>
+    private static Command DoctorCommand() =>
+        new("doctor",
+            "Verifies the bank's schema shape (tables, columns, indexes) against what this binary expects, and reports. Never repairs — run after a suspected aborted migration, hand-edited bank, or partial restore.");
 
     private static Command ScopeCommand(string description) =>
         new("scope", description)

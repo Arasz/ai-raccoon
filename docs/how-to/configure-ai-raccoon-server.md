@@ -309,6 +309,48 @@ overflows the reaper's `DateTimeOffset.AddDays` arithmetic.
 
 ---
 
+## Diagnose a bank's schema
+
+`CREATE TABLE IF NOT EXISTS` is silent when an object of that name already exists with a **different
+shape**. Opening a bank proves its objects *exist*; it never proves they have the right columns,
+types or constraints. A bank that diverged unintentionally — an aborted migration, hand surgery, a
+partial restore — keeps that shape indefinitely and fails later at query time, far from the cause.
+
+```bash
+ai-raccoon doctor                          # verifies the configured bank
+ai-raccoon --data-root /path/to/dir doctor # verifies a bank elsewhere (a copy, a restore)
+```
+
+A healthy bank:
+
+```
+user_version: 10 (this binary: 10)
+application_id: -519479064 (expected: -519479064)
+doctor verifies schema shape only; it never repairs a bank
+status: HEALTHY
+```
+
+The same bank with one index dropped by hand:
+
+```
+status: SHAPE MISMATCH (1 finding(s))
+  - idx_entries_scope_project: missing index
+```
+
+Note what the second example shows: `user_version` is correct **and** `application_id` matches, so
+neither the version ladder nor the schema digest considers anything wrong — while an index is
+missing. That gap is the reason this verb exists.
+
+**It reports; it never repairs.** A wrongly-shaped table may hold data the correct shape cannot
+represent, so recreating it is a data-loss decision, not a schema decision — one for you to make
+with the bank in front of you.
+
+It opens the bank **read-only** and does not modify it, so it is safe to run against a live bank or
+a backup. Exit code is `0` when healthy and non-zero on a mismatch, so it composes into a script.
+
+If the bank is encrypted and the passphrase cannot be resolved, that is reported as a *read* failure
+and is distinguishable from a shape problem — a locked bank is not a broken one.
+
 ## Related documentation
 
 - [ADR-0020: Always-on HTTP stdio proxy](../adr/0020-always-on-http-stdio-proxy.md)
