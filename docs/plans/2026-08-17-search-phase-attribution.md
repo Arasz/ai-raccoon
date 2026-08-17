@@ -174,7 +174,7 @@ in §S1's watch-red note.
   S1 (Core + store + host + reporting + shared test harness)
         │
         ├──> S2 (the closure gate)
-        └──> S3 (docs + ADR-0079)
+        └──> S3 (docs + ADR-0080)
                                         S4 (server.json derives from VERSION)  ── independent
                                               │
                                               └──> S5 (the bump, last commit)
@@ -366,25 +366,25 @@ the residual is *supposed* to contain.
 
 ---
 
-### S3 — Docs and ADR-0079
+### S3 — Docs and ADR-0080
 
 **Scope.** Fix every hardcoded "six", document what the new series mean and do not mean, record the
 decision.
 
 **Files.**
-- `docs/adr/0079-the-phases-close-against-search-total-not-the-tool-total.md` **(new)** — 0079 is
+- `docs/adr/0080-the-phases-close-against-search-total-not-the-tool-total.md` **(new)** — 0079 is
   the next free number; 0078 is the highest on disk
 - `docs/adr/README.md` (index row, matching the existing dense-summary style)
 - `docs/explanation/architecture.md` (`:400`, `:696`)
 - `docs/how-to/read-performance-metrics.md` (`:63`, plus the `search.*` reader guidance)
 
-**ADR-0079 is deliberately narrow.** It earns its place for **§1's structural finding only**: the
+**ADR-0080 is deliberately narrow.** It earns its place for **§1's structural finding only**: the
 phases can never close against `memory_search`, because the tool total brackets the SDK dispatch and
 region B sits between them — therefore `search.total` is the denominator, and `search.open` /
 `search.embed` are what make that denominator decomposable. The rejected-alternatives inventory
 (residual phase, granular spans, compile-time analyzer) stays in this plan and out of the ADR.
 
-**One thing ADR-0079 must argue explicitly**, or the next reader closes S2 as a regression:
+**One thing ADR-0080 must argue explicitly**, or the next reader closes S2 as a regression:
 **ADR-0062's relationship to S2's `Task.Delay`.** 0062's headline is *"Wait for the observable,
 never for the clock"*, and its Consequences record *"No fixed sleep remains in the file"* (live echo
 at `MetricsFlusherTests.cs:194`). S2 is compatible and the ADR must say why: 0062 is about a **fake
@@ -414,7 +414,7 @@ Not a risk at any realistic rate — recorded so a future `metrics.dropped` upti
 1. No occurrence of "six" describing the phase list survives in `src/`, `docs/explanation/`,
    `docs/how-to/`, or `tests/` (the `tests/` occurrences are fixed in S1, whose scope already opens
    every one of those files; this criterion is where they are checked).
-2. ADR-0079 follows the Nygard shape used by 0071-0078 and is linked from `docs/adr/README.md`.
+2. ADR-0080 follows the Nygard shape used by 0071-0078 and is linked from `docs/adr/README.md`.
 3. The four reader rules and the buffer-pressure line are present.
 
 **Gate.**
