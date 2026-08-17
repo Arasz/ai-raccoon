@@ -31,7 +31,7 @@ flowchart LR
 
 ## What's new
 
-- **ai-raccoon now measures its own performance, and you can ask it.** [ADR-0074](docs/adr/0074-a-capped-buffer-satisfies-the-channel-rule-and-reshapes-g4.md) · [How-to](docs/how-to/read-performance-metrics.md)
+- **The memory now measures its own performance, and you can ask it.** (1.20.0) [ADR-0074](docs/adr/0074-a-capped-buffer-satisfies-the-channel-rule-and-reshapes-g4.md) · [How-to](docs/how-to/read-performance-metrics.md)
 - **A long memory_write now matches on the chunk it stored, not the first page of the document.** (1.19.1) [ADR-0073](docs/adr/0073-a-write-embeds-the-chunk-it-stored.md)
 - **The bank now compacts itself, and repairs entries too long to be searchable.** (1.17.0) [ADR-0070](docs/adr/0070-maintenance-is-a-list-of-jobs-with-a-ledger.md)
 - **A long `memory_write` is now searchable across its whole length.** (1.15.0) [ADR-0064](docs/adr/0064-memory-write-chunks-like-everything-else.md)
