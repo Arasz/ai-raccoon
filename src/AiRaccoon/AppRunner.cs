@@ -1,10 +1,12 @@
 using System.Runtime.InteropServices;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
+using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Settings;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
@@ -217,6 +219,9 @@ public sealed partial class AppRunner
             // ADR-0075 amendment: extract prune and settings maintenance list route the same way too.
             services.AddSingleton<IPromotionQueuePruneStore>(lazyServerStore);
             services.AddSingleton<IMaintenanceStatsStore>(lazyServerStore);
+            // ADR-0075 amendment: noise entries and watch registered route the same way too.
+            services.AddSingleton<INoiseSummaryStore>(lazyServerStore);
+            services.AddSingleton<IWatchRegisteredStore>(lazyServerStore);
         }
 
         try

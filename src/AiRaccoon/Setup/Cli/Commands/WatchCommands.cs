@@ -8,12 +8,16 @@ using AiRaccoon.Infrastructure.Watch;
 
 namespace AiRaccoon.Setup.Cli.Commands;
 
-/// <summary>One-shot watch-config verb handlers; the only family with a ctor dependency (IWatchStore).</summary>
+/// <summary>One-shot watch-config verb handlers; the only family with a ctor dependency. Takes the
+/// narrow <see cref="IWatchRegisteredStore" /> (ADR-0075 amendment) rather than the full
+/// <see cref="IWatchStore" /> — the CLI graph swaps it for a server-backed store; the
+/// add/remove/fingerprint members of the full interface are server-side only and never belong on a
+/// CLI command's own constructor.</summary>
 public sealed class WatchCommands
 {
-    private readonly IWatchStore _watchStore;
+    private readonly IWatchRegisteredStore _watchStore;
 
-    public WatchCommands(IWatchStore watchStore)
+    public WatchCommands(IWatchRegisteredStore watchStore)
     {
         ArgumentNullException.ThrowIfNull(watchStore);
         _watchStore = watchStore;

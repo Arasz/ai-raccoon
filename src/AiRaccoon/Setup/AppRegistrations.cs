@@ -225,6 +225,9 @@ public static partial class AppRegistrations
                 sp.GetRequiredService<IEncryptionKeyResolver>()));
             services.AddSingleton<ISqliteConnectionFactory>(sp => sp.GetRequiredService<SqliteConnectionFactory>());
             services.AddRequiredSingleton<IWatchStore, WatchStore>();
+            // ADR-0075 amendment: the server-side default for `watch registered` — overridden by
+            // LazyServerSettingsStore for the CLI graph, exactly like ISettingsStore above.
+            services.AddSingleton<IWatchRegisteredStore>(sp => sp.GetRequiredService<WatchStore>());
             services.AddRequiredSingleton<INoiseFilteringService, NoiseFilteringService>();
 
             // Register default noise filter policies (deterministic only — see ADR-0033).
@@ -233,6 +236,9 @@ public static partial class AppRegistrations
             // noise_entries (ADR-0029/ADR-0039): the training-data source — every rejected write,
             // TTL-purged by BankMaintenanceHostedService.
             services.AddRequiredSingleton<INoiseEntryStore, SqliteNoiseEntryStore>();
+            // ADR-0075 amendment: the server-side default for `noise entries` — overridden by
+            // LazyServerSettingsStore for the CLI graph, exactly like ISettingsStore above.
+            services.AddSingleton<INoiseSummaryStore>(sp => sp.GetRequiredService<SqliteNoiseEntryStore>());
 
             // Self-learning noise substrate seam (ADR-0039, amended): no scoring model registered.
             // INoiseDetector -> NoOpNoiseDetector is what a future structural/lexical detector

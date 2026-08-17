@@ -1,6 +1,8 @@
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Settings;
 using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
@@ -181,6 +183,50 @@ public sealed class LazyServerSettingsStoreTests
         });
 
         await store.RequestRepairAsync(RepairKind.ChunkIndex, TestContext.Current.CancellationToken);
+        await store.GetSettingAsync("a", TestContext.Current.CancellationToken);
+
+        acquireCalls.ShouldBe(1);
+    }
+
+    /// <summary>ADR-0075 amendment: `noise entries` reaches the same acquired store as every other control-plane call.</summary>
+    [Fact]
+    public async Task SummarizeAsync_DelegatesToTheAcquiredStore()
+    {
+        var inner = new InMemorySettings
+        {
+            NoiseSummary = new NoiseEntrySummary(2, new Dictionary<string, int>(StringComparer.Ordinal) { ["p"] = 2 })
+        };
+        var store = new LazyServerSettingsStore(_ => Task.FromResult<ISettingsStore>(inner));
+
+        var summary = await store.SummarizeAsync(TestContext.Current.CancellationToken);
+
+        summary.ShouldBe(inner.NoiseSummary);
+    }
+
+    /// <summary>ADR-0075 amendment: `watch registered` reaches the same acquired store as every other control-plane call.</summary>
+    [Fact]
+    public async Task ListWatchesAsync_DelegatesToTheAcquiredStore()
+    {
+        var inner = new InMemorySettings { Watches = [new WatchRegistration("acme", "/a/b.md", 1, 2)] };
+        var store = new LazyServerSettingsStore(_ => Task.FromResult<ISettingsStore>(inner));
+
+        var watches = await store.ListWatchesAsync(TestContext.Current.CancellationToken);
+
+        watches.ShouldBe(inner.Watches);
+    }
+
+    [Fact]
+    public async Task SummarizeAsync_TriggersTheSameAcquireAsASettingsCall()
+    {
+        var acquireCalls = 0;
+        var inner = new InMemorySettings();
+        var store = new LazyServerSettingsStore(_ =>
+        {
+            acquireCalls++;
+            return Task.FromResult<ISettingsStore>(inner);
+        });
+
+        await store.SummarizeAsync(TestContext.Current.CancellationToken);
         await store.GetSettingAsync("a", TestContext.Current.CancellationToken);
 
         acquireCalls.ShouldBe(1);

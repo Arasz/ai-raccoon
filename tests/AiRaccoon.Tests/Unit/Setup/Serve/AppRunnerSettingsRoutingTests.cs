@@ -161,6 +161,56 @@ public sealed class AppRunnerSettingsRoutingTests : IDisposable
         stdout.ShouldContain("db file:");
     }
 
+    /// <summary>
+    ///     ADR-0075 amendment: `noise entries` used to summarize noise_entries by opening the bank
+    ///     directly from the CLI process (INoiseEntryStore bound unconditionally, never routed
+    ///     through CliWriteOptOuts's mechanism at all) — the defect this task fixes. It now routes
+    ///     through the same acquired INoiseSummaryStore as every other non-opted-out command.
+    /// </summary>
+    [Fact]
+    public async Task ANoiseEntriesCommand_UsesTheInjectedAcquireFunction()
+    {
+        var acquireCalls = 0;
+        var fake = new InMemorySettings();
+
+        var (exit, stdout) = await Run(
+            (_, _, _) =>
+            {
+                acquireCalls++;
+                return Task.FromResult<ISettingsStore>(fake);
+            },
+            ["--data-root", _dataRoot, "noise", "entries"]);
+
+        exit.ShouldBe(0);
+        acquireCalls.ShouldBe(1);
+        stdout.ShouldContain("total: 0");
+    }
+
+    /// <summary>
+    ///     ADR-0075 amendment: `watch registered` used to list watch registrations by opening the
+    ///     bank directly from the CLI process (IWatchStore bound unconditionally, never routed
+    ///     through CliWriteOptOuts's mechanism at all) — the defect this task fixes. It now routes
+    ///     through the same acquired IWatchRegisteredStore as every other non-opted-out command.
+    /// </summary>
+    [Fact]
+    public async Task AWatchRegisteredCommand_UsesTheInjectedAcquireFunction()
+    {
+        var acquireCalls = 0;
+        var fake = new InMemorySettings();
+
+        var (exit, stdout) = await Run(
+            (_, _, _) =>
+            {
+                acquireCalls++;
+                return Task.FromResult<ISettingsStore>(fake);
+            },
+            ["--data-root", _dataRoot, "watch", "registered"]);
+
+        exit.ShouldBe(0);
+        acquireCalls.ShouldBe(1);
+        stdout.ShouldContain("no registered watches");
+    }
+
     /// <summary>A failed acquire surfaces as the command's own failure, not a crash.</summary>
     [Fact]
     public async Task WhenTheAcquireFunctionFails_TheCommandReportsItAndDoesNotThrow()

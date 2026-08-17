@@ -143,4 +143,22 @@ public sealed class ServerSettingsStoreTests : IAsyncLifetime
         await Should.ThrowAsync<SettingsServerUnavailableException>(
             () => unreachable.SetSettingAsync("sweep.threshold", "0.1", TestContext.Current.CancellationToken));
     }
+
+    /// <summary>ADR-0075 amendment: `noise entries` reaches noise_entries entirely through the server.</summary>
+    [Fact]
+    public async Task SummarizeAsync_ReturnsTheLiveSummary()
+    {
+        var summary = await _store.SummarizeAsync(TestContext.Current.CancellationToken);
+
+        summary.TotalCount.ShouldBe(0);
+    }
+
+    /// <summary>ADR-0075 amendment: `watch registered` reaches the live registration list entirely through the server.</summary>
+    [Fact]
+    public async Task ListWatchesAsync_ReturnsTheLiveList()
+    {
+        var watches = await _store.ListWatchesAsync(TestContext.Current.CancellationToken);
+
+        watches.ShouldBeEmpty();
+    }
 }

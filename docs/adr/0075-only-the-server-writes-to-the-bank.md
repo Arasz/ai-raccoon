@@ -431,3 +431,53 @@ auth), `SqlitePromotionQueueStoreOutboxTests`/`SqliteMaintenanceStatsStoreTests`
 `PromotionQueuePruneJobTests` (server-side read/apply), `ExtractPruneCommandTests` (the CLI's own
 text — "queued for the server to remove", "request committed", "maintenance poll" — mirroring
 `RepairCommandsTests`), and the red-then-green `CliBankWriteTests` run described above.
+
+## Amendment 2026-08-17 (continued again) — `noise entries` and `watch registered` close the read side, and a bank-open gate
+
+Every prior amendment closed a command that *writes* the bank. Two commands remained that only
+*read* — `noise entries` (`NoiseEntriesCommands` → `SqliteNoiseEntryStore.SummarizeAsync`) and
+`watch registered` (`WatchCommands` → `WatchStore.ListWatchesAsync`). Neither violates this ADR's
+literal "zero writes" wording, so neither belonged in `CliWriteOptOuts`. They mattered for a
+subtler reason: both opened the bank via `OpenBankAsync`, which runs `MemorySchema.EnsureAsync` —
+and `EnsureAsync` writes migrations whenever the bank is behind the binary. Zero writes on a
+healthy digest-matching bank, a real write on the first run after an upgrade. The CLI therefore
+retained latent write capability on exactly the path no list guarded, outside both
+`CliWriteOptOuts` and the gate that backs it.
+
+**Fixed the same way `settings maintenance list` was** — the one prior command of the same shape:
+a pure read returning a payload, no `--apply` gate, so no outbox to defer. Two narrow read-only
+interfaces, split out of their full stores the way `IMaintenanceStatsStore` was split from the
+store it reports on:
+
+- **`INoiseSummaryStore.SummarizeAsync`** out of `INoiseEntryStore`; **`IWatchRegisteredStore.ListWatchesAsync`**
+  out of `IWatchStore`. The full interfaces keep their server-only members (record/list/purge for
+  noise; add/remove/fingerprint for watch) that never belong on a CLI command's constructor.
+- `SqliteNoiseEntryStore` / `WatchStore` implement the narrow interface alongside their full
+  interface as the server-side default (`AppRegistrations`) — the method already lived on them, so
+  no new store is needed; `ServerSettingsStore` / `LazyServerSettingsStore` implement it for the
+  CLI graph over the same acquired connection — now seven interfaces on one class, not a new
+  transport. New token-gated routes `/noise/summary` and `/watch/registered` (`NoiseSummaryProtocol`/
+  `NoiseSummaryEndpoint`, `WatchRegisteredProtocol`/`WatchRegisteredEndpoint`).
+
+**The gate now covers bank-open, not just writes.** `CliBankWriteTests` proved a *write* cannot
+slip past the opt-out list; nothing proved a *read* cannot — which is how these two opened the bank
+for months without being added anywhere. `CliCommandsDoNotOpenTheBankTests` derives every CLI
+command type from `ConfigCommands`'s own constructor, builds the exact service graph
+`AppRunner.RunCliCommand` builds for a non-opted-out command, and walks each command's constructed
+object graph for a live `ISqliteConnectionFactory` — the one seam every bank-opening type holds.
+`BankCapableCliCommandAllowlist`, kept beside `CliWriteOptOuts` so both are amended together, names
+the three sanctioned exceptions: `EncryptionCommands` (bootstrap — it keys the bank before a server
+can decrypt it), `DoctorCommands` (its own read-only connection, deliberately bypassing
+`EnsureAsync`), and `ServeCommands` (running it *is* becoming the server, not asking one to do
+something). The gate found that third one itself on its first red run, which is the point of
+deriving from the constructed graph rather than trusting a hand-written list to already be complete.
+
+With these two, the single-writer rule is closed on both sides: the only CLI commands that open the
+bank directly are the three allowlisted ones, and that is now a checked fact rather than a claim.
+
+**Evidence**: `CliCommandsDoNotOpenTheBankTests` (the bank-open gate, watched red naming
+`NoiseEntriesCommands`, `WatchCommands`, and — before allowlisting it — `ServeCommands`),
+`NoiseSummaryEndpointTests` / `WatchRegisteredEndpointTests` (route-table + auth),
+`LazyServerSettingsStoreTests` / `AppRunnerSettingsRoutingTests` / `ServerSettingsStoreTests`
+(CLI-graph routing, same shape as the maintenance-stats case). `dotnet build` clean; `Speed=Fast`
+2633 passed / 1 skipped / 0 failed.

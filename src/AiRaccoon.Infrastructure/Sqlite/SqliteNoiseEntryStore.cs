@@ -5,8 +5,10 @@ using Dapper;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 
-/// <summary>INoiseEntryStore over noise_entries (ADR-0029/ADR-0039).</summary>
-public sealed class SqliteNoiseEntryStore(ISqliteConnectionFactory factory) : INoiseEntryStore
+/// <summary>INoiseEntryStore over noise_entries (ADR-0029/ADR-0039); also the server-side default for
+/// <see cref="INoiseSummaryStore" /> (ADR-0075 amendment) — overridden by LazyServerSettingsStore for
+/// the CLI graph, same shape as SqliteMaintenanceStatsStore.</summary>
+public sealed class SqliteNoiseEntryStore(ISqliteConnectionFactory factory) : INoiseEntryStore, INoiseSummaryStore
 {
     public async Task RecordAsync(MemoryWriteRequest request, string policyName, long expiresAtUnixSeconds,
         long nowUnixSeconds, CancellationToken cancellationToken = default)

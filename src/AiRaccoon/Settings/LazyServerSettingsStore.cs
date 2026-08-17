@@ -1,6 +1,8 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Watch;
 using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Settings;
@@ -13,7 +15,7 @@ namespace AiRaccoon.Settings;
 ///     instance; a failed acquire is not cached and is retried on the next call.
 /// </summary>
 internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationStore, IRepairStore,
-    IPromotionQueuePruneStore, IMaintenanceStatsStore
+    IPromotionQueuePruneStore, IMaintenanceStatsStore, INoiseSummaryStore, IWatchRegisteredStore
 {
     private readonly Func<CancellationToken, Task<ISettingsStore>> _acquire;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -72,6 +74,14 @@ internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationS
     public async Task<BankStats> GetStatsAsync(CancellationToken cancellationToken = default) =>
         await AsMaintenanceStatsStore(await InnerAsync(cancellationToken)).GetStatsAsync(cancellationToken);
 
+    /// <inheritdoc />
+    public async Task<NoiseEntrySummary> SummarizeAsync(CancellationToken cancellationToken = default) =>
+        await AsNoiseSummaryStore(await InnerAsync(cancellationToken)).SummarizeAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<WatchRegistration>> ListWatchesAsync(CancellationToken cancellationToken = default) =>
+        await AsWatchRegisteredStore(await InnerAsync(cancellationToken)).ListWatchesAsync(cancellationToken);
+
     /// <summary>
     ///     Every store the acquire function can resolve to in production (<see cref="ServerSettingsStore" />)
     ///     implements both interfaces over the same connection; a cast failure here means a caller
@@ -95,6 +105,16 @@ internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationS
     private static IMaintenanceStatsStore AsMaintenanceStatsStore(ISettingsStore store) =>
         store as IMaintenanceStatsStore ?? throw new NotSupportedException(
             $"ai-raccoon: {store.GetType().Name} does not support maintenance stats");
+
+    /// <summary>Same reasoning as <see cref="AsMigrationStore" />, for the noise-summary capability.</summary>
+    private static INoiseSummaryStore AsNoiseSummaryStore(ISettingsStore store) =>
+        store as INoiseSummaryStore ?? throw new NotSupportedException(
+            $"ai-raccoon: {store.GetType().Name} does not support noise summary");
+
+    /// <summary>Same reasoning as <see cref="AsMigrationStore" />, for the watch-registered capability.</summary>
+    private static IWatchRegisteredStore AsWatchRegisteredStore(ISettingsStore store) =>
+        store as IWatchRegisteredStore ?? throw new NotSupportedException(
+            $"ai-raccoon: {store.GetType().Name} does not support watch-registered listing");
 
     private async Task<ISettingsStore> InnerAsync(CancellationToken cancellationToken)
     {

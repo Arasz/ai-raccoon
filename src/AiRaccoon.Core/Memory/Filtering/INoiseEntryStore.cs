@@ -35,11 +35,13 @@ public interface INoiseEntryStore
 /// <summary>
 ///     Null Object default for <see cref="SqliteMemoryStore" />'s legacy (pre-noise-entries)
 ///     constructor — never records anything. Not a nullable injected parameter: a genuinely
-///     functioning, always-non-null implementation that does nothing.
+///     functioning, always-non-null implementation that does nothing. Also implements
+///     <see cref="INoiseSummaryStore" /> so the same instance serves as the null object wherever a
+///     test needs one for the CLI's `noise entries` command without a real bank.
 /// </summary>
-public sealed class NoOpNoiseEntryStore : INoiseEntryStore
+public sealed class NoOpNoiseEntryStore : INoiseEntryStore, INoiseSummaryStore
 {
-    public static readonly INoiseEntryStore Instance = new NoOpNoiseEntryStore();
+    public static readonly NoOpNoiseEntryStore Instance = new();
 
     private NoOpNoiseEntryStore()
     {
