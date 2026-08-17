@@ -1,8 +1,16 @@
 {
-  "lastUpdated": "2026-08-17T15:35:00.000000+00:00",
+  "lastUpdated": "2026-08-17",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "add-missing-metrics",
+      "title": "Close the books on SearchAsync's phase attribution; make VERSION the only version marker",
+      "pr": null,
+      "merged": "2026-08-17",
+      "outcome": "Issue #382. The six SearchTimings phases never decomposed a search: SearchAsync opened the bank and embedded the query before the first timer started. Measured on the live bank 2026-08-17 (n=12): memory_search averaged 287.03 ms against 169.12 ms of phases, 41% in no phase; worst recorded search left 1,177.68 of 1,799.91 ms unattributed. Adds search.open and search.embed plus a measured Total recorded as search.total and deliberately kept OUT of PhaseNames (summing PhaseNames stays correct; a derived SeriesNames carries everything). Three findings corrected the issue's own premise: the gate it asked for cannot be built (memory_search is a stopwatch around the whole SDK dispatch, with the access gate, the query guard, a POST-return bank write and serialization outside SearchAsync, so sum-of-phases can never equal it at any granularity -- the phases close against search.total instead, ADR-0080); query embedding is not a bare neural forward pass but four settings reads, a cached ONNX session build, a WordPiece trim, then the pass; and the '~2 bank opens per search' it leaned on is stale, a prefix read made it one. Closure gate uses a real clock with a 28 ms residual budget chosen from measurement -- a cold isolated run has a 13-29 ms residual from JIT and query-plan compile, so the test does a discarded warm-up search first; without it the budget would have been flaky. Separately, on owner ruling, VERSION became the only version marker: .mcp/server.json's two literals are now __VERSION__ substituted at pack time, verified by a test that opens the built nupkg rather than the obj copy, and version-bump.py lost its syncer half. Merged locally without CI or PR review during a global GitHub API outage; full local suite green (3519 passed, 0 failed).",
+      "version": "1.25.0"
+    },
     {
       "id": "table-chunking-measurability",
       "title": "Make table chunking adjudicable: table-bearing corpus, a gate that re-chunks, span-anchored relevance",
@@ -156,7 +164,7 @@
       "summary": "Live test of the 7721 serve + hermes bridge against the real bank. 23/23 tools exercised on an isolated test project with zero residue verified; watch cycle proven end-to-end; metrics = memory_stats + queue meta + maintenance-stats (OTLP export off, /metrics 404). DB: 13,523 entries all embedded, 0 TTLs, 8 stale Active workspaces. Promotion queue: 998 bank-wide vs reserved ~200, borrowing, shared tier = 1 row, extraction propose-only. BUG (code+experiment): DeleteBySourcePath matches source_file not path, so the watch digest deletes manual memory_write rows citing a watched file (2/2 collateral victims in the test). Full report: docs/work/2026-08-09-ai-raccoon-mem-test.md."
     }
   ],
-  "next": "Table chunking is now measurable, so the open question is which arm to build. ADR-0077's two CORRECTNESS properties (prose and tables never share a chunk; no header-orphaned body row) are unblocked by replacement semantics and need no retrieval corpus at all -- build those first. The tuning arms (per-row with header carry-over, and a row linearised into natural language, the two ADR-0077 did not reject) can now be scored against the table corpus; report relevance-set sizes beside the scores, since a span anchor bounds but does not freeze inflation. Also outstanding from before this task: PR 383 could not be closed during the GitHub outage -- confirm it is closed and that its auto-merge stayed disabled, or it will merge a second copy of work already in main as 7c1ad4cf. And the two operational questions on the real bank remain open: whether to run `repair chunk-index --apply` (62% of rows to position-unknown) or `repair reingest --apply` (910 files, 15,099 chunks). CliBankWriteTests.ReadCommand_CommitsNothingToTheBank is load-sensitive and flaked a build-slow lane; worth filing.",
+  "next": "Region B is now measurable but unmeasured: search.total closes SearchAsync's own books, and the gap between it and the memory_search tool total (access gate, query guard, the post-return quality write, SDK serialization) has no series at all. Recording a search.total series makes that subtraction possible for the first time -- do it on real traffic before sizing or optimising anything there, and do not carry over ADR-0075's trace numbers, which predate the digest gate and the prefix-read change. Also open: the closure gate only catches an untimed step larger than the 28 ms budget, which is stated in the test rather than left implied.",
   "filedNotStarted": [],
   "research": [],
   "stillTrue": [
