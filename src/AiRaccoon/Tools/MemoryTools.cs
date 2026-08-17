@@ -161,7 +161,7 @@ public sealed partial class MemoryTools(
         var correlationId = Guid.CreateVersion7().ToString("N");
         await qualityService.RecordSearchSafeAsync(correlationId, query, scope, projectId, results.Count,
             [.. results.Where(r => r.SourceFile is not null).Select(r => r.SourceFile!).Take(5)], cancellationToken);
-        RecordPhaseMeasurements(searchResults.Timings, ContentHash.OfValue(query), correlationId, projectId);
+        RecordSearchMeasurements(searchResults, ContentHash.OfValue(query), correlationId, projectId);
 
         // QueryLengthGuard is always on -- a fact about the embedding window, not a togglable
         // policy like the guard above -- so it is evaluated unconditionally, never through
@@ -321,19 +321,27 @@ public sealed partial class MemoryTools(
     public sealed record EmbedResult(int Processed, int Pending);
 
     /// <summary>
-    ///     Tags each of the six search phases with the query hash and correlation id and hands them
-    ///     to the recorder — never the query text itself (SqliteMetricsStore's save-time allowlist
-    ///     rejects it). Best-effort: a throwing recorder must never fail or slow the search (WP3).
+    ///     Tags each of the six search phases — plus the fusion diff, present only when the
+    ///     no-fusion-regression flag is on (docs/adr/0078) — with the query hash and correlation id
+    ///     and hands them to the recorder; never the query text itself (SqliteMetricsStore's
+    ///     save-time allowlist rejects it). Best-effort: a throwing recorder must never fail or slow
+    ///     the search (WP3).
     /// </summary>
-    private void RecordPhaseMeasurements(SearchTimings timings, string queryHash, string correlationId, string projectId)
+    private void RecordSearchMeasurements(SearchResults results, string queryHash, string correlationId, string projectId)
     {
         try
         {
             var recordedAt = _timeProvider.GetUtcNow();
-            foreach (var (name, value) in timings.Phases())
+            foreach (var (name, value) in results.Timings.Phases())
             {
                 measurements.Record(new Measurement(name, MeasurementKind.Histogram, value.TotalMilliseconds,
                     "ms", recordedAt, projectId, queryHash, correlationId));
+            }
+
+            foreach (var (name, value, unit) in results.Fusion?.Measurements() ?? [])
+            {
+                measurements.Record(new Measurement(name, MeasurementKind.Gauge, value,
+                    unit, recordedAt, projectId, queryHash, correlationId));
             }
         }
         catch (Exception ex)
