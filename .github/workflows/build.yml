@@ -148,10 +148,16 @@ jobs:
     # had failed on every run it ever had, so it could not signal anything.
     #
     # Runs beside the other two jobs, so the coverage costs concurrency, not wall
-    # clock (measured: the full suite is ~3m30s of test time).
+    # clock. The "~3m30s of test time" this comment used to claim went stale as the
+    # suite grew: run 32048870721 (2026-08-17) spent 13m56s on 826 Speed=Slow tests,
+    # and run 32052100773 was KILLED at the old 20-minute ceiling — so main carried a
+    # tagged, published 1.26.0 with no verdict at all, because the gate timed out
+    # rather than answering. A gate that randomly cannot finish reports nothing; sized
+    # here at roughly 2x the measured 14 minutes so growth shows up as a slow gate
+    # instead of a silent one. Re-measure when this comment looks old again.
     needs: changes
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: true
       # #150: one SIGBUS (exit 135) test-host crash was observed here with no
