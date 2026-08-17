@@ -6,18 +6,18 @@ using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Ingestion;
 
-/// <summary>What a repair pass found and did. A dry run (apply: false) fills it in without writing.</summary>
-public sealed record ChunkIndexRepairReport(
-    int GroupsExamined, int RowsRepositioned, int RowsSetToUnknown);
-
 /// <summary>
 ///     GH #371: re-derives chunk_index/total_chunks per (ctx, source_file) group straight from the
 ///     document a still-present source_file names, instead of the row-id order the old recompute
 ///     left behind. A group whose source_file is missing, unreadable, or absent gets chunk_index =
 ///     -1 (position unknown) — never a guess. Pure UPDATE: never inserts or deletes a row.
 ///     <para>
-///         Explicitly invoked only (`ai-raccoon repair chunk-index`) — never registered as an
-///         <see cref="AiRaccoon.Infrastructure.Maintenance.IMaintenanceJob" />, so it cannot run
+///         This class itself never implements <see cref="AiRaccoon.Infrastructure.Maintenance.IMaintenanceJob" />
+///         — <see cref="AiRaccoon.Infrastructure.Maintenance.ChunkIndexRepairJob" /> wraps it instead
+///         (ADR-0075 amendment), registered on the maintenance list but on-demand only (<c>Interval</c>
+///         is null): it only ever runs because a human explicitly requested it via
+///         `ai-raccoon repair chunk-index --apply`, which now commits a repair_requests row through
+///         the server rather than writing here directly. Never on a clock, so it still cannot run
 ///         unattended against a live bank on open (docs/plans/2026-08-08-search-knn-perf.md §3.3).
 ///     </para>
 /// </summary>

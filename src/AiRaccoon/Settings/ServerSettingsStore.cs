@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Hosting.Node;
 using CommunityToolkit.Diagnostics;
@@ -17,11 +18,12 @@ internal sealed class SettingsServerRefusedException(string message) : Exception
 ///     writes the bank. Same <see cref="ISettingsStore" /> surface as the bank-backed store, so a
 ///     subsystem keeps one implementation and only the transport under it changes.
 ///     <para>
-///         Also <see cref="IModelMigrationStore" /> (ADR-0076): <c>model set</c> reaches the same
-///         way, over the same connection — one class, one credential, one transport.
+///         Also <see cref="IModelMigrationStore" /> (ADR-0076) and <see cref="IRepairStore" />
+///         (ADR-0075 amendment): <c>model set</c> and <c>repair</c> reach the same way, over the same
+///         connection — one class, one credential, one transport for every control-plane resource.
 ///     </para>
 /// </summary>
-internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
+internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore, IRepairStore
 {
     private readonly HttpClient _client;
 
@@ -95,6 +97,30 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     public Task<bool> HasOpenModelMigrationAsync(CancellationToken cancellationToken = default) =>
         throw new NotSupportedException(
             "ai-raccoon: HasOpenModelMigrationAsync is a server-side check (ToolGate); the CLI never calls it");
+
+    /// <inheritdoc />
+    public async Task<ReingestRepairReport> ReportReingestAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await SendAsync(() => _client.GetAsync(RepairProtocol.ForKind(RepairKinds.Reingest), cancellationToken));
+        Ensure(response);
+        return (await response.Content.ReadFromJsonAsync<ReingestRepairReport>(cancellationToken))!;
+    }
+
+    /// <inheritdoc />
+    public async Task<ChunkIndexRepairReport> ReportChunkIndexAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await SendAsync(() => _client.GetAsync(RepairProtocol.ForKind(RepairKinds.ChunkIndex), cancellationToken));
+        Ensure(response);
+        return (await response.Content.ReadFromJsonAsync<ChunkIndexRepairReport>(cancellationToken))!;
+    }
+
+    /// <inheritdoc />
+    public async Task RequestRepairAsync(RepairKind kind, CancellationToken cancellationToken = default)
+    {
+        var response = await SendAsync(() =>
+            _client.PostAsJsonAsync(RepairProtocol.Path, new RepairRequest(kind.ToKey()), cancellationToken));
+        Ensure(response);
+    }
 
     /// <summary>
     ///     A transport failure is reported as unavailable rather than surfacing a bare

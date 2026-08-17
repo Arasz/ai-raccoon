@@ -34,6 +34,12 @@ public sealed class CliWriteOptOutsTests
     [InlineData("model", "reset")]
     [InlineData("model", "set", "local")]
     [InlineData("model", "set", "openai")]
+    // The reported defect this ADR-0075 amendment fixes: `repair <verb> --apply` was never on this
+    // list, yet still wrote the bank directly via an unconditionally-bound IMemoryStore
+    // (AppRegistrations.cs) — repair is now a thin IRepairStore client like every other command, so
+    // these two rows belong here like everything else.
+    [InlineData("repair", "reingest")]
+    [InlineData("repair", "chunk-index")]
     public void WritesDirectly_IsFalse_ForEverythingElse(params string[] commandPath) =>
         CliWriteOptOuts.WritesDirectly(commandPath).ShouldBeFalse();
 }

@@ -160,6 +160,15 @@ public static partial class AppRegistrations
                 new MetricsRetentionJob(sp.GetRequiredService<TimeProvider>()),
                 // ADR-0076: on-demand — HasWorkAsync reads the outbox itself, not a cadence.
                 new ModelMigrationJob(sp.GetRequiredService<IEntryEmbedder>()),
+                // ADR-0075 amendment: on-demand, same shape as ModelMigrationJob — HasWorkAsync reads
+                // the repair_requests row a `repair <verb> --apply` submitted through the server.
+                // Before PendingEmbedJob for the same reason ChunkBackfillJob is: a reingest repair
+                // leaves rows pending, and PendingEmbedJob, last in this list, already sees them by
+                // the time this same foreach reaches it.
+                new ChunkIndexRepairJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<ILocalTokenizer>(),
+                    sp.GetRequiredService<TimeProvider>()),
+                new ReingestRepairJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<ILocalTokenizer>(),
+                    sp.GetRequiredService<IMemoryStore>(), sp.GetRequiredService<TimeProvider>()),
                 // .NET-F1: on-demand — HasWorkAsync reads entries.embed_state itself, not a cadence.
                 new PendingEmbedJob(sp.GetRequiredService<IEntryEmbedder>())
             ]);
@@ -232,6 +241,9 @@ public static partial class AppRegistrations
             services.AddSingleton<IModelMigrationStore>(sp => sp.GetRequiredService<SqliteMemoryStore>());
             services.AddRequiredSingleton<IMemorySourceStore, SqliteMemorySourceStore>();
             services.AddRequiredSingleton<ISettingsStore, SqliteSettingsStore>();
+            // ADR-0075 amendment: the server-side default for `repair` — overridden by
+            // LazyServerSettingsStore for the CLI graph, exactly like ISettingsStore above.
+            services.AddRequiredSingleton<IRepairStore, SqliteRepairStore>();
             services.AddRequiredSingleton<IWorkspaceStore, SqliteWorkspaceStore>();
             services.AddRequiredSingleton<IPromotionQueueStore, SqlitePromotionQueueStore>();
         }

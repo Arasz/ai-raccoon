@@ -36,20 +36,36 @@ public class CliCommandTreeTests
             .Children.OfType<Command>().Single(c => c.Name == name);
 
     /// <summary>
-    ///     `repair reingest --help` used to say "Embedding is left pending; run memory_embed_pending
-    ///     afterward" — true only when no server is running. PendingEmbedJob (.NET-F1) means a
-    ///     running server now drains it on-demand within ~15s; the help text must say so, and must
-    ///     still name memory_embed_pending as the manual path for the no-server case.
+    ///     `repair reingest --help` used to say "a running server drains it automatically... with no
+    ///     server running, nothing drains it — run memory_embed_pending by hand" — enshrining the
+    ///     defect this ADR-0075 amendment fixes: the CLI wrote the bank directly whenever no server
+    ///     happened to be running, and advertised that as the normal manual path. `--apply` now only
+    ///     ever requests the server apply it (ADR-0075 amendment); the help text must say that, and
+    ///     must not advertise a CLI-only manual fallback as the normal case.
     /// </summary>
     [Fact]
-    public void RepairReingestCommand_DescribesHowEmbeddingActuallyDrains()
+    public void RepairReingestCommand_DescribesRequestingTheServer_NotAManualFallback()
     {
         var reingest = CommandAt("repair").Children.OfType<Command>().Single(c => c.Name == "reingest");
         var description = reingest.Description.ShouldNotBeNull();
 
-        description.ShouldContain("automatically");
-        description.ShouldContain("memory_embed_pending");
-        description.ShouldNotContain("run memory_embed_pending afterward");
+        description.ShouldContain("server");
+        description.ShouldContain("--apply");
+        description.ShouldNotContain("memory_embed_pending");
+        description.ShouldNotContain("no server running", Case.Insensitive);
+    }
+
+    [Fact]
+    public void RepairApplyOptions_DescribeRequestingTheServer_NotWritingLocally()
+    {
+        var repair = CommandAt("repair");
+        var reingestApply = repair.Children.OfType<Command>().Single(c => c.Name == "reingest")
+            .Children.OfType<Option>().Single(o => o.Name == "--apply");
+        var chunkIndexApply = repair.Children.OfType<Command>().Single(c => c.Name == "chunk-index")
+            .Children.OfType<Option>().Single(o => o.Name == "--apply");
+
+        reingestApply.Description.ShouldNotBeNull().ShouldContain("server");
+        chunkIndexApply.Description.ShouldNotBeNull().ShouldContain("server");
     }
 
     [Fact]

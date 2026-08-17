@@ -299,3 +299,80 @@ statement-volume drop. **Search gets no measurable wall-clock difference despite
 reported as a genuine, useful finding about where search's cost actually lives, not as a weaker
 version of the write result. §8's wall-clock criterion is closed by this measurement, not by a
 quieter re-run.
+
+## Amendment 2026-08-17 — `repair` was never on the route table, and wrote the bank directly
+
+The owner's own manual audit found `repair reingest --apply` and `repair chunk-index --apply`
+writing the bank directly from the CLI process — `CliWriteOptOuts` (§5.3's opt-out list) never named
+`repair`, so `AppRunner.RunCliCommand` correctly routed it to the server-backed store for
+`ISettingsStore`/`IModelMigrationStore`, but `IMemoryStore` was (and, for every command this
+amendment does not touch, still is) bound unconditionally to the direct `SqliteMemoryStore`
+(`AppRegistrations.cs`). `repair`'s command classes held that direct store and called its write
+methods, so every `--apply` wrote the bank from the CLI process regardless of the route-table intent.
+A prior commit (`6c38e663`) made this worse by documenting the gap as expected behaviour in three
+user-facing places — the CLI help text, the runtime `--apply` output, and a doc comment — each saying
+some version of "with no server running, nothing drains it, run `memory_embed_pending` by hand,"
+enshrining the violation as a feature rather than flagging it as one.
+
+**Fixed by giving `repair` the same shape `settings`/`model set` already have, generalised one step
+further.** `model set` (ADR-0076) proved the outbox pattern for "the CLI records a request, a
+maintenance job drains it" — but `model set` never had a read half worth moving, so that pattern
+alone under-specifies what a command with a genuine read (a report) needs. `repair` has both:
+
+- **`IRepairStore.ReportReingestAsync`/`ReportChunkIndexAsync`** — a synchronous, read-only,
+  server-computed answer (mirrors `GET /settings`): the CLI asks a question, gets numbers back, never
+  opens the bank itself, whether or not `--apply` was passed. The scan that used to run inside the
+  CLI process now runs inside the HTTP request handler on the server.
+- **`IRepairStore.RequestRepairAsync`** — an outbox row (`repair_requests`, keyed by kind, mirroring
+  `model_migration`'s id=1 shape but keyed since two repair kinds are independent) the CLI commits
+  through the server on `--apply`; `ReingestRepairJob`/`ChunkIndexRepairJob` — on-demand
+  (`Interval` is null, exactly like `ModelMigrationJob`) — apply it within the maintenance loop's next
+  ~15s poll.
+
+Both halves go through the same acquired connection `ServerSettingsStore`/`LazyServerSettingsStore`
+already hold for settings and model migration — a third interface on the same class, not a second
+`BackendLauncher` acquire path. `/repair` is a new route on the same token-guarded host as `/settings`,
+default-closed by `McpTokenGate` like every route that isn't explicitly opened.
+
+**The "explicit-only, never unattended" guard survives, restated correctly.** `ReingestRepair`/
+`ChunkIndexRepair` themselves still never implement `IMaintenanceJob` — `ReingestRepairJob`/
+`ChunkIndexRepairJob` wrap them instead, on the maintenance job list but gated on `HasWorkAsync`
+reading the outbox row, never on a clock. A job that only ever runs because a human explicitly
+requested it via `--apply` is not "unattended" in the sense GH #371 cared about; the two
+`*DoesNotAutoStartTests` suites now assert that restated invariant (`Interval` is null) rather than
+"never appears on the job list," which was never actually the requirement.
+
+**The three enshrined strings are fixed to say what is now true**: the CLI help text, the `--apply`
+output, and the `ReingestRepair`/`ChunkIndexRepair` doc comments no longer describe a "no server
+running, nothing drains it" branch — that branch is unreachable now, because `apply: true` is only
+ever reached inside the server process (`ReingestRepairJob`, gated on the outbox row).
+
+**No residual violation from `repair` remains.** `CliWriteOptOuts` still names only `encryption`
+(the bootstrap path), and that is now accurate for `repair` too — the CLI process opens the bank for
+`repair` never, not even to read.
+
+**Two other CLI-writes-the-bank violations were found in the same audit and are deliberately not
+fixed here** — queued as follow-up work, not silently left undocumented:
+
+- `settings maintenance list` (`MaintenanceCommands.ReadStatsAsync`) opens the bank directly to read
+  `page_size`/`page_count`/`freelist_count` and issues `PRAGMA wal_checkpoint(PASSIVE)`, unconditionally,
+  on every invocation — no `--apply` gate. This is a pure "ask a question, get numbers back" case, the
+  same shape `IRepairStore`'s report half already demonstrates; the fix is expected to add a small
+  `IMaintenanceStatsStore` alongside `IRepairStore` on the same acquired connection, not a new
+  transport.
+- `extract prune --apply` deletes via `IPromotionQueueStore` (`SqlitePromotionQueueStore.cs:262`),
+  the same never-swapped-for-the-CLI-graph pattern `repair` had.
+
+Until those land, `CliWriteOptOuts`'s doc comment claim that `encryption` is the *only* exception
+should be read as "the only exception among the commands this amendment and ADR-0076 have addressed,"
+not as a claim that every CLI command is clean — the gate this ADR's Consequences section describes
+(a route-table guard asserting zero bank writes from the CLI process) does not yet cover
+`maintenance list` or `extract prune`.
+
+**Evidence**: `RepairEndpointTests` (route-table + auth), `SqliteRepairStoreTests`/
+`ReingestRepairJobTests`/`ChunkIndexRepairJobTests` (server-side read and apply, red-then-green),
+`AppRunnerSettingsRoutingTests.ARepairCommand_UsesTheInjectedAcquireFunction` (watched red by
+temporarily removing the `IRepairStore` DI override — reproduces the original defect exactly: the
+fake acquire function is never called, `acquireCalls` stays 0), `CliWriteOptOutsTests` (repair is
+`WritesDirectly: false`), and `RepairCommandsTests` (the CLI's own text no longer contains
+`memory_embed_pending`/"no server running", watched red against the pre-fix string).

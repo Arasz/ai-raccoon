@@ -212,6 +212,8 @@ public sealed partial class AppRunner
             services.AddSingleton<ISettingsStore>(lazyServerStore);
             // ADR-0076: model set routes the same way now — same instance, same acquired connection.
             services.AddSingleton<IModelMigrationStore>(lazyServerStore);
+            // ADR-0075 amendment: repair routes the same way — same instance, same acquired connection.
+            services.AddSingleton<IRepairStore>(lazyServerStore);
         }
 
         try

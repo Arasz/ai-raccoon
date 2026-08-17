@@ -1,30 +1,34 @@
 using System.CommandLine;
-using AiRaccoon.Core.Ingestion;
-using AiRaccoon.Infrastructure.Embedding;
-using AiRaccoon.Infrastructure.Ingestion;
-using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Setup.Cli.Commands;
 
 /// <summary>
-///     `repair chunk-index` handler (GH #371): explicit-only re-derivation of chunk_index/total_chunks
-///     from each row's source_file. Dry run reports by default; --apply writes. Deliberately its own
-///     top-level operation, not a maintenance-job subcommand — it must never be reachable from the
-///     job list <see cref="AiRaccoon.Infrastructure.Maintenance.BankMaintenanceHostedService" /> runs on bank open.
+///     `repair chunk-index` handler (GH #371): a thin client over <see cref="IRepairStore" />
+///     (ADR-0075 amendment) — the report is scanned server-side and never opens the bank from the
+///     CLI process; --apply commits a request the server applies, rather than writing here.
+///     Deliberately its own top-level operation, not a maintenance-job subcommand in the CLI sense —
+///     it must never be reachable from the clock-scheduled job list a bank open runs.
 /// </summary>
-public sealed class ChunkIndexRepairCommands(
-    ISqliteConnectionFactory bankConnectionFactory, IFileTypeMatcher fileTypeMatcher, ILocalTokenizer localTokenizer)
+public sealed class ChunkIndexRepairCommands(IRepairStore repair)
 {
     public async Task<int> RunAsync(ParseResult parseResult, StandardStreams streams, CancellationToken cancellationToken)
     {
         var apply = parseResult.GetValue<bool>("--apply");
 
-        await using var connection = await bankConnectionFactory.OpenBankAsync(cancellationToken);
-        var report = await new ChunkIndexRepair(fileTypeMatcher, localTokenizer).RunAsync(connection, apply, cancellationToken);
+        var report = await repair.ReportChunkIndexAsync(cancellationToken);
 
-        var verb = apply ? "repositioned" : "would reposition (dry run; pass --apply to write)";
+        var verb = apply ? "queued for the server to reposition" : "would reposition (dry run; pass --apply to queue it)";
         await streams.WriteOutputLineAsync($"chunk-index repair: {report.GroupsExamined} source group(s) examined, " +
                                             $"{report.RowsRepositioned} row(s) {verb}, {report.RowsSetToUnknown} row(s) set to the unknown position (-1)");
+
+        if (apply)
+        {
+            await repair.RequestRepairAsync(RepairKind.ChunkIndex, cancellationToken);
+            await streams.WriteOutputLineAsync(
+                "chunk-index repair: request committed; the server applies it on its next maintenance poll (~15s).");
+        }
+
         return 0;
     }
 }
