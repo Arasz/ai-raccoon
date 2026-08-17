@@ -1,6 +1,8 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Watch;
 
 namespace AiRaccoon.Tests.TestHelpers;
 
@@ -11,7 +13,7 @@ namespace AiRaccoon.Tests.TestHelpers;
 ///     `Parse*` helper falls to its documented default.
 /// </summary>
 public sealed class InMemorySettings : ISettingsStore, IModelMigrationStore, IRepairStore,
-    IPromotionQueuePruneStore, IMaintenanceStatsStore
+    IPromotionQueuePruneStore, IMaintenanceStatsStore, INoiseSummaryStore, IWatchRegisteredStore
 {
     public Dictionary<string, string> Values { get; } = new(StringComparer.Ordinal);
 
@@ -31,6 +33,10 @@ public sealed class InMemorySettings : ISettingsStore, IModelMigrationStore, IRe
     public PromotionQueueOrphanReport PruneReport { get; set; } = new(0, new Dictionary<string, int>(StringComparer.Ordinal));
 
     public BankStats Stats { get; set; } = new(0, 0, 0, 0, 0);
+
+    public NoiseEntrySummary NoiseSummary { get; set; } = new(0, new Dictionary<string, int>(StringComparer.Ordinal));
+
+    public IReadOnlyList<WatchRegistration> Watches { get; set; } = [];
 
     public Task<ReingestRepairReport> ReportReingestAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(ReingestReport);
@@ -54,6 +60,12 @@ public sealed class InMemorySettings : ISettingsStore, IModelMigrationStore, IRe
     }
 
     public Task<BankStats> GetStatsAsync(CancellationToken cancellationToken = default) => Task.FromResult(Stats);
+
+    public Task<NoiseEntrySummary> SummarizeAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(NoiseSummary);
+
+    public Task<IReadOnlyList<WatchRegistration>> ListWatchesAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(Watches);
 
     public Task<EmbeddingConfig> StartModelMigrationAsync(string provider, string? model, string? baseUrl,
         CancellationToken cancellationToken = default)

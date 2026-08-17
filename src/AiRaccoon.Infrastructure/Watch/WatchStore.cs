@@ -28,8 +28,10 @@ public interface IWatchStore
     Task<IReadOnlyList<string>> ListFilesAsync(string projectId, CancellationToken cancellationToken = default);
 }
 
-/// <summary>Dapper impl of IWatchStore over the watches/watch_files tables (MemorySql consts).</summary>
-public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore
+/// <summary>Dapper impl of IWatchStore over the watches/watch_files tables (MemorySql consts); also
+/// the server-side default for <see cref="IWatchRegisteredStore" /> (ADR-0075 amendment) —
+/// overridden by LazyServerSettingsStore for the CLI graph, same shape as SqliteMaintenanceStatsStore.</summary>
+public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, IWatchRegisteredStore
 {
     public async Task AddWatchAsync(string projectId, string path, long createdAt, long lastChangeTs,
         CancellationToken cancellationToken = default)

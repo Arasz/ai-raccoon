@@ -147,6 +147,9 @@ internal static partial class McpServerSetup
                 // entirely too, same token-guarded host.
                 webApplication.MapPromotionQueuePrune();
                 webApplication.MapMaintenanceStats();
+                // ADR-0075 amendment: noise entries and watch registered reach the server entirely too.
+                webApplication.MapNoiseSummary();
+                webApplication.MapWatchRegistered();
             }
 
             return webApplication;

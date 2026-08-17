@@ -2,8 +2,10 @@ using System.Net;
 using System.Net.Http.Json;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Hosting.Node;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Watch;
 using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Settings;
@@ -19,16 +21,17 @@ internal sealed class SettingsServerRefusedException(string message) : Exception
 ///     writes the bank. Same <see cref="ISettingsStore" /> surface as the bank-backed store, so a
 ///     subsystem keeps one implementation and only the transport under it changes.
 ///     <para>
-///         Also <see cref="IModelMigrationStore" /> (ADR-0076), <see cref="IRepairStore" />
-///         (ADR-0075 amendment), <see cref="IPromotionQueuePruneStore" /> and
-///         <see cref="IMaintenanceStatsStore" /> (both this same amendment): <c>model set</c>,
-///         <c>repair</c>, <c>extract prune</c> and <c>settings maintenance list</c> all reach the
-///         same way, over the same connection — one class, one credential, one transport for every
-///         control-plane resource.
+///         Also <see cref="IModelMigrationStore" /> (ADR-0076), <see cref="IRepairStore" />,
+///         <see cref="IPromotionQueuePruneStore" />, <see cref="IMaintenanceStatsStore" />,
+///         <see cref="INoiseSummaryStore" /> and <see cref="IWatchRegisteredStore" /> (all this same
+///         amendment): <c>model set</c>, <c>repair</c>, <c>extract prune</c>,
+///         <c>settings maintenance list</c>, <c>noise entries</c> and <c>watch registered</c> all
+///         reach the same way, over the same connection — one class, one credential, one transport
+///         for every control-plane resource.
 ///     </para>
 /// </summary>
 internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore, IRepairStore,
-    IPromotionQueuePruneStore, IMaintenanceStatsStore
+    IPromotionQueuePruneStore, IMaintenanceStatsStore, INoiseSummaryStore, IWatchRegisteredStore
 {
     private readonly HttpClient _client;
 
@@ -149,6 +152,22 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
         var response = await SendAsync(() => _client.GetAsync(MaintenanceStatsProtocol.Path, cancellationToken));
         Ensure(response);
         return (await response.Content.ReadFromJsonAsync<BankStats>(cancellationToken))!;
+    }
+
+    /// <inheritdoc />
+    public async Task<NoiseEntrySummary> SummarizeAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await SendAsync(() => _client.GetAsync(NoiseSummaryProtocol.Path, cancellationToken));
+        Ensure(response);
+        return (await response.Content.ReadFromJsonAsync<NoiseEntrySummary>(cancellationToken))!;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<WatchRegistration>> ListWatchesAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await SendAsync(() => _client.GetAsync(WatchRegisteredProtocol.Path, cancellationToken));
+        Ensure(response);
+        return (await response.Content.ReadFromJsonAsync<List<WatchRegistration>>(cancellationToken))!;
     }
 
     /// <summary>

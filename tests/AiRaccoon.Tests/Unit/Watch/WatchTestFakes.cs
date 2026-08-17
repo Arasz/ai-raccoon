@@ -79,7 +79,7 @@ internal sealed class TempDir : IDisposable
 }
 
 /// <summary>In-memory IWatchStore: watches + per-file fingerprints, with call counters.</summary>
-internal sealed class FakeWatchStore : IWatchStore
+internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
 {
     private static readonly WatchKeyComparer KeyComparer = WatchKeyComparer.Instance;
 
