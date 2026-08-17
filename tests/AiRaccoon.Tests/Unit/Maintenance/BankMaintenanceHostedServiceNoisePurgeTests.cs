@@ -4,7 +4,6 @@ using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Observability;
 using AiRaccoon.Tests.Unit.Observability;
-using AiRaccoon.Tests.Unit.Watch;
 using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -37,7 +36,7 @@ public sealed class BankMaintenanceHostedServiceNoisePurgeTests : IDisposable
         _time = new FakeTimeProvider(FixedNow);
         _logger = new FakeLogger<BankMaintenanceHostedService>();
         _noiseEntryStore = new SqliteNoiseEntryStore(_factory);
-        _service = new BankMaintenanceHostedService(_factory, _time, _probe.Telemetry, _logger, new FakeWatchMemoryStore(), _noiseEntryStore,
+        _service = new BankMaintenanceHostedService(_factory, _time, _probe.Telemetry, _logger, _noiseEntryStore,
             new SqlitePromotionQueueStore(_factory, _time), new SqliteSearchQualityService(_factory, Microsoft.Extensions.Logging.Abstractions.NullLogger<SqliteSearchQualityService>.Instance));
     }
 
@@ -86,7 +85,7 @@ public sealed class BankMaintenanceHostedServiceNoisePurgeTests : IDisposable
         var brokenFactory = new SqliteConnectionFactory(brokenOptions, NullKeyProvider.Resolver(brokenOptions));
         var throwingStore = new ThrowingNoiseEntryStore();
         var service = new BankMaintenanceHostedService(_factory, _time, _probe.Telemetry, _logger,
-            new FakeWatchMemoryStore(), throwingStore,
+            throwingStore,
             new SqlitePromotionQueueStore(_factory, _time), new SqliteSearchQualityService(_factory, Microsoft.Extensions.Logging.Abstractions.NullLogger<SqliteSearchQualityService>.Instance));
 
         await Should.NotThrowAsync(() => service.RunOnceAsync(TestContext.Current.CancellationToken));

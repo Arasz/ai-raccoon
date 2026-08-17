@@ -15,7 +15,8 @@ namespace AiRaccoon.Infrastructure.Embedding;
 public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationLease? migrationLease = null,
     TimeProvider? timeProvider = null) : IEntryEmbedder
 {
-    private const int BatchSize = 32;
+    /// <summary>Rows per generator call. Internal so PendingEmbedJob can derive its own per-run bound from it instead of duplicating the number.</summary>
+    internal const int BatchSize = 32;
     private const string BundledModel = "bundled";
 
     // Optional so every existing call site (production DI and every test that builds EntryEmbedder
@@ -244,6 +245,19 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
         }
 
         return processed;
+    }
+
+    /// <summary>
+    ///     Embeds up to <paramref name="limit" /> bank-wide pending rows (not project-scoped, like
+    ///     <see cref="DrainMigrationAsync" />'s own loop) — a single bounded batch rather than a full
+    ///     drain, for <see cref="PendingEmbedJob" />'s on-demand sweep.
+    /// </summary>
+    public async Task<int> EmbedPendingBatchAsync(SqliteConnection connection, int limit,
+        CancellationToken cancellationToken)
+    {
+        var batch = (await connection.QueryAsync<EmbedRow>(Def(MemorySql.SelectAllPendingForEmbed,
+                new { limit }, cancellationToken)).ConfigureAwait(false)).ToList();
+        return await EmbedAsync(connection, batch, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Embeds a query string, or null when the bank has no engine — search degrades rather than failing.</summary>

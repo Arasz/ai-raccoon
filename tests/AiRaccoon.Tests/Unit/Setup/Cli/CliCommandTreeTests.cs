@@ -35,6 +35,23 @@ public class CliCommandTreeTests
         CliCommandTree.BuildFullRootCommand().Children.OfType<Command>().Single(c => c.Name == "settings")
             .Children.OfType<Command>().Single(c => c.Name == name);
 
+    /// <summary>
+    ///     `repair reingest --help` used to say "Embedding is left pending; run memory_embed_pending
+    ///     afterward" — true only when no server is running. PendingEmbedJob (.NET-F1) means a
+    ///     running server now drains it on-demand within ~15s; the help text must say so, and must
+    ///     still name memory_embed_pending as the manual path for the no-server case.
+    /// </summary>
+    [Fact]
+    public void RepairReingestCommand_DescribesHowEmbeddingActuallyDrains()
+    {
+        var reingest = CommandAt("repair").Children.OfType<Command>().Single(c => c.Name == "reingest");
+        var description = reingest.Description.ShouldNotBeNull();
+
+        description.ShouldContain("automatically");
+        description.ShouldContain("memory_embed_pending");
+        description.ShouldNotContain("run memory_embed_pending afterward");
+    }
+
     [Fact]
     public void ServeCommand_ExposesServeOptions()
     {

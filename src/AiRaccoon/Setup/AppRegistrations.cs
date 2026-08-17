@@ -145,8 +145,12 @@ public static partial class AppRegistrations
         {
             services.AddRequiredSingleton<ISweepService, SweepService>();
             services.AddSingleton<MaintenanceJobRunner>();
-            // The list is the schedule (ADR-0070). Order matters only in that a reclaim after the
-            // backfill collects the pages the backfill's deletes freed as well.
+            // The list is the schedule (ADR-0070). Order matters: a reclaim after the backfill
+            // collects the pages the backfill's deletes freed as well, and PendingEmbedJob is LAST
+            // so any job earlier in this list that leaves rows pending — chunk-backfill produced
+            // 13,578 of them on a real bank — is already visible to PendingEmbedJob.HasWorkAsync by
+            // the time MaintenanceJobRunner's single foreach reaches it, embedding them in this same
+            // pass instead of the next one.
             services.AddSingleton<IReadOnlyList<IMaintenanceJob>>(sp =>
             [
                 new ChunkBackfillJob(sp.GetRequiredService<IMarkdownChunker>(), sp.GetRequiredService<TimeProvider>(),
@@ -155,7 +159,9 @@ public static partial class AppRegistrations
                 new VacuumJob(),
                 new MetricsRetentionJob(sp.GetRequiredService<TimeProvider>()),
                 // ADR-0076: on-demand — HasWorkAsync reads the outbox itself, not a cadence.
-                new ModelMigrationJob(sp.GetRequiredService<IEntryEmbedder>())
+                new ModelMigrationJob(sp.GetRequiredService<IEntryEmbedder>()),
+                // .NET-F1: on-demand — HasWorkAsync reads entries.embed_state itself, not a cadence.
+                new PendingEmbedJob(sp.GetRequiredService<IEntryEmbedder>())
             ]);
             services.AddHostedService<BankMaintenanceHostedService>();
         }

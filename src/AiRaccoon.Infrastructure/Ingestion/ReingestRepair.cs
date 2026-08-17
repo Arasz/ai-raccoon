@@ -23,8 +23,13 @@ public sealed record ReingestRepairReport(int FilesToReingest, int RowsAffected,
 ///     <para>
 ///         Discards per-row metadata (rating/access_count/last_accessed_at) for every row it
 ///         replaces — a re-chunk moves boundaries, so hashes change and there is no 1:1 row to carry
-///         them onto. Leaves embedding pending; the caller runs it after committing, the same way
-///         the watch digest does.
+///         them onto. Leaves embedding pending, unlike the watch digest
+///         (<see cref="AiRaccoon.Infrastructure.Watch.WatchDigestExecutor.TryEmbedPendingAsync" />),
+///         which embeds inline after committing — this repair does not. A running server drains it
+///         on-demand within its next ~15s poll
+///         (<see cref="AiRaccoon.Infrastructure.Maintenance.PendingEmbedJob" />); with no server
+///         running, nothing drains it, since the CLI process builds its own container with no
+///         hosted services.
 ///     </para>
 ///     <para>
 ///         Explicitly invoked only (`ai-raccoon repair reingest`) — never registered as an

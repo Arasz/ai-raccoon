@@ -63,6 +63,24 @@ public sealed class ReingestRepairCommandsTests : IDisposable
         stdout.ShouldContain("discarded");
     }
 
+    /// <summary>
+    ///     ReingestRepair.RunAsync never embeds; RunAsync used to claim otherwise ("the caller runs
+    ///     it after committing, the same way the watch digest does" — untrue, the watch digest
+    ///     embeds inline, this command never has). The CLI output must state what actually happens
+    ///     now: a running server drains it on-demand (PendingEmbedJob, ~15s poll); with no server,
+    ///     nothing drains it and memory_embed_pending is the manual path.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_Apply_StatesHowEmbeddingActuallyDrains()
+    {
+        await SeedStaleFileAsync();
+
+        var stdout = await RunAsync(apply: true);
+
+        stdout.ShouldContain("memory_embed_pending");
+        stdout.ShouldContain("no server running", Case.Insensitive);
+    }
+
     private async Task SeedStaleFileAsync()
     {
         var file = Path.Combine(_dataRoot, "stale.md");

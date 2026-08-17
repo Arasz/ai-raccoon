@@ -39,6 +39,14 @@ public sealed class ReingestRepairCommands(
                 "and there is no 1:1 row to carry it onto.");
         }
 
+        if (apply && report.ChunksToEmbed > 0)
+        {
+            await streams.WriteOutputLineAsync(
+                "reingest repair: embedding is deferred — a running server drains it automatically within " +
+                "~15s of its next maintenance poll; with no server running, nothing drains it (the CLI process " +
+                "has no hosted services of its own), so run memory_embed_pending by hand.");
+        }
+
         return 0;
     }
 }

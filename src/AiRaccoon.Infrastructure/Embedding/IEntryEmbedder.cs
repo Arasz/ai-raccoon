@@ -35,6 +35,9 @@ public interface IEntryEmbedder
     Task<int> EmbedPendingAsync(SqliteConnection connection, string projectId, int? limit,
         CancellationToken cancellationToken);
 
+    /// <summary>Embeds up to <paramref name="limit" /> bank-wide pending rows (not project-scoped) — a single bounded batch for PendingEmbedJob's on-demand sweep.</summary>
+    Task<int> EmbedPendingBatchAsync(SqliteConnection connection, int limit, CancellationToken cancellationToken);
+
     /// <summary>Embeds a query string, or null when the bank has no engine — search degrades rather than failing.</summary>
     Task<byte[]?> EmbedQueryAsync(SqliteConnection connection, string query,
         CancellationToken cancellationToken);

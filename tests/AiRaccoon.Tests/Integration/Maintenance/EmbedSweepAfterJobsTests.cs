@@ -1,9 +1,11 @@
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Observability;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.Unit.Observability;
-using AiRaccoon.Tests.Unit.Watch;
+using AiRaccoon.Tests.TestHelpers;
+using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging.Testing;
@@ -14,14 +16,18 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration.Maintenance;
 
 /// <summary>
-///     `chunk-backfill` writes its pieces unembedded, and the pass's embed sweep runs BEFORE the
-///     jobs — so on a real bank the backfill's 13,578 new rows sat pending, waiting for the next
-///     pass up to a checkpoint interval (default 60 minutes) away. Measured on the live bank: the
-///     jobs finished at 20:14 and the backlog had not moved by 20:39.
+///     `chunk-backfill` writes its pieces unembedded, and (before PendingEmbedJob existed) the
+///     pass's one pending-embed sweep ran BEFORE the job list — so on a real bank the backfill's
+///     13,578 new rows sat pending, waiting for the next pass up to a checkpoint interval (default
+///     60 minutes) away. Measured on the live bank: the jobs finished at 20:14 and the backlog had
+///     not moved by 20:39.
 ///     <para>
-///         Nothing was broken; the rows drain eventually. But every user installing this version
-///         pays that window, during which the rows are absent from vector search. A job that creates
-///         work should have that work swept in the same pass that created it.
+///         PendingEmbedJob (.NET-F1) fixed this by replacing the bespoke pre/post-job sweep with
+///         plain job-list ordering: registered LAST (AppRegistrations), its HasWorkAsync sees
+///         whatever an earlier job in the same MaintenanceJobRunner.RunDueAsync pass just committed,
+///         on the same connection — no CreatedWork flag or second sweep required. This test proves
+///         that property survives: a fake earlier job creates a real pending row, and PendingEmbedJob
+///         embeds it before RunOnceAsync returns.
 ///     </para>
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
@@ -32,7 +38,6 @@ public sealed class EmbedSweepAfterJobsTests : IDisposable
 
     private readonly string _dataRoot = TestData.CreateTempRoot("embed-after-jobs");
     private readonly SqliteConnectionFactory _factory;
-    private readonly FakeWatchMemoryStore _memory = new();
     private readonly BackgroundTelemetryProbe _probe = new(BankMaintenanceHostedService.OperationName);
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 8, 15, 12, 0, 0, TimeSpan.Zero));
 
@@ -40,7 +45,6 @@ public sealed class EmbedSweepAfterJobsTests : IDisposable
     {
         var options = TestData.CreateInfrastructureOptions(_dataRoot);
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
-        _memory.ProjectIds.Add(ProjectId);
     }
 
     public void Dispose()
@@ -50,69 +54,48 @@ public sealed class EmbedSweepAfterJobsTests : IDisposable
     }
 
     /// <summary>
-    ///     The pass must sweep again after a job runs. Asserted by a job that only then makes rows
-    ///     pending — so a sweep that happens only before the jobs sees nothing and never embeds.
+    ///     The pass must embed a row a job creates, in the SAME pass — asserted by a fake job that
+    ///     only then inserts a real pending row, ordered before PendingEmbedJob in the list.
     /// </summary>
     [Fact]
     public async Task APassWhoseJobCreatesPendingRows_EmbedsThemInTheSamePass()
     {
-        var job = new PendingCreatingJob(_memory, ProjectId);
+        await ConfigureProviderAsync();
+        var pendingCreatingJob = new PendingCreatingJob(ProjectId);
+        var pendingEmbedJob = new PendingEmbedJob(new EntryEmbedder(new CountingEmbeddingService()));
 
-        await ServiceWith(job).RunOnceAsync(TestContext.Current.CancellationToken);
+        await ServiceWith(pendingCreatingJob, pendingEmbedJob).RunOnceAsync(TestContext.Current.CancellationToken);
 
-        _memory.EmbedCalls.ShouldContain(ProjectId,
-            "the backfill's own output must be swept in the pass that created it, not the next one");
+        (await ReadEmbedStatesAsync()).ShouldAllBe(state => state == "embedded",
+            "the pending-creating job's own output must be embedded in the pass that created it, not the next one");
     }
 
-    /// <summary>A pass where no job ran must not pay for a second sweep it has no reason to make.</summary>
-    [Fact]
-    public async Task APassWhereNoJobRan_SweepsOnce()
+    private async Task ConfigureProviderAsync()
     {
-        _memory.PendingCounts[ProjectId] = 3;
-
-        await ServiceWith().RunOnceAsync(TestContext.Current.CancellationToken);
-
-        _memory.EmbedCalls.Count(id => id == ProjectId).ShouldBe(1);
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES (@key, @value)",
+            new { key = EmbeddingSettingsKeys.Provider, value = "local" },
+            cancellationToken: TestContext.Current.CancellationToken));
     }
 
-    /// <summary>
-    ///     The gate. A job that ran but created nothing — vacuum, reclaim — must not earn a second
-    ///     sweep: it doubles the window in which a background embed races an in-flight write, which
-    ///     is what turned `Embeddings_ConfigureOpenAi_RoutesThroughTheConfiguredEndpoint` red on CI
-    ///     while passing locally.
-    /// </summary>
-    [Fact]
-    public async Task APassWhoseJobCreatedNothing_DoesNotSweepTwice()
+    private async Task<IReadOnlyList<string>> ReadEmbedStatesAsync()
     {
-        _memory.PendingCounts[ProjectId] = 3;
-
-        await ServiceWith(new NoWorkJob()).RunOnceAsync(TestContext.Current.CancellationToken);
-
-        _memory.EmbedCalls.Count(id => id == ProjectId).ShouldBe(1,
-            "a job that made no work must not trigger a second sweep");
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var states = await connection.QueryAsync<string>(new CommandDefinition(
+            "SELECT embed_state FROM entries WHERE project_id = @projectId", new { projectId = ProjectId },
+            cancellationToken: TestContext.Current.CancellationToken));
+        return states.ToList();
     }
 
     private BankMaintenanceHostedService ServiceWith(params IMaintenanceJob[] jobs) =>
-        new(_factory, _time, _probe.Telemetry, new FakeLogger<BankMaintenanceHostedService>(), _memory,
+        new(_factory, _time, _probe.Telemetry, new FakeLogger<BankMaintenanceHostedService>(),
             NoOpNoiseEntryStore.Instance, new SqlitePromotionQueueStore(_factory, _time),
-            new SqliteSearchQualityService(_factory, Microsoft.Extensions.Logging.Abstractions.NullLogger<SqliteSearchQualityService>.Instance),
+            new SqliteSearchQualityService(_factory, NullLogger<SqliteSearchQualityService>.Instance),
             new MaintenanceJobRunner(_time, NullLogger<MaintenanceJobRunner>.Instance), jobs);
 
-    /// <summary>Stands in for vacuum and reclaim: runs, changes nothing that needs embedding.</summary>
-    private sealed class NoWorkJob : IMaintenanceJob
-    {
-        public string Name => "no-work";
-
-        public string DisplayName => "do nothing that needs embedding";
-
-        public TimeSpan? Interval => null;
-
-        public Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
-            Task.FromResult(false);
-    }
-
-    /// <summary>Stands in for chunk-backfill: makes rows pending only when it runs.</summary>
-    private sealed class PendingCreatingJob(FakeWatchMemoryStore memory, string projectId) : IMaintenanceJob
+    /// <summary>Stands in for chunk-backfill: writes a real pending row directly, the same shape a chunker's INSERT leaves.</summary>
+    private sealed class PendingCreatingJob(string projectId) : IMaintenanceJob
     {
         public string Name => "pending-creating";
 
@@ -120,10 +103,16 @@ public sealed class EmbedSweepAfterJobsTests : IDisposable
 
         public TimeSpan? Interval => null;
 
-        public Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
+        public async Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
         {
-            memory.PendingCounts[projectId] = 42;
-            return Task.FromResult(true);
+            await connection.ExecuteAsync(new CommandDefinition(
+                """
+                INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
+                VALUES (@hash, @path, @value, 'project', @projectId, 0, 0)
+                """,
+                new { hash = Guid.NewGuid().ToString("N"), path = "backfilled.md", value = "backfilled content", projectId },
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+            return true;
         }
     }
 }

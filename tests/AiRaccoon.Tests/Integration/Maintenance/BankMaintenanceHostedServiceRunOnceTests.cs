@@ -4,7 +4,6 @@ using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Observability;
 using AiRaccoon.Tests.Unit.Observability;
-using AiRaccoon.Tests.Unit.Watch;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
@@ -30,7 +29,6 @@ public sealed class BankMaintenanceHostedServiceRunOnceTests : IDisposable
     private readonly FakeTimeProvider _time;
     private readonly FakeLogger<BankMaintenanceHostedService> _logger;
     private readonly BackgroundTelemetryProbe _probe = new(BankMaintenanceHostedService.OperationName);
-    private readonly FakeWatchMemoryStore _memory = new();
     private readonly BankMaintenanceHostedService _service;
 
     public BankMaintenanceHostedServiceRunOnceTests()
@@ -39,7 +37,7 @@ public sealed class BankMaintenanceHostedServiceRunOnceTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _time = new FakeTimeProvider(FixedNow);
         _logger = new FakeLogger<BankMaintenanceHostedService>();
-        _service = new BankMaintenanceHostedService(_factory, _time, _probe.Telemetry, _logger, _memory, NoOpNoiseEntryStore.Instance,
+        _service = new BankMaintenanceHostedService(_factory, _time, _probe.Telemetry, _logger, NoOpNoiseEntryStore.Instance,
             new SqlitePromotionQueueStore(_factory, _time), new SqliteSearchQualityService(_factory, Microsoft.Extensions.Logging.Abstractions.NullLogger<SqliteSearchQualityService>.Instance));
     }
 
@@ -163,61 +161,6 @@ public sealed class BankMaintenanceHostedServiceRunOnceTests : IDisposable
         _probe.Durations.ShouldHaveSingleItem().Tags["result"].ShouldBe("success");
     }
 
-    /// <summary>
-    ///     A watch-triggered embed failure leaves a row `embed_state='pending'` with nothing else
-    ///     retrying it (.NET-F1) — the maintenance pass is the only sweep, so it must pick up any
-    ///     project reporting a nonzero PendingCount and retry EmbedPendingAsync for it.
-    /// </summary>
-    [Fact]
-    public async Task RunOnce_ProjectHasPendingRows_RetriesEmbedForThatProject()
-    {
-        _memory.ProjectIds.Add("acme");
-        _memory.PendingCounts["acme"] = 2;
-
-        await _service.RunOnceAsync(TestContext.Current.CancellationToken);
-
-        _memory.EmbedCalls.ShouldContain("acme");
-    }
-
-    [Fact]
-    public async Task RunOnce_ProjectHasNoPendingRows_NeverCallsEmbedPending()
-    {
-        _memory.ProjectIds.Add("acme");
-        _memory.PendingCounts["acme"] = 0;
-
-        await _service.RunOnceAsync(TestContext.Current.CancellationToken);
-
-        _memory.EmbedCalls.ShouldBeEmpty();
-    }
-
-    [Fact]
-    public async Task RunOnce_MultipleProjectsPending_RetriesEachOne()
-    {
-        _memory.ProjectIds.Add("acme");
-        _memory.ProjectIds.Add("beta");
-        _memory.PendingCounts["acme"] = 1;
-        _memory.PendingCounts["beta"] = 3;
-
-        await _service.RunOnceAsync(TestContext.Current.CancellationToken);
-
-        _memory.EmbedCalls.ShouldContain("acme");
-        _memory.EmbedCalls.ShouldContain("beta");
-    }
-
-    /// <summary>A retry failure for one project must not abort the checkpoint/vacuum pass — same silent-failure discipline as the watch digest's own best-effort embed.</summary>
-    [Fact]
-    public async Task RunOnce_EmbedRetryThrows_PassStillSucceeds()
-    {
-        _memory.ProjectIds.Add("acme");
-        _memory.PendingCounts["acme"] = 1;
-        _memory.EmbedError = new InvalidOperationException("embed boom");
-
-        await Should.NotThrowAsync(() => _service.RunOnceAsync(TestContext.Current.CancellationToken));
-
-        _memory.EmbedCalls.ShouldContain("acme");
-        _logger.Collector.GetSnapshot().ShouldContain(r => r.Id.Id == 510); // checkpoint still ran
-    }
-
     [Fact]
     public async Task RunOnce_WhenThePassThrows_RecordsTheFailure()
     {
@@ -228,7 +171,7 @@ public sealed class BankMaintenanceHostedServiceRunOnceTests : IDisposable
         using var probe = new BackgroundTelemetryProbe(BankMaintenanceHostedService.OperationName);
         var service = new BankMaintenanceHostedService(
             new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options)), _time, probe.Telemetry,
-            _logger, _memory, NoOpNoiseEntryStore.Instance,
+            _logger, NoOpNoiseEntryStore.Instance,
             new SqlitePromotionQueueStore(_factory, _time), new SqliteSearchQualityService(_factory, Microsoft.Extensions.Logging.Abstractions.NullLogger<SqliteSearchQualityService>.Instance));
 
         var thrown = await Should.ThrowAsync<Exception>(

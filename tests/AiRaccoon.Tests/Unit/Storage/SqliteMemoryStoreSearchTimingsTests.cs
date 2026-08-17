@@ -169,6 +169,10 @@ public sealed class SqliteMemoryStoreSearchTimingsTests : IDisposable
             CancellationToken cancellationToken) =>
             throw new NotSupportedException("Not exercised by SearchAsync.");
 
+        public Task<int> EmbedPendingBatchAsync(SqliteConnection connection, int limit,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException("Not exercised by SearchAsync.");
+
         public Task<byte[]?> EmbedQueryAsync(SqliteConnection connection, string query,
             CancellationToken cancellationToken) => Task.FromResult<byte[]?>(EmbeddingBlob.ToBytes(new float[384]));
 

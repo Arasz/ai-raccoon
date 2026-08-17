@@ -342,7 +342,8 @@ internal static class CliCommandTree
                 "Re-ingests source files chunk-index repair could only mark chunk_index = -1 for — a chunker change made their stored rows unreproducible by hash. " +
                 "Deletes and re-inserts each file's chunks (never a memory_write row that merely cites the path, never a file that no longer exists) and discards their per-row " +
                 "metadata (rating, access_count, last_accessed_at) in the process — a re-chunk moves boundaries, so there is no 1:1 row to carry it onto. Embedding is left pending; " +
-                "run memory_embed_pending afterward. Reports by default; --apply writes.")
+                "a running server drains it automatically within ~15s of its next maintenance poll. With no server running, nothing drains it — run memory_embed_pending by hand. " +
+                "Reports by default; --apply writes.")
             {
                 new Option<bool>("--apply") { Description = "Performs the reingest instead of only reporting what it would do" }
             }
