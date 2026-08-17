@@ -1,8 +1,15 @@
 {
-  "lastUpdated": "2026-08-17",
+  "lastUpdated": "2026-08-17T16:50:00.000000+00:00",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "table-chunk-correctness-and-heading-arm",
+      "title": "Table chunking: build the correctness properties, widen the graded set, score the section-heading arm",
+      "pr": 384,
+      "merged": "2026-08-17",
+      "outcome": "Measurement only; MarkdownChunker unchanged on main. Built ADR-0077's two correctness properties (prose and tables never share a chunk; no header-orphaned body row), measured them, and REVERTED them -- they take the answer-bearing chunk from 49% to 100% table content and cost retrieval (0.146341 nDCG@5 against a 0.227007 baseline). Implementation survives at commit 813e8345. Widened the graded set 16 queries/13 docs -> 40/22, which REVERSED the accepted conclusion of the first record: at 16 queries every arm lost and the two leaders tied to six decimals; at 40, per-row + section heading returns 0.292417/0.275129 and linearised + section heading 0.294594/0.273601 against the 0.227007/0.237599 baseline. The section heading is the cheapest win found, +0.031 to +0.051 nDCG@5 on every shape -- FileIngestor.HeadingSection parses section/heading_path out of the chunk's OWN text, so a table with no '#' line gets section = null and forfeits the 4x bm25 section weight. Also learned: reversal is only a valid perturbation at sufficient width (at 16 queries a reversed top-10 OUTSCORED the real order; at 40 it degrades). Gate floors re-pinned 0.050/0.070 -> 0.160/0.170 because the old pair was derived on a different query set, not to admit anything. ADR-0081 and ADR-0082 (renumbered around main's 0080 on integration); findings and proposals in issue #385. Merged locally as 2b989058 during a global GitHub Actions outage; verified Speed=Fast 2587 passed / 0 failed."
+    },
     {
       "id": "add-missing-metrics",
       "title": "Close the books on SearchAsync's phase attribution; make VERSION the only version marker",
@@ -164,7 +171,7 @@
       "summary": "Live test of the 7721 serve + hermes bridge against the real bank. 23/23 tools exercised on an isolated test project with zero residue verified; watch cycle proven end-to-end; metrics = memory_stats + queue meta + maintenance-stats (OTLP export off, /metrics 404). DB: 13,523 entries all embedded, 0 TTLs, 8 stale Active workspaces. Promotion queue: 998 bank-wide vs reserved ~200, borrowing, shared tier = 1 row, extraction propose-only. BUG (code+experiment): DeleteBySourcePath matches source_file not path, so the watch digest deletes manual memory_write rows citing a watched file (2/2 collateral victims in the test). Full report: docs/work/2026-08-09-ai-raccoon-mem-test.md."
     }
   ],
-  "next": "Region B is now measurable but unmeasured: search.total closes SearchAsync's own books, and the gap between it and the memory_search tool total (access gate, query guard, the post-return quality write, SDK serialization) has no series at all. Recording a search.total series makes that subtraction possible for the first time -- do it on real traffic before sizing or optimising anything there, and do not carry over ADR-0075's trace numbers, which predate the digest gate and the prefix-read change. Also open: the closure gate only catches an untimed step larger than the 28 ms budget, which is stated in the test rather than left implied.",
+  "next": "Decide the table-chunking question from issue #385, whose suggested order is D -> A -> C -> B. D: settle the reingest question on the real bank (910 files, 15,099 chunks) -- any chunking change rewrites every ContentHash, so this gates everything else. A: ship the section heading independently of the table shape; it helps every shape measured including today's, and is one lever with one number behind it. C: measure the prose side and bank cost before treating +29% as free -- per-row nearly doubles chunk count (631 -> ~1310). B: hold out a real split before choosing per-row vs linearised; the 40 queries are a tuning set (ADR-0056) and the two arms differ by 0.002 while swapping order between metrics. Do NOT merge the correctness properties alone (commit 813e8345) -- only in combination with the heading. Separately: nothing on main since 1.24.0 has CI behind it (global Actions outage) -- re-run when it recovers. CliBankWriteTests.ReadCommand_CommitsNothingToTheBank remains load-sensitive and flaked again under concurrent local runs; worth filing.",
   "filedNotStarted": [],
   "research": [],
   "stillTrue": [
