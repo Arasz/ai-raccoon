@@ -302,9 +302,9 @@ public class MemoryToolsTests
         _store.LastQuery.ProjectId.ShouldBe("acme");
     }
 
-    /// <summary>WP10: the six SearchTimings phases reach the recorder, each tagged with the query hash and this call's own correlation id — never the query text.</summary>
+    /// <summary>WP10/S1: the eight SearchTimings phases plus the measured total reach the recorder, each tagged with the query hash and this call's own correlation id — never the query text.</summary>
     [Fact]
-    public async Task Search_RecordsSixPhaseMeasurements_TaggedWithHashAndCorrelationId_NeverQueryText()
+    public async Task Search_RecordsNineSeriesMeasurements_TaggedWithHashAndCorrelationId_NeverQueryText()
     {
         var recorder = new RecordingMeasurementRecorder();
         var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
@@ -314,7 +314,7 @@ public class MemoryToolsTests
         var envelope = await tools.Search("acme", "widgets", cancellationToken: TestContext.Current.CancellationToken);
         var correlationId = envelope.Meta.CorrelationId.ShouldNotBeNull();
 
-        recorder.Recorded.Select(m => m.Name).ShouldBe(SearchTimings.PhaseNames, ignoreOrder: true);
+        recorder.Recorded.Select(m => m.Name).ShouldBe(SearchTimings.SeriesNames, ignoreOrder: true);
         recorder.Recorded.ShouldAllBe(m => m.QueryHash == ContentHash.OfValue("widgets"));
         recorder.Recorded.ShouldAllBe(m => m.CorrelationId == correlationId);
         recorder.Recorded.ShouldAllBe(m => m.Tags == null);
@@ -345,7 +345,7 @@ public class MemoryToolsTests
         fusion.ShouldAllBe(m => m.Tags == null);
     }
 
-    /// <summary>The default path records the six phases and nothing else — the flag must not leak into it.</summary>
+    /// <summary>The default path records the eight phases and the total, and nothing else — the flag must not leak into it.</summary>
     [Fact]
     public async Task Search_StoreReportsNoFusionDiff_RecordsNoFusionMeasurement()
     {
@@ -366,7 +366,7 @@ public class MemoryToolsTests
     ///     built on a fake clock. RecordedAt must come from the same injected clock the report uses.
     /// </summary>
     [Fact]
-    public async Task Search_RecordsSixPhaseMeasurements_RecordedAt_FromTheInjectedTimeProvider()
+    public async Task Search_RecordsNineSeriesMeasurements_RecordedAt_FromTheInjectedTimeProvider()
     {
         var recorder = new RecordingMeasurementRecorder();
         var time = new FakeTimeProvider(FixedNow);

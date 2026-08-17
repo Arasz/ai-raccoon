@@ -52,9 +52,9 @@ public sealed class MetricsReportServiceTests : IDisposable
     }
 
     /// <summary>
-    ///     WP10 restates this: the report now always carries the six search-phase series alongside
-    ///     whatever tools are asked for, so a quiet bank's series count is toolNames.Count plus the
-    ///     six phases — every one of them still at count zero.
+    ///     WP10/S1 restates this: the report now always carries the eight search-phase series plus
+    ///     the measured total alongside whatever tools are asked for, so a quiet bank's series count
+    ///     is toolNames.Count plus SeriesNames.Count — every one of them still at count zero.
     /// </summary>
     [Fact]
     public async Task GetReportAsync_QuietBank_ReturnsEmptySeriesWithoutError()
@@ -62,7 +62,7 @@ public sealed class MetricsReportServiceTests : IDisposable
         var report = await _service.GetReportAsync("acme", ["memory_search", "memory_write"],
             TimeSpan.FromHours(1), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
 
-        report.Series.Count.ShouldBe(2 + SearchTimings.PhaseNames.Count);
+        report.Series.Count.ShouldBe(2 + SearchTimings.SeriesNames.Count);
         report.Series.ShouldAllBe(s => s.Count == 0);
     }
 
@@ -83,9 +83,10 @@ public sealed class MetricsReportServiceTests : IDisposable
     }
 
     /// <summary>
-    ///     Finding 9: seriesNames is toolNames + the six phase names, and PhaseNames is never empty,
-    ///     so seriesNames can never be empty either — an empty toolNames list still goes through the
-    ///     normal query path and still returns the six phase series, at count 0 on a quiet bank.
+    ///     Finding 9: seriesNames is toolNames + SearchTimings.SeriesNames, and SeriesNames is never
+    ///     empty, so seriesNames can never be empty either — an empty toolNames list still goes
+    ///     through the normal query path and still returns the phase-plus-total series, at count 0
+    ///     on a quiet bank.
     /// </summary>
     [Fact]
     public async Task GetReportAsync_NoToolNamesGiven_StillReturnsThePhaseSeries()
@@ -93,7 +94,7 @@ public sealed class MetricsReportServiceTests : IDisposable
         var report = await _service.GetReportAsync("acme", [], TimeSpan.FromHours(1), TimeSpan.FromMinutes(1),
             TestContext.Current.CancellationToken);
 
-        report.Series.Select(s => s.Tool).ShouldBe(SearchTimings.PhaseNames, ignoreOrder: true);
+        report.Series.Select(s => s.Tool).ShouldBe(SearchTimings.SeriesNames, ignoreOrder: true);
         report.Series.ShouldAllBe(s => s.Count == 0);
     }
 
