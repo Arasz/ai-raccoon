@@ -19,7 +19,8 @@ internal sealed class ConfigCommands(
     MaintenanceCommands maintenance,
     PerformanceCommands performance,
     ServeCommands serve,
-    NoiseEntriesCommands noiseEntries)
+    NoiseEntriesCommands noiseEntries,
+    DoctorCommands doctor)
 {
     public async Task<int> RunAsync(CliInput cliInput,
         StandardStreams streams,
@@ -103,6 +104,7 @@ internal sealed class ConfigCommands(
                 ["settings", "performance", "list"] => await performance.ListAsync(store, streams, ctx),
                 ["serve", "observability"] => await serve.Observability(cliInput, streams, ctx),
                 ["serve"] => await serve.StartNode(cliInput, streams, ctx),
+                ["doctor"] => await doctor.RunAsync(streams, ctx),
                 _ => throw new InvalidOperationException($"unhandled command: {string.Join(' ', commandPath)}")
             };
         }
