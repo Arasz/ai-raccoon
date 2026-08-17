@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Settings;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
@@ -129,6 +130,57 @@ public sealed class LazyServerSettingsStoreTests
         });
 
         await store.StartModelMigrationAsync("local", null, null, TestContext.Current.CancellationToken);
+        await store.GetSettingAsync("a", TestContext.Current.CancellationToken);
+
+        acquireCalls.ShouldBe(1);
+    }
+
+    /// <summary>ADR-0075 amendment: repair reaches the same acquired store as every other control-plane call.</summary>
+    [Fact]
+    public async Task RequestRepairAsync_DelegatesToTheAcquiredStore()
+    {
+        var inner = new InMemorySettings();
+        var store = new LazyServerSettingsStore(_ => Task.FromResult<ISettingsStore>(inner));
+
+        await store.RequestRepairAsync(RepairKind.Reingest, TestContext.Current.CancellationToken);
+
+        inner.LastRepairRequest.ShouldBe(RepairKind.Reingest);
+    }
+
+    [Fact]
+    public async Task ReportReingestAsync_DelegatesToTheAcquiredStore()
+    {
+        var inner = new InMemorySettings { ReingestReport = new ReingestRepairReport(3, 5, 7) };
+        var store = new LazyServerSettingsStore(_ => Task.FromResult<ISettingsStore>(inner));
+
+        var report = await store.ReportReingestAsync(TestContext.Current.CancellationToken);
+
+        report.ShouldBe(new ReingestRepairReport(3, 5, 7));
+    }
+
+    [Fact]
+    public async Task ReportChunkIndexAsync_DelegatesToTheAcquiredStore()
+    {
+        var inner = new InMemorySettings { ChunkIndexReport = new ChunkIndexRepairReport(2, 4, 6) };
+        var store = new LazyServerSettingsStore(_ => Task.FromResult<ISettingsStore>(inner));
+
+        var report = await store.ReportChunkIndexAsync(TestContext.Current.CancellationToken);
+
+        report.ShouldBe(new ChunkIndexRepairReport(2, 4, 6));
+    }
+
+    [Fact]
+    public async Task RequestRepairAsync_TriggersTheSameAcquireAsASettingsCall()
+    {
+        var acquireCalls = 0;
+        var inner = new InMemorySettings();
+        var store = new LazyServerSettingsStore(_ =>
+        {
+            acquireCalls++;
+            return Task.FromResult<ISettingsStore>(inner);
+        });
+
+        await store.RequestRepairAsync(RepairKind.ChunkIndex, TestContext.Current.CancellationToken);
         await store.GetSettingAsync("a", TestContext.Current.CancellationToken);
 
         acquireCalls.ShouldBe(1);

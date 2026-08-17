@@ -5,6 +5,7 @@ using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Core.Watch;
+using AiRaccoon.Infrastructure.Embedding;
 using FluentValidation;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
@@ -37,6 +38,10 @@ internal static partial class ToolRefusals
         // ADR-0076: refuses every bank operation for the duration of a model migration.
         [typeof(ModelMigrationInProgressException)] = "model-migration-in-progress",
         [typeof(ContextOutsideProjectException)] = "context-outside-project",
+        // The install this process started from was replaced/removed under it (e.g. 'dotnet tool
+        // update'); a plain InvalidOperationException still means the asset is genuinely missing
+        // and stays unmapped (docs/reference/agent-memory-server.md Error shapes).
+        [typeof(BundledModelInstallReplacedException)] = "embedding-install-replaced",
         // Moved out of DirectThrowPrefixes by docs/adr/0065: the consent gate now lives in
         // ShareExtractService, so it raises a domain exception instead of a bare McpException.
         [typeof(ConfirmationRequiredException)] = "confirm-required",
@@ -60,7 +65,7 @@ internal static partial class ToolRefusals
 
     /// <summary>Expected refusals remain visible at Warning without being logged as errors.</summary>
     private static readonly HashSet<string> WarningPrefixes =
-        ["sync-network", "sync-corrupt-file", "unknown-hash"];
+        ["sync-network", "sync-corrupt-file", "unknown-hash", "embedding-install-replaced"];
 
     /// <summary>
     ///     The wire prefix for a known refusal, or null when the exception is a genuine failure.

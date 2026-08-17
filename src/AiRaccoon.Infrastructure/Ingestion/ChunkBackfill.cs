@@ -19,7 +19,7 @@ public sealed record ChunkBackfillReport(
 ///     WP3 step 4: splits rows holding more text than the embedding window into in-budget pieces.
 ///     Operates on each row's own stored value — it never reads the source file (docs/adr/0069).
 /// </summary>
-public sealed class ChunkBackfill(IMarkdownChunker chunker, TimeProvider timeProvider)
+public sealed class ChunkBackfill(IMarkdownChunker chunker, TimeProvider timeProvider, ILocalTokenizer localTokenizer)
 {
     public async Task<ChunkBackfillReport> RunAsync(SqliteConnection connection, bool dryRun,
         CancellationToken cancellationToken = default)
@@ -107,8 +107,7 @@ public sealed class ChunkBackfill(IMarkdownChunker chunker, TimeProvider timePro
     }
 
     /// <summary>The same resolution the ingest path uses, read from the same settings.</summary>
-    private static async Task<(int Budget, int Overlay, TokenCount CountTokens)> BudgetAsync(
-        SqliteConnection connection, CancellationToken cancellationToken)
+    private async Task<ChunkBudget> BudgetAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var provider = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
             "SELECT value FROM settings WHERE key = 'embedding.provider'", cancellationToken: cancellationToken))
@@ -120,8 +119,7 @@ public sealed class ChunkBackfill(IMarkdownChunker chunker, TimeProvider timePro
 
         var budget = Math.Min(256, EmbeddingService.SafeChunkBudgetFor(provider, model));
         var overlay = Math.Min(ChunkingDefaults.OverlayTokens, Math.Max(0, budget - 1));
-        var tokenizer = OnnxEmbeddingGenerator.CreateTokenizer(BundledModel.ResolveVocabPath());
-        return (budget, overlay, text => tokenizer.CountTokens(text));
+        return new ChunkBudget(budget, overlay, localTokenizer.CountTokens);
     }
 
     private sealed record Row(

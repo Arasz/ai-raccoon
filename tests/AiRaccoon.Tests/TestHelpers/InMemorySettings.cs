@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Tests.TestHelpers;
@@ -8,12 +9,31 @@ namespace AiRaccoon.Tests.TestHelpers;
 ///     above all. Unset keys return null, which is what an unconfigured bank returns, so every
 ///     `Parse*` helper falls to its documented default.
 /// </summary>
-public sealed class InMemorySettings : ISettingsStore, IModelMigrationStore
+public sealed class InMemorySettings : ISettingsStore, IModelMigrationStore, IRepairStore
 {
     public Dictionary<string, string> Values { get; } = new(StringComparer.Ordinal);
 
     /// <summary>Every argument this was last called with, for a test to assert routing without a real bank (ADR-0076).</summary>
     public (string Provider, string? Model, string? BaseUrl)? LastModelMigrationRequest { get; private set; }
+
+    /// <summary>Every kind this was last asked to request, for a test to assert routing without a real bank (ADR-0075 amendment).</summary>
+    public RepairKind? LastRepairRequest { get; private set; }
+
+    public ReingestRepairReport ReingestReport { get; set; } = new(0, 0, 0);
+
+    public ChunkIndexRepairReport ChunkIndexReport { get; set; } = new(0, 0, 0);
+
+    public Task<ReingestRepairReport> ReportReingestAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(ReingestReport);
+
+    public Task<ChunkIndexRepairReport> ReportChunkIndexAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(ChunkIndexReport);
+
+    public Task RequestRepairAsync(RepairKind kind, CancellationToken cancellationToken = default)
+    {
+        LastRepairRequest = kind;
+        return Task.CompletedTask;
+    }
 
     public Task<EmbeddingConfig> StartModelMigrationAsync(string provider, string? model, string? baseUrl,
         CancellationToken cancellationToken = default)

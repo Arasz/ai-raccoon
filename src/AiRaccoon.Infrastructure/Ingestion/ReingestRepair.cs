@@ -1,12 +1,10 @@
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Watch;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Ingestion;
-
-/// <summary>What a repair pass found and did. A dry run (apply: false) fills it in without writing.</summary>
-public sealed record ReingestRepairReport(int FilesToReingest, int RowsAffected, int ChunksToEmbed);
 
 /// <summary>
 ///     GH #371 follow-up: fixes what <see cref="ChunkIndexRepair" /> can only mark chunk_index = -1
@@ -23,13 +21,23 @@ public sealed record ReingestRepairReport(int FilesToReingest, int RowsAffected,
 ///     <para>
 ///         Discards per-row metadata (rating/access_count/last_accessed_at) for every row it
 ///         replaces — a re-chunk moves boundaries, so hashes change and there is no 1:1 row to carry
-///         them onto. Leaves embedding pending; the caller runs it after committing, the same way
-///         the watch digest does.
+///         them onto. Leaves embedding pending, unlike the watch digest
+///         (<see cref="AiRaccoon.Infrastructure.Watch.WatchDigestExecutor.TryEmbedPendingAsync" />),
+///         which embeds inline after committing — this repair does not. A running server drains it
+///         on-demand within its next ~15s poll
+///         (<see cref="AiRaccoon.Infrastructure.Maintenance.PendingEmbedJob" />). ADR-0075's amendment
+///         means <c>apply: true</c> is now only ever reached inside the server process
+///         (<see cref="AiRaccoon.Infrastructure.Maintenance.ReingestRepairJob" />, itself gated on a
+///         repair_requests row `ai-raccoon repair reingest --apply` commits through the server) — so
+///         there is no longer a "no server running" path for this repair to leave undrained.
 ///     </para>
 ///     <para>
-///         Explicitly invoked only (`ai-raccoon repair reingest`) — never registered as an
-///         <see cref="AiRaccoon.Infrastructure.Maintenance.IMaintenanceJob" />, so it cannot run
-///         unattended against a live bank on open.
+///         This class itself never implements <see cref="AiRaccoon.Infrastructure.Maintenance.IMaintenanceJob" />
+///         — <see cref="AiRaccoon.Infrastructure.Maintenance.ReingestRepairJob" /> wraps it instead,
+///         registered on the maintenance list but on-demand only (<c>Interval</c> is null): it only
+///         ever runs because a human explicitly requested it via <c>--apply</c>, never on a clock, so
+///         it still cannot run unattended against a live bank on open — see
+///         <c>ReingestRepairDoesNotAutoStartTests</c> for what that guard actually asserts now.
 ///     </para>
 /// </summary>
 public sealed class ReingestRepair(ChunkPositionScanner scanner)
@@ -40,7 +48,7 @@ public sealed class ReingestRepair(ChunkPositionScanner scanner)
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(store);
 
-        var (maxTokens, overlayTokens, countTokens) = await ChunkPositionScanner.BudgetAsync(connection, cancellationToken)
+        var (maxTokens, overlayTokens, countTokens) = await scanner.BudgetAsync(connection, cancellationToken)
             .ConfigureAwait(false);
 
         // workspace_id IS NULL and path = source_file: exactly the rows ReplaceAsync's own

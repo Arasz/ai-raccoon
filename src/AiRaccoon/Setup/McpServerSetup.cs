@@ -141,6 +141,8 @@ internal static partial class McpServerSetup
                 // Carries sync credentials and the embedding API key, so it is mapped only on a
                 // token-guarded host, like /shutdown.
                 webApplication.MapSettings();
+                // ADR-0075 amendment: repair reaches the server entirely, same token-guarded host.
+                webApplication.MapRepair();
             }
 
             return webApplication;

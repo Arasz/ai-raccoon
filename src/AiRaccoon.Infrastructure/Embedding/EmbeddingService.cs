@@ -13,7 +13,7 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     docs/work/features-native-memory/native-memory.feature): local → the bundled int8 ONNX model
 ///     in-process, openai → any OpenAI-compatible endpoint. A fingerprint change triggers a full re-embed.
 /// </summary>
-public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger) : IEmbeddingService
+public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, ILocalTokenizer localTokenizer) : IEmbeddingService
 {
     public const string DefaultOpenAiEndpoint = "https://api.openai.com/v1";
 
@@ -80,15 +80,13 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger) :
             return query;
         }
 
-        var tokenizer = OnnxEmbeddingGenerator.CreateTokenizer(BundledModel.ResolveVocabPath());
-        var tokens = tokenizer.CountTokens(query);
+        var tokens = localTokenizer.CountTokens(query);
         if (tokens <= OnnxEmbeddingGenerator.MaxContentTokens)
         {
             return query;
         }
 
-        var trimmed = TokenBudget.Trim(query, OnnxEmbeddingGenerator.MaxContentTokens,
-            text => tokenizer.CountTokens(text));
+        var trimmed = TokenBudget.Trim(query, OnnxEmbeddingGenerator.MaxContentTokens, localTokenizer.CountTokens);
         Log.QueryTrimmedToWindow(_logger, tokens, OnnxEmbeddingGenerator.MaxContentTokens, trimmed.Length, query.Length);
         return trimmed;
     }

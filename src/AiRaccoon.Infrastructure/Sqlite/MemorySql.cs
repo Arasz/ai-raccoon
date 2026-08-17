@@ -318,6 +318,10 @@ internal static class MemorySql
         "SELECT id AS Id, value AS Value FROM entries WHERE embed_state = 'pending' AND project_id = @projectId " +
         "ORDER BY id LIMIT @limit";
 
+    /// <summary>Bank-wide pending-row existence check for PendingEmbedJob.HasWorkAsync, polled every 15s (BankMaintenanceHostedService.OnDemandPollInterval) — EXISTS short-circuits on the first row instead of counting the whole backlog on every poll.</summary>
+    public const string HasPendingEmbed =
+        "SELECT EXISTS(SELECT 1 FROM entries WHERE embed_state = 'pending' LIMIT 1)";
+
     // Sets all four embed-transition columns together (docs/plans/2026-08-08-search-knn-perf.md
     // §3.6): a chunk with no heading writes heading_path = '' — never NULL, since NULL means "not
     // yet processed" and the vec_structure_au trigger guards on IS NOT NULL.
@@ -391,6 +395,24 @@ internal static class MemorySql
 
     public const string ReleaseModelMigrationLease =
         "UPDATE model_migration SET lease_owner = NULL, lease_expires_at = NULL WHERE id = 1 AND lease_owner = @owner";
+
+    // ---- repair_requests (ADR-0075 amendment) ----
+
+    // ON CONFLICT resets finished_at to NULL unconditionally: a second request for a kind whose
+    // first request already finished must reopen it; a second request while one is still open just
+    // refreshes requested_at, which is harmless (the job re-derives its own report from a live scan).
+    public const string RequestRepair =
+        """
+        INSERT INTO repair_requests (kind, requested_at, finished_at)
+        VALUES (@kind, @requestedAt, NULL)
+        ON CONFLICT(kind) DO UPDATE SET requested_at = @requestedAt, finished_at = NULL
+        """;
+
+    public const string HasOpenRepairRequest =
+        "SELECT count(*) FROM repair_requests WHERE kind = @kind AND finished_at IS NULL";
+
+    public const string FinishRepairRequest =
+        "UPDATE repair_requests SET finished_at = @finishedAt WHERE kind = @kind AND finished_at IS NULL";
 
     // Custom contexts are listed alongside shared/project because their label is the only key that
     // reaches their rows through memory_search (SearchContexts.For), and this is the only place a

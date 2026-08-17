@@ -21,7 +21,8 @@ internal static class SearchTimingsHarness
     {
         embedder ??= new EntryEmbedder(TestData.CreateEmbeddingService());
         return new SqliteMemoryStore(factory, new SqliteMemorySourceStore(factory),
-            new FileIngestor(new FileTypeMatcher([]), embedder, new SqliteMemorySourceStore(factory), timeProvider),
+            new FileIngestor(new FileTypeMatcher([]), embedder, new SqliteMemorySourceStore(factory), timeProvider,
+                new LocalTokenizer()),
             embedder, timeProvider, NullLogger<SqliteMemoryStore>.Instance,
             new NoiseFilteringService([]), new SqliteSettingsStore(factory));
     }
@@ -48,6 +49,10 @@ internal static class SearchTimingsHarness
             CancellationToken cancellationToken) => Task.CompletedTask;
 
         public Task<int> EmbedPendingAsync(SqliteConnection connection, string projectId, int? limit,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException("Not exercised by SearchAsync.");
+
+        public Task<int> EmbedPendingBatchAsync(SqliteConnection connection, int limit,
             CancellationToken cancellationToken) =>
             throw new NotSupportedException("Not exercised by SearchAsync.");
 

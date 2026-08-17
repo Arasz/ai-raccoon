@@ -19,7 +19,6 @@ public sealed partial class BankMaintenanceHostedService(
     TimeProvider timeProvider,
     IOperationTelemetry telemetry,
     ILogger<BankMaintenanceHostedService> logger,
-    IMemoryStore store,
     INoiseEntryStore noiseEntryStore,
     IPromotionQueueStore promotionQueueStore,
     ISearchQualityService searchQuality)
@@ -43,13 +42,12 @@ public sealed partial class BankMaintenanceHostedService(
         TimeProvider timeProvider,
         IOperationTelemetry telemetry,
         ILogger<BankMaintenanceHostedService> logger,
-        IMemoryStore store,
         INoiseEntryStore noiseEntryStore,
         IPromotionQueueStore promotionQueueStore,
         ISearchQualityService searchQuality,
         MaintenanceJobRunner jobRunner,
         IReadOnlyList<IMaintenanceJob> jobs)
-        : this(factory, timeProvider, telemetry, logger, store, noiseEntryStore, promotionQueueStore, searchQuality)
+        : this(factory, timeProvider, telemetry, logger, noiseEntryStore, promotionQueueStore, searchQuality)
     {
         _jobRunner = jobRunner;
         _jobs = jobs;
@@ -235,30 +233,25 @@ public sealed partial class BankMaintenanceHostedService(
         try
         {
             await RunCheckpointAsync(connection, cancellationToken).ConfigureAwait(false);
-            await RetryPendingEmbedsAsync(cancellationToken).ConfigureAwait(false);
             await PurgeExpiredNoiseEntriesAsync(cancellationToken).ConfigureAwait(false);
             await PurgeExpiredRetentionAsync(connection, cancellationToken).ConfigureAwait(false);
 
             // Scheduling moved into MaintenanceJobRunner and the bank's maintenance_jobs ledger
             // (ADR-0070). The clock it replaces was the _lastVacuumUtc field below, seeded on first
             // run, so a bank only ever opened by short-lived processes never vacuumed at all.
+            //
+            // PendingEmbedJob is registered LAST in the job list (AppRegistrations) on purpose: a
+            // job that runs earlier and leaves rows pending — chunk-backfill produced 13,578 of them
+            // on a real bank — is visible to PendingEmbedJob.HasWorkAsync by the time this same
+            // foreach reaches it, so those rows are swept in this pass, not the next one up to a
+            // checkpoint interval away. Ordering replaces what used to be a bespoke CreatedWork-gated
+            // second sweep here.
             var outcomes = _jobRunner is null
                 ? []
                 : await _jobRunner.RunDueAsync(connection, _jobs, cancellationToken).ConfigureAwait(false);
             if (outcomes.Any(o => o.Ran))
             {
                 pass.Tag("jobs.ran", string.Join(',', outcomes.Where(o => o.Ran).Select(o => o.Name)));
-
-                // Sweep again ONLY when a job actually created rows to embed. chunk-backfill produced
-                // 13,578 unembedded rows on a real bank and the sweep above had already run before it
-                // did, so they sat until the next pass — up to a checkpoint interval away, absent from
-                // vector search. Gated rather than unconditional: vacuum and reclaim never make work,
-                // and a needless extra sweep doubles the window in which a background embed races an
-                // in-flight write (an E2E asserting one embedding request caught exactly that).
-                if (outcomes.Any(o => o.CreatedWork))
-                {
-                    await RetryPendingEmbedsAsync(cancellationToken).ConfigureAwait(false);
-                }
 
                 // A VACUUM rewrites the whole file through the WAL; truncate it now, not next tick.
                 await RunCheckpointAsync(connection, cancellationToken).ConfigureAwait(false);
@@ -298,55 +291,6 @@ public sealed partial class BankMaintenanceHostedService(
         else
         {
             Log.Checkpoint(logger);
-        }
-    }
-
-    /// <summary>
-    ///     Retries embedding for every project reporting a nonzero pending count (.NET-F1): a
-    ///     watch-triggered embed failure leaves a row `embed_state='pending'` forever with nothing
-    ///     else retrying it, so this pass is the only recovery besides another file change or a
-    ///     manual `memory_embed_pending` call. One project's failure is logged and never blocks the
-    ///     rest of the sweep or the checkpoint/vacuum pass.
-    /// </summary>
-    private async Task RetryPendingEmbedsAsync(CancellationToken cancellationToken)
-    {
-        IReadOnlyList<string> projectIds;
-        try
-        {
-            projectIds = await store.GetProjectIdsAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            Log.PendingEmbedSweepFailed(logger, ex);
-            return;
-        }
-
-        foreach (var projectId in projectIds)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            try
-            {
-                var stats = await store.GetStatsAsync(projectId, cancellationToken).ConfigureAwait(false);
-                if (stats.PendingCount == 0)
-                {
-                    continue;
-                }
-
-                var result = await store.EmbedPendingAsync(projectId, null, cancellationToken).ConfigureAwait(false);
-                Log.PendingEmbedsRetried(logger, projectId, result.Processed, result.Pending);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                Log.PendingEmbedRetryFailed(logger, projectId, ex);
-            }
         }
     }
 
@@ -393,7 +337,7 @@ public sealed partial class BankMaintenanceHostedService(
     /// <summary>
     ///     ADR-0029's retention TTL, never built until this task: noise_entries would otherwise
     ///     accumulate forever. A failure logs and never blocks the checkpoint/vacuum pass — same
-    ///     silent-failure discipline as the pending-embed retry sweep above.
+    ///     silent-failure discipline as the retention purge below.
     /// </summary>
     private async Task PurgeExpiredNoiseEntriesAsync(CancellationToken cancellationToken)
     {
@@ -498,18 +442,6 @@ public sealed partial class BankMaintenanceHostedService(
 
         [LoggerMessage(EventId = 515, Level = LogLevel.Warning, Message = "Shutdown checkpoint failed")]
         public static partial void ShutdownCheckpointFailed(ILogger logger, Exception exception);
-
-        [LoggerMessage(EventId = 517, Level = LogLevel.Warning,
-            Message = "Pending-embed retry sweep could not list project ids; retried on the next tick")]
-        public static partial void PendingEmbedSweepFailed(ILogger logger, Exception exception);
-
-        [LoggerMessage(EventId = 518, Level = LogLevel.Information,
-            Message = "Pending-embed retry for {ProjectId}: {Processed} processed, {Pending} still pending")]
-        public static partial void PendingEmbedsRetried(ILogger logger, string projectId, int processed, int pending);
-
-        [LoggerMessage(EventId = 519, Level = LogLevel.Warning,
-            Message = "Pending-embed retry failed for {ProjectId}; row(s) stay pending, retried on the next tick")]
-        public static partial void PendingEmbedRetryFailed(ILogger logger, string projectId, Exception exception);
 
         [LoggerMessage(EventId = 520, Level = LogLevel.Information, Message = "Noise entry retention purge removed {Count} expired row(s)")]
         public static partial void NoiseEntriesPurged(ILogger logger, int count);

@@ -38,7 +38,7 @@ public sealed class WriteChunksToBudgetTests : IAsyncLifetime
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
-            new EmbeddingService(new FakeLogger<EmbeddingService>()));
+            new EmbeddingService(new FakeLogger<EmbeddingService>(), new LocalTokenizer()));
         await _store.ConfigureEmbeddingAsync("local", null, null, TestContext.Current.CancellationToken);
     }
 

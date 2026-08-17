@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using CommunityToolkit.Diagnostics;
 
@@ -10,7 +11,7 @@ namespace AiRaccoon.Settings;
 ///     probes or auto-starts anything. The acquire result is cached for the lifetime of this
 ///     instance; a failed acquire is not cached and is retried on the next call.
 /// </summary>
-internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationStore
+internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationStore, IRepairStore
 {
     private readonly Func<CancellationToken, Task<ISettingsStore>> _acquire;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -45,6 +46,18 @@ internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationS
     public async Task<bool> HasOpenModelMigrationAsync(CancellationToken cancellationToken = default) =>
         await AsMigrationStore(await InnerAsync(cancellationToken)).HasOpenModelMigrationAsync(cancellationToken);
 
+    /// <inheritdoc />
+    public async Task<ReingestRepairReport> ReportReingestAsync(CancellationToken cancellationToken = default) =>
+        await AsRepairStore(await InnerAsync(cancellationToken)).ReportReingestAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<ChunkIndexRepairReport> ReportChunkIndexAsync(CancellationToken cancellationToken = default) =>
+        await AsRepairStore(await InnerAsync(cancellationToken)).ReportChunkIndexAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public async Task RequestRepairAsync(RepairKind kind, CancellationToken cancellationToken = default) =>
+        await AsRepairStore(await InnerAsync(cancellationToken)).RequestRepairAsync(kind, cancellationToken);
+
     /// <summary>
     ///     Every store the acquire function can resolve to in production (<see cref="ServerSettingsStore" />)
     ///     implements both interfaces over the same connection; a cast failure here means a caller
@@ -53,6 +66,11 @@ internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationS
     private static IModelMigrationStore AsMigrationStore(ISettingsStore store) =>
         store as IModelMigrationStore ?? throw new NotSupportedException(
             $"ai-raccoon: {store.GetType().Name} does not support model migration");
+
+    /// <summary>Same reasoning as <see cref="AsMigrationStore" />, for the repair capability.</summary>
+    private static IRepairStore AsRepairStore(ISettingsStore store) =>
+        store as IRepairStore ?? throw new NotSupportedException(
+            $"ai-raccoon: {store.GetType().Name} does not support repair requests");
 
     private async Task<ISettingsStore> InnerAsync(CancellationToken cancellationToken)
     {

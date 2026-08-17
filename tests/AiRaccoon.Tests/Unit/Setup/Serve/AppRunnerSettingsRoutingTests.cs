@@ -87,6 +87,31 @@ public sealed class AppRunnerSettingsRoutingTests : IDisposable
         acquireCalls.ShouldBe(1);
     }
 
+    /// <summary>
+    ///     ADR-0075 amendment: `repair &lt;verb&gt; --apply` used to write the bank directly from the
+    ///     CLI process (IMemoryStore bound unconditionally, CliWriteOptOuts never named it) — the
+    ///     defect this task fixes. It now routes through the same acquired IRepairStore as every
+    ///     other non-opted-out command, exactly mirroring AModelSetCommand_UsesTheInjectedAcquireFunction.
+    /// </summary>
+    [Fact]
+    public async Task ARepairCommand_UsesTheInjectedAcquireFunction()
+    {
+        var acquireCalls = 0;
+        var fake = new InMemorySettings();
+
+        var (exit, stdout) = await Run(
+            (_, _, _) =>
+            {
+                acquireCalls++;
+                return Task.FromResult<ISettingsStore>(fake);
+            },
+            ["--data-root", _dataRoot, "repair", "reingest"]);
+
+        exit.ShouldBe(0);
+        acquireCalls.ShouldBe(1);
+        stdout.ShouldContain("reingest repair:");
+    }
+
     /// <summary>A failed acquire surfaces as the command's own failure, not a crash.</summary>
     [Fact]
     public async Task WhenTheAcquireFunctionFails_TheCommandReportsItAndDoesNotThrow()

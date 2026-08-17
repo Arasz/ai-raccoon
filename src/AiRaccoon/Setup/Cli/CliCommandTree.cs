@@ -326,25 +326,28 @@ internal static class CliCommandTree
     }
 
     /// <summary>
-    ///     Explicit-only repair operations (GH #371) — never part of the maintenance job list a bank
-    ///     open runs automatically; an operator invokes these by hand.
+    ///     Explicit-only repair operations (GH #371), reaching the server entirely (ADR-0075
+    ///     amendment): the report is scanned server-side, and --apply commits a request the
+    ///     maintenance loop's on-demand job applies — never a clock-scheduled run, and never a write
+    ///     from the CLI process. An operator invokes these by hand; nothing here runs unattended.
     /// </summary>
     private static Command RepairCommand() =>
-        new("repair", "Explicit-only repair operations. Nothing here runs automatically — every repair is invoked by hand.")
+        new("repair", "Explicit-only repair operations, reaching the server entirely. Nothing here runs unattended — every repair is invoked by hand.")
         {
             new Command("chunk-index",
                 "Re-derives chunk_index/total_chunks per source_file from the document itself, instead of the row-insertion order an older binary may have left behind (GH #371). " +
-                "A source_file that no longer exists gets chunk_index = -1 (position unknown), never a guess. Pure UPDATE — never inserts or deletes a row. Reports by default; --apply writes.")
+                "A source_file that no longer exists gets chunk_index = -1 (position unknown), never a guess. Pure UPDATE — never inserts or deletes a row. Reports by default (scanned " +
+                "server-side); --apply requests the server apply it on its next maintenance poll (~15s).")
             {
-                new Option<bool>("--apply") { Description = "Writes the repositioned values instead of only reporting them" }
+                new Option<bool>("--apply") { Description = "Requests the server reposition the values instead of only reporting them" }
             },
             new Command("reingest",
                 "Re-ingests source files chunk-index repair could only mark chunk_index = -1 for — a chunker change made their stored rows unreproducible by hash. " +
                 "Deletes and re-inserts each file's chunks (never a memory_write row that merely cites the path, never a file that no longer exists) and discards their per-row " +
-                "metadata (rating, access_count, last_accessed_at) in the process — a re-chunk moves boundaries, so there is no 1:1 row to carry it onto. Embedding is left pending; " +
-                "run memory_embed_pending afterward. Reports by default; --apply writes.")
+                "metadata (rating, access_count, last_accessed_at) in the process — a re-chunk moves boundaries, so there is no 1:1 row to carry it onto. Reports by default (scanned " +
+                "server-side); --apply requests the server apply it and drain the resulting embeddings, both on its next maintenance poll (~15s) — the CLI never writes the bank itself.")
             {
-                new Option<bool>("--apply") { Description = "Performs the reingest instead of only reporting what it would do" }
+                new Option<bool>("--apply") { Description = "Requests the server perform the reingest instead of only reporting what it would do" }
             }
         };
 

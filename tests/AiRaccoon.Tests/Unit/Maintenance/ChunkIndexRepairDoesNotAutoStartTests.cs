@@ -10,11 +10,17 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Maintenance;
 
 /// <summary>
-///     GH #371 hard constraint: the chunk-index repair must never run unattended against a live
-///     bank — <see cref="MaintenanceJobRunner" />/<see cref="BankMaintenanceHostedService" /> can
-///     start jobs within seconds of the first bank open, so it must not be reachable through that
-///     list. Two independent proofs: it cannot structurally BE one of those jobs, and the real
-///     DI-composed job list — the actual bank-open trigger surface — does not contain one.
+///     GH #371 hard constraint: a chunk-index repair must never run because a clock fired, only
+///     because a human explicitly asked. That guard is NOT "never appear on the maintenance job
+///     list" — ADR-0075's amendment puts <see cref="ChunkIndexRepairJob" /> on that list,
+///     on-demand-only, mirroring <see cref="ModelMigrationJob" /> (ADR-0076): its
+///     <see cref="IMaintenanceJob.Interval" /> is null, so <see cref="MaintenanceJobRunner" />/
+///     <see cref="BankMaintenanceHostedService" /> — which can start jobs within seconds of the first
+///     bank open — can only ever run it when <see cref="IMaintenanceJob.HasWorkAsync" /> finds a
+///     repair_requests row `repair chunk-index --apply` committed through the server
+///     (<see cref="ChunkIndexRepairJobTests" /> covers that gating directly). Two proofs here:
+///     <see cref="ChunkIndexRepair" /> itself structurally cannot BE one of those jobs, and the real
+///     DI-composed job list's entry for it is on-demand-only.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -27,10 +33,10 @@ public sealed class ChunkIndexRepairDoesNotAutoStartTests : IDisposable
     [Fact]
     public void ChunkIndexRepair_DoesNotImplementIMaintenanceJob() =>
         typeof(ChunkIndexRepair).GetInterfaces().ShouldNotContain(typeof(IMaintenanceJob),
-            "a type wired into the auto-run job list must be an IMaintenanceJob — this one structurally cannot be added to it by accident");
+            "a type wired into the auto-run job list must be an IMaintenanceJob — this one structurally cannot be added to it by accident; ChunkIndexRepairJob wraps it instead");
 
     [Fact]
-    public void RegisterMemoryServices_TheBankOpenJobList_DoesNotIncludeTheChunkIndexRepair()
+    public void RegisterMemoryServices_TheBankOpenJobList_HasNoClockIntervalForChunkIndexRepair()
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -43,8 +49,9 @@ public sealed class ChunkIndexRepairDoesNotAutoStartTests : IDisposable
         using var provider = services.BuildServiceProvider();
 
         var jobs = provider.GetRequiredService<IReadOnlyList<IMaintenanceJob>>();
-        jobs.ShouldNotBeEmpty();
-        jobs.ShouldAllBe(job => !job.Name.Contains("chunk-index", StringComparison.OrdinalIgnoreCase)
-                                 && !job.DisplayName.Contains("chunk-index", StringComparison.OrdinalIgnoreCase));
+        var chunkIndexJobs = jobs.Where(job => job.Name.Contains("chunk-index", StringComparison.OrdinalIgnoreCase)).ToList();
+        chunkIndexJobs.ShouldHaveSingleItem("exactly one on-demand relay for the CLI-requested chunk-index repair, mirroring ModelMigrationJob");
+        chunkIndexJobs.Single().Interval.ShouldBeNull(
+            "never clock-scheduled — HasWorkAsync (gated on a repair_requests row) is the only due-ness signal");
     }
 }

@@ -381,6 +381,18 @@ internal static class MemorySchema
                                               lease_expires_at INTEGER NULL
                                           );
 
+                                          -- Repair outbox (ADR-0075 amendment): `repair <verb> --apply` commits a request
+                                          -- row through the server instead of writing the bank itself. Keyed by kind
+                                          -- (RepairKinds), not a single id=1 row like model_migration, since chunk-index
+                                          -- and reingest repairs are independent and either can have its own open request.
+                                          -- finished_at is null for exactly as long as the corresponding maintenance job
+                                          -- (ReingestRepairJob/ChunkIndexRepairJob) owes the apply.
+                                          CREATE TABLE IF NOT EXISTS repair_requests (
+                                              kind         TEXT PRIMARY KEY,
+                                              requested_at INTEGER NOT NULL,
+                                              finished_at  INTEGER NULL
+                                          );
+
                                           """;
 
     /// <summary>

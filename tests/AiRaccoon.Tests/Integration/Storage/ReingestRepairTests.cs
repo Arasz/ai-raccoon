@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Watch;
@@ -154,7 +155,7 @@ public sealed class ReingestRepairTests : IDisposable
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]);
-        var repair = new ReingestRepair(new ChunkPositionScanner(matcher));
+        var repair = new ReingestRepair(new ChunkPositionScanner(matcher, new LocalTokenizer()));
         return await repair.RunAsync(connection, _store, apply, TestContext.Current.CancellationToken);
     }
 

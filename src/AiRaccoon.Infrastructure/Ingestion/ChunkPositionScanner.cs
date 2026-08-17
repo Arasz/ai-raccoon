@@ -24,7 +24,7 @@ public sealed record ChunkPositionScan(
 ///     re-derive chunk_index/total_chunks, and by repair reingest to find files a chunker change
 ///     left with rows it can no longer reproduce.
 /// </summary>
-public sealed class ChunkPositionScanner(IFileTypeMatcher fileTypeMatcher)
+public sealed class ChunkPositionScanner(IFileTypeMatcher fileTypeMatcher, ILocalTokenizer localTokenizer)
 {
     private const int DefaultMaxTokens = 256;
 
@@ -59,8 +59,7 @@ public sealed class ChunkPositionScanner(IFileTypeMatcher fileTypeMatcher)
     }
 
     /// <summary>The same resolution the ingest path uses, read from the same settings (mirrors <see cref="Ingestion.ChunkBackfill" />'s BudgetAsync).</summary>
-    public static async Task<(int MaxTokens, int OverlayTokens, TokenCount CountTokens)> BudgetAsync(
-        SqliteConnection connection, CancellationToken cancellationToken)
+    public async Task<ChunkBudget> BudgetAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var provider = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
                 "SELECT value FROM settings WHERE key = 'embedding.provider'", cancellationToken: cancellationToken))
@@ -72,8 +71,7 @@ public sealed class ChunkPositionScanner(IFileTypeMatcher fileTypeMatcher)
 
         var budget = Math.Min(DefaultMaxTokens, EmbeddingService.SafeChunkBudgetFor(provider, model));
         var overlay = Math.Min(ChunkingDefaults.OverlayTokens, Math.Max(0, budget - 1));
-        var tokenizer = OnnxEmbeddingGenerator.CreateTokenizer(BundledModel.ResolveVocabPath());
-        return (budget, overlay, text => tokenizer.CountTokens(text));
+        return new ChunkBudget(budget, overlay, localTokenizer.CountTokens);
     }
 
     private static bool TryReadFile(string path, out string content)

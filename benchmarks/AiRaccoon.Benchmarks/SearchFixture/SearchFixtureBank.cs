@@ -89,7 +89,7 @@ public sealed class SearchFixtureBank : IAsyncDisposable
         var options = new InfrastructureOptions { DataRoot = dataRoot, Scope = InstallScope.User };
         var factory = new SqliteConnectionFactory(options, new NoopEncryptionKeyResolver());
         var sourceStore = new SqliteMemorySourceStore(factory);
-        var embeddingService = new EmbeddingService(NullLogger<EmbeddingService>.Instance);
+        var embeddingService = new EmbeddingService(NullLogger<EmbeddingService>.Instance, new LocalTokenizer());
         var countTokens = new TokenCount(new O200kTokenizer().CountTokens);
         var markdownChunker = new MarkdownChunker(countTokens);
         var fileTypeMatcher = new FileTypeMatcher([
@@ -97,7 +97,7 @@ public sealed class SearchFixtureBank : IAsyncDisposable
             new JsonFileTypeHandler(new JsonFileTypeChunker(countTokens, markdownChunker, ChunkingDefaults.OverlayTokens))
         ]);
         var embedder = new EntryEmbedder(embeddingService);
-        var fileIngestor = new FileIngestor(fileTypeMatcher, embedder, sourceStore, TimeProvider.System);
+        var fileIngestor = new FileIngestor(fileTypeMatcher, embedder, sourceStore, TimeProvider.System, new LocalTokenizer());
         var noiseFilteringService = new NoiseFilteringService(Array.Empty<INoiseFilterPolicy>());
         var store = new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, TimeProvider.System,
             NullLogger<SqliteMemoryStore>.Instance, noiseFilteringService, new SqliteSettingsStore(factory));

@@ -1,7 +1,6 @@
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Tests.Unit.Watch;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging.Testing;
@@ -40,7 +39,7 @@ public sealed class BankMaintenanceHostedServiceOnDemandPollTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _time = new FakeTimeProvider(FixedNow);
         _service = new BankMaintenanceHostedService(_factory, _time, TestTelemetry.None,
-            new FakeLogger<BankMaintenanceHostedService>(), new FakeWatchMemoryStore(), NoOpNoiseEntryStore.Instance,
+            new FakeLogger<BankMaintenanceHostedService>(), NoOpNoiseEntryStore.Instance,
             new SqlitePromotionQueueStore(_factory, _time),
             new SqliteSearchQualityService(_factory, NullLogger<SqliteSearchQualityService>.Instance),
             new MaintenanceJobRunner(_time, NullLogger<MaintenanceJobRunner>.Instance),

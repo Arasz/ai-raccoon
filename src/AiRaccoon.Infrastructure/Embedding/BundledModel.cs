@@ -67,17 +67,17 @@ public sealed partial class BundledModel(ILogger<BundledModel> logger, IHttpClie
     ///     'ai-raccoon model set local &lt;path&gt;', null-or-whitespace = unset), else the bundled copy next
     ///     to the running tool, else the repo source copy during tests.
     /// </summary>
-    public static string ResolveModelPath() => ResolveModelPath(null);
+    public static string ResolveModelPath() => ResolveModelPath(null, AppContext.BaseDirectory);
 
-    private static string ResolveModelPath(string? configuredPath)
+    internal static string ResolveModelPath(string? configuredPath, string baseDirectory)
     {
         if (!string.IsNullOrWhiteSpace(configuredPath))
         {
             return Path.GetFullPath(configuredPath);
         }
 
-        return ResolveBundled(ModelFileName)
-               ?? throw new InvalidOperationException(MissingBundledModelMessage(ModelFileName));
+        return ResolveBundled(ModelFileName, baseDirectory)
+               ?? throw BundledAssetUnavailable("embedding model", ModelFileName, baseDirectory, MissingBundledModelMessage(ModelFileName));
     }
 
     /// <summary>
@@ -87,10 +87,26 @@ public sealed partial class BundledModel(ILogger<BundledModel> logger, IHttpClie
     internal static string MissingBundledModelMessage(string fileName) =>
         $"Bundled embedding model '{fileName}' not found next to the tool. Run 'ai-raccoon model set local' to restore it, or 'ai-raccoon model set local <path-to-onnx>' for a custom path.";
 
-    public static string ResolveVocabPath() =>
-        ResolveBundled(VocabFileName)
-        ?? throw new InvalidOperationException(
-            $"Bundled BERT vocab '{VocabFileName}' not found next to the tool. Run 'ai-raccoon model set local' to restore it.");
+    public static string ResolveVocabPath() => ResolveVocabPath(AppContext.BaseDirectory);
+
+    internal static string ResolveVocabPath(string baseDirectory) =>
+        ResolveBundled(VocabFileName, baseDirectory)
+        ?? throw BundledAssetUnavailable("BERT vocab", VocabFileName, baseDirectory, MissingBundledVocabMessage(VocabFileName));
+
+    /// <summary>Actionable message for a missing bundled vocab; points at 'ai-raccoon model set local'.</summary>
+    internal static string MissingBundledVocabMessage(string fileName) =>
+        $"Bundled BERT vocab '{fileName}' not found next to the tool. Run 'ai-raccoon model set local' to restore it.";
+
+    /// <summary>
+    ///     Distinguishes a genuinely-missing bundled asset (baseDirectory exists, the file does not —
+    ///     'model set local' fixes it) from an install replaced out from under this process
+    ///     (baseDirectory itself no longer exists, e.g. after 'dotnet tool update' — only a restart
+    ///     fixes it).
+    /// </summary>
+    private static InvalidOperationException BundledAssetUnavailable(string assetLabel, string fileName, string baseDirectory, string missingAssetMessage) =>
+        Directory.Exists(baseDirectory)
+            ? new InvalidOperationException(missingAssetMessage)
+            : new BundledModelInstallReplacedException(assetLabel, fileName, baseDirectory);
 
     private async Task<List<string>> DownloadResources(HttpClient httpClient, BundledResource resource, CancellationToken cancellationToken)
     {
