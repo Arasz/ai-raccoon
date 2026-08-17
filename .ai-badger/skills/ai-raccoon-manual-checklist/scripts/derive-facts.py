@@ -21,9 +21,6 @@ LAYOUT_HINT = (f"{PREFIX}: the tree layout moved; fix this script rather than ty
 COPY_HINT = f'{PREFIX}: copy these into the checklist\'s "derived" block verbatim.'
 
 CSPROJ = "src/AiRaccoon/AiRaccoon.csproj"
-# The version moved out of the csproj into a plain file at the repo root; the element is still
-# read first because a tree carrying both is stating the local one deliberately.
-VERSION_FILE = "VERSION"
 TOOLS_DIR = "src/AiRaccoon/Tools"
 PROMPTS_DIR = "src/AiRaccoon/Prompts"
 
@@ -92,13 +89,6 @@ def read_package_version(csproj_text: str) -> str:
     return "" if version == VERSION_PLACEHOLDER else version
 
 
-def read_version_file(path: Path) -> str:
-    """The trimmed contents of the ``VERSION`` file at *path*, or `""` when absent or blank."""
-    if not path.is_file():
-        return ""
-    return _read(path).strip()
-
-
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
 
@@ -116,10 +106,9 @@ def derive(repo_root: Path) -> Facts:
     if not prompts_dir.is_dir():
         raise DerivationFailed(f"no prompts directory at {prompts_dir}")
 
-    version_file = repo_root / VERSION_FILE
-    version = read_package_version(_read(csproj)) or read_version_file(version_file)
+    version = read_package_version(_read(csproj))
     if not version:
-        raise DerivationFailed(f"no version in {csproj} nor {version_file}")
+        raise DerivationFailed(f"no literal <PackageVersion> in {csproj}")
 
     return Facts(version=version,
                  tools=count_in_tree(tools_dir, "McpServerTool"),

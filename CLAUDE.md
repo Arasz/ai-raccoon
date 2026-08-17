@@ -160,3 +160,11 @@ Start with `get_graph_summary` for orientation. Record architectural decisions w
 Skills, personas, and instructions here are managed by ai-badger. Run `welcome-ai-badger`
 to re-scaffold after changing `.ai-badger/config.json`, and `feed-badger` to contribute
 project-agnostic improvements back to the framework. Provenance: `.ai-badger/manifest.json`.
+
+<!-- ai-badger:keep-start -->
+- **The CLI asks; the server acts** — The CLI never writes the bank: it communicates a need to start a job on the server, and the server does the work.
+  → `.ai-badger/invariants/cli-asks-the-server-acts.md`
+
+- **Spend the minimum test time that still proves quality** — Fast tests on the affected scope are unlimited; full-scope fast is a per-packet checkpoint; slow runs once. A failure resets the count, and if CI can run it, CI runs it.
+  → `.ai-badger/invariants/minimal-test-runs.md`
+<!-- ai-badger:keep-end -->
