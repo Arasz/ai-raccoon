@@ -25,3 +25,11 @@ unconditionally to the direct store while the routing at `AppRunner` only swaps 
 so the exception was taken rather than granted, and nothing compared the list against the code. Hold
 this invariant with a gate that fails when a command path writes without being sanctioned, or expect
 the next command to re-add the hole (see `derive-or-delete-the-list`).
+
+**The read side is gated the same way.** `noise entries` and `watch registered` were reads, so they
+never belonged in `CliWriteOptOuts` — but both opened the bank via `OpenBankAsync`, which runs
+`MemorySchema.EnsureAsync` and writes migrations on a digest-stale bank, leaving the CLI latent
+write capability on the path no list guarded. They now route through the server like `settings
+maintenance list`, and `CliCommandsDoNotOpenTheBankTests` walks every CLI command's constructed
+graph for a live `ISqliteConnectionFactory`; `BankCapableCliCommandAllowlist` names the three
+sanctioned exceptions (`encryption`, `doctor`, `serve`).
