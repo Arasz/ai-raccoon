@@ -119,7 +119,7 @@ public sealed class ChunkBackfillTests : IDisposable
     }
 
     private static ChunkBackfill Backfill() =>
-        new(TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow));
+        new(TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow), new LocalTokenizer());
 
     private static string Paragraphs(int count) =>
         string.Join("\n\n", Enumerable.Range(0, count).Select(i =>

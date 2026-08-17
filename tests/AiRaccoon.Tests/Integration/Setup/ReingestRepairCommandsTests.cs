@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Setup.Cli;
@@ -84,7 +85,7 @@ public sealed class ReingestRepairCommandsTests : IDisposable
         CliArgs.TryParse(argv, out var parsed).ShouldBeTrue();
 
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]);
-        var command = new ReingestRepairCommands(_factory, matcher, _store);
+        var command = new ReingestRepairCommands(_factory, matcher, _store, new LocalTokenizer());
 
         var stdout = new StringWriter();
         var stderr = new StringWriter();

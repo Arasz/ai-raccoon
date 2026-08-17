@@ -1,3 +1,4 @@
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -44,7 +45,7 @@ public sealed class ChunkBackfillTrialRun
         connection.EnableExtensions();
         connection.LoadVector();
 
-        var backfill = new ChunkBackfill(TestData.RealMarkdownChunker(), TimeProvider.System);
+        var backfill = new ChunkBackfill(TestData.RealMarkdownChunker(), TimeProvider.System, new LocalTokenizer());
         var started = DateTimeOffset.UtcNow;
         var report = await backfill.RunAsync(connection, dryRun: !apply, TestContext.Current.CancellationToken);
         var elapsed = DateTimeOffset.UtcNow - started;

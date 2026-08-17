@@ -1,5 +1,6 @@
 using System.CommandLine;
 using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
 
@@ -11,14 +12,15 @@ namespace AiRaccoon.Setup.Cli.Commands;
 ///     top-level operation, not a maintenance-job subcommand — it must never be reachable from the
 ///     job list <see cref="AiRaccoon.Infrastructure.Maintenance.BankMaintenanceHostedService" /> runs on bank open.
 /// </summary>
-public sealed class ChunkIndexRepairCommands(ISqliteConnectionFactory bankConnectionFactory, IFileTypeMatcher fileTypeMatcher)
+public sealed class ChunkIndexRepairCommands(
+    ISqliteConnectionFactory bankConnectionFactory, IFileTypeMatcher fileTypeMatcher, ILocalTokenizer localTokenizer)
 {
     public async Task<int> RunAsync(ParseResult parseResult, StandardStreams streams, CancellationToken cancellationToken)
     {
         var apply = parseResult.GetValue<bool>("--apply");
 
         await using var connection = await bankConnectionFactory.OpenBankAsync(cancellationToken);
-        var report = await new ChunkIndexRepair(fileTypeMatcher).RunAsync(connection, apply, cancellationToken);
+        var report = await new ChunkIndexRepair(fileTypeMatcher, localTokenizer).RunAsync(connection, apply, cancellationToken);
 
         var verb = apply ? "repositioned" : "would reposition (dry run; pass --apply to write)";
         await streams.WriteOutputLineAsync($"chunk-index repair: {report.GroupsExamined} source group(s) examined, " +

@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -20,16 +21,16 @@ public sealed record ChunkIndexRepairReport(
 ///         unattended against a live bank on open (docs/plans/2026-08-08-search-knn-perf.md §3.3).
 ///     </para>
 /// </summary>
-public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher)
+public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, ILocalTokenizer localTokenizer)
 {
-    private readonly ChunkPositionScanner _scanner = new(fileTypeMatcher);
+    private readonly ChunkPositionScanner _scanner = new(fileTypeMatcher, localTokenizer);
 
     public async Task<ChunkIndexRepairReport> RunAsync(SqliteConnection connection, bool apply,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(connection);
 
-        var (maxTokens, overlayTokens, countTokens) = await ChunkPositionScanner.BudgetAsync(connection, cancellationToken)
+        var (maxTokens, overlayTokens, countTokens) = await _scanner.BudgetAsync(connection, cancellationToken)
             .ConfigureAwait(false);
 
         var groups = (await connection.QueryAsync<GroupKey>(new CommandDefinition(

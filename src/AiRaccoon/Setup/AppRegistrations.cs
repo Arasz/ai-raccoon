@@ -149,7 +149,8 @@ public static partial class AppRegistrations
             // backfill collects the pages the backfill's deletes freed as well.
             services.AddSingleton<IReadOnlyList<IMaintenanceJob>>(sp =>
             [
-                new ChunkBackfillJob(sp.GetRequiredService<IMarkdownChunker>(), sp.GetRequiredService<TimeProvider>()),
+                new ChunkBackfillJob(sp.GetRequiredService<IMarkdownChunker>(), sp.GetRequiredService<TimeProvider>(),
+                    sp.GetRequiredService<ILocalTokenizer>()),
                 new Vec0ReclaimJob(),
                 new VacuumJob(),
                 new MetricsRetentionJob(sp.GetRequiredService<TimeProvider>()),
@@ -232,6 +233,7 @@ public static partial class AppRegistrations
         private void RegisterEmbeddingServices()
         {
             services.AddRequiredSingleton<IBundledModel, BundledModel>();
+            services.AddRequiredSingleton<ILocalTokenizer, LocalTokenizer>();
             services.AddRequiredSingleton<IEmbeddingService, EmbeddingService>();
             // ADR-0076: the migration lease EntryEmbedder's DrainMigrationAsync needs; registered
             // before IEntryEmbedder so constructor injection resolves it.

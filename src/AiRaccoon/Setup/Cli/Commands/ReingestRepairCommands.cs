@@ -1,6 +1,7 @@
 using System.CommandLine;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
 
@@ -14,14 +15,15 @@ namespace AiRaccoon.Setup.Cli.Commands;
 ///     runs (same explicit-only constraint as `repair chunk-index`).
 /// </summary>
 public sealed class ReingestRepairCommands(
-    ISqliteConnectionFactory bankConnectionFactory, IFileTypeMatcher fileTypeMatcher, IMemoryStore store)
+    ISqliteConnectionFactory bankConnectionFactory, IFileTypeMatcher fileTypeMatcher, IMemoryStore store,
+    ILocalTokenizer localTokenizer)
 {
     public async Task<int> RunAsync(ParseResult parseResult, StandardStreams streams, CancellationToken cancellationToken)
     {
         var apply = parseResult.GetValue<bool>("--apply");
 
         await using var connection = await bankConnectionFactory.OpenBankAsync(cancellationToken);
-        var report = await new ReingestRepair(new ChunkPositionScanner(fileTypeMatcher))
+        var report = await new ReingestRepair(new ChunkPositionScanner(fileTypeMatcher, localTokenizer))
             .RunAsync(connection, store, apply, cancellationToken);
 
         var verb = apply ? "reingested" : "would reingest (dry run; pass --apply to write)";

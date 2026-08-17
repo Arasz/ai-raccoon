@@ -63,7 +63,7 @@ public sealed class FirstContactRehearsal
                 NullLogger<MaintenanceJobRunner>.Instance)
             .RunDueAsync(connection,
                 [
-                    new ChunkBackfillJob(TestData.RealMarkdownChunker(), TimeProvider.System),
+                    new ChunkBackfillJob(TestData.RealMarkdownChunker(), TimeProvider.System, new LocalTokenizer()),
                     new Vec0ReclaimJob(),
                     new VacuumJob()
                 ], TestContext.Current.CancellationToken);

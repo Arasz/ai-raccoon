@@ -71,7 +71,7 @@ public static class TestData
         var embedder = new EntryEmbedder(embeddings);
         var matcher = new FileTypeMatcher(
             [new MarkdownFileTypeHandler(markdownChunker), new JsonFileTypeHandler(jsonChunker)]);
-        var fileIngestor = new FileIngestor(matcher, embedder, sourceStore, timeProvider);
+        var fileIngestor = new FileIngestor(matcher, embedder, sourceStore, timeProvider, new LocalTokenizer());
         var noiseFilteringService = new NoiseFilteringService(noisePolicies ?? Array.Empty<INoiseFilterPolicy>());
         return new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService,
             settings ?? new SqliteSettingsStore(factory));
@@ -188,7 +188,7 @@ public static class TestData
     public static BundledModel CreateBundledModel() => new(NullLogger<BundledModel>.Instance, new NoopHttpClientFactory());
 
     /// <summary>EmbeddingService with a null logger — the constructor requires a real <see cref="ILogger{TCategoryName}"/> now that it is DI-registered, so tests that don't care about logging use this.</summary>
-    public static EmbeddingService CreateEmbeddingService() => new(NullLogger<EmbeddingService>.Instance);
+    public static EmbeddingService CreateEmbeddingService() => new(NullLogger<EmbeddingService>.Instance, new LocalTokenizer());
 
     /// <summary>Returns the p-th percentile (0–1) of the samples.</summary>
     public static double Percentile(IReadOnlyList<double> samples, double quantile)

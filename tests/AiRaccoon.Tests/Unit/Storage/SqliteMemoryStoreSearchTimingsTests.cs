@@ -36,7 +36,8 @@ public sealed class SqliteMemoryStoreSearchTimingsTests : IDisposable
     {
         embedder ??= new EntryEmbedder(TestData.CreateEmbeddingService());
         return new SqliteMemoryStore(_factory, new SqliteMemorySourceStore(_factory),
-            new FileIngestor(new FileTypeMatcher([]), embedder, new SqliteMemorySourceStore(_factory), timeProvider),
+            new FileIngestor(new FileTypeMatcher([]), embedder, new SqliteMemorySourceStore(_factory), timeProvider,
+                new LocalTokenizer()),
             embedder, timeProvider, NullLogger<SqliteMemoryStore>.Instance,
             new NoiseFilteringService([]), new SqliteSettingsStore(_factory));
     }

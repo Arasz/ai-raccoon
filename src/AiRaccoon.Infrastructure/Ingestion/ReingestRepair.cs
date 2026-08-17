@@ -40,7 +40,7 @@ public sealed class ReingestRepair(ChunkPositionScanner scanner)
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(store);
 
-        var (maxTokens, overlayTokens, countTokens) = await ChunkPositionScanner.BudgetAsync(connection, cancellationToken)
+        var (maxTokens, overlayTokens, countTokens) = await scanner.BudgetAsync(connection, cancellationToken)
             .ConfigureAwait(false);
 
         // workspace_id IS NULL and path = source_file: exactly the rows ReplaceAsync's own

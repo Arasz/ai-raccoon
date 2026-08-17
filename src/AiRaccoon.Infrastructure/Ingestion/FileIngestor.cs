@@ -18,29 +18,10 @@ public sealed class FileIngestor(
     IFileTypeMatcher fileTypeMatcher,
     IEntryEmbedder embedder,
     IMemorySourceStore sourceStore,
-    TimeProvider timeProvider) : IFileIngestor
+    TimeProvider timeProvider,
+    ILocalTokenizer localTokenizer) : IFileIngestor
 {
     private const int DefaultMaxTokens = 256;
-
-    /// <summary>
-    ///     The bundled vocab never changes with the configured model path (see
-    ///     <see cref="EmbeddingService.CreateLocal" />), so one real BERT tokenizer is built lazily and
-    ///     reused for every local-engine ingest in this process (docs/adr/0036) — counting is done with
-    ///     the same tokenizer that will actually embed the chunk, not the o200k budget proxy.
-    /// </summary>
-    /// <remarks>
-    ///     Known, deliberately unaddressed gap (docs/adr/0036): a long punctuation-free, newline-joined
-    ///     run (e.g. a hash list) can collapse to a single [UNK] under this tokenizer's pretokenizer,
-    ///     reporting an implausibly small count that a budget ceiling alone would not catch. Measured
-    ///     against the live bank at 1/15,246 entries affecting a 123-char fragment — real but
-    ///     low-impact; <see cref="OnnxEmbeddingGenerator" />'s embed-time detector makes it visible.
-    ///     Chunker-side remediation is out of scope for this wave.
-    /// </remarks>
-    private static readonly Lazy<TokenCount> LocalCountTokens = new(() =>
-    {
-        var tokenizer = OnnxEmbeddingGenerator.CreateTokenizer(BundledModel.ResolveVocabPath());
-        return text => tokenizer.CountTokens(text);
-    });
 
     /// <summary>
     ///     Set <paramref name="embedInline" /> false when the caller holds a write transaction: embedding
@@ -237,9 +218,18 @@ public sealed class FileIngestor(
     ///         those boundaries permanently wrong. Chunking to the most restrictive plausible window
     ///         is safe in the other direction: a chunk that fits the bundled model fits a larger one.
     ///     </para>
+    ///     <para>
+    ///         "local" counts with the shared <see cref="LocalTokenizer" /> (docs/adr/0036) — the same
+    ///         real BERT tokenizer that will actually embed the chunk, not the o200k budget proxy.
+    ///         Known, deliberately unaddressed gap: a long punctuation-free, newline-joined run (e.g. a
+    ///         hash list) can collapse to a single [UNK] under its pretokenizer, reporting an
+    ///         implausibly small count that a budget ceiling alone would not catch. Measured against
+    ///         the live bank at 1/15,246 entries affecting a 123-char fragment — real but low-impact;
+    ///         <see cref="OnnxEmbeddingGenerator" />'s embed-time detector makes it visible.
+    ///         Chunker-side remediation is out of scope for this wave.
+    ///     </para>
     /// </summary>
-    private static async Task<(int MaxTokens, int OverlayTokens, TokenCount? CountTokens)> ChunkSizeForAsync(
-        SqliteConnection connection, CancellationToken cancellationToken)
+    private async Task<ChunkSize> ChunkSizeForAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var configured = await connection.QuerySingleOrDefaultAsync<string?>(
                 Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Provider }, cancellationToken))
@@ -251,9 +241,14 @@ public sealed class FileIngestor(
             .ConfigureAwait(false);
         var maxTokens = Math.Min(DefaultMaxTokens, EmbeddingService.SafeChunkBudgetFor(provider, model));
         var overlayTokens = Math.Min(ChunkingDefaults.OverlayTokens, Math.Max(0, maxTokens - 1));
-        var countTokens = provider.Equals("local", StringComparison.OrdinalIgnoreCase) ? LocalCountTokens.Value : null;
-        return (maxTokens, overlayTokens, countTokens);
+        TokenCount? countTokens = provider.Equals("local", StringComparison.OrdinalIgnoreCase) ? localTokenizer.CountTokens : null;
+        return new ChunkSize(maxTokens, overlayTokens, countTokens);
     }
+
+    /// <summary>Resolved chunk sizing for one ingest: unlike <see cref="Ingestion.ChunkBudget" />, the
+    /// counter is optional — null when the configured provider is not "local", so the chunker falls
+    /// back to its own default counter.</summary>
+    private sealed record ChunkSize(int MaxTokens, int OverlayTokens, TokenCount? CountTokens);
 
     private static async Task RequireInScopeAsync(SqliteConnection connection, string projectId, string path,
         CancellationToken cancellationToken)

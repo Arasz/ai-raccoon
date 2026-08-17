@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.TestHelpers;
@@ -101,7 +102,7 @@ public sealed class ChunkIndexRepairTests : IDisposable
     private static ChunkIndexRepair Repair()
     {
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]);
-        return new ChunkIndexRepair(matcher);
+        return new ChunkIndexRepair(matcher, new LocalTokenizer());
     }
 
     private static async Task<Dictionary<string, long>> PositionsByValueAsync(SqliteConnection connection, string sourceFile) =>
