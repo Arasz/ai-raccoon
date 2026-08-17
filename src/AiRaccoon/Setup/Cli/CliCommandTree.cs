@@ -71,6 +71,7 @@ internal static class CliCommandTree
         root.Add(EncryptionCommand());
         root.Add(RepairCommand());
         root.Add(ServeCommand());
+        root.Add(DoctorCommand());
         return root;
     }
 
@@ -328,6 +329,15 @@ internal static class CliCommandTree
                 new Option<bool>("--apply") { Description = "Writes the repositioned values instead of only reporting them" }
             }
         };
+
+    /// <summary>
+    ///     Verifies the bank's schema shape (tables/columns/indexes) against what this binary's DDL
+    ///     produces and reports — it never repairs (GH #357). An operation, not settings-backed
+    ///     configuration, so it stays top level like `watch`/`extract`/`noise`/`encryption`/`serve`.
+    /// </summary>
+    private static Command DoctorCommand() =>
+        new("doctor",
+            "Verifies the bank's schema shape (tables, columns, indexes) against what this binary expects, and reports. Never repairs — run after a suspected aborted migration, hand-edited bank, or partial restore.");
 
     private static Command ScopeCommand(string description) =>
         new("scope", description)
