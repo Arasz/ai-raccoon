@@ -58,8 +58,35 @@ public sealed class CliContractTests : IAsyncLifetime
         new(["watch", "registered"], 0, "no registered watches", ""),
         new(["extract", "prune"], 0, "promotion queue: no orphaned candidates found", ""),
         new(["bogusverb"], ExitCode.FailedToParseCliArgs, "", "Unrecognized command or argument 'bogusverb'."),
+        // A recognised-but-incomplete command shows help for the command it got as far as
+        // (docs/adr/0060 keeps this distinct from the bogusverb row above: that one never
+        // resolves a command path, so it gets no help — only its error).
         new(["settings", "sweep", "bogus"], ExitCode.InvalidArgument, "",
-            "Required command was not provided.\nUnrecognized command or argument 'bogus'.")
+            "Required command was not provided.\nUnrecognized command or argument 'bogus'.\n\n" +
+            "Description:\n" +
+            "  Background reaper configuration: the kill switch, the cadence and the rating threshold it deletes below. The reaper is ON by default — 'sweep disable' is how you disarm it. Per-entry TTLs are data, set by the memory_set_ttl tool, not configured here.\n\n" +
+            "Usage:\n" +
+            "  AiRaccoon settings sweep [command] [options]\n\n" +
+            "Options:\n" +
+            "  -?, -h, --help  Show help and usage information\n\n" +
+            "Commands:\n" +
+            "  enable                    Arms the background reaper (the default: it deletes expired entries on its cadence)\n" +
+            "  disable                   Disarms the background reaper — nothing is deleted until it is enabled again\n" +
+            "  interval-hours <1..8760>  Sets the reaper cadence in hours (1..8760, default 24); applies live, no server restart needed\n" +
+            "  threshold                 Sweep rating threshold\n" +
+            "  list, show                Shows the whole policy: enabled, interval hours and threshold (row values, else the defaults)"),
+        new(["model", "set", "openai"], ExitCode.InvalidArgument, "",
+            "Required argument missing for command: 'openai'.\n\n" +
+            "Description:\n" +
+            "  Routes through an OpenAI-compatible endpoint; key via --api-key (persisted in settings)\n\n" +
+            "Usage:\n" +
+            "  AiRaccoon model set openai <model> [<base-url>] [options]\n\n" +
+            "Arguments:\n" +
+            "  <model-id>\n" +
+            "  <url>\n\n" +
+            "Options:\n" +
+            "  --api-key <key>  API key persisted in the settings table\n" +
+            "  -?, -h, --help   Show help and usage information")
     ];
 
     public ValueTask InitializeAsync()
