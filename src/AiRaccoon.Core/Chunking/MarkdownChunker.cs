@@ -39,17 +39,6 @@ public sealed class MarkdownChunker : IMarkdownChunker
         var cursor = 0;
         while (cursor < units.Count)
         {
-            if (units[cursor].IsTable)
-            {
-                // A table unit is already a whole chunk: header, separator and the rows that fit.
-                // It takes no overlay and leaves none, so neither side of the boundary mixes prose
-                // with table rows in one embedding (docs/adr/0077).
-                chunks.Add(string.Concat(units[cursor].Lines));
-                previousUnits = null;
-                cursor++;
-                continue;
-            }
-
             var overlay = BuildOverlay(previousUnits, overlayTokens);
             var (chunkUnits, nextCursor) = BuildChunk(units, cursor, overlay, maxTokens, countTokens);
             chunks.Add(string.Concat(chunkUnits.SelectMany(unit => unit.Lines)));
@@ -78,11 +67,6 @@ public sealed class MarkdownChunker : IMarkdownChunker
         while (c < units.Count)
         {
             var next = units[c];
-            if (next.IsTable)
-            {
-                break;
-            }
-
             if (newUnitCount > 0 && tokens + next.TokenCount > maxTokens)
             {
                 break;
@@ -152,21 +136,14 @@ public sealed class MarkdownChunker : IMarkdownChunker
         List<Unit> units = [];
         List<string>? fenceLines = null;
         var fenceTokens = 0;
-        for (var index = 0; index < lines.Count; index++)
+        foreach (var line in lines)
         {
-            var line = lines[index];
             if (fenceLines is null)
             {
                 if (IsFenceDelimiter(line))
                 {
                     fenceLines = [line];
                     fenceTokens = countTokens(line);
-                }
-                else if (StartsTable(lines, index))
-                {
-                    // Only reached outside a fence, so a table drawn inside a code block stays fence
-                    // content and a bare pipe line without a separator row stays prose.
-                    index = FlushTable(units, lines, index, maxTokens, countTokens) - 1;
                 }
                 else
                 {
@@ -198,87 +175,6 @@ public sealed class MarkdownChunker : IMarkdownChunker
         }
 
         return units;
-    }
-
-    /// <summary>A table starts where a pipe row is followed directly by a separator row; a pipe alone
-    /// is prose, which is what an early blast-radius figure got wrong (docs/adr/0077).</summary>
-    private static bool StartsTable(List<string> lines, int index) =>
-        IsPipeRow(lines[index]) && index + 1 < lines.Count && IsSeparatorRow(lines[index + 1]);
-
-    private static bool IsPipeRow(string line) => line.TrimStart().StartsWith('|');
-
-    private static bool IsSeparatorRow(string line)
-    {
-        if (!IsPipeRow(line))
-        {
-            return false;
-        }
-
-        var dashes = 0;
-        foreach (var character in line.Trim())
-        {
-            if (character == '-')
-            {
-                dashes++;
-            }
-            else if (character is not ('|' or ':' or ' ' or '\t'))
-            {
-                return false;
-            }
-        }
-
-        return dashes > 0;
-    }
-
-    /// <summary>
-    ///     Emits a table region as whole-chunk units, each repeating the header and separator, so no
-    ///     body row is ever emitted header-orphaned (docs/adr/0048's unbuilt follow-up, docs/adr/0077).
-    ///     Returns the index of the first line after the region. Falls back to plain lines when the
-    ///     header and one row cannot fit together — the token budget outranks the property, the same
-    ///     precedence <see cref="FlushAsSubFences" /> applies to fences (docs/adr/0036).
-    /// </summary>
-    private static int FlushTable(List<Unit> units, List<string> lines, int start, int maxTokens,
-        TokenCount countTokens)
-    {
-        var end = start + 2;
-        while (end < lines.Count && IsPipeRow(lines[end]))
-        {
-            end++;
-        }
-
-        var header = EndWithNewline(lines[start]);
-        var separator = EndWithNewline(lines[start + 1]);
-        var caption = new List<string> { header, separator };
-        var rows = lines[(start + 2)..end];
-
-        if (rows.Count == 0 || rows.Any(row => countTokens(string.Concat(header, separator, EndWithNewline(row))) > maxTokens))
-        {
-            FlushAsLines(units, lines[start..end], maxTokens, countTokens);
-            return end;
-        }
-
-        List<string> current = [];
-        foreach (var row in rows)
-        {
-            current.Add(EndWithNewline(row));
-            if (countTokens(string.Concat(caption.Concat(current))) <= maxTokens)
-            {
-                continue;
-            }
-
-            current.RemoveAt(current.Count - 1);
-            AddTableUnit(units, caption, current, countTokens);
-            current = [EndWithNewline(row)];
-        }
-
-        AddTableUnit(units, caption, current, countTokens);
-        return end;
-    }
-
-    private static void AddTableUnit(List<Unit> units, List<string> caption, List<string> rows, TokenCount countTokens)
-    {
-        List<string> unitLines = [.. caption, .. rows];
-        units.Add(new Unit(unitLines, countTokens(string.Concat(unitLines)), IsTable: true));
     }
 
     private static void FlushFence(List<Unit> units, List<string> fenceLines, int fenceTokens, int maxTokens,
@@ -499,5 +395,5 @@ public sealed class MarkdownChunker : IMarkdownChunker
 
     private static string NormalizeLineEndings(string text) => text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
 
-    private sealed record Unit(List<string> Lines, int TokenCount, bool IsTable = false);
+    private sealed record Unit(List<string> Lines, int TokenCount);
 }
