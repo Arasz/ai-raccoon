@@ -6,10 +6,12 @@ Ask the running server how it is performing — no OpenTelemetry collector requi
 
 ## What this is, and what it is not
 
-AiRaccoon records a measurement for every MCP tool call and every `memory_search` phase
-(`search.fts`, `search.vector`, `search.fusion`, `search.affinity`, `search.snippets`,
-`search.bump`), persists them in a `metrics` table inside `memory.db`, and reads them back
-through the `memory_performance` MCP tool. This is diagnostics for **you**, the person running or
+AiRaccoon records a measurement for every MCP tool call, every `memory_search` phase
+(`search.open`, `search.embed`, `search.fts`, `search.vector`, `search.fusion`, `search.affinity`,
+`search.snippets`, `search.bump`), and one measured total per search (`search.total` — not itself
+a phase; see [Reading `search.*` series](#reading-search-series) below), persists them in a
+`metrics` table inside `memory.db`, and reads them back through the `memory_performance` MCP tool.
+This is diagnostics for **you**, the person running or
 developing AiRaccoon — not a replacement for
 [the Meter/OTLP export path](monitor-and-export-telemetry.md), which is unchanged and keeps
 exporting the same counters and spans to a collector when one is configured. Use this page when
@@ -60,9 +62,9 @@ hours in 1-minute buckets (180 points):
 A few things worth knowing before reading a report:
 
 - **The series list is fixed, not discovered.** It is every tool on the server's own tool
-  inventory plus the six `memory_search` phases — never `SELECT DISTINCT name FROM metrics` — so a
-  tool or phase nothing has called yet still appears, at `count: 0`, rather than being silently
-  omitted.
+  inventory plus `SearchTimings.SeriesNames` — the eight `memory_search` phases and the measured
+  `search.total` — never `SELECT DISTINCT name FROM metrics` — so a tool, phase or `search.total`
+  nothing has called yet still appears, at `count: 0`, rather than being silently omitted.
 - **A quiet window is an empty series, never an error.** Asking about a bank with no traffic in
   the requested window is a well-formed answer ("nothing happened"), not a failure.
 - **The report is project-scoped.** It covers only the `projectId` you pass; there is no
@@ -75,6 +77,36 @@ A few things worth knowing before reading a report:
   durations, not individual events. Correlating a specific slow search with `search_quality`'s
   usefulness data needs the raw `metrics` rows (`query_hash`, `correlation_id` columns), which this
   tool does not expose directly.
+
+## Reading `search.*` series
+
+Four things a reader can get wrong about the phase series, each because the shape of the data
+looks like something it is not:
+
+1. **A window spanning the day `search.open`/`search.embed`/`search.total` were added will show
+   them at a lower count than `search.fts`.** Rows recorded before the change never wrote those
+   three names, and `PerformanceReportBuilder` reports a series with no samples in the window as
+   `count: 0` with null percentiles and empty buckets — it does not backfill, because an old row
+   does not know its own bank-open or embed duration. Sum-versus-total arithmetic (`Σ phases` vs.
+   `search.total`) is only valid where `search.total`'s count in the window equals `search.fts`'s;
+   a count mismatch is the honest signal that the window straddles the change, not a defect in
+   either series.
+2. **`search.total` is not `memory_search`.** `search.total` brackets only
+   `SqliteMemoryStore.SearchAsync`; `memory_search`'s own reported duration additionally covers the
+   access gate, the query guard, the post-search `search_quality` write, envelope shaping and MCP
+   SDK dispatch. The two will not agree, and that gap is expected — see
+   [ADR-0079](../adr/0079-the-phases-close-against-search-total-not-the-tool-total.md) for why it
+   cannot be closed from inside `SearchAsync`. Sum the phases against `search.total`, never against
+   `memory_search`.
+3. **`search.open` covers only `SearchAsync`'s own bank open**, not the query guard's separate one
+   (a single settings-prefix read, evaluated before `SearchAsync` is even called). Connection
+   dispose / return-to-pool happens at method exit, after the `search.total` bracket has already
+   closed, so it is in neither `search.open` nor `search.total`.
+4. **`search.embed` reads near zero on a bank with no embedding engine configured** — that is
+   `EntryEmbedder` returning null right after its own settings read, not evidence that embedding is
+   cheap. On a bank *with* an engine configured, the same span also covers the ONNX session build
+   on its first use, so the very first search after server startup can show as an outlier in this
+   series without anything being wrong.
 
 ## What is not read back yet
 
@@ -103,5 +135,7 @@ for the keys and how (not yet) to change them.
   data flow from hot path to table to report
 - [ADR-0074](../adr/0074-a-capped-buffer-satisfies-the-channel-rule-and-reshapes-g4.md) — why the
   writer is a capped buffer, not a channel
+- [ADR-0079](../adr/0079-the-phases-close-against-search-total-not-the-tool-total.md) — why the
+  phases close against `search.total`, not `memory_search`
 - [docs/reference/agent-memory-server.md](../reference/agent-memory-server.md#tools-27) — the full
   `memory_performance` tool contract
