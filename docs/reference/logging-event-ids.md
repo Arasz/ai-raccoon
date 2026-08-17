@@ -9,7 +9,7 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **134** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **136** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
@@ -69,6 +69,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 961 | `src/AiRaccoon.Infrastructure/Metrics/SqliteMetricsStore.cs` (WP3: the save-time query-identity allowlist) |
 | 970-974 | `src/AiRaccoon.Infrastructure/Metrics/MetricsFlusher.cs` (WP3; moved from 962-964 and extended to 973-974 — the bounded shutdown-time final flush, review-fixes blocker 2 — freeing room the old block did not have: it sat wedged between SqliteMetricsStore's 961 and SqliteSearchQualityService's 965) |
 | 965 | `src/AiRaccoon.Infrastructure/Sqlite/SqliteSearchQualityService.cs` (WP10, docs/plans/2026-08-15-performance-metrics-implementation.md: `RecordSearchSafeAsync`'s best-effort failure) |
+| 1000-1001 | `src/AiRaccoon/Setup/Cli/Commands/DoctorCommands.cs` (GH #357: `doctor`'s key-resolution and bank-open failure logs) |
 
 ## How this table is produced
 

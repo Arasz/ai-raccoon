@@ -249,6 +249,36 @@ ai-raccoon settings retrieval alpha show        # 0.5
 ai-raccoon settings retrieval alpha set 0.7     # 0..1; weights the structure vector against the content vector
 ```
 
+#### The no-fusion-regression rule (off by default)
+
+[ADR-0006](../adr/0006-rrf-parameter-optimization.md) declares that the hybrid never ranks the
+expected chunk below the best single modality. It holds across the tuning queries — and
+[#367](https://github.com/Arasz/ai-raccoon/issues/367) found a real bank where it does not: a chunk
+ranked **1st** by keyword search alone came back **18th** under the default hybrid.
+
+This setting enforces that rule as an ordering. It has **no tunable parameter** — it is on or off:
+
+```bash
+ai-raccoon settings retrieval fusion show       # enabled: False  (default: False — off serves the baseline fusion)
+ai-raccoon settings retrieval fusion enable
+ai-raccoon settings retrieval fusion disable
+```
+
+**It ships off, deliberately.** The offline query corpus cannot adjudicate a fusion change —
+[ADR-0072](../adr/0072-a-term-budget-for-long-queries-is-not-adjudicable.md) records a change that
+was measured and *not* shipped for exactly this reason, because choosing from a three-query held-out
+set is fitting noise. So enabling it is how the evidence gets collected, not a setting you are
+expected to leave alone.
+
+**When enabled it records what it changed.** Each search computes both the baseline ordering and the
+adjusted one, serves the adjusted one, and writes three measurements to the `metrics` table:
+whether the top result changed, how far the baseline's top result moved, and how much of the top 5
+shifted. `metrics.correlation_id` joins back to `search_quality`, so a run can be scored against the
+usefulness grades it produced. That extra work is why it is gated rather than always on.
+
+Turning it off restores the previous behaviour exactly — the baseline path is unchanged when the
+flag is absent or false.
+
 ### Self-instrumentation (metrics)
 
 Controls the background writer for AiRaccoon's own performance measurements (see
@@ -278,6 +308,109 @@ allocation an operator could otherwise set arbitrarily large, and an unbounded r
 overflows the reaper's `DateTimeOffset.AddDays` arithmetic.
 
 ---
+
+## Diagnose a bank's schema
+
+`CREATE TABLE IF NOT EXISTS` is silent when an object of that name already exists with a **different
+shape**. Opening a bank proves its objects *exist*; it never proves they have the right columns,
+types or constraints. A bank that diverged unintentionally — an aborted migration, hand surgery, a
+partial restore — keeps that shape indefinitely and fails later at query time, far from the cause.
+
+```bash
+ai-raccoon doctor                          # verifies the configured bank
+ai-raccoon --data-root /path/to/dir doctor # verifies a bank elsewhere (a copy, a restore)
+```
+
+A healthy bank:
+
+```
+user_version: 10 (this binary: 10)
+application_id: -519479064 (expected: -519479064)
+doctor verifies schema shape only; it never repairs a bank
+status: HEALTHY
+```
+
+The same bank with one index dropped by hand:
+
+```
+status: SHAPE MISMATCH (1 finding(s))
+  - idx_entries_scope_project: missing index
+```
+
+Note what the second example shows: `user_version` is correct **and** `application_id` matches, so
+neither the version ladder nor the schema digest considers anything wrong — while an index is
+missing. That gap is the reason this verb exists.
+
+**It reports; it never repairs.** A wrongly-shaped table may hold data the correct shape cannot
+represent, so recreating it is a data-loss decision, not a schema decision — one for you to make
+with the bank in front of you.
+
+It opens the bank **read-only** and does not modify it, so it is safe to run against a live bank or
+a backup. Exit code is `0` when healthy and non-zero on a mismatch, so it composes into a script.
+
+If the bank is encrypted and the passphrase cannot be resolved, that is reported as a *read* failure
+and is distinguishable from a shape problem — a locked bank is not a broken one.
+
+## Repair chunk ordering on an existing bank
+
+`chunk_index` records where a chunk sits **in its document**. Until 1.23.0 it was derived from row
+insertion order instead, and ingest only ever inserted — so a paragraph edited into the *middle* of a
+watched file was numbered *last*. Measured on a real 25,995-entry bank: 908 of 1,343 source files had
+been re-ingested incrementally, and every one checked was out of document order.
+
+That matters because the adjacent-chunk boost ([ADR-0005](../adr/0005-source-affinity-ranking.md))
+tests whether two results are neighbours. Wrong ordering means it rewards chunks that are not.
+
+New ingests are correct from 1.23.0 onward. Rows already in your bank are not — repair them
+explicitly:
+
+```bash
+ai-raccoon repair chunk-index            # dry run: reports what it would change, writes nothing
+ai-raccoon repair chunk-index --apply    # performs the repair
+```
+
+**Nothing repairs itself.** This is not in the maintenance job list, so upgrading does not silently
+rewrite your bank — you choose when it runs, and the default is a report.
+
+It is **UPDATE-only**: it never inserts or deletes a row. Where a chunk's position genuinely cannot
+be known — the source file has been moved or deleted, or the entry was written directly by
+`memory_write` and has no file — it sets `chunk_index = -1`, meaning *position unknown*, rather than
+guessing. The ranker skips those rows when testing adjacency instead of treating `-1` as a neighbour
+of `0`.
+
+### Read the dry run before you apply it
+
+**On a bank with any history, the repair will mark a large fraction of rows *position unknown*, and
+you should decide whether that is the trade you want.**
+
+It positions a row by re-chunking the source file with the **current** chunker and matching on
+content hash. A row produced by an *older* chunker has different boundaries, so its hash does not
+match anything the current chunker produces, and it is honestly marked `-1` rather than guessed at.
+This project has changed chunk boundaries several times ([ADR-0036](../adr/0036-engine-aware-chunk-token-budget.md),
+[ADR-0048](../adr/0048-a-chunk-is-a-well-formed-markdown-fragment.md), and others), so most rows on
+an older bank predate the boundaries in force today.
+
+Measured on a real 25,995-entry bank:
+
+| | rows | share |
+|---|---|---|
+| would be repositioned | 4,710 | 18% |
+| would be marked position-unknown (`-1`) | 16,074 | 62% |
+
+A row at `-1` is **skipped** by the adjacent-chunk boost rather than mis-boosted. That removes the
+wrong adjacency this fix exists to eliminate — but it also removes any adjacency signal for those
+rows, which is a different behaviour from having a correct one. Whether that is an improvement on
+your bank is not something the repair can tell you, and it has not been measured across a query set.
+
+So: **run the dry run, read the two numbers, and decide.** If most of your bank would go to `-1`,
+re-ingesting the affected sources under the current chunker is the more thorough fix, and the repair
+is not a substitute for it.
+
+Run it against a **copy** first if you want to see the scale of the change on your own data:
+
+```bash
+ai-raccoon --data-root /path/to/copy --port 7799 repair chunk-index
+```
 
 ## Related documentation
 

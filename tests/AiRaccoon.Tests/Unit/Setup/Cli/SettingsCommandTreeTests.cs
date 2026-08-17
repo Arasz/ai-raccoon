@@ -21,7 +21,7 @@ namespace AiRaccoon.Tests.Unit.Setup.Cli;
 public class SettingsCommandTreeTests
 {
     /// <summary>The end-state top level: one config noun plus the operations that are not configuration.</summary>
-    private static readonly string[] TopLevel = ["settings", "model", "watch", "extract", "encryption", "serve", "noise"];
+    private static readonly string[] TopLevel = ["settings", "model", "watch", "extract", "encryption", "repair", "serve", "noise", "doctor"];
 
     /// <summary>
     ///     Every configuration leaf, with a sample argv that satisfies its arguments. The coverage test
@@ -39,6 +39,9 @@ public class SettingsCommandTreeTests
         ("settings model show", ["settings", "model", "show"]),
         ("settings retrieval alpha set", ["settings", "retrieval", "alpha", "set", "0.5"]),
         ("settings retrieval alpha show", ["settings", "retrieval", "alpha", "show"]),
+        ("settings retrieval fusion enable", ["settings", "retrieval", "fusion", "enable"]),
+        ("settings retrieval fusion disable", ["settings", "retrieval", "fusion", "disable"]),
+        ("settings retrieval fusion show", ["settings", "retrieval", "fusion", "show"]),
         ("settings sweep enable", ["settings", "sweep", "enable"]),
         ("settings sweep disable", ["settings", "sweep", "disable"]),
         ("settings sweep interval-hours", ["settings", "sweep", "interval-hours", "12"]),

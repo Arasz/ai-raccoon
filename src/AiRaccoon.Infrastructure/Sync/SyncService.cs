@@ -394,9 +394,12 @@ public partial class SyncService(
                 // merge's tombstone DELETE can remove group members and the merge INSERT above
                 // can add new source_file-bearing rows to a group; bank-wide is cheap and sync
                 // is rare, so there is no reason to scope this to the affected groups.
+                // FromIdOrder (GH #371), not the sentinel-guarded form: a merge's pulled rows and a
+                // tombstone's survivors both need re-deriving from this bank's own id order — see
+                // MemorySql.RecomputeChunkColumnsBankWideFromIdOrder for why that is still safe here.
                 await using (var recompute = conn.CreateCommand())
                 {
-                    recompute.CommandText = MemorySql.RecomputeChunkColumnsBankWide;
+                    recompute.CommandText = MemorySql.RecomputeChunkColumnsBankWideFromIdOrder;
                     await recompute.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 

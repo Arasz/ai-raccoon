@@ -19,7 +19,9 @@ internal sealed class ConfigCommands(
     MaintenanceCommands maintenance,
     PerformanceCommands performance,
     ServeCommands serve,
-    NoiseEntriesCommands noiseEntries)
+    NoiseEntriesCommands noiseEntries,
+    ChunkIndexRepairCommands chunkIndexRepair,
+    DoctorCommands doctor)
 {
     public async Task<int> RunAsync(CliInput cliInput,
         StandardStreams streams,
@@ -51,6 +53,9 @@ internal sealed class ConfigCommands(
                 ["settings", "model", "show"] => await settings.ModelShowAsync(store, streams, ctx),
                 ["settings", "retrieval", "alpha", "set"] => await settings.RetrievalAlphaSetAsync(parsedCliArgs, store, streams, ctx),
                 ["settings", "retrieval", "alpha", "show"] => await settings.RetrievalAlphaShowAsync(store, streams, ctx),
+                ["settings", "retrieval", "fusion", "enable"] => await settings.RetrievalFusionSetAsync(true, store, streams, ctx),
+                ["settings", "retrieval", "fusion", "disable"] => await settings.RetrievalFusionSetAsync(false, store, streams, ctx),
+                ["settings", "retrieval", "fusion", "show"] => await settings.RetrievalFusionShowAsync(store, streams, ctx),
                 ["settings", "sweep", "enable"] => await settings.SweepEnabledSetAsync(true, store, streams, ctx),
                 ["settings", "sweep", "disable"] => await settings.SweepEnabledSetAsync(false, store, streams, ctx),
                 ["settings", "sweep", "interval-hours"] => await settings.SweepIntervalHoursSetAsync(parsedCliArgs, store, streams, ctx),
@@ -91,6 +96,7 @@ internal sealed class ConfigCommands(
                 ["settings", "extract", "exclude", "remove"] => await extract.ExcludeRemoveAsync(parsedCliArgs, store, streams, ctx),
                 ["settings", "extract", "exclude", "list"] => await extract.ExcludeListAsync(store, streams, ctx),
                 ["extract", "prune"] => await extract.PruneAsync(parsedCliArgs, streams, ctx),
+                ["repair", "chunk-index"] => await chunkIndexRepair.RunAsync(parsedCliArgs, streams, ctx),
                 ["encryption", "show"] => await encryptionCommands.ShowAsync(store, streams, ctx),
                 ["encryption", "unset"] => await encryptionCommands.UnsetAsync(store, streams, ctx),
                 ["encryption", "migrate"] => await encryptionCommands.MigrateAsync(streams, ctx),
@@ -103,6 +109,7 @@ internal sealed class ConfigCommands(
                 ["settings", "performance", "list"] => await performance.ListAsync(store, streams, ctx),
                 ["serve", "observability"] => await serve.Observability(cliInput, streams, ctx),
                 ["serve"] => await serve.StartNode(cliInput, streams, ctx),
+                ["doctor"] => await doctor.RunAsync(streams, ctx),
                 _ => throw new InvalidOperationException($"unhandled command: {string.Join(' ', commandPath)}")
             };
         }

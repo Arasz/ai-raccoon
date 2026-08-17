@@ -4,6 +4,7 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
+using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Infrastructure.Embedding;
 
@@ -191,6 +192,30 @@ public sealed class SettingsCommands
             ? parsed
             : StructureFusion.DefaultAlpha;
         await streams.WriteOutputLineAsync(alpha.ToString(CultureInfo.InvariantCulture));
+        return 0;
+    }
+
+    /// <summary>
+    ///     The no-fusion-regression reorder's kill switch (docs/adr/0078). Default off, so `enable`
+    ///     is how the evidence-gathering path is armed and `disable` returns to the baseline.
+    /// </summary>
+    public async Task<int> RetrievalFusionSetAsync(bool enabled, IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken)
+    {
+        await store.SetSettingAsync(FusionConfigKeys.NoRegressionEnabledGlobal, enabled ? "true" : "false",
+            cancellationToken);
+        await streams.WriteOutputLineAsync($"retrieval fusion no-regression reorder {(enabled ? "enabled" : "disabled")}");
+        return 0;
+    }
+
+    /// <summary>Names the default in the output: reading "False" alone cannot tell an unset bank from a disabled one.</summary>
+    public async Task<int> RetrievalFusionShowAsync(IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken)
+    {
+        var enabled = FusionConfigKeys.ParseNoRegressionEnabled(
+            await store.GetSettingAsync(FusionConfigKeys.NoRegressionEnabledGlobal, cancellationToken));
+        await streams.WriteOutputLineAsync(
+            $"enabled: {enabled}  (default: {FusionConfigKeys.DefaultNoRegressionEnabled} — off serves the baseline fusion)");
         return 0;
     }
 

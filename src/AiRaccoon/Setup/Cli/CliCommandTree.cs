@@ -69,7 +69,9 @@ internal static class CliCommandTree
         root.Add(ExtractCommand());
         root.Add(NoiseCommand());
         root.Add(EncryptionCommand());
+        root.Add(RepairCommand());
         root.Add(ServeCommand());
+        root.Add(DoctorCommand());
         return root;
     }
 
@@ -183,6 +185,16 @@ internal static class CliCommandTree
             new Command("show", "Shows the current alpha (row value, else 0.5)")
         };
         retrieval.Add(alpha);
+        var fusion = new Command("fusion",
+            "No-fusion-regression reorder (docs/adr/0078): keeps a result from ranking below where its best single modality put it. OFF by default and unproven — 'fusion enable' arms it and starts recording how it differs from the baseline.")
+        {
+            new Command("enable", "Arms the reorder and its evidence collection (not the default)"),
+            new Command("disable", "Back to the baseline fusion (the default)")
+        };
+        var fusionShow = new Command("show", "Shows whether the reorder is armed, and names the default");
+        fusionShow.Aliases.Add("list");
+        fusion.Add(fusionShow);
+        retrieval.Add(fusion);
         return retrieval;
     }
 
@@ -312,6 +324,30 @@ internal static class CliCommandTree
         encryption.Add(new Command("migrate", "Rekeys a bank still encrypted under the pre-ADR-0012 key derivation (ADR-0012)"));
         return encryption;
     }
+
+    /// <summary>
+    ///     Explicit-only repair operations (GH #371) — never part of the maintenance job list a bank
+    ///     open runs automatically; an operator invokes these by hand.
+    /// </summary>
+    private static Command RepairCommand() =>
+        new("repair", "Explicit-only repair operations. Nothing here runs automatically — every repair is invoked by hand.")
+        {
+            new Command("chunk-index",
+                "Re-derives chunk_index/total_chunks per source_file from the document itself, instead of the row-insertion order an older binary may have left behind (GH #371). " +
+                "A source_file that no longer exists gets chunk_index = -1 (position unknown), never a guess. Pure UPDATE — never inserts or deletes a row. Reports by default; --apply writes.")
+            {
+                new Option<bool>("--apply") { Description = "Writes the repositioned values instead of only reporting them" }
+            }
+        };
+
+    /// <summary>
+    ///     Verifies the bank's schema shape (tables/columns/indexes) against what this binary's DDL
+    ///     produces and reports — it never repairs (GH #357). An operation, not settings-backed
+    ///     configuration, so it stays top level like `watch`/`extract`/`noise`/`encryption`/`serve`.
+    /// </summary>
+    private static Command DoctorCommand() =>
+        new("doctor",
+            "Verifies the bank's schema shape (tables, columns, indexes) against what this binary expects, and reports. Never repairs — run after a suspected aborted migration, hand-edited bank, or partial restore.");
 
     private static Command ScopeCommand(string description) =>
         new("scope", description)

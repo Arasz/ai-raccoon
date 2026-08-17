@@ -104,7 +104,9 @@ public sealed class WorkspaceEntryUniquenessTests : IDisposable
                 agentId = (string?)null,
                 createdAt = now,
                 updatedAt = now,
-                sourceId = (long?)null
+                sourceId = (long?)null,
+                chunkIndex = -1,
+                totalChunks = 0
             },
             cancellationToken: TestContext.Current.CancellationToken));
     }

@@ -78,7 +78,7 @@ public sealed partial class SqliteMemoryStore
 
     private sealed record SourceRow(string Path, string Value, string? SourceFile, string? Section, string? SourceType, string? HeadingPath);
 
-    private sealed record DeleteRecomputeRow(string? Scope, string? ContextLabel, string? WorkspaceId, string? SourceFile);
+    private sealed record DeleteRecomputeRow(string? Scope, string? ContextLabel, string? WorkspaceId, string? SourceFile, long ChunkIndex);
 
     private sealed record SharedRow(string Path, string Value);
 

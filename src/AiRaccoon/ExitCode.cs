@@ -50,5 +50,11 @@ public static class ExitCode
     /// <summary>A settings command could neither reach nor auto-start a settings server within the acquire budget.</summary>
     public const int SettingsServerUnavailable = 18;
 
+    /// <summary>`doctor` (GH #357): the bank's actual schema shape (tables/columns/indexes) differs from what this binary's DDL produces — distinct from the bank simply failing to open.</summary>
+    public const int SchemaVerificationFailed = 19;
+
+    /// <summary>`doctor`: the bank's stored user_version is newer than this binary's MemorySchema.CurrentVersion — a newer build wrote it, not a shape mismatch.</summary>
+    public const int SchemaNewerThanBinary = 20;
+
     public const int Success = 0;
 }

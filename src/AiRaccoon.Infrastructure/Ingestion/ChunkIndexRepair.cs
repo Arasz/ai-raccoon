@@ -1,0 +1,174 @@
+using AiRaccoon.Core.Chunking;
+using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Sqlite;
+using Dapper;
+using Microsoft.Data.Sqlite;
+
+namespace AiRaccoon.Infrastructure.Ingestion;
+
+/// <summary>What a repair pass found and did. A dry run (apply: false) fills it in without writing.</summary>
+public sealed record ChunkIndexRepairReport(
+    int GroupsExamined, int RowsRepositioned, int RowsSetToUnknown);
+
+/// <summary>
+///     GH #371: re-derives chunk_index/total_chunks per (ctx, source_file) group straight from the
+///     document a still-present source_file names, instead of the row-id order the old recompute
+///     left behind. A group whose source_file is missing, unreadable, or absent gets chunk_index =
+///     -1 (position unknown) — never a guess. Pure UPDATE: never inserts or deletes a row.
+///     <para>
+///         Explicitly invoked only (`ai-raccoon repair chunk-index`) — never registered as an
+///         <see cref="AiRaccoon.Infrastructure.Maintenance.IMaintenanceJob" />, so it cannot run
+///         unattended against a live bank on open (docs/plans/2026-08-08-search-knn-perf.md §3.3).
+///     </para>
+/// </summary>
+public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher)
+{
+    private const int DefaultMaxTokens = 256;
+
+    public async Task<ChunkIndexRepairReport> RunAsync(SqliteConnection connection, bool apply,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        var (maxTokens, overlayTokens, countTokens) = await BudgetAsync(connection, cancellationToken)
+            .ConfigureAwait(false);
+
+        var groups = (await connection.QueryAsync<GroupKey>(new CommandDefinition(
+                $"""
+                 SELECT DISTINCT {MemorySql.ContextKeyExpression("")} AS Ctx, source_file AS SourceFile
+                 FROM entries
+                 WHERE source_file IS NOT NULL
+                 """, cancellationToken: cancellationToken))
+            .ConfigureAwait(false)).ToList();
+
+        var groupsExamined = 0;
+        var repositioned = 0;
+        var setUnknown = 0;
+
+        foreach (var group in groups)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            groupsExamined++;
+
+            var rows = (await connection.QueryAsync<GroupRow>(new CommandDefinition(
+                    $"""
+                     SELECT id AS Id, hash AS Hash, chunk_index AS ChunkIndex
+                     FROM entries
+                     WHERE source_file = @sourceFile AND ({MemorySql.ContextKeyExpression("")}) = @ctx
+                     """, new { sourceFile = group.SourceFile, ctx = group.Ctx }, cancellationToken: cancellationToken))
+                .ConfigureAwait(false)).ToList();
+            var totalChunks = rows.Count;
+
+            IReadOnlyDictionary<long, int> positionById;
+            if (group.SourceFile is null
+                || !fileTypeMatcher.TryGetHandler(group.SourceFile, out var handler)
+                || !TryReadFile(group.SourceFile, out var content))
+            {
+                positionById = rows.ToDictionary(row => row.Id, _ => -1);
+            }
+            else
+            {
+                var chunks = handler.Chunker.Chunk(content, maxTokens, overlayTokens, countTokens);
+                var byHash = rows.ToDictionary(row => row.Hash, row => row.Id, StringComparer.Ordinal);
+                var byId = new Dictionary<long, int>(rows.Count);
+                for (var ordinal = 0; ordinal < chunks.Count; ordinal++)
+                {
+                    var hash = ContentHash.Of(group.SourceFile, chunks[ordinal]);
+                    if (byHash.TryGetValue(hash, out var id))
+                    {
+                        byId[id] = ordinal;
+                    }
+                }
+
+                // A row this pass's re-chunk did not reproduce (stale content, a boundary shift) has
+                // no document position to report — unknown, not a guess.
+                foreach (var row in rows.Where(row => !byId.ContainsKey(row.Id)))
+                {
+                    byId[row.Id] = -1;
+                }
+
+                positionById = byId;
+            }
+
+            foreach (var row in rows)
+            {
+                var newIndex = positionById[row.Id];
+                if (newIndex == row.ChunkIndex)
+                {
+                    continue;
+                }
+
+                if (newIndex < 0)
+                {
+                    setUnknown++;
+                }
+                else
+                {
+                    repositioned++;
+                }
+
+                if (apply)
+                {
+                    await connection.ExecuteAsync(new CommandDefinition(MemorySql.SetChunkPosition,
+                            new { id = row.Id, chunkIndex = newIndex, totalChunks }, cancellationToken: cancellationToken))
+                        .ConfigureAwait(false);
+                }
+            }
+        }
+
+        return new ChunkIndexRepairReport(groupsExamined, repositioned, setUnknown);
+    }
+
+    private static bool TryReadFile(string path, out string content)
+    {
+        try
+        {
+            content = File.ReadAllText(path);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            content = "";
+            return false;
+        }
+    }
+
+    /// <summary>The same resolution the ingest path uses, read from the same settings (mirrors <see cref="Ingestion.ChunkBackfill" />'s BudgetAsync).</summary>
+    private static async Task<(int Budget, int Overlay, TokenCount CountTokens)> BudgetAsync(
+        SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var provider = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+                "SELECT value FROM settings WHERE key = 'embedding.provider'", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        var model = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+                "SELECT value FROM settings WHERE key = 'embedding.model'", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        provider = string.IsNullOrWhiteSpace(provider) ? "local" : provider;
+
+        var budget = Math.Min(DefaultMaxTokens, EmbeddingService.SafeChunkBudgetFor(provider, model));
+        var overlay = Math.Min(ChunkingDefaults.OverlayTokens, Math.Max(0, budget - 1));
+        var tokenizer = OnnxEmbeddingGenerator.CreateTokenizer(BundledModel.ResolveVocabPath());
+        return (budget, overlay, text => tokenizer.CountTokens(text));
+    }
+
+    // Plain classes, not records: Ctx is a computed SQL expression with no declared column type, and
+    // an empty result set makes Microsoft.Data.Sqlite report it as byte[] rather than string —
+    // property-set materialization tolerates that; record constructor-matching does not.
+    private sealed class GroupKey
+    {
+        public string Ctx { get; set; } = "";
+
+        public string SourceFile { get; set; } = "";
+    }
+
+    private sealed class GroupRow
+    {
+        public long Id { get; set; }
+
+        public string Hash { get; set; } = "";
+
+        public long ChunkIndex { get; set; }
+    }
+}
