@@ -1,0 +1,176 @@
+{
+  "run": {
+    "date": "2026-08-17",
+    "branch": "main",
+    "commit": "d769882a0b65329f0a547ad3fa6e513775897888",
+    "data-root": "/tmp/ai-raccoon-checklist-IEBp (a VACUUM INTO copy of ~/.ai-raccoon/memory.db, 21440 entries; the live bank was never opened read-write and never written)",
+    "note": "Focus: things changed in the last 3 releases (1.25.0 search phase attribution + VERSION-only marker, 1.26.0 repair reaches the server + repair drains what it re-ingested, 1.27.0 noise entries / watch registered leave the CLI write path). The installed global tool was already 1.27.0+d769882a (= HEAD), reused as-is; no force-update run against the user's live server on 7721. Server under test bound an ephemeral port (53262), never 7721."
+  },
+  "derived": {
+    "version": "1.27.0",
+    "mcp-tool-count": 27,
+    "mcp-prompt-count": 2,
+    "note": "python3 .ai-badger/skills/ai-raccoon-manual-checklist/scripts/derive-facts.py . ; installed tool's `ai-raccoon --version` = 1.27.0+d769882a0b65329f0a547ad3fa6e513775897888, matching git rev-parse HEAD exactly. The script had to be fixed first — it still read <PackageVersion> from the csproj, which 1.25.0 removed (VERSION at the repo root is now the only marker, read via Directory.Build.props)."
+  },
+  "findings-against-prior-runs": [
+    {
+      "prior-run": "any checklist run after ai-raccoon 1.25.0 that used the shipped derive-facts.py",
+      "prior-claim": "the script derives the version from the tree",
+      "what-is-actually-true": "derive-facts.py read <PackageVersion> from src/AiRaccoon/AiRaccoon.csproj. 1.25.0 moved the version out of the csproj into a VERSION file at the repo root (read by Directory.Build.props), so the shipped script failed loudly with 'no literal <PackageVersion> in .../AiRaccoon.csproj' on the very tree it ships for. That is the script behaving as designed — but it blocked the run and would have pressured a human to type the version by hand, the exact rot the script exists to prevent.",
+      "evidence": "Running the installed copy against this tree printed: 'derive-facts: no literal <PackageVersion> in src/AiRaccoon/AiRaccoon.csproj' and exited 1. The fix (read the csproj element first, fall back to the root VERSION file) was already merged upstream in ai-badger PR #408 but not synced to the two installed copies (~/.hermes/skills/AiRaccoon/... and .ai-badger/skills/ai-raccoon-manual-checklist/...). After syncing the merged script, it derives version=1.27.0, mcp-tool-count=27, mcp-prompt-count=2, exit 0.",
+      "so-what": "A stale script in an installed copy is the one a future run executes. This run synced both installed copies to the merged fix. Worth a den-refresh pass so other skill copies in the tree don't still carry the csproj reader."
+    }
+  ],
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "The running binary reports derived.version (1.27.0) and its embedded commit equals the tree HEAD",
+      "command": "ai-raccoon --version; git rev-parse HEAD",
+      "evidence": "ai-raccoon --version -> '1.27.0+d769882a0b65329f0a547ad3fa6e513775897888'; git rev-parse HEAD -> d769882a0b65329f0a547ad3fa6e513775897888",
+      "observed-result": "Installed binary reports 1.27.0 and its embedded commit equals this worktree's HEAD exactly, so the install is provably this tree, not a stale build.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Deliberate deviation recorded: the global tool was already installed at the matching commit (a live server + MCP clients are using it), so it was reused as-is rather than force-updated — which would also have cycled the user's live server on 7721. Still the real installed binary, which is what the step exists to exercise."
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "serve --port 0 binds an ephemeral port and reports it; 7721 is never touched",
+      "command": "ai-raccoon --data-root <copy> serve --port 0 (backgrounded); read the bound URL from the server's own output",
+      "evidence": "serve.log: 'Now listening on: http://127.0.0.1:53262' and 'http://127.0.0.1:53262/mcp'; /observability reports serverInfo version 1.27.0.0. The user's own server (PID 15528) stayed on 7721.",
+      "observed-result": "Server bound ephemeral port 53262 and reported it; the default port 7721 was never bound or restarted.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Default port never bound, per the skill's Never list. --restart on 7721 was deliberately not exercised because it would cycle the user's live server; the ephemeral-port bind is the part this step protects."
+    },
+    {
+      "item": "repair-chunk-index-reaches-server",
+      "expected-result": "`repair chunk-index` reports server-side scan results without the CLI opening the bank (1.26.0, ADR-0075)",
+      "command": "ai-raccoon --data-root <copy> --port 53262 repair chunk-index",
+      "evidence": "'chunk-index repair: 1493 source group(s) examined, 0 row(s) would reposition (dry run; pass --apply to queue it), 19 row(s) set to the unknown position (-1)'",
+      "observed-result": "The dry-run report came back over the server (port 53262), not a CLI-held bank connection — the copy had already had chunk-index repair applied on the live bank, so 0 rows would reposition now. The 19 rows at -1 are the honest 'position unknown' marker, not a guess.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The verb routes through the server and reports rather than writes; --apply was deliberately not run for chunk-index because the live bank had already been repaired and 0 rows would reposition."
+    },
+    {
+      "item": "repair-reingest-reaches-server-and-drains",
+      "expected-result": "`repair reingest --apply` queues the work to the server, and the server applies it AND drains the resulting embeddings on its next poll — nothing left pending (1.26.0 headline)",
+      "command": "ai-raccoon --data-root <copy> --port 53262 repair reingest (dry run), then repair reingest --apply; wait ~20s for the 15s maintenance poll; inspect serve.log and the entries embed_state",
+      "evidence": "dry run: '1 file(s) would reingest ... 16 row(s) affected, 16 chunk(s) to embed'. --apply: 'request committed; the server applies it and drains the resulting embeddings on its next maintenance poll (~15s) — nothing left to run by hand.' serve.log then logged: '[525] maintenance job 'apply a CLI-requested reingest repair' (repair-reingest) ran in 6638 ms' followed by '[525] maintenance job 'embed rows left pending by a write, a watch digest or a repair' (pending-embed) ran in 181 ms'. After: entries=21442, embedded=21442, zero pending.",
+      "observed-result": "The exact 1.26.0 behaviour: the CLI never writes the bank; the server applies the reingest and the pending-embed job drains what it re-ingested, all on the 15s poll. Every one of the 21442 entries is embedded afterwards — nothing left unsearchable.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both halves of the 1.26.0 claim verified on real content: server-routed apply, and the repair finishes what it re-ingested (pending-embed drain to zero)."
+    },
+    {
+      "item": "noise-entries-and-watch-registered-leave-the-cli-bank-path",
+      "expected-result": "`noise entries` and `watch registered` return over the server, and the CLI's own DI graph holds no live bank connection (1.27.0, completes ADR-0075)",
+      "command": "ai-raccoon --data-root <copy> --port 53262 noise entries; ... watch registered ai-badger; read the reflection gate test",
+      "evidence": "noise entries -> 'total: 0' before the noise-write test, then 'total: 2 / HermesBackgroundProcessLog: 2' after two rejected writes. watch registered ai-badger -> 'project: ai-badger path: /Users/arasz/RiderProjects/ai-badger/docs registered: 2026-08-07... lastChange: 2026-08-17...'. CliCommandsDoNotOpenTheBankTests derives every leaf command from ConfigCommands' constructor and walks the constructed graph for a live ISqliteConnectionFactory; only EncryptionCommands/DoctorCommands/ServeCommands are allowlisted.",
+      "observed-result": "Both read-side commands return their summaries over the HTTP control plane (the same 53262 port), and the reflection gate (the 1.27.0 test that fails on a bank-capable CLI command) names only the three sanctioned exceptions.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The two commands 1.27.0 closed — noise entries and watch registered — demonstrably return over the server, and the gate that makes reopening them a build failure is present (tests/AiRaccoon.Tests/Unit/Setup/CliCommandsDoNotOpenTheBankTests.cs)."
+    },
+    {
+      "item": "version-as-the-only-marker",
+      "expected-result": "VERSION at the repo root is the single hand-written version marker; the csproj reads it via Directory.Build.props (1.25.0)",
+      "command": "cat VERSION; grep -n 'Version' Directory.Build.props; run derive-facts.py after the fix",
+      "evidence": "VERSION -> '1.27.0'. Directory.Build.props:3 -> '<Version>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)VERSION').Trim())</Version>', plus a ValidateVersionFile target that errors on any non-bare-semver. derive-facts.py (post-fix) -> version=1.27.0, exit 0.",
+      "observed-result": "The csproj carries no literal <PackageVersion> any more; VERSION is the only marker, validated to bare semver by the build, and the (fixed) derive-facts script reads it.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Verified against the source (Directory.Build.props and VERSION), not memory. This is also why derive-facts.py needed fixing this run."
+    },
+    {
+      "item": "search-phase-attribution",
+      "expected-result": "memory_performance reports the eight search.* phases plus search.total, each with counts and percentiles (1.25.0)",
+      "command": "memory_performance (MCP) for projectId=ai-badger after one memory_search, summarized by a parser",
+      "evidence": "After one search, the report listed search.open, search.embed, search.fts, search.vector, search.fusion, search.affinity, search.snippets, search.bump and search.total, each count=1 with real p50/p95 (e.g. search.fts p50=2272.7ms, search.vector p50=33.3ms, search.fusion p50=0.87ms, search.total p50=2758.0ms).",
+      "observed-result": "The phase series exist and are populated after real searches — search phase attribution (the 1.25.0 feature) is live on the running binary.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The eight phase names + search.total all appeared with non-zero counts, matching docs/reference/logging-event-ids.md's list (SearchTimings.SeriesNames)."
+    },
+    {
+      "item": "fusion-flag-enabled-and-recording",
+      "expected-result": "With fusion.noRegression.enabled.global=true (as on this machine), searches record search.fusion.* telemetry; the flag default is still false (ADR-0078)",
+      "command": "sqlite3 read of the settings row; memory_search twice; count search.fusion.* metrics before and after",
+      "evidence": "settings row: fusion.noRegression.enabled.global=true (inherited from the live bank; the code default is DefaultNoRegressionEnabled=false). metrics: search.fusion.top1_changed went 7 -> 9, top1_rank_delta 7 -> 9, top5_moved 7 -> 9 across the run — two enabled-flag searches wrote a fusion-diff row each.",
+      "observed-result": "Fusion is armed on this machine (the flag is on, overriding the code default), and the enabled path writes the three fusion-diff telemetry rows per search — the evidence surface ADR-0078 ships the flag for.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Confirmed on the data, not the setting name alone: the telemetry row count moved exactly with the searches run under the enabled flag. The code default remains false (src/AiRaccoon.Core/Memory/Fusion/FusionConfigKeys.cs:11), so 'enabled on this machine' is a persisted setting, not a default change."
+    },
+    {
+      "item": "memory-write-stores-and-reports-truthfully",
+      "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns stored=false with a reason and no fabricated hash (ADR-0032)",
+      "command": "memory_write (positive), then two HermesProcessNoisePolicy shapes plus a clean control",
+      "evidence": "positive -> hash e32b8c31..., stored=true. '[IMPORTANT: Background process ...' -> stored=false, reason \"rejected by noise policy 'HermesBackgroundProcessLog'\", hash ''. 'received signal 15' -> stored=false, same reason. clean control -> stored=true, hash bcedae17...",
+      "observed-result": "Stored entries return real hashes; the two registered machine-notification shapes are rejected with a named reason and an empty hash, and the negative control was kept — the filter rejects what it claims, not everything.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "One write-path policy is registered (HermesProcessNoisePolicy, ADR-0039) and its three shapes were exercised against the source (the policy class), with a clean negative control proving the filter is not reject-all."
+    },
+    {
+      "item": "memory-search-hybrid-and-get",
+      "expected-result": "memory_search returns the written entry through hybrid BM25+vector ranking; memory_get returns its content by hash",
+      "command": "memory_search query with no lexical overlap; memory_get by the returned hash",
+      "evidence": "search 'an antique navigation instrument reflecting evening light in a stargazing room' -> rank 1 = the written hash e32b8c31... (stored text: 'astrolabe ... lamplight ... observatory', zero shared terms). memory_get hash e32b8c31... -> the full stored value.",
+      "observed-result": "The query shares no literal term with the stored text, so a dead vector leg would have failed it; it ranked 1. memory_get returned the content by hash.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Written as a query keyword match cannot carry, per the skill's guidance; both the hybrid search and the by-hash get worked."
+    },
+    {
+      "item": "noise-store-retains-rejected-entries",
+      "expected-result": "Rejected writes are retrievable from the noise store (ADR-0039), not silently dropped",
+      "command": "sqlite3 read of noise_entries for projectId=checklist-1-27 after the two rejected writes",
+      "evidence": "noise_entries count for the project = 2, matching the two rejected writes (Background process prefix + received signal), and `noise entries` (server-routed) reports 'total: 2 / HermesBackgroundProcessLog: 2'.",
+      "observed-result": "Both rejected entries landed in the noise store under the named policy — the training-data source ADR-0039 exists for.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Rejection is reported on the write AND the content is retained in noise_entries, matching the read-back via the server-routed `noise entries` verb."
+    },
+    {
+      "item": "query-trim-warns-with-event-416",
+      "expected-result": "A search query longer than the embedding window is trimmed and logged as event 416, naming the token and character budgets (ADR-0071)",
+      "command": "memory_search with a ~4260-character query over the 254-token window; grep serve.log",
+      "evidence": "serve.log:174-175: 'warn: AiRaccoon.Infrastructure.Embedding.EmbeddingService[416] Search query was shortened to fit the embedding model: 880 tokens exceeded the 254-token window, so only the first 1232 of 4260 characters were used to find matches. Results may miss what the rest of the query asked for — use a shorter, more specific query.'",
+      "observed-result": "The query was trimmed deliberately and the warning carried the token count, window, and character counts — event 416, which logging-event-ids.md:46 maps to ADR-0071.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The exact log line the user pasted, reproduced live, and the event id resolves against docs/reference/logging-event-ids.md (416, EmbeddingService.cs, ADR-0071)."
+    },
+    {
+      "item": "full-mcp-surface",
+      "expected-result": "Every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+      "command": "tools/list and prompts/list over the live MCP HTTP endpoint",
+      "evidence": "tools/list -> 27 tools (memory_write, memory_search, memory_get, memory_performance, memory_promotion_list, memory_watch_status, ...). prompts/list -> 2 (memory-usage-guide, workspace-consolidation-guide).",
+      "observed-result": "Live surface equals the derived counts exactly (27 tools / 2 prompts).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The comparison that catches a build other than the one under test; it matched."
+    },
+    {
+      "item": "observability-event-ids-resolve",
+      "expected-result": "The event ids emitted during this run (510, 416, 525/526, 610) resolve against docs/reference/logging-event-ids.md",
+      "command": "grep serve.log for emitted ids; cross-check against the reference table",
+      "evidence": "serve.log emitted: [510] Bank WAL checkpoint complete (BankMaintenanceHostedService), [525] maintenance job ran x2 (MaintenanceJobRunner: repair-reingest, pending-embed), [416] query trimmed (EmbeddingService), [610] idle watchdog armed, [14] Now listening. All resolve: 510-524 = BankMaintenanceHostedService, 525-526 = MaintenanceJobRunner, 416 = EmbeddingService/ADR-0071, 610-612 = IdleWatchdog.",
+      "observed-result": "Every maintenance/embedding event id seen in the live log resolves against the reference; the 525 maintenance lines are exactly the repair-reingest + pending-embed pair 1.26.0 introduced.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Cross-checked against the reference table rather than assumed; the emitted ids cover the three subsystems this release touched (maintenance jobs, WAL checkpoint, query trim)."
+    },
+    {
+      "item": "baseline-vs-after-performance-read",
+      "expected-result": "A baseline memory_performance/metrics read before the checklist, a second after, and the diff is attributable to the checklist's own activity",
+      "command": "read the metrics table (counts by name) and memory_performance before any checklist writes; repeat after",
+      "evidence": "Baseline: metrics table 661 rows; search.fusion.* = 7 each; memory_performance(ai-badger) showed only memory_performance count=2 (no search traffic in the 3h window). After: 718 rows (+57); search.fusion.* = 9 each (+2, the two enabled-flag searches); memory_performance(ai-badger) now lists memory_search count=1 with all nine search phases at real p50s (search.fts 2272.7ms / search.vector 33.3ms / search.total 2758.0ms).",
+      "observed-result": "The 57-row delta decomposes into exactly this run's activity: the writes (memory_write x4), the searches and their phase series, the memory_get/promotion_list/watch_status calls, and the +2 fusion-diff rows from the two searches under the enabled flag. Nothing in the diff is unexplained.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The before/after read the user asked for: the diff is attributable to the checklist's own traffic, and it independently confirms the fusion flag is recording on the enabled path."
+    }
+  ]
+}
