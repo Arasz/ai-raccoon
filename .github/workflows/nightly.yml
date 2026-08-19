@@ -6,6 +6,18 @@
 # run it ever had before then, which is exactly why a red main went unnoticed:
 # a permanently-failing backstop signals nothing.
 #
+# Since 2026-08-19 the test step is scripts/nightly-triage.py: the suite runs once
+# (still unfiltered), failures are re-run once in isolation and classified
+# (flake candidate / regression / known flake via known-flakes.json), trx + serve
+# logs upload as the nightly-diagnostics artifact on red, and an unledgered red
+# files or comments a 'nightly'-labelled issue. Exit 0 means "green or only known
+# flakes" — the repo's record-and-tolerate policy, decided by the workflow itself.
+#
+# Timeout 45 min: measured 16m49s (2026-08-19) + the isolated rerun of the failed
+# tests on a red night + upload slack. Split into two jobs (Speed=Nightly /
+# Speed!=Nightly — complementary filters, so the backstop property survives) when
+# a run is killed by the timeout or typical duration reaches ~35 min.
+#
 # ⚠️ SCHEDULED RUNS ARE BEST-EFFORT. GitHub documents `schedule` as subject to
 # delay during periods of high load, and runs can be dropped entirely — there is
 # no retry and nothing goes red when a window is missed. Absence of a nightly
@@ -22,6 +34,9 @@ on:
 
 permissions:
   contents: read
+  # The triage script files/comments the red-nightly issue (gh CLI, native — no
+  # third-party action, matching release.yml's GH_TOKEN precedent).
+  issues: write
 
 concurrency:
   group: nightly
@@ -30,13 +45,31 @@ concurrency:
 jobs:
   full-suite:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      # Same crash-dump capture build-slow carries: a test-host SIGBUS must be
+      # diagnosable from the artifacts, not a bare "exit code 1".
+      DOTNET_DbgEnableMiniDump: 1
+      DOTNET_DbgMiniDumpType: 2
+      DOTNET_DbgMiniDumpName: ${{ github.workspace }}/dumps/coredump.%p.dmp
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           global-json-file: global.json
-      - name: Full test suite
+      - name: Full suite + failure triage
+        env:
+          GH_TOKEN: ${{ github.token }}
         # nuget.config references the gitignored local feed .nupkg-local/; make it
         # exist on the fresh runner or restore fails with NU1301.
-        run: mkdir -p .nupkg-local && dotnet test --nologo
+        run: mkdir -p .nupkg-local && python3 scripts/nightly-triage.py
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: nightly-diagnostics
+          path: |
+            TestResults/
+            dumps/
+          if-no-files-found: ignore

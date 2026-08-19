@@ -24,6 +24,9 @@ tests/AiRaccoon.Tests/Unit/Retrieval/assets/*
 !tests/AiRaccoon.Tests/Unit/Retrieval/assets/reference-topk.json
 # Reqnroll generated code-behind files (P12)
 **/*.feature.cs
+# trx test results + E2E serve-log diagnostics written by scripts/nightly-triage.py
+/TestResults/
+/dumps/
 # SQLite WAL sidecars (journal_mode=WAL is forced by SqliteConnectionFactory)
 *.db-shm
 *.db-wal
