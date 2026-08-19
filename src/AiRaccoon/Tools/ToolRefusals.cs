@@ -105,9 +105,11 @@ internal static partial class ToolRefusals
             }
             catch (McpException ex)
             {
-                // Every prefix thrown directly as a bare McpException (invalid-params,
-                // confirm-required) is a user-input mistake, never an infrastructure fault.
-                return Refused(request, ex.Message, "refused", LogLevel.Information);
+                // Every prefix thrown directly as a bare McpException is a
+                // user-input mistake, never an infrastructure fault. The message is already
+                // client-visible over MCP, so logging it adds no new exposure; 5d511748's
+                // anti-flood property (no Exception object) is kept.
+                return Refused(request, ex.Message, ex.Message, LogLevel.Information);
             }
             catch (Exception ex)
             {
@@ -148,18 +150,18 @@ internal static partial class ToolRefusals
     }
 
     private static CallToolResult Refused(RequestContext<CallToolRequestParams> request, string message,
-        string prefix, LogLevel level)
+        string reason, LogLevel level)
     {
         var logger = request.Services?.GetService<ILoggerFactory>()?.CreateLogger("AiRaccoon.Tools.ToolRefusals");
         if (logger is not null)
         {
             if (level == LogLevel.Warning)
             {
-                Log.ToolRefusedAtWarning(logger, request.Params?.Name ?? string.Empty, prefix);
+                Log.ToolRefusedAtWarning(logger, request.Params?.Name ?? string.Empty, reason);
             }
             else
             {
-                Log.ToolRefused(logger, request.Params?.Name ?? string.Empty, prefix);
+                Log.ToolRefused(logger, request.Params?.Name ?? string.Empty, reason);
             }
         }
 

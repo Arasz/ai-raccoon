@@ -129,6 +129,15 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
                 "invalid-argument",
                 "acme-full",
                 "full"
+            },
+            {
+                // Bare McpException path: ToolGate.RequireAsync rejects a blank project id
+                // before any access check (invalid-params is in DirectThrowPrefixes).
+                "memory_search",
+                new Dictionary<string, object?> { ["projectId"] = "", ["query"] = "x" },
+                "invalid-params",
+                null,
+                null
             }
         };
 
@@ -401,6 +410,70 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
                 record.Level.ShouldBe(LogLevel.Warning);
                 record.Exception.ShouldBeNull();
                 record.Message.ShouldNotContain("No entry with hash");
+            }
+            finally
+            {
+                await host.StopAsync(TestContext.Current.CancellationToken);
+            }
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(dataRoot);
+        }
+    }
+
+    [Fact]
+    public async Task BareMcpException_LogsTheRealReason_AtInformation_WithoutExceptionDetails()
+    {
+        var dataRoot = TestData.CreateTempRoot("tool-refusals-bare-mcpexception");
+        try
+        {
+            var fakeLogs = new FakeLoggerProvider();
+            var (port, host) = await LoopbackPort.BindWithRetryAsync(async candidate =>
+            {
+                var started = McpServerSetup.CreateServerHost(
+                    new ServerConfig(candidate, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot)));
+                started.Services.GetRequiredService<ILoggerFactory>().AddProvider(fakeLogs);
+                await started.StartAsync(TestContext.Current.CancellationToken);
+                return (candidate, started);
+            });
+            try
+            {
+                using var httpClient = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
+                var transport = new HttpClientTransport(
+                    new HttpClientTransportOptions
+                    {
+                        Name = "tool-refusals-bare-mcpexception-test",
+                        Endpoint = new Uri($"http://127.0.0.1:{port}/mcp"),
+                        TransportMode = HttpTransportMode.StreamableHttp
+                    },
+                    httpClient, NullLoggerFactory.Instance, true);
+                await using var client = await McpClient.CreateAsync(transport,
+                    cancellationToken: TestContext.Current.CancellationToken);
+
+                var result = await client.CallToolAsync("memory_search",
+                    new Dictionary<string, object?> { ["projectId"] = "", ["query"] = "x" },
+                    cancellationToken: TestContext.Current.CancellationToken);
+
+                // (a) caller-facing text unchanged — exact message, prefix included.
+                result.IsError.ShouldBe(true);
+                var text = string.Concat(result.Content.OfType<TextContentBlock>().Select(b => b.Text));
+                text.ShouldBe("invalid-params: project_id is required");
+
+                // (b) the log carries the real reason after "refused: ".
+                var record = fakeLogs.Collector.GetSnapshot()
+                    .Single(r => r.Message.Contains(
+                        "refused: invalid-params: project_id is required", StringComparison.Ordinal));
+                // (c) level is Information for a non-WarningPrefix refusal.
+                record.Level.ShouldBe(LogLevel.Information);
+                // (d) no exception attached — 5d511748's anti-flood property.
+                record.Exception.ShouldBeNull();
+                // (e) the zero-information literal is gone.
+                record.Message.ShouldNotContain("refused: refused");
+
+                // No fail-level records — the bare refusal must not read as a crash.
+                fakeLogs.Collector.GetSnapshot().Where(r => r.Level == LogLevel.Error)
+                    .ShouldBeEmpty();
             }
             finally
             {
