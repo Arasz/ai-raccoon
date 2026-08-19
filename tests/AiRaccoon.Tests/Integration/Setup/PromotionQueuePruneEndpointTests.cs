@@ -19,6 +19,11 @@ namespace AiRaccoon.Tests.Integration.Setup;
 ///     and the apply request — the CLI never opens the bank for it. Modelled on
 ///     <see cref="RepairEndpointTests" />.
 /// </summary>
+/// <remarks>
+///     The request row is counted without the finished_at filter: the maintenance loop's 15s
+///     on-demand poll can legitimately apply the request between the POST and the count, so the
+///     endpoint's contract is the commit, not the row staying open.
+/// </remarks>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class PromotionQueuePruneEndpointTests : IAsyncLifetime
@@ -57,12 +62,12 @@ public sealed class PromotionQueuePruneEndpointTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Post_CommitsAnOpenRequestRow()
+    public async Task Post_CommitsARequestRow()
     {
         var response = await _client.PostAsync(PromotionQueuePruneProtocol.Path, null, TestContext.Current.CancellationToken);
 
         response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
-        (await OpenRequestCountAsync()).ShouldBe(1);
+        (await RequestCountAsync()).ShouldBe(1);
     }
 
     [Fact]
@@ -76,12 +81,12 @@ public sealed class PromotionQueuePruneEndpointTests : IAsyncLifetime
             .StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
     }
 
-    private async Task<long> OpenRequestCountAsync()
+    private async Task<long> RequestCountAsync()
     {
         var options = new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User };
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
         return await connection.ExecuteScalarAsync<long>(
-            "SELECT count(*) FROM promotion_queue_prune_requests WHERE id = 1 AND finished_at IS NULL");
+            "SELECT count(*) FROM promotion_queue_prune_requests WHERE id = 1");
     }
 }
