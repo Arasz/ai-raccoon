@@ -19,6 +19,11 @@ namespace AiRaccoon.Tests.Integration.Setup;
 ///     ADR-0075 amendment: `repair` reaches the server entirely, both the read-only report and the
 ///     apply request — the CLI never opens the bank for it. Modelled on <see cref="SettingsEndpointTests" />.
 /// </summary>
+/// <remarks>
+///     The request row is counted without the finished_at filter: the maintenance loop's 15s
+///     on-demand poll can legitimately apply the request between the POST and the count, so the
+///     endpoint's contract is the commit, not the row staying open.
+/// </remarks>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class RepairEndpointTests : IAsyncLifetime
@@ -77,13 +82,13 @@ public sealed class RepairEndpointTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task PostReingest_CommitsAnOpenRequestRow()
+    public async Task PostReingest_CommitsARequestRow()
     {
         var response = await _client.PostAsJsonAsync("/repair", new RepairRequest("reingest"),
             TestContext.Current.CancellationToken);
 
         response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
-        (await OpenRequestCountAsync("reingest")).ShouldBe(1);
+        (await RequestCountAsync("reingest")).ShouldBe(1);
     }
 
     [Fact]
@@ -106,12 +111,12 @@ public sealed class RepairEndpointTests : IAsyncLifetime
             .StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
     }
 
-    private async Task<long> OpenRequestCountAsync(string kind)
+    private async Task<long> RequestCountAsync(string kind)
     {
         var options = new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User };
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
         return await connection.ExecuteScalarAsync<long>(
-            "SELECT count(*) FROM repair_requests WHERE kind = @kind AND finished_at IS NULL", new { kind });
+            "SELECT count(*) FROM repair_requests WHERE kind = @kind", new { kind });
     }
 }
