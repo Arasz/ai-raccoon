@@ -53,11 +53,15 @@ def parse_trx(path: Path) -> dict:
         for r in root.findall(".//t:UnitTestResult", TRX_NS)
         if r.get("outcome") == "Failed"
     ]
+    total = int(counters.get("total") or 0) if counters is not None else 0
+    executed = int(counters.get("executed") or 0) if counters is not None else 0
     return {
-        "total": int(counters.get("total") or 0) if counters is not None else 0,
+        "total": total,
         "passed": int(counters.get("passed") or 0) if counters is not None else 0,
         "failed": int(counters.get("failed") or 0) if counters is not None else 0,
-        "skipped": int(counters.get("skipped") or 0) if counters is not None else 0,
+        # The trx Counters element has no skipped attribute (verified against a real trx:
+        # total=2 executed=1 for one pass + one skip) — skipped is total minus executed.
+        "skipped": max(0, total - executed),
         "started_at": times.get("start") if times is not None else None,
         "finished_at": times.get("finish") if times is not None else None,
         "failed_tests": failed,
