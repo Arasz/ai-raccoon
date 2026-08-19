@@ -32,12 +32,14 @@ public sealed class TableRetrievalGateTests(TableCorpusFixture fixture, ITestOut
     /// <summary>
     ///     A perturbation must keep less than this share of the same-run baseline or the metric
     ///     cannot see it. Observed survival ratios: reversal 0.449/0.475 on Apple M4 (2026-08-17),
-    ///     0.723/0.638 on ubuntu-latest x86_64 (2026-08-19); mispairing 0.336-0.348. The absolute
+    ///     0.723/0.638 on ubuntu-latest x86_64 (2026-08-19); mispairing 0.336-0.348. The baseline
+    ///     is the stable quantity across platforms (0.227 vs 0.229 nDCG@5) while the absolute
     ///     perturbation scores are the platform-variable ones — a reversal cleared the 0.160 floor
-    ///     on CI (reversed nDCG@5 0.165440, nightly 2026-08-19) — while the same-run ratio keeps
-    ///     check and baseline on one scale (docs/adr/0079 names the relational checks as the
-    ///     discriminators, not the absolute floors). 0.85 leaves at least 12.7 points of headroom
-    ///     over the worst observed survival ratio.
+    ///     on CI (reversed nDCG@5 0.165440, nightly 2026-08-19) — so the same-run ratio absorbs
+    ///     baseline-level platform shifts; the perturbed score's own variance remains, and 0.85 is
+    ///     calibrated with at least 12.7 points of headroom over the worst observed ratio
+    ///     (docs/adr/0079 names the relational checks as the discriminators, not the absolute
+    ///     floors).
     /// </summary>
     private const double PerturbationSurvivalRatio = 0.85;
 
@@ -66,15 +68,17 @@ public sealed class TableRetrievalGateTests(TableCorpusFixture fixture, ITestOut
     ///     The ranking discriminates: scoring each query against the next query's document must
     ///     collapse the score to a small share of the same-run baseline, or the metric is not
     ///     measuring whether the right thing was retrieved. The comparison is relational
-    ///     (docs/adr/0079) because the absolute floors carry the platform's embedding numerics;
-    ///     the same-run baseline cancels them.
+    ///     (docs/adr/0079) because the absolute floors carry the platform's embedding numerics.
+    ///     Each query is ranked once and graded against both its own relevance and the next
+    ///     query's, so the two series share identical ranking inputs.
     /// </summary>
     [Fact]
     public async Task MismatchedPairing_TrailsTheBaseline()
     {
         var bank = fixture.Bank;
         var queries = TableCorpusCatalog.Load();
-        var (ndcg, mrr) = await ScoreAllAsync(bank, reverse: false);
+        var ndcg = new List<double>();
+        var mrr = new List<double>();
         var mispairedNdcg = new List<double>();
         var mispairedMrr = new List<double>();
 
@@ -82,18 +86,19 @@ public sealed class TableRetrievalGateTests(TableCorpusFixture fixture, ITestOut
         {
             var asked = queries[index];
             var graded = queries[(index + 1) % queries.Count];
-            var relevant = bank.RelevantFor(graded);
-            var ranked = await bank.RankAsync(asked.Query, SearchLimit, TestContext.Current.CancellationToken);
-            mispairedNdcg.Add(RetrievalMetrics.NdcgAtK([.. ranked.Take(RankCutoff)], relevant, RankCutoff));
-            mispairedMrr.Add(RetrievalMetrics.Mrr(ranked, relevant));
+            var ranked = (await bank.RankAsync(asked.Query, SearchLimit, TestContext.Current.CancellationToken)).ToList();
+            var relevant = bank.RelevantFor(asked);
+            var misrelevant = bank.RelevantFor(graded);
+            ndcg.Add(RetrievalMetrics.NdcgAtK([.. ranked.Take(RankCutoff)], relevant, RankCutoff));
+            mrr.Add(RetrievalMetrics.Mrr(ranked, relevant));
+            mispairedNdcg.Add(RetrievalMetrics.NdcgAtK([.. ranked.Take(RankCutoff)], misrelevant, RankCutoff));
+            mispairedMrr.Add(RetrievalMetrics.Mrr(ranked, misrelevant));
         }
 
         output.WriteLine($"as ranked:  nDCG@5={ndcg.Average():F6} MRR@10={mrr.Average():F6}");
         output.WriteLine($"mispaired:  nDCG@5={mispairedNdcg.Average():F6} MRR@10={mispairedMrr.Average():F6}");
-        mispairedNdcg.Average().ShouldBeLessThan(ndcg.Average() * PerturbationSurvivalRatio,
-            $"a perturbation that keeps {PerturbationSurvivalRatio:0%} of the same-run baseline is not visible to the metric");
-        mispairedMrr.Average().ShouldBeLessThan(mrr.Average() * PerturbationSurvivalRatio,
-            $"a perturbation that keeps {PerturbationSurvivalRatio:0%} of the same-run baseline is not visible to the metric");
+        AssertTrailsBaseline(mispairedNdcg.Average(), ndcg.Average(), "mispaired nDCG@5");
+        AssertTrailsBaseline(mispairedMrr.Average(), mrr.Average(), "mispaired MRR@10");
     }
 
     /// <summary>
@@ -113,10 +118,8 @@ public sealed class TableRetrievalGateTests(TableCorpusFixture fixture, ITestOut
 
         output.WriteLine($"as ranked:  nDCG@5={ndcg.Average():F6} MRR@10={mrr.Average():F6}");
         output.WriteLine($"reversed:   nDCG@5={reversedNdcg.Average():F6} MRR@10={reversedMrr.Average():F6}");
-        reversedNdcg.Average().ShouldBeLessThan(ndcg.Average() * PerturbationSurvivalRatio,
-            $"a perturbation that keeps {PerturbationSurvivalRatio:0%} of the same-run baseline is not visible to the metric");
-        reversedMrr.Average().ShouldBeLessThan(mrr.Average() * PerturbationSurvivalRatio,
-            $"a perturbation that keeps {PerturbationSurvivalRatio:0%} of the same-run baseline is not visible to the metric");
+        AssertTrailsBaseline(reversedNdcg.Average(), ndcg.Average(), "reversed nDCG@5");
+        AssertTrailsBaseline(reversedMrr.Average(), mrr.Average(), "reversed MRR@10");
     }
 
     /// <summary>
@@ -225,6 +228,18 @@ public sealed class TableRetrievalGateTests(TableCorpusFixture fixture, ITestOut
                 $"MRR@10={RetrievalMetrics.Mrr(ranked, relevant):F4} relevant={relevant.Count} " +
                 $"anchorTableShare={Math.Min(1.0, (double)tableChars / anchor.Value.Length):F2} {query.ExpectedSource}");
         }
+    }
+
+    /// <summary>
+    ///     The relational discriminator: a perturbed mean must keep less than
+    ///     <see cref="PerturbationSurvivalRatio" /> of the same-run baseline, or the metric cannot
+    ///     see the perturbation (docs/adr/0079).
+    /// </summary>
+    private static void AssertTrailsBaseline(double perturbed, double baseline, string label)
+    {
+        var kept = baseline <= 0 ? 1.0 : perturbed / baseline;
+        perturbed.ShouldBeLessThan(baseline * PerturbationSurvivalRatio,
+            $"{label} kept {kept:P1} of its same-run baseline {baseline:F6} — the limit is {PerturbationSurvivalRatio:0%}");
     }
 
     private async Task<(List<double> Ndcg, List<double> Mrr)> ScoreAllAsync(TableCorpusBank bank, bool reverse)
