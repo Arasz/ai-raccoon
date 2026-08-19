@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Text;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
 using AiRaccoon.Infrastructure.Embedding;
@@ -40,6 +41,21 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
     private static readonly TimeSpan HardCap = TimeSpan.FromSeconds(60);
     private static readonly HttpClient HttpClient = new() { Timeout = TimeSpan.FromSeconds(5) };
 
+    /// <summary>How long the mid-drain test waits for the relay to acquire the migration lease —
+    /// the earliest bank-visible sign the drain started. 120s covers the 15s on-demand poll
+    /// (<see cref="AiRaccoon.Infrastructure.Maintenance.BankMaintenanceHostedService.OnDemandPollInterval" />)
+    /// with huge slack for a starved runner; the drain then has its own window below.</summary>
+    private static readonly TimeSpan RelayStartCap = TimeSpan.FromSeconds(120);
+
+    /// <summary>How long the mid-drain test waits for a partial drain (0 &lt; embedded &lt; total)
+    /// once the lease shows the relay started. The unbounded term under load is the FIRST batch's
+    /// real-ONNX latency (session load + 32 rows), not the poll cadence, so the cap must absorb it.</summary>
+    private static readonly TimeSpan PartialDrainCap = TimeSpan.FromSeconds(180);
+
+    /// <summary>Serve logs land here (survives the test's temp-root cleanup) so a failed run's
+    /// evidence — EventIds 525/526/513, the lease, the ledger — is inspectable from CI artifacts.</summary>
+    private static readonly string DiagRoot = Path.Combine(Path.GetTempPath(), "ai-raccoon-crash-diag");
+
     /// <summary>Enough rows that re-embedding them for real (the bundled ONNX model, batches of 32)
     /// takes long enough to reliably outlast the window between "outbox committed" and "process
     /// killed" — the case under test needs zero rows re-embedded before the kill, not many, but this
@@ -59,6 +75,7 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
     private int _port;
     private Process? _serverA;
     private Process? _serverB;
+    private string _diagDir = null!;
 
     public ValueTask InitializeAsync()
     {
@@ -67,6 +84,9 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
         _portLease = LoopbackPort.Reserve();
         _port = _portLease.Port;
         _portLease.ReleaseForBind();
+        _diagDir = Path.Combine(DiagRoot, Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(_diagDir);
+        File.WriteAllText(Path.Combine(DiagRoot, "LATEST.txt"), _diagDir);
         return ValueTask.CompletedTask;
     }
 
@@ -102,7 +122,7 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
             (EnvEncryptionKeyProvider.EnvVarName, null));
 
         // 1. A real server, up and past its own startup pass (WAL truncated), with nothing owed yet.
-        _serverA = StartServeProcess();
+        _serverA = StartServeProcess("server-a");
         await WaitForServerAsync();
         await WaitForStartupCheckpointAsync();
 
@@ -132,7 +152,7 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
 
         // 5. A fresh server against the same bank — standing in for a restart after a crash, not a
         // resumed process. Its own startup pass is the only thing that touches the migration.
-        _serverB = StartServeProcess();
+        _serverB = StartServeProcess("server-b");
         await WaitForServerAsync();
 
         // 6. Bounded wait for the startup pass to finish draining. No progress channel exists to
@@ -152,7 +172,9 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
     ///     The other half of "kill it for real": <see cref="AnInterruptedMigration_IsFinishedByTheNextServersStartupPass_WithNoKickEverHavingRun" />
     ///     kills before the relay ever ran; this kills the relay itself mid-drain — some rows already
     ///     re-embedded under the new engine, others still owed — and shows the next start finishes
-    ///     exactly the remainder, with no duplicate rows and no row left behind.
+    ///     exactly the remainder, with no duplicate rows and no row left behind. Two phased waits:
+    ///     the relay's lease proves it started, then a partial drain proves the kill landed inside
+    ///     the batch loop; either timeout fails with the bank ledger and serve logs as evidence.
     /// </summary>
     [Fact]
     public async Task AnInterruptedMigration_KilledMidDrain_IsFinishedByTheNextServersStartupPass()
@@ -160,7 +182,7 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
             (EnvEncryptionKeyProvider.EnvVarName, null));
 
-        _serverA = StartServeProcess();
+        _serverA = StartServeProcess("server-a");
         await WaitForServerAsync();
         await WaitForStartupCheckpointAsync();
 
@@ -176,12 +198,33 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
         (await RunCliAsync("model", "set", "local", otherModelPath)).ExitCode.ShouldBe(0);
         (await CountByStateAsync("pending")).ShouldBe(MidDrainRowCount); // the outbox's own atomic move
 
-        // Wait for the on-demand relay to actually start draining (real local-ONNX batches of 32
-        // over MidDrainRowCount rows), then kill the instant some rows have moved but not all —
-        // proof the kill lands inside the batch loop, not before or after it. The kill happens
-        // INSIDE the predicate, immediately after the read that observed the partial state: any
-        // gap here (a second round-trip, then kill) is exactly the window a fast drain can finish
-        // in, which is what turned the first version of this test into a false negative.
+        // Phase 1 — wait for the on-demand relay to start draining. The lease it holds from its
+        // first batch to the finish (renewed every batch, ADR-0076) is the earliest bank-visible
+        // start signal. A single blind wait for a partial drain could not distinguish "relay never
+        // started" from "first batch still embedding" — the lease can, and the failure message
+        // (below) is only as good as what this phase proves.
+        var relayStarted = await TryWaitUntilAsync(async () =>
+        {
+            await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+            return await connection.QuerySingleAsync<string?>(new CommandDefinition(
+                "SELECT lease_owner FROM model_migration WHERE id = 1",
+                cancellationToken: TestContext.Current.CancellationToken)) is not null;
+        }, RelayStartCap, pollMs: 5);
+
+        if (!relayStarted)
+        {
+            relayStarted.ShouldBeTrue(
+                "the migration relay never acquired the drain lease within " + RelayStartCap +
+                " — no row ever moved; the captured serve logs and bank ledger say whether the " +
+                "poll never ran (513) or every attempt failed (526):" + Environment.NewLine +
+                await BuildEvidenceAsync());
+        }
+
+        // Phase 2 — kill the instant some rows have moved but not all: proof the kill lands inside
+        // the batch loop, not before or after it. The kill happens INSIDE the predicate,
+        // immediately after the read that observed the partial state: any gap here (a second
+        // round-trip, then kill) is exactly the window a fast drain can finish in. The cap is
+        // generous because the unbounded term under load is the first batch's real-ONNX latency.
         var embeddedAtKill = -1;
         var caughtMidDrain = await TryWaitUntilAsync(async () =>
         {
@@ -194,18 +237,24 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
             embeddedAtKill = embedded;
             KillIfAlive(_serverA);
             return true;
-        }, TimeSpan.FromSeconds(90), pollMs: 5);
+        }, PartialDrainCap, pollMs: 5);
 
-        caughtMidDrain.ShouldBeTrue(
-            "never observed a partial drain — the relay likely finished before this test could catch " +
-            "it mid-way; not evidence of a bug, just a race this specific assertion lost");
+        if (!caughtMidDrain)
+        {
+            caughtMidDrain.ShouldBeTrue(
+                "the relay held the lease for " + PartialDrainCap + " without an observable " +
+                "partial drain — the first batch never completed, or the drain finished between " +
+                "polls; the counts and logs below say which:" + Environment.NewLine +
+                await BuildEvidenceAsync());
+        }
+
         embeddedAtKill.ShouldBeInRange(1, MidDrainRowCount - 1);
         (await IsMigrationOpenAsync()).ShouldBeTrue();
 
         // A fresh server against the same bank finishes exactly the remainder. Generous timeout:
         // depending on how early the kill landed, this may still owe most of MidDrainRowCount rows
         // of real local-ONNX inference.
-        _serverB = StartServeProcess();
+        _serverB = StartServeProcess("server-b");
         await WaitForServerAsync();
         await WaitUntilAsync(() => IsMigrationOpenAsync().ContinueWith(t => !t.Result), TimeSpan.FromSeconds(300));
 
@@ -246,7 +295,10 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
     {
     }
 
-    private Process StartServeProcess()
+    /// <summary>Starts a real serve process; its stdout/stderr stream to files under the run's
+    /// diag dir instead of being discarded, so a failed run carries the server-side evidence
+    /// (maintenance EventIds 525/526/513) into CI artifacts.</summary>
+    private Process StartServeProcess(string label)
     {
         var startInfo = new ProcessStartInfo(AiRaccoonProcess.Executable)
         {
@@ -260,9 +312,66 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
         }
 
         var process = Process.Start(startInfo)!;
-        _ = process.StandardOutput.ReadToEndAsync();
-        _ = process.StandardError.ReadToEndAsync();
+        _ = CaptureAsync(process.StandardOutput, Path.Combine(_diagDir, $"{label}.out"));
+        _ = CaptureAsync(process.StandardError, Path.Combine(_diagDir, $"{label}.err"));
         return process;
+    }
+
+    /// <summary>Best-effort: the process's stream ends when it exits, and the file is only ever
+    /// read after that — a failure to write diagnostics must never fail the test itself.</summary>
+    private static async Task CaptureAsync(StreamReader reader, string path)
+    {
+        try
+        {
+            await File.WriteAllTextAsync(path, await reader.ReadToEndAsync());
+        }
+        catch (IOException)
+        {
+            // Diagnostic capture is best-effort.
+        }
+    }
+
+    /// <summary>
+    ///     The bank-visible state a failed wait must carry: row counts by embed state, the
+    ///     migration row (started/finished/lease), the maintenance ledger, and the serve log tails.
+    ///     The point is that the NEXT occurrence of any of these waits is diagnosed from CI output.
+    /// </summary>
+    private async Task<string> BuildEvidenceAsync()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"entries: embedded={await CountByStateAsync("embedded")} " +
+                      $"pending={await CountByStateAsync("pending")}");
+        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            var startedAt = await connection.QuerySingleAsync<long?>(new CommandDefinition(
+                "SELECT started_at FROM model_migration WHERE id = 1",
+                cancellationToken: TestContext.Current.CancellationToken));
+            var finishedAt = await connection.QuerySingleAsync<long?>(new CommandDefinition(
+                "SELECT finished_at FROM model_migration WHERE id = 1",
+                cancellationToken: TestContext.Current.CancellationToken));
+            var leaseOwner = await connection.QuerySingleAsync<string?>(new CommandDefinition(
+                "SELECT lease_owner FROM model_migration WHERE id = 1",
+                cancellationToken: TestContext.Current.CancellationToken));
+            sb.AppendLine($"model_migration: started_at={startedAt} finished_at={finishedAt} lease_owner={leaseOwner}");
+            foreach (var job in await connection.QueryAsync(new CommandDefinition(
+                         "SELECT name, last_run_at, run_count FROM maintenance_jobs " +
+                         "WHERE name IN ('model-migration', 'pending-embed') ORDER BY name",
+                         cancellationToken: TestContext.Current.CancellationToken)))
+            {
+                sb.AppendLine($"maintenance_jobs: {job.name} last_run_at={job.last_run_at} run_count={job.run_count}");
+            }
+        }
+
+        foreach (var path in Directory.GetFiles(_diagDir, "server-*.err"))
+        {
+            sb.AppendLine($"--- tail of {Path.GetFileName(path)} ---");
+            foreach (var line in (await File.ReadAllLinesAsync(path)).TakeLast(15))
+            {
+                sb.AppendLine(line);
+            }
+        }
+
+        return sb.ToString();
     }
 
     private Task<ProcessRun> RunCliAsync(params string[] verb) =>
