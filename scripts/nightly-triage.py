@@ -117,11 +117,18 @@ def classify(failed_tests: list[str], ledger: dict[str, dict],
 
 
 def run_dotnet_test(trx_name: str, extra: list[str] | None = None) -> subprocess.CompletedProcess:
-    """One dotnet test invocation writing its trx under TestResults/."""
+    """One dotnet test invocation writing its trx under TestResults/.
+
+    The directory comes from --results-directory, not the logger's LogFileDirectory:
+    the trx logger ignores that parameter and writes into the TEST PROJECT's TestResults
+    dir instead (witnessed twice on the first branch-nightly dispatch — the suite passed,
+    the trx was not where the script read, and the run reported unclassifiable).
+    """
     os.makedirs(TEST_RESULTS, exist_ok=True)
     command = [
         "dotnet", "test", "--nologo",
-        "--logger", f"trx;LogFileName={trx_name};LogFileDirectory={TEST_RESULTS}",
+        "--results-directory", str(TEST_RESULTS.resolve()),
+        "--logger", f"trx;LogFileName={trx_name}",
     ]
     if extra:
         command.extend(extra)
@@ -225,6 +232,7 @@ def main() -> int:
         summary = f"{today} red(unclassifiable) — no trx after the first run (build failure or test-host crash)"
         print(summary)
         write_step_summary(summary)
+        file_or_comment_issue(summary, {}, "unclassifiable")
         return 1
 
     trx = safe_parse_trx(first_trx)
@@ -233,6 +241,7 @@ def main() -> int:
                    "(test-host crash mid-write)")
         print(summary)
         write_step_summary(summary)
+        file_or_comment_issue(summary, {}, "unclassifiable")
         return 1
 
     failed = trx["failed_tests"]
@@ -251,6 +260,8 @@ def main() -> int:
         print(summary)
         write_step_summary(summary)
         write_classification(verdict, {}, trx)
+        if verdict != "green":
+            file_or_comment_issue(summary, {}, "unclassifiable")
         return 0 if verdict == "green" else 1
 
     if len(failed) > MASS_FAILURE_THRESHOLD:
@@ -259,6 +270,7 @@ def main() -> int:
         print(summary)
         write_step_summary(summary)
         write_classification("mass", {}, trx)
+        file_or_comment_issue(summary, {}, failed[0])
         return 1
 
     # Rerun only the failures the ledger does not already own.

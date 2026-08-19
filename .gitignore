@@ -25,7 +25,8 @@ tests/AiRaccoon.Tests/Unit/Retrieval/assets/*
 # Reqnroll generated code-behind files (P12)
 **/*.feature.cs
 # trx test results + E2E serve-log diagnostics written by scripts/nightly-triage.py
-/TestResults/
+# (the trx logger writes under the test project dir when given a relative path, so **)
+**/TestResults/
 /dumps/
 # SQLite WAL sidecars (journal_mode=WAL is forced by SqliteConnectionFactory)
 *.db-shm
