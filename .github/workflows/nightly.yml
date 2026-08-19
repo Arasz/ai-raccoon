@@ -16,7 +16,9 @@
 # Timeout 45 min: measured 16m49s (2026-08-19) + the isolated rerun of the failed
 # tests on a red night + upload slack. Split into two jobs (Speed=Nightly /
 # Speed!=Nightly — complementary filters, so the backstop property survives) when
-# a run is killed by the timeout or typical duration reaches ~35 min.
+# a run is killed by the timeout or typical duration reaches ~35 min. NOTE: a
+# job-level timeout kill aborts the runner before the upload step — a split is
+# also the fix for the no-artifacts-on-timeout case.
 #
 # ⚠️ SCHEDULED RUNS ARE BEST-EFFORT. GitHub documents `schedule` as subject to
 # delay during periods of high load, and runs can be dropped entirely — there is
@@ -62,8 +64,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         # nuget.config references the gitignored local feed .nupkg-local/; make it
-        # exist on the fresh runner or restore fails with NU1301.
-        run: mkdir -p .nupkg-local && python3 scripts/nightly-triage.py
+        # exist on the fresh runner or restore fails with NU1301. dumps/ must exist
+        # too, or the crash-dump env vars above cannot write (build-slow mkdirs it).
+        run: mkdir -p .nupkg-local dumps && python3 scripts/nightly-triage.py
       - name: Upload diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

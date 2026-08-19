@@ -209,14 +209,15 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
             return await connection.QuerySingleAsync<string?>(new CommandDefinition(
                 "SELECT lease_owner FROM model_migration WHERE id = 1",
                 cancellationToken: TestContext.Current.CancellationToken)) is not null;
-        }, RelayStartCap, pollMs: 5);
+        }, RelayStartCap, pollMs: 50);
 
         if (!relayStarted)
         {
             relayStarted.ShouldBeTrue(
                 "the migration relay never acquired the drain lease within " + RelayStartCap +
-                " — no row ever moved; the captured serve logs and bank ledger say whether the " +
-                "poll never ran (513) or every attempt failed (526):" + Environment.NewLine +
+                " — no row ever moved (or the drain finished before this test could observe it); " +
+                "the captured serve logs and bank ledger say whether the poll never ran (513) or " +
+                "every attempt failed (526):" + Environment.NewLine +
                 await BuildEvidenceAsync());
         }
 
@@ -237,7 +238,7 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
             embeddedAtKill = embedded;
             KillIfAlive(_serverA);
             return true;
-        }, PartialDrainCap, pollMs: 5);
+        }, PartialDrainCap, pollMs: 50);
 
         if (!caughtMidDrain)
         {
@@ -317,15 +318,21 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
         return process;
     }
 
-    /// <summary>Best-effort: the process's stream ends when it exits, and the file is only ever
-    /// read after that — a failure to write diagnostics must never fail the test itself.</summary>
+    /// <summary>Best-effort: streams the process's output to the file as it arrives, so the file
+    /// exists and grows while the process lives — the evidence block reads it exactly when the
+    /// process is still up (relay stuck, not dead). A failure to write diagnostics (including the
+    /// dispose race after a kill) must never fail the test itself.</summary>
     private static async Task CaptureAsync(StreamReader reader, string path)
     {
         try
         {
-            await File.WriteAllTextAsync(path, await reader.ReadToEndAsync());
+            await using var writer = new StreamWriter(path);
+            while (await reader.ReadLineAsync() is { } line)
+            {
+                await writer.WriteLineAsync(line);
+            }
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException)
         {
             // Diagnostic capture is best-effort.
         }
@@ -338,40 +345,48 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
     /// </summary>
     private async Task<string> BuildEvidenceAsync()
     {
-        var sb = new StringBuilder();
-        sb.AppendLine($"entries: embedded={await CountByStateAsync("embedded")} " +
-                      $"pending={await CountByStateAsync("pending")}");
-        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        try
         {
-            var startedAt = await connection.QuerySingleAsync<long?>(new CommandDefinition(
-                "SELECT started_at FROM model_migration WHERE id = 1",
-                cancellationToken: TestContext.Current.CancellationToken));
-            var finishedAt = await connection.QuerySingleAsync<long?>(new CommandDefinition(
-                "SELECT finished_at FROM model_migration WHERE id = 1",
-                cancellationToken: TestContext.Current.CancellationToken));
-            var leaseOwner = await connection.QuerySingleAsync<string?>(new CommandDefinition(
-                "SELECT lease_owner FROM model_migration WHERE id = 1",
-                cancellationToken: TestContext.Current.CancellationToken));
-            sb.AppendLine($"model_migration: started_at={startedAt} finished_at={finishedAt} lease_owner={leaseOwner}");
-            foreach (var job in await connection.QueryAsync(new CommandDefinition(
-                         "SELECT name, last_run_at, run_count FROM maintenance_jobs " +
-                         "WHERE name IN ('model-migration', 'pending-embed') ORDER BY name",
-                         cancellationToken: TestContext.Current.CancellationToken)))
+            var sb = new StringBuilder();
+            sb.AppendLine($"entries: embedded={await CountByStateAsync("embedded")} " +
+                          $"pending={await CountByStateAsync("pending")}");
+            await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
             {
-                sb.AppendLine($"maintenance_jobs: {job.name} last_run_at={job.last_run_at} run_count={job.run_count}");
+                var startedAt = await connection.QuerySingleAsync<long?>(new CommandDefinition(
+                    "SELECT started_at FROM model_migration WHERE id = 1",
+                    cancellationToken: TestContext.Current.CancellationToken));
+                var finishedAt = await connection.QuerySingleAsync<long?>(new CommandDefinition(
+                    "SELECT finished_at FROM model_migration WHERE id = 1",
+                    cancellationToken: TestContext.Current.CancellationToken));
+                var leaseOwner = await connection.QuerySingleAsync<string?>(new CommandDefinition(
+                    "SELECT lease_owner FROM model_migration WHERE id = 1",
+                    cancellationToken: TestContext.Current.CancellationToken));
+                sb.AppendLine($"model_migration: started_at={startedAt} finished_at={finishedAt} lease_owner={leaseOwner}");
+                foreach (var job in await connection.QueryAsync(new CommandDefinition(
+                             "SELECT name, last_run_at, run_count FROM maintenance_jobs " +
+                             "WHERE name IN ('model-migration', 'pending-embed') ORDER BY name",
+                             cancellationToken: TestContext.Current.CancellationToken)))
+                {
+                    sb.AppendLine($"maintenance_jobs: {job.name} last_run_at={job.last_run_at} run_count={job.run_count}");
+                }
             }
-        }
 
-        foreach (var path in Directory.GetFiles(_diagDir, "server-*.err"))
+            foreach (var path in Directory.GetFiles(_diagDir, "server-*.err"))
+            {
+                sb.AppendLine($"--- tail of {Path.GetFileName(path)} ---");
+                foreach (var line in (await File.ReadAllLinesAsync(path)).TakeLast(15))
+                {
+                    sb.AppendLine(line);
+                }
+            }
+
+            return sb.ToString();
+        }
+        catch (Exception ex)
         {
-            sb.AppendLine($"--- tail of {Path.GetFileName(path)} ---");
-            foreach (var line in (await File.ReadAllLinesAsync(path)).TakeLast(15))
-            {
-                sb.AppendLine(line);
-            }
+            // The evidence must never mask the assertion it serves.
+            return $"evidence construction failed: {ex}";
         }
-
-        return sb.ToString();
     }
 
     private Task<ProcessRun> RunCliAsync(params string[] verb) =>

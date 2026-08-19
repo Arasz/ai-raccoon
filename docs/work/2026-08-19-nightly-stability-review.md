@@ -50,7 +50,9 @@ unaddressed Class B tests and the absence of any classification/notification mac
   failure is ledgered (the repo's record-and-tolerate policy, machine-decidable).
 - **R2** artifacts on failure: trx + serve logs + crash dumps (build-slow's pattern).
 - **R3** `known-flakes.json` ledger: exact-FQN containment; enter via owner-approved PR with
-  evidence; quarantine rule (2nd red in 10 runs → must fix); 30-day stale warning.
+  evidence; quarantine rule (2nd red in 10 runs → must fix); 30-day stale warning. Ledger FQNs
+  must match the trx `testName` byte-for-byte — parameterized-theory entries carry their
+  argument-rendered name.
 - **R4** red-nightly notification: native `gh` CLI, auto-file/comment a `nightly`-labelled issue
   (dedupe by open issue search); `issues: write` only.
 - **R6** timeout 30→45 (rerun headroom); split trigger documented (killed by timeout or ≥35 min).
@@ -81,7 +83,8 @@ unaddressed Class B tests and the absence of any classification/notification mac
 ## Acceptance gates
 
 - WP1: (a) nonexistent-model-path injection fails the test with the new evidence message showing
-  EventId 526/525 + ledger rows (prove-the-check); (b) 3× isolated runs green locally.
+  EventId 526/525 + ledger rows (prove-the-check; re-witnessed after the streaming-capture fix —
+  F1 of the code review); (b) 3× isolated runs green locally.
 - WP2: both tests green in targeted runs; the nightly's Class B sources closed.
 - WP3: every R1 verdict path witnessed against synthetic trx (flake candidate / regression /
   ledgered / mass failure / unclassifiable); branch-nightly dispatch on the PR shows the summary

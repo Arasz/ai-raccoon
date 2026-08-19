@@ -64,6 +64,15 @@ def parse_trx(path: Path) -> dict:
     }
 
 
+def safe_parse_trx(path: Path) -> dict | None:
+    """parse_trx, or None when the file is corrupt/truncated (a test-host crash mid-write) —
+    the caller treats that as unclassifiable rather than dying with a traceback."""
+    try:
+        return parse_trx(path)
+    except (ET.ParseError, OSError, ValueError):
+        return None
+
+
 def trx_duration_s(trx: dict) -> float | None:
     """Test-suite wall duration from the trx Times element, if both ends parse."""
     if not trx["started_at"] or not trx["finished_at"]:
@@ -140,6 +149,9 @@ def summarize(date: str, verdict: str, trx: dict, classes: dict[str, str]) -> st
     known = [fqn for fqn, c in classes.items() if c == "known"]
     if known:
         parts.append("known flakes: " + ", ".join(known))
+    unclassifiable = [fqn for fqn, c in classes.items() if c == "unclassifiable"]
+    if unclassifiable:
+        parts.append("unclassifiable: " + ", ".join(unclassifiable))
     return " — ".join(parts)
 
 
@@ -157,13 +169,29 @@ def write_classification(verdict: str, classes: dict[str, str], trx: dict) -> No
 
 
 def copy_serve_logs() -> None:
-    """E2E serve logs (test-side diag dir) into TestResults/ so they upload with the trx."""
-    if not SERVE_LOG_DIAG_DIR.exists():
+    """The E2E test's LATEST diag dir into TestResults/ so it uploads with the trx. Only the
+    latest run's dir — the GUID dirs accumulate locally and all of them would bloat the artifact."""
+    latest = SERVE_LOG_DIAG_DIR / "LATEST.txt"
+    if not latest.exists():
+        return
+    source = Path(latest.read_text(encoding="utf-8").strip())
+    if not source.is_dir():
         return
     try:
-        shutil.copytree(SERVE_LOG_DIAG_DIR, TEST_RESULTS / "serve-logs", dirs_exist_ok=True)
+        shutil.copytree(source, TEST_RESULTS / "serve-logs", dirs_exist_ok=True)
     except OSError:
         pass  # diagnostics are best-effort
+
+
+def write_step_summary(summary: str) -> None:
+    """The one-liner onto the Actions run page, when running in CI."""
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not path:
+        return
+    try:
+        Path(path).write_text(summary + "\n", encoding="utf-8")
+    except OSError:
+        pass
 
 
 def gh(args: list[str]) -> str:
@@ -196,44 +224,69 @@ def main() -> int:
     if not first_trx.exists():
         summary = f"{today} red(unclassifiable) — no trx after the first run (build failure or test-host crash)"
         print(summary)
+        write_step_summary(summary)
         return 1
 
-    trx = parse_trx(first_trx)
+    trx = safe_parse_trx(first_trx)
+    if trx is None:
+        summary = (f"{today} red(unclassifiable) — corrupt/truncated trx after the first run "
+                   "(test-host crash mid-write)")
+        print(summary)
+        write_step_summary(summary)
+        return 1
+
     failed = trx["failed_tests"]
     if not failed:
-        summary = f"{today} green — {trx['passed']} passed / 0 failed / {trx['skipped']} skipped — " \
-                  f"{format_duration(trx_duration_s(trx))}"
+        if first.returncode != 0:
+            # The host crashed AFTER writing results: a green-looking trx from a dead host is
+            # not a green run — the repo's one unfiltered backstop must not report what it
+            # did not finish.
+            summary = (f"{today} red(unclassifiable) — test host crashed after writing results "
+                       f"(exit {first.returncode})")
+            verdict = "unclassifiable"
+        else:
+            summary = f"{today} green — {trx['passed']} passed / 0 failed / {trx['skipped']} skipped — " \
+                      f"{format_duration(trx_duration_s(trx))}"
+            verdict = "green"
         print(summary)
-        write_classification("green", {}, trx)
-        return 0
+        write_step_summary(summary)
+        write_classification(verdict, {}, trx)
+        return 0 if verdict == "green" else 1
 
     if len(failed) > MASS_FAILURE_THRESHOLD:
         summary = f"{today} red(mass failure) — {len(failed)} failed, no rerun " \
                   f"(environment signal, not {len(failed)} individual flakes)"
         print(summary)
+        write_step_summary(summary)
         write_classification("mass", {}, trx)
         return 1
 
     # Rerun only the failures the ledger does not already own.
     unknowns = [fqn for fqn in failed if fqn not in ledger]
     rerun_failed: set[str] = set()
+    rerun_crashed = False
     if unknowns:
-        run_dotnet_test("rerun.trx", ["--no-build", "--filter", build_filter(unknowns)])
-        rerun_trx = TEST_RESULTS / "rerun.trx"
-        if rerun_trx.exists():
-            rerun_failed = set(parse_trx(rerun_trx)["failed_tests"])
-        # No rerun trx: the rerun itself crashed the host — every unknown stays
-        # unclassifiable, which is red, not a convenient regression.
+        rerun_trx_path = TEST_RESULTS / "rerun.trx"
+        rerun_trx_path.unlink(missing_ok=True)  # a stale trx from a prior local run must not count
+        rerun = run_dotnet_test("rerun.trx", ["--no-build", "--filter", build_filter(unknowns)])
+        parsed = safe_parse_trx(rerun_trx_path) if rerun_trx_path.exists() else None
+        if parsed is not None:
+            rerun_failed = set(parsed["failed_tests"])
+        # A crashed rerun proves nothing: the unknowns it did not re-fail stay unclassifiable,
+        # not "flake" — only an intact, all-green rerun earns that verdict.
+        rerun_crashed = rerun.returncode != 0 or parsed is None
 
     classes = classify(failed, ledger, rerun_failed)
-    if not rerun_failed and unknowns and not (TEST_RESULTS / "rerun.trx").exists():
+    if rerun_crashed:
         for fqn in unknowns:
-            classes[fqn] = "unclassifiable"
+            if classes[fqn] == "flake":
+                classes[fqn] = "unclassifiable"
 
     all_ledgered = all(c == "known" for c in classes.values())
     verdict = "green(known flakes only)" if all_ledgered else "red"
     summary = summarize(today, verdict, trx, classes)
     print(summary)
+    write_step_summary(summary)
     write_classification(verdict, classes, trx)
 
     if not all_ledgered:
