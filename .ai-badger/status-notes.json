@@ -115,5 +115,13 @@
       "Two known parallel-load flakes: BackendLauncherTests.Acquire_WhenAServerIsAlreadyListening_DoesNotSpawn, McpTokenFileTests.TwoProcessesHealingConcurrently (both pass in isolation).",
       "Existing long-lived stdio bridges still run the pre-fix 1.8.1 build; they go quiet on restart."
     ]
-  }
+  },
+    "improve-refusal-reason": [
+        "Root cause: ToolRefusals.Filter bare-McpException catch passed the literal 'refused' as the log reason since 5d511748 (2026-08-11, anti stack-trace-flood fix stripped message+Exception from refusal logs); ex.Message went only to the caller. All 4 bare-McpException throw sites are 'invalid-params: <detail>' (ToolGate, MemoryTools x2, PromotionTools).",
+        "Fix: log ex.Message as the reason; Refused() param renamed prefix->reason. Mapped refusals STAY prefix-only by design (5d511748 + KnownRefusal_IsWarningWithoutExceptionDetails pins Exception null and no detail).",
+        "TDD: e2e test over real server (FakeLoggerProvider) with witnessed RED (Sequence contains no matching element) on both the worktree and an independent reviewer copy of old code. Reviewer (opus) APPROVE, 2 nits fixed (comment label order; drop redundant parenthetical). Gates: ToolRefusalsTests 38/38, VersionContractTests 8/8, build 0/0, CI build-fast/bdd/slow green.",
+        "Version 1.27.1, no README entry (internal fix). Live test: dotnet tool update to 1.27.1, throwaway --data-root + port 8123, curl MCP initialize->tools/call memory_search projectId='' -> caller 'invalid-params: project_id is required' and log line '\"memory_search\" refused: invalid-params: project_id is required' at event 910/Information, no exception.",
+        "NuGet indexing lag: shell ai-raccoon indexed ~8 min, RID payloads ~12+ min after push.",
+        "PROCESS COLLISION LESSON: a parallel Claude Code session on the same taskId hit its weekly usage limit mid-run; its session-stop hooks finished the tracking entry and removed the worktree my start had just created. Recovery: flip executed-tasks.json state back to STARTED under the flock, re-run start (recreates worktree)."
+    ]
 }

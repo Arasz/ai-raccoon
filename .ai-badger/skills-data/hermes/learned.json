@@ -454,10 +454,10 @@
     {
       "category": "uncategorized",
       "name": "git-worktree-isolation",
-      "sourceHash": "3e9b865c881f480cebaf133ce50df95abb33134a28cf6efcd4f675c6c04aaae7",
+        "sourceHash": "e20878ed20fc31b4940163732ba2adbd1d2526979b6e831cd1abae804f14db1f",
       "sourcePath": "git-worktree-isolation",
       "status": "synced",
-      "syncedAt": "2026-08-06T16:51:43Z",
+        "syncedAt": "2026-08-19T08:39:57Z",
       "target": ".ai-badger/skills/learned/uncategorized/git-worktree-isolation"
     },
     {
