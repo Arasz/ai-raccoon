@@ -333,7 +333,11 @@ public sealed class NodeRunnerTests : IDisposable
         stopwatch.Stop();
 
         exit.ShouldBe(ExitCode.Success);
-        stopwatch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(15));
+        // Generous bound: the child self-exits 5s after its last activity, and a starved runner
+        // (nightly 2026-08-15) took 20.6s to do the shutdown work — the bound catches a broken
+        // idle timeout (the process then never exits and the await below hangs) and slow shutdown
+        // alike, so it only needs to exceed the observed slow tail, not approximate the idle span.
+        stopwatch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(30));
     }
 
     [Fact]

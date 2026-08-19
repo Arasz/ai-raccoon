@@ -163,9 +163,12 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         _lastFileContent = token;
     }
 
-    /// <summary>Reconcile (idempotent) + poll until the token is searchable, optionally under a specific source file.</summary>
+    /// <summary>Reconcile (idempotent) + poll until the token is searchable, optionally under a specific source file.
+    /// The default budget is generous because it also bounds the real iterations that deliver OS
+    /// events into the pipeline: 2s of fake time was 20 steps ≈ 0.4s real on a loaded runner — not
+    /// enough (nightly 2026-08-12: "Ten pending paths" gave up with f5.md not searchable).</summary>
     private async Task<bool> EnsureSearchableAsync(string projectId, string token, string? sourcePath = null,
-        int maxFakeSeconds = 2)
+        int maxFakeSeconds = 6)
     {
         await Ctx.ReconcileOnceAsync();
         var normalized = sourcePath is null ? null : Normalized(sourcePath);
@@ -176,7 +179,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         }, maxFakeSeconds);
     }
 
-    private async Task<bool> EnsureNotSearchableAsync(string projectId, string token, int maxFakeSeconds = 2)
+    private async Task<bool> EnsureNotSearchableAsync(string projectId, string token, int maxFakeSeconds = 6)
     {
         await Ctx.ReconcileOnceAsync();
         return await Ctx.StepUntilAsync(async () =>
