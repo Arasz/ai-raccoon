@@ -15,9 +15,11 @@ using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
+using JetBrains.Annotations;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests;
@@ -30,6 +32,7 @@ public static class TestData
     public static readonly SemaphoreSlim EnvVarGate = new(1, 1);
 
     private static readonly TimeSpan DeleteTempRootFirstDelay = TimeSpan.FromMilliseconds(20);
+    private static readonly IModelMigrationLease ModelMigrationLease = Substitute.For<IModelMigrationLease>();
 
     /// <summary>
     ///     Holds <see cref="EnvVarGate" /> as a READER, for a test that opens a bank through the real
@@ -52,16 +55,17 @@ public static class TestData
         IMarkdownChunker markdownChunker,
         TimeProvider timeProvider,
         IEmbeddingService embeddings,
+        IModelMigrationLease? modelMigrationLease = null,
         IJsonChunker? jsonChunker = null,
         IEnumerable<INoiseFilterPolicy>? noisePolicies = null,
         ISettingsStore? settings = null)
     {
         jsonChunker ??= RealJsonChunker(markdownChunker);
-        var embedder = new EntryEmbedder(embeddings);
+        var embedder = new EntryEmbedder(embeddings, modelMigrationLease ?? ModelMigrationLease, timeProvider);
         var matcher = new FileTypeMatcher(
             [new MarkdownFileTypeHandler(markdownChunker), new JsonFileTypeHandler(jsonChunker)]);
         var fileIngestor = new FileIngestor(matcher, embedder, sourceStore, timeProvider, new LocalTokenizer());
-        var noiseFilteringService = new NoiseFilteringService(noisePolicies ?? Array.Empty<INoiseFilterPolicy>());
+        var noiseFilteringService = new NoiseFilteringService(noisePolicies ?? []);
         return new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService,
             settings ?? new SqliteSettingsStore(factory));
     }
@@ -270,7 +274,8 @@ public static class TestData
     }
 }
 
-/// <summary>Recording fake for the propose tier — tool/hosted-service unit tests that must not touch a bank.</summary>
+/// <summary>Recording fake for the proposal tier — tool/hosted-service unit tests that must not touch a bank.</summary>
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public sealed class FakePromotionQueue : IPromotionQueue
 {
     public string? LastProject { get; private set; }

@@ -7,6 +7,7 @@ using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
+using NSubstitute;
 using Shouldly;
 using Xunit;
 
@@ -29,6 +30,7 @@ public sealed class PendingEmbedMaintenanceDrainTests : IDisposable
 
     private readonly string _dataRoot = TestData.CreateTempRoot("pending-embed-drain");
     private readonly SqliteConnectionFactory _factory;
+    private readonly IModelMigrationLease _modelMigrationLease = Substitute.For<IModelMigrationLease>();
     private readonly FakeTimeProvider _time;
 
     public PendingEmbedMaintenanceDrainTests()
@@ -46,7 +48,7 @@ public sealed class PendingEmbedMaintenanceDrainTests : IDisposable
     {
         await SeedPendingRowsAsync(3);
         await ConfigureProviderAsync();
-        var jobs = new IMaintenanceJob[] { new PendingEmbedJob(new EntryEmbedder(new CountingEmbeddingService())) };
+        var jobs = new IMaintenanceJob[] { new PendingEmbedJob(new EntryEmbedder(new CountingEmbeddingService(), _modelMigrationLease, _time)) };
         var service = ServiceWith(jobs);
 
         using var cts = new CancellationTokenSource();

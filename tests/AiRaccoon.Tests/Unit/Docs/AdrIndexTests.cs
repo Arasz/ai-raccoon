@@ -109,9 +109,11 @@ public class AdrIndexTests
         var section = Regex.Match(File.ReadAllText(TestData.RepoFile("docs/adr/README.md")),
             @"^## Numbers never used\s*$(.*)", RegexOptions.Singleline | RegexOptions.Multiline);
         return section.Success
-            ? Regex.Matches(section.Groups[1].Value, @"^\| *(\d{4}) *\|", RegexOptions.Multiline)
-                .Select(m => int.Parse(m.Groups[1].Value))
-                .ToHashSet()
+            ?
+            [
+                .. Regex.Matches(section.Groups[1].Value, @"^\| *(\d{4}) *\|", RegexOptions.Multiline)
+                    .Select(m => int.Parse(m.Groups[1].Value))
+            ]
             : [];
     }
 

@@ -10,33 +10,29 @@ public sealed record FusionDiff(double Top1Changed, double Top1RankDelta, double
     /// <summary>The baseline top result is not in the served list at all — not a delta of zero.</summary>
     public const double Dropped = -1;
 
-    public const string Top1ChangedMetric = "search.fusion.top1_changed";
+    private const string Top1ChangedMetric = "search.fusion.top1_changed";
 
-    public const string Top1RankDeltaMetric = "search.fusion.top1_rank_delta";
+    private const string Top1RankDeltaMetric = "search.fusion.top1_rank_delta";
 
-    public const string Top5MovedMetric = "search.fusion.top5_moved";
-
-    /// <summary>Declared, not reflected, for the same reason as SearchTimings.PhaseNames.</summary>
-    public static IReadOnlyList<string> MetricNames { get; } =
-        [Top1ChangedMetric, Top1RankDeltaMetric, Top5MovedMetric];
+    private const string Top5MovedMetric = "search.fusion.top5_moved";
 
     private const int Window = 5;
 
+    /// <summary>Declared, not reflected, for the same reason as SearchTimings.PhaseNames.</summary>
+    public static IReadOnlyList<string> MetricNames { get; } = [Top1ChangedMetric, Top1RankDeltaMetric, Top5MovedMetric];
+
     /// <summary>This instance as measurement rows, in the same order as <see cref="MetricNames" />.</summary>
     public IReadOnlyList<(string Name, double Value, string Unit)> Measurements() =>
-        [
-            (MetricNames[0], Top1Changed, "flag"),
-            (MetricNames[1], Top1RankDelta, "ranks"),
-            (MetricNames[2], Top5Moved, "results")
-        ];
+    [
+        (MetricNames[0], Top1Changed, "flag"),
+        (MetricNames[1], Top1RankDelta, "ranks"),
+        (MetricNames[2], Top5Moved, "results")
+    ];
 
     public static FusionDiff Between(
         IReadOnlyList<MemorySearchResult> baseline,
         IReadOnlyList<MemorySearchResult> adjusted)
     {
-        ArgumentNullException.ThrowIfNull(baseline);
-        ArgumentNullException.ThrowIfNull(adjusted);
-
         if (baseline.Count == 0 || adjusted.Count == 0)
         {
             return new FusionDiff(0, 0, 0);

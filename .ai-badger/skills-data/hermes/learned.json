@@ -643,10 +643,10 @@
         {
             "category": "uncategorized",
             "name": "refactoring-fix",
-            "sourceHash": "d2d2658ea70b2815b3455e0e85bfdeef397aef74eb3fb239243de31b3583e2ed",
+            "sourceHash": "ae05abf09556f4d817eb1dd8213dec16c6c36a436c25c65bdf6d55f240261050",
             "sourcePath": "software-development/refactoring-fix",
             "status": "synced",
-            "syncedAt": "2026-08-13T08:38:29Z",
+            "syncedAt": "2026-08-20T18:34:12Z",
             "target": ".ai-badger/skills/learned/uncategorized/refactoring-fix"
         },
         {
@@ -666,6 +666,15 @@
             "status": "synced",
             "syncedAt": "2026-08-06T15:43:06Z",
             "target": ".ai-badger/skills/learned/uncategorized/review-gate-diff-verification"
+        },
+        {
+            "category": "uncategorized",
+            "name": "safe-bulk-refactoring",
+            "sourceHash": "cd382afec5b76c80206f542358af8f5fd4ba398447a34be1c07a8236cdb52232",
+            "sourcePath": "software-development/safe-bulk-refactoring",
+            "status": "synced",
+            "syncedAt": "2026-08-20T15:59:43Z",
+            "target": ".ai-badger/skills/learned/uncategorized/safe-bulk-refactoring"
         },
         {
             "category": "uncategorized",

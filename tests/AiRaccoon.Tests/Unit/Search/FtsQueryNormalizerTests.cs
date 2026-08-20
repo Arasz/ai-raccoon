@@ -1,6 +1,6 @@
-using AiRaccoon.Infrastructure.Sqlite;
 using Shouldly;
 using Xunit;
+using FtsQueryNormalizer = AiRaccoon.Infrastructure.Sqlite.Memory.FtsQueryNormalizer;
 
 namespace AiRaccoon.Tests.Unit.Search;
 

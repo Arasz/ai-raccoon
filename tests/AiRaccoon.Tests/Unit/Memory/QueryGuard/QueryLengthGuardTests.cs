@@ -59,7 +59,7 @@ public class QueryLengthGuardTests
         var verdict = QueryLengthGuard.Evaluate(query);
 
         verdict.Guidance.ShouldNotBeNullOrWhiteSpace();
-        verdict.Guidance!.ShouldContain("keyword", Case.Insensitive);
+        verdict.Guidance!.ShouldContain("keyword");
     }
 
     [Fact]

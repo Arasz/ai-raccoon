@@ -5,6 +5,7 @@ using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
+using NSubstitute;
 using Shouldly;
 using Xunit;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
@@ -26,6 +27,8 @@ public sealed class CustomContextDiscoverabilityTests : IDisposable
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 14, 0, 0, 0, TimeSpan.Zero);
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-custom-context");
     private readonly SqliteConnectionFactory _factory;
+    private readonly IModelMigrationLease _modelMigrationLease = Substitute.For<IModelMigrationLease>();
+    private readonly TimeProvider _timeProvider = new FakeTimeProvider();
 
     public CustomContextDiscoverabilityTests()
     {
@@ -37,7 +40,7 @@ public sealed class CustomContextDiscoverabilityTests : IDisposable
 
     private SqliteMemoryStore CreateStore()
     {
-        var embedder = new EntryEmbedder(TestData.CreateEmbeddingService());
+        var embedder = new EntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider);
         return new SqliteMemoryStore(_factory, new SqliteMemorySourceStore(_factory),
             new FileIngestor(new FileTypeMatcher([]), embedder, new SqliteMemorySourceStore(_factory),
                 new FakeTimeProvider(FixedNow), new LocalTokenizer()),
@@ -96,7 +99,7 @@ public sealed class CustomContextDiscoverabilityTests : IDisposable
             new MemoryWriteRequest("proj-1", "The team adopted the chassis pattern.", Context: "adr"), ct);
 
         var results = (await store.SearchAsync(
-            new SearchQuery("proj-2", "chassis", SearchScope.All, Limit: 5, MinRelativeScore: 0.0), ct)).Results;
+            new SearchQuery("proj-2", "chassis", Limit: 5, MinRelativeScore: 0.0), ct)).Results;
 
         results.ShouldBeEmpty("the project is the isolation boundary and must still hold");
     }
@@ -136,7 +139,7 @@ public sealed class CustomContextDiscoverabilityTests : IDisposable
         var label = reported.Contains(':') ? reported[(reported.LastIndexOf(':') + 1)..] : reported;
 
         var results = (await store.SearchAsync(
-            new SearchQuery("proj-1", "chassis", SearchScope.All, Limit: 5, MinRelativeScore: 0.0, ContextLabel: label), ct)).Results;
+            new SearchQuery("proj-1", "chassis", Limit: 5, MinRelativeScore: 0.0, ContextLabel: label), ct)).Results;
 
         results.ShouldNotBeEmpty($"the label '{label}' reported by stats must be the one search accepts");
     }

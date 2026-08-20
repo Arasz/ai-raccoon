@@ -211,18 +211,22 @@ public sealed class ReingestRepairTests : IDisposable
     private async Task<List<(string Hash, long ChunkIndex)>> SnapshotAsync(string file)
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
-        return (await connection.QueryAsync<(string Hash, long ChunkIndex)>(
+        return
+        [
+            .. await connection.QueryAsync<(string Hash, long ChunkIndex)>(
                 "SELECT hash AS Hash, chunk_index AS ChunkIndex FROM entries WHERE source_file = @file ORDER BY hash",
-                new { file }))
-            .ToList();
+                new { file })
+        ];
     }
 
     private async Task<List<string>> RowHashesForAsync(string file)
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
-        return (await connection.QueryAsync<string>(
-                "SELECT hash FROM entries WHERE source_file = @file", new { file }))
-            .ToList();
+        return
+        [
+            .. await connection.QueryAsync<string>(
+                "SELECT hash FROM entries WHERE source_file = @file", new { file })
+        ];
     }
 
     private async Task<Dictionary<string, long>> PositionsByValueAsync(string file)

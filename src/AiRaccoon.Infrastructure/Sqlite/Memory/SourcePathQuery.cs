@@ -1,7 +1,7 @@
 using System.Buffers;
 using System.Text.RegularExpressions;
 
-namespace AiRaccoon.Infrastructure.Sqlite;
+namespace AiRaccoon.Infrastructure.Sqlite.Memory;
 
 /// <summary>
 ///     Source-path-shaped queries (file[#section]) match the source_file/section FTS columns
@@ -15,6 +15,20 @@ internal static partial class SourcePathQuery
     private static readonly SearchValues<string> Reserved =
         SearchValues.Create(["and", "or", "not", "near"], StringComparison.Ordinal);
 
+    extension(FtsQueryPlan queryPlan)
+    {
+        public FtsQueryPlan AsPathQuery(string query)
+        {
+            var isPathQuery = TryBuild(query, out var pathExpression);
+            if (isPathQuery)
+            {
+                queryPlan = queryPlan with { Expression = pathExpression, Fallback = null, IsPathQuery = isPathQuery };
+            }
+
+            return queryPlan;
+        }
+    }
+
     public static bool TryBuild(string query, out string ftsExpression)
     {
         var match = PathRegex().Match(query.Trim());
@@ -24,13 +38,11 @@ internal static partial class SourcePathQuery
             return false;
         }
 
-        // File tokens come from the token regex, so each is a valid FTS5 bareword. The section
-        // is the raw anchor and is always quoted: a markdown anchor like "getting-started"
-        // holds a hyphen, which FTS5 reads as a column filter rather than part of a bareword.
         var tokens = TokenRegex().Matches(match.Groups["file"].Value)
             .Select(t => t.Value.ToLowerInvariant())
             .Select(t => Reserved.Contains(t) ? $"\"{t}\"" : t)
             .ToList();
+
         if (match.Groups["section"].Success)
         {
             tokens.Add($"\"{match.Groups["section"].Value.ToLowerInvariant()}\"");

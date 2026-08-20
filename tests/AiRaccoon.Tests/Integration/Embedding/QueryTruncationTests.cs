@@ -1,8 +1,11 @@
+using AiRaccoon.Core.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
-using Microsoft.Extensions.Logging;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Testing;
+using Microsoft.Extensions.Time.Testing;
+using NSubstitute;
 using Shouldly;
 using Xunit;
 
@@ -29,6 +32,8 @@ public sealed class QueryTruncationTests : IDisposable
     private readonly string _dataRoot = TestData.CreateTempRoot("query-truncation");
     private readonly SqliteConnectionFactory _factory;
     private readonly FakeLogger<EmbeddingService> _logger = new();
+    private readonly IModelMigrationLease _modelMigrationLease = Substitute.For<IModelMigrationLease>();
+    private readonly FakeTimeProvider _timeProvider = new();
 
     public QueryTruncationTests()
     {
@@ -42,7 +47,7 @@ public sealed class QueryTruncationTests : IDisposable
     public async Task ALongQuery_IsTrimmedByTheQueryPath_NotByTheGenerator()
     {
         await using var connection = await OpenConfiguredAsync();
-        var embedder = new EntryEmbedder(new EmbeddingService(_logger, new LocalTokenizer()));
+        var embedder = new EntryEmbedder(new EmbeddingService(_logger, new LocalTokenizer()), _modelMigrationLease, _timeProvider);
 
         var vector = await embedder.EmbedQueryAsync(connection, LongQuery(), TestContext.Current.CancellationToken);
 
@@ -59,21 +64,21 @@ public sealed class QueryTruncationTests : IDisposable
     public async Task TheQueryMessage_SaysWhatWasCutAndWhatItMeans()
     {
         await using var connection = await OpenConfiguredAsync();
-        var embedder = new EntryEmbedder(new EmbeddingService(_logger, new LocalTokenizer()));
+        var embedder = new EntryEmbedder(new EmbeddingService(_logger, new LocalTokenizer()), _modelMigrationLease, _timeProvider);
 
         await embedder.EmbedQueryAsync(connection, LongQuery(), TestContext.Current.CancellationToken);
 
         var message = _logger.Collector.GetSnapshot().First(r => r.Id.Id == QueryTrimmedEventId).Message;
-        message.ShouldContain("search query", Case.Insensitive);
-        message.ShouldContain("254", Case.Insensitive);
-        message.ShouldContain("shorter", Case.Insensitive);
+        message.ShouldContain("search query");
+        message.ShouldContain("254");
+        message.ShouldContain("shorter");
     }
 
     [Fact]
     public async Task AShortQuery_IsNotTrimmedAndSaysNothing()
     {
         await using var connection = await OpenConfiguredAsync();
-        var embedder = new EntryEmbedder(new EmbeddingService(_logger, new LocalTokenizer()));
+        var embedder = new EntryEmbedder(new EmbeddingService(_logger, new LocalTokenizer()), _modelMigrationLease, _timeProvider);
 
         await embedder.EmbedQueryAsync(connection, "how does the promotion queue decide?",
             TestContext.Current.CancellationToken);
@@ -87,11 +92,11 @@ public sealed class QueryTruncationTests : IDisposable
     {
         await using var connection = await OpenConfiguredAsync();
         var tokenizer = OnnxEmbeddingGenerator.CreateTokenizer(BundledModel.ResolveVocabPath());
-        var atLimit = AiRaccoon.Core.Chunking.TokenBudget.Trim(LongQuery(),
+        var atLimit = TokenBudget.Trim(LongQuery(),
             OnnxEmbeddingGenerator.MaxContentTokens, text => tokenizer.CountTokens(text));
         tokenizer.CountTokens(atLimit).ShouldBe(OnnxEmbeddingGenerator.MaxContentTokens,
             "the fixture must sit exactly on the limit, or this tests nothing");
-        var embedder = new EntryEmbedder(new EmbeddingService(_logger, new LocalTokenizer()));
+        var embedder = new EntryEmbedder(new EmbeddingService(_logger, new LocalTokenizer()), _modelMigrationLease, _timeProvider);
 
         await embedder.EmbedQueryAsync(connection, atLimit, TestContext.Current.CancellationToken);
 
@@ -102,7 +107,7 @@ public sealed class QueryTruncationTests : IDisposable
         string.Join(' ', Enumerable.Repeat(
             "how does the retrieval pipeline weigh full text against vectors when the corpus is large", 40));
 
-    private async Task<Microsoft.Data.Sqlite.SqliteConnection> OpenConfiguredAsync()
+    private async Task<SqliteConnection> OpenConfiguredAsync()
     {
         var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         await connection.ExecuteAsync("INSERT OR REPLACE INTO settings (key, value) VALUES (@key, 'local')",

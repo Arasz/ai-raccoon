@@ -11,13 +11,12 @@ internal static class ModalityCandidates
 {
     public static IReadOnlyList<MemorySearchResult> ByBm25(SearchResults searchResults) =>
     [
-        .. Deduplicated(searchResults.Fts, searchResults.Indexes.ValueByHash, ascending: true).OrderBy(result => result.Ranking)
+        .. Deduplicated(searchResults.Fts, searchResults.Index.ValueByHash, ascending: true).OrderBy(result => result.Ranking)
     ];
 
-    public static IReadOnlyList<MemorySearchResult> ByCosine(
-        SearchResults searchResults) =>
+    public static IReadOnlyList<MemorySearchResult> ByCosine(SearchResults searchResults) =>
     [
-        .. Deduplicated(searchResults.Vector, searchResults.Indexes.ValueByHash, ascending: false).OrderByDescending(result => result.Ranking)
+        .. Deduplicated(searchResults.Vector, searchResults.Index.ValueByHash, ascending: false).OrderByDescending(result => result.Ranking)
     ];
 
     /// <summary>

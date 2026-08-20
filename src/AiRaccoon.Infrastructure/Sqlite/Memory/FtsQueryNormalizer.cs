@@ -1,7 +1,7 @@
 using System.Buffers;
 using System.Text.RegularExpressions;
 
-namespace AiRaccoon.Infrastructure.Sqlite;
+namespace AiRaccoon.Infrastructure.Sqlite.Memory;
 
 /// <summary>
 ///     Free-text query -> safe FTS5 MATCH plan (see docs/plans/retrieval-improvement-c.md §3 Wave 1): AND-join with OR fallback
@@ -26,31 +26,22 @@ internal static partial class FtsQueryNormalizer
 
     public static FtsQueryPlan BuildPlan(string query)
     {
-        ArgumentNullException.ThrowIfNull(query);
-
-        // Content tokens (precision primary) vs the query's full token set (recall OR
-        // joins): stopwords are stripped from AND primaries because they drown signal
-        // (see docs/plans/retrieval-improvement-c.md §2.2), but OR joins keep them — under OR they add BM25 weight without
-        // constraining, and removing them measurably regresses baseline rankings (A1).
         var rawTokens = TokenRegex().Matches(query)
             .Select(match => match.Value.ToLowerInvariant())
             .Where(token => !Reserved.Contains(token))
             .ToList();
+
         var tokens = rawTokens.Where(token => !Stopwords.Contains(token)).ToList();
 
-        if (tokens.Count == 0)
+        switch (tokens.Count)
         {
-            return new FtsQueryPlan("", null, 0);
+            case 0:
+                return new FtsQueryPlan("", null, 0);
+            case 1:
+                return new FtsQueryPlan(tokens[0], null, 1);
         }
 
-        if (tokens.Count == 1)
-        {
-            return new FtsQueryPlan(tokens[0], null, 1);
-        }
 
-        // Adjacent token pairs as quoted phrases ("shadcn ui"): precision signal for the OR
-        // fallback (see docs/plans/retrieval-improvement-c.md §3 Wave 1.2). Skipped under AND semantics (no constraint) and in
-        // the long-query OR primary, where they measurably regress baseline rankings (A1).
         var bigrams = tokens.Count >= 3
             ? Enumerable.Range(0, tokens.Count - 1)
                 .Select(i => $"\"{tokens[i]} {tokens[i + 1]}\"")
@@ -59,20 +50,12 @@ internal static partial class FtsQueryNormalizer
 
         if (tokens.Count <= 4)
         {
-            // AND for precision; the OR fallback (with bigrams and the query's stopwords)
-            // prevents the zero-match regression measured for unguarded AND (see
-            // docs/plans/retrieval-improvement-c.md §3 Wave 1.3). The store falls back when the AND primary matches fewer rows than it
-            // has terms or fewer than the caller asked for — an AND that small is
-            // over-constrained (A6/C2 measured cases).
             return new FtsQueryPlan(
                 string.Join(" AND ", tokens),
                 string.Join(" OR ", rawTokens.Concat(bigrams)),
                 tokens.Count);
         }
 
-        // Long queries keep the proven OR recall of all query tokens: stopword stripping
-        // and bigrams each regress baseline rankings here (A1 measured case), so the
-        // original OR expression is preserved verbatim.
         return new FtsQueryPlan(string.Join(" OR ", rawTokens), null, tokens.Count);
     }
 
@@ -81,4 +64,7 @@ internal static partial class FtsQueryNormalizer
 }
 
 /// <summary>Primary FTS5 MATCH expression, the OR-join fallback (null when none), and the content-token count for the under-match check.</summary>
-internal sealed record FtsQueryPlan(string Expression, string? Fallback, int TokenCount);
+public sealed record FtsQueryPlan(string Expression, string? Fallback, int TokenCount)
+{
+    public bool IsPathQuery { get; init; }
+}

@@ -39,7 +39,7 @@ public interface IEntryEmbedder
     Task<int> EmbedPendingBatchAsync(SqliteConnection connection, int limit, CancellationToken cancellationToken);
 
     /// <summary>Embeds a query string, or null when the bank has no engine — search degrades rather than failing.</summary>
-    Task<byte[]?> EmbedQueryAsync(SqliteConnection connection, string query,
+    Task<QueryVector> EmbedQueryAsync(SqliteConnection connection, string query,
         CancellationToken cancellationToken);
 
     Task<EmbeddingSettings> ReadSettingsAsync(SqliteConnection connection,

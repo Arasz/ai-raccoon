@@ -4,6 +4,8 @@ using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
+using NSubstitute;
 using Shouldly;
 using Xunit;
 
@@ -21,16 +23,15 @@ namespace AiRaccoon.Tests.Integration.Maintenance;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
-public sealed class FirstContactRehearsal
+public sealed class FirstContactRehearsal(ITestOutputHelper output)
 {
-    internal const string BankEnvVar = "AIRACCOON_FIRST_CONTACT_BANK";
+    private const string BankEnvVar = "AIRACCOON_FIRST_CONTACT_BANK";
 
     /// <summary>How many pending rows to embed as a throughput sample. Unset skips it.</summary>
-    internal const string EmbedSampleEnvVar = "AIRACCOON_FIRST_CONTACT_EMBED_SAMPLE";
+    private const string EmbedSampleEnvVar = "AIRACCOON_FIRST_CONTACT_EMBED_SAMPLE";
 
-    private readonly ITestOutputHelper _output;
-
-    public FirstContactRehearsal(ITestOutputHelper output) => _output = output;
+    private readonly IModelMigrationLease _modelMigrationLease = Substitute.For<IModelMigrationLease>();
+    private readonly TimeProvider _timeProvider = new FakeTimeProvider();
 
     [Fact]
     public async Task Rehearse_TheFirstOpenByANewBinary()
@@ -38,7 +39,7 @@ public sealed class FirstContactRehearsal
         var bank = Environment.GetEnvironmentVariable(BankEnvVar);
         if (bank is null)
         {
-            _output.WriteLine($"{BankEnvVar} not set — rehearses a 1.17.0 first open against a bank COPY.");
+            output.WriteLine($"{BankEnvVar} not set — rehearses a 1.17.0 first open against a bank COPY.");
             return;
         }
 
@@ -62,11 +63,11 @@ public sealed class FirstContactRehearsal
         var outcomes = await new MaintenanceJobRunner(TimeProvider.System,
                 NullLogger<MaintenanceJobRunner>.Instance)
             .RunDueAsync(connection,
-                [
-                    new ChunkBackfillJob(TestData.RealMarkdownChunker(), TimeProvider.System, new LocalTokenizer()),
-                    new Vec0ReclaimJob(),
-                    new VacuumJob()
-                ], TestContext.Current.CancellationToken);
+            [
+                new ChunkBackfillJob(TestData.RealMarkdownChunker(), TimeProvider.System, new LocalTokenizer()),
+                new Vec0ReclaimJob(),
+                new VacuumJob()
+            ], TestContext.Current.CancellationToken);
         var jobsElapsed = DateTimeOffset.UtcNow - jobsStarted;
 
         var rowsAfter = await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM entries");
@@ -74,38 +75,38 @@ public sealed class FirstContactRehearsal
         var pending = await connection.ExecuteScalarAsync<long>(
             "SELECT COUNT(*) FROM entries WHERE embed_state = 'pending'");
 
-        _output.WriteLine($"migration        : {migrateElapsed.TotalSeconds:F1}s");
+        output.WriteLine($"migration        : {migrateElapsed.TotalSeconds:F1}s");
         foreach (var outcome in outcomes)
         {
-            _output.WriteLine($"job {outcome.Name,-15}: {(outcome.Ran ? "ran" : "skipped")}{(outcome.Error is null ? "" : " — " + outcome.Error)}");
+            output.WriteLine($"job {outcome.Name,-15}: {(outcome.Ran ? "ran" : "skipped")}{(outcome.Error is null ? "" : " — " + outcome.Error)}");
         }
 
-        _output.WriteLine($"jobs total       : {jobsElapsed.TotalSeconds:F1}s");
-        _output.WriteLine($"rows             : {rowsBefore:N0} -> {rowsAfter:N0}");
-        _output.WriteLine($"chars            : {charsBefore:N0} -> {charsAfter:N0} ({charsAfter - charsBefore:+#;-#;0})");
-        _output.WriteLine($"over-window rows : {overBefore} -> {await OverWindowAsync(connection)}");
-        _output.WriteLine($"file             : {fileBefore:N0} -> {new FileInfo(bank).Length:N0} ({new FileInfo(bank).Length - fileBefore:+#;-#;0})");
-        _output.WriteLine($"pending embeds   : {pending:N0}");
+        output.WriteLine($"jobs total       : {jobsElapsed.TotalSeconds:F1}s");
+        output.WriteLine($"rows             : {rowsBefore:N0} -> {rowsAfter:N0}");
+        output.WriteLine($"chars            : {charsBefore:N0} -> {charsAfter:N0} ({charsAfter - charsBefore:+#;-#;0})");
+        output.WriteLine($"over-window rows : {overBefore} -> {await OverWindowAsync(connection)}");
+        output.WriteLine($"file             : {fileBefore:N0} -> {new FileInfo(bank).Length:N0} ({new FileInfo(bank).Length - fileBefore:+#;-#;0})");
+        output.WriteLine($"pending embeds   : {pending:N0}");
 
         // The one number nobody had: how long the pending backlog takes to drain. The 2026-08-09
         // review flagged "no embedding throughput" as a gap and it was still open, so the drain time
         // was being asserted by nobody and guessed by everyone. Sampled, not extrapolated blind.
         if (pending > 0 && Environment.GetEnvironmentVariable(EmbedSampleEnvVar) is { } rawSample
-            && int.TryParse(rawSample, out var sample) && sample > 0)
+                        && int.TryParse(rawSample, out var sample) && sample > 0)
         {
             var project = await connection.ExecuteScalarAsync<string?>(
                 "SELECT project_id FROM entries WHERE embed_state = 'pending' AND project_id IS NOT NULL LIMIT 1");
-            var embedder = new EntryEmbedder(TestData.CreateEmbeddingService());
+            var embedder = new EntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider);
             var started = DateTimeOffset.UtcNow;
             var embedded = await embedder.EmbedPendingAsync(connection, project ?? "acme", sample,
                 TestContext.Current.CancellationToken);
             var elapsed = DateTimeOffset.UtcNow - started;
 
             var perRow = elapsed.TotalMilliseconds / Math.Max(1, embedded);
-            _output.WriteLine($"embed sample     : {embedded} rows in {elapsed.TotalSeconds:F1}s "
-                              + $"({perRow:F0} ms/row)");
-            _output.WriteLine($"drain estimate   : {TimeSpan.FromMilliseconds(perRow * pending).TotalMinutes:F1} min "
-                              + $"for {pending:N0} rows — EXTRAPOLATED from {embedded}, not measured whole");
+            output.WriteLine($"embed sample     : {embedded} rows in {elapsed.TotalSeconds:F1}s "
+                             + $"({perRow:F0} ms/row)");
+            output.WriteLine($"drain estimate   : {TimeSpan.FromMilliseconds(perRow * pending).TotalMinutes:F1} min "
+                             + $"for {pending:N0} rows — EXTRAPOLATED from {embedded}, not measured whole");
         }
 
         outcomes.ShouldAllBe(o => o.Error == null, "a job that errors on a real bank is the finding");

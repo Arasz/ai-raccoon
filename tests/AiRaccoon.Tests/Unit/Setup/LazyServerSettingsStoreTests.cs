@@ -1,8 +1,8 @@
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
-using AiRaccoon.Settings;
-using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Infrastructure.Watch;
+using AiRaccoon.Settings;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
@@ -102,10 +102,9 @@ public sealed class LazyServerSettingsStoreTests
     public async Task AFailingAcquire_PropagatesToTheCaller()
     {
         var store = new LazyServerSettingsStore(_ =>
-            Task.FromException<ISettingsStore>(new SettingsServerUnavailableException("no server", null)));
+            Task.FromException<ISettingsStore>(new SettingsServerUnavailableException("no server")));
 
-        await Should.ThrowAsync<SettingsServerUnavailableException>(
-            () => store.GetSettingAsync("k", TestContext.Current.CancellationToken));
+        await Should.ThrowAsync<SettingsServerUnavailableException>(() => store.GetSettingAsync("k", TestContext.Current.CancellationToken));
     }
 
     /// <summary>ADR-0076: model set reaches the same acquired store as every other settings command.</summary>

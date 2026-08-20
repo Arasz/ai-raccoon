@@ -10,7 +10,16 @@ namespace AiRaccoon.Infrastructure.Sqlite.Memory;
 internal static class SearchResultMerger
 {
     public static IReadOnlyList<MemorySearchResult> Merge(
-        SearchResult searchResult,
+        IReadOnlyList<MemorySearchResult> searchResults,
+        SearchQuery searchQuery,
+        FtsQueryPlan queryPlan)
+    {
+        return Merge(searchResults, searchQuery.Limit, searchQuery.MinRelativeScore, searchQuery.RrfK, searchQuery.SourceLambda(queryPlan), searchQuery.ConsolidationThreshold,
+            searchQuery.DocScoreFormula);
+    }
+
+    public static IReadOnlyList<MemorySearchResult> Merge(
+        IReadOnlyList<MemorySearchResult> searchResults,
         int limit,
         double minRelativeScore = 0.0,
         int rrfK = SearchQuery.DefaultRrfK,
@@ -18,9 +27,9 @@ internal static class SearchResultMerger
         double consolidationThreshold = double.PositiveInfinity,
         DocScoreFormula formula = DocScoreFormula.Max)
     {
-        var unitWeightResults = new WeightedResults(searchResult.Results, Weight: 1.0);
+        var unitWeightResults = new WeightedResults(searchResults, Weight: 1.0);
         var fused = ReciprocalRankFusion.Fuse([unitWeightResults], rrfK, 0.0, int.MaxValue);
-        var ranked = SourceAffinityRanker.Rank(searchResult with { Results = fused }, sourceLambda, consolidationThreshold, formula);
+        var ranked = SourceAffinityRanker.Rank(fused, sourceLambda, consolidationThreshold, formula);
         return
         [
             .. ranked

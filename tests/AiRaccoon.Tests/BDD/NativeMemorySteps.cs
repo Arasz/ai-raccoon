@@ -1283,8 +1283,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         payload.ShouldContain("Console.WriteLine(result);");
     }
 
-    private static int FenceDelimiters(string text) =>
-        text.Split('\n').Count(line => line.TrimStart().StartsWith("```", StringComparison.Ordinal));
+    private static int FenceDelimiters(string text) => text.Split('\n').Count(line => line.TrimStart().StartsWith("```", StringComparison.Ordinal));
 
     [Then("no error is raised")]
     public void ThenNoErrorRaised() => _lastSearch.ShouldNotBeNull();
@@ -1449,7 +1448,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
 
         const string query = "rrf fusion weighting";
         _defaultRrfSearch = (await _store.SearchAsync(
-            new SearchQuery(projectId, query, SearchScope.All, null, 20, 0.0),
+            new SearchQuery(projectId, query),
             CancellationToken.None)).Results;
         _lastSearch = (await _store.SearchAsync(
             new SearchQuery(projectId, query, SearchScope.All, null, 20, 0.0, 30, 2),

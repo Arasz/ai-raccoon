@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Reflection;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
@@ -7,7 +8,6 @@ using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Settings;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli.Commands;
-using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
 using Xunit;
@@ -106,10 +106,12 @@ public sealed class CliCommandsDoNotOpenTheBankTests : IDisposable
             .GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
             .Single();
 
-        return configCommandsConstructor.GetParameters()
-            .Select(p => p.ParameterType)
-            .Where(t => t.Name.EndsWith("Commands", StringComparison.Ordinal))
-            .ToArray();
+        return
+        [
+            .. configCommandsConstructor.GetParameters()
+                .Select(p => p.ParameterType)
+                .Where(t => t.Name.EndsWith("Commands", StringComparison.Ordinal))
+        ];
     }
 
     /// <summary>Exactly the graph AppRunner.RunCliCommand builds for a command path CliWriteOptOuts does not opt out — RegisterCoreMemoryServices + RegisterCommands, then the same override the CLI applies. The acquire delegate here must never run: the walk below stops at delegates rather than invoking them.</summary>
@@ -188,7 +190,7 @@ public sealed class CliCommandsDoNotOpenTheBankTests : IDisposable
                     continue;
                 }
 
-                if (value is System.Collections.IEnumerable enumerable and not string)
+                if (value is IEnumerable enumerable and not string)
                 {
                     foreach (var item in enumerable)
                     {

@@ -217,7 +217,7 @@ public class SyncCloudStoreFactoryTests
             Factory(store).ReadOptionsAsync(TestContext.Current.CancellationToken));
 
         ex.Message.ShouldContain("minio");
-        ex.Message.ShouldContain("s3", Case.Insensitive);
+        ex.Message.ShouldContain("s3");
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Memory.QueryGuard;
+using AiRaccoon.Infrastructure.Embedding;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
@@ -75,8 +76,8 @@ public sealed class QueryGuardRecallProbe
         // FALSE POSITIVE check for the 1,000-char warning threshold (PR #339): a character count is
         // a proxy for a token count, and whitespace-heavy text tokenises far shorter than its length
         // suggests — a 12,952-char markdown table measured 249 tokens, comfortably inside the window.
-        var tokenizer = AiRaccoon.Infrastructure.Embedding.OnnxEmbeddingGenerator.CreateTokenizer(
-            AiRaccoon.Infrastructure.Embedding.BundledModel.ResolveVocabPath());
+        var tokenizer = OnnxEmbeddingGenerator.CreateTokenizer(
+            BundledModel.ResolveVocabPath());
         const int WindowTokens = 254;
         const int ThresholdChars = 1000;
         var overChars = queries.Where(q => q.Length > ThresholdChars).ToList();

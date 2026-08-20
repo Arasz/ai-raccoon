@@ -34,8 +34,8 @@ public sealed class SearchResultMergerTests
         var junk = new[] { Hit("a", 1.0), Hit("b", 0.31), Hit("c", 0.12) };
         double[] positional = [Positional(1), Positional(2), Positional(3)];
 
-        var mergedStrong = SearchResultMerger.Merge(new SearchResult(strong, TimeSpan.Zero), 3);
-        var mergedJunk = SearchResultMerger.Merge(new SearchResult(junk, TimeSpan.Zero), 3);
+        var mergedStrong = SearchResultMerger.Merge(strong, 3);
+        var mergedJunk = SearchResultMerger.Merge(junk, 3);
 
         mergedStrong.Select(result => result.Ranking).ShouldBe(positional, 1e-12,
             "a strong candidate set is rescored to the closed form (k+1)/(k+rank)");
@@ -54,7 +54,7 @@ public sealed class SearchResultMergerTests
     {
         var candidates = new[] { Hit("a", 1.0), Hit("b", 0.31), Hit("c", 0.12) };
 
-        var merged = SearchResultMerger.Merge(new SearchResult(candidates, TimeSpan.Zero), 10);
+        var merged = SearchResultMerger.Merge(candidates, 10);
 
         merged.Select(result => result.Hash).ShouldBe(["a", "b", "c"]);
     }
@@ -69,7 +69,7 @@ public sealed class SearchResultMergerTests
     {
         var candidates = Enumerable.Range(1, 10).Select(i => Hit($"h{i:D2}", 1.0 / i)).ToArray();
 
-        var merged = SearchResultMerger.Merge(new SearchResult(candidates, TimeSpan.Zero), 20, minRelativeScore: 0.9);
+        var merged = SearchResultMerger.Merge(candidates, 20, minRelativeScore: 0.9);
 
         merged.Count.ShouldBe(7, "ranks 1-7 clear 0.9 on the positional curve; rank 8 is 0.8971");
         Positional(7).ShouldBeGreaterThanOrEqualTo(0.9);

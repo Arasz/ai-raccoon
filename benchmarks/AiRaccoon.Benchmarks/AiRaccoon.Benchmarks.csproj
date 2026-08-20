@@ -21,6 +21,8 @@
         <PackageReference Include="LLamaSharp.Backend.Cpu"/>
         <PackageReference Include="Microsoft.Extensions.AI"/>
         <PackageReference Include="Microsoft.Extensions.AI.OpenAI"/>
+        <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing"/>
+        <PackageReference Include="NSubstitute"/>
         <PackageReference Include="OpenAI"/>
     </ItemGroup>
 

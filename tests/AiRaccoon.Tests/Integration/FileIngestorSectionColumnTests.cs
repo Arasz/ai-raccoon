@@ -4,6 +4,8 @@ using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Time.Testing;
+using NSubstitute;
 using Shouldly;
 using Xunit;
 
@@ -24,7 +26,9 @@ public class FileIngestorSectionColumnTests : IDisposable
 {
     private readonly SqliteConnection _conn;
     private readonly FileIngestor _ingestor;
+    private readonly IModelMigrationLease _modelMigrationLease = Substitute.For<IModelMigrationLease>();
     private readonly string _testDir;
+    private readonly TimeProvider _timeProvider = new FakeTimeProvider();
 
     public FileIngestorSectionColumnTests()
     {
@@ -36,7 +40,7 @@ public class FileIngestorSectionColumnTests : IDisposable
         _conn = factory.OpenBankAsync(CancellationToken.None).GetAwaiter().GetResult();
 
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker())]);
-        _ingestor = new FileIngestor(matcher, new EntryEmbedder(TestData.CreateEmbeddingService()),
+        _ingestor = new FileIngestor(matcher, new EntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider),
             new SqliteMemorySourceStore(factory), TimeProvider.System, new LocalTokenizer());
 
         using var scopeCmd = _conn.CreateCommand();

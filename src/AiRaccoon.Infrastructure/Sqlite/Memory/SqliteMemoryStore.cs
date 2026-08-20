@@ -30,7 +30,6 @@ public sealed partial class SqliteMemoryStore(
 {
     private const string SharedScope = "shared";
     private readonly INoiseEntryStore _noiseEntryStore = NoOpNoiseEntryStore.Instance;
-
     private readonly INoiseShadowObserver _noiseShadowObserver = NoOpNoiseShadowObserver.Instance;
 
     public SqliteMemoryStore(
@@ -161,26 +160,16 @@ public sealed partial class SqliteMemoryStore(
         searchTimingsCollector.Open = timeProvider.GetElapsedTime(openStart);
 
         var embedStart = timeProvider.GetTimestamp();
+        var plan = FtsQueryNormalizer.BuildPlan(query.Query).AsPathQuery(query.Query);
         var queryVector = await embedder.EmbedQueryAsync(connection, query.Query, cancellationToken).ConfigureAwait(false);
+        queryVector = queryVector with
+        {
+            Alpha = queryVector.IsEmpty ? StructureFusion.DefaultAlpha : await ReadStructureAlphaAsync(connection, cancellationToken).ConfigureAwait(false)
+        };
+
         searchTimingsCollector.Embed = timeProvider.GetElapsedTime(embedStart);
 
-        var plan = FtsQueryNormalizer.BuildPlan(query.Query);
-        var isPathQuery = SourcePathQuery.TryBuild(query.Query, out var pathExpression);
-        if (isPathQuery)
-        {
-            plan = plan with { Expression = pathExpression, Fallback = null };
-        }
-
-        var alpha = StructureFusion.DefaultAlpha;
-        if (queryVector is not null)
-        {
-            alpha = await ReadStructureAlphaAsync(connection, cancellationToken).ConfigureAwait(false);
-        }
-
-        var ftsQueried = plan.Expression.Length > 0 && query.FtsWeight != 0;
-        var vectorQueried = queryVector is not null && query.VectorWeight != 0;
-
-        return await ExecuteSearchPipeline(connection, query, queryVector, vectorQueried, alpha, plan, ftsQueried, isPathQuery, searchTimingsCollector, cancellationToken);
+        return await ExecuteSearchPipeline(connection, query, plan, queryVector, searchTimingsCollector, cancellationToken);
     }
 
     /// <summary>memory_get (ADR-0035): the caller's own rows plus the cross-project shared tier; null when no such hash is reachable.</summary>
@@ -296,7 +285,7 @@ public sealed partial class SqliteMemoryStore(
 
         ContextScope.RequireWithinProject(context, projectId);
 
-        var (filter, values) = ContextFilter.For(context, projectId, "");
+        var (filter, values) = ContextFilterProvider.For(context, projectId, "");
         var parameters = new DynamicParameters();
         foreach (var (key, value) in values)
         {
@@ -518,7 +507,7 @@ public sealed partial class SqliteMemoryStore(
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(context);
 
-        var (filter, values) = ContextFilter.For(context, projectId, "");
+        var (filter, values) = ContextFilterProvider.For(context, projectId, "");
         var parameters = new DynamicParameters();
         foreach (var (key, value) in values)
         {
@@ -572,23 +561,23 @@ public sealed partial class SqliteMemoryStore(
         return affected > 0;
     }
 
-    private async Task<Core.Memory.SearchResults> ExecuteSearchPipeline(SqliteConnection connection, SearchQuery query, byte[]? queryVector, bool vectorQueried, double alpha, FtsQueryPlan plan,
-        bool ftsQueried, bool isPathQuery, SearchTimingsCollector searchTimingsCollector, CancellationToken cancellationToken)
+    private async Task<Core.Memory.SearchResults> ExecuteSearchPipeline(SqliteConnection connection, SearchQuery query, FtsQueryPlan plan, QueryVector queryVector,
+        SearchTimingsCollector searchTimingsCollector, CancellationToken cancellationToken)
     {
-        var searchResults = await ExecuteSearchForContexts(connection, query, queryVector, vectorQueried, alpha, plan, ftsQueried, cancellationToken);
+        var searchResults = await ExecuteSearchForContexts(connection, query, plan, queryVector, cancellationToken);
         searchTimingsCollector.Fts = searchResults.FtsTotalTiming;
         searchTimingsCollector.Vector = searchResults.VectorTotalTiming;
 
         var fusedResults = SearchResultFusion(query, searchResults);
         searchTimingsCollector.Fusion = fusedResults.SearchTiming;
 
-        var mergedResults = SearchResultMerge(query, fusedResults, isPathQuery);
+        var mergedResults = SearchResultMerge(query, plan, fusedResults);
         searchTimingsCollector.Merge = mergedResults.SearchTiming;
 
-        var adjustedResults = await AdjustMergedResults(connection, query, fusedResults, mergedResults, ftsQueried, vectorQueried, isPathQuery, cancellationToken);
+        var adjustedResults = await AdjustMergedResults(connection, query, plan, queryVector, fusedResults, mergedResults, cancellationToken);
         searchTimingsCollector.Adjustment = adjustedResults.SearchTiming;
 
-        var deferredResults = await ResolveDeferredSnippetsAsync(connection, adjustedResults, searchResults.Indexes, query.Query, cancellationToken);
+        var deferredResults = await ResolveDeferredSnippetsAsync(connection, query, adjustedResults, searchResults.Index, cancellationToken);
         searchTimingsCollector.Snippets = deferredResults.SearchTiming;
 
         var bumpStart = timeProvider.GetTimestamp();
@@ -598,41 +587,38 @@ public sealed partial class SqliteMemoryStore(
         return new Core.Memory.SearchResults(deferredResults.Results, searchTimingsCollector.ToCollected(timeProvider), deferredResults.FusionDiff);
     }
 
-    private async Task<AdjustedSearchResult> AdjustMergedResults(SqliteConnection connection, SearchQuery query, FusedSearchResult fusedSearchResult, MergedSearchResult mergedSearchResult,
-        bool ftsQueried, bool vectorQueried, bool isPathQuery, CancellationToken cancellationToken)
+    private async Task<AdjustedSearchResult> AdjustMergedResults(SqliteConnection connection, SearchQuery query, FtsQueryPlan queryPlan, QueryVector queryVector, FusedSearchResult fusedSearchResult,
+        MergedSearchResult mergedSearchResult, CancellationToken cancellationToken)
     {
         var adjustmentStart = timeProvider.GetTimestamp();
-        var legs = LegsFor(fusedSearchResult.FtsCandidates, fusedSearchResult.VectorCandidates, ftsQueried, vectorQueried);
+
+        var legs = LegsFor(query, queryPlan, queryVector, fusedSearchResult.FtsCandidates, fusedSearchResult.VectorCandidates);
+        var merged = mergedSearchResult.Results;
+
         if (!await NoFusionRegressionEnabledAsync(connection, legs, cancellationToken).ConfigureAwait(false))
         {
-            return new AdjustedSearchResult(mergedSearchResult.Results, timeProvider.GetElapsedTime(adjustmentStart));
+            return new AdjustedSearchResult(merged, timeProvider.GetElapsedTime(adjustmentStart));
         }
 
-        var adjustedSea = mergedSearchResult with
+        var adjusted = SearchResultMerger.Merge(NoFusionRegression.Reorder(merged, legs), query, queryPlan);
+        return new AdjustedSearchResult(adjusted, timeProvider.GetElapsedTime(adjustmentStart))
         {
-            Results = SearchResultMerger.Merge(mergedSearchResult with { Results = NoFusionRegression.Reorder(mergedSearchResult.Results, legs) }, query.Limit,
-                query.MinRelativeScore, query.RrfK, isPathQuery ? 0.0 : query.SourceLambda,
-                query.ConsolidationThreshold, query.DocScoreFormula)
-        };
-        return new AdjustedSearchResult(adjustedSea.Results, timeProvider.GetElapsedTime(adjustmentStart))
-        {
-            FusionDiff = FusionDiff.Between(mergedSearchResult.Results, adjustedSea.Results)
+            FusionDiff = FusionDiff.Between(merged, adjusted)
         };
     }
 
-    private MergedSearchResult SearchResultMerge(SearchQuery query, FusedSearchResult fusedResult, bool isPathQuery)
+    private MergedSearchResult SearchResultMerge(SearchQuery query, FtsQueryPlan queryPlan, FusedSearchResult fusedResult)
     {
         var mergeStart = timeProvider.GetTimestamp();
-        var merged = SearchResultMerger.Merge(fusedResult, query.Limit, query.MinRelativeScore, query.RrfK, isPathQuery ? 0.0 : query.SourceLambda, query.ConsolidationThreshold,
-            query.DocScoreFormula);
+        var merged = SearchResultMerger.Merge(fusedResult.Results, query, queryPlan);
         return new MergedSearchResult(merged, timeProvider.GetElapsedTime(mergeStart));
     }
 
-    private FusedSearchResult SearchResultFusion(SearchQuery query, SearchResults batch)
+    private FusedSearchResult SearchResultFusion(SearchQuery query, SearchResults searchResults)
     {
         var fusionStart = timeProvider.GetTimestamp();
-        var ftsCandidates = ModalityCandidates.ByBm25(batch);
-        var vectorCandidates = ModalityCandidates.ByCosine(batch);
+        var ftsCandidates = ModalityCandidates.ByBm25(searchResults);
+        var vectorCandidates = ModalityCandidates.ByCosine(searchResults);
         List<WeightedResults> weightedResults = [new(ftsCandidates, query.FtsWeight), new(vectorCandidates, query.VectorWeight)];
         var fused = ReciprocalRankFusion.Fuse(weightedResults, query.RrfK, 0, int.MaxValue);
         return new FusedSearchResult(fused, timeProvider.GetElapsedTime(fusionStart))
@@ -642,64 +628,57 @@ public sealed partial class SqliteMemoryStore(
         };
     }
 
-    private async Task<SearchResults> ExecuteSearchForContexts(SqliteConnection connection, SearchQuery query, byte[]? queryVector, bool vectorQueried, double alpha, FtsQueryPlan plan,
-        bool ftsQueried,
-        CancellationToken cancellationToken)
+    private async Task<SearchResults> ExecuteSearchForContexts(SqliteConnection connection, SearchQuery query, FtsQueryPlan plan, QueryVector queryVector, CancellationToken cancellationToken)
     {
         var contexts = await SearchContexts.ResolveAsync(connection, query, cancellationToken).ConfigureAwait(false);
-        var batch = new SearchResults();
+        var searchResults = new SearchResults();
 
         foreach (var context in contexts)
         {
-            var ctxFilter = ContextFilter.For(context, query.ProjectId, "e.");
+            var ctxFilter = ContextFilterProvider.For(context, query.ProjectId, "e.");
             var ctx = MemorySql.ContextKeyFor(context, query.ProjectId);
-            var limit = CandidateWindowFor(query.Limit, query.CandidateWindow);
+            var byHashIndex = searchResults.Index;
 
-            var vectorResults = await VectorSearch(connection, batch.Indexes, queryVector, ctx, vectorQueried, limit, alpha, cancellationToken);
-            var ftsResults = await FtsSearch(connection, query, ctxFilter, plan, batch.Indexes, queryVector, ftsQueried, limit, cancellationToken);
+            var vectorResults = await VectorSearch(connection, query, queryVector, byHashIndex, ctx, cancellationToken);
+            var ftsResults = await FtsSearch(connection, query, plan, queryVector, ctxFilter, byHashIndex, cancellationToken);
 
-            batch.AddResults(vectorResults, ftsResults);
+            searchResults.AddResults(vectorResults, ftsResults);
         }
 
-        return batch;
+        return searchResults;
     }
 
-    private async Task<VectorSearchResult> VectorSearch(SqliteConnection connection, HashIndexes hashIndexes, byte[]? queryVector, string ctx, bool vectorQueried, int limit, double alpha,
+    private async Task<VectorSearchResult> VectorSearch(SqliteConnection connection, SearchQuery query, QueryVector queryVector, ByHashIndex byHashIndex, string ctx,
         CancellationToken cancellationToken)
     {
-        if (!vectorQueried)
+        if (!query.IsVectorQueried(queryVector))
         {
             return new VectorSearchResult([], TimeSpan.Zero);
         }
 
         var vectorStart = timeProvider.GetTimestamp();
-        var vectorParameters = DynamicParameters.VectorParameters(ctx, limit, queryVector);
-        var vectorResults = await QueryDualVectorBatchAsync(connection, vectorParameters, alpha, hashIndexes, cancellationToken).ConfigureAwait(false);
+        var vectorResults = await QueryDualVectorsAsync(connection, query, queryVector, byHashIndex, ctx, cancellationToken).ConfigureAwait(false);
         return new VectorSearchResult(vectorResults, timeProvider.GetElapsedTime(vectorStart));
     }
 
-    private async Task<FtsSearchResult> FtsSearch(SqliteConnection connection, SearchQuery query, ContextFilterValues contextFilter, FtsQueryPlan plan, HashIndexes hashIndexes,
-        byte[]? queryVector,
-        bool ftsQueried,
-        int limit,
-        CancellationToken cancellationToken)
+    private async Task<FtsSearchResult> FtsSearch(SqliteConnection connection, SearchQuery query, FtsQueryPlan plan, QueryVector queryVector, ContextFilter contextFilter,
+        ByHashIndex byHashIndex, CancellationToken cancellationToken)
     {
-        if (!ftsQueried)
+        if (!query.IsFtsQueried(plan))
         {
             return new FtsSearchResult([], TimeSpan.Zero);
         }
 
         var ftsStart = timeProvider.GetTimestamp();
-        var mainQueryParameters = DynamicParameters.SearchParameters(plan.Expression, limit, queryVector, contextFilter.Values);
-        var ftsResults = await QueryFtsBatchAsync(connection, contextFilter.Filter, plan.Expression, mainQueryParameters, hashIndexes, cancellationToken).ConfigureAwait(false);
+        var ftsResults = await QueryFtsBatchAsync(connection, query, plan, queryVector, contextFilter, byHashIndex, cancellationToken);
 
         if (plan.Fallback is null || ftsResults.Count > Math.Max(plan.TokenCount, query.Limit))
         {
             return new FtsSearchResult(ftsResults, timeProvider.GetElapsedTime(ftsStart));
         }
 
-        var fallbackQueryParameters = DynamicParameters.SearchParameters(plan.Fallback, limit, queryVector, contextFilter.Values);
-        ftsResults = await QueryFtsBatchAsync(connection, contextFilter.Filter, plan.Fallback, fallbackQueryParameters, hashIndexes, cancellationToken).ConfigureAwait(false);
+
+        ftsResults = await QueryFallbackFtsBatchAsync(connection, query, plan, queryVector, contextFilter, byHashIndex, cancellationToken);
 
         return new FtsSearchResult(ftsResults, timeProvider.GetElapsedTime(ftsStart));
     }
@@ -788,26 +767,26 @@ public sealed partial class SqliteMemoryStore(
     ///     (docs/adr/0004-dual-vector-structure-signal.md); banks without structure vectors degrade
     ///     to content-only order.
     /// </summary>
-    private async Task<IReadOnlyList<MemorySearchResult>> QueryDualVectorBatchAsync(
-        SqliteConnection connection, DynamicParameters parameters, double alpha,
-        HashIndexes hashIndexes, CancellationToken cancellationToken)
+    private static async Task<IReadOnlyList<MemorySearchResult>> QueryDualVectorsAsync(SqliteConnection connection, SearchQuery query, QueryVector queryVector,
+        ByHashIndex byHashIndex, string ctx, CancellationToken cancellationToken)
     {
+        var vectorParameters = DynamicParameters.VectorParameters(query, queryVector, ctx);
         var contentRows = (await connection.QueryAsync<VectorRow>(
-                    new CommandDefinition(MemorySql.VectorSearchByFilter, parameters,
+                    new CommandDefinition(MemorySql.VectorSearchByFilter, vectorParameters,
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false))
             .ToList();
         var structureRows = (await connection.QueryAsync<VectorRow>(
-                    new CommandDefinition(MemorySql.StructureVectorSearchByFilter, parameters,
+                    new CommandDefinition(MemorySql.StructureVectorSearchByFilter, vectorParameters,
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false))
             .ToList();
 
-        var limit = parameters.Get<int>("limit");
+        var limit = query.LimitForCandidateWindow;
         var fused = StructureFusion.Rank(
             contentRows.Select(row => new VectorHit(row.Hash, StructureFusion.SimFromDistance(row.Distance))),
             structureRows.Select(row => new VectorHit(row.Hash, StructureFusion.SimFromDistance(row.Distance))),
-            alpha, limit);
+            queryVector.Alpha, limit);
 
         var byHash = contentRows.Concat(structureRows)
             .GroupBy(row => row.Hash, StringComparer.Ordinal)
@@ -816,7 +795,7 @@ public sealed partial class SqliteMemoryStore(
         var ranked = fused.Select(rank => (Row: byHash[rank.Hash], rank.Score)).ToList();
         foreach (var (row, _) in ranked)
         {
-            hashIndexes.ValueByHash[row.Hash] = row.Value;
+            byHashIndex.ValueByHash[row.Hash] = row.Value;
         }
 
         return BuildDualVectorResults(ranked);
@@ -839,38 +818,39 @@ public sealed partial class SqliteMemoryStore(
     ///     an FTS-originated survivor gets the real FTS5 snippet() text (matching the @query it was
     ///     matched by); everything else falls back to <see cref="SnippetFallback" />, as before deferral.
     /// </summary>
-    private async Task<DeferredSearchResult> ResolveDeferredSnippetsAsync(
-        SqliteConnection connection, AdjustedSearchResult adjustedSearch,
-        HashIndexes hashIndexes, string queryText, CancellationToken cancellationToken)
+    private async Task<DeferredSearchResult> ResolveDeferredSnippetsAsync(SqliteConnection connection, SearchQuery query, AdjustedSearchResult adjustedSearch, ByHashIndex byHashIndex,
+        CancellationToken cancellationToken)
     {
         var deferredSnippetsStart = timeProvider.GetTimestamp();
         var deferred = adjustedSearch.Results.Where(result => result.Snippet.Length == 0).ToList();
         if (deferred.Count == 0)
         {
-            return new DeferredSearchResult([], TimeSpan.Zero);
+            return DeferredSearchResult.Empty;
         }
 
-        var ftsSnippetByHash = await ResolveFtsSnippetsAsync(connection, deferred, hashIndexes, cancellationToken).ConfigureAwait(false);
+        var ftsSnippetByHash = await ResolveFtsSnippetsAsync(connection, deferred, byHashIndex, cancellationToken).ConfigureAwait(false);
 
         return new DeferredSearchResult([
-                .. adjustedSearch.Results.Select(result =>
+            .. adjustedSearch.Results.Select(result =>
+            {
+                if (result.Snippet.Length != 0)
                 {
-                    if (result.Snippet.Length != 0)
-                    {
-                        return result;
-                    }
+                    return result;
+                }
 
-                    if (ftsSnippetByHash.TryGetValue(result.Hash, out var ftsSnippet) && ftsSnippet.Length > 0)
-                    {
-                        return result with { Snippet = ftsSnippet };
-                    }
+                if (ftsSnippetByHash.TryGetValue(result.Hash, out var ftsSnippet) && ftsSnippet.Length > 0)
+                {
+                    return result with { Snippet = ftsSnippet };
+                }
 
-                    return hashIndexes.ValueByHash.TryGetValue(result.Hash, out var value)
-                        ? result with { Snippet = SnippetFallback.From(value, result.Hash, queryText) }
-                        : result;
-                })
-            ]
-            , timeProvider.GetElapsedTime(deferredSnippetsStart));
+                return byHashIndex.ValueByHash.TryGetValue(result.Hash, out var value)
+                    ? result with { Snippet = SnippetFallback.From(value, result.Hash, query.Query) }
+                    : result;
+            })
+        ], timeProvider.GetElapsedTime(deferredSnippetsStart))
+        {
+            FusionDiff = adjustedSearch.FusionDiff
+        };
     }
 
     /// <summary>
@@ -883,17 +863,17 @@ public sealed partial class SqliteMemoryStore(
     /// </summary>
     private static async Task<IReadOnlyDictionary<string, string>> ResolveFtsSnippetsAsync(
         SqliteConnection connection, IReadOnlyList<MemorySearchResult> deferred,
-        HashIndexes hashIndexes,
+        ByHashIndex byHashIndex,
         CancellationToken cancellationToken)
     {
         var snippetByHash = new Dictionary<string, string>(StringComparer.Ordinal);
         var byQuery = deferred
-            .Where(result => hashIndexes.FtsQueryByHash.ContainsKey(result.Hash))
-            .GroupBy(result => hashIndexes.FtsQueryByHash[result.Hash], StringComparer.Ordinal);
+            .Where(result => byHashIndex.FtsQueryByHash.ContainsKey(result.Hash))
+            .GroupBy(result => byHashIndex.FtsQueryByHash[result.Hash], StringComparer.Ordinal);
 
         foreach (var group in byQuery)
         {
-            var ids = group.Select(result => hashIndexes.IdByHash[result.Hash]).ToList();
+            var ids = group.Select(result => byHashIndex.IdByHash[result.Hash]).ToList();
             var rows = await connection.QueryAsync<SnippetRow>(
                     Def(MemorySql.FtsSnippetsForSurvivors, new { query = group.Key, ids }, cancellationToken))
                 .ConfigureAwait(false);

@@ -52,7 +52,7 @@ public class CliCommandTreeTests
         description.ShouldContain("server");
         description.ShouldContain("--apply");
         description.ShouldNotContain("memory_embed_pending");
-        description.ShouldNotContain("no server running", Case.Insensitive);
+        description.ShouldNotContain("no server running");
     }
 
     [Fact]

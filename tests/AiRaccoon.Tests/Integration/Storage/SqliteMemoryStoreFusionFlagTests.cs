@@ -127,8 +127,7 @@ public sealed class SqliteMemoryStoreFusionFlagTests : IAsyncLifetime
     {
         await SeedRegressionShapeAsync();
         var baseline = await SearchAsync();
-        await _store.SetSettingAsync(FusionConfigKeys.NoRegressionEnabledGlobal, "true",
-            TestContext.Current.CancellationToken);
+        await _store.SetSettingAsync(FusionConfigKeys.NoRegressionEnabledGlobal, "true", TestContext.Current.CancellationToken);
 
         var adjusted = await SearchAsync();
 

@@ -3,6 +3,8 @@ using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.TestHelpers;
 using Dapper;
+using Microsoft.Extensions.Time.Testing;
+using NSubstitute;
 using Shouldly;
 using Xunit;
 
@@ -24,6 +26,8 @@ public sealed class PendingEmbedJobTests : IDisposable
 
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-pending-embed-job");
     private readonly SqliteConnectionFactory _factory;
+    private readonly IModelMigrationLease _modelMigrationLease = Substitute.For<IModelMigrationLease>();
+    private readonly TimeProvider _timeProvider = new FakeTimeProvider();
 
     public PendingEmbedJobTests()
     {
@@ -33,7 +37,7 @@ public sealed class PendingEmbedJobTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    private static PendingEmbedJob NewJob() => new(new EntryEmbedder(new CountingEmbeddingService()));
+    private PendingEmbedJob NewJob() => new(new EntryEmbedder(new CountingEmbeddingService(), _modelMigrationLease, _timeProvider));
 
     /// <summary>
     ///     Mutation-check this one (project instruction: a check never seen to fail is not a check):

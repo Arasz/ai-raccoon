@@ -34,6 +34,6 @@ public sealed class TimerRegistrations(TimeProvider inner) : TimeProvider
         Guard.IsGreaterThan(count, 0);
 
         return WaitByPolling.WaitForAsync(
-            () => ValueTask.FromResult(Count >= count), TimeProvider.System, cancellationToken);
+            () => ValueTask.FromResult(Count >= count), System, cancellationToken);
     }
 }

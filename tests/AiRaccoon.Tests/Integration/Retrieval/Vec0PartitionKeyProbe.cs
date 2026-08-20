@@ -2,7 +2,6 @@ using System.Diagnostics;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
-using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
 
@@ -53,7 +52,9 @@ public sealed class Vec0PartitionKeyProbe : IDisposable
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
 
-        List<(long Id, string Ctx, string Scope, byte[] Embedding)> vectors = (await connection.QueryAsync<(long Id, string Ctx, string Scope, byte[] Embedding)>(
+        List<(long Id, string Ctx, string Scope, byte[] Embedding)> vectors =
+        [
+            .. await connection.QueryAsync<(long Id, string Ctx, string Scope, byte[] Embedding)>(
                 """
                 SELECT e.id AS Id,
                        COALESCE(e.context_label, e.scope || ':' || e.project_id) AS Ctx,
@@ -61,8 +62,8 @@ public sealed class Vec0PartitionKeyProbe : IDisposable
                        e.embedding AS Embedding
                 FROM entries e
                 WHERE e.embedding IS NOT NULL
-                """))
-            .ToList();
+                """)
+        ];
         vectors.Count.ShouldBeGreaterThan(1000, "the probe needs the real corpus to mean anything");
 
         // The committed corpus is ONE project and ONE context, so it cannot exhibit partition waste

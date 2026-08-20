@@ -28,7 +28,7 @@ public sealed class RepairCommandsTests
     {
         var stdout = await RunReingestAsync(apply: false, new ReingestRepairReport(1, 3, 2));
 
-        stdout.ShouldContain("metadata", Case.Insensitive);
+        stdout.ShouldContain("metadata");
         stdout.ShouldContain("rating");
         stdout.ShouldContain("discarded");
     }
@@ -38,7 +38,7 @@ public sealed class RepairCommandsTests
     {
         var stdout = await RunReingestAsync(apply: true, new ReingestRepairReport(1, 3, 2));
 
-        stdout.ShouldContain("metadata", Case.Insensitive);
+        stdout.ShouldContain("metadata");
         stdout.ShouldContain("rating");
         stdout.ShouldContain("discarded");
     }
@@ -57,7 +57,7 @@ public sealed class RepairCommandsTests
         stdout.ShouldContain("server applies");
         stdout.ShouldContain("maintenance poll");
         stdout.ShouldNotContain("memory_embed_pending");
-        stdout.ShouldNotContain("no server running", Case.Insensitive);
+        stdout.ShouldNotContain("no server running");
     }
 
     [Fact]
@@ -109,8 +109,7 @@ public sealed class RepairCommandsTests
         inner.LastRepairRequest.ShouldBeNull();
     }
 
-    private static Task<string> RunReingestAsync(bool apply, ReingestRepairReport report) =>
-        RunReingestAsync(apply, new InMemorySettings { ReingestReport = report });
+    private static Task<string> RunReingestAsync(bool apply, ReingestRepairReport report) => RunReingestAsync(apply, new InMemorySettings { ReingestReport = report });
 
     private static async Task<string> RunReingestAsync(bool apply, InMemorySettings store)
     {
@@ -126,8 +125,7 @@ public sealed class RepairCommandsTests
         return stdout.ToString();
     }
 
-    private static Task<string> RunChunkIndexAsync(bool apply, ChunkIndexRepairReport report) =>
-        RunChunkIndexAsync(apply, new InMemorySettings { ChunkIndexReport = report });
+    private static Task<string> RunChunkIndexAsync(bool apply, ChunkIndexRepairReport report) => RunChunkIndexAsync(apply, new InMemorySettings { ChunkIndexReport = report });
 
     private static async Task<string> RunChunkIndexAsync(bool apply, InMemorySettings store)
     {

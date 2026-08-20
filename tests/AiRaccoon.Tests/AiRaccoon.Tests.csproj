@@ -17,6 +17,7 @@
         <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing"/>
         <PackageReference Include="Microsoft.NET.Test.Sdk"/>
         <PackageReference Include="ModelContextProtocol.Core"/>
+        <PackageReference Include="NSubstitute"/>
         <PackageReference Include="OpenTelemetry.Exporter.InMemory"/>
         <PackageReference Include="Reqnroll.xunit.v3"/>
         <PackageReference Include="Reqnroll.Tools.MsBuild.Generation" PrivateAssets="all"/>
@@ -35,7 +36,8 @@
     <ItemGroup>
         <Content Include="Unit\Retrieval\assets\manifest.json" CopyToOutputDirectory="PreserveNewest"/>
         <Content Include="Resources/jsaa-memory.db" CopyToOutputDirectory="PreserveNewest"/>
-        <Content Include="Resources/gate-query-vectors.json" CopyToOutputDirectory="PreserveNewest"/>    </ItemGroup>
+        <Content Include="Resources/gate-query-vectors.json" CopyToOutputDirectory="PreserveNewest"/>
+    </ItemGroup>
 
     <ItemGroup>
         <ReqnrollFeatureFiles Include="..\..\docs\work\features-agent-memory\agent-memory.feature">

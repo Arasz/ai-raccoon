@@ -6,6 +6,7 @@ using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
+using NSubstitute;
 using Shouldly;
 using Xunit;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
@@ -27,13 +28,15 @@ public sealed class ProjectRowsTests : IDisposable
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 14, 0, 0, 0, TimeSpan.Zero);
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-project-rows");
     private readonly SqliteConnectionFactory _factory;
+    private readonly IModelMigrationLease _modelMigrationLease = Substitute.For<IModelMigrationLease>();
     private readonly SqliteMemoryStore _store;
+    private readonly TimeProvider _timeProvider = new FakeTimeProvider();
 
     public ProjectRowsTests()
     {
         var options = TestData.CreateInfrastructureOptions(_dataRoot);
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
-        var embedder = new EntryEmbedder(TestData.CreateEmbeddingService());
+        var embedder = new EntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider);
         _store = new SqliteMemoryStore(_factory, new SqliteMemorySourceStore(_factory),
             new FileIngestor(new FileTypeMatcher([]), embedder, new SqliteMemorySourceStore(_factory),
                 new FakeTimeProvider(FixedNow), new LocalTokenizer()),

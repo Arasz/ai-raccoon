@@ -124,11 +124,9 @@ public sealed class MetricsRetentionJobTests : IDisposable
 
     private MaintenanceJobRunner Runner() => new(_time, NullLogger<MaintenanceJobRunner>.Instance);
 
-    private async Task<SqliteConnection> OpenAsync() =>
-        await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+    private async Task<SqliteConnection> OpenAsync() => await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
 
-    private static async Task<List<string>> SurvivorsAsync(SqliteConnection connection) =>
-        (await connection.QueryAsync<string>("SELECT name FROM metrics ORDER BY name")).ToList();
+    private static async Task<List<string>> SurvivorsAsync(SqliteConnection connection) => [.. await connection.QueryAsync<string>("SELECT name FROM metrics ORDER BY name")];
 
     private static async Task SeedMetricAsync(SqliteConnection connection, string name, long recordedAt) =>
         await connection.ExecuteAsync(

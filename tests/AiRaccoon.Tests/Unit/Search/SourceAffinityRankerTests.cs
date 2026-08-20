@@ -23,7 +23,7 @@ public sealed class SourceAffinityRankerTests
             Hit("h2", 1.0, "a.md", 1)
         };
 
-        var ranked = SourceAffinityRanker.Rank(new SearchResult(candidates, TimeSpan.Zero), lambda: 0.0, double.PositiveInfinity, DocScoreFormula.Max);
+        var ranked = SourceAffinityRanker.Rank(candidates, lambda: 0.0, double.PositiveInfinity, DocScoreFormula.Max);
 
         ranked.Select(r => r.Hash).ShouldBe(["h1", "h2"]);
         ranked[0].Ranking.ShouldBe(0.9);
@@ -40,7 +40,7 @@ public sealed class SourceAffinityRankerTests
             Hit("h2", 0.8, "a.md", 2)
         };
 
-        var ranked = SourceAffinityRanker.Rank(new SearchResult(candidates, TimeSpan.Zero), lambda: 0.1, double.PositiveInfinity, DocScoreFormula.Max);
+        var ranked = SourceAffinityRanker.Rank(candidates, lambda: 0.1, double.PositiveInfinity, DocScoreFormula.Max);
 
         ranked.Select(r => r.Hash).ShouldBe(["h0", "h1", "h2"]);
         ranked[0].Ranking.ShouldBe(1.0); // 1.1 / 1.1
@@ -62,7 +62,7 @@ public sealed class SourceAffinityRankerTests
             Hit("h1", 0.9, "a.md", 0)
         };
 
-        var ranked = SourceAffinityRanker.Rank(new SearchResult(candidates, TimeSpan.Zero), lambda: 0.1, double.PositiveInfinity, DocScoreFormula.Max);
+        var ranked = SourceAffinityRanker.Rank(candidates, lambda: 0.1, double.PositiveInfinity, DocScoreFormula.Max);
 
         ranked[0].Ranking.ShouldBe(1.0);
         ranked[1].Ranking.ShouldBe(0.9);
@@ -77,7 +77,7 @@ public sealed class SourceAffinityRankerTests
             Hit("h2", 0.9, "a.md", 2)
         };
 
-        var ranked = SourceAffinityRanker.Rank(new SearchResult(candidates, TimeSpan.Zero), lambda: 0.1, double.PositiveInfinity, DocScoreFormula.Max);
+        var ranked = SourceAffinityRanker.Rank(candidates, lambda: 0.1, double.PositiveInfinity, DocScoreFormula.Max);
 
         ranked[0].Ranking.ShouldBe(1.0);
         ranked[1].Ranking.ShouldBe(0.9);
@@ -92,11 +92,11 @@ public sealed class SourceAffinityRankerTests
             Hit("h1", 0.85, "a.md", 1)
         };
 
-        var wide = SourceAffinityRanker.Rank(new SearchResult(candidates, TimeSpan.Zero), lambda: 0.1, 0.2, DocScoreFormula.Max);
+        var wide = SourceAffinityRanker.Rank(candidates, lambda: 0.1, 0.2, DocScoreFormula.Max);
         wide[0].Ranking.ShouldBe(1.0); // (1.0 + 0.1) / 1.1
         wide[1].Ranking.ShouldBe(0.95 / 1.1, 1e-9);
 
-        var narrow = SourceAffinityRanker.Rank(new SearchResult(candidates, TimeSpan.Zero), lambda: 0.1, 0.1, DocScoreFormula.Max);
+        var narrow = SourceAffinityRanker.Rank(candidates, lambda: 0.1, 0.1, DocScoreFormula.Max);
         narrow[0].Ranking.ShouldBe(1.0); // no boost
         narrow[1].Ranking.ShouldBe(0.95); // 0.85 + 0.1 (h0 still visible to h1)
     }
@@ -111,7 +111,7 @@ public sealed class SourceAffinityRankerTests
             Hit("b0", 0.5, "b.md", 0)
         };
 
-        var ranked = SourceAffinityRanker.Rank(new SearchResult(candidates, TimeSpan.Zero), lambda: 0.1, double.PositiveInfinity, DocScoreFormula.Max);
+        var ranked = SourceAffinityRanker.Rank(candidates, lambda: 0.1, double.PositiveInfinity, DocScoreFormula.Max);
 
         ranked.Select(r => r.Hash).ShouldBe(["a0", "a1", "b0"]);
     }
@@ -126,7 +126,7 @@ public sealed class SourceAffinityRankerTests
             Hit("h2", 0.9, "a.md", 2)
         };
 
-        var ranked = SourceAffinityRanker.Rank(new SearchResult(candidates, TimeSpan.Zero), lambda: 0.1, 0.1, DocScoreFormula.Max);
+        var ranked = SourceAffinityRanker.Rank(candidates, lambda: 0.1, 0.1, DocScoreFormula.Max);
 
         ranked.Select(r => r.Hash).ShouldBe(["h0", "h2"]);
     }
@@ -141,7 +141,7 @@ public sealed class SourceAffinityRankerTests
             Hit("h1", 0.7, "a.md", 0)
         };
 
-        var ranked = SourceAffinityRanker.Rank(new SearchResult(candidates, TimeSpan.Zero), lambda: 0.1, 0.1, DocScoreFormula.Max);
+        var ranked = SourceAffinityRanker.Rank(candidates, lambda: 0.1, 0.1, DocScoreFormula.Max);
 
         ranked.Select(r => r.Hash).ShouldBe(["h0", "h1"]);
     }
@@ -155,7 +155,7 @@ public sealed class SourceAffinityRankerTests
             Hit("h1", 0.95, "a.md", 1)
         };
 
-        var ranked = SourceAffinityRanker.Rank(new SearchResult(candidates, TimeSpan.Zero), lambda: 0.1, 0.1, DocScoreFormula.Max);
+        var ranked = SourceAffinityRanker.Rank(candidates, lambda: 0.1, 0.1, DocScoreFormula.Max);
 
         ranked.Select(r => r.Hash).ShouldBe(["h0", "h1"]);
         ranked[0].Ranking.ShouldBe(1.0); // 1.1 / 1.1
@@ -165,7 +165,7 @@ public sealed class SourceAffinityRankerTests
     [Fact]
     public void Rank_EmptyCandidates_ReturnsEmpty()
     {
-        var ranked = SourceAffinityRanker.Rank(new SearchResult([], TimeSpan.Zero), lambda: 0.1, 0.1, DocScoreFormula.Max);
+        var ranked = SourceAffinityRanker.Rank([], lambda: 0.1, 0.1, DocScoreFormula.Max);
 
         ranked.ShouldBeEmpty();
     }
@@ -179,7 +179,7 @@ public sealed class SourceAffinityRankerTests
             new MemorySearchResult("h2", 0.9, "p2", "s")
         };
 
-        var ranked = SourceAffinityRanker.Rank(new SearchResult(candidates, TimeSpan.Zero), lambda: 0.1, 0.1, DocScoreFormula.Max);
+        var ranked = SourceAffinityRanker.Rank(candidates, lambda: 0.1, 0.1, DocScoreFormula.Max);
 
         ranked.Select(r => r.Hash).ShouldBe(["h1", "h2"]);
         ranked[0].Ranking.ShouldBe(1.0);
@@ -195,7 +195,7 @@ public sealed class SourceAffinityRankerTests
             Hit("h1", 0.9, "a.md", 1)
         };
 
-        var ranked = SourceAffinityRanker.Rank(new SearchResult(candidates, TimeSpan.Zero), lambda: 0.1, double.PositiveInfinity, DocScoreFormula.Max);
+        var ranked = SourceAffinityRanker.Rank(candidates, lambda: 0.1, double.PositiveInfinity, DocScoreFormula.Max);
 
         ranked[0].Ranking.ShouldBe(1.0); // top stays 1.0 (ranking contract)
     }
@@ -210,7 +210,7 @@ public sealed class SourceAffinityRankerTests
             Hit("h2", 0.8, "b.md", 0)
         };
 
-        var merged = SearchResultMerger.Merge(new SearchResult(batch, TimeSpan.Zero), 10, sourceLambda: 0.1,
+        var merged = SearchResultMerger.Merge(batch, 10, sourceLambda: 0.1,
             consolidationThreshold: double.PositiveInfinity, formula: DocScoreFormula.Max);
 
         merged.Select(r => r.Hash).ShouldBe(["h0", "h1", "h2"]);

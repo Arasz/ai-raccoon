@@ -94,8 +94,8 @@ public sealed class ModalityCandidatesTests
         var projectCopy = new MemorySearchResult("project-hash", 0.6, "abc123.md", "s");
         var sharedCopy = new MemorySearchResult("shared-hash", 0.9, "shared/def456.md", "s");
         var searchResults = VectorResults([projectCopy], [sharedCopy]);
-        searchResults.Indexes.ValueByHash["project-hash"] = "identical promoted text";
-        searchResults.Indexes.ValueByHash["shared-hash"] = "identical promoted text";
+        searchResults.Index.ValueByHash["project-hash"] = "identical promoted text";
+        searchResults.Index.ValueByHash["shared-hash"] = "identical promoted text";
 
         var ordered = ModalityCandidates.ByCosine(searchResults);
 
@@ -109,8 +109,8 @@ public sealed class ModalityCandidatesTests
         var projectCopy = new MemorySearchResult("project-hash", -2.0, "abc123.md", "s");
         var sharedCopy = new MemorySearchResult("shared-hash", -9.0, "shared/def456.md", "s");
         var searchResults = FtsResults([projectCopy], [sharedCopy]);
-        searchResults.Indexes.ValueByHash["project-hash"] = "identical promoted text";
-        searchResults.Indexes.ValueByHash["shared-hash"] = "identical promoted text";
+        searchResults.Index.ValueByHash["project-hash"] = "identical promoted text";
+        searchResults.Index.ValueByHash["shared-hash"] = "identical promoted text";
 
         var ordered = ModalityCandidates.ByBm25(searchResults);
 
@@ -124,8 +124,8 @@ public sealed class ModalityCandidatesTests
         var a = new MemorySearchResult("h1", 0.6, "a.md", "s");
         var b = new MemorySearchResult("h2", 0.9, "shared/h2.md", "s");
         var searchResults = VectorResults([a], [b]);
-        searchResults.Indexes.ValueByHash["h1"] = "text a";
-        searchResults.Indexes.ValueByHash["h2"] = "text b";
+        searchResults.Index.ValueByHash["h1"] = "text a";
+        searchResults.Index.ValueByHash["h2"] = "text b";
 
         var ordered = ModalityCandidates.ByCosine(searchResults);
 

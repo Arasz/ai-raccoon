@@ -7,7 +7,7 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
 ///     Row insertion for a chunked `memory_write` (docs/adr/0064). Lives beside
-///     <see cref="EntryBucket" /> and <see cref="ContextFilter" /> rather than inside
+///     <see cref="EntryBucket" /> and <see cref="ContextFilterProvider" /> rather than inside
 ///     <see cref="Memory.SqliteMemoryStore" />, whose size ratchet says to split rather than raise the cap.
 /// </summary>
 internal static class WriteChunks

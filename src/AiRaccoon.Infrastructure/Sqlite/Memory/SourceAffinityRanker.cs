@@ -9,12 +9,11 @@ namespace AiRaccoon.Infrastructure.Sqlite.Memory;
 internal static class SourceAffinityRanker
 {
     public static IReadOnlyList<MemorySearchResult> Rank(
-        SearchResult searchResult,
+        IReadOnlyList<MemorySearchResult> candidates,
         double lambda,
         double consolidationThreshold,
         DocScoreFormula formula)
     {
-        var candidates = searchResult.Results;
         if (lambda <= 0.0 || candidates.Count == 0)
         {
             return candidates;

@@ -1,6 +1,6 @@
-using AiRaccoon.Infrastructure.Sqlite;
 using Shouldly;
 using Xunit;
+using SourcePathQuery = AiRaccoon.Infrastructure.Sqlite.Memory.SourcePathQuery;
 
 namespace AiRaccoon.Tests.Unit.Search;
 

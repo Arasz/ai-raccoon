@@ -21,8 +21,8 @@ namespace AiRaccoon.Tests.Unit.Setup;
 public sealed class DoctorCommandsTests : IDisposable
 {
     private readonly string _dataRoot = TestData.CreateTempRoot("doctor-cli");
-    private readonly InfrastructureOptions _options;
     private readonly SqliteConnectionFactory _factory;
+    private readonly InfrastructureOptions _options;
 
     public DoctorCommandsTests()
     {
@@ -32,11 +32,9 @@ public sealed class DoctorCommandsTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    private Task<(int Exit, string Out, string Err)> Run(DoctorCommands doctor, string[] args) =>
-        CliRun.RunAsync(args, TestData.CreateConfigCommands(new FakeConfigStore(), doctor: doctor));
+    private Task<(int Exit, string Out, string Err)> Run(DoctorCommands doctor, string[] args) => CliRun.RunAsync(args, TestData.CreateConfigCommands(new FakeConfigStore(), doctor: doctor));
 
-    private DoctorCommands CreateDoctor(IEncryptionKeyResolver? resolver = null) =>
-        new(_factory, resolver ?? NullKeyProvider.Resolver(_options), NullLogger<DoctorCommands>.Instance);
+    private DoctorCommands CreateDoctor(IEncryptionKeyResolver? resolver = null) => new(_factory, resolver ?? NullKeyProvider.Resolver(_options), NullLogger<DoctorCommands>.Instance);
 
     [Fact]
     public async Task Doctor_NoBankFile_ReportsNothingToCheckAndExitsZero()
@@ -88,7 +86,7 @@ public sealed class DoctorCommandsTests : IDisposable
         var combined = outp + err;
         combined.ShouldContain("entries");
         combined.ShouldContain("missing column");
-        combined.ShouldContain("never repair", Case.Insensitive);
+        combined.ShouldContain("never repair");
     }
 
     [Fact]
@@ -145,7 +143,6 @@ public sealed class DoctorCommandsTests : IDisposable
 
     private sealed class ThrowingKeyResolver : IEncryptionKeyResolver
     {
-        public Task<ResolvedKey> ResolveAsync(CancellationToken cancellationToken = default) =>
-            throw new InvalidOperationException("simulated encryption key resolution failure");
+        public Task<ResolvedKey> ResolveAsync(CancellationToken cancellationToken = default) => throw new InvalidOperationException("simulated encryption key resolution failure");
     }
 }

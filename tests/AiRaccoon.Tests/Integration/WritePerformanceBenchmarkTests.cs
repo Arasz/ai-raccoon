@@ -1,15 +1,6 @@
-using System;
 using System.Diagnostics;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Memory.Filtering;
-using AiRaccoon.Core.Memory.Filtering.Policies;
-using AiRaccoon.Infrastructure.Embedding;
-using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Setup;
-using AiRaccoon.Setup.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
 using Xunit;
@@ -31,8 +22,8 @@ public class WritePerformanceBenchmarkTests(ITestOutputHelper output)
         {
             var options = TestData.CreateInfrastructureOptions(dataRoot);
             var services = new ServiceCollection();
-            services.RegisterMemoryServices(options, new[] { McpTransport.Stdio });
-            
+            services.RegisterMemoryServices(options, [McpTransport.Stdio]);
+
             // Build service provider
             using var provider = services.BuildServiceProvider();
             var memoryStore = provider.GetRequiredService<IMemoryStore>();
@@ -129,8 +120,10 @@ Iterations: {iterations}
             {
                 return current.FullName;
             }
+
             current = current.Parent;
         }
+
         return Directory.GetCurrentDirectory();
     }
 }

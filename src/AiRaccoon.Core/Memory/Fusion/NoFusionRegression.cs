@@ -12,9 +12,6 @@ public static class NoFusionRegression
         IReadOnlyList<MemorySearchResult> fused,
         IReadOnlyList<ModalityLeg> legs)
     {
-        ArgumentNullException.ThrowIfNull(fused);
-        ArgumentNullException.ThrowIfNull(legs);
-
         var contributing = legs.Where(leg => leg.Contributes).ToList();
         if (contributing.Count < 2 || fused.Count == 0)
         {

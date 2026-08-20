@@ -1,6 +1,5 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Infrastructure.Chunking;
-using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Setup;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -36,7 +35,7 @@ public class IngestionCompositionTests
             var services = new ServiceCollection();
             services.AddLogging(b => b.SetMinimumLevel(LogLevel.Warning));
             services.RegisterCoreMemoryServices(TestData.CreateInfrastructureOptions(tempRoot));
-            return services.BuildServiceProvider().GetServices<IFileTypeHandler>().ToList();
+            return [.. services.BuildServiceProvider().GetServices<IFileTypeHandler>()];
         }
         finally
         {

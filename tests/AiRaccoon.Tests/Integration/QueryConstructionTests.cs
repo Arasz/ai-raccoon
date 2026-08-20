@@ -98,7 +98,7 @@ public sealed class QueryConstructionTests : IDisposable
         var results = (await _store.SearchAsync(new SearchQuery(
             ProjectId, "How does the project handle data erasure?", SearchScope.Project,
             Limit: 30, MinRelativeScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 0), TestContext.Current.CancellationToken)).Results;
-        var rank = FirstFileRank(results.Select(r => r.Hash).ToList(),
+        var rank = FirstFileRank([.. results.Select(r => r.Hash)],
             FileLevel("docs:adr:0067-registry-driven-erasure-with-runtime-verification.md"));
         rank.ShouldNotBeNull("A6's AND primary matches only ADR-0068 rows; the OR fallback must restore ADR-0067");
         rank.Value.ShouldBe(8,

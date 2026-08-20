@@ -8,6 +8,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
+using NSubstitute;
 using Shouldly;
 using Xunit;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
@@ -30,6 +31,8 @@ public sealed class SqliteMemoryStoreNoiseEntryTests : IDisposable
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 14, 0, 0, 0, TimeSpan.Zero);
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-noise-entry-wiring");
     private readonly SqliteConnectionFactory _factory;
+    private readonly IModelMigrationLease _modelMigrationLease = Substitute.For<IModelMigrationLease>();
+    private readonly TimeProvider _timeProvider = new FakeTimeProvider();
 
     public SqliteMemoryStoreNoiseEntryTests()
     {
@@ -41,7 +44,7 @@ public sealed class SqliteMemoryStoreNoiseEntryTests : IDisposable
 
     private SqliteMemoryStore CreateStore(INoiseEntryStore noiseEntryStore)
     {
-        var entryEmbedder = new EntryEmbedder(TestData.CreateEmbeddingService());
+        var entryEmbedder = new EntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider);
         var noiseFilteringService = new NoiseFilteringService([new HermesProcessNoisePolicy()]);
         return new SqliteMemoryStore(_factory, new SqliteMemorySourceStore(_factory),
             new FileIngestor(new FileTypeMatcher([]), entryEmbedder, new SqliteMemorySourceStore(_factory), new FakeTimeProvider(FixedNow),

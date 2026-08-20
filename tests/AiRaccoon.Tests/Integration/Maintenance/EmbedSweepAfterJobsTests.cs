@@ -1,15 +1,15 @@
 using AiRaccoon.Core.Memory.Filtering;
-using AiRaccoon.Core.Observability;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Tests.Unit.Observability;
 using AiRaccoon.Tests.TestHelpers;
+using AiRaccoon.Tests.Unit.Observability;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
+using NSubstitute;
 using Shouldly;
 using Xunit;
 
@@ -38,6 +38,7 @@ public sealed class EmbedSweepAfterJobsTests : IDisposable
 
     private readonly string _dataRoot = TestData.CreateTempRoot("embed-after-jobs");
     private readonly SqliteConnectionFactory _factory;
+    private readonly IModelMigrationLease _modelMigrationLease = Substitute.For<IModelMigrationLease>();
     private readonly BackgroundTelemetryProbe _probe = new(BankMaintenanceHostedService.OperationName);
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 8, 15, 12, 0, 0, TimeSpan.Zero));
 
@@ -62,7 +63,7 @@ public sealed class EmbedSweepAfterJobsTests : IDisposable
     {
         await ConfigureProviderAsync();
         var pendingCreatingJob = new PendingCreatingJob(ProjectId);
-        var pendingEmbedJob = new PendingEmbedJob(new EntryEmbedder(new CountingEmbeddingService()));
+        var pendingEmbedJob = new PendingEmbedJob(new EntryEmbedder(new CountingEmbeddingService(), _modelMigrationLease, _time));
 
         await ServiceWith(pendingCreatingJob, pendingEmbedJob).RunOnceAsync(TestContext.Current.CancellationToken);
 
@@ -85,7 +86,7 @@ public sealed class EmbedSweepAfterJobsTests : IDisposable
         var states = await connection.QueryAsync<string>(new CommandDefinition(
             "SELECT embed_state FROM entries WHERE project_id = @projectId", new { projectId = ProjectId },
             cancellationToken: TestContext.Current.CancellationToken));
-        return states.ToList();
+        return [.. states];
     }
 
     private BankMaintenanceHostedService ServiceWith(params IMaintenanceJob[] jobs) =>

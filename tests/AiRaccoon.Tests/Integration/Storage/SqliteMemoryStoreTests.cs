@@ -855,20 +855,26 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             "a single promoted entry in the shared tier must not tie the project tier's real top match");
     }
 
-    // Merge's own multi-list RRF behaviour (fuses batches by rank position); production now
-    // passes it a single already-globally-fused batch (see docs/adr/0006-rrf-parameter-optimization.md).
+    // The cross-context RRF now lives in the global fusion — production fuses the per-context
+    // batches first and hands Merge a single already-fused list (docs/adr/0006). Both halves are
+    // pinned here in production order: the fusion promotes the dual-retrieved doc, Merge preserves
+    // the order and re-normalizes.
     [Fact]
     public void Merge_RrfAcrossContextBatches_PromotesDualRetrievedDocs_AndNormalizesToMax()
     {
         var shared = new[] { Hit("h1", "a.md"), Hit("h2", "b.md") };
         var project = new[] { Hit("h2", "b.md"), Hit("h3", "c.md") };
 
-        var merged = SearchResultMerger.Merge(new SearchResult([.. shared, .. project], TimeSpan.Zero), 10);
+        var fused = ReciprocalRankFusion.Fuse(
+            [new WeightedResults(shared, 1.0), new WeightedResults(project, 1.0)], 60, 0, 10);
+        var merged = SearchResultMerger.Merge(fused, 10);
 
         // h1 = 1/61, h3 = 1/62, h2 = 1/61 + 1/62 -> h2 ranks first and normalizes to 1.0.
-        merged.Select(r => r.Hash).ShouldBe(["h2", "h1", "h3"]);
-        merged[0].Ranking.ShouldBe(1.0);
-        merged[1].Ranking.ShouldBe(62.0 / 123, 1e-9);
+        fused.Select(r => r.Hash).ShouldBe(["h2", "h1", "h3"]);
+        fused[0].Ranking.ShouldBe(1.0);
+        fused[1].Ranking.ShouldBe(62.0 / 123, 1e-9);
+        merged.Select(r => r.Hash).ShouldBe(["h2", "h1", "h3"], "Merge preserves the fused order");
+        merged[0].Ranking.ShouldBe(1.0, "and re-normalizes its top hit");
     }
 
     [Fact]
@@ -876,7 +882,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     {
         var results = new[] { Hit("h1", "a.md"), Hit("h2", "b.md"), Hit("h3", "c.md") };
 
-        var merged = SearchResultMerger.Merge(new SearchResult(results, TimeSpan.Zero), 10);
+        var merged = SearchResultMerger.Merge(results, 10);
 
         merged.Select(r => r.Hash).ShouldBe(["h1", "h2", "h3"]);
         merged[0].Ranking.ShouldBe(1.0);
@@ -887,7 +893,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     {
         var results = new[] { Hit("h1", "a.md"), Hit("h2", "b.md"), Hit("h3", "c.md") };
 
-        var merged = SearchResultMerger.Merge(new SearchResult(results, TimeSpan.Zero), 10, 0.9);
+        var merged = SearchResultMerger.Merge(results, 10, 0.9, rrfK: 10);
 
         // Single-list scores 11/11, 11/12, 11/13; only the top two clear 0.9.
         merged.Select(r => r.Hash).ShouldBe(["h1", "h2"]);
@@ -903,7 +909,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             new MemorySearchResult("h3", 0.7, "c.md", "s")
         };
 
-        var merged = SearchResultMerger.Merge(new SearchResult(results, TimeSpan.Zero), 2);
+        var merged = SearchResultMerger.Merge(results, 2);
 
         // Rank order decides, not the interim score payload.
         merged.Select(r => r.Hash).ShouldBe(["h1", "h2"]);
@@ -911,7 +917,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
     [Fact]
     public void Merge_EmptyBatches_ReturnsEmpty() =>
-        SearchResultMerger.Merge(new SearchResult([], TimeSpan.Zero), 10)
+        SearchResultMerger.Merge([], 10)
             .ShouldBeEmpty();
 
     private static MemorySearchResult Hit(string hash, string path) => new(hash, 0, path, "s");
@@ -1263,32 +1269,30 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
     private sealed class EntryRow
     {
-        public string Hash { get; set; } = "";
+        public string Hash { get; init; } = "";
 
-        public string Path { get; set; } = "";
+        public string Path { get; init; } = "";
 
-        public string? Scope { get; set; }
+        public string? Scope { get; init; }
 
-        public string ProjectId { get; set; } = "";
+        public string ProjectId { get; init; } = "";
 
-        public string? ContextLabel { get; set; }
+        public string? ContextLabel { get; init; }
 
-        public string? WorkspaceId { get; set; }
+        public string? WorkspaceId { get; init; }
 
-        public string? AgentId { get; set; }
+        public string? AgentId { get; init; }
 
-        public long CreatedAt { get; set; }
+        public long CreatedAt { get; init; }
 
-        public int AccessCount { get; set; }
+        public int AccessCount { get; init; }
 
-        public long? LastAccessedAt { get; set; }
+        public long? LastAccessedAt { get; init; }
 
-        public double Rating { get; set; }
+        public double Rating { get; init; }
 
-        public int? TtlDays { get; set; }
+        public int? TtlDays { get; init; }
 
-        public string EmbedState { get; set; } = "";
+        public string EmbedState { get; init; } = "";
     }
-
-    /// <summary>Deterministic test chunker: splits on blank lines.</summary>
 }

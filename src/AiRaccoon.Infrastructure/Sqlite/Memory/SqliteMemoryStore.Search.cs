@@ -2,6 +2,7 @@ using System.Globalization;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Infrastructure.Embedding;
+using CommunityToolkit.Diagnostics;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
@@ -28,37 +29,56 @@ public sealed partial class SqliteMemoryStore
             : (int)Math.Clamp((long)limit * 3, 100, int.MaxValue);
 
     /// <summary>A leg that was never queried is degradation, not disagreement (docs/adr/0078).</summary>
-    private static IReadOnlyList<ModalityLeg> LegsFor(
+    private static IReadOnlyList<ModalityLeg> LegsFor(SearchQuery query,
+        FtsQueryPlan plan,
+        QueryVector queryVector,
         IReadOnlyList<MemorySearchResult> ftsCandidates,
-        IReadOnlyList<MemorySearchResult> vectorCandidates,
-        bool ftsQueried,
-        bool vectorQueried) =>
+        IReadOnlyList<MemorySearchResult> vectorCandidates
+    ) =>
     [
-        ftsQueried ? ModalityLeg.From("fts", ftsCandidates) : ModalityLeg.Skipped("fts"),
-        vectorQueried ? ModalityLeg.From("vector", vectorCandidates) : ModalityLeg.Skipped("vector")
+        query.IsFtsQueried(plan) ? ModalityLeg.From("fts", ftsCandidates) : ModalityLeg.Skipped("fts"),
+        query.IsVectorQueried(queryVector) ? ModalityLeg.From("vector", vectorCandidates) : ModalityLeg.Skipped("vector")
     ];
+
 
     /// <summary>
     ///     Keyword modality: FTS5 candidates without snippet() — deferred (see <see cref="BuildFtsResults" />).
     ///     carry each candidate's raw value, matching @query text and row id, for snippet resolution after ranking.
     /// </summary>
-    private async Task<IReadOnlyList<MemorySearchResult>> QueryFtsBatchAsync(
-        SqliteConnection connection, string filter, string ftsExpression, DynamicParameters parameters,
-        HashIndexes hashIndexes, CancellationToken cancellationToken)
+    private Task<IReadOnlyList<MemorySearchResult>> QueryFtsBatchAsync(
+        SqliteConnection connection, SearchQuery query, FtsQueryPlan plan, QueryVector queryVector, ContextFilter contextFilter,
+        ByHashIndex byHashIndex, CancellationToken cancellationToken)
+    {
+        var queryParameters = DynamicParameters.SearchParameters(query, plan, queryVector, contextFilter);
+        return QueryFtsBatchAsync(connection, contextFilter, byHashIndex, plan.Expression, queryParameters, cancellationToken);
+    }
+
+    private Task<IReadOnlyList<MemorySearchResult>> QueryFallbackFtsBatchAsync(
+        SqliteConnection connection, SearchQuery query, FtsQueryPlan plan, QueryVector queryVector, ContextFilter contextFilter,
+        ByHashIndex byHashIndex, CancellationToken cancellationToken)
+    {
+        Guard.IsNotNull(plan.Fallback);
+
+        var queryParameters = DynamicParameters.FallbackSearchParameters(query, plan, queryVector, contextFilter);
+        return QueryFtsBatchAsync(connection, contextFilter, byHashIndex, plan.Fallback, queryParameters, cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<MemorySearchResult>> QueryFtsBatchAsync(SqliteConnection connection, ContextFilter contextFilter,
+        ByHashIndex byHashIndex, string expression, DynamicParameters queryParameters, CancellationToken cancellationToken)
     {
         try
         {
             var rows = (await connection.QueryAsync<SearchRow>(
                     new CommandDefinition(
-                        MemorySql.SearchByFilter.Replace("{filter}", filter), parameters,
+                        MemorySql.SearchByFilter.Replace("{filter}", contextFilter.Filter), queryParameters,
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false)).ToList();
 
             foreach (var row in rows)
             {
-                hashIndexes.ValueByHash[row.Hash] = row.Value;
-                hashIndexes.FtsQueryByHash[row.Hash] = ftsExpression;
-                hashIndexes.IdByHash[row.Hash] = row.Id;
+                byHashIndex.ValueByHash[row.Hash] = row.Value;
+                byHashIndex.FtsQueryByHash[row.Hash] = expression;
+                byHashIndex.IdByHash[row.Hash] = row.Id;
             }
 
             return BuildFtsResults(rows);
@@ -94,10 +114,7 @@ public sealed partial class SqliteMemoryStore
     ///     Reads the no-fusion-regression flag only when two legs actually contributed, so a
     ///     single-leg or degraded search pays no extra bank read at all (docs/adr/0078).
     /// </summary>
-    private async Task<bool> NoFusionRegressionEnabledAsync(SqliteConnection connection,
-        IReadOnlyList<ModalityLeg> legs, CancellationToken cancellationToken) =>
+    private static async Task<bool> NoFusionRegressionEnabledAsync(SqliteConnection connection, IReadOnlyList<ModalityLeg> legs, CancellationToken cancellationToken) =>
         legs.Count(leg => leg.Contributes) >= 2
-        && FusionConfigKeys.ParseNoRegressionEnabled(
-            await ReadSettingAsync(connection, FusionConfigKeys.NoRegressionEnabledGlobal, cancellationToken)
-                .ConfigureAwait(false));
+        && FusionConfigKeys.ParseNoRegressionEnabled(await ReadSettingAsync(connection, FusionConfigKeys.NoRegressionEnabledGlobal, cancellationToken).ConfigureAwait(false));
 }

@@ -11,6 +11,8 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
+using NSubstitute;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Benchmarks.SearchFixture;
@@ -61,6 +63,9 @@ public sealed class SearchFixtureBank : IAsyncDisposable
         "alert", "threshold", "throughput", "concurrency", "transaction", "rollback", "commit"
     ];
 
+    private static readonly IModelMigrationLease ModelMigrationLease = Substitute.For<IModelMigrationLease>();
+    private static readonly TimeProvider TimeProvider = new FakeTimeProvider();
+
     private readonly string _dataRoot;
     private readonly FakeEmbeddingEndpoint _embeddings;
     private readonly SqliteConnectionFactory _factory;
@@ -97,9 +102,9 @@ public sealed class SearchFixtureBank : IAsyncDisposable
             new MarkdownFileTypeHandler(markdownChunker),
             new JsonFileTypeHandler(new JsonFileTypeChunker(countTokens, markdownChunker, ChunkingDefaults.OverlayTokens))
         ]);
-        var embedder = new EntryEmbedder(embeddingService);
+        var embedder = new EntryEmbedder(embeddingService, ModelMigrationLease, TimeProvider);
         var fileIngestor = new FileIngestor(fileTypeMatcher, embedder, sourceStore, TimeProvider.System, new LocalTokenizer());
-        var noiseFilteringService = new NoiseFilteringService(Array.Empty<INoiseFilterPolicy>());
+        var noiseFilteringService = new NoiseFilteringService([]);
         var store = new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, TimeProvider.System,
             NullLogger<SqliteMemoryStore>.Instance, noiseFilteringService, new SqliteSettingsStore(factory));
 

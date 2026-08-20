@@ -5,6 +5,8 @@ using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
+using NSubstitute;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Unit.Storage;
@@ -17,10 +19,13 @@ namespace AiRaccoon.Tests.Unit.Storage;
 /// </summary>
 internal static class SearchTimingsHarness
 {
+    private static readonly IModelMigrationLease ModelMigrationLease = Substitute.For<IModelMigrationLease>();
+    private static readonly TimeProvider TimeProvider = new FakeTimeProvider();
+
     public static SqliteMemoryStore CreateStore(ISqliteConnectionFactory factory, TimeProvider timeProvider,
         IEntryEmbedder? embedder = null)
     {
-        embedder ??= new EntryEmbedder(TestData.CreateEmbeddingService());
+        embedder ??= new EntryEmbedder(TestData.CreateEmbeddingService(), ModelMigrationLease, TimeProvider);
         return new SqliteMemoryStore(factory, new SqliteMemorySourceStore(factory),
             new FileIngestor(new FileTypeMatcher([]), embedder, new SqliteMemorySourceStore(factory), timeProvider,
                 new LocalTokenizer()),
@@ -57,7 +62,7 @@ internal static class SearchTimingsHarness
             CancellationToken cancellationToken) =>
             throw new NotSupportedException("Not exercised by SearchAsync.");
 
-        public async Task<byte[]?> EmbedQueryAsync(SqliteConnection connection, string query,
+        public async Task<QueryVector> EmbedQueryAsync(SqliteConnection connection, string query,
             CancellationToken cancellationToken)
         {
             if (delay > TimeSpan.Zero)
@@ -65,7 +70,7 @@ internal static class SearchTimingsHarness
                 await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
             }
 
-            return EmbeddingBlob.ToBytes(new float[384]);
+            return new QueryVector(EmbeddingBlob.ToBytes(new float[384]));
         }
 
         public Task<EmbeddingSettings> ReadSettingsAsync(SqliteConnection connection,

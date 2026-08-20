@@ -5,7 +5,7 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
 ///     `memory_list`'s nested-directory JSON. A pure function over paths — it never read the bank,
-///     which is why it belongs beside <see cref="ContextFilter" /> rather than inside the store.
+///     which is why it belongs beside <see cref="ContextFilterProvider" /> rather than inside the store.
 /// </summary>
 internal static class FileTree
 {

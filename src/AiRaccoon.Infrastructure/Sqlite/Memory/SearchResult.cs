@@ -7,7 +7,7 @@ public record SearchResult(IReadOnlyList<MemorySearchResult> Results, TimeSpan S
 
 public sealed record SearchResults
 {
-    public HashIndexes Indexes { get; } = HashIndexes.Create();
+    public ByHashIndex Index { get; } = ByHashIndex.Create();
     public List<VectorSearchResult> Vector { get; } = [];
     public TimeSpan VectorTotalTiming => TimeSpan.FromMilliseconds(Vector.Sum(result => result.SearchTiming.TotalMilliseconds));
     public List<FtsSearchResult> Fts { get; } = [];
@@ -37,7 +37,12 @@ public sealed record AdjustedSearchResult(IReadOnlyList<MemorySearchResult> Resu
 
 public sealed record DeferredSearchResult(IReadOnlyList<MemorySearchResult> Results, TimeSpan SearchTiming) : SearchResult(Results, SearchTiming)
 {
-    public FusionDiff? FusionDiff { get; init; }
+    public static readonly DeferredSearchResult Empty = new([], TimeSpan.Zero)
+    {
+        FusionDiff = null
+    };
+
+    public required FusionDiff? FusionDiff { get; init; }
 }
 
 public sealed record MergedSearchResult(IReadOnlyList<MemorySearchResult> Results, TimeSpan SearchTiming) : SearchResult(Results, SearchTiming);

@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -12,22 +13,12 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     re-embed everything when the engine changes. Takes an open connection rather than opening
 ///     its own, since every caller is already inside one and embedding is never its own transaction.
 /// </summary>
-public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationLease? migrationLease = null,
-    TimeProvider? timeProvider = null) : IEntryEmbedder
+public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationLease migrationLease, TimeProvider timeProvider) : IEntryEmbedder
 {
     /// <summary>Rows per generator call. Internal so PendingEmbedJob can derive its own per-run bound from it instead of duplicating the number.</summary>
     internal const int BatchSize = 32;
+
     private const string BundledModel = "bundled";
-
-    // Optional so every existing call site (production DI and every test that builds EntryEmbedder
-    // directly, none of which touch StartMigrationAsync/DrainMigrationAsync) keeps compiling; a
-    // caller that does reach either method without one gets a clear failure, not a silent no-op.
-    private readonly IModelMigrationLease? _migrationLease = migrationLease;
-
-    // DrainMigrationAsync stamps finished_at from this, taken after the drain loop completes — never
-    // from a value a caller captured before calling in, which is what understated recorded migration
-    // duration by ~60x on a 25,917-entry bank (357s real drain, 6s recorded; ADR-0076).
-    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     /// <summary>Writes the engine settings and, when the engine fingerprint changed, re-embeds the whole bank.</summary>
     public async Task<EmbeddingConfig> ConfigureAsync(SqliteConnection connection, string provider, string? model,
@@ -133,13 +124,13 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
     /// <inheritdoc />
     public async Task<bool> DrainMigrationAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
-        if (_migrationLease is null)
+        if (migrationLease is null)
         {
             throw new InvalidOperationException(
                 "ai-raccoon: EntryEmbedder was built without an IModelMigrationLease; DrainMigrationAsync needs one");
         }
 
-        if (!await _migrationLease.TryAcquireAsync(connection, cancellationToken).ConfigureAwait(false))
+        if (!await migrationLease.TryAcquireAsync(connection, cancellationToken).ConfigureAwait(false))
         {
             return false; // another relay already owns it
         }
@@ -147,7 +138,7 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
         try
         {
             var open = await connection.QuerySingleOrDefaultAsync<long?>(
-                    Def(MemorySql.HasOpenModelMigration, cancellationToken)).ConfigureAwait(false) > 0;
+                Def(MemorySql.HasOpenModelMigration, cancellationToken)).ConfigureAwait(false) > 0;
             if (!open)
             {
                 return false; // finished by another relay between the caller's check and our lease
@@ -157,24 +148,24 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var batch = (await connection.QueryAsync<EmbedRow>(Def(MemorySql.SelectAllPendingForEmbed,
-                        new { limit = BatchSize }, cancellationToken)).ConfigureAwait(false)).ToList();
+                    new { limit = BatchSize }, cancellationToken)).ConfigureAwait(false)).ToList();
                 if (batch.Count == 0)
                 {
                     break;
                 }
 
                 await EmbedAsync(connection, batch, cancellationToken).ConfigureAwait(false);
-                await _migrationLease.TryRenewAsync(connection, cancellationToken).ConfigureAwait(false);
+                await migrationLease.TryRenewAsync(connection, cancellationToken).ConfigureAwait(false);
             }
 
             await connection.ExecuteAsync(Def(MemorySql.FinishModelMigration,
-                    new { finishedAt = _timeProvider.GetUtcNow().ToUnixTimeSeconds() }, cancellationToken))
+                    new { finishedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() }, cancellationToken))
                 .ConfigureAwait(false);
             return true;
         }
         finally
         {
-            await _migrationLease.ReleaseAsync(connection, cancellationToken).ConfigureAwait(false);
+            await migrationLease.ReleaseAsync(connection, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -256,27 +247,24 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
         CancellationToken cancellationToken)
     {
         var batch = (await connection.QueryAsync<EmbedRow>(Def(MemorySql.SelectAllPendingForEmbed,
-                new { limit }, cancellationToken)).ConfigureAwait(false)).ToList();
+            new { limit }, cancellationToken)).ConfigureAwait(false)).ToList();
         return await EmbedAsync(connection, batch, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Embeds a query string, or null when the bank has no engine — search degrades rather than failing.</summary>
-    public async Task<byte[]?> EmbedQueryAsync(SqliteConnection connection, string query,
+    public async Task<QueryVector> EmbedQueryAsync(SqliteConnection connection, string query,
         CancellationToken cancellationToken)
     {
         var settings = await ReadSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(settings.Provider))
         {
-            return null;
+            return QueryVector.Empty;
         }
 
         var generator = embeddings.CreateGenerator(settings);
-        // Trim here, deliberately and reported, rather than letting the generator do it silently: it
-        // cannot tell a query from stored content, so it logged both as a truncated "chunk" (ADR-0071).
         var embedded = embeddings.TrimQueryToWindow(settings, query);
-        var embedding = await generator.GenerateAsync([embedded], cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
-        return EmbeddingBlob.ToBytes(embedding[0].Vector);
+        var embedding = await generator.GenerateAsync([embedded], cancellationToken: cancellationToken).ConfigureAwait(false);
+        return new QueryVector(EmbeddingBlob.ToBytes(embedding[0].Vector));
     }
 
     public async Task<EmbeddingSettings> ReadSettingsAsync(SqliteConnection connection,

@@ -4,10 +4,11 @@ using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Observability;
 using AiRaccoon.Tests.Unit.Observability;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
-using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using Xunit;
 
@@ -26,10 +27,10 @@ public sealed class BankMaintenanceHostedServiceRunOnceTests : IDisposable
 
     private readonly string _dataRoot = TestData.CreateTempRoot("bank-maintenance");
     private readonly SqliteConnectionFactory _factory;
-    private readonly FakeTimeProvider _time;
     private readonly FakeLogger<BankMaintenanceHostedService> _logger;
     private readonly BackgroundTelemetryProbe _probe = new(BankMaintenanceHostedService.OperationName);
     private readonly BankMaintenanceHostedService _service;
+    private readonly FakeTimeProvider _time;
 
     public BankMaintenanceHostedServiceRunOnceTests()
     {
@@ -38,16 +39,16 @@ public sealed class BankMaintenanceHostedServiceRunOnceTests : IDisposable
         _time = new FakeTimeProvider(FixedNow);
         _logger = new FakeLogger<BankMaintenanceHostedService>();
         _service = new BankMaintenanceHostedService(_factory, _time, _probe.Telemetry, _logger, NoOpNoiseEntryStore.Instance,
-            new SqlitePromotionQueueStore(_factory, _time), new SqliteSearchQualityService(_factory, Microsoft.Extensions.Logging.Abstractions.NullLogger<SqliteSearchQualityService>.Instance));
+            new SqlitePromotionQueueStore(_factory, _time), new SqliteSearchQualityService(_factory, NullLogger<SqliteSearchQualityService>.Instance));
     }
+
+    private string WalPath => Path.Combine(_dataRoot, "memory.db-wal");
 
     public void Dispose()
     {
         _probe.Dispose();
         TestData.DeleteTempRoot(_dataRoot);
     }
-
-    private string WalPath => Path.Combine(_dataRoot, "memory.db-wal");
 
     private async Task InsertSettingAsync(string key, string value, CancellationToken cancellationToken)
     {
@@ -68,9 +69,9 @@ public sealed class BankMaintenanceHostedServiceRunOnceTests : IDisposable
                              INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
                              VALUES (@hash, @path, @value, 'project', 'acme', 0, 0)
                              """;
-        var hash = insert.Parameters.Add("@hash", Microsoft.Data.Sqlite.SqliteType.Text);
-        var path = insert.Parameters.Add("@path", Microsoft.Data.Sqlite.SqliteType.Text);
-        var value = insert.Parameters.Add("@value", Microsoft.Data.Sqlite.SqliteType.Text);
+        var hash = insert.Parameters.Add("@hash", SqliteType.Text);
+        var path = insert.Parameters.Add("@path", SqliteType.Text);
+        var value = insert.Parameters.Add("@value", SqliteType.Text);
         for (var i = 0; i < 2000; i++)
         {
             hash.Value = $"h{i}";
@@ -172,10 +173,9 @@ public sealed class BankMaintenanceHostedServiceRunOnceTests : IDisposable
         var service = new BankMaintenanceHostedService(
             new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options)), _time, probe.Telemetry,
             _logger, NoOpNoiseEntryStore.Instance,
-            new SqlitePromotionQueueStore(_factory, _time), new SqliteSearchQualityService(_factory, Microsoft.Extensions.Logging.Abstractions.NullLogger<SqliteSearchQualityService>.Instance));
+            new SqlitePromotionQueueStore(_factory, _time), new SqliteSearchQualityService(_factory, NullLogger<SqliteSearchQualityService>.Instance));
 
-        var thrown = await Should.ThrowAsync<Exception>(
-            () => service.RunOnceAsync(TestContext.Current.CancellationToken));
+        var thrown = await Should.ThrowAsync<Exception>(() => service.RunOnceAsync(TestContext.Current.CancellationToken));
 
         probe.Spans.ShouldHaveSingleItem().Status.ShouldBe(ActivityStatusCode.Error);
         var duration = probe.Durations.ShouldHaveSingleItem();
