@@ -1,0 +1,8 @@
+[
+  {
+    "test": "AiRaccoon.Tests.Integration.Setup.Serve.BackendLauncherTests.Acquire_WhenAServerIsAlreadyListening_DoesNotSpawn",
+    "issue": 395,
+    "reason": "Class B port/probe race (family history: Acquire_WhenTheBackendNeverAnswers_GivesUpAtTheBudget, 08-11). One red on the 2026-08-20 branch nightly (run 32360776555) under full-suite load: the launcher's single 'already listening?' probe did not get the held listener's fake MCP response in time, so it tried to spawn the deliberately-unstartable command (BackendStartException). Rerun passed. Quarantine rule: 2nd red in 10 nightly runs must trigger a real fix (probe robustness, src/AiRaccoon/Hosting/Proxy/BackendLauncher.cs).",
+    "since": "2026-08-20"
+  }
+]
