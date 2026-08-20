@@ -14,11 +14,6 @@ public sealed record FusedRank(string Hash, double Score);
 /// </summary>
 public static class StructureFusion
 {
-    public const double DefaultAlpha = 0.5;
-
-    /// <summary>Settings key for the bank-scoped alpha; absent or unparsable falls back to <see cref="DefaultAlpha" />.</summary>
-    public const string AlphaSettingKey = "retrieval.structureAlpha";
-
     /// <summary>vec0 cosine distance in [0, 2] to cosine similarity in [-1, 1] (embeddings are L2-normalized).</summary>
     public static double SimFromDistance(double distance) => 1.0 - distance;
 

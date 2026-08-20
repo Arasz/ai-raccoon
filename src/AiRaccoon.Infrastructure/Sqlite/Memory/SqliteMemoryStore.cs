@@ -164,7 +164,7 @@ public sealed partial class SqliteMemoryStore(
         var queryVector = await embedder.EmbedQueryAsync(connection, query.Query, cancellationToken).ConfigureAwait(false);
         queryVector = queryVector with
         {
-            Alpha = queryVector.IsEmpty ? StructureFusion.DefaultAlpha : await ReadStructureAlphaAsync(connection, cancellationToken).ConfigureAwait(false)
+            Alpha = queryVector.IsEmpty ? SearchParameterSettingsKeys.DefaultStructureAlpha : await ReadStructureAlphaAsync(connection, cancellationToken).ConfigureAwait(false)
         };
 
         searchTimingsCollector.Embed = timeProvider.GetElapsedTime(embedStart);

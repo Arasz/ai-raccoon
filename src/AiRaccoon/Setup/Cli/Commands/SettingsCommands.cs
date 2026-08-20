@@ -178,7 +178,7 @@ public sealed class SettingsCommands
             return ExitCode.InvalidArgument;
         }
 
-        await store.SetSettingAsync(StructureFusion.AlphaSettingKey,
+        await store.SetSettingAsync(SearchParameterSettingsKeys.StructureAlpha,
             alpha.ToString(CultureInfo.InvariantCulture), cancellationToken);
         await streams.WriteOutputLineAsync($"retrieval alpha set to {alpha.ToString(CultureInfo.InvariantCulture)}");
         return 0;
@@ -187,10 +187,10 @@ public sealed class SettingsCommands
     public async Task<int> RetrievalAlphaShowAsync(IMemoryStore store, StandardStreams streams,
         CancellationToken cancellationToken)
     {
-        var raw = await store.GetSettingAsync(StructureFusion.AlphaSettingKey, cancellationToken);
+        var raw = await store.GetSettingAsync(SearchParameterSettingsKeys.StructureAlpha, cancellationToken);
         var alpha = double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
             ? parsed
-            : StructureFusion.DefaultAlpha;
+            : SearchParameterSettingsKeys.DefaultStructureAlpha;
         await streams.WriteOutputLineAsync(alpha.ToString(CultureInfo.InvariantCulture));
         return 0;
     }

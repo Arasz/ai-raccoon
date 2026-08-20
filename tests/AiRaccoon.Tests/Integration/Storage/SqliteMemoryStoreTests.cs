@@ -959,14 +959,14 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [Fact]
     public async Task SetSetting_RoundTripsStructureAlpha()
     {
-        await _store.SetSettingAsync(StructureFusion.AlphaSettingKey, "0.8",
+        await _store.SetSettingAsync(SearchParameterSettingsKeys.StructureAlpha, "0.8",
             TestContext.Current.CancellationToken);
 
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var raw = await connection.ExecuteScalarAsync<string?>(
             new CommandDefinition(
                 "SELECT value FROM settings WHERE key = @key",
-                new { key = StructureFusion.AlphaSettingKey },
+                new { key = SearchParameterSettingsKeys.StructureAlpha },
                 cancellationToken: TestContext.Current.CancellationToken));
         raw.ShouldBe("0.8", "the alpha setting must persist in the bank settings table");
     }

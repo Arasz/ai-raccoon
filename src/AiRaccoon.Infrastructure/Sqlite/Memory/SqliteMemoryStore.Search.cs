@@ -102,12 +102,12 @@ public sealed partial class SqliteMemoryStore
         CancellationToken cancellationToken)
     {
         var raw = await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key = StructureFusion.AlphaSettingKey }, cancellationToken))
+                Def(MemorySql.SelectSetting, new { key = SearchParameterSettingsKeys.StructureAlpha }, cancellationToken))
             .ConfigureAwait(false);
         return double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var alpha)
                && alpha is >= 0.0 and <= 1.0
             ? alpha
-            : StructureFusion.DefaultAlpha;
+            : SearchParameterSettingsKeys.DefaultStructureAlpha;
     }
 
     /// <summary>

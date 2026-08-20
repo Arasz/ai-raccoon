@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
 using Shouldly;
 using Xunit;
@@ -156,5 +157,5 @@ public sealed class StructureFusionTests
     }
 
     [Fact]
-    public void DefaultAlpha_IsTheDocumentedBlend() => StructureFusion.DefaultAlpha.ShouldBe(0.5);
+    public void DefaultAlpha_IsTheDocumentedBlend() => SearchParameterSettingsKeys.DefaultStructureAlpha.ShouldBe(0.5);
 }

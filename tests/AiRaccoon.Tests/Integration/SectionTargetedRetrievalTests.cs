@@ -217,7 +217,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     {
         var queries = FileLevelQueries();
         var contentOnly = await FileRanksAsync(queries, 1.0, TestContext.Current.CancellationToken);
-        var fused = await FileRanksAsync(queries, StructureFusion.DefaultAlpha,
+        var fused = await FileRanksAsync(queries, SearchParameterSettingsKeys.DefaultStructureAlpha,
             TestContext.Current.CancellationToken);
 
         var hit5Regressions = queries
@@ -275,7 +275,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     private async Task<Dictionary<string, int?>> FileRanksAsync(
         IReadOnlyList<BaselineQuery> queries, double alpha, CancellationToken cancellationToken)
     {
-        await _store.SetSettingAsync(StructureFusion.AlphaSettingKey,
+        await _store.SetSettingAsync(SearchParameterSettingsKeys.StructureAlpha,
             alpha.ToString(CultureInfo.InvariantCulture), cancellationToken);
         var ranks = new Dictionary<string, int?>(StringComparer.Ordinal);
         foreach (var query in queries)
