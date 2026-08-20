@@ -1,15 +1,14 @@
 using AiRaccoon.Core.Access;
-using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Degradation;
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
-using AiRaccoon.Tests.TestHelpers;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Sweep;
 
@@ -114,5 +113,4 @@ public sealed class SweepHostedServiceTests : IDisposable
             TestContext.Current.CancellationToken);
         return [.. entries.Select(e => e.Hash)];
     }
-
 }

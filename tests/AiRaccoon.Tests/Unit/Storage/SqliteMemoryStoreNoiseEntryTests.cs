@@ -3,13 +3,14 @@ using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Memory.Filtering.Policies;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
-using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Unit.Storage;
 
@@ -23,6 +24,9 @@ namespace AiRaccoon.Tests.Unit.Storage;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class SqliteMemoryStoreNoiseEntryTests : IDisposable
 {
+    private const string RejectedContent = "[IMPORTANT: Background process proc_x9f completed normally (exit code 0).\n" +
+                                           "Command: dotnet build\nOutput: ]";
+
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 14, 0, 0, 0, TimeSpan.Zero);
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-noise-entry-wiring");
     private readonly SqliteConnectionFactory _factory;
@@ -34,9 +38,6 @@ public sealed class SqliteMemoryStoreNoiseEntryTests : IDisposable
     }
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
-
-    private const string RejectedContent = "[IMPORTANT: Background process proc_x9f completed normally (exit code 0).\n" +
-                                            "Command: dotnet build\nOutput: ]";
 
     private SqliteMemoryStore CreateStore(INoiseEntryStore noiseEntryStore)
     {
@@ -109,7 +110,7 @@ public sealed class SqliteMemoryStoreNoiseEntryTests : IDisposable
     {
         public static readonly INoiseShadowObserver Instance = new NoOpNoiseShadowObserverForTests();
 
-        public Task<NoiseFilterResult> ObserveStoredWriteAsync(Microsoft.Data.Sqlite.SqliteConnection connection,
+        public Task<NoiseFilterResult> ObserveStoredWriteAsync(SqliteConnection connection,
             string projectId, string? agentId, string content, string hash, CancellationToken cancellationToken = default) =>
             Task.FromResult(NoiseFilterResult.Clean);
     }

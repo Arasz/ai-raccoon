@@ -1,17 +1,16 @@
 using System.Text.Json;
-using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Degradation;
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Promotion;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
-using AiRaccoon.Tests.TestHelpers;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Extraction;
 
@@ -464,5 +463,4 @@ public sealed class PromotionQueueServiceTests : IDisposable
         public void RecordFailed(string projectId, int count) => Failed.Add((projectId, count));
         public void RecordSnapshot(PromotionQueueStats stats, int capacity) => Snapshots.Add((stats, capacity));
     }
-
 }

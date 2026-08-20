@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 

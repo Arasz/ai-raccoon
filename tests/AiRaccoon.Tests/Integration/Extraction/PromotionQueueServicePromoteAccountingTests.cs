@@ -1,6 +1,4 @@
-using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Promotion;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -11,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Extraction;
 
@@ -179,15 +178,17 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
     /// <summary>Queue store whose rows the test controls (copy of the race-tests shape).</summary>
     private sealed class RaceyQueueStore : IPromotionQueueStore
     {
+        public List<PromotionQueueRow> Rows { get; } = [];
+
         public Task<int> PurgeOldDiscardsAsync(long nowUnixSeconds, int retentionDays,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         /// <summary>Forwards to this fake's own DiscardAsync — the behaviour IPromotionQueueStore
         /// used to supply as a default, now stated where it is chosen (ADR-0054).</summary>
         public async Task<PromotionQueueRow?> ClaimAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
             (await DiscardAsync(projectId, hash, cancellationToken).ConfigureAwait(false)).SingleOrDefault();
-        public List<PromotionQueueRow> Rows { get; } = [];
 
         public Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
             CancellationToken cancellationToken = default) =>
@@ -254,8 +255,7 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
 
         public int SharedRows => _createdByHash.Count;
 
-        public override Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(new SharedIndex([], []));
+        public override Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) => Task.FromResult(new SharedIndex([], []));
 
         public override Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
             CancellationToken cancellationToken = default)
@@ -273,8 +273,7 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
             return Task.FromResult(new MemoryEntryResult(entry, Created: true));
         }
 
-        public override Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
-            Task.FromResult<string?>(null);
+        public override Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
     }
 
     private sealed class SpyMetrics : IPromotionQueueMetrics

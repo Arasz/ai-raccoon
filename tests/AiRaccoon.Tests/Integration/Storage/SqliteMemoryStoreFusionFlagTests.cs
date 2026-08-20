@@ -1,4 +1,3 @@
-using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Infrastructure.Embedding;
@@ -9,6 +8,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using SearchResults = AiRaccoon.Core.Memory.SearchResults;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -21,6 +22,7 @@ namespace AiRaccoon.Tests.Integration.Storage;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class SqliteMemoryStoreFusionFlagTests : IAsyncLifetime
 {
+    private const string Query = "quokka forage";
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
     private readonly string _dataRoot = TestData.CreateTempRoot();
@@ -43,8 +45,6 @@ public sealed class SqliteMemoryStoreFusionFlagTests : IAsyncLifetime
         await _openAi.DisposeAsync();
         TestData.DeleteTempRoot(_dataRoot);
     }
-
-    private const string Query = "quokka forage";
 
     /// <summary>
     ///     Issue #367's mechanism, reproduced: the target is written before an engine is configured,
@@ -73,8 +73,7 @@ public sealed class SqliteMemoryStoreFusionFlagTests : IAsyncLifetime
         return target.Hash;
     }
 
-    private Task<SearchResults> SearchAsync() =>
-        _store.SearchAsync(new SearchQuery("acme", Query), TestContext.Current.CancellationToken);
+    private Task<SearchResults> SearchAsync() => _store.SearchAsync(new SearchQuery("acme", Query), TestContext.Current.CancellationToken);
 
     [Fact]
     public async Task Search_FlagAbsent_BuriesTheSingleLegWinner_AndRecordsNoFusionEvidence()

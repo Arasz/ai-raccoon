@@ -1,15 +1,14 @@
-using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Degradation;
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
-using AiRaccoon.Tests.TestHelpers;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -145,5 +144,4 @@ public sealed class SweepScopeSiblingTests : IDisposable
 
         public string? WorkspaceId { get; set; }
     }
-
 }

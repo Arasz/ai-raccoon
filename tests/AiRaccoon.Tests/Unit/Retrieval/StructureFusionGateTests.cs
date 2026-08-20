@@ -2,12 +2,12 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
-using Dapper;
-using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Unit.Retrieval;
 
@@ -47,6 +47,7 @@ public sealed class StructureFusionGateTests : IDisposable
     ///     exactly the same file and heading.
     /// </summary>
     private const string ExpectedSourceFile = "docs/adr/0068-what-erasure-does-not-erase.md";
+
     private const string ExpectedHeading = "Decision";
 
     private readonly string _dataRoot;

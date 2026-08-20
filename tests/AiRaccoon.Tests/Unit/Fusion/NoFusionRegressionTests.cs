@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Fusion;
+using AiRaccoon.Infrastructure.Sqlite.Memory;
 using Shouldly;
 using Xunit;
 
@@ -9,7 +10,7 @@ namespace AiRaccoon.Tests.Unit.Fusion;
 ///     The no-fusion-regression reorder (docs/adr/0078): ADR-0006 declares the hybrid never ranks
 ///     the expected chunk below the best single modality, and issue #367 is the real bank's
 ///     counterexample. These pin the rule as an ORDER, which is all that survives the second
-///     fusion in <see cref="AiRaccoon.Infrastructure.Sqlite.SearchResultMerger" /> (ADR-0058).
+///     fusion in <see cref="SearchResultMerger" /> (ADR-0058).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]

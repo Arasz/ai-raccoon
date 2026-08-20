@@ -7,6 +7,7 @@ using AiRaccoon.Tests.Unit.Retrieval;
 using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Retrieval;
 
@@ -41,13 +42,18 @@ internal sealed class TableCorpusBank : IAsyncDisposable
     /// <summary>The chunk budget this bank was built at — the axis a chunking arm moves.</summary>
     public int MaxTokens { get; }
 
+    public ValueTask DisposeAsync()
+    {
+        TestData.DeleteTempRoot(_dataRoot);
+        return ValueTask.CompletedTask;
+    }
+
     /// <summary>
     ///     Ingests the corpus at <paramref name="maxTokensOverride" /> tokens per chunk, or at the
     ///     production budget when null. The override is how a test perturbs chunking without touching
     ///     production configuration.
     /// </summary>
-    public static Task<TableCorpusBank> BuildAsync(int? maxTokensOverride, CancellationToken cancellationToken) =>
-        BuildAsync(maxTokensOverride, arm: null, cancellationToken);
+    public static Task<TableCorpusBank> BuildAsync(int? maxTokensOverride, CancellationToken cancellationToken) => BuildAsync(maxTokensOverride, arm: null, cancellationToken);
 
     /// <summary>
     ///     Builds the corpus under a chunking <paramref name="arm" /> — a factory taking the real
@@ -115,14 +121,7 @@ internal sealed class TableCorpusBank : IAsyncDisposable
     }
 
     /// <summary>The relevance set for a graded query: chunks of its document that carry its answer span.</summary>
-    public IReadOnlySet<string> RelevantFor(TableQuery query) =>
-        SpanAnchoredRelevance.Resolve(Chunks, query.ExpectedSource, query.AnswerSpan);
-
-    public ValueTask DisposeAsync()
-    {
-        TestData.DeleteTempRoot(_dataRoot);
-        return ValueTask.CompletedTask;
-    }
+    public IReadOnlySet<string> RelevantFor(TableQuery query) => SpanAnchoredRelevance.Resolve(Chunks, query.ExpectedSource, query.AnswerSpan);
 
     private static async Task<IReadOnlyList<CorpusChunk>> ReadChunksAsync(
         SqliteConnectionFactory factory, CancellationToken cancellationToken)

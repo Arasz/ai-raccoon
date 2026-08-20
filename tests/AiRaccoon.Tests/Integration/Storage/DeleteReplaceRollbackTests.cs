@@ -1,6 +1,5 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
@@ -9,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -67,8 +67,7 @@ public sealed class DeleteReplaceRollbackTests : IDisposable
         await InstallFailureTriggerAsync("DELETE", "watch_files", ct);
         try
         {
-            var thrown = await Should.ThrowAsync<SqliteException>(
-                () => _store.DeleteSourcePathAsync("acme", file, ct));
+            var thrown = await Should.ThrowAsync<SqliteException>(() => _store.DeleteSourcePathAsync("acme", file, ct));
             thrown.Message.ShouldContain(InducedFailureMessage);
         }
         finally
@@ -105,8 +104,7 @@ public sealed class DeleteReplaceRollbackTests : IDisposable
         await InstallFailureTriggerAsync("INSERT", "watch_files", ct);
         try
         {
-            var thrown = await Should.ThrowAsync<SqliteException>(
-                () => _store.ReplaceIfFileChangedAsync("acme", file, "revised-hash", ct));
+            var thrown = await Should.ThrowAsync<SqliteException>(() => _store.ReplaceIfFileChangedAsync("acme", file, "revised-hash", ct));
             thrown.Message.ShouldContain(InducedFailureMessage);
         }
         finally
@@ -155,8 +153,7 @@ public sealed class DeleteReplaceRollbackTests : IDisposable
         await InstallFailureTriggerAsync("INSERT", "watch_files", ct);
         try
         {
-            var thrown = await Should.ThrowAsync<SqliteException>(
-                () => _store.ReplaceAsync("acme", file, "forced-hash", ct));
+            var thrown = await Should.ThrowAsync<SqliteException>(() => _store.ReplaceAsync("acme", file, "forced-hash", ct));
             thrown.Message.ShouldContain(InducedFailureMessage);
         }
         finally
@@ -193,13 +190,13 @@ public sealed class DeleteReplaceRollbackTests : IDisposable
     {
         await using var connection = await _factory.OpenBankAsync(ct);
         await connection.ExecuteAsync($"""
-            CREATE TRIGGER test_force_fail_{operation.ToLowerInvariant()}_{table}
-            BEFORE {operation} ON {table}
-            FOR EACH ROW
-            BEGIN
-                SELECT RAISE(ABORT, '{InducedFailureMessage}');
-            END;
-            """);
+                                       CREATE TRIGGER test_force_fail_{operation.ToLowerInvariant()}_{table}
+                                       BEFORE {operation} ON {table}
+                                       FOR EACH ROW
+                                       BEGIN
+                                           SELECT RAISE(ABORT, '{InducedFailureMessage}');
+                                       END;
+                                       """);
     }
 
     private async Task DropFailureTriggerAsync(CancellationToken ct)

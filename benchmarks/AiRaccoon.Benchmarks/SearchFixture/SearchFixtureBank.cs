@@ -11,6 +11,7 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Benchmarks.SearchFixture;
 

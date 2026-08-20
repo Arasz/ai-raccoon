@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.Integration.Retrieval;
@@ -12,6 +11,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -450,9 +450,9 @@ public sealed class RrfParameterSweepTests : IDisposable
         builder.AppendLine("# Wave 4 RRF Parameter Optimization — Parameter Sweep");
         builder.AppendLine();
         builder.AppendLine("Date: 2026-08-04, re-measured 2026-08-14 (WP4 corpus regeneration, " +
-                            "docs/plans/2026-08-14-code-quality-improvement-plan.md). Corpus: " +
-                            "tests/AiRaccoon.Tests/Resources/jsaa-memory.db (2518 chunks, regenerated through " +
-                            "the production FileIngestor — was 752/761 chunks through the retired Python re-chunker).");
+                           "docs/plans/2026-08-14-code-quality-improvement-plan.md). Corpus: " +
+                           "tests/AiRaccoon.Tests/Resources/jsaa-memory.db (2518 chunks, regenerated through " +
+                           "the production FileIngestor — was 752/761 chunks through the retired Python re-chunker).");
         builder.AppendLine("Measured by RrfParameterSweepTests (limit 10, Wave 3 source-affinity fixed at λ=0.1, thr=0.1, Max).");
         builder.AppendLine();
         builder.AppendLine(
@@ -547,7 +547,7 @@ public sealed class RrfParameterSweepTests : IDisposable
         connection.Open();
         using var command = connection.CreateCommand();
         command.CommandText = "SELECT source_file, heading_path, hash, chunk_index, value FROM entries " +
-                               "ORDER BY source_file, chunk_index";
+                              "ORDER BY source_file, chunk_index";
         using var reader = command.ExecuteReader();
         var rows = new List<(string SourceFile, string? HeadingPath, string Hash, int ChunkIndex, string Value)>();
         while (reader.Read())

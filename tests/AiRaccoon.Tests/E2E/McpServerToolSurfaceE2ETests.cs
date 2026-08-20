@@ -1,19 +1,18 @@
-using AiRaccoon.Tests.TestHelpers;
 using System.Text.Json;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
-using AiRaccoon.Infrastructure.Chunking;
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
+using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Shouldly;
 using Xunit;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.E2E;
 
@@ -161,7 +160,8 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
         var factory = new SqliteConnectionFactory(options,
             new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
                 [new EnvEncryptionKeyProvider()]));
-        var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), TimeProvider.System, TestData.CreateEmbeddingService());
+        var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), TimeProvider.System,
+            TestData.CreateEmbeddingService());
         await store.SetSettingAsync(WatchConfigKeys.EnabledProject(ProjectId), "true");
         await store.SetSettingAsync(IngestScopeKeys.ScopeProject(ProjectId), IngestScopeKeys.Serialize([tempDir]));
     }

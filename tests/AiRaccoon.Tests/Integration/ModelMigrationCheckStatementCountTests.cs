@@ -1,12 +1,12 @@
-using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
+using Shouldly;
 using SQLitePCL;
 using Xunit;
-using Shouldly;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -138,20 +138,16 @@ public sealed class ModelMigrationCheckStatementCountTests
             return inner.OpenBankSkippingEnsureAsync(cancellationToken);
         }
 
-        public Task<bool> MigrateLegacyKeyAsync(CancellationToken cancellationToken = default) =>
-            inner.MigrateLegacyKeyAsync(cancellationToken);
+        public Task<bool> MigrateLegacyKeyAsync(CancellationToken cancellationToken = default) => inner.MigrateLegacyKeyAsync(cancellationToken);
 
         public Task<SqliteConnection> OpenBankWithResolvedKeyAsync(
             ResolvedKey resolvedKey, CancellationToken cancellationToken = default) =>
             inner.OpenBankWithResolvedKeyAsync(resolvedKey, cancellationToken);
 
-        public Task RekeyBankAsync(string newKey, CancellationToken cancellationToken = default) =>
-            inner.RekeyBankAsync(newKey, cancellationToken);
+        public Task RekeyBankAsync(string newKey, CancellationToken cancellationToken = default) => inner.RekeyBankAsync(newKey, cancellationToken);
 
-        public Task RekeyBankAsync(string newKey, string? currentKey, CancellationToken cancellationToken = default) =>
-            inner.RekeyBankAsync(newKey, currentKey, cancellationToken);
+        public Task RekeyBankAsync(string newKey, string? currentKey, CancellationToken cancellationToken = default) => inner.RekeyBankAsync(newKey, currentKey, cancellationToken);
 
-        public Task<SqliteConnection> OpenBankWithKeyAsync(string? key, CancellationToken cancellationToken = default) =>
-            inner.OpenBankWithKeyAsync(key, cancellationToken);
+        public Task<SqliteConnection> OpenBankWithKeyAsync(string? key, CancellationToken cancellationToken = default) => inner.OpenBankWithKeyAsync(key, cancellationToken);
     }
 }

@@ -1,5 +1,3 @@
-using System.Net;
-using System.Net.Sockets;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AiRaccoon.Core.Access;
@@ -15,6 +13,7 @@ using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup;
+using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Dapper;
 using FluentValidation;
@@ -26,7 +25,7 @@ using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Shouldly;
 using Xunit;
-using AiRaccoon.Tests.TestHelpers;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Mcp;
 
@@ -41,32 +40,6 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
 {
     private readonly string _dataRoot = TestData.CreateTempRoot("tool-refusals-tests");
     private bool _holdsEnvGate;
-
-    /// <summary>
-    ///     Takes <see cref="TestData.EnvVarGate" /> as a READER (docs/adr/0062). The gate was built
-    ///     to serialise the classes that mutate the process-global AIRACCOON_DB_PASSPHRASE against
-    ///     each other; it does nothing for a class that merely *reads* the environment by opening a
-    ///     bank. This class stands up a real server, so an env mutation landing mid-run makes it open
-    ///     a plain bank with a key — SQLite error 26, "file is not a database" — which is what its
-    ///     intermittent CI reds turned out to be.
-    /// </summary>
-    public async ValueTask InitializeAsync()
-    {
-        await TestData.EnvVarGate.WaitAsync(TestContext.Current.CancellationToken);
-        _holdsEnvGate = true;
-    }
-
-    public ValueTask DisposeAsync()
-    {
-        DeleteRoot();
-        if (_holdsEnvGate)
-        {
-            _holdsEnvGate = false;
-            TestData.EnvVarGate.Release();
-        }
-
-        return ValueTask.CompletedTask;
-    }
 
     /// <summary>
     ///     Only path-outside-scope was ever proven through a real McpServer; access-denied (project
@@ -168,6 +141,32 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
                 "embedding-install-replaced"
             }
         };
+
+    /// <summary>
+    ///     Takes <see cref="TestData.EnvVarGate" /> as a READER (docs/adr/0062). The gate was built
+    ///     to serialise the classes that mutate the process-global AIRACCOON_DB_PASSPHRASE against
+    ///     each other; it does nothing for a class that merely *reads* the environment by opening a
+    ///     bank. This class stands up a real server, so an env mutation landing mid-run makes it open
+    ///     a plain bank with a key — SQLite error 26, "file is not a database" — which is what its
+    ///     intermittent CI reds turned out to be.
+    /// </summary>
+    public async ValueTask InitializeAsync()
+    {
+        await TestData.EnvVarGate.WaitAsync(TestContext.Current.CancellationToken);
+        _holdsEnvGate = true;
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        DeleteRoot();
+        if (_holdsEnvGate)
+        {
+            _holdsEnvGate = false;
+            TestData.EnvVarGate.Release();
+        }
+
+        return ValueTask.CompletedTask;
+    }
 
     private void DeleteRoot() => TestData.DeleteTempRoot(_dataRoot);
 

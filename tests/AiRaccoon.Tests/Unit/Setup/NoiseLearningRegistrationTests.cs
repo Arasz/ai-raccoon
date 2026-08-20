@@ -1,13 +1,13 @@
 using System.Reflection;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
-using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Setup;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Shouldly;
 using Xunit;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Unit.Setup;
 

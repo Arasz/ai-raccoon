@@ -1,6 +1,6 @@
 using AiRaccoon.Core.Memory;
 
-namespace AiRaccoon.Infrastructure.Sqlite;
+namespace AiRaccoon.Infrastructure.Sqlite.Memory;
 
 /// <summary>
 ///     Fuses per-context batches with RRF, then applies source-affinity ranking (see
@@ -10,21 +10,14 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 internal static class SearchResultMerger
 {
     public static IReadOnlyList<MemorySearchResult> Merge(
-        IEnumerable<IReadOnlyList<MemorySearchResult>> batches,
+        SearchResult searchResult,
         int limit,
         double minRelativeScore = 0.0,
-        int rrfK = SearchQuery.DefaultRrfK,
         double sourceLambda = 0.0,
         double consolidationThreshold = double.PositiveInfinity,
         DocScoreFormula formula = DocScoreFormula.Max)
     {
-        ArgumentNullException.ThrowIfNull(batches);
-
-        var lists = batches
-            .Select(batch => (batch, Weight: 1.0))
-            .ToList();
-        var fused = ReciprocalRankFusion.Fuse(lists, rrfK, 0.0, int.MaxValue);
-        var ranked = SourceAffinityRanker.Rank(fused, sourceLambda, consolidationThreshold, formula);
+        var ranked = SourceAffinityRanker.Rank(searchResult, sourceLambda, consolidationThreshold, formula);
         return
         [
             .. ranked

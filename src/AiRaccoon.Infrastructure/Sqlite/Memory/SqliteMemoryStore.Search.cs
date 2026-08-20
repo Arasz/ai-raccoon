@@ -5,7 +5,7 @@ using AiRaccoon.Infrastructure.Embedding;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
-namespace AiRaccoon.Infrastructure.Sqlite;
+namespace AiRaccoon.Infrastructure.Sqlite.Memory;
 
 /// <summary>
 ///     The read-path helpers <see cref="SearchAsync" /> composes — candidate windowing, the keyword
@@ -40,13 +40,11 @@ public sealed partial class SqliteMemoryStore
 
     /// <summary>
     ///     Keyword modality: FTS5 candidates without snippet() — deferred (see <see cref="BuildFtsResults" />).
-    ///     <paramref name="valueByHash" />, <paramref name="ftsQueryByHash" /> and <paramref name="idByHash" />
     ///     carry each candidate's raw value, matching @query text and row id, for snippet resolution after ranking.
     /// </summary>
     private async Task<IReadOnlyList<MemorySearchResult>> QueryFtsBatchAsync(
         SqliteConnection connection, string filter, string ftsExpression, DynamicParameters parameters,
-        IDictionary<string, string> valueByHash, IDictionary<string, string> ftsQueryByHash,
-        IDictionary<string, long> idByHash, CancellationToken cancellationToken)
+        HashIndexes hashIndexes, CancellationToken cancellationToken)
     {
         try
         {
@@ -58,9 +56,9 @@ public sealed partial class SqliteMemoryStore
 
             foreach (var row in rows)
             {
-                valueByHash[row.Hash] = row.Value;
-                ftsQueryByHash[row.Hash] = ftsExpression;
-                idByHash[row.Hash] = row.Id;
+                hashIndexes.ValueByHash[row.Hash] = row.Value;
+                hashIndexes.FtsQueryByHash[row.Hash] = ftsExpression;
+                hashIndexes.IdByHash[row.Hash] = row.Id;
             }
 
             return BuildFtsResults(rows);
@@ -80,7 +78,7 @@ public sealed partial class SqliteMemoryStore
             row.SourceFile, row.ChunkIndex, row.TotalChunks))
     ];
 
-    private async Task<double> ReadStructureAlphaAsync(SqliteConnection connection,
+    private static async Task<double> ReadStructureAlphaAsync(SqliteConnection connection,
         CancellationToken cancellationToken)
     {
         var raw = await connection.QuerySingleOrDefaultAsync<string?>(

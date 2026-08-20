@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Maintenance;
 
@@ -25,9 +26,9 @@ public sealed class ModelMigrationJobTests : IAsyncLifetime
 
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-model-migration-job");
     private SqliteConnectionFactory _factory = null!;
+    private string _otherModelPath = null!;
     private SqliteMemoryStore _store = null!;
     private FakeTimeProvider _time = null!;
-    private string _otherModelPath = null!;
 
     public async ValueTask InitializeAsync()
     {
@@ -52,8 +53,7 @@ public sealed class ModelMigrationJobTests : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
-    private ModelMigrationJob NewJob() =>
-        new(new EntryEmbedder(TestData.CreateEmbeddingService(), new SqliteModelMigrationLease(_time), _time));
+    private ModelMigrationJob NewJob() => new(new EntryEmbedder(TestData.CreateEmbeddingService(), new SqliteModelMigrationLease(_time), _time));
 
     [Fact]
     public async Task HasWorkAsync_WithNoOpenMigration_IsFalse()
@@ -213,14 +213,18 @@ public sealed class ModelMigrationJobTests : IAsyncLifetime
                 row.FinishedAt is { } finished ? DateTimeOffset.FromUnixTimeSeconds(finished) : null);
     }
 
-    private sealed record MigrationRow(string Provider, string? Model, string? BaseUrl, string Engine,
-        long StartedAt, long? FinishedAt);
+    private sealed record MigrationRow(
+        string Provider,
+        string? Model,
+        string? BaseUrl,
+        string Engine,
+        long StartedAt,
+        long? FinishedAt);
 
     /// <summary>Advances a <see cref="FakeTimeProvider"/> by a fixed step on every generator call, standing in for real embedding latency without sleeping.</summary>
     private sealed class ClockAdvancingEmbeddingService(FakeTimeProvider time, TimeSpan perCallAdvance) : IEmbeddingService
     {
-        public IEmbeddingGenerator<string, Embedding<float>> CreateGenerator(EmbeddingSettings settings) =>
-            new ClockAdvancingGenerator(time, perCallAdvance);
+        public IEmbeddingGenerator<string, Embedding<float>> CreateGenerator(EmbeddingSettings settings) => new ClockAdvancingGenerator(time, perCallAdvance);
 
         public string TrimQueryToWindow(EmbeddingSettings settings, string query) => query;
 

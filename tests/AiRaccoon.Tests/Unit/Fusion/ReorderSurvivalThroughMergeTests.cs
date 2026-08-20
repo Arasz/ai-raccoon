@@ -1,6 +1,6 @@
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Fusion;
-using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite.Memory;
 using Shouldly;
 using Xunit;
 
@@ -21,8 +21,7 @@ public sealed class ReorderSurvivalThroughMergeTests
 
     private const double ShippedLambda = 0.1;
 
-    private static MemorySearchResult Chunk(string hash, string? source, int chunkIndex) =>
-        new(hash, 0, hash, "snippet", source, chunkIndex);
+    private static MemorySearchResult Chunk(string hash, string? source, int chunkIndex) => new(hash, 0, hash, "snippet", source, chunkIndex);
 
     /// <summary>With no adjacent siblings anywhere, λ adds nothing and the reorder reaches the caller intact.</summary>
     [Fact]
@@ -31,7 +30,7 @@ public sealed class ReorderSurvivalThroughMergeTests
         var reordered = (IReadOnlyList<MemorySearchResult>)
             [.. Enumerable.Range(1, 6).Select(i => Chunk($"h{i}", $"f{i}.md", 0))];
 
-        var served = SearchResultMerger.Merge([reordered], 10, 0.0, RrfK, ShippedLambda);
+        var served = SearchResultMerger.Merge([reordered], 10, 0.0, ShippedLambda);
 
         served.Select(r => r.Hash).ShouldBe(reordered.Select(r => r.Hash));
     }
@@ -53,7 +52,7 @@ public sealed class ReorderSurvivalThroughMergeTests
             Chunk("cluster-c", "cluster.md", 5)
         ];
 
-        var served = SearchResultMerger.Merge([reordered], 10, 0.0, RrfK, ShippedLambda);
+        var served = SearchResultMerger.Merge([reordered], 10, 0.0, ShippedLambda);
 
         served[0].Hash.ShouldBe("cluster-b");
         served[1].Hash.ShouldBe("lone");
@@ -71,7 +70,7 @@ public sealed class ReorderSurvivalThroughMergeTests
             Chunk("cluster-c", "cluster.md", 5)
         ];
 
-        var served = SearchResultMerger.Merge([reordered], 10, 0.0, RrfK, sourceLambda: 0.0);
+        var served = SearchResultMerger.Merge([reordered], 10, 0.0, sourceLambda: 0.0);
 
         served.Select(r => r.Hash).ShouldBe(reordered.Select(r => r.Hash));
     }
@@ -90,7 +89,7 @@ public sealed class ReorderSurvivalThroughMergeTests
             [Chunk("c1", null, 0), Chunk("c2", null, 0), Chunk("target", null, 0)];
 
         var served = SearchResultMerger.Merge(
-            [NoFusionRegression.Reorder(fused, [fts, vector])], 10, 0.0, RrfK, ShippedLambda);
+            [NoFusionRegression.Reorder(fused, [fts, vector])], 10, 0.0, ShippedLambda);
 
         served.Select(r => r.Hash).ShouldBe(["c1", "target", "c2"]);
         served.Select(r => r.Ranking).ShouldBeUnique();

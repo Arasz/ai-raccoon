@@ -1,3 +1,5 @@
+using System.Reflection;
+using System.Text.Json;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.QueryGuard;
@@ -11,6 +13,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Metrics;
 
@@ -55,12 +58,12 @@ public sealed class SearchMetricsIsolationTests : IDisposable
         _tools = BuildTools(recorder);
     }
 
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
+
     private MemoryTools BuildTools(IMeasurementRecorder recorder) =>
         new(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue()),
             new NoOpSearchQualityService(), new QueryGuardService(new InMemorySettings()),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
-
-    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private async Task<int> CountMetricsRowsAsync()
     {
@@ -135,8 +138,6 @@ public sealed class SearchMetricsIsolationTests : IDisposable
         rows.ShouldAllBe(r => r.Tags == null, "no row may carry the query text anywhere, including Tags");
     }
 
-    private sealed record PhaseRow(string Name, string? QueryHash, string? CorrelationId, string? Tags);
-
     /// <summary>
     ///     Spec scenario 23: "two runs of the same query share a hash" — nothing today runs the same
     ///     query twice and inspects the stored rows. Two separate calls (two separate correlation
@@ -178,7 +179,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
     public async Task Search_EveryMetricsSettingAtItsMostRestrictiveValue_StillRecordsAMeasurement()
     {
         var settingKeys = typeof(MetricsConfigKeys)
-            .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .GetFields(BindingFlags.Public | BindingFlags.Static)
             .Where(f => f.IsLiteral && f.FieldType == typeof(string) && f.Name.EndsWith("Global", StringComparison.Ordinal))
             .Select(f => (string)f.GetRawConstantValue()!)
             .ToList();
@@ -227,7 +228,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
             "acme", ContentHash.OfValue("chassis"), hashedCorrelationId);
         var queryTextLeaked = new Measurement("search.fts", MeasurementKind.Histogram, 1, "ms", FixedNow,
             "acme", ContentHash.OfValue("chassis"), leakedCorrelationId,
-            Tags: System.Text.Json.JsonSerializer.Serialize(new { query = "chassis" }));
+            Tags: JsonSerializer.Serialize(new { query = "chassis" }));
 
         await _metricsStore.SaveBatchAsync([hashed, queryTextLeaked], TestContext.Current.CancellationToken);
 
@@ -269,10 +270,11 @@ public sealed class SearchMetricsIsolationTests : IDisposable
             "a recorder that writes through synchronously, plugged into the real search path, must move the count the gate checks");
     }
 
+    private sealed record PhaseRow(string Name, string? QueryHash, string? CorrelationId, string? Tags);
+
     /// <summary>Simulates the exact defect G4 forbids: writes straight through to the store, blocking, on the caller's thread.</summary>
     private sealed class SynchronousMetricsRecorder(IMetricsStore store) : IMeasurementRecorder
     {
-        public void Record(Measurement measurement) =>
-            store.SaveBatchAsync([measurement], CancellationToken.None).GetAwaiter().GetResult();
+        public void Record(Measurement measurement) => store.SaveBatchAsync([measurement], CancellationToken.None).GetAwaiter().GetResult();
     }
 }

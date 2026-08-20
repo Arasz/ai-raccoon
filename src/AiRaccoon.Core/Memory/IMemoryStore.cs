@@ -5,8 +5,7 @@ public interface IMemoryStore : IModelMigrationStore
 {
     Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default);
 
-    Task<SearchResults> SearchAsync(SearchQuery query,
-        CancellationToken cancellationToken = default);
+    Task<SearchResults> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     Reads one entry's full content by hash (memory_get; ADR-0035) — a hash addressable in

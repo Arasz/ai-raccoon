@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Retrieval;
 
@@ -21,6 +22,9 @@ public sealed class HeldOutRetrievalGateTests : IDisposable
     private const string ProjectId = "job-search-ai-assistant";
     private const int RankCutoff = 5;
     private const int SearchLimit = 10;
+
+    /// <summary>Cross-platform envelope for a pinned ranking number (GoldenFile.RankingTolerance).</summary>
+    private const double Tolerance = GoldenFile.RankingTolerance;
 
     /// <summary>
     ///     Per-query held-out nDCG@5 at the shipped defaults, measured 2026-08-15 over the pinned
@@ -41,9 +45,6 @@ public sealed class HeldOutRetrievalGateTests : IDisposable
     ///     reversal — see <see cref="ReversedRanking_FailsTheHeldOutMeanFloor" />.
     /// </summary>
     private static readonly double HeldOutMeanFloor = HeldOutNdcg5Floor.Values.Average();
-
-    /// <summary>Cross-platform envelope for a pinned ranking number (GoldenFile.RankingTolerance).</summary>
-    private const double Tolerance = GoldenFile.RankingTolerance;
 
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
 

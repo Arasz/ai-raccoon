@@ -1,9 +1,9 @@
 using Dapper;
 using Microsoft.Data.Sqlite;
 
-namespace AiRaccoon.Infrastructure.Sqlite;
+namespace AiRaccoon.Infrastructure.Sqlite.Memory;
 
-/// <summary>Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3, GH #371): the write/delete-boundary helpers <see cref="SqliteMemoryStore" />'s write paths call.</summary>
+/// <summary>Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3, GH #371): the write/delete-boundary helpers <see cref="Memory.SqliteMemoryStore" />'s write paths call.</summary>
 public sealed partial class SqliteMemoryStore
 {
     /// <summary>

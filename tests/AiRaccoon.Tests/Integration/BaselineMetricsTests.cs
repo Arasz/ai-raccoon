@@ -3,8 +3,6 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Infrastructure.Chunking;
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.Unit.Retrieval;
@@ -12,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
 

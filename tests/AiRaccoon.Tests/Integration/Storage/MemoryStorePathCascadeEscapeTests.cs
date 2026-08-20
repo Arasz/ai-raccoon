@@ -1,12 +1,11 @@
-using AiRaccoon.Core.Chunking;
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
-using AiRaccoon.Tests.TestHelpers;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -71,5 +70,4 @@ public sealed class MemoryStorePathCascadeEscapeTests : IDisposable
             new { ProjectId }, cancellationToken: TestContext.Current.CancellationToken));
         return [.. rows];
     }
-
 }

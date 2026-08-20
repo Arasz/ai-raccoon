@@ -39,7 +39,7 @@ public sealed class SearchResultsTests
         empty.Fts.ShouldBe(TimeSpan.Zero);
         empty.Vector.ShouldBe(TimeSpan.Zero);
         empty.Fusion.ShouldBe(TimeSpan.Zero);
-        empty.Affinity.ShouldBe(TimeSpan.Zero);
+        empty.Merge.ShouldBe(TimeSpan.Zero);
         empty.Snippets.ShouldBe(TimeSpan.Zero);
         empty.Bump.ShouldBe(TimeSpan.Zero);
         empty.Total.ShouldBe(TimeSpan.Zero);

@@ -1,7 +1,5 @@
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Ingestion;
-using AiRaccoon.Infrastructure.Chunking;
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
@@ -12,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Client;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.E2E;
 
@@ -62,7 +61,8 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
         var factory = new SqliteConnectionFactory(options,
             new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
                 [new EnvEncryptionKeyProvider()]));
-        var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), TimeProvider.System, TestData.CreateEmbeddingService());
+        var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), TimeProvider.System,
+            TestData.CreateEmbeddingService());
         await store.SetSettingAsync(AccessModePolicy.GlobalSettingKey, AccessModePolicy.Serialize(AccessMode.Full));
 
         // Ingest is contained by the declared scope, so the E2E server is configured with one

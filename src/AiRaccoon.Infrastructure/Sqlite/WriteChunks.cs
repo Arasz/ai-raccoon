@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Sqlite.Memory;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
@@ -7,7 +8,7 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 /// <summary>
 ///     Row insertion for a chunked `memory_write` (docs/adr/0064). Lives beside
 ///     <see cref="EntryBucket" /> and <see cref="ContextFilter" /> rather than inside
-///     <see cref="SqliteMemoryStore" />, whose size ratchet says to split rather than raise the cap.
+///     <see cref="Memory.SqliteMemoryStore" />, whose size ratchet says to split rather than raise the cap.
 /// </summary>
 internal static class WriteChunks
 {

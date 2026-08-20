@@ -9,7 +9,7 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 /// <summary>
 ///     Write-path hook for shadow/dry-run mode (ADR-0039). Takes a <see cref="SqliteConnection" />,
 ///     so this stays Infrastructure-only rather than living in Core alongside the rest of the noise
-///     abstractions. <see cref="NoOpNoiseShadowObserver" /> is <see cref="SqliteMemoryStore" />'s
+///     abstractions. <see cref="NoOpNoiseShadowObserver" /> is <see cref="Memory.SqliteMemoryStore" />'s
 ///     default — see that class for why (TestData.cs, out of this lane's ownership, constructs
 ///     SqliteMemoryStore without this dependency).
 /// </summary>
@@ -73,7 +73,7 @@ public sealed partial class NoiseShadowObserver(
 }
 
 /// <summary>
-///     Null Object default for <see cref="SqliteMemoryStore" />'s legacy (pre-shadow-mode)
+///     Null Object default for <see cref="Memory.SqliteMemoryStore" />'s legacy (pre-shadow-mode)
 ///     constructor — never touches the connection, never enabled. Not a nullable injected
 ///     parameter: a genuinely functioning, always-non-null implementation that does nothing.
 /// </summary>

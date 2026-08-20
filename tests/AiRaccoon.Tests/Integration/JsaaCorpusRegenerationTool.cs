@@ -1,13 +1,14 @@
 using System.Diagnostics;
 using System.Text.Json;
 using AiRaccoon.Core.Ingestion;
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -106,7 +107,7 @@ public sealed class JsaaCorpusRegenerationTool(ITestOutputHelper output)
             }
 
             output.WriteLine($"ingested {ingestedFiles}/{files.Count} files (0-chunk files are non-indexable " +
-                              "extensions under the curated globs, e.g. skill reference assets)");
+                             "extensions under the curated globs, e.g. skill reference assets)");
 
             var pending = await store.EmbedPendingAsync(projectId, null, cancellationToken);
             output.WriteLine($"final embed-pending pass: processed={pending.Processed} remaining={pending.Pending}");
@@ -130,7 +131,7 @@ public sealed class JsaaCorpusRegenerationTool(ITestOutputHelper output)
 
             var (total, withStructure, distinctHeadings) = await CountStructureAsync(targetPath, cancellationToken);
             output.WriteLine($"regenerated corpus: {total} rows, {withStructure} with structure_embedding, " +
-                              $"{distinctHeadings} distinct heading paths");
+                             $"{distinctHeadings} distinct heading paths");
             total.ShouldBeGreaterThan(0);
             withStructure.ShouldBeGreaterThan(0, "at least one chunk must carry an H1/H2 to exercise the structure modality");
         }
@@ -220,7 +221,7 @@ public sealed class JsaaCorpusRegenerationTool(ITestOutputHelper output)
     private static async Task<(int Total, int WithStructure, int DistinctHeadings)> CountStructureAsync(
         string dbPath, CancellationToken cancellationToken)
     {
-        await using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={dbPath}");
+        await using var connection = new SqliteConnection($"Data Source={dbPath}");
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText =

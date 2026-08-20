@@ -1,6 +1,5 @@
 using AiRaccoon.Core.Access;
 using AiRaccoon.Hosting.Common;
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
@@ -8,6 +7,7 @@ using AiRaccoon.Setup;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Client;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Observability;
 

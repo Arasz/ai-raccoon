@@ -18,13 +18,18 @@ using AiRaccoon.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests;
 
 public static class TestData
 {
+    private const int DeleteTempRootMaxAttempts = 5;
+
     /// <summary>Serializes tests that mutate the process-global AIRACCOON_DB_PASSPHRASE (shared by CliCommandRunnerTests and ConfigCommandsEncryptionTests).</summary>
     public static readonly SemaphoreSlim EnvVarGate = new(1, 1);
+
+    private static readonly TimeSpan DeleteTempRootFirstDelay = TimeSpan.FromMilliseconds(20);
 
     /// <summary>
     ///     Holds <see cref="EnvVarGate" /> as a READER, for a test that opens a bank through the real
@@ -36,22 +41,6 @@ public static class TestData
     {
         await EnvVarGate.WaitAsync(cancellationToken);
         return new EnvGateHold();
-    }
-
-    private sealed class EnvGateHold : IAsyncDisposable
-    {
-        private bool _released;
-
-        public ValueTask DisposeAsync()
-        {
-            if (!_released)
-            {
-                _released = true;
-                EnvVarGate.Release();
-            }
-
-            return ValueTask.CompletedTask;
-        }
     }
 
     /// <summary>Builds a real <see cref="SqliteMemoryStore"/> wired to a <see cref="FileIngestor"/> backed by the given
@@ -155,9 +144,6 @@ public static class TestData
         return root;
     }
 
-    private const int DeleteTempRootMaxAttempts = 5;
-    private static readonly TimeSpan DeleteTempRootFirstDelay = TimeSpan.FromMilliseconds(20);
-
     /// <summary>Idempotent, retry-tolerant teardown for a <see cref="CreateTempRoot"/> directory: a
     /// directory already gone is success (not a spurious Dispose failure), a transient lock — a
     /// handle not yet closed, a scan racing teardown — gets a few short retries. A lock that never
@@ -165,7 +151,7 @@ public static class TestData
     public static void DeleteTempRoot(string path)
     {
         var delay = DeleteTempRootFirstDelay;
-        for (var attempt = 1; ; attempt++)
+        for (var attempt = 1;; attempt++)
         {
             try
             {
@@ -177,7 +163,7 @@ public static class TestData
                 return;
             }
             catch (Exception ex) when (attempt < DeleteTempRootMaxAttempts &&
-                                        ex is IOException or UnauthorizedAccessException)
+                                       ex is IOException or UnauthorizedAccessException)
             {
                 Thread.Sleep(delay);
                 delay += delay;
@@ -233,6 +219,22 @@ public static class TestData
         }
 
         throw new InvalidOperationException($"Could not locate {relative} from the test output directory.");
+    }
+
+    private sealed class EnvGateHold : IAsyncDisposable
+    {
+        private bool _released;
+
+        public ValueTask DisposeAsync()
+        {
+            if (!_released)
+            {
+                _released = true;
+                EnvVarGate.Release();
+            }
+
+            return ValueTask.CompletedTask;
+        }
     }
 
     private sealed class UnreachablePromotionQueueStore : IPromotionQueueStore
@@ -367,7 +369,8 @@ public sealed class FakePromotionQueue : IPromotionQueue
 public sealed class NoOpSearchQualityService : ISearchQualityService
 {
     public Task<int> PurgeOlderThanAsync(long nowUnixSeconds, int retentionDays,
-        CancellationToken cancellationToken = default) => Task.FromResult(0);
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(0);
 
     public Task RecordSearchAsync(string correlationId, string query, string? scope, string? projectId,
         string? sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default) =>
@@ -462,8 +465,7 @@ public sealed class FakeExtractionStore : FakeMemoryStore
             Candidates.GetValueOrDefault(projectId) ?? []);
     }
 
-    public override Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(Index);
+    public override Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) => Task.FromResult(Index);
 
     public override Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
         CancellationToken cancellationToken = default)

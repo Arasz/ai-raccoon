@@ -3,9 +3,9 @@ using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Memory.Filtering.Policies;
+using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Metrics;
 using AiRaccoon.Core.Observability;
 using AiRaccoon.Core.SearchQuality;
@@ -30,6 +30,7 @@ using AiRaccoon.Observability;
 using AiRaccoon.Setup.Models;
 using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Setup;
 

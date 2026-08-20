@@ -43,7 +43,7 @@ public sealed class SqliteMemoryStoreSearchTimingsTests : IDisposable
         result.Timings.Fts.ShouldBeGreaterThan(TimeSpan.Zero);
         result.Timings.Vector.ShouldBe(TimeSpan.Zero, "VectorWeight is 0, so the vector modality never queries");
         result.Timings.Fusion.ShouldBeGreaterThan(TimeSpan.Zero);
-        result.Timings.Affinity.ShouldBeGreaterThan(TimeSpan.Zero);
+        result.Timings.Merge.ShouldBeGreaterThan(TimeSpan.Zero);
         result.Timings.Snippets.ShouldBeGreaterThan(TimeSpan.Zero);
         result.Timings.Bump.ShouldBeGreaterThan(TimeSpan.Zero);
         result.Timings.Total.ShouldBeGreaterThan(TimeSpan.Zero, "Total brackets the whole SearchAsync body");
@@ -110,7 +110,7 @@ public sealed class SqliteMemoryStoreSearchTimingsTests : IDisposable
         result.Timings.Fts.ShouldBe(TimeSpan.FromMilliseconds(22));
         result.Timings.Vector.ShouldBe(TimeSpan.FromMilliseconds(33));
         result.Timings.Fusion.ShouldBe(TimeSpan.FromMilliseconds(44));
-        result.Timings.Affinity.ShouldBe(TimeSpan.FromMilliseconds(55));
+        result.Timings.Merge.ShouldBe(TimeSpan.FromMilliseconds(55));
         result.Timings.Snippets.ShouldBe(TimeSpan.FromMilliseconds(66));
         result.Timings.Bump.ShouldBe(TimeSpan.FromMilliseconds(77));
     }
@@ -126,8 +126,8 @@ public sealed class SqliteMemoryStoreSearchTimingsTests : IDisposable
     /// </summary>
     private sealed class ScriptedTimeProvider(IReadOnlyList<TimeSpan> deltas) : TimeProvider
     {
-        private int _index;
         private long _cursor;
+        private int _index;
 
         public override long TimestampFrequency => TimeSpan.TicksPerSecond;
 

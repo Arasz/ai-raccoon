@@ -1,11 +1,12 @@
 using AiRaccoon.Benchmarks.SearchFixture;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Sqlite.Memory;
 using BenchmarkDotNet.Attributes;
 
 namespace AiRaccoon.Benchmarks.Benchmarks;
 
 /// <summary>
-///     End-to-end <see cref="AiRaccoon.Infrastructure.Sqlite.SqliteMemoryStore.SearchAsync" />
+///     End-to-end <see cref="SqliteMemoryStore.SearchAsync" />
 ///     latency over the WP4 fixture bank (docs/plans/2026-08-08-search-knn-perf.md §5): the
 ///     headline hybrid case plus per-modality variants (FtsWeight=0 / VectorWeight=0) so a
 ///     regression can be attributed to keyword ranking, vector KNN, or fusion/snippet
@@ -32,17 +33,17 @@ public class SearchLatencyBenchmark
     [Benchmark(Baseline = true)]
     public async Task<IReadOnlyList<MemorySearchResult>> SearchAll_Limit10() =>
         (await _bank.Store.SearchAsync(new SearchQuery(SearchFixtureBank.ProjectId, Query,
-            Limit: 10, MinRelativeScore: 0.0))).Results;
+            Limit: 10, MinRelativeScore: 0.0), CancellationToken.None)).Results;
 
     /// <summary>Vector-only (FtsWeight=0): isolates vec0 KNN + fusion + deferred-snippet cost.</summary>
     [Benchmark]
     public async Task<IReadOnlyList<MemorySearchResult>> SearchAll_VectorOnly_Limit10() =>
         (await _bank.Store.SearchAsync(new SearchQuery(SearchFixtureBank.ProjectId, Query,
-            Limit: 10, MinRelativeScore: 0.0, FtsWeight: 0, VectorWeight: 1))).Results;
+            Limit: 10, MinRelativeScore: 0.0, FtsWeight: 0, VectorWeight: 1), CancellationToken.None)).Results;
 
     /// <summary>FTS-only (VectorWeight=0): isolates the FTS5 bm25 + snippet() cost.</summary>
     [Benchmark]
     public async Task<IReadOnlyList<MemorySearchResult>> SearchAll_FtsOnly_Limit10() =>
         (await _bank.Store.SearchAsync(new SearchQuery(SearchFixtureBank.ProjectId, Query,
-            Limit: 10, MinRelativeScore: 0.0, FtsWeight: 1, VectorWeight: 0))).Results;
+            Limit: 10, MinRelativeScore: 0.0, FtsWeight: 1, VectorWeight: 0), CancellationToken.None)).Results;
 }

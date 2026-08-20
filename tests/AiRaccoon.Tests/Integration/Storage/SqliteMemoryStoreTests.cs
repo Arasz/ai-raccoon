@@ -1,4 +1,3 @@
-using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
@@ -8,13 +7,15 @@ using AiRaccoon.Core.Rating;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite.Memory;
+using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
-using AiRaccoon.Tests.TestHelpers;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -22,6 +23,11 @@ namespace AiRaccoon.Tests.Integration.Storage;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class SqliteMemoryStoreTests : IDisposable
 {
+    // ── WP1/WP2: honest write outcome (ADR-0032/0033/0034) ──
+
+    private const string HermesNoiseContent =
+        "[IMPORTANT: Background process proc_1 completed normally (exit code 0).\nCommand: cd /tmp && echo test\nOutput: test]";
+
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
     private readonly string _dataRoot = CreateTempRoot();
@@ -857,7 +863,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         var shared = new[] { Hit("h1", "a.md"), Hit("h2", "b.md") };
         var project = new[] { Hit("h2", "b.md"), Hit("h3", "c.md") };
 
-        var merged = SearchResultMerger.Merge([shared, project], 10, rrfK: 60);
+        var merged = SearchResultMerger.Merge([shared, project], 10);
 
         // h1 = 1/61, h3 = 1/62, h2 = 1/61 + 1/62 -> h2 ranks first and normalizes to 1.0.
         merged.Select(r => r.Hash).ShouldBe(["h2", "h1", "h3"]);
@@ -881,7 +887,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     {
         var results = new[] { Hit("h1", "a.md"), Hit("h2", "b.md"), Hit("h3", "c.md") };
 
-        var merged = SearchResultMerger.Merge([results], 10, 0.9, 10);
+        var merged = SearchResultMerger.Merge([results], 10, 0.9);
 
         // Single-list scores 11/11, 11/12, 11/13; only the top two clear 0.9.
         merged.Select(r => r.Hash).ShouldBe(["h1", "h2"]);
@@ -1094,11 +1100,6 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             new { file });
         count.ShouldBe(3, "one ingest's chunk set, not two");
     }
-
-    // ── WP1/WP2: honest write outcome (ADR-0032/0033/0034) ──
-
-    private const string HermesNoiseContent =
-        "[IMPORTANT: Background process proc_1 completed normally (exit code 0).\nCommand: cd /tmp && echo test\nOutput: test]";
 
     [Fact]
     public async Task RejectedWrite_ReportsNotStored()

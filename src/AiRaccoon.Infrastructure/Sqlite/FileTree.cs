@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AiRaccoon.Infrastructure.Sqlite.Memory;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 

@@ -1,8 +1,9 @@
 using System.Reflection;
+using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Sqlite.Memory;
+using AiRaccoon.Tools;
 using ArchUnitNET.Domain;
-using ArchUnitNET.Fluent;
 using ArchUnitNET.Loader;
-using ArchUnitNET.xUnitV3;
 using ModelContextProtocol.Server;
 using Shouldly;
 using Xunit;
@@ -20,11 +21,11 @@ namespace AiRaccoon.Tests.Unit.Layering;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class LayeringRulesTests
 {
-    private static readonly Assembly CoreAssembly = typeof(Core.Memory.SearchQuery).Assembly;
-    private static readonly Assembly InfrastructureAssembly = typeof(Infrastructure.Sqlite.SqliteMemoryStore).Assembly;
-    private static readonly Assembly HostAssembly = typeof(global::AiRaccoon.Tools.ToolGate).Assembly;
+    private static readonly Assembly CoreAssembly = typeof(SearchQuery).Assembly;
+    private static readonly Assembly InfrastructureAssembly = typeof(SqliteMemoryStore).Assembly;
+    private static readonly Assembly HostAssembly = typeof(ToolGate).Assembly;
 
-    private static readonly ArchUnitNET.Domain.Architecture Architecture =
+    private static readonly Architecture Architecture =
         new ArchLoader().LoadAssemblies(CoreAssembly, InfrastructureAssembly, HostAssembly).Build();
 
     /// <summary>
@@ -75,8 +76,7 @@ public sealed class LayeringRulesTests
         CoreTypes().Count.ShouldBeGreaterThan(100,
             "the networking rule scans this set; if it empties, the rule stops being able to fail");
 
-    private static List<IType> CoreTypes() =>
-        [.. Architecture.Types.Where(t => t.Assembly.Name == CoreAssembly.GetName().Name)];
+    private static List<IType> CoreTypes() => [.. Architecture.Types.Where(t => t.Assembly.Name == CoreAssembly.GetName().Name)];
 
     private static List<string> NetworkingDependenciesInCore() =>
     [

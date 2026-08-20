@@ -1,12 +1,13 @@
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -27,8 +28,8 @@ public sealed class WriteEmbedsTheChunkNotTheDocumentTests : IDisposable
     private const string ProjectId = "acme";
 
     private readonly string _dataRoot = TestData.CreateTempRoot("embed-chunk-not-doc");
-    private readonly SqliteConnectionFactory _factory;
     private readonly CountingEmbeddingService _embeddings = new();
+    private readonly SqliteConnectionFactory _factory;
     private readonly IMemoryStore _store;
 
     public WriteEmbedsTheChunkNotTheDocumentTests()

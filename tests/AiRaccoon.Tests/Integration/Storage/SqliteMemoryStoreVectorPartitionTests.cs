@@ -1,14 +1,14 @@
-using AiRaccoon.Tests.TestHelpers;
-using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -142,5 +142,4 @@ public sealed class SqliteMemoryStoreVectorPartitionTests : IAsyncLifetime
         (await _store.SearchAsync(
             new SearchQuery("acme", query, scope, Limit: limit, MinRelativeScore: 0.0, FtsWeight: 0, VectorWeight: 1),
             TestContext.Current.CancellationToken)).Results;
-
 }

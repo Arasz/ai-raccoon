@@ -1,13 +1,11 @@
-using System.Text.Json;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Infrastructure.Chunking;
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -33,9 +31,9 @@ public sealed class SourceIdentityTests : IDisposable
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
 
     private readonly string _dataRoot;
+    private readonly Dictionary<string, string> _hashMap;
     private readonly ITestOutputHelper _output;
     private readonly SqliteMemoryStore _store;
-    private readonly Dictionary<string, string> _hashMap;
 
     public SourceIdentityTests(ITestOutputHelper output)
     {

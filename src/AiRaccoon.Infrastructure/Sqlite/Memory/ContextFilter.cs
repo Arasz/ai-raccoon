@@ -1,6 +1,6 @@
 using AiRaccoon.Core.Memory;
 
-namespace AiRaccoon.Infrastructure.Sqlite;
+namespace AiRaccoon.Infrastructure.Sqlite.Memory;
 
 /// <summary>
 ///     Maps a context string to a row filter — the read/delete twin of <see cref="EntryBucket"/>,
@@ -13,47 +13,43 @@ internal static class ContextFilter
     ///     Built only from constant fragments; every value goes through parameters, so a user-supplied
     ///     context string can never inject SQL. Callers that accept an untrusted context must first
     ///     pass it through <see cref="ContextScope.RequireWithinProject"/> — this maps, it does not
-    ///     authorise.
+    ///     authorize.
     /// </summary>
-    public static (string Filter, IReadOnlyDictionary<string, object?> Values) For(
-        string context, string projectId, string alias)
+    public static ContextFilterValues For(string context, string projectId, string alias)
     {
         if (context == ContextNaming.SharedContext)
         {
-            return ($"{alias}scope = 'shared'", new Dictionary<string, object?>());
+            return new ContextFilterValues($"{alias}scope = 'shared'", []);
         }
 
         if (context.StartsWith("project:", StringComparison.Ordinal))
         {
-            // Bind the caller's project, never the one parsed out of the context — binding the parsed
-            // id is what let a delete re-target another project.
-            return ($"{alias}scope = 'project' AND {alias}project_id = @projectId",
+            return new ContextFilterValues($"{alias}scope = 'project' AND {alias}project_id = @projectId",
                 new Dictionary<string, object?> { ["projectId"] = projectId });
         }
 
         if (context.StartsWith("workspace:", StringComparison.Ordinal))
         {
-            return ($"{alias}workspace_id = @workspaceId AND {alias}project_id = @projectId",
+            return new ContextFilterValues($"{alias}workspace_id = @workspaceId AND {alias}project_id = @projectId",
                 new Dictionary<string, object?> { ["workspaceId"] = context["workspace:".Length..], ["projectId"] = projectId });
         }
 
         if (context.StartsWith("label:", StringComparison.Ordinal))
         {
-            // Label context (see docs/plans/retrieval-improvement-c.md §3 2e): contributes the
-            // label's custom-scoped rows only — project-scoped rows are already in the project batch
-            // (SearchContexts), and a union here would double-count them in RRF.
             var rest = context["label:".Length..];
             var colon = rest.IndexOf(':', StringComparison.Ordinal);
             if (colon > 0)
             {
                 var label = rest[(colon + 1)..];
-                return (
+                return new ContextFilterValues(
                     $"{alias}scope = 'custom' AND {alias}context_label = @contextLabel AND {alias}project_id = @projectId",
                     new Dictionary<string, object?> { ["projectId"] = projectId, ["contextLabel"] = label });
             }
         }
 
-        return ($"{alias}scope = 'custom' AND {alias}context_label = @contextLabel AND {alias}project_id = @projectId",
+        return new ContextFilterValues($"{alias}scope = 'custom' AND {alias}context_label = @contextLabel AND {alias}project_id = @projectId",
             new Dictionary<string, object?> { ["contextLabel"] = context, ["projectId"] = projectId });
     }
 }
+
+public sealed record ContextFilterValues(string Filter, Dictionary<string, object?> Values);

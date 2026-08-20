@@ -9,6 +9,7 @@ using Microsoft.Extensions.Time.Testing;
 using Microsoft.ML.Tokenizers;
 using Shouldly;
 using Xunit;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -89,6 +90,5 @@ public sealed class ChunkBudgetWithNoProviderTests : IAsyncLifetime
 
     /// <summary>Real repo prose: synthetic filler tokenizes with a lower BERT/o200k ratio and does
     /// not reproduce the mismatch (see ChunkBudgetIsEngineAwareTests).</summary>
-    private static string BuildLongNote() =>
-        File.ReadAllText(TestData.RepoFile("docs/plans/2026-08-14-code-quality-improvement-plan.md"));
+    private static string BuildLongNote() => File.ReadAllText(TestData.RepoFile("docs/plans/2026-08-14-code-quality-improvement-plan.md"));
 }

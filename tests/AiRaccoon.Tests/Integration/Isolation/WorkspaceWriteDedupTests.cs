@@ -1,14 +1,13 @@
-using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
-using AiRaccoon.Tests.TestHelpers;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Isolation;
 
@@ -143,5 +142,4 @@ public sealed class WorkspaceWriteDedupTests : IDisposable
         return await connection.ExecuteScalarAsync<long>(
             "SELECT count(*) FROM entries WHERE hash = @hash", new { hash });
     }
-
 }

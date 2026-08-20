@@ -1,5 +1,5 @@
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite.Memory;
 using Shouldly;
 using Xunit;
 
@@ -15,8 +15,7 @@ namespace AiRaccoon.Tests.Unit.Search;
 public sealed class SearchResultMergerTests
 {
     /// <summary>The closed form the second fusion produces at the default k: (k+1)/(k+rank).</summary>
-    private static double Positional(int rank) =>
-        (SearchQuery.DefaultRrfK + 1.0) / (SearchQuery.DefaultRrfK + rank);
+    private static double Positional(int rank) => (SearchQuery.DefaultRrfK + 1.0) / (SearchQuery.DefaultRrfK + rank);
 
     private static MemorySearchResult Hit(string hash, double ranking) => new(hash, ranking, $"{hash}.md", "s");
 

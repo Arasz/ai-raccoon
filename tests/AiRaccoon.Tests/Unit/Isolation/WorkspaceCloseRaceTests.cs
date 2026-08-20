@@ -1,6 +1,5 @@
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Workspace;
 using Dapper;
@@ -8,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Unit.Isolation;
 
@@ -30,8 +30,8 @@ public sealed class WorkspaceCloseRaceTests : IDisposable
     private readonly string _dataRoot = TestData.CreateTempRoot("airaccoon-workspace-close-race");
     private readonly SqliteConnectionFactory _factory;
     private readonly SqliteMemoryStore _memoryStore;
-    private readonly SqliteWorkspaceStore _workspaceStore;
     private readonly WorkspaceService _service;
+    private readonly SqliteWorkspaceStore _workspaceStore;
 
     public WorkspaceCloseRaceTests()
     {

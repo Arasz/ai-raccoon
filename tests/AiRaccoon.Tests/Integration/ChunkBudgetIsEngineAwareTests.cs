@@ -3,13 +3,13 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using Microsoft.ML.Tokenizers;
 using Shouldly;
 using Xunit;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -78,8 +78,7 @@ public sealed class ChunkBudgetIsEngineAwareTests : IAsyncLifetime
     /// <summary>Real repo prose (not synthetic repeated paragraphs): the review measured that
     /// synthetic filler tokenizes with a lower BERT/o200k ratio than real English technical prose,
     /// so a real document is what actually reproduces RAG-F3's truncation.</summary>
-    private static string BuildLongNote() =>
-        File.ReadAllText(TestData.RepoFile("docs/plans/2026-08-14-code-quality-improvement-plan.md"));
+    private static string BuildLongNote() => File.ReadAllText(TestData.RepoFile("docs/plans/2026-08-14-code-quality-improvement-plan.md"));
 
     private static string CreateTempRoot() => TestData.CreateTempRoot("airaccoon-chunk-budget-tests");
 

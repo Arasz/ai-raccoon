@@ -1,6 +1,6 @@
 using AiRaccoon.Core.Memory;
 
-namespace AiRaccoon.Infrastructure.Sqlite;
+namespace AiRaccoon.Infrastructure.Sqlite.Memory;
 
 /// <summary>
 ///     Source-affinity ranking (see docs/adr/0005-source-affinity-ranking.md): adjacent-chunk boost, source
@@ -9,12 +9,12 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 internal static class SourceAffinityRanker
 {
     public static IReadOnlyList<MemorySearchResult> Rank(
-        IReadOnlyList<MemorySearchResult> candidates,
+        SearchResult searchResult,
         double lambda,
         double consolidationThreshold,
         DocScoreFormula formula)
     {
-        ArgumentNullException.ThrowIfNull(candidates);
+        var candidates = searchResult.Results;
         if (lambda <= 0.0 || candidates.Count == 0)
         {
             return candidates;
@@ -106,17 +106,15 @@ internal static class SourceAffinityRanker
         var bestBySource = new Dictionary<string, MemorySearchResult>(StringComparer.Ordinal);
         foreach (var result in order)
         {
-            if (result.SourceFile is not null && !bestBySource.ContainsKey(result.SourceFile))
+            if (result.SourceFile is not null)
             {
-                bestBySource[result.SourceFile] = result;
+                bestBySource.TryAdd(result.SourceFile, result);
             }
         }
 
         var merged = new HashSet<string>(StringComparer.Ordinal);
         foreach (var result in order)
         {
-            // GH #371: the same -1-vs-0 near-miss SiblingCount guards against — an unknown-position
-            // row (chunk_index = -1) must never merge into another as if it were the neighbour.
             if (result.SourceFile is null
                 || !bestBySource.TryGetValue(result.SourceFile, out var best)
                 || ReferenceEquals(best, result)

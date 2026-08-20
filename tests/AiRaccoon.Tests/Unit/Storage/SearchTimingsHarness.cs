@@ -5,6 +5,7 @@ using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Unit.Storage;
 
@@ -42,11 +43,11 @@ internal static class SearchTimingsHarness
             string? model, string? baseUrl, DateTimeOffset now, CancellationToken cancellationToken) =>
             throw new NotSupportedException("Not exercised by SearchAsync.");
 
-        public Task<bool> DrainMigrationAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
-            throw new NotSupportedException("Not exercised by SearchAsync.");
+        public Task<bool> DrainMigrationAsync(SqliteConnection connection, CancellationToken cancellationToken) => throw new NotSupportedException("Not exercised by SearchAsync.");
 
         public Task EmbedIfConfiguredAsync(SqliteConnection connection, long id, string value,
-            CancellationToken cancellationToken) => Task.CompletedTask;
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
 
         public Task<int> EmbedPendingAsync(SqliteConnection connection, string projectId, int? limit,
             CancellationToken cancellationToken) =>

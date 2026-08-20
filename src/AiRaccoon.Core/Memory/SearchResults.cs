@@ -20,14 +20,22 @@ public sealed record SearchTimings(
     TimeSpan Fts,
     TimeSpan Vector,
     TimeSpan Fusion,
-    TimeSpan Affinity,
+    TimeSpan Merge,
+    TimeSpan Adjustment,
     TimeSpan Snippets,
     TimeSpan Bump,
     TimeSpan Total)
 {
+    /// <summary>
+    ///     The metric name <see cref="Total" /> records under. Not in <see cref="PhaseNames" /> (F11):
+    ///     it is a measured member of this record, not a decomposition entry, so a consumer that ever
+    ///     sums <see cref="PhaseNames" /> can never double-count it.
+    /// </summary>
+    public const string TotalName = "search.total";
+
     /// <summary>All-zero timings, for a caller that has not measured phases yet (WP1, before WP2 lands).</summary>
     public static SearchTimings Empty { get; } = new(TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero,
-        TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero);
+        TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero);
 
     /// <summary>
     ///     The metric names a search records — `search.&lt;phase&gt;`, one per constructor parameter
@@ -42,28 +50,21 @@ public sealed record SearchTimings(
         "search.fusion", "search.affinity", "search.snippets", "search.bump"
     ];
 
-    /// <summary>
-    ///     The metric name <see cref="Total" /> records under. Not in <see cref="PhaseNames" /> (F11):
-    ///     it is a measured member of this record, not a decomposition entry, so a consumer that ever
-    ///     sums <see cref="PhaseNames" /> can never double-count it.
-    /// </summary>
-    public const string TotalName = "search.total";
-
     /// <summary>Every series a search records — <see cref="PhaseNames" /> plus <see cref="TotalName" /> — derived once, so downstream readers never keep a second hand-written copy (derive-or-delete-the-list).</summary>
     public static IReadOnlyList<string> SeriesNames { get; } = [.. PhaseNames, TotalName];
 
     /// <summary>This instance's phases as name/value pairs, in the same order as <see cref="PhaseNames" />.</summary>
     public IReadOnlyList<(string Name, TimeSpan Value)> Phases() =>
-        [
-            (PhaseNames[0], Open),
-            (PhaseNames[1], Embed),
-            (PhaseNames[2], Fts),
-            (PhaseNames[3], Vector),
-            (PhaseNames[4], Fusion),
-            (PhaseNames[5], Affinity),
-            (PhaseNames[6], Snippets),
-            (PhaseNames[7], Bump)
-        ];
+    [
+        (PhaseNames[0], Open),
+        (PhaseNames[1], Embed),
+        (PhaseNames[2], Fts),
+        (PhaseNames[3], Vector),
+        (PhaseNames[4], Fusion),
+        (PhaseNames[5], Merge),
+        (PhaseNames[6], Snippets),
+        (PhaseNames[7], Bump)
+    ];
 
     /// <summary>This instance's series as name/value pairs — <see cref="Phases" /> plus <see cref="Total" /> under <see cref="TotalName" /> — mirroring <see cref="FusionDiff.Measurements" />.</summary>
     public IReadOnlyList<(string Name, TimeSpan Value)> Measurements() => [.. Phases(), (TotalName, Total)];

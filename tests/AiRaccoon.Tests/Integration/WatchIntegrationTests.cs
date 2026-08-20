@@ -1,7 +1,6 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Watch;
@@ -10,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -639,7 +639,8 @@ public sealed class WatchIntegrationTests
             _factory = new SqliteConnectionFactory(
                 new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
                 NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
-            Memory = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), Time, TestData.CreateEmbeddingService());
+            Memory = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), Time,
+                TestData.CreateEmbeddingService());
             WatchStore = new WatchStore(_factory);
             ScanGuard = new WatchScanGuard();
             Pipeline = new WatchPipeline(new WatchScheduler(),
@@ -712,7 +713,8 @@ public sealed class WatchIntegrationTests
             System.IO.File.SetLastWriteTimeUtc(path, Time.GetUtcNow().Subtract(age).UtcDateTime);
         }
 
-        public async Task<IReadOnlyList<MemorySearchResult>> SearchAsync(string query, CancellationToken cancellationToken) => (await Memory.SearchAsync(new SearchQuery(Project, query), cancellationToken)).Results;
+        public async Task<IReadOnlyList<MemorySearchResult>> SearchAsync(string query, CancellationToken cancellationToken) =>
+            (await Memory.SearchAsync(new SearchQuery(Project, query), cancellationToken)).Results;
 
         public async Task<int> CountEntriesAsync(string path, string? valueContains,
             CancellationToken cancellationToken)

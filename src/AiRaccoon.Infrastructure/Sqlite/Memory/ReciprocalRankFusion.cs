@@ -1,6 +1,6 @@
 using AiRaccoon.Core.Memory;
 
-namespace AiRaccoon.Infrastructure.Sqlite;
+namespace AiRaccoon.Infrastructure.Sqlite.Memory;
 
 /// <summary>
 ///     Reciprocal rank fusion (FR-NM-4; see docs/work/features-native-memory/native-memory.feature): score = sum of weight / (k + rank) per retrieving
@@ -9,12 +9,11 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 internal static class ReciprocalRankFusion
 {
     public static IReadOnlyList<MemorySearchResult> Fuse(
-        IReadOnlyList<(IReadOnlyList<MemorySearchResult> List, double Weight)> lists,
+        IReadOnlyList<WeightedResults> results,
         int k,
         double minRelativeScore,
         int limit)
     {
-        ArgumentNullException.ThrowIfNull(lists);
         if (k <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(k));
@@ -23,7 +22,7 @@ internal static class ReciprocalRankFusion
         var scores = new Dictionary<string, double>(StringComparer.Ordinal);
         var payloads = new Dictionary<string, MemorySearchResult>(StringComparer.Ordinal);
 
-        foreach (var (list, weight) in lists)
+        foreach (var (list, weight) in results)
         {
             if (list.Count == 0)
             {
@@ -55,3 +54,5 @@ internal static class ReciprocalRankFusion
         ];
     }
 }
+
+public sealed record WeightedResults(IReadOnlyList<MemorySearchResult> Result, double Weight);

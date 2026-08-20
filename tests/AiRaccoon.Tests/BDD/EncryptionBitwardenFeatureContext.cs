@@ -1,17 +1,15 @@
-using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Encryption;
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
-using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging.Testing;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.BDD;
 
@@ -239,7 +237,8 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
     private sealed class PathSwitchingRunner(Func<string> path) : ICliSecretManager
     {
         public Task<BwsResult> RunAsync(IReadOnlyList<string> args, string? token, TimeSpan timeout,
-            CancellationToken cancellationToken = default) => new BitwardenCliSecretManager(path()).RunAsync(args, token, timeout, cancellationToken);
+            CancellationToken cancellationToken = default) =>
+            new BitwardenCliSecretManager(path()).RunAsync(args, token, timeout, cancellationToken);
     }
 
     private sealed class StubEnvProvider(string? passphrase) : IEncryptionKeyProvider
@@ -248,8 +247,6 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
 
         public bool IsForSource(string source) => Source.Equals(source, StringComparison.Ordinal);
 
-        public Task<Passphrase> GetPassphraseAsync(EncryptionData encryptionData, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new Passphrase(Source) { Value = passphrase });
+        public Task<Passphrase> GetPassphraseAsync(EncryptionData encryptionData, CancellationToken cancellationToken = default) => Task.FromResult(new Passphrase(Source) { Value = passphrase });
     }
-
 }

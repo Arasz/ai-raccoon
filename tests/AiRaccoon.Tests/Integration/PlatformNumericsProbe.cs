@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics.Arm;
 using System.Runtime.Intrinsics.X86;
@@ -14,6 +15,7 @@ using Microsoft.Extensions.Time.Testing;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using Xunit;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -80,7 +82,7 @@ public sealed class PlatformNumericsProbe : IDisposable
         _output.WriteLine($"Avx2={Avx2.IsSupported} Avx512F={Avx512F.IsSupported} " +
                           $"Avx512BW={Avx512BW.IsSupported} AvxVnni={AvxVnni.IsSupported} " +
                           $"Sse41={Sse41.IsSupported} AdvSimd={AdvSimd.IsSupported} Dp={Dp.IsSupported}");
-        _output.WriteLine($"VectorFloatCount={System.Numerics.Vector<float>.Count}");
+        _output.WriteLine($"VectorFloatCount={Vector<float>.Count}");
         if (File.Exists("/proc/cpuinfo"))
         {
             var model = File.ReadLines("/proc/cpuinfo").FirstOrDefault(l => l.StartsWith("model name", StringComparison.Ordinal));
@@ -170,6 +172,12 @@ public sealed class PlatformNumericsProbe : IDisposable
     }
 
     private sealed record BaselineQuery(
-        string Id, string Category, string Query, string? ExpectedSource,
-        string? ExpectedKnowledge, string Scope, int SearchLimit, bool NegativeTest);
+        string Id,
+        string Category,
+        string Query,
+        string? ExpectedSource,
+        string? ExpectedKnowledge,
+        string Scope,
+        int SearchLimit,
+        bool NegativeTest);
 }

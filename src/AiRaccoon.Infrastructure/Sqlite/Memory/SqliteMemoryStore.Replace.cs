@@ -1,7 +1,7 @@
 using Dapper;
 using Microsoft.Data.Sqlite;
 
-namespace AiRaccoon.Infrastructure.Sqlite;
+namespace AiRaccoon.Infrastructure.Sqlite.Memory;
 
 /// <summary>Replace-by-path: the watch digest's fingerprint-gated <see cref="ReplaceIfFileChangedAsync" />
 /// and a repair's unconditional <see cref="ReplaceAsync" />, both over one shared transactional core.</summary>

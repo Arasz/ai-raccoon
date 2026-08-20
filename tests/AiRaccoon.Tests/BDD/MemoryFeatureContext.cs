@@ -1,11 +1,10 @@
-using AiRaccoon.Core.Chunking;
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
-using AiRaccoon.Tests.TestHelpers;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.BDD;
 
@@ -41,5 +40,4 @@ public class MemoryFeatureContext : IDisposable
     public async Task<SqliteConnection> OpenBankAsync(CancellationToken cancellationToken = default) => await Factory.OpenBankAsync(cancellationToken);
 
     private static string CreateTempRoot() => TestData.CreateTempRoot();
-
 }
