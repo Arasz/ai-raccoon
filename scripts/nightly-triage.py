@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -111,6 +112,31 @@ def build_filter(fqns: list[str]) -> str:
     return "|".join(f"FullyQualifiedName~{fqn}" for fqn in fqns)
 
 
+# Class FQNs are safe in a --filter value; the only fatal character is the space, and these
+# shapes (verified 2026-08-20: `+` and backtick included) never contain one.
+_FILTER_SAFE_PART = re.compile(r"[A-Za-z0-9_.+`]+")
+
+
+def class_fqns_from_test_names(fqns: list[str]) -> list[str]:
+    """Class FQNs from trx testNames, deduped, order-preserving.
+
+    xunit v3 theory rows carry the argument-rendered display name in the trx testName:
+    'Ns.Class.Method(label: "...", argv: [...])'. The first '(' always opens the method's
+    argument list (C# identifiers cannot contain '('), and the method name is the last
+    '.'-separated segment before it. A class-level rerun is wider than the failed rows but
+    safe: classification stays per-FQN on the first run's failures, and a rerun-only failure
+    goes red (main()).
+    """
+    classes: list[str] = []
+    seen: set[str] = set()
+    for fqn in fqns:
+        cls = fqn.split("(", 1)[0].rsplit(".", 1)[0]
+        if cls not in seen:
+            seen.add(cls)
+            classes.append(cls)
+    return classes
+
+
 def classify(failed_tests: list[str], ledger: dict[str, dict],
              rerun_failed: set[str]) -> dict[str, str]:
     """Per-FQN verdict: known (in ledger), regression (failed again), flake (passed alone)."""
@@ -146,7 +172,8 @@ def format_duration(seconds: float | None) -> str:
     return f"{minutes}m{secs:02d}s"
 
 
-def summarize(date: str, verdict: str, trx: dict, classes: dict[str, str]) -> str:
+def summarize(date: str, verdict: str, trx: dict, classes: dict[str, str],
+              rerun_only: frozenset[str] = frozenset()) -> str:
     """The one-liner that is the run's whole report card."""
     parts = [f"{date} {verdict}",
              f"{trx['passed']} passed / {trx['failed']} failed / {trx['skipped']} skipped",
@@ -163,15 +190,19 @@ def summarize(date: str, verdict: str, trx: dict, classes: dict[str, str]) -> st
     unclassifiable = [fqn for fqn, c in classes.items() if c == "unclassifiable"]
     if unclassifiable:
         parts.append("unclassifiable: " + ", ".join(unclassifiable))
+    if rerun_only:
+        parts.append("new failures in rerun: " + ", ".join(sorted(rerun_only)))
     return " — ".join(parts)
 
 
-def write_classification(verdict: str, classes: dict[str, str], trx: dict) -> None:
+def write_classification(verdict: str, classes: dict[str, str], trx: dict,
+                         rerun_only: frozenset[str] = frozenset()) -> None:
     os.makedirs(TEST_RESULTS, exist_ok=True)
     payload = {
         "verdict": verdict,
         "all_ledgered": bool(classes) and all(c == "known" for c in classes.values()),
         "failed": [{"test": fqn, "class": cls} for fqn, cls in sorted(classes.items())],
+        "rerun_only": sorted(rerun_only),
         "counts": {k: trx[k] for k in ("total", "passed", "failed", "skipped")},
         "duration_s": trx_duration_s(trx),
     }
@@ -205,26 +236,69 @@ def write_step_summary(summary: str) -> None:
         pass
 
 
-def gh(args: list[str]) -> str:
-    return subprocess.run(["gh", *args], capture_output=True, text=True, check=False).stdout.strip()
+def gh(args: list[str]) -> subprocess.CompletedProcess:
+    """Runs gh and returns the full result — the caller decides what a failure means.
+
+    A silent failure here is a lost notification (2026-08-20: the create 422'd on a missing
+    'nightly' label and the script reported nothing), so callers must surface rc/stderr.
+    """
+    try:
+        return subprocess.run(["gh", *args], capture_output=True, text=True, check=False)
+    except FileNotFoundError:
+        return subprocess.CompletedProcess(["gh", *args], returncode=127,
+                                           stdout="", stderr="gh: command not found")
 
 
-def file_or_comment_issue(summary_line: str, classes: dict[str, str], first_fqn: str) -> None:
-    """Create one open issue per failing test family, or comment on the existing one."""
+def file_or_comment_issue(summary_line: str, classes: dict[str, str], first_fqn: str) -> str:
+    """Create one open issue per failing test family, or comment on the existing one.
+
+    Returns a note ("" on success) the caller folds into the summary line — a gh failure
+    must be visible, not swallowed. The issue title/search use the METHOD FQN (everything
+    before the first '('): the display-name-suffixed theory FQN carries GitHub search
+    operators ('(', ')', '"', 'label:') and can exceed the search/title limits.
+    """
     if "GH_TOKEN" not in os.environ:
-        return
+        return ""
     run_url = (f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/"
                f"{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/"
                f"{os.environ.get('GITHUB_RUN_ID', '')}")
     body = (f"{summary_line}\n\nRun: {run_url}\n\nDiagnostics: "
             f"`nightly-diagnostics` artifact (trx, classification, serve logs).")
-    existing = gh(["issue", "list", "--label", "nightly", "--state", "open",
-                   "--search", first_fqn, "--json", "number", "--jq", ".[0].number"])
+    clean_fqn = first_fqn.split("(", 1)[0] if first_fqn != "unclassifiable" else first_fqn
+
+    # The 'nightly' label may not exist in a fresh repo; create it idempotently so the
+    # issue create cannot 422 on it (the 2026-08-20 silent-failure root cause).
+    label_ok = gh(["label", "create", "nightly", "--force", "--color", "d73a4a",
+                   "--description", "red nightly run"]).returncode == 0
+    notes: list[str] = []
+    if not label_ok:
+        notes.append("gh label create nightly failed — filing without the label")
+
+    search = gh(["issue", "list", "--state", "open", "--search", f"{clean_fqn} in:title",
+                 "--json", "number", "--jq", ".[0].number"])
+    if search.returncode != 0:
+        notes.append("gh issue list failed (rc {0}): {1}".format(
+            search.returncode, search.stderr.strip() or search.stdout.strip() or "no output"))
+        return "; ".join(notes)
+    existing = search.stdout.strip()
+
+    title = f"nightly red {os.environ.get('GITHUB_RUN_DATE', '')}: {clean_fqn}"
+    if not label_ok:
+        title = f"[nightly] {title}"
     if existing:
-        gh(["issue", "comment", existing, "--body", body])
+        result = gh(["issue", "comment", existing, "--body", body])
+        step = "issue comment"
     else:
-        title = f"nightly red {os.environ.get('GITHUB_RUN_DATE', '')}: {first_fqn}"
-        gh(["issue", "create", "--title", title, "--body", body, "--label", "nightly"])
+        args = ["issue", "create", "--title", title, "--body", body]
+        if label_ok:
+            args += ["--label", "nightly"]
+        result = gh(args)
+        step = "issue create"
+    if result.returncode != 0:
+        notes.append("gh {0} failed (rc {1}): {2}".format(
+            step, result.returncode,
+            result.stderr.strip() or result.stdout.strip() or "no output"))
+    return "; ".join(notes)
 
 
 def main() -> int:
@@ -234,18 +308,20 @@ def main() -> int:
     first_trx = TEST_RESULTS / "nightly.trx"
     if not first_trx.exists():
         summary = f"{today} red(unclassifiable) — no trx after the first run (build failure or test-host crash)"
+        note = file_or_comment_issue(summary, {}, "unclassifiable")
+        summary = f"{summary} — gh: {note}" if note else summary
         print(summary)
         write_step_summary(summary)
-        file_or_comment_issue(summary, {}, "unclassifiable")
         return 1
 
     trx = safe_parse_trx(first_trx)
     if trx is None:
         summary = (f"{today} red(unclassifiable) — corrupt/truncated trx after the first run "
                    "(test-host crash mid-write)")
+        note = file_or_comment_issue(summary, {}, "unclassifiable")
+        summary = f"{summary} — gh: {note}" if note else summary
         print(summary)
         write_step_summary(summary)
-        file_or_comment_issue(summary, {}, "unclassifiable")
         return 1
 
     failed = trx["failed_tests"]
@@ -261,20 +337,22 @@ def main() -> int:
             summary = f"{today} green — {trx['passed']} passed / 0 failed / {trx['skipped']} skipped — " \
                       f"{format_duration(trx_duration_s(trx))}"
             verdict = "green"
+        if verdict != "green":
+            note = file_or_comment_issue(summary, {}, "unclassifiable")
+            summary = f"{summary} — gh: {note}" if note else summary
         print(summary)
         write_step_summary(summary)
         write_classification(verdict, {}, trx)
-        if verdict != "green":
-            file_or_comment_issue(summary, {}, "unclassifiable")
         return 0 if verdict == "green" else 1
 
     if len(failed) > MASS_FAILURE_THRESHOLD:
         summary = f"{today} red(mass failure) — {len(failed)} failed, no rerun " \
                   f"(environment signal, not {len(failed)} individual flakes)"
+        note = file_or_comment_issue(summary, {}, failed[0])
+        summary = f"{summary} — gh: {note}" if note else summary
         print(summary)
         write_step_summary(summary)
         write_classification("mass", {}, trx)
-        file_or_comment_issue(summary, {}, failed[0])
         return 1
 
     # Rerun only the failures the ledger does not already own.
@@ -284,13 +362,23 @@ def main() -> int:
     if unknowns:
         rerun_trx_path = TEST_RESULTS / "rerun.trx"
         rerun_trx_path.unlink(missing_ok=True)  # a stale trx from a prior local run must not count
-        rerun = run_dotnet_test("rerun.trx", ["--no-build", "--filter", build_filter(unknowns)])
-        parsed = safe_parse_trx(rerun_trx_path) if rerun_trx_path.exists() else None
-        if parsed is not None:
-            rerun_failed = set(parsed["failed_tests"])
-        # A crashed rerun proves nothing: the unknowns it did not re-fail stay unclassifiable,
-        # not "flake" — only an intact, all-green rerun earns that verdict.
-        rerun_crashed = rerun.returncode != 0 or parsed is None
+        # Class-level filter: trx testNames for xunit theory rows carry the argument-rendered
+        # display name, whose spaces break `dotnet test --filter` at MSBuild parsing (MSB4177,
+        # 2026-08-20 — the rerun never ran and every failure came back unclassifiable).
+        class_names = class_fqns_from_test_names(unknowns)
+        if any(not _FILTER_SAFE_PART.fullmatch(name) for name in class_names):
+            # An FQN shape the derivation cannot guarantee safe (e.g. a future generic-method
+            # FQN): fail safe — no rerun, the unknowns stay unclassifiable.
+            rerun_crashed = True
+        else:
+            rerun = run_dotnet_test("rerun.trx",
+                                    ["--no-build", "--filter", build_filter(class_names)])
+            parsed = safe_parse_trx(rerun_trx_path) if rerun_trx_path.exists() else None
+            if parsed is not None:
+                rerun_failed = set(parsed["failed_tests"])
+            # A crashed rerun proves nothing: the unknowns it did not re-fail stay unclassifiable,
+            # not "flake" — only an intact, all-green rerun earns that verdict.
+            rerun_crashed = rerun.returncode != 0 or parsed is None
 
     classes = classify(failed, ledger, rerun_failed)
     if rerun_crashed:
@@ -298,16 +386,32 @@ def main() -> int:
             if classes[fqn] == "flake":
                 classes[fqn] = "unclassifiable"
 
+    # A class-level rerun exercises tests that PASSED in the first run; one of those failing is
+    # a red nobody asked for — name it and never let it hide behind a green-looking exit.
+    rerun_only = rerun_failed - set(failed) - set(ledger)
+    for fqn in sorted(rerun_only):
+        classes[fqn] = "unclassifiable"
+
+    # A rerun that failed anything is not the "intact, all-green rerun" that earns a flake
+    # verdict — downgrade the first-run unknowns so the ledger never records a flake on
+    # evidence that was itself red.
+    if rerun_failed:
+        for fqn in unknowns:
+            if classes[fqn] == "flake":
+                classes[fqn] = "unclassifiable"
+
     all_ledgered = all(c == "known" for c in classes.values())
     verdict = "green(known flakes only)" if all_ledgered else "red"
-    summary = summarize(today, verdict, trx, classes)
-    print(summary)
-    write_step_summary(summary)
-    write_classification(verdict, classes, trx)
-
+    summary = summarize(today, verdict, trx, classes, frozenset(rerun_only))
     if not all_ledgered:
         copy_serve_logs()
-        file_or_comment_issue(summary, classes, failed[0])
+        note = file_or_comment_issue(summary, classes, failed[0])
+        summary = f"{summary} — gh: {note}" if note else summary
+    print(summary)
+    write_step_summary(summary)
+    write_classification(verdict, classes, trx, frozenset(rerun_only))
+
+    if not all_ledgered:
         return 1
     return 0
 
