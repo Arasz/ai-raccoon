@@ -1,9 +1,12 @@
+using System.Data.Common;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Memory;
 using AiRaccoon.Tests.TestHelpers;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -149,5 +152,81 @@ public sealed class SearchParametersResolutionTests : IDisposable
         var hit = results.ShouldHaveSingleItem();
         hit.Hash.ShouldBe(entry.Hash);
         hit.Ranking.ShouldBe(1.0);
+    }
+
+    [Fact]
+    public async Task GetSearchParameterDefaults_ResolvesBothSources_OnTheCallersConnection()
+    {
+        // The read-count criterion (ADR-0083, plan §7) pins two halves. The SELECT-level
+        // half is structural: the resolution method's only settings SQL is the two MemorySql
+        // constants (one retrieval.% prefix read + one fusion-key read) — pinned by the
+        // acceptance grep (plan §7) and by this test resolving BOTH sources in one call on
+        // the caller's own connection. The connection-level half — no per-option bank opens —
+        // is pinned by Search_OpensExactlyOneBankConnection (a per-statement spy is not
+        // possible on Microsoft.Data.Sqlite: SqliteCommand is sealed and CreateCommand's
+        // covariant return cannot be intercepted).
+        var ct = TestContext.Current.CancellationToken;
+        await _store.SetSettingAsync(SearchParameterSettingsKeys.RrfK, "30", ct);
+        await _store.SetSettingAsync(FusionConfigKeys.NoRegressionEnabledGlobal, "true", ct);
+
+        await using var connection = await _factory.OpenBankAsync(ct);
+        var defaults = await _store.GetSearchParameterDefaultsAsync(connection, ct);
+
+        defaults.RrfK.ShouldBe(30);
+        defaults.FusionNoRegressionEnabled.ShouldBe(true);
+        defaults.SourceLambda.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Search_OpensExactlyOneBankConnection()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var counting = new CountingConnectionFactory(_factory);
+        var store = TestData.CreateMemoryStore(counting, NullLogger<SqliteMemoryStore>.Instance,
+            new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
+            TestData.CreateEmbeddingService());
+        await store.WriteAsync(new MemoryWriteRequest("acme", "one connection for the whole search"), ct);
+        counting.Reset();
+
+        await store.SearchAsync(new SearchQuery("acme", "one", VectorWeight: 0), ct);
+
+        // The plan review's M1 concern: per-option settings reads opening their own bank
+        // connections (up to 9 per search). The batched defaults resolution keeps the
+        // whole search — settings included — on exactly one connection.
+        counting.OpenCount.ShouldBe(1);
+    }
+
+    /// <summary>Counts bank opens; delegates everything else to the real factory.</summary>
+    private sealed class CountingConnectionFactory(ISqliteConnectionFactory inner) : ISqliteConnectionFactory
+    {
+        public int OpenCount { get; private set; }
+
+        public void Reset() => OpenCount = 0;
+
+        public string BankPath => inner.BankPath;
+
+        public async Task<SqliteConnection> OpenBankAsync(CancellationToken cancellationToken = default)
+        {
+            OpenCount++;
+            return await inner.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        public Task<bool> MigrateLegacyKeyAsync(CancellationToken cancellationToken = default) =>
+            inner.MigrateLegacyKeyAsync(cancellationToken);
+
+        public Task<SqliteConnection> OpenBankWithResolvedKeyAsync(ResolvedKey resolvedKey,
+            CancellationToken cancellationToken = default) => inner.OpenBankWithResolvedKeyAsync(resolvedKey, cancellationToken);
+
+        public Task RekeyBankAsync(string newKey, CancellationToken cancellationToken = default) =>
+            inner.RekeyBankAsync(newKey, cancellationToken);
+
+        public Task RekeyBankAsync(string newKey, string? currentKey, CancellationToken cancellationToken = default) =>
+            inner.RekeyBankAsync(newKey, currentKey, cancellationToken);
+
+        public Task<SqliteConnection> OpenBankWithKeyAsync(string? key, CancellationToken cancellationToken = default) =>
+            inner.OpenBankWithKeyAsync(key, cancellationToken);
+
+        public Task<SqliteConnection> OpenBankSkippingEnsureAsync(CancellationToken cancellationToken = default) =>
+            inner.OpenBankSkippingEnsureAsync(cancellationToken);
     }
 }

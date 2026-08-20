@@ -24,7 +24,8 @@ public static class SearchParameterSettingsKeys
     public const string FusionNoRegressionEnabled = FusionConfigKeys.NoRegressionEnabledGlobal;
 
     // Chosen values, docs/adr/0006 (pinned by SearchParameterSettingsKeysTests).
-    public const int DefaultRrfK = 60;
+    // DefaultRrfK is aliased to SearchQuery's constant so the value lives in one place.
+    public const int DefaultRrfK = SearchQuery.DefaultRrfK;
     public const int DefaultFtsWeight = 1;
     public const int DefaultVectorWeight = 1;
     public const double DefaultSourceLambda = 0.1;

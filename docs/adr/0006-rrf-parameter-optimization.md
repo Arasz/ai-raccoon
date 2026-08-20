@@ -4,6 +4,9 @@ Date: 2026-08-04
 
 Status: Accepted. The "minScore semantics" section is superseded by
 [ADR-0047](0047-relative-score-floor.md); the chosen fusion parameters are unaffected.
+Amended 2026-08-20 — the parameter VALUES stand unchanged; their PROVENANCE is now
+query > settings > canonical constants, resolved per search via `SearchParameters`
+(ADR-0083).
 Amended 2026-08-09 — the parameters below stand unchanged; the second,
 cross-context RRF pass they were measured through is removed (see the amendment at the end).
 Amended 2026-08-14 — the gate corpus was regenerated (WP4); the chosen parameters are

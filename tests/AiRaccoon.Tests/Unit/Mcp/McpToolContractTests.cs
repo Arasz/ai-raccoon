@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Setup;
 using Microsoft.Extensions.DependencyInjection;
@@ -79,6 +80,21 @@ public sealed class McpToolContractTests : IAsyncLifetime
         var actual = string.Join('\n', Tools().Select(Describe));
 
         actual.ShouldBe(ExpectedContract);
+    }
+
+    [Fact]
+    public void MemorySearchEnumWireValues_AreTheDocumentedContract()
+    {
+        // The two enum knobs travel as plain string? params (the schema cannot carry value
+        // lists for them), so the wire values are pinned here against the parse helpers —
+        // a rename in SearchParameterSettingsKeys or a rejected value change is a contract
+        // break, not an implementation detail (ADR-0083, plan S2).
+        SearchParameterSettingsKeys.ParseDocScoreFormula("max").ShouldBe(Core.Memory.DocScoreFormula.Max);
+        SearchParameterSettingsKeys.ParseDocScoreFormula("sum").ShouldBe(Core.Memory.DocScoreFormula.Sum);
+        SearchParameterSettingsKeys.ParseDocScoreFormula("avg").ShouldBeNull();
+        SearchParameterSettingsKeys.ParseCandidateWindow("max3x100").ShouldBe(CandidateWindowMode.Max3X100);
+        SearchParameterSettingsKeys.ParseCandidateWindow("max5x50").ShouldBe(CandidateWindowMode.Max5X50);
+        SearchParameterSettingsKeys.ParseCandidateWindow("max").ShouldBeNull();
     }
 
     /// <summary>

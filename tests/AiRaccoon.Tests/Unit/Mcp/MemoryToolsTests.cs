@@ -466,6 +466,7 @@ public class MemoryToolsTests
             _tools.Search("acme", "query", rrfK: rrfK, cancellationToken: TestContext.Current.CancellationToken));
 
         ToolRefusals.PrefixFor(ex).ShouldBe("invalid-params", "the wire prefix is the contract, not the exception type");
+        _store.LastQuery.ShouldBeNull("the store must not be reached when the provided values are invalid");
     }
 
     [Fact]
@@ -475,6 +476,7 @@ public class MemoryToolsTests
             _tools.Search("acme", "query", sourceLambda: 2.0, cancellationToken: TestContext.Current.CancellationToken));
 
         ToolRefusals.PrefixFor(ex).ShouldBe("invalid-params");
+        _store.LastQuery.ShouldBeNull("the store must not be reached when the provided values are invalid");
     }
 
     [Theory]
