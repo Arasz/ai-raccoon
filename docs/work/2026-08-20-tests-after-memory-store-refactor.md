@@ -22,7 +22,7 @@ API adjustment and needs a decision — none of it is fixable from the test side
 
 ## Failing tests — probable reason
 
-### A. Second RRF pass removed from `SearchResultMerger.Merge` (9 tests)
+### A. Second RRF pass removed from `SearchResultMerger.Merge` (9 tests — RESOLVED)
 
 The refactor deleted the internal re-fusion (the ADR-0058 "redundant second fusion"); Merge now
 ranks the already-fused list directly. Tests that pinned the old two-pass behavior fail:
@@ -43,6 +43,14 @@ unit fixtures with all-zero rankings hit `0/0 = NaN`, which the min-score filter
 the empty served list in `WithNoSiblings`. The `Merge_RebuildsScores...` test documents itself
 as the signal to delete when this pass is removed (ADR-0058).
 
+Resolved 2026-08-20: owner ruling restored the single-list re-fusion inside `Merge`
+(`rrfK` threaded from the query; commit 404ba926) — the nine unit tests pass again. The two
+`SqliteMemoryStoreTests` cases were rewritten to the current contract: `Merge_AppliesMinScore`
+regained its explicit `rrfK: 10` (the compile-time adjustment had dropped it), and
+`Merge_RrfAcrossContextBatches` now fuses the two context batches first (production shape) and
+asserts both halves — the original 62/123 normalization math lives at the fusion layer where it
+belongs.
+
 ### B. Search phase timings restructured (2 tests — RESOLVED)
 
 - `SqliteMemoryStoreSearchTimingsTests.Search_AttributesEachPhasesElapsedTime_ToThatPhaseAndNoOther`
@@ -60,7 +68,7 @@ bump) and the "every phase that ran" test asserts the new Adjustment phase; both
 entry so the deferred-snippet path and access bump actually do work (their timings are only
 non-zero when they have work). Class now 4/4 green.
 
-### C. Retrieval quality gates (7 tests)
+### C. Retrieval quality gates (7 tests — RESOLVED)
 
 - `HeldOutRetrievalGateTests.HeldOutMean_HoldsItsFloor` (nDCG@5 0.257 vs 0.2796 floor)
 - `HeldOutRetrievalGateTests.HeldOutQueries_HoldTheirPinnedNdcg5Floor`
@@ -74,6 +82,33 @@ Probable reason: the pipeline change alters served rankings (floor now applies t
 scores, affinity boost adds to them directly). The held-out nDCG@5 floor dropped ~2.3 points —
 the gates are doing their job, and the baselines were measured on the pre-refactor pipeline.
 Re-pinning the floors without investigating the regression would hide it.
+
+Resolved 2026-08-20: with the fusion restored in `Merge` (category A) and the two search-path
+bugs fixed (below), all seven gates pass against their original pins — no floors moved. The
+earlier nDCG drop was not a real ranking regression but the missing OR-fallback: held-out queries
+are multi-token, the primary AND under-matched, and the fallback re-query re-ran the same AND
+expression, so every such search returned (near-)nothing.
+
+## Two search-path code bugs found while fixing the BDD/Integration failures (RESOLVED)
+
+1. **OR-fallback never fired.** `FtsSearch`'s fallback re-query built its parameters with
+   `DynamicParameters.SearchParameters`, which binds `@query` to `plan.Expression` — the same AND
+   expression the primary query just under-matched. `plan.Fallback` was dead code. Evidence:
+   BDD "Search spans project and workspace when the workspace is named" ("fact finding" — two
+   tokens, no chunk contains both) returned 0 of the expected 2. Fixed with a dedicated
+   `FallbackSearchParameters` binding `plan.Fallback` (plus a `QueryFallbackFtsBatchAsync` facade
+   that records the actual expression per row so native snippet resolution re-runs the right
+   MATCH). The BDD scenario was RIGHT; the code had the bug.
+2. **Merge applied the candidate-window size as the final limit.** The
+   `Merge(searchResults, searchQuery, queryPlan)` overload passed `searchQuery.LimitForCandidateWindow`
+   (max(limit*3, 100)) instead of `searchQuery.Limit` — a Limit=3 query returned up to 100
+   results. Evidence: `SqliteMemoryStoreHybridSearchTests` expected 3 survivors out of 8
+   candidates, got all 8. Fixed to pass `searchQuery.Limit`. The tests were RIGHT; the code had
+   the bug.
+
+Both fixes also cleared `SqliteMemoryStoreFusionFlagTests` (2), `ToolRefusalsTests` (the
+memory_search case had failed with an unmapped `SQLITE_SCHEMA`/vtable exception on the search
+path), and `WatchIntegrationTests.DeletedDirectory_Cascades...`.
 
 ### D. Pre-existing, environment-dependent (12 tests — NOT caused by this refactor)
 
