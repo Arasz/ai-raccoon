@@ -83,7 +83,7 @@ public sealed class SqliteMemoryStoreSizeRatchetTests
     [Fact]
     public void SqliteMemoryStore_DoesNotExceedItsMeasuredLineCap()
     {
-        var path = Path.Combine(FindRepoRoot(), "src", "AiRaccoon.Infrastructure", "Sqlite", "SqliteMemoryStore.cs");
+        var path = Path.Combine(FindRepoRoot(), "src", "AiRaccoon.Infrastructure", "Sqlite", "Memory", "SqliteMemoryStore.cs");
         var lines = File.ReadAllLines(path).Length;
 
         lines.ShouldBeLessThanOrEqualTo(MaxLines,

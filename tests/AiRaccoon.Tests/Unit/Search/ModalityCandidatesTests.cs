@@ -2,6 +2,7 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Sqlite.Memory;
 using Shouldly;
 using Xunit;
+using SearchResults = AiRaccoon.Infrastructure.Sqlite.Memory.SearchResults;
 
 namespace AiRaccoon.Tests.Unit.Search;
 
@@ -23,7 +24,7 @@ public sealed class ModalityCandidatesTests
         var bigContext = new[] { Hit("h1", -9.0), Hit("h2", -6.0), Hit("h3", -3.0) };
         var smallContext = new[] { Hit("h4", -0.5) };
 
-        var ordered = ModalityCandidates.ByBm25([bigContext, smallContext]);
+        var ordered = ModalityCandidates.ByBm25(FtsResults(bigContext, smallContext));
 
         ordered.Select(r => r.Hash).ShouldBe(["h1", "h2", "h3", "h4"],
             "h4 is the weakest match by absolute bm25 despite being rank 1 of its own (tiny) context");
@@ -36,7 +37,7 @@ public sealed class ModalityCandidatesTests
         var bigContext = new[] { Hit("h1", 0.95), Hit("h2", 0.8), Hit("h3", 0.5) };
         var smallContext = new[] { Hit("h4", 0.1) };
 
-        var ordered = ModalityCandidates.ByCosine([bigContext, smallContext]);
+        var ordered = ModalityCandidates.ByCosine(VectorResults(bigContext, smallContext));
 
         ordered.Select(r => r.Hash).ShouldBe(["h1", "h2", "h3", "h4"],
             "h4 is the weakest match by absolute cosine score despite being rank 1 of its own (tiny) context");
@@ -50,7 +51,7 @@ public sealed class ModalityCandidatesTests
         // ascending — which is what keeps single-context (project-scope) baselines unchanged.
         var context = new[] { Hit("h1", -9.0), Hit("h2", -9.0), Hit("h3", -3.0) };
 
-        ModalityCandidates.ByBm25([context]).Select(r => r.Hash).ShouldBe(["h1", "h2", "h3"]);
+        ModalityCandidates.ByBm25(FtsResults(context)).Select(r => r.Hash).ShouldBe(["h1", "h2", "h3"]);
     }
 
     [Fact]
@@ -58,7 +59,7 @@ public sealed class ModalityCandidatesTests
     {
         var context = new[] { Hit("h1", 0.9), Hit("h2", 0.9), Hit("h3", 0.2) };
 
-        ModalityCandidates.ByCosine([context]).Select(r => r.Hash).ShouldBe(["h1", "h2", "h3"]);
+        ModalityCandidates.ByCosine(VectorResults(context)).Select(r => r.Hash).ShouldBe(["h1", "h2", "h3"]);
     }
 
     [Fact]
@@ -67,7 +68,7 @@ public sealed class ModalityCandidatesTests
         var contextA = new[] { Hit("h1", -2.0) };
         var contextB = new[] { Hit("h1", -9.0) };
 
-        var ordered = ModalityCandidates.ByBm25([contextA, contextB]);
+        var ordered = ModalityCandidates.ByBm25(FtsResults(contextA, contextB));
 
         ordered.ShouldHaveSingleItem().Ranking.ShouldBe(-9.0);
     }
@@ -78,7 +79,7 @@ public sealed class ModalityCandidatesTests
         var contextA = new[] { Hit("h1", 0.3) };
         var contextB = new[] { Hit("h1", 0.9) };
 
-        var ordered = ModalityCandidates.ByCosine([contextA, contextB]);
+        var ordered = ModalityCandidates.ByCosine(VectorResults(contextA, contextB));
 
         ordered.ShouldHaveSingleItem().Ranking.ShouldBe(0.9);
     }
@@ -92,13 +93,11 @@ public sealed class ModalityCandidatesTests
         // project copy must still win.
         var projectCopy = new MemorySearchResult("project-hash", 0.6, "abc123.md", "s");
         var sharedCopy = new MemorySearchResult("shared-hash", 0.9, "shared/def456.md", "s");
-        var valueByHash = new Dictionary<string, string>
-        {
-            ["project-hash"] = "identical promoted text",
-            ["shared-hash"] = "identical promoted text"
-        };
+        var searchResults = VectorResults([projectCopy], [sharedCopy]);
+        searchResults.Indexes.ValueByHash["project-hash"] = "identical promoted text";
+        searchResults.Indexes.ValueByHash["shared-hash"] = "identical promoted text";
 
-        var ordered = ModalityCandidates.ByCosine([[projectCopy], [sharedCopy]], valueByHash);
+        var ordered = ModalityCandidates.ByCosine(searchResults);
 
         var hit = ordered.ShouldHaveSingleItem();
         hit.Hash.ShouldBe("project-hash");
@@ -109,13 +108,11 @@ public sealed class ModalityCandidatesTests
     {
         var projectCopy = new MemorySearchResult("project-hash", -2.0, "abc123.md", "s");
         var sharedCopy = new MemorySearchResult("shared-hash", -9.0, "shared/def456.md", "s");
-        var valueByHash = new Dictionary<string, string>
-        {
-            ["project-hash"] = "identical promoted text",
-            ["shared-hash"] = "identical promoted text"
-        };
+        var searchResults = FtsResults([projectCopy], [sharedCopy]);
+        searchResults.Indexes.ValueByHash["project-hash"] = "identical promoted text";
+        searchResults.Indexes.ValueByHash["shared-hash"] = "identical promoted text";
 
-        var ordered = ModalityCandidates.ByBm25([[projectCopy], [sharedCopy]], valueByHash);
+        var ordered = ModalityCandidates.ByBm25(searchResults);
 
         var hit = ordered.ShouldHaveSingleItem();
         hit.Hash.ShouldBe("project-hash");
@@ -126,12 +123,38 @@ public sealed class ModalityCandidatesTests
     {
         var a = new MemorySearchResult("h1", 0.6, "a.md", "s");
         var b = new MemorySearchResult("h2", 0.9, "shared/h2.md", "s");
-        var valueByHash = new Dictionary<string, string> { ["h1"] = "text a", ["h2"] = "text b" };
+        var searchResults = VectorResults([a], [b]);
+        searchResults.Indexes.ValueByHash["h1"] = "text a";
+        searchResults.Indexes.ValueByHash["h2"] = "text b";
 
-        var ordered = ModalityCandidates.ByCosine([[a], [b]], valueByHash);
+        var ordered = ModalityCandidates.ByCosine(searchResults);
 
         ordered.Select(r => r.Hash).ShouldBe(["h2", "h1"], "distinct content must never be merged");
     }
 
     private static MemorySearchResult Hit(string hash, double ranking) => new(hash, ranking, $"{hash}.md", "s");
+
+    /// <summary>Builds the cross-context candidate collection with each context's results as an FTS batch.</summary>
+    private static SearchResults FtsResults(params IReadOnlyList<MemorySearchResult>[] contexts)
+    {
+        var searchResults = new SearchResults();
+        foreach (var context in contexts)
+        {
+            searchResults.AddResults(new VectorSearchResult([], TimeSpan.Zero), new FtsSearchResult(context, TimeSpan.Zero));
+        }
+
+        return searchResults;
+    }
+
+    /// <summary>Builds the cross-context candidate collection with each context's results as a vector batch.</summary>
+    private static SearchResults VectorResults(params IReadOnlyList<MemorySearchResult>[] contexts)
+    {
+        var searchResults = new SearchResults();
+        foreach (var context in contexts)
+        {
+            searchResults.AddResults(new VectorSearchResult(context, TimeSpan.Zero), new FtsSearchResult([], TimeSpan.Zero));
+        }
+
+        return searchResults;
+    }
 }

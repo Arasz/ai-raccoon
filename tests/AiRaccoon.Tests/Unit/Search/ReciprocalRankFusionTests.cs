@@ -18,7 +18,7 @@ public sealed class ReciprocalRankFusionTests
         var vec = new[] { Hit("b"), Hit("a") };
 
         var fused = ReciprocalRankFusion.Fuse(
-            [(fts, 2), (vec, 1)], 30, 0, 10);
+            [new WeightedResults(fts, 2), new WeightedResults(vec, 1)], 30, 0, 10);
 
         // a = 2/31 + 1/32 beats b = 2/32 + 1/31 when the keyword weight dominates.
         fused.Select(r => r.Hash).ShouldBe(["a", "b"]);
@@ -31,7 +31,7 @@ public sealed class ReciprocalRankFusionTests
         var vec = new[] { Hit("b"), Hit("a") };
 
         var fused = ReciprocalRankFusion.Fuse(
-            [(fts, 1), (vec, 2)], 30, 0, 10);
+            [new WeightedResults(fts, 1), new WeightedResults(vec, 2)], 30, 0, 10);
 
         fused.Select(r => r.Hash).ShouldBe(["b", "a"]);
     }
@@ -41,7 +41,7 @@ public sealed class ReciprocalRankFusionTests
     {
         var fts = new[] { Hit("a"), Hit("b") };
 
-        var fused = ReciprocalRankFusion.Fuse([(fts, 1)], 60, 0, 10);
+        var fused = ReciprocalRankFusion.Fuse([new WeightedResults(fts, 1)], 60, 0, 10);
 
         fused[0].Ranking.ShouldBe(1.0);
         fused[0].Hash.ShouldBe("a");
@@ -53,8 +53,8 @@ public sealed class ReciprocalRankFusionTests
     {
         var fts = new[] { Hit("a"), Hit("b") };
 
-        var k10 = ReciprocalRankFusion.Fuse([(fts, 1)], 10, 0, 10);
-        var k60 = ReciprocalRankFusion.Fuse([(fts, 1)], 60, 0, 10);
+        var k10 = ReciprocalRankFusion.Fuse([new WeightedResults(fts, 1)], 10, 0, 10);
+        var k60 = ReciprocalRankFusion.Fuse([new WeightedResults(fts, 1)], 60, 0, 10);
 
         k10[1].Ranking.ShouldBe(11.0 / 12, 1e-9);
         k60[1].Ranking.ShouldBe(61.0 / 62, 1e-9);
@@ -68,7 +68,7 @@ public sealed class ReciprocalRankFusionTests
         // (empty vec list) must not drop the keyword hits.
         var fts = new[] { Hit("a"), Hit("b") };
 
-        var fused = ReciprocalRankFusion.Fuse([(fts, 1), ([], 1)],
+        var fused = ReciprocalRankFusion.Fuse([new WeightedResults(fts, 1), new WeightedResults([], 1)],
             60, 0, 10);
 
         fused.Select(r => r.Hash).ShouldBe(["a", "b"]);
@@ -80,7 +80,7 @@ public sealed class ReciprocalRankFusionTests
     {
         var list = new[] { Hit("a"), Hit("b"), Hit("c") };
 
-        var fused = ReciprocalRankFusion.Fuse([(list, 1)], 10, 0.9, 10);
+        var fused = ReciprocalRankFusion.Fuse([new WeightedResults(list, 1)], 10, 0.9, 10);
 
         // Scores 11/11, 11/12, 11/13 -> only the top two clear 0.9.
         fused.Select(r => r.Hash).ShouldBe(["a", "b"]);
@@ -91,7 +91,7 @@ public sealed class ReciprocalRankFusionTests
     {
         var list = new[] { Hit("a"), Hit("b"), Hit("c") };
 
-        var fused = ReciprocalRankFusion.Fuse([(list, 1)], 60, 0, 2);
+        var fused = ReciprocalRankFusion.Fuse([new WeightedResults(list, 1)], 60, 0, 2);
 
         fused.Select(r => r.Hash).ShouldBe(["a", "b"]);
     }
@@ -102,7 +102,7 @@ public sealed class ReciprocalRankFusionTests
         var fts = new[] { new MemorySearchResult("a", 0, "a.md", "keyword snippet") };
         var vec = new[] { new MemorySearchResult("a", 0, "a.md", "vector teaser") };
 
-        var fused = ReciprocalRankFusion.Fuse([(fts, 1), (vec, 1)], 60, 0, 10);
+        var fused = ReciprocalRankFusion.Fuse([new WeightedResults(fts, 1), new WeightedResults(vec, 1)], 60, 0, 10);
 
         var hit = fused.ShouldHaveSingleItem();
         hit.Snippet.ShouldBe("keyword snippet");
