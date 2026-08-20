@@ -337,14 +337,12 @@ def main() -> int:
             summary = f"{today} green — {trx['passed']} passed / 0 failed / {trx['skipped']} skipped — " \
                       f"{format_duration(trx_duration_s(trx))}"
             verdict = "green"
-        print(summary)
-        write_step_summary(summary)
-        write_classification(verdict, {}, trx)
         if verdict != "green":
             note = file_or_comment_issue(summary, {}, "unclassifiable")
             summary = f"{summary} — gh: {note}" if note else summary
-            print(summary)
-            write_step_summary(summary)
+        print(summary)
+        write_step_summary(summary)
+        write_classification(verdict, {}, trx)
         return 0 if verdict == "green" else 1
 
     if len(failed) > MASS_FAILURE_THRESHOLD:
@@ -393,6 +391,14 @@ def main() -> int:
     rerun_only = rerun_failed - set(failed) - set(ledger)
     for fqn in sorted(rerun_only):
         classes[fqn] = "unclassifiable"
+
+    # A rerun that failed anything is not the "intact, all-green rerun" that earns a flake
+    # verdict — downgrade the first-run unknowns so the ledger never records a flake on
+    # evidence that was itself red.
+    if rerun_failed:
+        for fqn in unknowns:
+            if classes[fqn] == "flake":
+                classes[fqn] = "unclassifiable"
 
     all_ledgered = all(c == "known" for c in classes.values())
     verdict = "green(known flakes only)" if all_ledgered else "red"

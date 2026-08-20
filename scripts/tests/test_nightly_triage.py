@@ -178,6 +178,8 @@ def test_main_rerun_only_failure_goes_red_unclassifiable(triage, tmp_path, monke
     classes = {entry["test"]: entry["class"] for entry in payload["failed"]}
     assert classes[rerun_only_fqn] == "unclassifiable"
     assert payload["rerun_only"] == [rerun_only_fqn]
+    # the rerun was NOT all-green, so the first-run failures must not be called flakes
+    assert all(classes[fqn] == "unclassifiable" for fqn in first_failed)
 
 
 def test_main_rerun_pass_marks_flake_candidates(triage, tmp_path, monkeypatch):

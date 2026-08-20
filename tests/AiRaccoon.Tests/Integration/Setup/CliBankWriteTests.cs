@@ -295,6 +295,12 @@ public sealed class CliBankWriteTests : IAsyncLifetime
         _ => throw new ArgumentOutOfRangeException(nameof(label), label, "no target-table recipe for this --apply leaf")
     };
 
+    /// <summary>
+    ///     Whether the CLI's outbox request row exists. The request rows persist after the relay
+    ///     consumes them (Finish* are UPDATEs), so existence — not "still pending" — is the claim:
+    ///     a <c>finished_at</c> condition would fail the moment the 15 s poll consumes the request
+    ///     in-window, recreating the F5-tail flake for the repair verbs.
+    /// </summary>
     private async Task<bool> RequestRowExistsAsync(string label, CancellationToken cancellationToken)
     {
         await using var connection = await _factory.OpenBankAsync(cancellationToken);
@@ -304,10 +310,10 @@ public sealed class CliBankWriteTests : IAsyncLifetime
                     "SELECT count(*) FROM promotion_queue_prune_requests WHERE id = 1",
                     cancellationToken: cancellationToken)) > 0,
             "repair chunk-index --apply" => await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                    "SELECT count(*) FROM repair_requests WHERE kind = 'chunk-index' AND finished_at IS NULL",
+                    "SELECT count(*) FROM repair_requests WHERE kind = 'chunk-index'",
                     cancellationToken: cancellationToken)) > 0,
             "repair reingest --apply" => await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                    "SELECT count(*) FROM repair_requests WHERE kind = 'reingest' AND finished_at IS NULL",
+                    "SELECT count(*) FROM repair_requests WHERE kind = 'reingest'",
                     cancellationToken: cancellationToken)) > 0,
             _ => throw new ArgumentOutOfRangeException(nameof(label), label, "no request-row recipe for this --apply leaf")
         };
