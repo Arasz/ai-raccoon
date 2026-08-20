@@ -1,5 +1,6 @@
 using System.Globalization;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
@@ -43,6 +44,25 @@ namespace AiRaccoon.Tests.Integration.Setup;
 public sealed class CliBankWriteTests : IAsyncLifetime
 {
     private static readonly TimeSpan HardCap = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    ///     The jobs whose ledger rows the fixture stamps so no command's auto-started server finds
+    ///     anything due (ADR-0070: <c>IsDue</c> is true while a job's row is missing). Kept in step
+    ///     with the DI-registered job list by <c>CliBankWriteLedgerDriftTests</c> — a job added to
+    ///     the list without a row here fails PR CI, not the next nightly.
+    /// </summary>
+    internal static readonly string[] MaintenanceLedgerNames =
+    [
+        ChunkBackfillJob.JobName,
+        Vec0ReclaimJob.JobName,
+        VacuumJob.JobName,
+        MetricsRetentionJob.JobName,
+        ModelMigrationJob.JobName,
+        ChunkIndexRepairJob.JobName,
+        ReingestRepairJob.JobName,
+        PromotionQueuePruneJob.JobName,
+        PendingEmbedJob.JobName
+    ];
 
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-cli-writes");
     private ISqliteConnectionFactory _factory = null!;
@@ -102,6 +122,27 @@ public sealed class CliBankWriteTests : IAsyncLifetime
         // Creating the bank is itself a write; do it here so the assertions below meet a bank that
         // is already stamped and current.
         await using var _ = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+
+        // Stamp every maintenance job's ledger row as "already run, just now". A missing row makes
+        // the job DUE (MaintenanceJobRunner.IsDue is true while last_run_at is NULL), and every
+        // command's auto-started server runs a startup pass that re-stamps whatever is missing —
+        // inside the command's observed window on a starved runner (2026-08-20 nightly: 5 of 6
+        // failures were exactly that). With the rows present, nothing is due on this bank and the
+        // pass writes nothing, deterministically — no dependence on the warm-up pass completing
+        // before the warm-up server exits.
+        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            foreach (var name in MaintenanceLedgerNames)
+            {
+                await connection.ExecuteAsync(
+                    """
+                    INSERT INTO maintenance_jobs (name, last_run_at, run_count) VALUES (@name, @now, 1)
+                    ON CONFLICT(name) DO NOTHING
+                    """,
+                    new { name, now });
+            }
+        }
 
         _portLease = LoopbackPort.Reserve();
         _port = _portLease.Port;
@@ -192,6 +233,13 @@ public sealed class CliBankWriteTests : IAsyncLifetime
     ///     invocation. Each row is seeded with data the mutation can actually act on (item 3 of the
     ///     CLI-off-the-bank task): an empty bank would let `extract prune --apply` short-circuit
     ///     before ever reaching the outbox write, making the assertion a no-op that could not fail.
+    ///     <para />
+    ///     The changed-set check is <see cref="ApplyCommitAssertions.IsHonestApplyCommit" />, not
+    ///     exact equality: on a loaded machine the 15 s maintenance poll can consume the request
+    ///     inside the command's window (2026-08-20 nightly F5), which legitimately changes the
+    ///     target table plus maintenance_jobs — the composite requires the request row to exist,
+    ///     nothing outside the allowed set to change, and any domain mutation to carry a
+    ///     maintenance stamp.
     /// </summary>
     [Theory]
     [MemberData(nameof(ApplyCommands))]
@@ -208,10 +256,61 @@ public sealed class CliBankWriteTests : IAsyncLifetime
             HardCap, TestContext.Current.CancellationToken);
         run.ExitCode.ShouldBe(0, $"'{label}' failed; stderr: {run.Stderr}");
 
+        var requestRowExists = await RequestRowExistsAsync(label, TestContext.Current.CancellationToken);
         var after = await BankContent.SnapshotAsync(_factory, TestContext.Current.CancellationToken);
         var changed = BankContent.Changed(before, after);
-        changed.ShouldBe([expectedOutboxTable],
-            $"'{label}' must commit only its outbox request ({expectedOutboxTable}); changed instead: {string.Join(", ", changed)}");
+        ApplyCommitAssertions.IsHonestApplyCommit(
+                changed, expectedOutboxTable, TargetDomainTablesFor(label), requestRowExists)
+            .ShouldBeTrue(
+                $"'{label}' must commit only its outbox request ({expectedOutboxTable}) — any domain-table change must carry a maintenance_jobs stamp; changed: {string.Join(", ", changed)}");
+    }
+
+    /// <summary>
+    ///     The composite's own proof: a rogue synchronous domain write (the ADR-0075 violation the
+    ///     gate exists to catch) must fail it — no request row was ever written and no maintenance
+    ///     stamp follows. Without this, the composite would be indistinguishable from one that can
+    ///     only pass.
+    /// </summary>
+    [Fact]
+    public async Task ADirectDomainWrite_WithoutRequest_FailsTheCompositeAssertion()
+    {
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EnvEncryptionKeyProvider.EnvVarName, null));
+        await SeedOrphanedPromotionQueueRowAsync(TestContext.Current.CancellationToken);
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync("DELETE FROM promotion_queue"); // the rogue's synchronous write
+
+        var requestRowExists = await RequestRowExistsAsync("extract prune --apply", TestContext.Current.CancellationToken);
+        ApplyCommitAssertions.IsHonestApplyCommit(
+                ["promotion_queue"], "promotion_queue_prune_requests",
+                TargetDomainTablesFor("extract prune --apply"), requestRowExists)
+            .ShouldBeFalse("a direct domain write with no outbox request must fail the composite");
+    }
+
+    private static IReadOnlySet<string> TargetDomainTablesFor(string label) => label switch
+    {
+        "extract prune --apply" => new HashSet<string> { "promotion_queue" },
+        "repair chunk-index --apply" => new HashSet<string> { "entries" },
+        "repair reingest --apply" => new HashSet<string> { "entries" },
+        _ => throw new ArgumentOutOfRangeException(nameof(label), label, "no target-table recipe for this --apply leaf")
+    };
+
+    private async Task<bool> RequestRowExistsAsync(string label, CancellationToken cancellationToken)
+    {
+        await using var connection = await _factory.OpenBankAsync(cancellationToken);
+        return label switch
+        {
+            "extract prune --apply" => await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                    "SELECT count(*) FROM promotion_queue_prune_requests WHERE id = 1",
+                    cancellationToken: cancellationToken)) > 0,
+            "repair chunk-index --apply" => await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                    "SELECT count(*) FROM repair_requests WHERE kind = 'chunk-index' AND finished_at IS NULL",
+                    cancellationToken: cancellationToken)) > 0,
+            "repair reingest --apply" => await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                    "SELECT count(*) FROM repair_requests WHERE kind = 'reingest' AND finished_at IS NULL",
+                    cancellationToken: cancellationToken)) > 0,
+            _ => throw new ArgumentOutOfRangeException(nameof(label), label, "no request-row recipe for this --apply leaf")
+        };
     }
 
     private Task SeedForAsync(string label, CancellationToken cancellationToken) => label switch

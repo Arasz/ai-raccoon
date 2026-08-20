@@ -19,7 +19,11 @@ namespace AiRaccoon.Tests.Integration.Sync;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class SyncServiceGateContentionTests : IDisposable
 {
-    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(15);
+    // Bounds wall-clock waiting only (and doubles as deadlock detection); every meaningful
+    // assertion is event-driven, so a broken gate fails on those regardless of this bound.
+    // 15 s was exceeded by a full-suite-parallel run (17.9 s observed, 2026-08-20 nightly F6);
+    // 60 s is 3.3x the observed worst, same shape as the 08-19 IdleTimeout 15s->30s absorption.
+    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(60);
 
     private readonly string _dataRoot = TestData.CreateTempRoot("sync-gate-contention");
 
