@@ -1,7 +1,0 @@
-{
-  "error": "JSONExporter.export() missing 1 required positional argument: 'file_path'",
-  "metadata": {
-    "source": "semantica-mcp",
-    "updatedAt": "2026-08-20T10:47:48.562285+00:00"
-  }
-}

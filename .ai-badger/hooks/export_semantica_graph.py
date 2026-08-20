@@ -164,12 +164,49 @@ def export_graph(
     return target_path
 
 
+def _error_payload_error(result) -> str | None:
+    """The error message when the (possibly double-encoded) result carries one.
+
+    Mirrors extract_graph_json's reject paths: outer error/isError, then the
+    inner payload of either envelope. None when the result is not an error —
+    a skipped write for any other reason stays silent.
+    """
+    if isinstance(result, str):
+        try:
+            result = json.loads(result)
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(result, dict):
+        return None
+    if result.get("error") is not None or result.get("isError"):
+        return str(result.get("error") or "isError")
+    for key in ("result", "structuredContent"):
+        inner = result.get(key)
+        if isinstance(inner, str):
+            try:
+                inner = json.loads(inner)
+            except json.JSONDecodeError:
+                continue
+        if isinstance(inner, dict) and (inner.get("error") is not None or inner.get("isError")):
+            return str(inner.get("error") or "isError")
+    return None
+
+
 def autosave_export(tool_name, result, session_id, project_dir) -> Path | None:
     """Auto-save an export_graph result; None (no write) when not a graph or not export."""
     if not is_export_graph(tool_name):
         return None
     graph = extract_graph_json(result)
     if graph is None:
+        # A skipped error must not be invisible (the bridge died silently for
+        # weeks before 0.130.0). One stderr line, never stdout — the hook is
+        # advisory and must not pollute the tool result channel.
+        error = _error_payload_error(result)
+        if error is not None:
+            print(
+                f"[ai-badger] semantica export_graph failed; .semantica/ dump skipped: {error}",
+                file=sys.stderr,
+            )
         return None
     target = session_export_target(session_id, project_dir)
     return export_graph(target_path=target, data_dict=graph, temp_dir=Path(project_dir))

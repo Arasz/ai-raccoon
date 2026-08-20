@@ -46,6 +46,22 @@ def _extract(payload: Dict[str, Any]) -> tuple:
     return tool_name, result, session_id
 
 
+def _project_dir(payload: Dict[str, Any]) -> Optional[Path]:
+    """Resolve the project dir: $CLAUDE_PROJECT_DIR, else the payload's cwd, else None.
+
+    PostToolUse payloads carry no cwd, and the hook's process cwd is the
+    agent's launcher, not the project — writing .semantica/ there would scatter
+    dumps across the machine. Mirrors commit_reminder_hook.resolve_project_root
+    and debug_log.resolve_project_root: env first, payload cwd second, never a
+    guess. None means skip (no write, exit 0).
+    """
+    env_root = os.environ.get("CLAUDE_PROJECT_DIR")
+    if env_root:
+        return Path(env_root)
+    cwd = payload.get("cwd")
+    return Path(cwd) if cwd else None
+
+
 def main(argv: Optional[list] = None) -> int:
     """Read the hook payload from stdin; autosave an export_graph result; exit 0."""
     try:
@@ -61,10 +77,13 @@ def main(argv: Optional[list] = None) -> int:
     if not export_module.is_export_graph(_extract(payload)[0]):
         return 0
 
+    project_dir = _project_dir(payload)
+    if project_dir is None:
+        return 0
+
     try:
         tool_name, result, session_id = _extract(payload)
-        export_module.autosave_export(
-            tool_name, result, session_id, Path(os.getcwd()))
+        export_module.autosave_export(tool_name, result, session_id, project_dir)
     except Exception:  # pylint: disable=broad-exception-caught
         # Advisory only — a hook failure must never block the tool call.
         return 0
