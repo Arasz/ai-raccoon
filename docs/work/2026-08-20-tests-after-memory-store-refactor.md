@@ -83,12 +83,14 @@ Probable reason: this host has `bws` installed with an invalid access token; the
 scenarios fail with `bws: invalid access token` during setup. Verified identical failures on the
 pre-refactor commit `36b766fe^` (12/15 filtered tests fail there too).
 
-## Observation: suite hang
+## Observation: suite hang (resolved)
 
 The full run stalled after ~3.5 min of test time with the host idle; a spawned
 `AiRaccoon --data-root .../ai-raccoon-model-migration-crash/...` server process from
-`ModelMigrationCrashRecoveryE2ETests` stayed alive. Probe run interrupted before a verdict —
-worth checking whether that E2E waits on a server that no longer exits after the refactor.
+`ModelMigrationCrashRecoveryE2ETests` stayed alive. A targeted re-run of that class in isolation
+afterwards PASSED (2 passed, 1 skipped, 0 failed, ~78 s), so the hang does not reproduce on its
+own — likely a transient full-suite interaction (parallel collection load/port contention)
+rather than a refactor-caused defect. Not re-verified inside a full run.
 
 ## Next step
 
