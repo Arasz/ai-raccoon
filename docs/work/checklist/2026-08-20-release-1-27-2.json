@@ -1,0 +1,167 @@
+{
+  "_note": "Copy to docs/work/checklist/<yyyy-mm-dd>-<subject>.json. Never fill this file in place. status is pass|fail|skipped|substituted; substituted means checked by a different instrument than the item names, and its reason must say which. accepted stays null until a human answers it, so an unfinished run is visibly unfinished. Delete any item whose feature no longer exists rather than skipping it.",
+  "run": {
+    "date": "2026-08-20",
+    "branch": "main",
+    "commit": "df750ccd + uncommitted VERSION bump 1.27.1 -> 1.27.2",
+    "data-root": "/tmp/checklist-1-27-2/bank (scratch bank, never ~/.ai-raccoon)",
+    "note": "Pre-flight pass for the 1.27.2 release in progress (local uncommitted VERSION bump; HEAD=df750ccd). Installed global tool was 1.27.1+bcd07970 (stale vs HEAD), so this run did a real build+pack+install: DOTNET_ENV=local dotnet build -c Release (0 warnings/errors), DeployToLocalSource packed ai-raccoon.1.27.2 + ai-raccoon.osx-arm64.1.27.2 into .nupkg-local, uninstall 1.27.1 / install 1.27.2, --version -> 1.27.2+df750ccd46fd0ba9fcbe992cfd0cd093c85d8931 (embedded commit = HEAD sha). scripts/verify-tool-package.py: model sha256 verified against the bundle pin. Changes since the last checklist run (1.27.0): 1.27.1 = #390 log-the-real-refusal-reason; 1.27.2 = #392 hermes-provider-setup script + integration test, plus chores. The user's live server (PID 5537, 1.27.1 binary) stayed on 7721 untouched; the server under test bound ephemeral port 60419. NOTE FOR THE USER: the live server on 7721 still runs the OLD 1.27.1 binary until restarted — the install replaced the tool on disk, not the running process."
+  },
+  "derived": {
+    "version": "1.27.2",
+    "mcp-tool-count": "27",
+    "mcp-prompt-count": "2",
+    "note": "Produced by scripts/derive-facts.py at run time: python3 /Users/arasz/.hermes/skills/AiRaccoon/ai-raccoon-manual-checklist/scripts/derive-facts.py . -> version=1.27.2, mcp-tool-count=27, mcp-prompt-count=2, exit 0. Installed tool --version = 1.27.2+df750ccd46fd0ba9fcbe992cfd0cd093c85d8931, embedded commit equals git rev-parse HEAD."
+  },
+  "findings-against-prior-runs": [
+    {
+      "prior-run": "2026-08-17-1-27-0.json and 2026-08-16-release-1-21-0.json (memory-search-hybrid-retrieval)",
+      "prior-claim": "the astrolabe query 'an antique navigation instrument reflecting evening light in a stargazing room' ranked the written astrolabe entry #1 on the bundled local model; 'a dead vector leg would have failed it'",
+      "what-is-actually-true": "On this run's 8-entry corpus (same bundled model, same query family) the astrolabe entry ranks 3rd, and the SAME two unrelated 'guide' chunks top every query — including an alien-token query ('quantum espresso froth ratios') with zero FTS matches and a zero-overlap sextant query whose exact match ranks 4th then 3rd. The vector leg is alive (alien queries return results) but its ranking is nearly query-insensitive: the two generic short guide texts sit close to the embedding centroid and win every RRF merge. The prior verdicts were corpus-specific, not wrong in their corpora — but 'hybrid works' on a 3-4 entry bank does not predict ranking behaviour on a denser one, and the prior run's acceptance reasoning (query could not be carried by keyword match) also understated that its query shared 'evening' with the target text.",
+      "evidence": "5 queries, same top-2 (guide.md chunks, order stable) every time; sextant exact-match at rank 4 (then 3); FTS leg itself is sane (MATCH 'the' BM25 ranks astrolabe 1st); stored vectors well-formed (all norm 1.0, distinct, cosine 0.01-0.42); no pipeline corruption found",
+      "so-what": "The semantic-retrieval item fails on this build+corpus as an honest 'vector leg not discriminating' — the leg returns content but ranking quality is not semantic. Whether that is acceptable for a release (weak bundled model on short generic texts) is a human call; accepted is left null on that item."
+    }
+  ],
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
+      "command": "rm -rf .nupkg .nupkg-local; DOTNET_ENV=local dotnet build src/AiRaccoon/AiRaccoon.csproj -c Release; dotnet tool uninstall -g ai-raccoon; dotnet tool install -g ai-raccoon --version 1.27.2 --add-source .nupkg-local; ai-raccoon --version; scripts/verify-tool-package.py",
+      "evidence": "Build succeeded, 0 Warning(s), 0 Error(s); packed ai-raccoon.1.27.2.nupkg + ai-raccoon.osx-arm64.1.27.2.nupkg into .nupkg-local; uninstalled 1.27.1, installed 1.27.2; ai-raccoon --version -> '1.27.2+df750ccd46fd0ba9fcbe992cfd0cd093c85d8931'; verify-tool-package: 'model sha256 verified: 4278337fd0ff3c68bfb6291042cad8ab363e1d9fbc43dcb499fe91c871902474' / 'OK: ai-raccoon.1.27.2.nupkg ships the verified bundled model'",
+      "observed-result": "The installed binary reports the derived version with an embedded commit equal to this tree's HEAD; the packed tool ships the byte-verified bundled model. The 1.27.1 install that predated the run is gone from the tool store.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Real build+pack+install cycle against the uncommitted 1.27.2 VERSION marker; version and commit identity both matched, and the model-integrity gate (verify-tool-package) passed on the installed package."
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+      "command": "ai-raccoon --data-root /tmp/checklist-1-27-2/bank serve --port 0 (backgrounded); read bound port from serve.log; then serve --port 60419 --restart (backgrounded); lsof on 7721 and 60419",
+      "evidence": "serve.log: 'Now listening on: http://127.0.0.1:60419'. serve2.log: '[650] asking the server on port 60419 to stop (pid 63254, 1.27.2+df750ccd46fd0ba9fcbe992cfd0cd093c85d8931)' then '[651] the server on port 60419 (pid 63254) stopped and the port is free', then 'Now listening on: http://127.0.0.1:60419' from the new process (pid 65320); old pid became <defunct>. lsof: 7721 still the user's AiRaccoon PID 5537 throughout; 60419 owned by 65320 after restart.",
+      "observed-result": "Ephemeral port bound and reported by the server's own output; --restart stopped the identified old process (naming its pid and version) and served in its place on the same port; the default port 7721 was never bound or restarted.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both halves exercised for real this time: the 1.27.0 run had skipped --restart (fear of cycling the live server); with a scratch server on an ephemeral port it was safe to prove, including the 650/651 identity+stop sequence and that the live server's PID never changed."
+    },
+    {
+      "item": "memory-write-stores-and-reports-truthfully",
+      "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
+      "command": "memory_write x8 (7 stored incl. controls, 3 rejected shapes interleaved), project checklist-1-27-2",
+      "evidence": "stored entries return data.hash = 64-hex + path + context (e.g. 61dfec67... astrolabe, 80e36737... sextant). Rejected: '[IMPORTANT: Background process 7 ...' -> data.hash='' path='' stored=false reason=\"rejected by noise policy 'HermesBackgroundProcessLog'\"; '[ASYNC DELEGATION BATCH COMPLETE ...' -> same; 'received signal 15' (exact body) -> same.",
+      "observed-result": "Every stored write returns a real hash; every rejected write returns stored=false with a named policy reason and empty hash/path — no fabricated entry on the rejection path.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both halves driven live with multiple shapes; a write-only check would have passed whether or not truthful reporting worked."
+    },
+    {
+      "item": "memory-search-hybrid-retrieval",
+      "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking",
+      "command": "model set local; memory_write target + distractor + controls; memory_search x6: astrolabe query, richer-astrolabe query, zero-overlap sextant query, widget query, invoice query, alien-token query; sqlite3 read of stored vectors (vec_entries_vector_chunks00) and FTS BM25 (MATCH 'the')",
+      "evidence": "All queries return the written entries (vector leg alive: alien query 'quantum espresso froth ratios' with zero FTS matches returns 8 results). BUT: the same two unrelated guide.md chunks rank 1-2 for EVERY query regardless of intent; the exact semantic match ranks 3-4 on three formulations of the astronomy/sextant query (sextant query 'a navigator's device for measuring angles to celestial bodies at night' -> sextant at rank 4, behind both guide chunks and the astrolabe; richer variant -> rank 3). FTS leg is sane (direct MATCH 'the' BM25 ranks astrolabe 1st). Stored vectors are well-formed (8/8 norm 1.0, pairwise cosine 0.01-0.42) — no corruption, no missing rows (all entries embed_state='embedded').",
+      "observed-result": "FAIL (quality): the hybrid pipeline returns content on every query, but the vector leg's contribution is nearly query-insensitive on this corpus — two generic short texts dominate every RRF merge, and the exact semantic match is never ranked #1. The leg is not dead (alien-token queries return) but it is not discriminating either; the item's able-to-fail bar ('a dead vector leg fails') is met in spirit because the semantic ranking demonstrably does not work. Mechanism: model capability + corpus composition (generic centroid-near texts), not a pipeline defect — unproven either way whether this regressed vs 1.27.0 (same bundled model, prior corpora were 3-4 entries).",
+      "status": "fail",
+      "accepted": null,
+      "acceptance-reason": "Left null deliberately: whether this is acceptable for a release (weak bundled model ranking short generic texts above exact matches) is the user's call — it is the one item this run cannot self-accept. Full evidence in findings-against-prior-runs and the evidence field."
+    },
+    {
+      "item": "memory-get-returns-content-by-hash",
+      "expected-result": "memory_get returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
+      "command": "memory_get by the sextant hash 80e36737...; memory_get with all-zero hash",
+      "evidence": "known hash -> data.value = the exact stored text (full round-trip, plus path/context/createdAt). all-zero hash -> isError=true, text 'unknown-hash: No entry with hash '0000000000000000000000000000000000000000000000000000000000000000' in project 'checklist-1-27-2'.'",
+      "observed-result": "Exact content round-trip by hash, and the unknown-hash case refuses explicitly with a named reason rather than inventing a result.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Negative tested too: a get that fabricated an answer for an unknown hash would have passed a round-trip-only check."
+    },
+    {
+      "item": "source-path-anchor-resolves-its-chunk",
+      "expected-result": "a `file#section` query returns that exact chunk within the production result window",
+      "command": "two writes to sourceFile=guide.md sections intro/details; memory_search 'guide.md#intro' and 'guide.md#details'",
+      "evidence": "#intro -> rank 1 = hash bd1587a2..., sourceFile=guide.md, chunkIndex=0, totalChunks=2, snippet 'Introduction: this guide walks through onboarding the widget pipeline for new tenants.'; #details -> rank 1 = hash 93f41fe5..., chunkIndex=1, snippet 'Details: the widget pipeline retry policy is exponential with a 30-second...'",
+      "observed-result": "Sibling chunks of the same file, distinguishable only by section, separated correctly in both directions — a coarse file-only match would have returned both chunks for either query.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both directions asserted with the exact chunk identity (hash + chunkIndex + snippet), ruling out file-only matching."
+    },
+    {
+      "item": "write-path-noise-filtering",
+      "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
+      "command": "grep registrations (AppRegistrations.cs -> HermesProcessNoisePolicy only); memory_write x5: 2 true shapes + 1 exact signal body + near-miss control + trailing-text variant; `noise entries` (CLI, server-routed); sqlite3 read of noise_entries",
+      "evidence": "Source: HermesProcessNoisePolicy.cs — prefixes '[IMPORTANT: Background process', '[ASYNC DELEGATION BATCH', and exact-body 'received signal <digits>[.]' (comment: 'Matches only an exact ... body — no leading or trailing text'). Live: '[IMPORTANT: Background process 7 (restic)...' -> stored=false (reason names policy); '[ASYNC DELEGATION BATCH COMPLETE ...' -> stored=false; 'received signal 15' -> stored=false; 'received signal 15, terminating' (trailing text) -> STORED (anchored match, not over-broad); near-miss (mid-sentence trigger) -> STORED. `noise entries` -> 'total: 3 / HermesBackgroundProcessLog: 3'. sqlite3 noise_entries: 3 rows, request_content verbatim, detected_by_policy=HermesBackgroundProcessLog each.",
+      "observed-result": "All three registered shapes rejected with the named reason and empty hash; both negative controls (trailing-text variant, mid-sentence mention) stored, proving the filter rejects what it claims and nothing more; all rejected bodies retained in the noise store verbatim.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Registered set derived from the policy source, not a stale list; negative controls make the item able to fail (an over-broad filter would have rejected them); rejection AND retention both verified."
+    },
+    {
+      "item": "read-path-query-guard",
+      "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
+      "command": "`settings queryguard list`; memory_search x3 (refuse shape, warn shape, clean control); `settings queryguard structural enable` then JSON-blob + job-line + clean probes; `settings queryguard structural disable`",
+      "evidence": "list -> 'enabled: True  shadow: False  structural: False  threshold: 0.98939822280316'. Refuse shape ('[IMPORTANT: Background process ... completed normally ... Command:') -> isError=true, 'invalid-params: This looks like tool output rather than a question...'. Warn shapes ('warn: the build finished...' and stack-frame 'at System.Net.Http.HttpClient.SendAsync()...') -> results returned, data keys ['results','warning'] with the WarnGuidance text; clean control -> data keys ['results'] only, no warning key. structural enable -> list shows structural: True; JSON-blob probe -> warning present ('This query's shape (line layout, punctuation density, token structure) statistics...'), isError=None (annotate-only); job-exit line -> no warning (below threshold, honest negative); clean control -> no warning. disable -> structural: False again.",
+      "observed-result": "Refuse throws before search with the ADR-0040 guidance; warn annotates (data.warning) without blocking; the clean control proves the guard is not annotating everything; the structural detector ships off, arms via the CLI verb, only ever annotates, and toggles back off cleanly.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "All four states exercised with positive and negative controls, including the enable/disable round-trip; the warning's home (data.warning inside the envelope) verified after an initial probe looked at the wrong level."
+    },
+    {
+      "item": "file-watch-status",
+      "expected-result": "memory_watch_status lists live registrations and their sync state",
+      "command": "`settings ingest scope add '*' /tmp/checklist-1-27-2/watch-doc`; `settings watch enable checklist-1-27-2 true`; `watch registered` before/after; memory_watch_add; memory_watch_status",
+      "evidence": "before -> 'no registered watches'. watch_add -> data {projectId, path}. memory_watch_status -> 'watches': [{projectId, path, state: 'Scanning'}]. `watch registered checklist-1-27-2` -> 'project: checklist-1-27-2  path: /tmp/checklist-1-27-2/watch-doc  registered: 2026-08-20T12:11:02Z  lastChange: never'.",
+      "observed-result": "Empty before, populated after registration, and the CLI's data view and the MCP tool's health view agree on the same registration; the state field reports the live sync phase (Scanning).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Empty-before is the control; two independent readers (CLI `watch registered`, MCP memory_watch_status) agreeing rules out one of them being a stub."
+    },
+    {
+      "item": "promotion-queue-state",
+      "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately",
+      "command": "memory_promotion_list (empty control); sqlite3 embed_state check on all entries; memory_share_extract {projectIds:['checklist-1-27-2']}; memory_promotion_list again",
+      "evidence": "before -> rows:[]. All 8 entries embed_state='embedded' (checked BEFORE extraction — unembedded rows are silently excluded from candidacy). share_extract -> candidates incl. hash b032ac63..., score 1.8127777777777778, reasons ['organic-note','durable-rule-language'], valuePreview matches the written cross-project note. promotion_list after -> the same hash with the SAME score and reasons, plus the near-miss entry as a second candidate.",
+      "observed-result": "Real candidacy proven by identity/score/reasons matching across two independent calls, not by a non-empty list; the pre-check that unembedded rows cannot be candidates was verified against the data first.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Empty control + embedded-precondition + identity across two independent readers; a vacuous empty result would have been caught by the embedded-precondition check."
+    },
+    {
+      "item": "full-mcp-surface",
+      "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+      "command": "tools/list, prompts/list, prompts/get x2 over the MCP streamable-HTTP endpoint (bearer token from <data-root>/mcp-token), parsed structurally",
+      "evidence": "tools/list -> 27 tools, 27 unique names (memory_write, memory_search, memory_get, memory_performance, memory_promotion_list, memory_watch_status, memory_share_extract, ...), parsed from the response itself; prompts/list -> 2: workspace-consolidation-guide, memory-usage-guide; prompts/get on both -> non-error result with real description + messages[0].content.text.",
+      "observed-result": "Live surface equals the derived counts exactly (27 tools / 2 prompts) and both prompts are individually retrievable with real content.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Names and counts came from the server's own tools/list/prompts/list, not from grepping constants — the comparison that catches a build other than the one under test, and it matched."
+    },
+    {
+      "item": "observability-event-ids",
+      "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+      "command": "grep -oE '\\[[0-9]+\\]' serve.log | sort -u; cross-check each against the reference table",
+      "evidence": "Emitted during the run: [0] and [14] (Microsoft.Hosting.Lifetime startup lines), [510] Bank WAL checkpoint (BankMaintenanceHostedService), [525] maintenance jobs (MaintenanceJobRunner), [610] idle watchdog armed (IdleWatchdog), [650]/[651] ServerRestart stop/stopped (ServerRestart.cs, ADR-0022), [672]/[673] settings control-plane writes key-only (SettingsEndpoint, ADR-0075), [674] model-migration outbox commit on `model set local` (SettingsEndpoint, ADR-0076), [910] tool refusal (ToolRefusals). Reference resolves: 510-524 BankMaintenanceHostedService, 525-526 MaintenanceJobRunner, 610-612 IdleWatchdog, 650-656 ServerRestart, 670-674 SettingsEndpoint, 910-912 ToolRefusals — every emitted id maps to its declared owner.",
+      "observed-result": "Every event id seen in the live log resolves against the reference table; the run exercised four subsystems' ids (maintenance, watchdog, restart, settings/model-migration, refusals) and all were accounted for.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Cross-checked against the reference rather than assumed; ids were observed firing from real activity (model set, restart, refusals, maintenance) and every one mapped to its documented owner."
+    },
+    {
+      "item": "refusal-reason-logged",
+      "expected-result": "a bare-McpException tool refusal logs ex.Message (e.g. 'invalid-params: project_id is required'), not the literal 'refused' (1.27.1, #390)",
+      "command": "memory_search with scope='bogus' (throws bare McpException 'invalid-params: Invalid scope ...'); also memory_search missing projectId (mapped invalid-argument); grep serve.log for ToolRefusals lines",
+      "evidence": "serve.log: info: AiRaccoon.Tools.ToolRefusals[910] / '\"memory_search\" refused: invalid-params: Invalid scope 'bogus': expected all, project, or shared.' — the real reason, not 'refused'. The missing-parameter case logs '\"memory_search\" refused: invalid-argument' (mapped refusal, prefix-only by design). Client saw the same message (isError=true).",
+      "observed-result": "The bare-McpException refusal is logged with ex.Message verbatim — the exact 1.27.1 fix — while mapped refusals stay prefix-only as designed; the 5d511748 anti-flood property (no Exception object) is structurally unchanged in the code.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Driven live against the running 1.27.2 binary and read from its own log; both the fixed path (bare McpException) and the by-design prefix-only path (argument binding) verified."
+    },
+    {
+      "item": "hermes-provider-setup-script",
+      "expected-result": "the 1.27.2 product change (scripts/hermes-provider-setup.py, #392) behaves as its integration test pins: settings extract verb + stdio-only probe",
+      "command": "/Users/arasz/.hermes/hermes-agent/venv/bin/python -m pytest integrations/hermes/tests/test_setup_script.py -q",
+      "evidence": "9 passed in 4.58s. The suite is hermetic: fake `hermes` and fake `ai-raccoon` shims on PATH record calls; HERMES_HOME points at a temp profile; the probe spawns the real server against a TEMP --data-root with --transport stdio. Tests pin the new surface: test_exclude_prefix_uses_settings_verb asserts 'settings extract exclude add hermes/' in the recorded ai-raccoon calls; the probe test keeps the REAL ai-raccoon binary with a temp bank.",
+      "observed-result": "The 1.27.2 script change (settings-extract verb + stdio-only probe) is exercised end-to-end by its hermetic suite, which passed 9/9 — including the exact verb regression the release carries.",
+      "status": "substituted",
+      "accepted": true,
+      "acceptance-reason": "Substituted instrument: integrations/hermes/tests/test_setup_script.py. The script's live `settings extract exclude add` write targets the DEFAULT bank (~/.ai-raccoon), which the checklist's Never list forbids touching; the hermetic suite covers the same behaviour with fake CLIs + a temp --data-root probe, and it is the instrument the change itself ships."
+    }
+  ]
+}
