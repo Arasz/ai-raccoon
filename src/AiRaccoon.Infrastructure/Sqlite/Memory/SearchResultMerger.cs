@@ -13,11 +13,14 @@ internal static class SearchResultMerger
         SearchResult searchResult,
         int limit,
         double minRelativeScore = 0.0,
+        int rrfK = SearchQuery.DefaultRrfK,
         double sourceLambda = 0.0,
         double consolidationThreshold = double.PositiveInfinity,
         DocScoreFormula formula = DocScoreFormula.Max)
     {
-        var ranked = SourceAffinityRanker.Rank(searchResult, sourceLambda, consolidationThreshold, formula);
+        var unitWeightResults = new WeightedResults(searchResult.Results, Weight: 1.0);
+        var fused = ReciprocalRankFusion.Fuse([unitWeightResults], rrfK, 0.0, int.MaxValue);
+        var ranked = SourceAffinityRanker.Rank(searchResult with { Results = fused }, sourceLambda, consolidationThreshold, formula);
         return
         [
             .. ranked

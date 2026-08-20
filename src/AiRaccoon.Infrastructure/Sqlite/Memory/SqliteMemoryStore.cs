@@ -611,7 +611,7 @@ public sealed partial class SqliteMemoryStore(
         var adjustedSea = mergedSearchResult with
         {
             Results = SearchResultMerger.Merge(mergedSearchResult with { Results = NoFusionRegression.Reorder(mergedSearchResult.Results, legs) }, query.Limit,
-                query.MinRelativeScore, isPathQuery ? 0.0 : query.SourceLambda,
+                query.MinRelativeScore, query.RrfK, isPathQuery ? 0.0 : query.SourceLambda,
                 query.ConsolidationThreshold, query.DocScoreFormula)
         };
         return new AdjustedSearchResult(adjustedSea.Results, timeProvider.GetElapsedTime(adjustmentStart))
@@ -623,7 +623,7 @@ public sealed partial class SqliteMemoryStore(
     private MergedSearchResult SearchResultMerge(SearchQuery query, FusedSearchResult fusedResult, bool isPathQuery)
     {
         var mergeStart = timeProvider.GetTimestamp();
-        var merged = SearchResultMerger.Merge(fusedResult, query.Limit, query.MinRelativeScore, isPathQuery ? 0.0 : query.SourceLambda, query.ConsolidationThreshold,
+        var merged = SearchResultMerger.Merge(fusedResult, query.Limit, query.MinRelativeScore, query.RrfK, isPathQuery ? 0.0 : query.SourceLambda, query.ConsolidationThreshold,
             query.DocScoreFormula);
         return new MergedSearchResult(merged, timeProvider.GetElapsedTime(mergeStart));
     }

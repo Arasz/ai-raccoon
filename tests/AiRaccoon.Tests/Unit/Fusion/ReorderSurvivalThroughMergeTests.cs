@@ -30,7 +30,7 @@ public sealed class ReorderSurvivalThroughMergeTests
         var reordered = (IReadOnlyList<MemorySearchResult>)
             [.. Enumerable.Range(1, 6).Select(i => Chunk($"h{i}", $"f{i}.md", 0))];
 
-        var served = SearchResultMerger.Merge(new SearchResult(reordered, TimeSpan.Zero), 10, 0.0, ShippedLambda);
+        var served = SearchResultMerger.Merge(new SearchResult(reordered, TimeSpan.Zero), 10, 0.0, RrfK, ShippedLambda);
 
         served.Select(r => r.Hash).ShouldBe(reordered.Select(r => r.Hash));
     }
@@ -52,7 +52,7 @@ public sealed class ReorderSurvivalThroughMergeTests
             Chunk("cluster-c", "cluster.md", 5)
         ];
 
-        var served = SearchResultMerger.Merge(new SearchResult(reordered, TimeSpan.Zero), 10, 0.0, ShippedLambda);
+        var served = SearchResultMerger.Merge(new SearchResult(reordered, TimeSpan.Zero), 10, 0.0, RrfK, ShippedLambda);
 
         served[0].Hash.ShouldBe("cluster-b");
         served[1].Hash.ShouldBe("lone");
@@ -70,7 +70,7 @@ public sealed class ReorderSurvivalThroughMergeTests
             Chunk("cluster-c", "cluster.md", 5)
         ];
 
-        var served = SearchResultMerger.Merge(new SearchResult(reordered, TimeSpan.Zero), 10, 0.0, sourceLambda: 0.0);
+        var served = SearchResultMerger.Merge(new SearchResult(reordered, TimeSpan.Zero), 10);
 
         served.Select(r => r.Hash).ShouldBe(reordered.Select(r => r.Hash));
     }
@@ -89,7 +89,7 @@ public sealed class ReorderSurvivalThroughMergeTests
             [Chunk("c1", null, 0), Chunk("c2", null, 0), Chunk("target", null, 0)];
 
         var served = SearchResultMerger.Merge(
-            new SearchResult(NoFusionRegression.Reorder(fused, [fts, vector]), TimeSpan.Zero), 10, 0.0, ShippedLambda);
+            new SearchResult(NoFusionRegression.Reorder(fused, [fts, vector]), TimeSpan.Zero), 10, 0.0, RrfK, ShippedLambda);
 
         served.Select(r => r.Hash).ShouldBe(["c1", "target", "c2"]);
         served.Select(r => r.Ranking).ShouldBeUnique();
