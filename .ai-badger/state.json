@@ -1,8 +1,14 @@
 {
-    "lastUpdated": "2026-08-20T12:10:00.000000+00:00",
+    "lastUpdated": "2026-08-20T14:45:00.000000+00:00",
     "notesRef": ".ai-badger/status-notes.json",
     "historyRef": ".ai-badger/status-history.json",
     "completedTasks": [
+        {
+            "id": "mem-hyb-ret",
+            "title": "Fusion retest of the 1.27.2 checklist FAIL (memory-search-hybrid-retrieval): is fusion.noRegression the cause?",
+            "merged": null,
+            "summary": "Diagnostic retest, no code change, no PR. Question: the checklist run's hybrid-retrieval fail (guide chunks dominate every query, exact match ranks 3-4) happened with fusion OFF - the scratch bank had no fusion.noRegression.enabled.global row (code default false; only the LIVE bank had it true). Retest on the same scratch bank + corpus: (a) fusion OFF (user's current live state) - anomaly reproduces on 3/4 semantic queries (astrolabe-richer: details>intro>astrolabe; sextant-zero-overlap: intro>details>astrolabe>sextant; sextant-richer: intro>details>sextant>astrolabe); one query (astrolabe-original) now ranks the astrolabe 1st because the corpus grew by one entry (the watch digest of notes.md) between the checklist probes and the retest, shifting RRF. (b) A/B with fusion ON: reorder promotes per-query where a single leg ranked the target 1st (astrolabe-original -> astrolabe 1; sextant-richer -> sextant 1) but does NOT fix astrolabe-richer (astrolabe still 3rd) or sextant-zero-overlap (sextant still 4th); fusion gauge rows (top1_changed=1, top1_rank_delta=7, top5_moved=4) prove the ON path engaged. Verdict: fusion is NOT the cause and enabling it is NOT the fix; the root cause is the bundled model's vector leg ranking generic short texts near the embedding centroid. Checklist FAIL stands (acceptance still the user's call); disabling fusion on the live bank does not change it. Lever for a real fix is a better embedding model, not the flag."
+        },
         {
             "id": "hermes-provider-cli-compat",
             "title": "Adjust the hermes provider plugin + setup script to the current ai-raccoon CLI (settings extract exclude verb, stdio-only probe)",
