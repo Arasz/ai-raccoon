@@ -8,6 +8,10 @@ obj/
 /.ai-badger/task-tracking/
 /.ai-badger/prompt-markers/
 /.ai-badger.bckp/
+# Per-session learned-skill artifacts (auto-scaffolded by agents; regenerated, not versioned)
+.ai-badger/skills-data/hermes/learned.json
+.ai-badger/skills/learned/uncategorized/refactoring-fix/references/ai-raccoon-search-pipeline-refactor-2026-08.md
+.ai-badger/skills/learned/uncategorized/refactoring-fix/references/test-failure-triage-after-refactor.md
 
 /.claude/worktrees/
 
