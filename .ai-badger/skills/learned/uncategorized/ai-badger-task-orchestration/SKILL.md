@@ -144,8 +144,10 @@ with owner-gate approval, multi-wave implementations. Trigger on "spec this out"
   evidence demands, post-merge checks), re-create the worktree at the final commit with
   `git worktree add .ai-badger/worktrees/<id> origin/task/<branch>` — and copy the
   gitignored assets again (see the assets pitfall): a fresh checkout fails model-dependent
-  tests until the copied files land (hit 2026-08-06: BundledModelLoggingTests' all-present
-  case on a fresh worktree).
+  tests until the copied files land (hit 2026-08-06: BundledModelLoggingTests' all-present case on a fresh worktree). **The tracker also flags the temp verify script itself** — a script created and then deleted per the cleanup instruction
+  reappears as an
+  "unverified changed path" the next turn; the cheap exit is one re-run with create → run → delete ALL inside a single turn (hit 2026-08-07 on a one-line .gitignore change whose only fitting verification is `git check-ignore` assertions,
+  not a suite).
 - **Main can move under a task branch.** If the user (or a sibling branch) commits to main
   mid-task — including committing YOUR untracked spec files themselves — the worktree
   branch sits on a stale base and `git diff main..HEAD` shows phantom out-of-scope changes.
@@ -290,6 +292,11 @@ with owner-gate approval, multi-wave implementations. Trigger on "spec this out"
   in the background while reviews run. Bun projects (jsaa frontend): `bun install
   --frozen-lockfile` — ~748 packages in under 2s, so just run it synchronously before
   the frontend lanes; without it `bun run lint` fails with "eslint: command not found".
+- **Task worktrees are untracked in the MAIN checkout until .gitignore learns them (user correction f: 2026-08-07).** `task_tracker.py start` creates
+  `.ai-badger/worktrees/<id>` — the main checkout's `git status` then shows
+  `?? .ai-badger/worktrees/` until the repo ignores it. A repo running /task for the first time needs `.ai-badger/worktrees/` added to the root .gitignore's ai-badger runtime-state block, next to `.ai-badger/task-tracking/` and
+  `.ai-badger/prompt-markers/`. Verify the rule with `git check-ignore -v
+  .ai-badger/worktrees/<anything>` AND that tracked config is not over-matched (`check-ignore` must NOT match `.ai-badger/config.json`, `state.json`, `CLAUDE.md`).
 - **Fresh ai-badger worktrees lack the repo `.venv` (gitignored) — and neither the shell `python3` (homebrew 3.14: "No module named pytest") nor `/usr/bin/python3` (has pytest, but gate subprocesses die on `import jsonschema` in engine/badger_lib.py) is the canonical interpreter.** Run worktree gates with the MAIN checkout's venv binary from the worktree cwd — venvs are path-independent, so `<main-checkout>/.venv/bin/python3 -m pytest -q` works from anywhere and carries jsonschema + pytest. Measured 2026-08-06 on an identical docs-only tree: `/usr/bin/python3` run → 40 failed + 99 errors (all environmental ModuleNotFoundError chains), `.venv` run → 3185 passed / 18 skipped.
 - **User-initiated `git merge origin/main` into your task branch mid-task: the state.json add/add resolves by UNION, not `checkout --ours`.** The other side's entry is another task's record (each references its own PR); keep BOTH entries — dedupe by entry id, newest first, `lastUpdated`/`next` from your side — then commit the merge. Hit 2026-08-06: the owner merged the sibling PRs to main and merged main into the task branch themselves; the conflict was expected and the union kept both task records in one file. Also check whether the merged main content introduced its own docs-canonicality gap (a sibling docs PR had merged without its docs/work/README.md row — main CI went red on test_docs_tree_is_canonical; the row fix rode the next PR).
 - **ng test output carries ANSI codes even when piped.** Asserting on captured output
@@ -348,6 +355,14 @@ with owner-gate approval, multi-wave implementations. Trigger on "spec this out"
   the whole feature to the no-op path (NullCloudStore; caught by review, would have shipped
   dead). Have the plan-reviewer verify test requirements → file coverage, not just the
   design prose.
+- **Delegated plans can FABRICATE file inventory — verify every path the plan names before dispatching the implementation lane.** A high-reasoning architect agent's plan for a renderer swap confidently cited
+  `src/tools/cv-styles/{navy-light,terminal-dark,terminal-light}.css`, a `CvStyles.cs` in the tool, a `-s all` tuner flag, and `new CvHtmlBuilder(style)` — NONE of which existed (the CSS was a C# string inside CvHtmlBuilder.cs; the tuner
+  used
+  `-r/--renderer`; there was one design, not three). The plan's structure and design decisions were sound — only the file facts were wrong. Cost when caught: one `ls`/`grep`
+  round before dispatch. Cost when NOT caught: the lane greps for ghosts, "can't find the file the plan says I own", or worse, creates the fabricated structure and ships it. Habit:
+  after the planner returns, run `ls`/`search_files`/`grep -rn` on EVERY concrete path, class name, flag and API signature the plan asserts, and correct the brief before dispatching. Also re-check the planner's "measured facts" against the
+  repo itself — the architect here also claimed the probe facts accurately, but a different agent's
+  "MEASURED" label is only as good as the source it cites. Same class as the plan-review-must-probe-SDK-claims pitfall, but on the ORCHESTRATOR side, before dispatch rather than in review.
 - **Have plan review PROBE load-bearing SDK/API claims empirically.** In one review the
   reviewer ran probe projects against the exact pinned packages and corrected two claims
   the plan's design rested on: Azure no-login throws `CredentialUnavailableException` (not
@@ -419,8 +434,9 @@ with owner-gate approval, multi-wave implementations. Trigger on "spec this out"
   before/after flow diagrams in plans, one PR per task (local merge only when the user's
   established repo pattern says so), TDD everywhere. **No copilot-PR-reviewer round** —
  "there is no copilot review, merge if green" (stated repeatedly, incl. 2026-08-05
- "f: copilot will not run"): the code-reviewer quality gate + full-suite green are the
- merge condition; skip the copilot poll entirely.
+ "f: copilot will not run"): the code-reviewer quality gate + full-suite green are the merge condition; skip the copilot poll entirely. Note the FRAMEWORK task skill's github extension still describes the copilot poll loop (it activates on
+  any github repoUrl) — that text does not apply to repos without the reviewer; instead of standing up a background poller, hand the green PR to the owner, who merges it themselves (their established pattern; confirmed again 2026-08-07 "f:
+  no copilot"). If in doubt, one `gh pr view --json reviews,statusCheckRollup` after marking ready settles whether any review mechanism exists at all.
 - **Graded memory-result logging when dogfooding ai-raccoon (user preference, f: 2026-08-05).**
   When a task uses the ai-raccoon memory store, the user wants every `memory_search`
   result logged to a JSONL quality file in the repo — one line per search with `ts`,

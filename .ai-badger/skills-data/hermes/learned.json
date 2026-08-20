@@ -202,10 +202,10 @@
     {
       "category": "uncategorized",
       "name": "ai-badger-task-orchestration",
-      "sourceHash": "536c565f39cd7d539d539969363e3498b1dddc3bac819e86c99d5aa7a8527ec8",
+        "sourceHash": "76df10e5c79d06d244d0a0d40a32ce6a68af8fd354a697b13b68247498548e9e",
       "sourcePath": "autonomous-ai-agents/ai-badger-task-orchestration",
       "status": "synced",
-      "syncedAt": "2026-08-06T16:24:43Z",
+        "syncedAt": "2026-08-20T10:31:11Z",
       "target": ".ai-badger/skills/learned/uncategorized/ai-badger-task-orchestration"
     },
     {
@@ -472,10 +472,10 @@
     {
       "category": "uncategorized",
       "name": "hermes-memory-provider-development",
-      "sourceHash": "fea089aadcba0122b98fa62030378d3f79ba8fe405236e685ad7d2118056275f",
+        "sourceHash": "f27498370a130ff638b8e6a2213f99f7c8b28d1e14d4dc4b169f51a15682aa84",
       "sourcePath": "hermes/hermes-memory-provider-development",
       "status": "synced",
-      "syncedAt": "2026-08-06T15:19:27Z",
+        "syncedAt": "2026-08-20T10:19:40Z",
       "target": ".ai-badger/skills/learned/uncategorized/hermes-memory-provider-development"
     },
     {

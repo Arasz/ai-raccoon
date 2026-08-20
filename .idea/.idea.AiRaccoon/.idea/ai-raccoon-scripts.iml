@@ -6,6 +6,7 @@
       <excludeFolder url="file://$MODULE_DIR$/../../.ai-badger/worktrees/campaign-review/.venv" />
       <excludeFolder url="file://$MODULE_DIR$/../../.claude/worktrees/agent-a90552dfb8b543a8f/.venv" />
       <excludeFolder url="file://$MODULE_DIR$/../../.venv" />
+      <excludeFolder url="file://$MODULE_DIR$/../../.ai-badger/worktrees/review-nightly-tests/.venv" />
     </content>
     <orderEntry type="jdk" jdkName="~/RiderProjects/ai-raccoon/.venv" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
