@@ -29,15 +29,15 @@ public sealed partial class SqliteMemoryStore
             : (int)Math.Clamp((long)limit * 3, 100, int.MaxValue);
 
     /// <summary>A leg that was never queried is degradation, not disagreement (docs/adr/0078).</summary>
-    private static IReadOnlyList<ModalityLeg> LegsFor(SearchQuery query,
+    private static IReadOnlyList<ModalityLeg> LegsFor(SearchParameters parameters,
         FtsQueryPlan plan,
         QueryVector queryVector,
         IReadOnlyList<MemorySearchResult> ftsCandidates,
         IReadOnlyList<MemorySearchResult> vectorCandidates
     ) =>
     [
-        query.IsFtsQueried(plan) ? ModalityLeg.From("fts", ftsCandidates) : ModalityLeg.Skipped("fts"),
-        query.IsVectorQueried(queryVector) ? ModalityLeg.From("vector", vectorCandidates) : ModalityLeg.Skipped("vector")
+        parameters.IsFtsQueried(plan) ? ModalityLeg.From("fts", ftsCandidates) : ModalityLeg.Skipped("fts"),
+        parameters.IsVectorQueried(queryVector) ? ModalityLeg.From("vector", vectorCandidates) : ModalityLeg.Skipped("vector")
     ];
 
 
@@ -46,20 +46,20 @@ public sealed partial class SqliteMemoryStore
     ///     carry each candidate's raw value, matching @query text and row id, for snippet resolution after ranking.
     /// </summary>
     private Task<IReadOnlyList<MemorySearchResult>> QueryFtsBatchAsync(
-        SqliteConnection connection, SearchQuery query, FtsQueryPlan plan, QueryVector queryVector, ContextFilter contextFilter,
+        SqliteConnection connection, SearchQuery query, SearchParameters parameters, FtsQueryPlan plan, QueryVector queryVector, ContextFilter contextFilter,
         ByHashIndex byHashIndex, CancellationToken cancellationToken)
     {
-        var queryParameters = DynamicParameters.SearchParameters(query, plan, queryVector, contextFilter);
+        var queryParameters = DynamicParameters.SearchParameters(query, parameters, plan, queryVector, contextFilter);
         return QueryFtsBatchAsync(connection, contextFilter, byHashIndex, plan.Expression, queryParameters, cancellationToken);
     }
 
     private Task<IReadOnlyList<MemorySearchResult>> QueryFallbackFtsBatchAsync(
-        SqliteConnection connection, SearchQuery query, FtsQueryPlan plan, QueryVector queryVector, ContextFilter contextFilter,
+        SqliteConnection connection, SearchQuery query, SearchParameters parameters, FtsQueryPlan plan, QueryVector queryVector, ContextFilter contextFilter,
         ByHashIndex byHashIndex, CancellationToken cancellationToken)
     {
         Guard.IsNotNull(plan.Fallback);
 
-        var queryParameters = DynamicParameters.FallbackSearchParameters(query, plan, queryVector, contextFilter);
+        var queryParameters = DynamicParameters.FallbackSearchParameters(query, parameters, plan, queryVector, contextFilter);
         return QueryFtsBatchAsync(connection, contextFilter, byHashIndex, plan.Fallback, queryParameters, cancellationToken);
     }
 
@@ -97,24 +97,4 @@ public sealed partial class SqliteMemoryStore
             row.Hash, row.Ranking, row.Path, string.Empty,
             row.SourceFile, row.ChunkIndex, row.TotalChunks))
     ];
-
-    private static async Task<double> ReadStructureAlphaAsync(SqliteConnection connection,
-        CancellationToken cancellationToken)
-    {
-        var raw = await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key = StructureFusion.AlphaSettingKey }, cancellationToken))
-            .ConfigureAwait(false);
-        return double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var alpha)
-               && alpha is >= 0.0 and <= 1.0
-            ? alpha
-            : StructureFusion.DefaultAlpha;
-    }
-
-    /// <summary>
-    ///     Reads the no-fusion-regression flag only when two legs actually contributed, so a
-    ///     single-leg or degraded search pays no extra bank read at all (docs/adr/0078).
-    /// </summary>
-    private static async Task<bool> NoFusionRegressionEnabledAsync(SqliteConnection connection, IReadOnlyList<ModalityLeg> legs, CancellationToken cancellationToken) =>
-        legs.Count(leg => leg.Contributes) >= 2
-        && FusionConfigKeys.ParseNoRegressionEnabled(await ReadSettingAsync(connection, FusionConfigKeys.NoRegressionEnabledGlobal, cancellationToken).ConfigureAwait(false));
 }

@@ -178,7 +178,7 @@ public sealed class SettingsCommands
             return ExitCode.InvalidArgument;
         }
 
-        await store.SetSettingAsync(StructureFusion.AlphaSettingKey,
+        await store.SetSettingAsync(SearchParameterSettingsKeys.StructureAlpha,
             alpha.ToString(CultureInfo.InvariantCulture), cancellationToken);
         await streams.WriteOutputLineAsync($"retrieval alpha set to {alpha.ToString(CultureInfo.InvariantCulture)}");
         return 0;
@@ -187,10 +187,10 @@ public sealed class SettingsCommands
     public async Task<int> RetrievalAlphaShowAsync(IMemoryStore store, StandardStreams streams,
         CancellationToken cancellationToken)
     {
-        var raw = await store.GetSettingAsync(StructureFusion.AlphaSettingKey, cancellationToken);
+        var raw = await store.GetSettingAsync(SearchParameterSettingsKeys.StructureAlpha, cancellationToken);
         var alpha = double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
             ? parsed
-            : StructureFusion.DefaultAlpha;
+            : SearchParameterSettingsKeys.DefaultStructureAlpha;
         await streams.WriteOutputLineAsync(alpha.ToString(CultureInfo.InvariantCulture));
         return 0;
     }
@@ -216,6 +216,167 @@ public sealed class SettingsCommands
             await store.GetSettingAsync(FusionConfigKeys.NoRegressionEnabledGlobal, cancellationToken));
         await streams.WriteOutputLineAsync(
             $"enabled: {enabled}  (default: {FusionConfigKeys.DefaultNoRegressionEnabled} — off serves the baseline fusion)");
+        return 0;
+    }
+
+    // Retrieval options (SearchParameterSettingsKeys): each has set|show, one shared core per
+    // value kind. The stored value is the wire form the settings snapshot parses back.
+
+    public Task<int> RetrievalRrfKSetAsync(ParseResult parseResult, IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken) =>
+        SetRetrievalIntAsync(parseResult, store, streams, SearchParameterSettingsKeys.RrfK, "rrfK", 1, cancellationToken);
+
+    public Task<int> RetrievalRrfKShowAsync(IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken) =>
+        ShowRetrievalOptionAsync(store, streams, SearchParameterSettingsKeys.RrfK, "rrfK",
+            SearchParameterSettingsKeys.DefaultRrfK.ToString(CultureInfo.InvariantCulture), cancellationToken);
+
+    public Task<int> RetrievalFtsWeightSetAsync(ParseResult parseResult, IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken) =>
+        SetRetrievalIntAsync(parseResult, store, streams, SearchParameterSettingsKeys.FtsWeight, "fts-weight", 0,
+            cancellationToken);
+
+    public Task<int> RetrievalFtsWeightShowAsync(IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken) =>
+        ShowRetrievalOptionAsync(store, streams, SearchParameterSettingsKeys.FtsWeight, "fts-weight",
+            SearchParameterSettingsKeys.DefaultFtsWeight.ToString(CultureInfo.InvariantCulture), cancellationToken);
+
+    public Task<int> RetrievalVectorWeightSetAsync(ParseResult parseResult, IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken) =>
+        SetRetrievalIntAsync(parseResult, store, streams, SearchParameterSettingsKeys.VectorWeight, "vector-weight", 0,
+            cancellationToken);
+
+    public Task<int> RetrievalVectorWeightShowAsync(IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken) =>
+        ShowRetrievalOptionAsync(store, streams, SearchParameterSettingsKeys.VectorWeight, "vector-weight",
+            SearchParameterSettingsKeys.DefaultVectorWeight.ToString(CultureInfo.InvariantCulture), cancellationToken);
+
+    public Task<int> RetrievalSourceLambdaSetAsync(ParseResult parseResult, IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken) =>
+        SetRetrievalDoubleAsync(parseResult, store, streams, SearchParameterSettingsKeys.SourceLambda, "source-lambda",
+            0.0, 1.0, cancellationToken);
+
+    public Task<int> RetrievalSourceLambdaShowAsync(IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken) =>
+        ShowRetrievalOptionAsync(store, streams, SearchParameterSettingsKeys.SourceLambda, "source-lambda",
+            SearchParameterSettingsKeys.DefaultSourceLambda.ToString(CultureInfo.InvariantCulture), cancellationToken);
+
+    public Task<int> RetrievalConsolidationSetAsync(ParseResult parseResult, IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken) =>
+        SetRetrievalDoubleAsync(parseResult, store, streams, SearchParameterSettingsKeys.ConsolidationThreshold,
+            "consolidation", 0.0, double.MaxValue, cancellationToken);
+
+    public Task<int> RetrievalConsolidationShowAsync(IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken) =>
+        ShowRetrievalOptionAsync(store, streams, SearchParameterSettingsKeys.ConsolidationThreshold, "consolidation",
+            SearchParameterSettingsKeys.DefaultConsolidationThreshold.ToString(CultureInfo.InvariantCulture),
+            cancellationToken);
+
+    public Task<int> RetrievalDocFormulaSetAsync(ParseResult parseResult, IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken) =>
+        SetRetrievalEnumAsync(parseResult, store, streams, SearchParameterSettingsKeys.DocScoreFormula, "doc-formula",
+            ["max", "sum"], cancellationToken);
+
+    public Task<int> RetrievalDocFormulaShowAsync(IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken) =>
+        ShowRetrievalOptionAsync(store, streams, SearchParameterSettingsKeys.DocScoreFormula, "doc-formula",
+            SearchParameterSettingsKeys.DefaultDocScoreFormula.ToString().ToLowerInvariant(), cancellationToken);
+
+    public Task<int> RetrievalWindowSetAsync(ParseResult parseResult, IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken) =>
+        SetRetrievalEnumAsync(parseResult, store, streams, SearchParameterSettingsKeys.CandidateWindow, "window",
+            ["max3x100", "max5x50"], cancellationToken);
+
+    public Task<int> RetrievalWindowShowAsync(IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken) =>
+        ShowRetrievalOptionAsync(store, streams, SearchParameterSettingsKeys.CandidateWindow, "window",
+            SearchParameterSettingsKeys.DefaultCandidateWindow.ToString().ToLowerInvariant(), cancellationToken);
+
+    /// <summary>Prints every retrieval option with its source — one call answers "what does a search run with?".</summary>
+    public async Task<int> RetrievalShowAllAsync(IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken)
+    {
+        var rows = await store.GetSettingsByPrefixAsync("retrieval.", cancellationToken);
+        var fusionRaw = await store.GetSettingAsync(FusionConfigKeys.NoRegressionEnabledGlobal, cancellationToken);
+
+        (string Key, string Name, string Default)[] options =
+        [
+            (SearchParameterSettingsKeys.RrfK, "rrfK", SearchParameterSettingsKeys.DefaultRrfK.ToString(CultureInfo.InvariantCulture)),
+            (SearchParameterSettingsKeys.FtsWeight, "ftsWeight", SearchParameterSettingsKeys.DefaultFtsWeight.ToString(CultureInfo.InvariantCulture)),
+            (SearchParameterSettingsKeys.VectorWeight, "vectorWeight", SearchParameterSettingsKeys.DefaultVectorWeight.ToString(CultureInfo.InvariantCulture)),
+            (SearchParameterSettingsKeys.SourceLambda, "sourceLambda", SearchParameterSettingsKeys.DefaultSourceLambda.ToString(CultureInfo.InvariantCulture)),
+            (SearchParameterSettingsKeys.ConsolidationThreshold, "consolidationThreshold", SearchParameterSettingsKeys.DefaultConsolidationThreshold.ToString(CultureInfo.InvariantCulture)),
+            (SearchParameterSettingsKeys.DocScoreFormula, "docScoreFormula", SearchParameterSettingsKeys.DefaultDocScoreFormula.ToString().ToLowerInvariant()),
+            (SearchParameterSettingsKeys.CandidateWindow, "candidateWindow", SearchParameterSettingsKeys.DefaultCandidateWindow.ToString().ToLowerInvariant()),
+            (SearchParameterSettingsKeys.StructureAlpha, "structureAlpha", SearchParameterSettingsKeys.DefaultStructureAlpha.ToString(CultureInfo.InvariantCulture)),
+            (FusionConfigKeys.NoRegressionEnabledGlobal, "fusionNoRegressionEnabled", FusionConfigKeys.DefaultNoRegressionEnabled.ToString().ToLowerInvariant())
+        ];
+
+        foreach (var (key, name, fallback) in options)
+        {
+            var raw = key == FusionConfigKeys.NoRegressionEnabledGlobal ? fusionRaw : rows.GetValueOrDefault(key);
+            await streams.WriteOutputLineAsync($"{name}: {raw ?? fallback}  ({(raw is null ? "default" : "setting")})");
+        }
+
+        return 0;
+    }
+
+    private static async Task<int> SetRetrievalIntAsync(ParseResult parseResult, IMemoryStore store,
+        StandardStreams streams, string key, string displayName, int min, CancellationToken cancellationToken)
+    {
+        var raw = parseResult.GetValue<string>("value")!;
+        if (!int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) || value < min)
+        {
+            await streams.WriteErrorLineAsync(
+                $"ai-raccoon: invalid {displayName} '{raw}' (expected an integer >= {min})");
+            return ExitCode.InvalidArgument;
+        }
+
+        await store.SetSettingAsync(key, value.ToString(CultureInfo.InvariantCulture), cancellationToken);
+        await streams.WriteOutputLineAsync($"retrieval {displayName} set to {value}");
+        return 0;
+    }
+
+    private static async Task<int> SetRetrievalDoubleAsync(ParseResult parseResult, IMemoryStore store,
+        StandardStreams streams, string key, string displayName, double min, double max,
+        CancellationToken cancellationToken)
+    {
+        var raw = parseResult.GetValue<string>("value")!;
+        if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
+            value < min || value > max)
+        {
+            await streams.WriteErrorLineAsync(
+                $"ai-raccoon: invalid {displayName} '{raw}' (expected a number in {min}..{max})");
+            return ExitCode.InvalidArgument;
+        }
+
+        await store.SetSettingAsync(key, value.ToString(CultureInfo.InvariantCulture), cancellationToken);
+        await streams.WriteOutputLineAsync($"retrieval {displayName} set to {value.ToString(CultureInfo.InvariantCulture)}");
+        return 0;
+    }
+
+    private static async Task<int> SetRetrievalEnumAsync(ParseResult parseResult, IMemoryStore store,
+        StandardStreams streams, string key, string displayName, string[] allowed, CancellationToken cancellationToken)
+    {
+        var raw = parseResult.GetValue<string>("value")!;
+        var normalized = raw.Trim().ToLowerInvariant();
+        if (!allowed.Contains(normalized))
+        {
+            await streams.WriteErrorLineAsync(
+                $"ai-raccoon: invalid {displayName} '{raw}' (expected one of: {string.Join(", ", allowed)})");
+            return ExitCode.InvalidArgument;
+        }
+
+        await store.SetSettingAsync(key, normalized, cancellationToken);
+        await streams.WriteOutputLineAsync($"retrieval {displayName} set to {normalized}");
+        return 0;
+    }
+
+    private static async Task<int> ShowRetrievalOptionAsync(IMemoryStore store, StandardStreams streams, string key,
+        string displayName, string fallbackText, CancellationToken cancellationToken)
+    {
+        var raw = await store.GetSettingAsync(key, cancellationToken);
+        await streams.WriteOutputLineAsync($"{displayName}: {raw ?? fallbackText}  (default: {fallbackText})");
         return 0;
     }
 

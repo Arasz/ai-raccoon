@@ -228,6 +228,15 @@ off. The second merge is deliberately left **outside** the `search.affinity` tim
 that phase stays comparable across flag states. A single-leg or degraded search pays nothing at
 all: the availability check short-circuits ahead of the settings read.
 
+> **Amended 2026-08-20 (ADR-0083).** The "pays nothing at all" sentence no longer holds for
+> the settings read: since the SearchParameters refactor the flag's value is part of the eager
+> batched defaults snapshot (`SearchParameters.FromSources(query, defaults)`, one `retrieval.%`
+> prefix read + this flag's read on the search's own connection), so a single-leg search pays
+> the same two SELECTs as any other. What stays conditional is the **application**: the reorder
+> work still runs only when two legs contributed. The flag's read cost is no longer "behind a
+> flag that is off" — it is a fixed two-SELECT tax on every search, accepted and pinned by
+> ADR-0083.
+
 ## Gates
 
 Every one was watched red against the built change, with the perturbation named.

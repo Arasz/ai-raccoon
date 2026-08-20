@@ -9,14 +9,14 @@ public sealed record SearchQuery(
     string? WorkspaceId = null,
     int Limit = 20,
     double MinRelativeScore = 0.0,
-    int RrfK = SearchQuery.DefaultRrfK,
-    int FtsWeight = 1,
-    int VectorWeight = 1,
+    int? RrfK = null,
+    int? FtsWeight = null,
+    int? VectorWeight = null,
     string? ContextLabel = null,
-    double SourceLambda = 0.1,
-    double ConsolidationThreshold = 0.1,
-    DocScoreFormula DocScoreFormula = DocScoreFormula.Max,
-    CandidateWindowMode CandidateWindow = CandidateWindowMode.Max3X100)
+    double? SourceLambda = null,
+    double? ConsolidationThreshold = null,
+    DocScoreFormula? DocScoreFormula = null,
+    CandidateWindowMode? CandidateWindow = null) : ISearchParametersSource
 {
     public const int DefaultRrfK = 60;
 
@@ -26,29 +26,22 @@ public sealed record SearchQuery(
     /// </summary>
     public double MinRelativeScore { get; } = MinRelativeScore;
 
-    /// <summary>RRF cutoff; a result's score contribution from a ranked list is weight / (k + rank).</summary>
-    public int RrfK { get; } = RrfK;
-
-    /// <summary>Weight of the FTS5 (keyword) ranked list in the RRF fusion.</summary>
-    public int FtsWeight { get; } = FtsWeight;
-
-    /// <summary>Weight of the vec0 (semantic) ranked list in the RRF fusion.</summary>
-    public int VectorWeight { get; } = VectorWeight;
-
     /// <summary>When set, the project scope also searches this project's custom-scoped rows under the label.</summary>
     public string? ContextLabel { get; } = ContextLabel;
 
-    /// <summary>Adjacent-chunk boost: a same-source sibling at chunk index N±1 adds λ to the chunk's score.</summary>
-    public double SourceLambda { get; } = SourceLambda;
+    // Per-call tuning values; null means "no opinion" and the store's defaults decide
+    // (SearchParameters.FromSources). Bank policy options (structure alpha, fusion flag)
+    // are never per-call and report no opinion.
 
-    /// <summary>Consolidation threshold: sibling visibility floor and the merge gap for weak adjacent siblings.</summary>
-    public double ConsolidationThreshold { get; } = ConsolidationThreshold;
-
-    /// <summary>Document-score formula used as the secondary sort key.</summary>
-    public DocScoreFormula DocScoreFormula { get; } = DocScoreFormula;
-
-    /// <summary>Per-modality candidate depth policy before RRF fusion (see docs/adr/0006-rrf-parameter-optimization.md).</summary>
-    public CandidateWindowMode CandidateWindow { get; } = CandidateWindow;
+    int? ISearchParametersSource.RrfK => RrfK;
+    int? ISearchParametersSource.FtsWeight => FtsWeight;
+    int? ISearchParametersSource.VectorWeight => VectorWeight;
+    double? ISearchParametersSource.SourceLambda => SourceLambda;
+    double? ISearchParametersSource.ConsolidationThreshold => ConsolidationThreshold;
+    DocScoreFormula? ISearchParametersSource.DocScoreFormula => DocScoreFormula;
+    CandidateWindowMode? ISearchParametersSource.CandidateWindow => CandidateWindow;
+    double? ISearchParametersSource.StructureAlpha => null;
+    bool? ISearchParametersSource.FusionNoRegressionEnabled => null;
 
     public sealed class Validator : AbstractValidator<SearchQuery>
     {
@@ -58,12 +51,7 @@ public sealed record SearchQuery(
             RuleFor(x => x.Query).NotNull().NotEmpty();
             RuleFor(x => x.Limit).GreaterThan(0);
             RuleFor(x => x.MinRelativeScore).InclusiveBetween(0.0, 1.0);
-            RuleFor(x => x.RrfK).GreaterThan(0);
-            RuleFor(x => x.FtsWeight).GreaterThanOrEqualTo(0);
-            RuleFor(x => x.VectorWeight).GreaterThanOrEqualTo(0);
             RuleFor(x => x.ContextLabel).MaximumLength(256);
-            RuleFor(x => x.SourceLambda).InclusiveBetween(0.0, 1.0);
-            RuleFor(x => x.ConsolidationThreshold).GreaterThanOrEqualTo(0.0);
         }
     }
 }

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Setup;
 using Microsoft.Extensions.DependencyInjection;
@@ -36,7 +37,7 @@ public sealed class McpToolContractTests : IAsyncLifetime
                                             memory_promotion_list(projectId:string|null?, limit:integer?, includeFullValue:boolean?)
                                             memory_record_followthrough(projectId:string!, correlationId:string!, filePath:string!)
                                             memory_record_grade(projectId:string!, correlationId:string!, grade:integer!, note:string|null?)
-                                            memory_search(projectId:string!, query:string!, scope:string?, workspaceId:string|null?, limit:integer?, minRelativeScore:number?, rrfK:integer?, ftsWeight:integer?, vectorWeight:integer?, contextLabel:string|null?)
+                                            memory_search(projectId:string!, query:string!, scope:string?, workspaceId:string|null?, limit:integer?, minRelativeScore:number?, rrfK:integer|null?, ftsWeight:integer|null?, vectorWeight:integer|null?, sourceLambda:number|null?, consolidationThreshold:number|null?, docScoreFormula:string|null?, candidateWindow:string|null?, contextLabel:string|null?)
                                             memory_set_ttl(projectId:string!, hash:string!, ttlDays:integer|null?)
                                             memory_share(projectId:string!, hash:string!)
                                             memory_share_extract(projectIds:array!, mode:string?, limit:integer|null?, includeTtlRows:boolean?, autoPromote:boolean?, confirm:boolean?)
@@ -79,6 +80,21 @@ public sealed class McpToolContractTests : IAsyncLifetime
         var actual = string.Join('\n', Tools().Select(Describe));
 
         actual.ShouldBe(ExpectedContract);
+    }
+
+    [Fact]
+    public void MemorySearchEnumWireValues_AreTheDocumentedContract()
+    {
+        // The two enum knobs travel as plain string? params (the schema cannot carry value
+        // lists for them), so the wire values are pinned here against the parse helpers —
+        // a rename in SearchParameterSettingsKeys or a rejected value change is a contract
+        // break, not an implementation detail (ADR-0083, plan S2).
+        SearchParameterSettingsKeys.ParseDocScoreFormula("max").ShouldBe(Core.Memory.DocScoreFormula.Max);
+        SearchParameterSettingsKeys.ParseDocScoreFormula("sum").ShouldBe(Core.Memory.DocScoreFormula.Sum);
+        SearchParameterSettingsKeys.ParseDocScoreFormula("avg").ShouldBeNull();
+        SearchParameterSettingsKeys.ParseCandidateWindow("max3x100").ShouldBe(CandidateWindowMode.Max3X100);
+        SearchParameterSettingsKeys.ParseCandidateWindow("max5x50").ShouldBe(CandidateWindowMode.Max5X50);
+        SearchParameterSettingsKeys.ParseCandidateWindow("max").ShouldBeNull();
     }
 
     /// <summary>
