@@ -6,7 +6,7 @@ probes it through Hermes' memory-plugin discovery (spawning a real
 server against a TEMP ``--data-root`` bank, so the probe never touches
 the real bank), activates it with ``hermes config set memory.provider
 ai-raccoon``, and excludes the ``hermes/`` source prefix from shared
-extraction (``ai-raccoon extract exclude add hermes/`` — a settings
+extraction (``ai-raccoon settings extract exclude add hermes/`` — a settings
 write against the default bank, which is created on first open if
 absent).
 
@@ -122,8 +122,9 @@ def resolve_hermes_python(override: str | None) -> str | None:
 def run_probe(home: Path, plugins_dir: Path, python: str) -> None:
     """Load the plugin through Hermes discovery in an isolated HERMES_HOME.
 
-    The temp home's config points the spawned server at a temp --data-root,
-    so the probe can never touch the real bank.
+    The temp home's config points the spawned server at a temp --data-root
+    with --transport stdio, so the probe is an in-process stdio server that
+    never touches a port — or the real bank.
     """
     with tempfile.TemporaryDirectory(prefix="hermes-setup-probe-") as tmp:
         tmp = Path(tmp)
@@ -133,7 +134,7 @@ def run_probe(home: Path, plugins_dir: Path, python: str) -> None:
         bank = tmp / "bank"
         (iso_home / "config.yaml").write_text(
             "plugins:\n  ai-raccoon:\n    transport: stdio\n"
-            f"    binary_args: ['--data-root', '{bank}']\n",
+            f"    binary_args: ['--data-root', '{bank}', '--transport', 'stdio']\n",
             encoding="utf-8")
         env = {**os.environ, "HERMES_HOME": str(iso_home)}
         result = subprocess.run(
@@ -170,18 +171,18 @@ def wire_exclude_prefix() -> None:
     Runs the config CLI against the default bank (~/.ai-raccoon); the bank is
     created on first open if it does not exist yet. Failure only warns: extraction
     is off by default and the operator can add the prefix later with
-    'ai-raccoon extract exclude add hermes/'.
+    'ai-raccoon settings extract exclude add hermes/'.
     """
     binary = shutil.which("ai-raccoon")
     if not binary:
         print(f"[exclude] WARNING: ai-raccoon CLI not found; run manually: "
-              f"ai-raccoon extract exclude add {EXCLUDE_PREFIX}")
+              f"ai-raccoon settings extract exclude add {EXCLUDE_PREFIX}")
         return
     result = subprocess.run(
-        ["ai-raccoon", "extract", "exclude", "add", EXCLUDE_PREFIX],
+        ["ai-raccoon", "settings", "extract", "exclude", "add", EXCLUDE_PREFIX],
         capture_output=True, text=True, timeout=60)
     if result.returncode != 0:
-        print(f"[exclude] WARNING: extract exclude add failed ({result.returncode}): "
+        print(f"[exclude] WARNING: settings extract exclude add failed ({result.returncode}): "
               f"{result.stderr.strip() or result.stdout.strip()}")
         return
     print(f"[exclude] source prefix '{EXCLUDE_PREFIX}' excluded from shared extraction")
