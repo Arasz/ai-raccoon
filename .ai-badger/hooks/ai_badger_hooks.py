@@ -605,6 +605,7 @@ def pre_llm_inject_context(
     parts: list[str] = []
     project = _project_cwd(cwd)
     prompt = message or user_message
+    index = _load_mcp_index(project)
 
     pending_reminder = _pop_pending_reminder(project)
     if pending_reminder:
@@ -622,7 +623,7 @@ def pre_llm_inject_context(
 
     # Usage hints — once per session. Repeated every turn, they became wallpaper: the
     # 0.18.0 changelog records an unconditional line as why a broken hook went unnoticed.
-    if not _session_hints_shown:
+    if "usage" not in _session_hints_shown:
         _session_hints_shown.add("usage")
         parts.append(
             "[Hermes] Use /usage for token consumption and model info. "
@@ -630,9 +631,18 @@ def pre_llm_inject_context(
             "Use session_search to recall past decisions."
         )
 
+    # Semantica nudge — once per session, gated on the index naming a semantica source.
+    if "semantica" not in _session_hints_shown:
+        _session_hints_shown.add("semantica")
+        try:
+            semantica = _load_semantica_export()
+            if semantica is not None and semantica.semantica_indexed(index):
+                parts.append(semantica.NUDGE_LINE)
+        except Exception:  # pylint: disable=broad-exception-caught
+            logger.warning("semantica nudge failed", exc_info=True)
+
     # MCP tool index recommendations
     if prompt:
-        index = _load_mcp_index(project)
         if index is None:
             event = "legacy" if _has_legacy_unmigrated_index(project) else "absent"
             _debug(_MCP_RETRIEVAL_COMPONENT, event, project=project,
@@ -873,6 +883,19 @@ def _maybe_record_follow_through(tool_name: str, result: str, cwd: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Semantica export autosave — dispatch only; logic in the sibling export module.
+# ---------------------------------------------------------------------------
+
+SEMANTICA_EXPORT_MODULE_NAME = "ai_badger_semantica_export"
+
+
+def _load_semantica_export() -> Optional[Any]:
+    """Import the sibling semantica export module lazily; None when absent or broken."""
+    return _load_sibling_module(SEMANTICA_EXPORT_MODULE_NAME, "export_semantica_graph.py",
+                                "semantica export autosave")
+
+
+# ---------------------------------------------------------------------------
 # Tool call observer — equivalent to Claude's PostToolUse hook
 # ---------------------------------------------------------------------------
 
@@ -930,6 +953,13 @@ def post_tool_observer(tool_name: str = "", result: str = "",
         _maybe_record_follow_through(tool_name, result, cwd)
     except Exception:  # pylint: disable=broad-exception-caught
         logger.warning("follow-through record failed", exc_info=True)
+
+    try:
+        semantica = _load_semantica_export()
+        if semantica is not None:
+            semantica.autosave_export(tool_name, result, session_id, Path(_project_cwd(cwd)))
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.warning("semantica export autosave failed", exc_info=True)
 
     # Log index hit/miss metrics if the index is available
     if tool_name:

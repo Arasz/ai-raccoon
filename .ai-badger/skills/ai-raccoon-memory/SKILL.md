@@ -29,6 +29,10 @@ is not in the watched list, run `memory_watch_add(projectId, <absolute path to d
 it into memory. The watch starts `scanning` and settles to `healthy`; an already-watched path is
 a no-op.
 
+Also watch `.semantica/` (one-time per project): `mkdir -p .semantica`, then
+`memory_watch_add(projectId, <absolute path to .semantica>)`. Re-adding is a no-op; the durable
+record lives in memory, so gitignore `.semantica/` in the consumer repo.
+
 **CLI prerequisite (only when the watch errors):** `watching-disabled` or `path-outside-scope`
 means the one-time per-install setup is missing (quote the `*` so the shell does not expand it):
 `ai-raccoon watch scope add '<project-id|*>' <path>`, then

@@ -45,6 +45,12 @@
         "bash": "python3 \".ai-badger/skills/ai-raccoon-memory/scripts/memory_grade_hook.py\"",
         "timeoutSec": 10,
         "matcher": "Read|ReadFile"
+      },
+      {
+        "type": "command",
+        "bash": "python3 \".ai-badger/skills/semantica-knowledge-graph/scripts/semantica_export_autosave_hook.py\"",
+        "timeoutSec": 10,
+        "matcher": "export_graph"
       }
     ],
     "preToolUse": [
