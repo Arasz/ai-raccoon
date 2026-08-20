@@ -12,10 +12,11 @@ internal static class SearchResultMerger
     public static IReadOnlyList<MemorySearchResult> Merge(
         IReadOnlyList<MemorySearchResult> searchResults,
         SearchQuery searchQuery,
+        SearchParameters parameters,
         FtsQueryPlan queryPlan)
     {
-        return Merge(searchResults, searchQuery.Limit, searchQuery.MinRelativeScore, searchQuery.RrfK, searchQuery.SourceLambda(queryPlan), searchQuery.ConsolidationThreshold,
-            searchQuery.DocScoreFormula);
+        return Merge(searchResults, searchQuery.Limit, searchQuery.MinRelativeScore, parameters.RrfK, parameters.SourceLambdaFor(queryPlan), parameters.ConsolidationThreshold,
+            parameters.DocScoreFormula);
     }
 
     public static IReadOnlyList<MemorySearchResult> Merge(

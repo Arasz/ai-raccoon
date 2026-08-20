@@ -21,7 +21,7 @@ public class SearchQueryTests
     }
 
     [Fact]
-    public void Constructor_WithOnlyRequiredFields_AppliesDefaults()
+    public void Constructor_WithOnlyRequiredFields_AppliesIdentityDefaultsAndNullTunables()
     {
         var query = new SearchQuery("acme", "search");
 
@@ -29,10 +29,15 @@ public class SearchQueryTests
         query.Limit.ShouldBe(20);
         query.MinRelativeScore.ShouldBe(0.0);
         query.Scope.ShouldBe(SearchScope.All);
-        query.RrfK.ShouldBe(60);
-        query.FtsWeight.ShouldBe(1);
-        query.VectorWeight.ShouldBe(1);
-        query.CandidateWindow.ShouldBe(CandidateWindowMode.Max3X100);
+        // Tuning values are "no opinion" at the query layer; SearchParameters.FromSources
+        // resolves them against the store's defaults (canonical constants otherwise).
+        query.RrfK.ShouldBeNull();
+        query.FtsWeight.ShouldBeNull();
+        query.VectorWeight.ShouldBeNull();
+        query.SourceLambda.ShouldBeNull();
+        query.ConsolidationThreshold.ShouldBeNull();
+        query.DocScoreFormula.ShouldBeNull();
+        query.CandidateWindow.ShouldBeNull();
     }
 
     [Fact]
@@ -113,29 +118,6 @@ public class SearchQueryTests
 
         result.IsValid.ShouldBeFalse();
         result.Errors.ShouldContain(e => e.PropertyName == "minRelativeScore");
-    }
-
-    [Theory]
-    [InlineData(0)]
-    [InlineData(-1)]
-    public void Validator_WithNonPositiveRrfK_ReportsCamelCaseProperty(int rrfK)
-    {
-        var result = new SearchQuery.Validator().Validate(new SearchQuery("acme", "query", RrfK: rrfK));
-
-        result.IsValid.ShouldBeFalse();
-        result.Errors.ShouldContain(e => e.PropertyName == "rrfK");
-    }
-
-    [Theory]
-    [InlineData(-1)]
-    [InlineData(-10)]
-    public void Validator_WithNegativeFusionWeight_ReportsCamelCaseProperty(int weight)
-    {
-        var result = new SearchQuery.Validator()
-            .Validate(new SearchQuery("acme", "query", FtsWeight: weight, VectorWeight: 1));
-
-        result.IsValid.ShouldBeFalse();
-        result.Errors.ShouldContain(e => e.PropertyName == "ftsWeight");
     }
 
     [Fact]

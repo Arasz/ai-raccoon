@@ -8,20 +8,20 @@ public static class DynamicParametersExtensions
 {
     extension(DynamicParameters)
     {
-        public static DynamicParameters VectorParameters(SearchQuery query, QueryVector queryVector, string? ctx)
+        public static DynamicParameters VectorParameters(SearchQuery query, SearchParameters searchParameters, QueryVector queryVector, string? ctx)
         {
             var parameters = new DynamicParameters();
             parameters.Add("ctx", ctx);
-            parameters.Add("limit", query.LimitForCandidateWindow);
+            parameters.Add("limit", searchParameters.CandidateWindowFor(query.Limit));
             parameters.Add("queryVector", queryVector.Data);
             return parameters;
         }
 
-        public static DynamicParameters SearchParameters(SearchQuery query, FtsQueryPlan queryPlan, QueryVector queryVector, ContextFilter contextFilter)
+        public static DynamicParameters SearchParameters(SearchQuery query, SearchParameters searchParameters, FtsQueryPlan queryPlan, QueryVector queryVector, ContextFilter contextFilter)
         {
             var parameters = new DynamicParameters();
             parameters.Add("query", queryPlan.Expression);
-            parameters.Add("limit", query.LimitForCandidateWindow);
+            parameters.Add("limit", searchParameters.CandidateWindowFor(query.Limit));
             if (!queryVector.IsEmpty)
             {
                 parameters.Add("queryVector", queryVector.Data);
@@ -35,11 +35,11 @@ public static class DynamicParametersExtensions
             return parameters;
         }
 
-        public static DynamicParameters FallbackSearchParameters(SearchQuery query, FtsQueryPlan queryPlan, QueryVector queryVector, ContextFilter contextFilter)
+        public static DynamicParameters FallbackSearchParameters(SearchQuery query, SearchParameters searchParameters, FtsQueryPlan queryPlan, QueryVector queryVector, ContextFilter contextFilter)
         {
             var parameters = new DynamicParameters();
             parameters.Add("query", queryPlan.Fallback);
-            parameters.Add("limit", query.LimitForCandidateWindow);
+            parameters.Add("limit", searchParameters.CandidateWindowFor(query.Limit));
             if (!queryVector.IsEmpty)
             {
                 parameters.Add("queryVector", queryVector.Data);

@@ -116,6 +116,28 @@ public class SearchParametersTests
         Should.Throw<ValidationException>(() => SearchParameters.FromSources(new StubSource(structureAlpha: 1.5)));
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void FromSources_WithInvalidRrfK_ReportsRrfKProperty(int rrfK)
+    {
+        var exception = Should.Throw<ValidationException>(() =>
+            SearchParameters.FromSources(new StubSource(rrfK: rrfK)));
+
+        exception.Errors.ShouldContain(e => e.PropertyName == "rrfK");
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(-10)]
+    public void FromSources_WithNegativeWeight_ReportsWeightProperty(int weight)
+    {
+        var exception = Should.Throw<ValidationException>(() =>
+            SearchParameters.FromSources(new StubSource(ftsWeight: weight, vectorWeight: 1)));
+
+        exception.Errors.ShouldContain(e => e.PropertyName == "ftsWeight");
+    }
+
     private sealed class StubSource(
         int? rrfK = null,
         int? ftsWeight = null,
