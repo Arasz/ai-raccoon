@@ -35,6 +35,16 @@ witnessed live (RED, 2026-08-20).
   provided" (exit 15). Confirmed live: `ai-raccoon settings extract exclude
   list` works and already shows `hermes/` on the real bank (add is deduped).
 
+## Plan rev 1 (2026-08-20, after read-only plan review — APPROVE-WITH-CHANGES)
+
+Review file: `docs/work/2026-08-20-hermes-provider-cli-compat-plan-review.md`.
+MUST-FIX folded: M1 (precondition command shape), M2 (attach-vs-bind
+classification by liveness), M3 (spawn/readiness/teardown mechanics).
+SHOULD-FIX folded: S1 (fake ai-raccoon shim for full-script tests), S2
+(argv assertion is the RED discriminator + failure-path case), S3
+(machine-local env assumptions noted). G-gap folded: the probe test fails
+with a clear message if no listener can be established.
+
 ## Scope
 
 1. `scripts/hermes-provider-setup.py`
@@ -50,19 +60,42 @@ witnessed live (RED, 2026-08-20).
      homebrew python3 which lacks `yaml` → `ModuleNotFoundError` in
      `test_install_copies_plugin_and_activates` and
      `test_rerun_is_idempotent`. Pin the shim shebang to `sys.executable`
-     (the pytest interpreter).
-   - NEW test `test_exclude_prefix_uses_settings_verb`: a fake `ai-raccoon`
-     shim on PATH records argv and exits 0; assert the recorded command is
-     `settings extract exclude add hermes/` and the success line prints.
-     (RED on old code: records `extract exclude add hermes/`.)
+     (the pytest interpreter). [already applied in the worktree]
+   - NEW fixture `fake_ai_raccoon` (S1): a shim on PATH (same mechanism as
+     `fake_hermes`) that records argv to a log and exits 0; used by the
+     install / rerun / exclude tests so the REAL default bank is never
+     touched. The probe test keeps the REAL binary (it needs it). Update
+     the module docstring's "real ~/.ai-raccoon bank is never touched"
+     claim to match.
+   - NEW test `test_exclude_prefix_uses_settings_verb` (S2): with
+     `fake_ai_raccoon`, assert the RECORDED argv is
+     `settings extract exclude add hermes/` — the argv assertion is the
+     RED discriminator (old code records `extract exclude add hermes/`);
+     the success-line assertion alone does not discriminate. Also assert
+     the success line prints. Failure path: fake exits non-zero → the
+     WARNING line contains the settings verb (pins the fallback message).
    - UPDATE `test_probe_spawns_isolated_server_and_passes`: keep the
-     `[probe] PASS` assertion; add a deterministic foreign-server
-     precondition — if 7721 is free, start a throwaway
-     `ai-raccoon serve --port 7721 --data-root <tmp>` (if the real server
-     already owns 7721 the spawn fails and that IS the precondition), so
-     the old code fails deterministically on every machine, not just this
-     one. RED already witnessed here (port-7721 message in the probe
-     stderr, 2026-08-20).
+     `[probe] PASS` assertion; add the foreign-server precondition with
+     the M1-M3 mechanics:
+     - Spawn: `Popen([binary, "--data-root", <tmp-foreign>, "serve",
+       "--port", "7721"])` — root option MUST precede the verb (M1; the
+       literal `serve --port 7721 --data-root <tmp>` exits 15 and binds
+       nothing → false green on old code).
+     - Readiness: wait for a TCP connect to 127.0.0.1:7721 (poll ~10 s)
+       AND classify by liveness, not by spawn outcome (M2): a throwaway
+       still alive after binding → it owns the port; exited 0 → an
+       ai-raccoon server (e.g. the real one) owns the port (serve
+       ATTACHES and exits 0, NodeRunner.cs:79-81); exited non-zero → a
+       foreign listener owns it. All three satisfy the precondition.
+     - If NO listener can be established at all → fail the test with a
+       clear message (folded G-gap; never proceed with 7721 free, or old
+       code starts its own backend and goes green).
+     - Teardown: `terminate()` + `wait()` the throwaway when the test
+       bound it; remove its temp data root.
+   - Env assumptions (S3): the probe test needs the hermes runtime python
+     (hardcoded HERMES_VENV_PYTHON) and the real `ai-raccoon` on PATH;
+     G1 runs under `/usr/bin/python3` (pytest 8.4.2 + yaml). These are
+     machine-local; noted because the suite has no CI wiring.
 3. No plugin source change: `client.py` / `__init__.py` verified working
    against 1.27.1 — this session's provider connects and `memory_search`
    works through the proxy. README.md already documents the isolation
@@ -77,7 +110,8 @@ witnessed live (RED, 2026-08-20).
 ## Acceptance gates
 
 - G1 — suite green: `/usr/bin/python3 -m pytest
-  integrations/hermes/tests/test_setup_script.py` → all pass (7 → 8 tests).
+  integrations/hermes/tests/test_setup_script.py` → all pass (7 → 9 tests:
+  + exclude-success, + exclude-failure-path).
 - G2 — witnessed RED → GREEN: probe test failed pre-fix with the port-7721
   message (witnessed); exclude test is RED on the old verb by construction.
 - G3 — live script: `python3 scripts/hermes-provider-setup.py` prints
