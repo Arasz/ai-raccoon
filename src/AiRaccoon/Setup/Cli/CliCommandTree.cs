@@ -195,8 +195,35 @@ internal static class CliCommandTree
         fusionShow.Aliases.Add("list");
         fusion.Add(fusionShow);
         retrieval.Add(fusion);
+
+        // One set|show pair per retrieval option (SearchParameterSettingsKeys), plus a
+        // show-all answering "what does a search run with?" in one call.
+        retrieval.Add(RetrievalOptionCommand("rrfk", "Sets retrieval.rrfK (integer >= 1, default 60)",
+            "Shows the current retrieval.rrfK (row value, else 60)"));
+        retrieval.Add(RetrievalOptionCommand("fts-weight", "Sets retrieval.ftsWeight (integer >= 0, default 1)",
+            "Shows the current retrieval.ftsWeight (row value, else 1)"));
+        retrieval.Add(RetrievalOptionCommand("vector-weight", "Sets retrieval.vectorWeight (integer >= 0, default 1)",
+            "Shows the current retrieval.vectorWeight (row value, else 1)"));
+        retrieval.Add(RetrievalOptionCommand("source-lambda", "Sets retrieval.sourceLambda (0..1, default 0.1)",
+            "Shows the current retrieval.sourceLambda (row value, else 0.1)"));
+        retrieval.Add(RetrievalOptionCommand("consolidation", "Sets retrieval.consolidationThreshold (>= 0, default 0.1)",
+            "Shows the current retrieval.consolidationThreshold (row value, else 0.1)"));
+        retrieval.Add(RetrievalOptionCommand("doc-formula", "Sets retrieval.docScoreFormula (max|sum, default max)",
+            "Shows the current retrieval.docScoreFormula (row value, else max)"));
+        retrieval.Add(RetrievalOptionCommand("window", "Sets retrieval.candidateWindow (max3x100|max5x50, default max3x100)",
+            "Shows the current retrieval.candidateWindow (row value, else max3x100)"));
+        var showAll = new Command("show-all", "Shows every retrieval option with its source (setting or default)");
+        showAll.Aliases.Add("list");
+        retrieval.Add(showAll);
         return retrieval;
     }
+
+    private static Command RetrievalOptionCommand(string name, string setDescription, string showDescription) =>
+        new(name, setDescription)
+        {
+            new Command("set", setDescription) { new Argument<string>("value") { HelpName = "value" } },
+            new Command("show", showDescription)
+        };
 
     private static Command SweepCommand()
     {

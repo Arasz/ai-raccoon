@@ -426,13 +426,77 @@ public class MemoryToolsTests
     }
 
     [Fact]
-    public async Task Search_WithoutFusionParameters_AppliesDefaults()
+    public async Task Search_WithoutTuningParameters_PassesNullsThrough()
     {
         await _tools.Search("acme", "query", cancellationToken: TestContext.Current.CancellationToken);
 
-        _store.LastQuery!.RrfK.ShouldBe(SearchQuery.DefaultRrfK);
-        _store.LastQuery.FtsWeight.ShouldBe(1);
+        // Tuning values are "no opinion" at the query layer; the store resolves them
+        // against its settings/defaults (SearchParameters.FromSources).
+        _store.LastQuery!.RrfK.ShouldBeNull();
+        _store.LastQuery.FtsWeight.ShouldBeNull();
+        _store.LastQuery.VectorWeight.ShouldBeNull();
+        _store.LastQuery.SourceLambda.ShouldBeNull();
+        _store.LastQuery.ConsolidationThreshold.ShouldBeNull();
+        _store.LastQuery.DocScoreFormula.ShouldBeNull();
+        _store.LastQuery.CandidateWindow.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Search_WithTuningParameters_DelegatesThemOnTheQuery()
+    {
+        await _tools.Search("acme", "query", rrfK: 30, ftsWeight: 2, vectorWeight: 1, sourceLambda: 0.3,
+            consolidationThreshold: 0.05, docScoreFormula: "sum", candidateWindow: "max5x50",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        _store.LastQuery!.RrfK.ShouldBe(30);
+        _store.LastQuery.FtsWeight.ShouldBe(2);
         _store.LastQuery.VectorWeight.ShouldBe(1);
+        _store.LastQuery.SourceLambda.ShouldBe(0.3);
+        _store.LastQuery.ConsolidationThreshold.ShouldBe(0.05);
+        _store.LastQuery.DocScoreFormula.ShouldBe(Core.Memory.DocScoreFormula.Sum);
+        _store.LastQuery.CandidateWindow.ShouldBe(CandidateWindowMode.Max5X50);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task Search_WithInvalidRrfK_FailsFastBeforeAnyBankWork(int rrfK)
+    {
+        var ex = await Should.ThrowAsync<ValidationException>(() =>
+            _tools.Search("acme", "query", rrfK: rrfK, cancellationToken: TestContext.Current.CancellationToken));
+
+        ToolRefusals.PrefixFor(ex).ShouldBe("invalid-params", "the wire prefix is the contract, not the exception type");
+    }
+
+    [Fact]
+    public async Task Search_WithOutOfRangeSourceLambda_FailsFastBeforeAnyBankWork()
+    {
+        var ex = await Should.ThrowAsync<ValidationException>(() =>
+            _tools.Search("acme", "query", sourceLambda: 2.0, cancellationToken: TestContext.Current.CancellationToken));
+
+        ToolRefusals.PrefixFor(ex).ShouldBe("invalid-params");
+    }
+
+    [Theory]
+    [InlineData("bogus")]
+    [InlineData("maxx")]
+    public async Task Search_WithInvalidDocScoreFormula_ThrowsInvalidParams(string formula)
+    {
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.Search("acme", "query", docScoreFormula: formula,
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldStartWith("invalid-params: Invalid docScoreFormula");
+    }
+
+    [Fact]
+    public async Task Search_WithInvalidCandidateWindow_ThrowsInvalidParams()
+    {
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.Search("acme", "query", candidateWindow: "max",
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldStartWith("invalid-params: Invalid candidateWindow");
     }
 
     [Fact]

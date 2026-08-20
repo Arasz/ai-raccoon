@@ -117,12 +117,24 @@ public sealed partial class MemoryTools(
             "query — a high score is not evidence of a good match, and this is not an absolute quality bar. Use it to " +
             "keep only hits in the same league as the best one; see ADR-0047.")]
         double minRelativeScore = 0.0,
-        [Description("RRF cutoff for the hybrid fusion (default 60); a result scores weight / (k + rank) per modality list.")]
-        int rrfK = SearchQuery.DefaultRrfK,
-        [Description("Weight of the keyword (FTS5) list in the RRF fusion (default 1).")]
-        int ftsWeight = 1,
-        [Description("Weight of the semantic (vector) list in the RRF fusion (default 1).")]
-        int vectorWeight = 1,
+        [Description(
+            "RRF cutoff for the hybrid fusion (bank setting retrieval.rrfK, else 60); a result scores weight / (k + rank) per modality list.")]
+        int? rrfK = null,
+        [Description("Weight of the keyword (FTS5) list in the RRF fusion (bank setting retrieval.ftsWeight, else 1).")]
+        int? ftsWeight = null,
+        [Description("Weight of the semantic (vector) list in the RRF fusion (bank setting retrieval.vectorWeight, else 1).")]
+        int? vectorWeight = null,
+        [Description(
+            "Adjacent-chunk sibling boost: a same-source chunk at index N±1 adds this much to the chunk's score (bank setting retrieval.sourceLambda, else 0.1; valid range 0..1).")]
+        double? sourceLambda = null,
+        [Description(
+            "Consolidation threshold: sibling visibility floor and the merge gap for weak adjacent siblings (bank setting retrieval.consolidationThreshold, else 0.1; must be >= 0).")]
+        double? consolidationThreshold = null,
+        [Description("Document-score formula used as the secondary sort key: \"max\" or \"sum\" (bank setting retrieval.docScoreFormula, else \"max\").")]
+        string? docScoreFormula = null,
+        [Description(
+            "Per-modality candidate depth policy before RRF fusion: \"max3x100\" or \"max5x50\" (bank setting retrieval.candidateWindow, else \"max3x100\").")]
+        string? candidateWindow = null,
         [Description("Narrows the project scope to one context. Omit it to search every context in " +
                      "the project (the default); memory_stats lists the labels in use.")]
         string? contextLabel = null,
@@ -138,10 +150,30 @@ public sealed partial class MemoryTools(
             _ => throw new McpException($"invalid-params: Invalid scope '{scope}': expected all, project, or shared.")
         };
 
+        // Enum wire names are validated here (not silently defaulted) so a typo fails fast.
+        DocScoreFormula? parsedFormula = null;
+        if (docScoreFormula is not null)
+        {
+            parsedFormula = SearchParameterSettingsKeys.ParseDocScoreFormula(docScoreFormula)
+                ?? throw new McpException($"invalid-params: Invalid docScoreFormula '{docScoreFormula}': expected 'max' or 'sum'.");
+        }
+
+        CandidateWindowMode? parsedWindow = null;
+        if (candidateWindow is not null)
+        {
+            parsedWindow = SearchParameterSettingsKeys.ParseCandidateWindow(candidateWindow)
+                ?? throw new McpException($"invalid-params: Invalid candidateWindow '{candidateWindow}': expected 'max3x100' or 'max5x50'.");
+        }
+
         var searchQuery = new SearchQuery(projectId, query, parsedScope, workspaceId, limit, minRelativeScore,
-            rrfK, ftsWeight, vectorWeight, contextLabel);
+            rrfK, ftsWeight, vectorWeight, contextLabel, sourceLambda, consolidationThreshold, parsedFormula, parsedWindow);
 
         await SearchQueryValidator.ValidateAndThrowAsync(searchQuery, cancellationToken);
+
+        // Fail-fast on the provided tuning values before any bank work: the same rule set the
+        // resolved record validates, applied to what the caller supplied (unset options fall
+        // back to the canonical constants, which are valid by construction).
+        SearchParameters.FromSources(searchQuery);
 
         var guard = await queryGuard.EvaluateAsync(projectId, query, cancellationToken);
         if (guard.Shadowed is { } suppressed)

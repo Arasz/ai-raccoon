@@ -38,6 +38,21 @@ public class SettingsCommandsTests
                 ["settings", "retrieval", "fusion", "enable"] => commands.RetrievalFusionSetAsync(true, store, streams, ct),
                 ["settings", "retrieval", "fusion", "disable"] => commands.RetrievalFusionSetAsync(false, store, streams, ct),
                 ["settings", "retrieval", "fusion", "show"] => commands.RetrievalFusionShowAsync(store, streams, ct),
+                ["settings", "retrieval", "rrfk", "set"] => commands.RetrievalRrfKSetAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["settings", "retrieval", "rrfk", "show"] => commands.RetrievalRrfKShowAsync(store, streams, ct),
+                ["settings", "retrieval", "fts-weight", "set"] => commands.RetrievalFtsWeightSetAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["settings", "retrieval", "fts-weight", "show"] => commands.RetrievalFtsWeightShowAsync(store, streams, ct),
+                ["settings", "retrieval", "vector-weight", "set"] => commands.RetrievalVectorWeightSetAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["settings", "retrieval", "vector-weight", "show"] => commands.RetrievalVectorWeightShowAsync(store, streams, ct),
+                ["settings", "retrieval", "source-lambda", "set"] => commands.RetrievalSourceLambdaSetAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["settings", "retrieval", "source-lambda", "show"] => commands.RetrievalSourceLambdaShowAsync(store, streams, ct),
+                ["settings", "retrieval", "consolidation", "set"] => commands.RetrievalConsolidationSetAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["settings", "retrieval", "consolidation", "show"] => commands.RetrievalConsolidationShowAsync(store, streams, ct),
+                ["settings", "retrieval", "doc-formula", "set"] => commands.RetrievalDocFormulaSetAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["settings", "retrieval", "doc-formula", "show"] => commands.RetrievalDocFormulaShowAsync(store, streams, ct),
+                ["settings", "retrieval", "window", "set"] => commands.RetrievalWindowSetAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["settings", "retrieval", "window", "show"] => commands.RetrievalWindowShowAsync(store, streams, ct),
+                ["settings", "retrieval", "show-all"] => commands.RetrievalShowAllAsync(store, streams, ct),
                 ["settings", "sweep", "enable"] => commands.SweepEnabledSetAsync(true, store, streams, ct),
                 ["settings", "sweep", "disable"] => commands.SweepEnabledSetAsync(false, store, streams, ct),
                 ["settings", "sweep", "interval-hours"] => commands.SweepIntervalHoursSetAsync(parsed.ParsedCliArgs, store, streams, ct),
@@ -108,6 +123,54 @@ public class SettingsCommandsTests
 
         exit.ShouldBe(0);
         stdout.Trim().ShouldBe(0.5.ToString(CultureInfo.InvariantCulture));
+    }
+
+    [Theory]
+    [InlineData("rrfk", "30", "retrieval.rrfK", "retrieval rrfK set to 30")]
+    [InlineData("fts-weight", "2", "retrieval.ftsWeight", "retrieval fts-weight set to 2")]
+    [InlineData("vector-weight", "0", "retrieval.vectorWeight", "retrieval vector-weight set to 0")]
+    [InlineData("source-lambda", "0.3", "retrieval.sourceLambda", "retrieval source-lambda set to 0.3")]
+    [InlineData("consolidation", "0.05", "retrieval.consolidationThreshold", "retrieval consolidation set to 0.05")]
+    [InlineData("doc-formula", "sum", "retrieval.docScoreFormula", "retrieval doc-formula set to sum")]
+    [InlineData("window", "max5x50", "retrieval.candidateWindow", "retrieval window set to max5x50")]
+    public async Task RetrievalOptionSet_StoresTheSettingAndPrintsIt(string option, string value, string key, string expectedLine)
+    {
+        var store = new FakeConfigStore();
+        var (exit, stdout, _) = await Run(["settings", "retrieval", option, "set", value], store);
+
+        exit.ShouldBe(0);
+        stdout.Trim().ShouldBe(expectedLine);
+        store.Settings[key].ShouldBe(value);
+    }
+
+    [Theory]
+    [InlineData("rrfk", "0", "expected an integer >= 1")]
+    [InlineData("fts-weight", "-1", "expected an integer >= 0")]
+    [InlineData("source-lambda", "1.5", "expected a number in 0..1")]
+    [InlineData("consolidation", "-0.1", "expected a number in 0..")]
+    [InlineData("doc-formula", "avg", "expected one of: max, sum")]
+    [InlineData("window", "max", "expected one of: max3x100, max5x50")]
+    [InlineData("rrfk", "abc", "expected an integer")]
+    public async Task RetrievalOptionSet_InvalidValue_ReturnsError(string option, string value, string expectedError)
+    {
+        var store = new FakeConfigStore();
+        var (exit, _, err) = await Run(["settings", "retrieval", option, "set", value], store);
+
+        exit.ShouldBe(ExitCode.InvalidArgument);
+        err.ShouldContain(expectedError);
+        store.Settings.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task RetrievalShowAll_PrintsEveryOptionWithItsSource()
+    {
+        var store = new FakeConfigStore { Settings = { ["retrieval.rrfK"] = "30" } };
+        var (exit, stdout, _) = await Run(["settings", "retrieval", "show-all"], store);
+
+        exit.ShouldBe(0);
+        stdout.ShouldContain("rrfK: 30  (setting)");
+        stdout.ShouldContain("sourceLambda: 0.1  (default)");
+        stdout.ShouldContain("fusionNoRegressionEnabled: false  (default)");
     }
 
     [Fact]
