@@ -150,30 +150,11 @@ public sealed partial class MemoryTools(
             _ => throw new McpException($"invalid-params: Invalid scope '{scope}': expected all, project, or shared.")
         };
 
-        // Enum wire names are validated here (not silently defaulted) so a typo fails fast.
-        DocScoreFormula? parsedFormula = null;
-        if (docScoreFormula is not null)
-        {
-            parsedFormula = SearchParameterSettingsKeys.ParseDocScoreFormula(docScoreFormula)
-                ?? throw new McpException($"invalid-params: Invalid docScoreFormula '{docScoreFormula}': expected 'max' or 'sum'.");
-        }
-
-        CandidateWindowMode? parsedWindow = null;
-        if (candidateWindow is not null)
-        {
-            parsedWindow = SearchParameterSettingsKeys.ParseCandidateWindow(candidateWindow)
-                ?? throw new McpException($"invalid-params: Invalid candidateWindow '{candidateWindow}': expected 'max3x100' or 'max5x50'.");
-        }
-
-        var searchQuery = new SearchQuery(projectId, query, parsedScope, workspaceId, limit, minRelativeScore,
-            rrfK, ftsWeight, vectorWeight, contextLabel, sourceLambda, consolidationThreshold, parsedFormula, parsedWindow);
-
-        await SearchQueryValidator.ValidateAndThrowAsync(searchQuery, cancellationToken);
-
-        // Fail-fast on the provided tuning values before any bank work: the same rule set the
-        // resolved record validates, applied to what the caller supplied (unset options fall
-        // back to the canonical constants, which are valid by construction).
-        SearchParameters.FromSources(searchQuery);
+        // Enum wire names are validated here (not silently defaulted) so a typo fails fast,
+        // and provided tuning values are range-checked before any bank work.
+        var searchQuery = BuildValidatedSearchQuery(projectId, query, parsedScope, workspaceId, limit,
+            minRelativeScore, rrfK, ftsWeight, vectorWeight, contextLabel, sourceLambda,
+            consolidationThreshold, docScoreFormula, candidateWindow);
 
         var guard = await queryGuard.EvaluateAsync(projectId, query, cancellationToken);
         if (guard.Shadowed is { } suppressed)
@@ -202,6 +183,38 @@ public sealed partial class MemoryTools(
         var result = new SearchResultList(results, warning);
         var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
         return envelope with { Meta = envelope.Meta with { CorrelationId = correlationId } };
+    }
+
+    /// <summary>
+    ///     Builds the query from the wire values: enum strings are parsed and rejected on typo,
+    ///     the identity rules run, and the provided tuning values are range-checked fail-fast via
+    ///     the resolved record's rule set (unset options fall back to valid constants).
+    /// </summary>
+    private static SearchQuery BuildValidatedSearchQuery(
+        string projectId, string query, SearchScope scope, string? workspaceId, int limit,
+        double minRelativeScore, int? rrfK, int? ftsWeight, int? vectorWeight, string? contextLabel,
+        double? sourceLambda, double? consolidationThreshold, string? docScoreFormula, string? candidateWindow)
+    {
+        DocScoreFormula? parsedFormula = null;
+        if (docScoreFormula is not null)
+        {
+            parsedFormula = SearchParameterSettingsKeys.ParseDocScoreFormula(docScoreFormula)
+                ?? throw new McpException($"invalid-params: Invalid docScoreFormula '{docScoreFormula}': expected 'max' or 'sum'.");
+        }
+
+        CandidateWindowMode? parsedWindow = null;
+        if (candidateWindow is not null)
+        {
+            parsedWindow = SearchParameterSettingsKeys.ParseCandidateWindow(candidateWindow)
+                ?? throw new McpException($"invalid-params: Invalid candidateWindow '{candidateWindow}': expected 'max3x100' or 'max5x50'.");
+        }
+
+        var searchQuery = new SearchQuery(projectId, query, scope, workspaceId, limit, minRelativeScore,
+            rrfK, ftsWeight, vectorWeight, contextLabel, sourceLambda, consolidationThreshold, parsedFormula, parsedWindow);
+
+        SearchQueryValidator.ValidateAndThrow(searchQuery);
+        SearchParameters.FromSources(searchQuery);
+        return searchQuery;
     }
 
     [McpServerTool(Name = TnMemoryList)]
