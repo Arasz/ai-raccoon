@@ -863,7 +863,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         var shared = new[] { Hit("h1", "a.md"), Hit("h2", "b.md") };
         var project = new[] { Hit("h2", "b.md"), Hit("h3", "c.md") };
 
-        var merged = SearchResultMerger.Merge([shared, project], 10);
+        var merged = SearchResultMerger.Merge(new SearchResult([.. shared, .. project], TimeSpan.Zero), 10);
 
         // h1 = 1/61, h3 = 1/62, h2 = 1/61 + 1/62 -> h2 ranks first and normalizes to 1.0.
         merged.Select(r => r.Hash).ShouldBe(["h2", "h1", "h3"]);
@@ -876,7 +876,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     {
         var results = new[] { Hit("h1", "a.md"), Hit("h2", "b.md"), Hit("h3", "c.md") };
 
-        var merged = SearchResultMerger.Merge([results], 10);
+        var merged = SearchResultMerger.Merge(new SearchResult(results, TimeSpan.Zero), 10);
 
         merged.Select(r => r.Hash).ShouldBe(["h1", "h2", "h3"]);
         merged[0].Ranking.ShouldBe(1.0);
@@ -887,7 +887,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     {
         var results = new[] { Hit("h1", "a.md"), Hit("h2", "b.md"), Hit("h3", "c.md") };
 
-        var merged = SearchResultMerger.Merge([results], 10, 0.9);
+        var merged = SearchResultMerger.Merge(new SearchResult(results, TimeSpan.Zero), 10, 0.9);
 
         // Single-list scores 11/11, 11/12, 11/13; only the top two clear 0.9.
         merged.Select(r => r.Hash).ShouldBe(["h1", "h2"]);
@@ -903,7 +903,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             new MemorySearchResult("h3", 0.7, "c.md", "s")
         };
 
-        var merged = SearchResultMerger.Merge([results], 2);
+        var merged = SearchResultMerger.Merge(new SearchResult(results, TimeSpan.Zero), 2);
 
         // Rank order decides, not the interim score payload.
         merged.Select(r => r.Hash).ShouldBe(["h1", "h2"]);
@@ -911,7 +911,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
     [Fact]
     public void Merge_EmptyBatches_ReturnsEmpty() =>
-        SearchResultMerger.Merge([[], []], 10)
+        SearchResultMerger.Merge(new SearchResult([], TimeSpan.Zero), 10)
             .ShouldBeEmpty();
 
     private static MemorySearchResult Hit(string hash, string path) => new(hash, 0, path, "s");

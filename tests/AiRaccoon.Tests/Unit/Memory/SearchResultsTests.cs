@@ -20,7 +20,8 @@ public sealed class SearchResultsTests
         var timings = new SearchTimings(
             TimeSpan.FromMilliseconds(1), TimeSpan.FromMilliseconds(2), TimeSpan.FromMilliseconds(3),
             TimeSpan.FromMilliseconds(4), TimeSpan.FromMilliseconds(5), TimeSpan.FromMilliseconds(6),
-            TimeSpan.FromMilliseconds(7), TimeSpan.FromMilliseconds(8), TimeSpan.FromMilliseconds(9));
+            TimeSpan.FromMilliseconds(7), TimeSpan.FromMilliseconds(8), TimeSpan.FromMilliseconds(9),
+            TimeSpan.FromMilliseconds(10));
 
         var searchResults = new SearchResults(results, timings);
 
@@ -40,6 +41,7 @@ public sealed class SearchResultsTests
         empty.Vector.ShouldBe(TimeSpan.Zero);
         empty.Fusion.ShouldBe(TimeSpan.Zero);
         empty.Merge.ShouldBe(TimeSpan.Zero);
+        empty.Adjustment.ShouldBe(TimeSpan.Zero);
         empty.Snippets.ShouldBe(TimeSpan.Zero);
         empty.Bump.ShouldBe(TimeSpan.Zero);
         empty.Total.ShouldBe(TimeSpan.Zero);
@@ -81,7 +83,8 @@ public sealed class SearchResultsTests
         var timings = new SearchTimings(
             TimeSpan.FromMilliseconds(1), TimeSpan.FromMilliseconds(2), TimeSpan.FromMilliseconds(3),
             TimeSpan.FromMilliseconds(4), TimeSpan.FromMilliseconds(5), TimeSpan.FromMilliseconds(6),
-            TimeSpan.FromMilliseconds(7), TimeSpan.FromMilliseconds(8), TimeSpan.FromMilliseconds(9));
+            TimeSpan.FromMilliseconds(7), TimeSpan.FromMilliseconds(8), TimeSpan.FromMilliseconds(9),
+            TimeSpan.FromMilliseconds(10));
 
         var phases = timings.Phases();
 
@@ -93,8 +96,8 @@ public sealed class SearchResultsTests
             ("search.vector", TimeSpan.FromMilliseconds(4)),
             ("search.fusion", TimeSpan.FromMilliseconds(5)),
             ("search.affinity", TimeSpan.FromMilliseconds(6)),
-            ("search.snippets", TimeSpan.FromMilliseconds(7)),
-            ("search.bump", TimeSpan.FromMilliseconds(8))
+            ("search.snippets", TimeSpan.FromMilliseconds(8)),
+            ("search.bump", TimeSpan.FromMilliseconds(9))
         ]);
     }
 
@@ -105,8 +108,9 @@ public sealed class SearchResultsTests
         var timings = new SearchTimings(
             TimeSpan.FromMilliseconds(1), TimeSpan.FromMilliseconds(2), TimeSpan.FromMilliseconds(3),
             TimeSpan.FromMilliseconds(4), TimeSpan.FromMilliseconds(5), TimeSpan.FromMilliseconds(6),
-            TimeSpan.FromMilliseconds(7), TimeSpan.FromMilliseconds(8), TimeSpan.FromMilliseconds(9));
+            TimeSpan.FromMilliseconds(7), TimeSpan.FromMilliseconds(8), TimeSpan.FromMilliseconds(9),
+            TimeSpan.FromMilliseconds(10));
 
-        timings.Measurements().ShouldBe([.. timings.Phases(), ("search.total", TimeSpan.FromMilliseconds(9))]);
+        timings.Measurements().ShouldBe([.. timings.Phases(), ("search.total", TimeSpan.FromMilliseconds(10))]);
     }
 }

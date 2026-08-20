@@ -19,7 +19,7 @@ public sealed class NoHandRolledCryptoTests
         "AiRaccoon.Infrastructure/Embedding/BundledModel.cs",
         "AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs",
         "AiRaccoon.Infrastructure/Sqlite/SnippetFallback.cs",
-        "AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs",
+        "AiRaccoon.Infrastructure/Sqlite/Memory/SqliteMemoryStore.cs",
         "AiRaccoon.Infrastructure/Watch/WatchDigestExecutor.cs"
     };
 
