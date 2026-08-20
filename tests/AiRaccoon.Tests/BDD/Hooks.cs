@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Tests.TestHelpers;
 using Reqnroll;
 
 namespace AiRaccoon.Tests.BDD;
@@ -19,6 +20,30 @@ public sealed class Hooks(ScenarioContext scenarioContext)
         // The encryption-bitwarden feature's context (real resolver-backed bank + fake-bws
         // runner); registered under its own type — the native-memory registrations stay as-is.
         scenarioContext.ScenarioContainer.RegisterInstanceAs(new EncryptionBitwardenFeatureContext());
+    }
+
+    /// <summary>
+    ///     The bitwarden scenarios shell out to a fake bws script; the child inherits this
+    ///     process's environment, so an ambient BWS_ACCESS_TOKEN on the host would reach the fake
+    ///     and be rejected as an unknown token. The scenarios define their own world: the Bitwarden
+    ///     vars are unset for the whole scenario, and only the token the runner sets explicitly
+    ///     (the -t channel) ever reaches the fake.
+    /// </summary>
+    [BeforeScenario("bitwarden")]
+    public async Task BeforeBitwardenScenario()
+    {
+        var scope = await EnvScope.AcquireAsync(CancellationToken.None,
+            ("BWS_ACCESS_TOKEN", null), ("BW_ACCESS_TOKEN", null));
+        scenarioContext.Set(scope);
+    }
+
+    [AfterScenario("bitwarden")]
+    public async Task AfterBitwardenScenario()
+    {
+        if (scenarioContext.TryGetValue<EnvScope>(out var scope))
+        {
+            await scope.DisposeAsync();
+        }
     }
 
     [AfterScenario]
