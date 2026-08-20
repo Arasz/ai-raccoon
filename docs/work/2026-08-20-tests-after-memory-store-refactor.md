@@ -43,16 +43,22 @@ unit fixtures with all-zero rankings hit `0/0 = NaN`, which the min-score filter
 the empty served list in `WithNoSiblings`. The `Merge_RebuildsScores...` test documents itself
 as the signal to delete when this pass is removed (ADR-0058).
 
-### B. Search phase timings restructured (2 tests)
+### B. Search phase timings restructured (2 tests — RESOLVED)
 
 - `SqliteMemoryStoreSearchTimingsTests.Search_AttributesEachPhasesElapsedTime_ToThatPhaseAndNoOther`
 - `SqliteMemoryStoreSearchTimingsTests.Search_PopulatesEveryPhaseThatRan_AndLeavesTheSkippedModalityAtZero`
 
-Probable reason: the pipeline now measures nine phases (open, embed, vector, fts, fusion, merge,
-adjustment, snippets, bump) — the scripted provider still scripts eight, shifting every value
-(observed: Fts 22ms → 33ms). Additionally, `ResolveDeferredSnippetsAsync` returns
-`TimeSpan.Zero` on the empty-deferred path, so a search with no results measures Snippets = 0
-where the old code measured the span unconditionally.
+Probable reason (original): the pipeline now measures nine phases (open, embed, vector, fts,
+fusion, merge, adjustment, snippets, bump) — the scripted provider scripted eight, shifting every
+value (observed: Fts 22ms → 33ms); the per-context loop also swapped to vector-before-fts, and
+`ResolveDeferredSnippetsAsync` returns `TimeSpan.Zero` on the empty-deferred path, so a search
+with no results measured Snippets = 0 where the old code measured the span unconditionally.
+
+Resolved 2026-08-20: both tests adjusted to the new pipeline — the scripted test now scripts nine
+values in the measured call order (open, embed, vector, fts, fusion, merge, adjustment, snippets,
+bump) and the "every phase that ran" test asserts the new Adjustment phase; both seed one matching
+entry so the deferred-snippet path and access bump actually do work (their timings are only
+non-zero when they have work). Class now 4/4 green.
 
 ### C. Retrieval quality gates (7 tests)
 
