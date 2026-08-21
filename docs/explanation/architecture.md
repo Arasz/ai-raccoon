@@ -282,13 +282,16 @@ opens the bank once for the whole call and hands the open connection to `FileIng
 against the project's declared ingest scope (`ingest.scope.<project>`, falling back to
 `ingest.scope.global`) and refuses with `PathOutsideScopeException` when it falls outside — the
 same rule and primitive `memory_watch_add` uses. An unscoped project refuses every ingest. Past
-the scope check, a non-indexable file (not `.md`/`.markdown`/`.txt`, or hidden) is silently
-skipped; an indexable file's content is split into **token-aware chunks** before hashing and
-insertion. Each new chunk is embedded immediately through `EntryEmbedder` when an engine is
-configured — no extension-host hook sits on this path (that pipeline was removed entirely,
-ADR-0016); without an engine the chunk stays `pending` for `memory_embed_pending` to pick up
-later. The chunker uses the o200k_base tokenizer with code-fence-aware splitting and an overlay
-window for context continuity between chunks.
+the scope check, a memory-indexable file (`.md`/`.markdown`/`.txt`/`.json`) is split into
+**token-aware chunks** before hashing and insertion; a recognized code extension (`.cs`, `.py`,
+`.ts`, `.go`, `.rs`, … — the v1 list, `CodeExtensions`) routes instead to `CodeIngestor` and the
+code corpus (`code_entries`) — memory extensions always win on overlap, so a `.md` file inside a
+code directory still lands in `entries`. Anything neither pipeline claims, or hidden, is silently
+skipped in both. Each new memory chunk is embedded immediately through `EntryEmbedder` when an
+engine is configured — no extension-host hook sits on this path (that pipeline was removed
+entirely, ADR-0016); without an engine the chunk stays `pending` for `memory_embed_pending` to
+pick up later. The chunker uses the o200k_base tokenizer with code-fence-aware splitting and an
+overlay window for context continuity between chunks.
 
 **Chunk bounds** are clamped to the configured embedding engine's maximum input
 tokens: 256 for the bundled all-MiniLM-L6-v2, 8191 for OpenAI-compatible models.
@@ -766,10 +769,12 @@ src/AiRaccoon.Core/         Pure domain layer — zero framework deps
                             MetricsConfigKeys (buffer/flush/retention settings)
   Metrics/                  Measurement, MeasurementKind, IMeasurementRecorder,
                             Statistics (pure percentile/min/max/mean), PerformanceReport/Builder
-  Chunking/                 IChunker base, IMarkdownChunker, IJsonChunker, MarkdownChunker (pure splitter)
+  Chunking/                 IChunker base, IMarkdownChunker, IJsonChunker, MarkdownChunker (pure splitter),
+                            ICodeChunker, CodeChunk (line-ranged, code corpus)
   Access/                   AccessMode enum, AccessModePolicy, AccessRequirement, AccessDeniedException
   Ingestion/                IFileTypeHandler, IFileTypeMatcher, IngestPath, IngestScopeKeys/List,
-                            PathOutsideScopeException, PathNotFoundException
+                            PathOutsideScopeException, PathNotFoundException, CodeExtensions,
+                            ICodeFileTypeMatcher, CorpusKind, IngestDispatcher (code corpus routing)
   Rating/                   RatingPolicy
   Degradation/              DegradationPolicy
   Workspace/                Workspace record, ConsolidationResult
@@ -783,9 +788,10 @@ src/AiRaccoon.Infrastructure/   Adapters — Dapper over SQLite, sync, embedding
   Sqlite/Encryption/        EncryptionKeyResolver, EncryptionSourceSidecar, key Providers
   Embedding/                EmbeddingService, OnnxEmbeddingGenerator, BundledModel, EntryEmbedder
   Ingestion/                FileIngestor (scope containment, chunking, chunk insertion; WI-8),
-                            FileTypeMatcher, MarkdownFileTypeHandler, JsonFileTypeHandler, IFileIngestor
+                            FileTypeMatcher, MarkdownFileTypeHandler, JsonFileTypeHandler, IFileIngestor,
+                            CodeIngestor, CodeFileTypeMatcher (code corpus, self-filtering)
   Sync/                     SyncService, SyncCloudStoreFactory, S3CloudStore, AzureBlobCloudStore, NullCloudStore, FakeCloudStore
-  Chunking/                 O200kTokenizer (o200k_base), JsonFileTypeChunker
+  Chunking/                 O200kTokenizer (o200k_base), JsonFileTypeChunker, NoOpCodeChunker (interim ICodeChunker)
   Workspace/                WorkspaceService
   Watch/                    WatchService, WatchPipeline, WatchScheduler, WatchHostedService
   Promotion/                PromotionQueueService (propose-tier queue, ADR-0007)

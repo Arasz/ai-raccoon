@@ -21,9 +21,13 @@ public sealed class FileIngestor(
     IMemorySourceStore sourceStore,
     TimeProvider timeProvider,
     ILocalTokenizer localTokenizer,
-    IIgnoreRulesProvider? ignoreRulesProvider = null) : IFileIngestor
+    IIgnoreRulesProvider? ignoreRulesProvider = null,
+    ICodeFileTypeMatcher? codeFileTypeMatcher = null,
+    ICodeIngestor? codeIngestor = null) : IFileIngestor
 {
     private const int DefaultMaxTokens = 256;
+    private readonly ICodeFileTypeMatcher _codeFileTypeMatcher = codeFileTypeMatcher ?? NullCodeFileTypeMatcher.Instance;
+    private readonly ICodeIngestor _codeIngestor = codeIngestor ?? NullCodeIngestor.Instance;
     private readonly IIgnoreRulesProvider _ignoreRulesProvider = ignoreRulesProvider ?? NullIgnoreRulesProvider.Instance;
 
     /// <summary>
@@ -35,13 +39,43 @@ public sealed class FileIngestor(
     {
         await RequireInScopeAsync(connection, projectId, path, cancellationToken).ConfigureAwait(false);
 
-        if (!IsIndexableFile(path, out var handler))
+        if (IsHidden(path))
         {
             return 0;
         }
 
+        if (!fileTypeMatcher.TryGetHandler(path, out var handler))
+        {
+            return await IngestAsCodeAsync(connection, projectId, path, cancellationToken).ConfigureAwait(false);
+        }
+
         var content = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
         return await InsertChunksAsync(connection, projectId, path, content, handler, context, cancellationToken, embedInline)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     OQ4 (docs/work/2026-08-21-code-search-implementation-plan.md §12.4): explicit single-file
+    ///     ingest routes code extensions to the code corpus too. No watch/ingest root is known here,
+    ///     so the file's own parent directory is treated as the `ai-raccoon.ignore` root — the
+    ///     closest analogue to `memory_ingest_directory` pointed at that directory.
+    /// </summary>
+    private async Task<int> IngestAsCodeAsync(SqliteConnection connection, string projectId, string path,
+        CancellationToken cancellationToken)
+    {
+        if (!_codeFileTypeMatcher.IsCodeFile(path))
+        {
+            return 0;
+        }
+
+        var root = Path.GetDirectoryName(path) ?? path;
+        var ignoreRules = await _ignoreRulesProvider.LoadAsync(root, cancellationToken).ConfigureAwait(false);
+        if (IsIgnored(ignoreRules, root, path))
+        {
+            return 0;
+        }
+
+        return await _codeIngestor.IngestFileAsync(connection, projectId, path, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -60,8 +94,14 @@ public sealed class FileIngestor(
         foreach (var file in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!IsIndexableFile(file, out var handler))
+            if (!fileTypeMatcher.TryGetHandler(file, out var handler))
             {
+                if (_codeFileTypeMatcher.IsCodeFile(file))
+                {
+                    indexed += await _codeIngestor.IngestFileAsync(connection, projectId, file, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+
                 continue;
             }
 

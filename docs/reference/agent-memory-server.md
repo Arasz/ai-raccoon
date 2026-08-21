@@ -77,6 +77,16 @@ config channel (see [Command-line options](#command-line-options)).
   the full chunk with `code_get`. `kind=code`/`both` searches are never recorded in
   `search_quality` (unlike `kind=memory`, which records exactly as today) — code identifiers
   and paths must not leave the machine through a syncing table.
+- **`memory_ingest_file`/`memory_ingest_directory` feed the code corpus too:** a file is routed
+  by extension — the memory-owned extensions (`.md`/`.markdown`/`.txt`/`.json`) always win on
+  overlap; a recognized code extension (`.cs`, `.py`, `.ts`, `.go`, `.rs`, … — the v1 list is
+  owner-adjustable) goes to the code corpus instead; anything else is skipped in both. A `.md`
+  file inside a directory of otherwise-code files still routes to memory. `ai-raccoon.ignore`
+  and the hidden-file/deny-set (`node_modules`, `bin`, `obj`, `.git`, `.venv`, `__pycache__`,
+  `dist`, `build`, `target`) rules apply identically to both corpora. In this release the code
+  chunker is not yet wired (the engine-generalization work it depends on ships in a later wave):
+  code files route correctly but every ingest produces 0 code rows until then — memory ingest is
+  unaffected.
 - **`memory_share`:** promotes the entry whose `hash` you pass (from a `memory_write`
   or `memory_search` result) into `shared`. It is additive — the source project row
   stays. There is no un-share; `memory_delete` on the shared row's hash removes it from

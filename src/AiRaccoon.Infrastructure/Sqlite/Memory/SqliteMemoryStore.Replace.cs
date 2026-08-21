@@ -83,6 +83,14 @@ public sealed partial class SqliteMemoryStore
             await connection.ExecuteAsync(
                     Def(MemorySql.DeleteBySourcePath, new { projectId, path, pathPrefix }, cancellationToken))
                 .ConfigureAwait(false);
+            // Code corpus leg (docs/work/2026-08-21-code-search-implementation-plan.md §3.5):
+            // unconditional, same reasoning as DeleteSourcePathAsync above.
+            await connection.ExecuteAsync(
+                    Def(MemorySql.DeleteCodeBySourcePath, new { projectId, path, pathPrefix }, cancellationToken))
+                .ConfigureAwait(false);
+            // fileIngestor self-filters by extension and, when the path is a code file, dispatches
+            // to ICodeIngestor internally (FileIngestor.IngestFileAsync) — one re-ingest call
+            // covers both corpora; each ingestor's own matcher decides whether it does anything.
             await fileIngestor
                 .IngestFileAsync(connection, projectId, path, null, cancellationToken, false)
                 .ConfigureAwait(false);

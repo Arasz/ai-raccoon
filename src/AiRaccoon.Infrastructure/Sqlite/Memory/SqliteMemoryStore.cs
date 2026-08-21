@@ -323,6 +323,12 @@ public sealed partial class SqliteMemoryStore(
             var deleted = await connection.ExecuteAsync(
                     Def(MemorySql.DeleteBySourcePath, new { projectId, path, pathPrefix }, cancellationToken))
                 .ConfigureAwait(false);
+            // Code corpus leg (docs/work/2026-08-21-code-search-implementation-plan.md §3.5):
+            // unconditional — each ingestor self-filters on re-ingest, so the digest needs no
+            // classification here. A no-op for a memory-only path (idx_code_entries_path-backed).
+            await connection.ExecuteAsync(
+                    Def(MemorySql.DeleteCodeBySourcePath, new { projectId, path, pathPrefix }, cancellationToken))
+                .ConfigureAwait(false);
             await connection.ExecuteAsync(
                     Def(MemorySql.DeleteWatchFilesByProjectPathCascade,
                         new { projectId, path, pathPrefix }, cancellationToken))

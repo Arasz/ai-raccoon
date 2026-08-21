@@ -214,8 +214,16 @@ public static partial class AppRegistrations
             services.AddSingleton<IFileTypeHandler>(sp => new JsonFileTypeHandler(sp.GetRequiredService<IJsonChunker>()));
             services.AddSingleton<IReadOnlyCollection<IFileTypeHandler>>(sp => sp.GetServices<IFileTypeHandler>().ToList());
             services.AddRequiredSingleton<IIgnoreRulesProvider, IgnoreRulesProvider>();
-            services.AddRequiredSingleton<IFileIngestor, FileIngestor>();
             services.AddRequiredSingleton<IFileTypeMatcher, FileTypeMatcher>();
+
+            // Code corpus (docs/work/2026-08-21-code-search-implementation-plan.md §12.5, Wave
+            // 2): registry + ingest plumbing land now; NoOpCodeChunker is the interim ICodeChunker
+            // until the real line-range chunker (WP2) replaces this registration in Wave 3
+            // (engine-blocked).
+            services.AddRequiredSingleton<ICodeFileTypeMatcher, CodeFileTypeMatcher>();
+            services.AddRequiredSingleton<ICodeChunker, NoOpCodeChunker>();
+            services.AddRequiredSingleton<ICodeIngestor, CodeIngestor>();
+            services.AddRequiredSingleton<IFileIngestor, FileIngestor>();
         }
 
         private void RegisterPromotionQueue()
