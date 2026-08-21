@@ -243,6 +243,7 @@ internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
 internal sealed class FakeIgnoreRulesProvider : IIgnoreRulesProvider
 {
     private readonly Dictionary<string, IgnoreRules> _rulesByRoot = new(IngestPath.PathComparer);
+    private readonly Dictionary<string, IgnoreRules> _afterFirstCallByRoot = new(IngestPath.PathComparer);
 
     public List<string> LoadCalls { get; } = [];
 
@@ -250,10 +251,29 @@ internal sealed class FakeIgnoreRulesProvider : IIgnoreRulesProvider
 
     public void Set(string root, string content) => Set(root, IgnoreRules.Parse(content));
 
+    /// <summary>
+    ///     S5: a deterministic mid-scan edit, independent of any hook timing — the very first
+    ///     <see cref="LoadAsync" /> call for <paramref name="root" /> returns <paramref name="before" />;
+    ///     every call after that returns <paramref name="after" />, forever. Drives
+    ///     <c>WatchCatchUp</c>'s own re-read-at-end-of-pass comparison to disagree exactly once, so a
+    ///     genuine second pass is the only way the loop settles.
+    /// </summary>
+    public void SetTransition(string root, IgnoreRules before, IgnoreRules after)
+    {
+        _rulesByRoot[root] = before;
+        _afterFirstCallByRoot[root] = after;
+    }
+
     public Task<IgnoreRules> LoadAsync(string root, CancellationToken cancellationToken = default)
     {
         LoadCalls.Add(root);
-        return Task.FromResult(_rulesByRoot.GetValueOrDefault(root, IgnoreRules.Empty));
+        var current = _rulesByRoot.GetValueOrDefault(root, IgnoreRules.Empty);
+        if (_afterFirstCallByRoot.TryGetValue(root, out var after))
+        {
+            _rulesByRoot[root] = after;
+        }
+
+        return Task.FromResult(current);
     }
 }
 
