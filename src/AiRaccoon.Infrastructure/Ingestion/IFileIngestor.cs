@@ -5,11 +5,13 @@ namespace AiRaccoon.Infrastructure.Ingestion;
 /// <summary>
 ///     One file's ingest outcome: rows written, and whether the watch digest may record a
 ///     fingerprint for it. <see cref="FingerprintEligible" /> is false only when the file's ONLY
-///     matched corpus is code and the code chunker produced zero chunks (B1) — a stand-in chunker
-///     (e.g. <c>NoOpCodeChunker</c>) must never let the file settle into a fingerprinted,
-///     permanently hash-skipped state before a real chunker ever ran on it. Every other outcome —
+///     matched corpus is code, the code chunker produced zero chunks (B1), AND the content is NOT
+///     empty/whitespace-only (S3) — a stand-in chunker (e.g. <c>NoOpCodeChunker</c>) must never let
+///     a file with real content settle into a fingerprinted, permanently hash-skipped state before
+///     a real chunker ever ran on it, but a genuinely empty/whitespace-only file chunks to zero
+///     rows FOREVER regardless of chunker quality, so it fingerprints like any other outcome —
 ///     a memory match (regardless of row count), a mixed match, or no corpus matching the file at
-///     all — fingerprints exactly as before.
+///     all — which all fingerprint exactly as before.
 /// </summary>
 public readonly record struct FileIngestResult(int RowsInserted, bool FingerprintEligible);
 

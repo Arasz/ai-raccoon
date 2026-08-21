@@ -101,6 +101,26 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
         (await CountAsync("entries")).ShouldBe(0);
     }
 
+    /// <summary>
+    ///     S3: an empty/whitespace-only code file legitimately chunks to zero rows FOREVER (unlike
+    ///     the B1 stand-in-chunker case, where zero rows is a temporary tooling gap) — it must still
+    ///     be fingerprint-eligible, or the watch digest hash-skip never engages and the file
+    ///     re-ingests on every poll indefinitely.
+    /// </summary>
+    [Fact]
+    public async Task IngestFileAsync_WhitespaceOnlyCodeFile_IsFingerprintEligible()
+    {
+        var ingestor = CreateIngestor();
+        var file = await WriteAsync("Empty.cs", "   \n\n\t\n");
+
+        var result = await ingestor.IngestFileAsync(_conn, "test_project", file, null,
+            TestContext.Current.CancellationToken);
+
+        result.RowsInserted.ShouldBe(0);
+        result.FingerprintEligible.ShouldBeTrue(
+            "a whitespace-only code file must fingerprint despite zero rows, or the watch digest re-ingests it forever");
+    }
+
     [Fact]
     public async Task IngestFileAsync_WithoutCodeSupportConfigured_CodeFileReturnsZero()
     {

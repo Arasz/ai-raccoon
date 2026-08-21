@@ -259,6 +259,24 @@ public static class TestData
         return dot;
     }
 
+    /// <summary>A real <see cref="IEmbeddingManifestLoader" /> — no fake: the B1 activation gate
+    /// (§3.3 D-E9) depends on the loader's own validation, not a stand-in.</summary>
+    public static IEmbeddingManifestLoader CreateManifestLoader() =>
+        new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator());
+
+    /// <summary>Stages the code-daemon-embed-v1 fixture manifest (768-dim, 128-ctx) into
+    /// <paramref name="dir" /> with stub tokenizer/onnx files, so a real
+    /// <see cref="IEmbeddingManifestLoader" /> accepts it — for tests that activate a real code
+    /// engine and need the B1 manifest gate (§3.3 D-E9) to pass.</summary>
+    public static void SeedCodeManifestDirectory(string dir)
+    {
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "sentencepiece.bpe.model"), "tokenizer");
+        File.WriteAllText(Path.Combine(dir, "model.onnx"), "model");
+        File.Copy(RepoFile("tests/AiRaccoon.Tests/Resources/ManifestFixtures/code-daemon-embed-v1.json"),
+            Path.Combine(dir, EmbeddingManifest.FileName));
+    }
+
     /// <summary>Locates a repo-relative file by walking up from the test output directory.</summary>
     public static string RepoFile(string relative)
     {

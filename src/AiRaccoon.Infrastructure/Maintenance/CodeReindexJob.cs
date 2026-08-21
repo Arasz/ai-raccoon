@@ -25,11 +25,22 @@ public sealed class CodeReindexJob(ICodeEmbedder embedder) : IMaintenanceJob
     /// <summary>Never due by the clock; <see cref="HasWorkAsync" /> is the only gate.</summary>
     public TimeSpan? Interval => null;
 
-    /// <summary>One drain batch per run (§3.3 D-E9: "batches of 32") — <see cref="HasWorkAsync" /> brings this job back next poll for whatever a run doesn't finish.</summary>
-    private const int RowsPerRun = 32;
+    /// <summary>Rows per run (S8: 4x CodeEmbedder.BatchSize — the sub-batch size a run's generator
+    /// calls are actually chunked to) — <see cref="HasWorkAsync" /> brings this job back next poll
+    /// for whatever a run doesn't finish.</summary>
+    private const int RowsPerRun = 4 * CodeEmbedder.BatchSize;
 
-    public async Task<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
-        await embedder.HasPendingWorkAsync(connection, cancellationToken).ConfigureAwait(false);
+    /// <summary>
+    ///     S6: reconciles the stored fingerprint against a freshly-computed one BEFORE reporting
+    ///     due-ness — a manifest that changed in place since activation must invalidate on its own,
+    ///     not only when a re-activation happens to run. Runs on every poll (15s on-demand cadence),
+    ///     same as every other on-every-open reconcile in this codebase.
+    /// </summary>
+    public async Task<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        await embedder.ReconcileFingerprintAsync(connection, cancellationToken).ConfigureAwait(false);
+        return await embedder.HasPendingWorkAsync(connection, cancellationToken).ConfigureAwait(false);
+    }
 
     /// <summary>Embeds up to <see cref="RowsPerRun" /> pending code rows; never leaves anything new pending itself.</summary>
     public async Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)

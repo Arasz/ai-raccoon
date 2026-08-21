@@ -31,4 +31,7 @@ public sealed class FakeCodeEmbedder : ICodeEmbedder
 
     public Task<bool> HasPendingWorkAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
         Task.FromResult(false);
+
+    public Task<bool> ReconcileFingerprintAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+        Task.FromResult(false);
 }

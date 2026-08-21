@@ -9,4 +9,9 @@ namespace AiRaccoon.Core.Memory.Code;
 public static class CodeCorpusSchema
 {
     public const int EmbeddingDimensions = 768;
+
+    /// <summary>S2: a row that fails embedding this many times in a row is excluded from future
+    /// drain selection (SelectAllPendingCodeForEmbed/HasPendingCodeEmbed) — a poison row must not
+    /// starve its batch or retry every 15s maintenance poll forever.</summary>
+    public const int MaxEmbedAttempts = 3;
 }

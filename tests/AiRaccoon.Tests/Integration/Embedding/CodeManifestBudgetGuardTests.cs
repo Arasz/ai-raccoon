@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using Microsoft.Extensions.Logging.Testing;
@@ -33,6 +34,38 @@ public sealed class CodeManifestBudgetGuardTests
         budget.ShouldBe(126, "min(510, 128 - 2) = 126 — the engine plan's flat-510 text must never win");
         budget.ShouldNotBe(EmbeddingService.MaxManifestChunkTokens,
             "510 would mean the ctx-aware D6 rule was reverted to the flat cap");
+    }
+
+    /// <summary>
+    ///     N2 (derive-not-restate): <see cref="CodeChunker.DefaultBudget" /> must equal what
+    ///     <see cref="EmbeddingService.ResolveChunkBudgetFor" /> derives from the REAL
+    ///     code-daemon-embed-v1 fixture manifest — so a future edit to either the constant or the
+    ///     formula alone is caught, instead of both drifting in silent agreement.
+    /// </summary>
+    [Fact]
+    public void DefaultBudget_EqualsTheFormulasOutput_ForTheRealCodeDaemonFixtureManifest()
+    {
+        var dir = SeedFixtureManifestDir();
+        var service = new EmbeddingService(new FakeLogger<EmbeddingService>(), new LocalTokenizer(),
+            new EmbeddingTokenizerFactory(),
+            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
+
+        var derived = service.ResolveChunkBudgetFor(new EmbeddingSettings("local", dir, null, null));
+
+        derived.ShouldBe(CodeChunker.DefaultBudget,
+            "CodeChunker.DefaultBudget must never drift from the manifest-driven formula it hard-codes");
+    }
+
+    private static string SeedFixtureManifestDir()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "ai-raccoon-code-budget-guard", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var fixturePath = Path.Combine(AppContext.BaseDirectory, "Resources", "ManifestFixtures",
+            "code-daemon-embed-v1.json");
+        File.Copy(fixturePath, Path.Combine(dir, EmbeddingManifest.FileName));
+        File.WriteAllText(Path.Combine(dir, "sentencepiece.bpe.model"), "tokenizer");
+        File.WriteAllText(Path.Combine(dir, "model.onnx"), "model");
+        return dir;
     }
 
     private static string WriteManifestDir(int contextWindowTokens)

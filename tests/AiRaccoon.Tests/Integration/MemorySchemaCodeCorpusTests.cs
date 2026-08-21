@@ -118,7 +118,8 @@ public sealed class MemorySchemaCodeCorpusTests
         columns.ShouldBe(
             [
                 "id", "hash", "path", "value", "source_file", "line_start", "line_end", "project_id",
-                "created_at", "updated_at", "embed_state", "embedding", "chunk_index", "total_chunks"
+                "created_at", "updated_at", "embed_state", "embedding", "chunk_index", "total_chunks",
+                "embed_attempts"
             ],
             ignoreOrder: true);
 

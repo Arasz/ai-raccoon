@@ -364,17 +364,36 @@ internal static class MemorySql
     public const string MarkAllCodeEmbeddedPending =
         "UPDATE code_entries SET embed_state = 'pending' WHERE embed_state = 'embedded'";
 
-    /// <summary>Bank-wide pending-row existence check for CodeReindexJob.HasWorkAsync — mirrors HasPendingEmbed.</summary>
+    /// <summary>Bank-wide pending-row existence check for CodeReindexJob.HasWorkAsync — mirrors HasPendingEmbed.
+    /// S2: excludes a row that crossed CodeCorpusSchema.MaxEmbedAttempts (the literal 3 below MUST track
+    /// that constant — a const string can't interpolate a const int, so LoggerMessageEventIdTests-style
+    /// drift protection isn't available here; MaxEmbedAttemptsSqlLiteralTests pins the two together instead),
+    /// or a permanently-poisoned row would keep this (and therefore the 15s on-demand poll) true forever.</summary>
     public const string HasPendingCodeEmbed =
-        "SELECT EXISTS(SELECT 1 FROM code_entries WHERE embed_state = 'pending' LIMIT 1)";
+        "SELECT EXISTS(SELECT 1 FROM code_entries WHERE embed_state = 'pending' AND embed_attempts < 3 LIMIT 1)";
 
-    /// <summary>Bank-wide (not project-scoped) pending code rows for the code-reindex drain — mirrors SelectAllPendingForEmbed.</summary>
+    /// <summary>Bank-wide (not project-scoped) pending code rows for the code-reindex drain — mirrors SelectAllPendingForEmbed.
+    /// S2: the same MaxEmbedAttempts exclusion as HasPendingCodeEmbed (see its own remark on the literal 3) — a
+    /// quarantined poison row is never re-selected.</summary>
     public const string SelectAllPendingCodeForEmbed =
-        "SELECT id AS Id, value AS Value FROM code_entries WHERE embed_state = 'pending' ORDER BY id LIMIT @limit";
+        "SELECT id AS Id, value AS Value FROM code_entries WHERE embed_state = 'pending' AND embed_attempts < 3 " +
+        "ORDER BY id LIMIT @limit";
 
-    /// <summary>Fills the embedding column and flips embed_state — fires vec_code_au, which writes the row into vec_code.</summary>
+    /// <summary>Fills the embedding column and flips embed_state — fires vec_code_au, which writes the row into vec_code.
+    /// The @engine guard (S1) blocks the write when a concurrent activation changed embedding.codeEngine after this
+    /// batch's rows were selected: without it, a stale UPDATE would mark the row 'embedded' with a vector generated
+    /// under the PREVIOUS engine, permanently mismatched with the new engine's fingerprint. The row simply stays
+    /// pending — the next drain re-embeds it under whichever engine is current then.</summary>
     public const string MarkCodeEmbedded =
-        "UPDATE code_entries SET embed_state = 'embedded', embedding = @embedding WHERE id = @id";
+        "UPDATE code_entries SET embed_state = 'embedded', embedding = @embedding " +
+        "WHERE id = @id AND embed_state = 'pending' " +
+        "AND (SELECT value FROM settings WHERE key = 'embedding.codeEngine') = @engine";
+
+    /// <summary>S2: bumps a row's failure count after an individual (not whole-batch) embed attempt fails
+    /// — the per-row fallback's own progress marker, so a poison row eventually crosses MaxEmbedAttempts
+    /// and drops out of SelectAllPendingCodeForEmbed/HasPendingCodeEmbed instead of retrying forever.</summary>
+    public const string IncrementCodeEmbedAttempts =
+        "UPDATE code_entries SET embed_attempts = embed_attempts + 1 WHERE id = @id";
 
     // ---- model_migration (ADR-0076) ----
 

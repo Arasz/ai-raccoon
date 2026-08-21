@@ -28,8 +28,13 @@ public interface ICodeEmbedder
     ///     `embed_state = 'pending'`, with the configured engine. A no-op (returns 0) when no code
     ///     engine is configured — a pending code row with no engine is legitimately unembeddable,
     ///     same rule as <see cref="IEntryEmbedder.EmbedPendingBatchAsync" />. Throws
-    ///     <see cref="AiRaccoon.Core.Memory.Code.CodeEngineUnloadableException" /> when configured
-    ///     but unloadable.
+    ///     <see cref="AiRaccoon.Core.Memory.Code.CodeEngineUnloadableException" /> only when the
+    ///     engine itself fails to load (broken manifest/model files) — a single row whose CONTENT
+    ///     breaks generation (S2) does not throw: it falls back to per-row embedding, so the rest of
+    ///     the batch still makes progress, and a row that keeps failing on its own is left pending
+    ///     with a bumped attempt count rather than retried forever. Returns the count actually
+    ///     marked embedded, which can be less than the rows selected when a concurrent activation
+    ///     (S1) or a poison row (S2) left some of them pending.
     /// </summary>
     Task<int> EmbedPendingBatchAsync(SqliteConnection connection, int limit, CancellationToken cancellationToken);
 
@@ -39,4 +44,16 @@ public interface ICodeEmbedder
     ///     the code-reindex maintenance job stays quiet (no error spam) while unconfigured.
     /// </summary>
     Task<bool> HasPendingWorkAsync(SqliteConnection connection, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     S6: compares the configured code-model directory's freshly-computed fingerprint against
+    ///     the stored `embedding.codeEngine` value; on a mismatch (the manifest on disk changed
+    ///     since the last activation/reconcile — a re-download, a changed pin) invalidates every
+    ///     embedded `code_entries` row to 'pending' and updates the stored fingerprint, in one
+    ///     transaction — the SAME invalidation <see cref="AiRaccoon.Core.Memory.ICodeEngineStore.ActivateCodeEngineAsync" />
+    ///     performs. A no-op (returns false) when no code engine is configured, or when the stored
+    ///     fingerprint already matches. Meant to be called on every poll (CodeReindexJob.HasWorkAsync),
+    ///     not just on an explicit re-activation.
+    /// </summary>
+    Task<bool> ReconcileFingerprintAsync(SqliteConnection connection, CancellationToken cancellationToken);
 }

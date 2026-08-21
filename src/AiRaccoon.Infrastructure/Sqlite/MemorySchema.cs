@@ -432,6 +432,13 @@ internal static class MemorySchema
                                               total_chunks INTEGER NOT NULL DEFAULT 0
                                           );
 
+                                          -- S2: a row that keeps failing to embed (poison content) must not starve
+                                          -- its batch or retry every maintenance poll forever. Added via ALTER, not
+                                          -- the CREATE TABLE column list above, so the SAME statement brings both a
+                                          -- brand-new bank (table just created, column still missing) and an
+                                          -- already-existing one to the same shape exactly once per digest change.
+                                          ALTER TABLE code_entries ADD COLUMN embed_attempts INTEGER NOT NULL DEFAULT 0;
+
                                           CREATE UNIQUE INDEX IF NOT EXISTS uq_code_chunk ON code_entries(project_id, path, hash);
                                           CREATE INDEX IF NOT EXISTS idx_code_entries_project ON code_entries(project_id);
                                           CREATE INDEX IF NOT EXISTS idx_code_entries_hash ON code_entries(hash);

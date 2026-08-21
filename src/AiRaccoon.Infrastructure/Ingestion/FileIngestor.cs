@@ -71,8 +71,11 @@ public sealed class FileIngestor(
     ///     OQ4 (docs/work/2026-08-21-code-search-implementation-plan.md §12.4): explicit single-file
     ///     ingest routes code extensions to the code corpus too. Not a code file at all — fingerprint
     ///     eligible as before, nothing will ever come of it regardless of chunker. A code file the
-    ///     chunker produced zero rows for is NOT fingerprint eligible (B1): a stand-in chunker (e.g.
-    ///     `NoOpCodeChunker`) must not let the watch digest settle into treating the file as done.
+    ///     chunker produced zero rows for is NOT fingerprint eligible (B1) UNLESS the content is
+    ///     empty/whitespace-only (S3): a stand-in chunker (e.g. `NoOpCodeChunker`) producing zero
+    ///     rows for real content must not let the watch digest settle into treating the file as
+    ///     done, but a genuinely empty/whitespace-only file chunks to zero rows FOREVER regardless
+    ///     of chunker quality — refusing to fingerprint it would re-ingest it on every poll forever.
     /// </summary>
     private async Task<FileIngestResult> IngestAsCodeAsync(SqliteConnection connection, string projectId, string path,
         CancellationToken cancellationToken)
@@ -84,7 +87,13 @@ public sealed class FileIngestor(
 
         var rows = await _codeIngestor.IngestFileAsync(connection, projectId, path, cancellationToken)
             .ConfigureAwait(false);
-        return new FileIngestResult(rows, rows > 0);
+        if (rows > 0)
+        {
+            return new FileIngestResult(rows, true);
+        }
+
+        var content = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+        return new FileIngestResult(0, string.IsNullOrWhiteSpace(content));
     }
 
     /// <summary>

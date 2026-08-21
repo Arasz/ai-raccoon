@@ -3,6 +3,7 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -90,11 +91,13 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
     public async Task ActivateThenDrain_OrderingIsPinned_RowsStayPendingUntilTheNextPollRunsTheJob()
     {
         var embedder = new CodeEmbedder(new FakeCodeEmbeddingService());
-        var store = new SqliteCodeEngineStore(_factory, new FakeCodeEmbeddingService());
+        var store = new SqliteCodeEngineStore(_factory, new FakeCodeEmbeddingService(), TestData.CreateManifestLoader());
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         await SeedEmbeddedCodeRowAsync(connection, id: 1);
 
-        await store.ActivateCodeEngineAsync("/models/code-daemon-embed-v1", TestContext.Current.CancellationToken);
+        var modelDir = Path.Combine(_dataRoot, "models", "code-daemon-embed-v1");
+        TestData.SeedCodeManifestDirectory(modelDir);
+        await store.ActivateCodeEngineAsync(modelDir, TestContext.Current.CancellationToken);
 
         // Right after activation (its own transaction, no drain inside it) the row is pending,
         // not yet re-embedded.
@@ -111,12 +114,14 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
     [Fact]
     public async Task FingerprintChangeViaReactivation_ReEmbedsCodeOnly_MemoryRowsUntouched()
     {
-        var store = new SqliteCodeEngineStore(_factory, new FakeCodeEmbeddingService());
+        var store = new SqliteCodeEngineStore(_factory, new FakeCodeEmbeddingService(), TestData.CreateManifestLoader());
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         await SeedEmbeddedCodeRowAsync(connection, id: 1);
         await SeedEmbeddedMemoryRowAsync(connection, id: 1);
 
-        await store.ActivateCodeEngineAsync("/models/code-daemon-embed-v1-v2", TestContext.Current.CancellationToken);
+        var modelDir = Path.Combine(_dataRoot, "models", "code-daemon-embed-v1-v2");
+        TestData.SeedCodeManifestDirectory(modelDir);
+        await store.ActivateCodeEngineAsync(modelDir, TestContext.Current.CancellationToken);
 
         var codeState = await connection.ExecuteScalarAsync<string>("SELECT embed_state FROM code_entries WHERE id = 1");
         var memoryState = await connection.ExecuteScalarAsync<string>("SELECT embed_state FROM entries WHERE id = 1");
@@ -124,14 +129,85 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
         memoryState.ShouldBe("embedded", "a code-engine fingerprint change must never touch the memory corpus");
     }
 
+    /// <summary>
+    ///     S6: `embedding.codeEngine` was write-only — activation writes it, but nothing ever
+    ///     compared it against a freshly-computed fingerprint, so a manifest changed IN PLACE on
+    ///     disk (a re-download, a changed pin) after activation never re-triggered a re-embed. The
+    ///     drain's own `HasWorkAsync` is where this must be caught: it runs on every 15s on-demand
+    ///     poll regardless of whether anything is already pending.
+    /// </summary>
     [Fact]
-    public async Task MemoryToolsStayCallable_WhileCodeRowsSitPendingMidDrainWindow()
+    public async Task HasWorkAsync_ManifestChangedInPlaceSinceActivation_InvalidatesAndUpdatesTheStoredFingerprint()
+    {
+        var embeddingService = TestData.CreateEmbeddingService();
+        var store = new SqliteCodeEngineStore(_factory, embeddingService, TestData.CreateManifestLoader());
+        var job = new CodeReindexJob(new CodeEmbedder(embeddingService));
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+
+        var modelDir = Path.Combine(_dataRoot, "models", "code-daemon-embed-v1-drift");
+        TestData.SeedCodeManifestDirectory(modelDir);
+        await store.ActivateCodeEngineAsync(modelDir, TestContext.Current.CancellationToken);
+        await SeedEmbeddedCodeRowAsync(connection, id: 1);
+        var storedEngineBefore = await ReadCodeEngineSettingAsync(connection);
+
+        // Simulate a re-download that changed the pinned model without going through
+        // `model set code local` again — the manifest's own bytes (and so its sha256) change.
+        var manifestPath = Path.Combine(modelDir, EmbeddingManifest.FileName);
+        File.WriteAllText(manifestPath, File.ReadAllText(manifestPath).Replace("faxenoff", "faxenoff-v2"));
+
+        (await job.HasWorkAsync(connection, TestContext.Current.CancellationToken)).ShouldBeTrue(
+            "the manifest drifted -- HasWorkAsync must invalidate the row to pending, not just report FALSE work");
+
+        var stateAfter = await connection.ExecuteScalarAsync<string>("SELECT embed_state FROM code_entries WHERE id = 1");
+        stateAfter.ShouldBe("pending", "a drifted manifest must invalidate previously-embedded rows exactly like reactivation");
+        var storedEngineAfter = await ReadCodeEngineSettingAsync(connection);
+        storedEngineAfter.ShouldNotBe(storedEngineBefore, "the stored fingerprint must be updated to the freshly-computed one");
+    }
+
+    /// <summary>S6: an UNCHANGED manifest must never invalidate — a poll must be a no-op when nothing drifted.</summary>
+    [Fact]
+    public async Task HasWorkAsync_ManifestUnchanged_NeverInvalidatesAlreadyEmbeddedRows()
+    {
+        var embeddingService = TestData.CreateEmbeddingService();
+        var store = new SqliteCodeEngineStore(_factory, embeddingService, TestData.CreateManifestLoader());
+        var job = new CodeReindexJob(new CodeEmbedder(embeddingService));
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+
+        var modelDir = Path.Combine(_dataRoot, "models", "code-daemon-embed-v1-stable");
+        TestData.SeedCodeManifestDirectory(modelDir);
+        await store.ActivateCodeEngineAsync(modelDir, TestContext.Current.CancellationToken);
+        await SeedEmbeddedCodeRowAsync(connection, id: 1);
+
+        (await job.HasWorkAsync(connection, TestContext.Current.CancellationToken)).ShouldBeFalse(
+            "nothing drifted and nothing is pending -- a poll must be a true no-op");
+
+        var state = await connection.ExecuteScalarAsync<string>("SELECT embed_state FROM code_entries WHERE id = 1");
+        state.ShouldBe("embedded", "an unchanged manifest must never invalidate an already-embedded row");
+    }
+
+    private static async Task<string?> ReadCodeEngineSettingAsync(SqliteConnection connection) =>
+        await connection.ExecuteScalarAsync<string?>("SELECT value FROM settings WHERE key = @key",
+            new { key = EmbeddingSettingsKeys.CodeEngine });
+
+    /// <summary>
+    ///     N1: renamed from "...WhileCodeRowsSitPendingMidDrainWindow" — this test never holds a
+    ///     real drain in flight (it deliberately never runs CodeReindexJob), so it does not prove
+    ///     anything about a mid-drain window specifically. What it actually proves: activation opens
+    ///     no model_migration row and interacts with no ToolGate, so a code row sitting pending for
+    ///     ANY reason (activation just ran, or a drain never got scheduled) never blocks a memory
+    ///     tool call — there is no cross-corpus coupling to accidentally introduce.
+    /// </summary>
+    [Fact]
+    public async Task MemoryToolsStayCallable_RegardlessOfPendingCodeRows_NoToolGateOrModelMigrationCoupling()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
-        var store = new SqliteCodeEngineStore(_factory, new FakeCodeEmbeddingService());
+        var store = new SqliteCodeEngineStore(_factory, new FakeCodeEmbeddingService(), TestData.CreateManifestLoader());
         await SeedPendingCodeRowAsync(connection, id: 1);
-        await store.ActivateCodeEngineAsync("/models/code-daemon-embed-v1", TestContext.Current.CancellationToken);
-        // Deliberately never runs CodeReindexJob -- the row stays pending, simulating the drain window.
+        var modelDir = Path.Combine(_dataRoot, "models", "code-daemon-embed-v1");
+        TestData.SeedCodeManifestDirectory(modelDir);
+        await store.ActivateCodeEngineAsync(modelDir, TestContext.Current.CancellationToken);
+        // Deliberately never runs CodeReindexJob -- the row stays pending; see the summary above
+        // for what that does and does not prove.
 
         var settings = new SqliteSettingsStore(_factory);
         var memoryStore = new SettingsOnlyStore(settings);
@@ -146,10 +222,19 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
         envelope.Data.ShouldNotBeNull("memory tools must never be blocked by a pending code drain -- no ToolGate interaction at all");
     }
 
-    private static async Task ActivateCodeEngineAsync(SqliteConnection connection, string directory) =>
+    /// <summary>Mirrors real activation: codeModel and codeEngine always land together, so
+    /// MarkCodeEmbedded's S1 engine guard has a real value to compare against, not a NULL that
+    /// could never match any captured engine.</summary>
+    private static async Task ActivateCodeEngineAsync(SqliteConnection connection, string directory)
+    {
+        await UpsertSettingAsync(connection, EmbeddingSettingsKeys.CodeModel, directory);
+        await UpsertSettingAsync(connection, EmbeddingSettingsKeys.CodeEngine, $"test:local:{directory}");
+    }
+
+    private static async Task UpsertSettingAsync(SqliteConnection connection, string key, string value) =>
         await connection.ExecuteAsync(new CommandDefinition(
             "INSERT INTO settings (key, value) VALUES (@key, @value) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            new { key = EmbeddingSettingsKeys.CodeModel, value = directory }, cancellationToken: TestContext.Current.CancellationToken));
+            new { key, value }, cancellationToken: TestContext.Current.CancellationToken));
 
     private static async Task SeedPendingCodeRowAsync(SqliteConnection connection, long id) =>
         await connection.ExecuteAsync(new CommandDefinition(
