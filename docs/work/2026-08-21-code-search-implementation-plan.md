@@ -505,3 +505,29 @@ win.
 - **Wave 3 (after WP0 = engine base on main):** WP2, WP3-remainder (counting tokenizer),
   WP1-remainder (`model set code local`, non-768 refusal), WP5, WP7-remainder
   (`code-reindex` drain), then WP8.
+
+### 12.6 Waves 1–2 integration-review dispositions (Opus gate, 2026-08-21)
+
+Review found 2 blocking + 12 should-fix; all fixed in the same task except the following
+recorded dispositions:
+
+- **v11 REVERTED (S7/S8, orchestrator ruling — owner review requested):** the plan-§4
+  `CurrentVersion 10→11` bump is replaced by an unconditional, ungated, idempotent
+  overlap-prune at bank open (`MigrateIngestScopeKeysAsync` shape, soft per-row failure
+  handling). Reason: the bump hard-fails concurrent sessions/peers on the older binary
+  (user_version survives `VACUUM INTO`; sync refuses newer snapshots) — repo precedent
+  ADR-0023, and this repo runs concurrent sessions as standard practice. `CurrentVersion`
+  stays 10.
+- **`idx_code_entries_path` DROPPED (S2):** proven inert — `uq_code_chunk` is the covering
+  index; the EXPLAIN gate is re-pointed at it. §3.1's index list amended accordingly.
+- **WP6 "code-budget warning" ownership (review note):** belongs to WP5 (the 126 trim), Wave
+  3 — §5's WP6 gate row is corrected by this disposition; not a Wave-2 gap.
+- **Per-call `limit`/`minRelativeScore` are shared across sections in Wave 2** (documented as
+  provisional); per-section split is WP5. WP5 must also resolve the `relativeScore` semantics
+  asymmetry: the FTS5-only code leg's score is positional (rank-derived), not
+  relevance-relative — carrying the same field name with different semantics is a Wave-3
+  design point, not a bug fix.
+- **`WatchScanGuard` drop-window (review note):** an ignore-edit digest landing between a
+  scan's final re-read and slot release is dropped, not queued — Wave-3 WP4-polish item.
+- **`kind=both` metrics row** records a query hash while `kind=code` records nothing —
+  asymmetry resolved in the S6 fix (see code); correlationId omitted for code/both envelopes.
