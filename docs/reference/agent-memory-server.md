@@ -190,12 +190,29 @@ is no longer an MCP tool — the CLI verbs are the single config channel (see
   (`'*'` clears only the global config; a file-name ghost row — written by an unquoted `*` —
   is removed individually, e.g. `settings watch remove CLAUDE.md`). `memory_watch_add` registers a
   file or directory and returns immediately (the initial scan runs in the background —
-  status reports `scanning`); already-watched paths are a no-op. `memory_watch_status`
-  lists every registered watch with live state (`scanning`/`healthy`/`retrying`/`stopped`),
-  last error and last sync; it is available in every access tier. `memory_watch_remove`
-  stops and unregisters; a non-existent watch is a no-op. Registration failures surface
-  as `watching-disabled:` / `path-outside-scope:` / `path-not-found:` tool errors;
-  watch failures never fail the server.
+  status reports `scanning`); an exact re-add of an already-watched path is a no-op
+  (`absorbedBy` in the result names it). **No overlapping watches**
+  (docs/work/2026-08-21-code-search-implementation-plan.md §2.2/§5.5): a path already covered
+  by an existing watch is refused (`watch-overlap:`, naming the covering watch — nothing is
+  written); registering a broader watch instead prunes every watch it contains (registration
+  row + fingerprints removed, listed in the result's `pruned`) — already-ingested entries are
+  kept, and the broader watch's catch-up scan re-covers them (idempotent, hash-skip cheap).
+  `memory_watch_status` lists every registered watch with live state
+  (`scanning`/`healthy`/`retrying`/`stopped`), last error and last sync; it is available in
+  every access tier. `memory_watch_remove` stops and unregisters; a non-existent watch is a
+  no-op. Registration failures surface as `watching-disabled:` / `path-outside-scope:` /
+  `path-not-found:` / `watch-overlap:` tool errors; watch failures never fail the server.
+- **`ai-raccoon.ignore`:** an optional gitignore-subset exclude file at the root of a watched
+  directory (or a `memory_ingest_directory` call's root) — `<root>/ai-raccoon.ignore`, one file
+  per root, never discovered in subdirectories. Syntax: `*` (one path segment), `**` (zero or
+  more segments), a trailing `/` for a directory pattern (matches the directory and everything
+  beneath it), a leading `/` (or any `/` elsewhere in the pattern) anchors it to the root — a
+  pattern with no `/` at all matches at any depth; `#` comments and blank lines are inert; no
+  `!` negation in v1; case sensitivity follows the host OS. A matched file is never
+  fingerprinted or chunked; a file that was already indexed before a matching rule appeared has
+  its stale chunks removed (and its fingerprint cleared) the next time its watch digests it or
+  its watch rescans. Editing the ignore file itself triggers a full re-scan of that watch. The
+  ignore file is never matched against its own rules.
 - **Deferred writes:** until an engine is configured, writes are stored deferred
   (`memory_stats.pending > 0`) and only become searchable after `memory_embed_pending`.
 - **`memory_performance`:** project-scoped only (the whole-bank scope is deferred). The
