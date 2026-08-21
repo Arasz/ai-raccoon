@@ -6,7 +6,8 @@ namespace AiRaccoon.Tests.TestHelpers;
 /// assert on what it did — every path is allowed and every tier reports enabled.</summary>
 public sealed class NoOpWatchService : IWatchService
 {
-    public Task AddAsync(string projectId, string path, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task<WatchAddOutcome> AddAsync(string projectId, string path, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new WatchAddOutcome([], null));
 
     public Task RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default) => Task.CompletedTask;
 

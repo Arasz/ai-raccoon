@@ -166,7 +166,7 @@ public sealed class WatchToolsTests
 
         public Exception? AddError { get; set; }
 
-        public Task AddAsync(string projectId, string path, CancellationToken cancellationToken = default)
+        public Task<WatchAddOutcome> AddAsync(string projectId, string path, CancellationToken cancellationToken = default)
         {
             if (AddError is not null)
             {
@@ -174,8 +174,12 @@ public sealed class WatchToolsTests
             }
 
             Added.Add((projectId, path));
-            return Task.CompletedTask;
+            return Task.FromResult(new WatchAddOutcome(Pruned, AbsorbedBy));
         }
+
+        public IReadOnlyList<string> Pruned { get; set; } = [];
+
+        public string? AbsorbedBy { get; set; }
 
         public Task RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default)
         {

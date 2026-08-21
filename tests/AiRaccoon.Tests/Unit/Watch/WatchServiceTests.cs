@@ -75,10 +75,76 @@ public sealed class WatchServiceTests
         stack.AllowScope(dir.Path);
 
         await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
-        await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        var second = await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
 
         stack.Store.Watches.Count.ShouldBe(1);
         (await stack.Service.StatusAsync(Project, TestContext.Current.CancellationToken)).Count.ShouldBe(1);
+        // Equal-path re-add: idempotent, reports absorbedBy (only case that does), never pruned.
+        second.AbsorbedBy.ShouldBe(dir.Path);
+        second.Pruned.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task AddAsync_BroaderWatch_PrunesTheNarrower_ReportsItInPruned_EntriesStay()
+    {
+        using var root = TempDir.New("service-overlap-root");
+        var inner = Path.Combine(root.Path, "src");
+        Directory.CreateDirectory(inner);
+        var stack = new WatchTestStack();
+        stack.Enable();
+        stack.AllowScope(root.Path);
+        await stack.Service.AddAsync(Project, inner, TestContext.Current.CancellationToken);
+
+        var outcome = await stack.Service.AddAsync(Project, root.Path, TestContext.Current.CancellationToken);
+
+        outcome.Pruned.ShouldBe([inner]);
+        outcome.AbsorbedBy.ShouldBeNull();
+        stack.Store.Watches.Count.ShouldBe(1);
+        stack.Store.Watches.ShouldContainKey((Project, root.Path));
+        stack.Store.Watches.ShouldNotContainKey((Project, inner));
+        // Runtime state for the pruned watch is gone; only the broader watch reports status.
+        var statuses = await stack.Service.StatusAsync(Project, TestContext.Current.CancellationToken);
+        statuses.ShouldHaveSingleItem();
+        statuses[0].Path.ShouldBe(root.Path);
+    }
+
+    [Fact]
+    public async Task AddAsync_NarrowerInsideExisting_ThrowsWatchOverlapException_NamingTheCoveringWatch_NothingWritten()
+    {
+        using var root = TempDir.New("service-overlap-reject-root");
+        var inner = Path.Combine(root.Path, "src");
+        Directory.CreateDirectory(inner);
+        var stack = new WatchTestStack();
+        stack.Enable();
+        stack.AllowScope(root.Path);
+        await stack.Service.AddAsync(Project, root.Path, TestContext.Current.CancellationToken);
+
+        var ex = await Should.ThrowAsync<WatchOverlapException>(
+            () => stack.Service.AddAsync(Project, inner, TestContext.Current.CancellationToken));
+
+        ex.CoveringPath.ShouldBe(root.Path);
+        stack.Store.Watches.Count.ShouldBe(1);
+        stack.Store.Watches.ShouldContainKey((Project, root.Path));
+        stack.Store.Watches.ShouldNotContainKey((Project, inner));
+    }
+
+    [Fact]
+    public async Task AddAsync_DisjointWatch_BothSurvive_NoCrossPrune()
+    {
+        using var repoA = TempDir.New("service-overlap-repo-a");
+        using var repoB = TempDir.New("service-overlap-repo2");
+        var stack = new WatchTestStack();
+        stack.Enable();
+        stack.Memory.Settings[IngestScopeKeys.ScopeProject(Project)] =
+            IngestScopeKeys.Serialize([repoA.Path, repoB.Path]);
+        await stack.Service.AddAsync(Project, repoA.Path, TestContext.Current.CancellationToken);
+
+        var outcome = await stack.Service.AddAsync(Project, repoB.Path, TestContext.Current.CancellationToken);
+
+        outcome.Pruned.ShouldBeEmpty();
+        stack.Store.Watches.Count.ShouldBe(2);
+        stack.Store.Watches.ShouldContainKey((Project, repoA.Path));
+        stack.Store.Watches.ShouldContainKey((Project, repoB.Path));
     }
 
     [Fact]

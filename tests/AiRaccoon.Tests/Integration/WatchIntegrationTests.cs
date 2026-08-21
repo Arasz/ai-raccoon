@@ -658,7 +658,7 @@ public sealed class WatchIntegrationTests
                 new IgnoreRulesProvider());
             Hosted = new WatchHostedService(Memory, WatchStore, Pipeline, EventSource, CatchUp, Time,
                 TestTelemetry.None, NullLogger<WatchHostedService>.Instance);
-            Service = new WatchService(WatchStore, Memory, Pipeline, Time);
+            Service = new WatchService(WatchStore, Memory, Pipeline, Time, new WatchOverlapResolver());
         }
 
         public FakeTimeProvider Time { get; }
