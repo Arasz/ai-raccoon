@@ -1051,4 +1051,91 @@ public sealed class MemorySchemaVersionTests
         await connection.ExecuteAsync(new CommandDefinition(
             "PRAGMA user_version = 4", cancellationToken: TestContext.Current.CancellationToken));
     }
+
+    /// <summary>
+    ///     Ladder step 11 (docs/work/2026-08-21-code-search-implementation-plan.md §4): per-project
+    ///     outermost-watch prune — the same algorithm the runtime add-time rule uses
+    ///     (WatchOverlapResolverTests), reused here rather than reimplemented (WatchOverlapResolver).
+    /// </summary>
+    [Fact]
+    public async Task EnsureAsync_BankWithNestedWatches_PrunesTheNarrower_ReturnsThePrunedList()
+    {
+        await using var connection = await OpenAsync();
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            CREATE TABLE watches (
+                project_id            TEXT NOT NULL,
+                path                  TEXT NOT NULL,
+                created_at            INTEGER NOT NULL,
+                last_change_ts        INTEGER NOT NULL,
+                scan_owner            TEXT NULL,
+                scan_lease_expires_at INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (project_id, path)
+            );
+            CREATE TABLE watch_files (
+                project_id TEXT NOT NULL,
+                path       TEXT NOT NULL,
+                file_hash  TEXT NOT NULL,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY (project_id, path)
+            );
+            INSERT INTO watches (project_id, path, created_at, last_change_ts) VALUES ('acme', '/repo', 1, 0);
+            INSERT INTO watches (project_id, path, created_at, last_change_ts) VALUES ('acme', '/repo/src', 2, 0);
+            INSERT INTO watches (project_id, path, created_at, last_change_ts) VALUES ('acme', '/repo2', 3, 0);
+            INSERT INTO watch_files (project_id, path, file_hash, updated_at)
+                VALUES ('acme', '/repo/src/a.md', 'h1', 1);
+            PRAGMA user_version = 10;
+            """,
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        var pruned = await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        pruned.ShouldHaveSingleItem();
+        pruned[0].Path.ShouldBe("/repo/src");
+        pruned[0].CoveredBy.ShouldBe("/repo");
+        var remaining = (await connection.QueryAsync<string>(new CommandDefinition(
+                "SELECT path FROM watches WHERE project_id = 'acme' ORDER BY path",
+                cancellationToken: TestContext.Current.CancellationToken)))
+            .ToArray();
+        remaining.ShouldBe(["/repo", "/repo2"]);
+        (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM watch_files WHERE project_id = 'acme'",
+                cancellationToken: TestContext.Current.CancellationToken)))
+            .ShouldBe(0L, "the pruned watch's fingerprints cascade with it");
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
+    }
+
+    [Fact]
+    public async Task EnsureAsync_BankWithNoOverlap_MigratesCleanly_EmptyPrunedList()
+    {
+        await using var connection = await OpenAsync();
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            CREATE TABLE watches (
+                project_id            TEXT NOT NULL,
+                path                  TEXT NOT NULL,
+                created_at            INTEGER NOT NULL,
+                last_change_ts        INTEGER NOT NULL,
+                scan_owner            TEXT NULL,
+                scan_lease_expires_at INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (project_id, path)
+            );
+            CREATE TABLE watch_files (
+                project_id TEXT NOT NULL,
+                path       TEXT NOT NULL,
+                file_hash  TEXT NOT NULL,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY (project_id, path)
+            );
+            INSERT INTO watches (project_id, path, created_at, last_change_ts) VALUES ('acme', '/repo-a', 1, 0);
+            INSERT INTO watches (project_id, path, created_at, last_change_ts) VALUES ('acme', '/repo-b', 2, 0);
+            PRAGMA user_version = 10;
+            """,
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        var pruned = await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        pruned.ShouldBeEmpty();
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
+    }
 }

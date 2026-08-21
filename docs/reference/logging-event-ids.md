@@ -9,7 +9,7 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **140** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **142** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
@@ -66,6 +66,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 700, 702-704, 707-709 | `src/AiRaccoon.Infrastructure/Promotion/PromotionQueueService.cs` (701/705/706 removed 2026-08-11: per-element eviction/failure logs de-noised; 708 = prune summary; 709 added 2026-08-14 = stale promotion claims reclaimed, ADR-0037) |
 | 800-807 | `src/AiRaccoon/Setup/Cli/Commands/EncryptionCommands.cs` |
 | 900 | `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs` |
+| 901, 902 | `src/AiRaccoon.Infrastructure/Sqlite/SqliteConnectionFactory.cs` (added 2026-08-21: the v11 ladder step's overlap-prune report — one line per pruned watch + a count, docs/work/2026-08-21-code-search-implementation-plan.md §4; the migration itself is silent and only returns the pruned list, since `SqliteConnectionFactory.InitializeAsync` is the one caller in the chain that owns a logger) |
 | 910-912 | `src/AiRaccoon/Tools/ToolRefusals.cs` |
 | 920-921 | `src/AiRaccoon/Tools/MemoryTools.cs` (docs/adr/0040: read-path query guard shadow-mode verdict; 921 added — WP10, docs/plans/2026-08-15-performance-metrics-implementation.md: best-effort phase-measurement recording failure) |
 | 950 | `src/AiRaccoon.Infrastructure/Sqlite/SqliteNoiseClusterStore.cs` (ADR-0039: noise-learning substrate) |
