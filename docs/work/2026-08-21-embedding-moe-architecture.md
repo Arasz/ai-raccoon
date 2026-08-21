@@ -7,7 +7,7 @@
 > = 510` deliberate cap, not derived). Superseded sections are marked inline.
 
 **Date:** 2026-08-21
-**Task:** `support-for-other-embedding-models` (worktree branch `task/support-for-other-embedding-models-u1`)
+**Task:** `support-for-other-embedding-models` (plan task; implementation on `task/embedding-model-support-u1`, PR #402)
 **Lane:** architect — abstraction/manifest, provider taxonomy, dimension strategy, download surface, backward compatibility, phased work packages
 **Status:** plan (ready for owner/MoE review; convention per `docs/work/README.md`)
 **Sibling lanes:** engineer = C# refactor details; ops = ecosystem facts (LM Studio/GGUF/quantization). Cross-lane decisions are marked **D#** and collected in §12.
@@ -386,7 +386,7 @@ Also in WP5 (cheap, high value): a **384-dim remote smoke test** — point `mode
 | R4 | Remote endpoint down or dims wrong at migration time ⇒ re-embed drain fails while the ToolGate blocks tools (ADR-0076) | pre-flight probe embed (one call, check dims match declared) before the migration commits, when `embedding.dimensions` is set; failure path documented (outbox stays open; retry after fixing endpoint) — design question Q5 |
 | R5 | Replacing a model file under the same path without a manifest change silently keeps old vectors | fingerprint includes manifest identity + dims (§5.5) |
 | R6 | Ranking regressions from a better model (RRF rank-fragility — tuning plan §2) | eval harness + per-query regression table gate (G5); default unchanged until owner decision |
-| R7 | vec0 rebuild window (DROP→CREATE) exposed to a crash | every-open DDL heals (F10); migration outbox retries (F11); covered by G4(b) crash test | **> SUPERSEDED by rev-2 D3:** no every-open DDL; single-transaction reconcile rolls back cleanly; G4(b) tests kill-9 between DROP and CREATE |
+| R7 | vec0 rebuild window (DROP→CREATE) exposed to a crash | every-open DDL heals (F10); migration outbox retries (F11); covered by G4(b) crash test — **> SUPERSEDED by rev-2 D3: no every-open DDL exists (digest-gated); the single-transaction reconcile rolls back cleanly on kill-9; G4(b) tests the DROP→CREATE window** |
 | R8 | `tokenizer.json`-BPE models unsupported in ML.Tokenizers 2.0.0 (D5) | manifest validation rejects them with an actionable error; Qwen3-class models already lack ONNX exports (research F9) — documented scope |
 | R9 | Chunk budget change 254 → 510 (D6) alters embedding granularity even for the bundled model if applied too broadly | D6 applies ONLY to manifest-local models; bundled/legacy paths keep 254; eval measures the bge-m3 chunking in WP5 |
 

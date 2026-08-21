@@ -8,7 +8,7 @@
 > = 8190). Superseded sections are marked inline.
 
 **Date:** 2026-08-21
-**Worktree:** task/support-for-other-embedding-models-u1
+**Worktree:** plan task `task/support-for-other-embedding-models-u1` (historical); implementation on `task/embedding-model-support-u1`, PR #402
 **Scope:** C# refactor plan for the local/remote embedding engine so that non-BERT models (case study: bge-m3) can be configured, embedded, and searched. Plan only — no code landed.
 **Inputs:** `docs/work/2026-08-21-embedding-model-replacement.md` (research lane, findings F1–F11), `docs/adr/0036` (engine-aware chunk budget), `docs/adr/0076` (model-set outbox), `docs/adr/0063` (unset provider ⇒ bundled local).
 **Status:** engineer lane draft; decisions here are proposals for the MoE owner, not accepted ADRs.
@@ -153,13 +153,23 @@ DrainMigrationAsync:
   2. resolve NEW engine dimension:
        local   → generator.Dimension (session output shape; descriptor cross-check)
        openai  → probe: one GenerateAsync(["probe"]) and measure vector length
-  3. read declared dims: ReadVecDimensionAsync(vec_entries), ReadVecDimensionAsync(vec_structure) **> SUPERSEDED by rev-2 D3:** read table PRESENCE explicitly — ReadVecDimensionAsync returns 384 for a MISSING table, conflating absent with 384
-  4. if any declared dim != new dim → RebuildVecTableAsync both tables at the NEW dim **> SUPERSEDED by rev-2 D3:** RebuildVecTableAsync REPOPULATES from the entries blob columns (which still hold OLD-dim blobs after MarkAllEmbeddedPending) — this wedges the bank. Use a single BEGIN IMMEDIATE DROP+CREATE at float[N] with NO repopulate; the drain's MarkEmbedded refills both tables via the triggers
+  3. read declared dims: ReadVecDimensionAsync(vec_entries), ReadVecDimensionAsync(vec_structure)
+  4. if any declared dim != new dim → RebuildVecTableAsync both tables at the NEW dim
        (safe: the outbox already marked every row pending, so the tables are empty;
         the ToolGate lock guarantees no query/write interleaves; trigger recreation
         follows the v2-step pattern, MemorySchema.cs:1159-1186)
   5. batch-embed loop (unchanged), finish, release lease (unchanged)
 ```
+
+> **Steps 3-4 SUPERSEDED by rev-2 D3 — do not execute verbatim.** (a) `ReadVecDimensionAsync`
+> returns 384 for a MISSING table — read table PRESENCE explicitly instead. (b)
+> `RebuildVecTableAsync` REPOPULATES from the entries blob columns, which still hold OLD-dim
+> blobs after `MarkAllEmbeddedPending` — inserting those into a fresh `float[N]` table wedges
+> the bank (ToolGate closed, ADR-0076). Use a single `BEGIN IMMEDIATE` transaction doing
+> DROP+CREATE at `float[N]` with NO repopulate; the drain's `MarkEmbedded` refills both tables
+> via the existing triggers (the "safe: the tables are empty" justification above does not
+> apply — emptiness of the vec tables is irrelevant to a repopulate that reads `entries`).
+> Kill-9 mid-transaction rolls back cleanly; G4(b) tests the exact window.
 
 This covers both swap cases with one mechanism: a live 384→1024 swap **and** a fresh bank (created `float[384]`) whose first configured engine is 1024-dim. No `CurrentVersion` bump is needed — this is a code-path change, not a DDL change (the ladder stays v10).
 
