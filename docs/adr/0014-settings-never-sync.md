@@ -63,3 +63,40 @@ comment recording the rule at the point it's enforced), `:344-360`
 (`StripNonSyncableAsync`, called from `SyncService.cs:62`, `:93`, `:149`);
 commits #88 (`64771f4`), #114 (`cc4ed68`), #129 (`b438322`, issues #121 and
 #115).
+
+## Amendment (2026-08-21) — the code corpus never syncs either
+
+`docs/work/2026-08-21-code-search-implementation-plan.md` §3.7 (as corrected
+by §12.2 H6) added a second corpus — `code_entries`/`code_fts`/`vec_code` —
+that must never leave the machine, for the same reason settings don't: a
+pushed snapshot is a whole-bank `VACUUM INTO`, so anything not explicitly
+excluded rides along.
+
+The mechanism differs from the settings strip on purpose. Settings are
+row-deleted (`DELETE FROM settings`) because the table itself is syncable
+shape, just not its contents. The code corpus is **table-dropped**
+(`DROP TABLE IF EXISTS code_entries/code_fts/vec_code`) because the gate is
+table *absence*, not empty tables — row-deletion would leave three empty
+tables (plus their FTS5/vec0 shadow tables and trigger families) in every
+pushed snapshot, and empty-but-present tables still assert something false
+about what synced. `IF EXISTS` matters here in a way it doesn't for
+`settings`: `StripNonSyncableAsync` opens the snapshot through `openSnapshot`,
+which never runs `MemorySchema.EnsureAsync` (H6) — a snapshot taken from a
+bank that predates the code corpus feature has none of these tables, and a
+bare `DROP TABLE` would throw and abort the push.
+
+The decision statement now reads: **settings and the code corpus never sync**
+— push strips/drops both from every snapshot on all three push paths (local,
+merged, retry-merged); pull never reads `remote.settings` and never names the
+code tables at all (merge only touches `entries`/`sync_tombstones`).
+
+Gated by `tests/AiRaccoon.Tests/Integration/Sync/SyncServiceCodeExclusionTests.cs`:
+`Sync_LocalPush_DropsCodeTablesFromSnapshot`,
+`Sync_MergedPush_DropsCodeTablesFromSnapshot`,
+`Sync_RetryMergedPush_DropsCodeTablesFromSnapshot` (all three push paths),
+`Sync_Pull_LeavesLocalCodeCorpusUntouched`, and
+`Sync_PreCodeCorpusSnapshot_StripsWithoutError` (the `IF EXISTS` case).
+
+> **Evidence:** `src/AiRaccoon.Infrastructure/Sync/SyncService.cs`
+> (`StripNonSyncableAsync`, called from the three push sites at
+> `SyncCycleAsync` — local snapshot, merged snapshot, retry-merged snapshot).
