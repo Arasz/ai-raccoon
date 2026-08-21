@@ -8,6 +8,7 @@ using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Options;
@@ -58,7 +59,8 @@ public sealed class CodeCorpusFeatureContext : IDisposable
         WatchStore = new WatchStore(Factory);
         Store = ComposeStore();
         CodeSearch = new SqliteCodeSearchService(Factory, CodeEmbedder);
-        CodeEngineStore = new SqliteCodeEngineStore(Factory, FakeEmbeddingService);
+        CodeEngineStore = new SqliteCodeEngineStore(Factory, FakeEmbeddingService,
+            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
         SearchQuality = new SqliteSearchQualityService(Factory, NullLogger<SqliteSearchQualityService>.Instance);
         ReindexJob = new CodeReindexJob(CodeEmbedder);
 

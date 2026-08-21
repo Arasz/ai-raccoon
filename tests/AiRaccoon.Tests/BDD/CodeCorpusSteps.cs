@@ -594,8 +594,12 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
     [Given("^a project whose code embedding engine manifest cannot be loaded$")]
     public async Task GivenCodeEngineManifestCannotBeLoaded()
     {
+        // B1: activation itself now validates the manifest, so a project whose engine is
+        // unloadable at QUERY time (this scenario's real target — model files corrupt AFTER a
+        // valid activation) needs a genuinely valid manifest here; FailOnCreateGenerator below is
+        // what actually simulates the unloadable engine, independent of activation succeeding.
         var dir = Path.Combine(Ctx.DataRoot, "broken-code-engine");
-        Directory.CreateDirectory(dir);
+        SeedManifestDirectory(dir, CodeCorpusSchema.EmbeddingDimensions);
         await Ctx.CodeEngineStore.ActivateCodeEngineAsync(dir);
         Ctx.FakeEmbeddingService.FailOnCreateGenerator = () => new InvalidOperationException("model file is corrupt");
     }
@@ -697,8 +701,10 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
     [Given("^a project with code chunks already embedded under the old engine$")]
     public async Task GivenCodeChunksEmbeddedUnderOldEngine()
     {
+        // B1: activation now validates the manifest itself, so the "old engine" needs a genuinely
+        // valid one too, not just an empty directory.
         var oldDir = Path.Combine(Ctx.DataRoot, "old-engine");
-        Directory.CreateDirectory(oldDir);
+        SeedManifestDirectory(oldDir, CodeCorpusSchema.EmbeddingDimensions);
         await Ctx.CodeEngineStore.ActivateCodeEngineAsync(oldDir);
         await SeedEmbeddedCodeEntryAsync("old-embedded-hash", "src/Old.cs", "sealed class Old { }", 1, 1);
     }
