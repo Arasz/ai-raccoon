@@ -3,6 +3,7 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Embedding;
@@ -43,6 +44,10 @@ internal static partial class ToolRefusals
         // update'); a plain InvalidOperationException still means the asset is genuinely missing
         // and stays unmapped (docs/reference/agent-memory-server.md Error shapes).
         [typeof(BundledModelInstallReplacedException)] = "embedding-install-replaced",
+        // WP5 (§3.3/§12.2 H5): a configured code engine whose manifest/model files fail to
+        // load — a genuine misconfiguration, so code searches refuse actionably instead of
+        // silently degrading like the unconfigured case (memory tools are unaffected).
+        [typeof(CodeEngineUnloadableException)] = "code-engine-unloadable",
         // Moved out of DirectThrowPrefixes by docs/adr/0065: the consent gate now lives in
         // ShareExtractService, so it raises a domain exception instead of a bare McpException.
         [typeof(ConfirmationRequiredException)] = "confirm-required",
@@ -66,7 +71,7 @@ internal static partial class ToolRefusals
 
     /// <summary>Expected refusals remain visible at Warning without being logged as errors.</summary>
     private static readonly HashSet<string> WarningPrefixes =
-        ["sync-network", "sync-corrupt-file", "unknown-hash", "embedding-install-replaced"];
+        ["sync-network", "sync-corrupt-file", "unknown-hash", "embedding-install-replaced", "code-engine-unloadable"];
 
     /// <summary>
     ///     The wire prefix for a known refusal, or null when the exception is a genuine failure.

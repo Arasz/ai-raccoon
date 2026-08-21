@@ -145,6 +145,10 @@ public sealed partial class MemoryTools(
             "indexed code corpus only), or both. Code is always project-scoped: scope=shared " +
             "returns an empty code section. Code hits carry lineStart/lineEnd instead of chunkIndex/totalChunks.")]
         string kind = "memory",
+        [Description("Code section only: maximum results, overriding limit for the code section (bank setting unaffected).")]
+        int? codeLimit = null,
+        [Description("Code section only: relative floor, overriding minRelativeScore for the code section.")]
+        double? codeMinRelativeScore = null,
         CancellationToken cancellationToken = default)
     {
         await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemorySearch, cancellationToken);
@@ -177,7 +181,8 @@ public sealed partial class MemoryTools(
         }
 
         var correlationId = Guid.CreateVersion7().ToString("N");
-        var dispatch = await searchDispatcher.DispatchAsync(searchQuery, parsedKind, scope, correlationId, cancellationToken);
+        var dispatch = await searchDispatcher.DispatchAsync(searchQuery, parsedKind, scope, correlationId,
+            codeLimit, codeMinRelativeScore, cancellationToken);
 
         if (dispatch.MemorySearchResults is not null)
         {

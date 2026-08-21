@@ -8,7 +8,8 @@ public sealed class SearchDispatcher(IMemoryStore store, ICodeSearchService code
     : ISearchDispatcher
 {
     public async Task<SearchDispatchResult> DispatchAsync(SearchQuery searchQuery, SearchKind kind, string rawScope,
-        string correlationId, CancellationToken cancellationToken = default)
+        string correlationId, int? codeLimit = null, double? codeMinRelativeScore = null,
+        CancellationToken cancellationToken = default)
     {
         SearchResults? memorySearchResults = null;
         IReadOnlyList<MemorySearchResult> results = [];
@@ -31,12 +32,11 @@ public sealed class SearchDispatcher(IMemoryStore store, ICodeSearchService code
             else
             {
                 var codeSearchResults = await codeSearch.SearchAsync(
-                    new CodeSearchQuery(searchQuery.ProjectId, searchQuery.Query, searchQuery.Limit, searchQuery.MinRelativeScore),
+                    new CodeSearchQuery(searchQuery.ProjectId, searchQuery.Query,
+                        codeLimit ?? searchQuery.Limit, codeMinRelativeScore ?? searchQuery.MinRelativeScore),
                     cancellationToken);
                 codeResults = codeSearchResults.Results;
-                // Every wave until WP5 lands the vec0 leg: no embedding.codeModel can be
-                // configured yet, so the code section is always FTS5-only.
-                codeWarning = CodeSearchWarnings.EngineNotConfigured;
+                codeWarning = codeSearchResults.Warning;
             }
         }
 

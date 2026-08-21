@@ -8,6 +8,12 @@ namespace AiRaccoon.Core.Memory;
 /// </summary>
 public interface ISearchDispatcher
 {
+    /// <summary>
+    ///     <paramref name="codeLimit" />/<paramref name="codeMinRelativeScore" /> override the
+    ///     shared <paramref name="searchQuery" /> values for the code section only (§3.6 per-section
+    ///     tuning) — null means "same as the memory section".
+    /// </summary>
     Task<SearchDispatchResult> DispatchAsync(SearchQuery searchQuery, SearchKind kind, string rawScope,
-        string correlationId, CancellationToken cancellationToken = default);
+        string correlationId, int? codeLimit = null, double? codeMinRelativeScore = null,
+        CancellationToken cancellationToken = default);
 }
