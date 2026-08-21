@@ -305,12 +305,6 @@ internal static class MemorySql
     public const string SelectWatchFilesByProject =
         "SELECT path FROM watch_files WHERE project_id = @projectId";
 
-    // A path that transitions to ignored must not keep a stale fingerprint: a later un-ignore
-    // with unchanged content would otherwise hash-skip and leave the file un-reingested
-    // (docs/work/2026-08-21-code-search-implementation-plan.md WP4-T20).
-    public const string DeleteWatchFile =
-        "DELETE FROM watch_files WHERE project_id = @projectId AND path = @path";
-
     // Counts the project's contexts, labelled or not (ADR-0045) — PendingCount has always counted
     // every row carrying the project id, and a bank holding one context-labelled entry reported
     // `entries: 0, pending: 1` while the two disagreed about what "this project" meant.

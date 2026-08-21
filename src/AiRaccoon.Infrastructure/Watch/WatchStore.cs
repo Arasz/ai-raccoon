@@ -41,13 +41,6 @@ public interface IWatchStore
     Task UpsertFileHashAsync(string projectId, string path, string fileHash, long updatedAt,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    ///     Removes one path's fingerprint without touching its watch's `last_change_ts` — a path
-    ///     that transitions to ignored must not keep a stale fingerprint, or a later un-ignore with
-    ///     unchanged content would hash-skip and never re-ingest.
-    /// </summary>
-    Task DeleteFileHashAsync(string projectId, string path, CancellationToken cancellationToken = default);
-
     /// <summary>Lists every fingerprinted file path for the project (catch-up reconciliation).</summary>
     Task<IReadOnlyList<string>> ListFilesAsync(string projectId, CancellationToken cancellationToken = default);
 }
@@ -198,15 +191,6 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
         await connection.ExecuteAsync(
                 new CommandDefinition(MemorySql.UpsertWatchFile,
                     new { projectId, path, fileHash, updatedAt }, cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
-    }
-
-    public async Task DeleteFileHashAsync(string projectId, string path, CancellationToken cancellationToken = default)
-    {
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        await connection.ExecuteAsync(
-                new CommandDefinition(MemorySql.DeleteWatchFile, new { projectId, path },
-                    cancellationToken: cancellationToken))
             .ConfigureAwait(false);
     }
 

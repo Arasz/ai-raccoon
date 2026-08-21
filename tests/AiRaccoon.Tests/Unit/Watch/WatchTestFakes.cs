@@ -197,12 +197,6 @@ internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
         return Task.CompletedTask;
     }
 
-    public Task DeleteFileHashAsync(string projectId, string path, CancellationToken cancellationToken = default)
-    {
-        RemoveFingerprint(projectId, path);
-        return Task.CompletedTask;
-    }
-
     public async Task<IReadOnlyList<string>> ListFilesAsync(string projectId,
         CancellationToken cancellationToken = default)
     {

@@ -53,9 +53,6 @@ public sealed class NullWatchStore : IWatchStore
     public Task UpsertFileHashAsync(string projectId, string path, string fileHash, long updatedAt,
         CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-    public Task DeleteFileHashAsync(string projectId, string path, CancellationToken cancellationToken = default) =>
-        Task.CompletedTask;
-
     public Task<IReadOnlyList<string>> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<string>>([]);
 }
