@@ -35,16 +35,31 @@ public sealed partial class MaintenanceJobRunner(TimeProvider timeProvider, ILog
                 await vacuum.RefreshIntervalAsync(connection, cancellationToken).ConfigureAwait(false);
             }
 
-            var lastRun = await connection.ExecuteScalarAsync<long?>(new CommandDefinition(
-                    "SELECT last_run_at FROM maintenance_jobs WHERE name = @name",
-                    new { name = job.Name }, cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+            bool due;
+            try
+            {
+                var lastRun = await connection.ExecuteScalarAsync<long?>(new CommandDefinition(
+                        "SELECT last_run_at FROM maintenance_jobs WHERE name = @name",
+                        new { name = job.Name }, cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
 
-            // On-demand due-ness (ADR-0076) is independent of the clock-gated IsDue check below —
-            // it exists precisely so a job like ModelMigrationJob isn't run-once by the ledger stamp
-            // every success writes. Checked first since it is the cheaper of the two most passes.
-            var due = await job.HasWorkAsync(connection, cancellationToken).ConfigureAwait(false)
+                // On-demand due-ness (ADR-0076) is independent of the clock-gated IsDue check below —
+                // it exists precisely so a job like ModelMigrationJob isn't run-once by the ledger stamp
+                // every success writes. Checked first since it is the cheaper of the two most passes.
+                due = await job.HasWorkAsync(connection, cancellationToken).ConfigureAwait(false)
                       || IsDue(job, lastRun, now);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // A broken due-ness check must not stop the pass: it happened before the
+                // run try/catch below, so an uncaught throw here used to skip every job
+                // registered after it. No ledger write happens either way, so it retries
+                // next pass — same semantics as a failed RunAsync.
+                Log.JobCheckFailed(logger, job.DisplayName, job.Name, ex);
+                outcomes.Add(new MaintenanceJobOutcome(job.Name, false, ex.Message));
+                continue;
+            }
+
             if (!due)
             {
                 outcomes.Add(new MaintenanceJobOutcome(job.Name, false, null));
@@ -90,6 +105,10 @@ public sealed partial class MaintenanceJobRunner(TimeProvider timeProvider, ILog
         [LoggerMessage(EventId = 526, Level = LogLevel.Warning,
             Message = "ai-raccoon: maintenance job '{DisplayName}' ({JobName}) failed; it will be retried")]
         public static partial void JobFailed(ILogger logger, string displayName, string jobName, Exception exception);
+
+        [LoggerMessage(EventId = 527, Level = LogLevel.Warning,
+            Message = "ai-raccoon: maintenance job '{DisplayName}' ({JobName}) due-check failed; it will be retried")]
+        public static partial void JobCheckFailed(ILogger logger, string displayName, string jobName, Exception exception);
     }
 
     private static bool IsDue(IMaintenanceJob job, long? lastRunAt, DateTimeOffset now)
