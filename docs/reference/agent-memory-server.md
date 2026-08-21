@@ -122,6 +122,14 @@ is no longer an MCP tool — the CLI verbs are the single config channel (see
   settings table. Changing the engine re-embeds the bank. The `engine` field in the
   result is the stable fingerprint (`local:bundled`, `openai:text-embedding-3-small@<baseUrl>`,
   etc.) — a change triggers the re-embed.
+- **Downloading a local model (CLI, not a tool):** `ai-raccoon model download {repo-id}`
+  resolves a Hugging Face repo, downloads the ONNX model + its external data + tokenizer with
+  SHA-256 pins captured from the LFS oids BEFORE download (verify-or-delete, no half-installed
+  model), runs an ONNX Runtime opset smoke test, and writes `manifest.json` into
+  `<data-root>/models/<slug>/` (e.g. `BAAI__bge-m3`). Flags: `--revision`, `--file` (repeatable),
+  `--dir`, `--dry-run` (resolve + print sizes/oids, download nothing), `--yes` (confirm
+  downloads > 500 MB). It never activates the model — `model set local <dir>` is the explicit
+  next step (plan `docs/work/2026-08-21-arbitrary-embedding-models-plan.md`, D4/D8).
 - **Structure alpha (CLI, not a tool):** `ai-raccoon settings retrieval alpha set {0..1}`
   writes the dual-vector fusion alpha (`retrieval.structureAlpha`, 0..1; default 0.5)
   used by search as `score = alpha × content + (1 − alpha) × heading-path structure`.
