@@ -11,6 +11,7 @@ using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
+using ModelContextProtocol;
 using Shouldly;
 using Xunit;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
@@ -36,7 +37,15 @@ public sealed class GoldenMemorySearchResponseTests : IAsyncLifetime
     private const string CorrelationIdPlaceholder = "<CORRELATION_ID>";
 
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
+
+    /// <summary>
+    ///     The exact serializer the MCP wire uses (McpJsonUtilities.DefaultOptions), not
+    ///     JsonSerializerDefaults.Web — DefaultOptions sets DefaultIgnoreCondition=WhenWritingNull,
+    ///     so a null property is genuinely absent from what the server emits, not present with a
+    ///     null value (integration review S1). WriteIndented is layered on the copy for readable
+    ///     diffs; McpJsonUtilities.DefaultOptions is shared/frozen, so it cannot be mutated in place.
+    /// </summary>
+    private static readonly JsonSerializerOptions JsonOptions = new(McpJsonUtilities.DefaultOptions) { WriteIndented = true };
 
     private readonly string _dataRoot = TestData.CreateTempRoot("airaccoon-golden-search-tests");
     private FakeEmbeddingEndpoint _openAi = null!;
@@ -86,6 +95,28 @@ public sealed class GoldenMemorySearchResponseTests : IAsyncLifetime
         captured.ToJsonString(JsonOptions).ShouldBe(golden.ToJsonString(JsonOptions),
             "the pre-kind memory_search envelope must still match the committed golden file (modulo Meta.CorrelationId) — " +
             "WP6-T01 compares its post-envelope-change capture against this same file");
+    }
+
+    /// <summary>
+    ///     Integration review S1: SearchResultList.Code carries an explicit
+    ///     <c>[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]</c> documenting that a
+    ///     null Code is omitted, not just null-valued — but McpJsonUtilities.DefaultOptions already
+    ///     sets DefaultIgnoreCondition=WhenWritingNull globally, so that per-property attribute does
+    ///     no independent work on the actual wire. Proven here on Warning, a property with no
+    ///     JsonIgnore attribute at all: the wire options omit it too, on the global setting alone.
+    /// </summary>
+    [Fact]
+    public void McpWireOptions_OmitNullProperties_EvenWithoutAJsonIgnoreAttribute()
+    {
+        var result = new MemoryTools.SearchResultList([], Warning: null, Code: null);
+
+        var json = JsonSerializer.Serialize(result, McpJsonUtilities.DefaultOptions);
+
+        // Warning has no [JsonIgnore] attribute — the wire's global DefaultIgnoreCondition must
+        // omit it alone. Code's [JsonIgnore] attribute is redundant with that global option, not
+        // the thing doing the work.
+        json.ShouldNotContain("\"warning\"");
+        json.ShouldNotContain("\"code\"");
     }
 
     private static JsonObject NormalizeCorrelationId(JsonObject envelope)

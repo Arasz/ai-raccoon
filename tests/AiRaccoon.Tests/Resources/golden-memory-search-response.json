@@ -6,7 +6,6 @@
         "ranking": 1,
         "path": "e835c7bd2adc251db767e6e61af2f85b779dbfdc410bd6e66ba63f19c451063e.md",
         "snippet": "the quick brown fox leaps over the lazy dog",
-        "sourceFile": null,
         "chunkIndex": -1,
         "totalChunks": 0
       },
@@ -15,18 +14,13 @@
         "ranking": 0.9838709677419354,
         "path": "e56475624815df289e8ff286571bde1e364fb6d1e455a4fd29818f1c1bf6da68.md",
         "snippet": "a second note about narwhals and tusks",
-        "sourceFile": null,
         "chunkIndex": -1,
         "totalChunks": 0
       }
-    ],
-    "warning": null
+    ]
   },
   "meta": {
     "waitingPromotionsCount": 0,
-    "promotionsWaitTimeSeconds": null,
-    "capacity": null,
-    "oldestWaitSeconds": null,
     "correlationId": "<CORRELATION_ID>"
   }
 }
