@@ -53,7 +53,37 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
         hit.Path.ShouldBe("src/Foo.cs");
         hit.LineStart.ShouldBe(1);
         hit.LineEnd.ShouldBe(3);
-        hit.Ranking.ShouldBe(1.0, "the top (only) hit is always max-normalized to 1.0, mirroring memory's RRF");
+        // Ranking on a single-hit result is not asserted here: max-normalization puts rank 1 at
+        // 1.0 unconditionally, so that would be theatre (integration review small item 4) --
+        // SearchAsync_RanksAStrongerMatchStrictlyAboveAWeakerOne below carries the real claim.
+    }
+
+    /// <summary>
+    ///     Integration review small item 4: SearchAsync_MatchesSeededRows_AndCarriesPathAndLineRange's
+    ///     Ranking.ShouldBe(1.0) was theatre — with a single seeded row, max-normalization puts rank 1
+    ///     at 1.0 no matter how weak or broken the underlying bm25 ordering is, so the assertion could
+    ///     never catch a ranking regression. This test seeds two rows with genuinely different match
+    ///     strength (mirrors SearchAsync_MinRelativeScore_DropsTheWeakerHit's fixture) and asserts the
+    ///     stronger match ranks strictly above the weaker one — a real ordering claim, not a tautology
+    ///     of the normalization formula.
+    /// </summary>
+    [Fact]
+    public async Task SearchAsync_RanksAStrongerMatchStrictlyAboveAWeakerOne()
+    {
+        await SeedAsync(id: 1, projectId: "acme", path: "src/A.cs", value: "class DingoTracker DingoTracker DingoTracker { }",
+            lineStart: 1, lineEnd: 1);
+        await SeedAsync(id: 2, projectId: "acme", path: "src/B.cs", value: "class DingoTracker { }",
+            lineStart: 1, lineEnd: 1);
+
+        var results = await _service.SearchAsync(new CodeSearchQuery("acme", "DingoTracker", 20, 0.0),
+            TestContext.Current.CancellationToken);
+
+        results.Results.Count.ShouldBe(2);
+        var strongest = results.Results[0];
+        var weakest = results.Results[1];
+        strongest.Hash.ShouldBe("hash-1", "the row repeating the term three times must rank ahead of the row with one occurrence");
+        strongest.Ranking.ShouldBeGreaterThan(weakest.Ranking,
+            "a genuinely weaker match must normalize below the top hit, not tie with it");
     }
 
     [Fact]
