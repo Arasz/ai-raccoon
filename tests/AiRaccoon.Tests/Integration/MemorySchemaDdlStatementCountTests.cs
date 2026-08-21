@@ -11,8 +11,7 @@ namespace AiRaccoon.Tests.Integration;
 ///     Counts the SQLite statements <see cref="MemorySchema.EnsureAsync" /> executes, via
 ///     <c>sqlite3_trace</c> on the real connection handle — not by splitting the <c>Ddl</c> source
 ///     string, which would misparse the trigger bodies' embedded semicolons. Pins both sides of
-///     ADR-0075's digest gate: 5 statements when the digest matches; the in-block count when it
-///     does not is currently under-asserted (see the pre-existing-drift note on that test below).
+///     ADR-0075's digest gate: 5 statements when the digest matches, 59 in the block when it does not.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -28,22 +27,13 @@ public sealed class MemorySchemaDdlStatementCountTests
 
         var statements = await TraceAsync(connection);
 
-        // The whole point of WP1: an install past its first run pays five statements, not forty-plus.
+        // The whole point of WP1: an install past its first run pays five statements, not fifty-nine.
         CountDdl(statements).ShouldBe(0, Report(statements));
         statements.Count.ShouldBe(5, Report(statements));
     }
 
-    /// <summary>
-    ///     KNOWN PRE-EXISTING FAILURE, not from this task: CountDdl(statements) is currently ~59,
-    ///     not the 42 asserted below. The code-corpus feature (code_entries/code_fts/vec_code and
-    ///     their triggers/indexes, WP1-WP8) landed in the Ddl block across many lanes without any
-    ///     of them updating this count — this task's scope (Wave-3 code-corpus review fixes) is not
-    ///     a full re-audit of every prior lane's contribution to it, so the assertion is left as-is
-    ///     rather than silently re-derived or skipped. The "digest matches" sibling test above (0
-    ///     Ddl statements on the fast path) is the one that actually protects WP1's cost claim.
-    /// </summary>
     [Fact]
-    public async Task EnsureAsync_WhenTheDigestIsStale_RunsTheFortyStatementDdlBlock()
+    public async Task EnsureAsync_WhenTheDigestIsStale_RunsTheFiftyNineStatementDdlBlock()
     {
         await using var connection = await OpenAsync();
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
@@ -55,10 +45,13 @@ public sealed class MemorySchemaDdlStatementCountTests
 
         var statements = await TraceAsync(connection);
 
-        // 39 measured at ADR-0075 (not the plan's "~30"/"roughly thirty-two", §4.2 — the plan
-        // undercounted), +1 for ADR-0076's model_migration table, +1 for the ADR-0075 amendment's
-        // repair_requests table, +1 for this amendment's promotion_queue_prune_requests table.
-        CountDdl(statements).ShouldBe(42, Report(statements));
+        // Re-derived from a live trace (Report(statements)), not restated by hand: 56 CREATE/DROP
+        // DDL statements (was last correctly counted at 42, before the ENTIRE code-corpus feature
+        // — code_entries/code_fts/vec_code and their triggers/indexes, WP1-WP8 — landed without
+        // anyone updating this test) + 3 for EnsureCodeEmbedAttemptsColumnAsync's own existence
+        // check (S2), which CountDdl does not special-case since it runs on this same
+        // digest-mismatch path, not the steady-state one the sibling test above pins to zero.
+        CountDdl(statements).ShouldBe(59, Report(statements));
     }
 
     private static async Task<List<string>> TraceAsync(SqliteConnection connection)
