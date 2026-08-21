@@ -8,7 +8,6 @@ using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Memory.QueryGuard.Structural;
 using AiRaccoon.Core.Metrics;
-using AiRaccoon.Core.SearchQuality;
 using FluentValidation;
 using JetBrains.Annotations;
 using ModelContextProtocol;
@@ -22,11 +21,10 @@ namespace AiRaccoon.Tools;
 public sealed partial class MemoryTools(
     IMemoryStore store,
     IToolGate gate,
-    ISearchQualityService qualityService,
+    ISearchDispatcher searchDispatcher,
     IQueryGuardService queryGuard,
     IMemoryWriteService writes,
     IMeasurementRecorder measurements,
-    ICodeSearchService codeSearch,
     ILogger<MemoryTools> logger,
     TimeProvider? timeProvider = null)
 {
@@ -178,55 +176,20 @@ public sealed partial class MemoryTools(
             throw new McpException($"invalid-params: {guard.Verdict.Guidance} Refused query: {QuerySnippet(query)}");
         }
 
-        SearchResults? searchResults = null;
-        IReadOnlyList<MemorySearchResult> results = [];
-        if (parsedKind != SearchKind.Code)
-        {
-            searchResults = await store.SearchAsync(searchQuery, cancellationToken);
-            results = searchResults.Results;
-        }
-
-        IReadOnlyList<CodeSearchResult>? codeResults = null;
-        string? codeWarning = null;
-        if (parsedKind != SearchKind.Memory)
-        {
-            // Code is project-scoped only (§3.1) -- an explicit scope=shared request never
-            // contributes code rows, even under kind=code/both.
-            if (parsedScope == SearchScope.Shared)
-            {
-                codeResults = [];
-            }
-            else
-            {
-                var codeSearchResults = await codeSearch.SearchAsync(
-                    new CodeSearchQuery(projectId, query, limit, minRelativeScore), cancellationToken);
-                codeResults = codeSearchResults.Results;
-                // Every wave until WP5 lands the vec0 leg: no embedding.codeModel can be
-                // configured yet, so the code section is always FTS5-only.
-                codeWarning = CodeSearchWarnings.EngineNotConfigured;
-            }
-        }
-
         var correlationId = Guid.CreateVersion7().ToString("N");
-        // search_quality exclusion (§1/§3.6): a code/both query never records -- the recorder's
-        // rows sync, and recording a code-adjacent query would leak identifiers/paths off-machine.
-        if (parsedKind == SearchKind.Memory)
-        {
-            await qualityService.RecordSearchSafeAsync(correlationId, query, scope, projectId, results.Count,
-                [.. results.Where(r => r.SourceFile is not null).Select(r => r.SourceFile!).Take(5)], cancellationToken);
-        }
+        var dispatch = await searchDispatcher.DispatchAsync(searchQuery, parsedKind, scope, correlationId, cancellationToken);
 
-        if (searchResults is not null)
+        if (dispatch.MemorySearchResults is not null)
         {
-            RecordSearchMeasurements(searchResults, ContentHash.OfValue(query), correlationId, projectId);
+            RecordSearchMeasurements(dispatch.MemorySearchResults, ContentHash.OfValue(query), correlationId, projectId);
         }
 
         // QueryLengthGuard is always on -- a fact about the embedding window, not a togglable
         // policy like the guard above -- so it is evaluated unconditionally, never through
         // IQueryGuardService (a disabled guard must not silence it). It applies identically
         // whichever kind was requested, since both corpora search the same query text.
-        var warning = ComposeWarning(SearchWarnings.Compose(guard.Verdict, QueryLengthGuard.Evaluate(query)), codeWarning);
-        var result = new SearchResultList(results, warning, codeResults);
+        var warning = ComposeWarning(SearchWarnings.Compose(guard.Verdict, QueryLengthGuard.Evaluate(query)), dispatch.CodeWarning);
+        var result = new SearchResultList(dispatch.Results, warning, dispatch.CodeResults);
         var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
         return envelope with { Meta = envelope.Meta with { CorrelationId = correlationId } };
     }

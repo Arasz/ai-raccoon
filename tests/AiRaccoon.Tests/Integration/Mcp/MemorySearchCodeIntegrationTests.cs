@@ -37,9 +37,10 @@ public sealed class MemorySearchCodeIntegrationTests : IAsyncLifetime
         var store = new SettingsOnlyStore(settings);
         var access = new MemoryAccessGuard(store);
         var gate = new ToolGate(access, new FakePromotionQueue());
-        _tools = new MemoryTools(store, gate, new NoOpSearchQualityService(), new QueryGuardService(settings),
-            new MemoryWriteService(store, new FakePromotionQueue()), new NoOpMeasurementRecorder(),
-            new SqliteCodeSearchService(_factory), NullLogger<MemoryTools>.Instance);
+        _tools = new MemoryTools(store, gate,
+            new SearchDispatcher(store, new SqliteCodeSearchService(_factory), new NoOpSearchQualityService()),
+            new QueryGuardService(settings), new MemoryWriteService(store, new FakePromotionQueue()),
+            new NoOpMeasurementRecorder(), NullLogger<MemoryTools>.Instance);
         await using var warm = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
     }
 
