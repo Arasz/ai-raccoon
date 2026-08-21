@@ -104,6 +104,12 @@ def _source_matches(result: dict, expected_source: str) -> bool:
         return False
     if not source_file_matches(source_file, expected_source):
         return False
+    # Section-anchor matching is best-effort: MCP search results carry a plain
+    # file `path`/`sourceFile`, not heading segments, so _heading_segments_match
+    # cannot fire on real results (review F3, 2026-08-21). Every corpus entry in
+    # the shipped corpora carries expectedHash, which resolve_gain checks first —
+    # this branch exists for corpora without hashes and stays honest (matches the
+    # source file only, never a fabricated section hit).
     anchor = anchor_of(expected_source)
     if anchor is not None and any(isinstance(result.get(k), str) for k in _HEADING_KEYS):
         return _heading_segments_match(result, anchor)

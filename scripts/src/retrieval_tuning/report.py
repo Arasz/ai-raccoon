@@ -215,16 +215,18 @@ def bucket_breakdown(per_query, entries: list[dict]) -> dict:
 # ---------------------------------------------------------------------------
 
 def matrix_influence_from_rows(rows: list[dict]) -> dict:
-    """(dataset, knob) -> {ladder value: {mean_ndcg5, mean_mrr5, hit3_rate, hit1_rate}}.
+    """(dataset, corpus_size, knob) -> {ladder value: {mean_ndcg5, mean_mrr5, hit3_rate, hit1_rate}}.
 
     Baseline rows are excluded; per-knob sweeps hold every other knob at the
-    explicit defaults (matrix.py contract).
+    explicit defaults (matrix.py contract). Keying on corpus_size keeps
+    distinct corpora that share a dataset basename (e.g. the matrix sweep
+    evaluates memory with the 10- and 100-query corpora) from collapsing.
     """
     influence: dict = {}
     for row in rows:
         if row.get("knob") == "baseline":
             continue
-        key = (row.get("dataset", ""), row.get("knob", ""))
+        key = (row.get("dataset", ""), str(row.get("corpus_size", "")), row.get("knob", ""))
         point = influence.setdefault(key, {})
         point[row.get("value", "")] = {
             "mean_ndcg5": float(row["mean_ndcg5"]),
@@ -249,10 +251,20 @@ def _value_key(value):
 
 
 def matrix_influence_summary_from_rows(rows: list[dict]) -> list[dict]:
-    """Per (dataset, knob): ladder values, ndcg5 movement, best ladder value."""
+    """Per (dataset, corpus_size, knob): ladder values, ndcg5 movement, best ladder value.
+
+    When a dataset basename carries more than one corpus_size in the CSV, the
+    dataset label disambiguates as 'name(size)' so tables never mix corpora.
+    """
     influence = matrix_influence_from_rows(rows)
+    size_counts: dict[str, set] = {}
+    for row in rows:
+        if row.get("knob") == "baseline":
+            continue
+        size_counts.setdefault(row.get("dataset", ""), set()).add(str(row.get("corpus_size", "")))
     summary: list[dict] = []
-    for (dataset, knob), points in sorted(influence.items()):
+    for (dataset, corpus_size, knob), points in sorted(influence.items()):
+        label = f"{dataset}({corpus_size})" if len(size_counts.get(dataset, {""})) > 1 else dataset
         ordered = sorted(points.items(), key=lambda kv: _value_key(kv[0]))
         values = [value for value, _ in ordered]
         ndcg5 = [p["mean_ndcg5"] for _, p in ordered]
@@ -261,7 +273,8 @@ def matrix_influence_summary_from_rows(rows: list[dict]) -> list[dict]:
         hit1 = [p["hit1_rate"] for _, p in ordered]
         best_idx = max(range(len(ndcg5)), key=lambda i: ndcg5[i])
         summary.append({
-            "dataset": dataset,
+            "dataset": label,
+            "corpus_size": corpus_size,
             "knob": knob,
             "values": values,
             "ndcg5_by_value": ndcg5,

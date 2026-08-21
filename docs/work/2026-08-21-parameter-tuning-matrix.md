@@ -72,7 +72,7 @@ Filter ranking ≥ minRelativeScore, take limit → ranked results
 | Corpus | Mean nDCG@5 | MRR@5 | hit@3 | hit@1 |
 |---|---|---|---|---|
 | sextant(6) | 0.655 | 0.542 | 0.833 | 0.333 |
-| memory(10) | 0.700 | 0.652 | 0.800 | 0.500 |
+| memory(10) | 0.700 | 0.617 | 0.900 | 0.400 |
 | memory(100) | 0.611 | 0.568 | 0.650 | 0.470 |
 
 ## Learned influence per knob

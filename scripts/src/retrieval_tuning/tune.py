@@ -163,6 +163,7 @@ def build_tuned_output(
     defaults_metrics: dict,
     tuned_metrics: dict,
     tuned_params: dict,
+    n_regressed_queries: int,
     best_trial: dict,
     drift: dict,
 ) -> dict:
@@ -182,6 +183,7 @@ def build_tuned_output(
             "tuned": tuned_metrics,
             "improvement_ndcg5": round(improvement, 9),
         },
+        "n_regressed_queries": n_regressed_queries,
         "drift": drift,
         "best_trial": best_trial,
     }
@@ -278,6 +280,7 @@ def run_study(
             defaults_metrics=drift_start.as_dict(),
             tuned_metrics=tuned_metrics.as_dict(),
             tuned_params=tuned_params,
+            n_regressed_queries=len(regressions),
             best_trial={"number": best.number, "value": float(best.value)},
             drift={"passed": not drift_problems_, "problems": drift_problems_},
         )

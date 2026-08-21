@@ -326,7 +326,7 @@ class McpClient:
 
     def memory_search(self, project_id: str, query: str, limit: int) -> list[dict]:
         data = self.call("memory_search", {
-            "projectId": project_id, "query": query, "limit": limit, "minScore": 0.0,
+            "projectId": project_id, "query": query, "limit": limit, "minRelativeScore": 0.0,
         })
         return data["data"]["results"]
 

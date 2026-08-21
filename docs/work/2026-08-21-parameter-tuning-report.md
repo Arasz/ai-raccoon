@@ -69,7 +69,21 @@ Summary: **1 improved**, **2 worsened**, **7 unchanged**.
 
 Per dataset: each knob's mean nDCG@5 across its ladder, Δ (max − min) and the best ladder value (other knobs held at the explicit defaults).
 
-### Dataset: memory
+### Dataset: memory(10)
+
+| knob | ladder values | nDCG@5 by value | ΔnDCG5 | best value |
+|---|---|---|---|---|
+| candidateWindow | max3x100, max5x50 | 0.700, 0.637 | 0.0629 | max3x100 |
+| consolidationThreshold | 0, 0.05, 0.1, 0.2, 0.5, 1.0 | 0.757, 0.763, 0.700, 0.731, 0.696, 0.596 | 0.1676 | 0.05 |
+| docScoreFormula | max, sum | 0.700, 0.700 | 0.0000 | max |
+| ftsWeight | 0, 1, 2, 3, 5, 10 | 0.406, 0.700, 0.658, 0.729, 0.667, 0.628 | 0.3231 | 3 |
+| fusion | False, True | 0.700, 0.683 | 0.0173 | False |
+| rrfK | 1, 5, 15, 60, 120, 200 | 0.498, 0.647, 0.679, 0.700, 0.689, 0.731 | 0.2329 | 200 |
+| sourceLambda | 0, 0.05, 0.1, 0.2, 0.3, 0.5 | 0.679, 0.704, 0.700, 0.643, 0.563, 0.573 | 0.1408 | 0.05 |
+| structureAlpha | 0, 0.25, 0.5, 0.75, 1.0 | 0.470, 0.486, 0.700, 0.676, 0.557 | 0.2295 | 0.5 |
+| vectorWeight | 0, 1, 2, 3, 5, 10 | 0.596, 0.700, 0.704, 0.687, 0.471, 0.465 | 0.2388 | 2 |
+
+### Dataset: memory(100)
 
 | knob | ladder values | nDCG@5 by value | ΔnDCG5 | best value |
 |---|---|---|---|---|

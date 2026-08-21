@@ -170,6 +170,7 @@ class TestTunedOutput:
             defaults_metrics=defaults,
             tuned_metrics=tuned,
             tuned_params=dict(settings_mod.KNOB_DEFAULTS),
+            n_regressed_queries=3,
             best_trial={"number": 2, "value": -0.5},
             drift={"passed": True, "problems": []},
         )
@@ -178,6 +179,7 @@ class TestTunedOutput:
         assert out["study_id"] == "retrieval-tune-2026-08-21"
         assert out["run_date"] == "2026-08-21"
         assert out["n_trials"] == 4
+        assert out["n_regressed_queries"] == 3
         assert out["eval"]["defaults"]["mean_ndcg5"] == 1.0
         assert out["eval"]["tuned"]["mean_ndcg5"] == pytest.approx(0.5)  # rank 3 -> 1/log2(4)
         assert out["eval"]["improvement_ndcg5"] == pytest.approx(-0.5)

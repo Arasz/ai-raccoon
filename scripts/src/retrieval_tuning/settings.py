@@ -17,7 +17,7 @@ import socket
 import subprocess
 from typing import Optional
 
-from .server import SafetyViolation, assert_port_not_7721
+from .server import SafetyViolation, assert_port_not_7721, assert_safe_data_root
 
 # The nine knobs and their canonical defaults (plan §1 table / §8 settings.py).
 KNOB_DEFAULTS: dict = {
@@ -150,6 +150,7 @@ def _stop_one_shot_backend(port: int) -> None:
 
 def apply_settings(data_root, knob_dict: dict, port: Optional[int] = None, binary: str = "ai-raccoon") -> list[str]:
     """Write every knob in knob_dict to the bank; returns the CLI stdout lines."""
+    assert_safe_data_root(data_root)  # never open the live bank for write (C1)
     auto_port = port is None
     port = port if port is not None else pick_free_port()
     assert_port_not_7721(port)
@@ -167,6 +168,7 @@ def reset_to_defaults(data_root, port: Optional[int] = None, binary: str = "ai-r
 
 
 def show_all(data_root, port: Optional[int] = None, binary: str = "ai-raccoon") -> str:
+    assert_safe_data_root(data_root)  # never open the live bank (C1)
     auto_port = port is None
     port = port if port is not None else pick_free_port()
     assert_port_not_7721(port)
@@ -178,6 +180,7 @@ def show_all(data_root, port: Optional[int] = None, binary: str = "ai-raccoon") 
 
 
 def show_knob(data_root, knob: str, port: Optional[int] = None, binary: str = "ai-raccoon") -> str:
+    assert_safe_data_root(data_root)  # never open the live bank (C1)
     auto_port = port is None
     port = port if port is not None else pick_free_port()
     assert_port_not_7721(port)

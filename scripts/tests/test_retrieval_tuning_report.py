@@ -220,17 +220,51 @@ def _fixture_matrix_csv(tmp_path):
 class TestMatrixInfluence:
     def test_influence_groups_by_dataset_and_knob(self, tmp_path):
         influence = report.matrix_influence(_fixture_matrix_csv(tmp_path))
-        assert ("mem", "rrfK") in influence
-        assert ("mem", "fusion") in influence
-        assert influence[("mem", "rrfK")]["5"]["mean_ndcg5"] == pytest.approx(0.5)
-        assert influence[("mem", "rrfK")]["60"]["mean_ndcg5"] == pytest.approx(0.6)
-        assert influence[("mem", "fusion")]["True"]["mean_ndcg5"] == pytest.approx(0.7)
+        assert ("mem", "100", "rrfK") in influence
+        assert ("mem", "100", "fusion") in influence
+        assert influence[("mem", "100", "rrfK")]["5"]["mean_ndcg5"] == pytest.approx(0.5)
+        assert influence[("mem", "100", "rrfK")]["60"]["mean_ndcg5"] == pytest.approx(0.6)
+        assert influence[("mem", "100", "fusion")]["True"]["mean_ndcg5"] == pytest.approx(0.7)
 
     def test_baseline_rows_are_excluded(self, tmp_path):
         influence = report.matrix_influence(_fixture_matrix_csv(tmp_path))
-        for (dataset, knob), points in influence.items():
+        for (dataset, corpus_size, knob), points in influence.items():
             assert knob != "baseline"
             assert "default" not in points
+
+    def test_same_dataset_two_corpora_do_not_collapse(self, tmp_path):
+        """Two corpora sharing a dataset basename must stay separate (review F5)."""
+        rows = [
+            {"config_id": "baseline", "knob": "baseline", "value": "default",
+             "dataset": "memory", "corpus_size": "10",
+             "mean_ndcg5": "0.70", "mean_mrr5": "0.6", "hit3_rate": "0.9", "hit1_rate": "0.4",
+             "per_query_json": "[]", "per_category_json": "{}"},
+            {"config_id": "baseline", "knob": "baseline", "value": "default",
+             "dataset": "memory", "corpus_size": "100",
+             "mean_ndcg5": "0.61", "mean_mrr5": "0.57", "hit3_rate": "0.65", "hit1_rate": "0.47",
+             "per_query_json": "[]", "per_category_json": "{}"},
+            {"config_id": "rrfK=15", "knob": "rrfK", "value": "15",
+             "dataset": "memory", "corpus_size": "10",
+             "mean_ndcg5": "0.68", "mean_mrr5": "0.6", "hit3_rate": "0.8", "hit1_rate": "0.5",
+             "per_query_json": "[]", "per_category_json": "{}"},
+            {"config_id": "rrfK=15", "knob": "rrfK", "value": "15",
+             "dataset": "memory", "corpus_size": "100",
+             "mean_ndcg5": "0.635", "mean_mrr5": "0.6", "hit3_rate": "0.7", "hit1_rate": "0.5",
+             "per_query_json": "[]", "per_category_json": "{}"},
+        ]
+        path = tmp_path / "two-corpus.csv"
+        with open(path, "w", newline="") as fh:
+            writer = csv.DictWriter(fh, fieldnames=list(rows[0]))
+            writer.writeheader()
+            writer.writerows(rows)
+        influence = report.matrix_influence(str(path))
+        assert ("memory", "10", "rrfK") in influence
+        assert ("memory", "100", "rrfK") in influence
+        assert influence[("memory", "10", "rrfK")]["15"]["mean_ndcg5"] == pytest.approx(0.68)
+        assert influence[("memory", "100", "rrfK")]["15"]["mean_ndcg5"] == pytest.approx(0.635)
+        summary = report.matrix_influence_summary(str(path))
+        labels = {s["dataset"] for s in summary}
+        assert labels == {"memory(10)", "memory(100)"}
 
     def test_summary_movement_hand_computed(self, tmp_path):
         summary = report.matrix_influence_summary(_fixture_matrix_csv(tmp_path))

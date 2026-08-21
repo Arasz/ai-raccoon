@@ -20,6 +20,11 @@ _HEX_RE = re.compile(r"^[0-9a-fA-F]{6,}$")
 _WS_RE = re.compile(r"\s+")
 
 
+def _slug(text: str) -> str:
+    """Anchor slugs are lowercased non-alphanumerics folded to single dashes."""
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+
+
 def load_corpus(path) -> list[dict]:
     """Read a corpus file: a JSON list of entries, or {'queries': [...]}."""
     raw = json.loads(Path(path).read_text())
@@ -118,7 +123,9 @@ def resolve_anchors(entries: list[dict], db_path) -> list[str]:
             if anchor:
                 for row in matches:
                     heading = f"{row['heading_path'] or ''} > {row['section'] or ''}"
-                    if any(seg.strip().lower() == anchor for seg in heading.split(">")):
+                    # Anchors in the corpora are slugified headings (e.g.
+                    # #decision-2-the-kill-switch); compare slugified segments.
+                    if any(_slug(seg) == anchor for seg in heading.split(">")):
                         break
                 else:
                     problems.append(
