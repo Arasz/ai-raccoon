@@ -189,8 +189,11 @@ digest-gated DDL block (no `CurrentVersion` bump — the metrics-table precedent
 - `code_entries` — one row per code chunk: `hash`/`path`/`value`/`source_file` mirror
   `entries`; `line_start`/`line_end` (1-based, inclusive) replace `section`/`heading_path`,
   since code has no structure modality. `uq_code_chunk UNIQUE(project_id, path, hash)` is the
-  dedup bucket; `idx_code_entries_project`, `idx_code_entries_hash`,
-  `idx_code_entries_embed_state`, and `idx_code_entries_path` mirror the `entries` indexes.
+  dedup bucket; `idx_code_entries_project`, `idx_code_entries_hash`, and
+  `idx_code_entries_embed_state` mirror the `entries` indexes. There is no separate
+  `idx_code_entries_path(project_id, path)`: it was a redundant left-prefix of `uq_code_chunk`
+  (the planner already picks `uq_code_chunk` for the per-project-path delete legs), so it was
+  dropped rather than kept as dead weight on every insert.
   `project_id` is `NOT NULL` — code has no shared/workspace/custom context, so there is no
   `scope`/`context_label`/`workspace_id`/`agent_id` column, and no
   `rating`/`ttl_days`/`access_count` (no degradation: a code row is a re-derivable cache, not

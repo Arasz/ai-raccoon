@@ -71,8 +71,8 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         {
             await using var cmd = connection.CreateCommand();
             cmd.CommandText = """
-                               INSERT INTO code_entries (hash, path, value, project_id, created_at, updated_at)
-                               VALUES ('h1', 'p1', @value, 'acme', 1, 1)
+                               INSERT INTO code_entries (hash, path, value, source_file, line_start, line_end, project_id, created_at, updated_at)
+                               VALUES ('h1', 'p1', @value, 'p1', 1, 1, 'acme', 1, 1)
                                """;
             cmd.Parameters.AddWithValue("@value", distinctiveValue);
             await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
