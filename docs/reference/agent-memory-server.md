@@ -102,10 +102,11 @@ config channel (see [Command-line options](#command-line-options)).
   owner-adjustable) goes to the code corpus instead; anything else is skipped in both. A `.md`
   file inside a directory of otherwise-code files still routes to memory. `ai-raccoon.ignore`
   and the hidden-file/deny-set (`node_modules`, `bin`, `obj`, `.git`, `.venv`, `__pycache__`,
-  `dist`, `build`, `target`) rules apply identically to both corpora. In this release the code
-  chunker is not yet wired (the engine-generalization work it depends on ships in a later wave):
-  code files route correctly but every ingest produces 0 code rows until then — memory ingest is
-  unaffected.
+  `dist`, `build`, `target`) rules apply identically to both corpora. Code files are chunked
+  (`CodeChunker`, line-range splitting) and stored on every ingest regardless of engine
+  configuration; each row lands `embed_state = 'pending'` until a code embedding engine is
+  configured (`model set code local`, below) — until then the rows are FTS5-searchable only
+  (see `kind=code` above). Memory ingest is unaffected.
 - **`memory_share`:** promotes the entry whose `hash` you pass (from a `memory_write`
   or `memory_search` result) into `shared`. It is additive — the source project row
   stays. There is no un-share; `memory_delete` on the shared row's hash removes it from
