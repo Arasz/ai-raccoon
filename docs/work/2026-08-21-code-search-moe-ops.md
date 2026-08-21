@@ -129,13 +129,13 @@ Settings rows **removed/changed**: none from the memory family. `settings model 
 
 **Placement (v1):** the **watched root** — the directory passed to `memory_watch_add` (or `memory_ingest_directory`). One file per watched directory; patterns are matched against paths **relative to that watched root**. v1 does not walk up to ancestors and does not support nested ignore files inside the tree (a v2 lever if users ask). The ignore file itself is never ingested (`.ignore` is not in either matcher's extension map).
 
-**Format:** gitignore-style line format — `#` comments, blank lines, `!` negation, trailing `/` = directories only, leading `/` = anchored to the watched root, `*`/`?`/`**` globs. v1 ships this **documented subset**; full gitignore parity (complex `**` edge cases) is an engineer-lane call: either a small matcher library or the documented subset — **open question O4**.
+**Format:** gitignore-style line format — `#` comments, blank lines, trailing `/` = directories only, leading `/` = anchored to the watched root, `*`/`**` globs. **No `!` negation in v1** (review F-09: re-include semantics interact badly with directory pruning; additive later — engineer §5.2, combined §2.1). The matcher is hand-rolled, kept minimal by design (verified: no glob machinery exists in `Watch/`; no `FileSystemGlobbing` in the package graph).
 
-**What it excludes:** **both pipelines** — a matched file is skipped by the memory ingest AND the code ingest; a matched directory is pruned from directory scans (watch initial scan/catch-up and `memory_ingest_directory`). A previously-indexed file that becomes ignored stays indexed until removed (ignore affects future ingests, git-add semantics — documented, not a deletion pass).
+**What it excludes:** **both pipelines** — a matched file is skipped by the memory ingest AND the code ingest; a matched directory is pruned from directory scans (watch initial scan/catch-up and `memory_ingest_directory`). **A previously-indexed file that becomes ignored is CLEANED**: the digest on an ignored path deletes its stale chunks from both corpora (`DeleteSourcePathAsync` — deletion is not gated by ignore) and updates `last_change_ts` without reading/fingerprinting; the catch-up scan's `ReconcileIgnoredAsync` clears fingerprinted-but-now-ignored paths.
 
-**Scope of effect:** scans and watch digests only. `memory_ingest_file` on an explicitly-named file is **never** ignored (explicit beats ignore); `memory_watch_add` on an explicitly-named file is never ignored either (same rule; a file watch is an explicit contract). Only directory walks consult the file. **Decision D6 flags this as the owner's call** if git semantics (ignore beats everything) are preferred.
+**Scope of effect:** scans and watch digests only. **`memory_ingest_file` on an explicitly-named ignored path returns 0 chunks (ignore wins — RESOLVED, combined §2.1; matches "ignored files are never fingerprinted, never chunked")**; `memory_watch_add` on an explicitly-named file applies no ignore rules (a file watch has no tree).
 
-**When changes take effect:** the file is read per scan/digest — no caching, no restart. Editing it triggers the watcher digest (it is a file under the watched root), which is a no-op ingest; the next directory re-scan applies the new patterns. Documented as "takes effect on the next scan".
+**When changes take effect:** the file is read per scan/digest — no caching, no restart. **Editing it triggers an immediate full re-scan of the watch root** (single-flighted; when a scan is already in flight the edit queues a follow-up scan or the scan re-checks the file's mtime at end — review F-16); the ignore file itself is never self-ignored and is fingerprinted like any non-indexable file so its edit is detected.
 
 **`memory_watch_add` parameter:** **none in v1** — the file just works. Agreed with the owner's recommendation; arguments: (a) a per-watch `ignore` param needs persistence + wire surface + docs to express what a versionable, repo-committed file expresses better; (b) the file travels with the repo, so every machine watching the repo gets the same exclusions; (c) it is discoverable by the user, invisible to the agent — the agent should not need to re-state exclusions per watch call. A `--ignore` override param is listed as a rejected alternative (R3).
 
@@ -143,12 +143,13 @@ Settings rows **removed/changed**: none from the memory family. `settings model 
 
 ### 2.4 NEW: no overlapping watches + repo-watch-by-default (owner requirement)
 
-**Rule statement (for the reference docs):** *"A project holds at most one watch per path: a watch may not be nested inside another watch of the same project. Registering a directory watch prunes every watch it contains. Registering a watch inside an existing directory watch is a no-op that reports the covering watch. `memory_watch_status` lists only the surviving (outermost) watches."*
+**Rule statement (for the reference docs):** *"A project holds at most one watch per path: a watch may not be nested inside another watch of the same project. Registering a directory watch prunes every watch it contains. Registering a watch inside an existing directory watch is **rejected** with an error naming the covering watch. `memory_watch_status` lists only the surviving (outermost) watches."*
 
-**Behavior on `memory_watch_add` (server-side, in one transaction):**
+**Behavior on `memory_watch_add` (review F-10/F-14 — per-watch prune transactions + register transaction, NOT one big transaction):**
 1. If the new path already has a watch (identical path) → no-op, `absorbedBy = path`.
-2. If the new path is inside an existing watch → no-op (the covering watch already digests it), `absorbedBy = <covering watch path>`.
-3. Else (the new path contains zero or more existing watches) → insert the new watch, **delete every nested watch row + cascade its `watch_files`** (the `RemoveWatchAsync` transaction pattern, `WatchStore.cs:46-75`), `pruned = [<nested paths>]`.
+2. If the new path is inside an existing watch → **rejected**: `WatchOverlapException(projectId, newPath, coveringPath)` naming the covering watch; nothing is written; `absorbedBy` is never set on a rejection.
+3. Else (the new path contains zero or more existing watches) → prune each contained watch (per watch: `RemoveWatchAsync` transaction + `UnregisterWatch`), then register the new watch (its own transaction, `lastChangeTs=0` → full catch-up), `pruned = [<nested paths>]`. A crash between prune and register leaves the path transiently unwatched — the failed MCP call tells the client to retry; the next `AddAsync` re-prunes.
+4. **Tie-break (review F-15):** mutual containment (real-path-equivalent registrations via symlink/case spellings) keeps the **longest literal path; on equal length, the first-registered** — never prune a watch whose real path equals the survivor's.
 
 **Result shape:** `WatchAddResult(ProjectId, Path)` (`WatchTools.cs:64`) gains two **additive** fields:
 
@@ -157,8 +158,8 @@ Settings rows **removed/changed**: none from the memory family. `settings model 
 ```
 
 - `pruned` — paths of watches removed because the new watch contains them (empty when none).
-- `absorbedBy` — the covering watch path when the add was a no-op (identical path or nested); null when the add won.
-- Additive = existing clients unaffected; the existing "no-op" promise in the tool description is now explicit (`absorbedBy` names the winner).
+- `absorbedBy` — the covering watch path ONLY for the identical-path re-add no-op; null otherwise (a rejected add throws — no result).
+- Additive = existing clients unaffected.
 
 **`memory_watch_status`:** reflects the winners only — pruned paths disappear from the list (no tombstone; the add response already reported them). No status-shape change.
 
@@ -171,9 +172,9 @@ Settings rows **removed/changed**: none from the memory family. `settings model 
 | Change | Location |
 |---|---|
 | Tools count 27 → **28** | `:19` |
-| `memory_search` row: add `kind=memory\|code\|both` (default `memory`); result `{results, warning}` unchanged for `memory`, `{memory: [...], code: [...]}` for `both`; code hits carry `path, lineStart, lineEnd` | `:37` + new "kind" note |
+| `memory_search` row: add `kind=memory\|code\|both` (default `memory`); result `{results, warning}` unchanged for `memory` (no `code` key — review F-12), `{results: [...], code: [...]}` for `code`/`both`; code hits carry `path, lineStart, lineEnd` | `:37` + new "kind" note |
 | New tool row `code_get`: `projectId`, `hash` → `{hash, value, path, lineStart, lineEnd}` | tools table |
-| `memory_watch_add` row + note: mirrors both corpora; prunes nested watches (`pruned`), reports the covering watch (`absorbedBy`) | `:49` |
+| `memory_watch_add` row + note: mirrors both corpora; prunes nested watches (`pruned`); a nested add is REJECTED naming the covering watch (`absorbedBy` only for identical-path re-add) | `:49` |
 | Embedding-engine section: `ai-raccoon model download <repo-id>`, `model set code local <dir>`, `settings model code show/reset` | `:116-124` |
 | New "Ignoring files" subsection: `ai-raccoon.ignore` contract (§2.3) | new |
 | New "Watches" rule statement (§2.4) | new |
@@ -203,26 +204,26 @@ Settings rows **removed/changed**: none from the memory family. `settings model 
 
 The exploration claimed sync excludes the code corpus "by construction". **Verified false for the push direction:** the snapshot is `VACUUM INTO` of the whole bank (`SyncService.cs:70, 101`) and only settings + workspace entries are stripped (`SyncService.cs:425-440`). A code corpus would ship source code + 768-dim vectors to the cloud object — a privacy leak (source leaves the machine) and a size regression (3072 bytes/chunk of vectors alone).
 
-**Required change:** `StripNonSyncableAsync` deletes `code_entries`, `code_fts`, `vec_code` (and shadow tables) from every pushed snapshot, mirroring the settings strip; ADR-0014 ("settings never sync") becomes "settings and the code corpus never sync". Pull/merge needs no change (merge names only `entries`/`sync_tombstones`/`memory_source`, `SyncService.cs:261-343`). Gate: a sync test asserting the pushed snapshot contains no `code_%` tables — same shape as the existing settings-strip tests (ADR-0014).
+**Required change (review F-22 + external round-1 B1 — DROP, not row-delete):** `StripNonSyncableAsync` **DROPs** `code_entries`, `code_fts`, `vec_code` (their FTS5/vec0 shadow tables and triggers drop with them; the strip already runs with vec0 loaded, `SyncService.cs:427-429`) from every pushed snapshot on **both push paths** (local + merged, `SyncService.cs:70-74,101-107`); ADR-0014 ("settings never sync") becomes "settings and the code corpus never sync". Row-deletion is NOT the mechanism — the gate asserts table ABSENCE (`sqlite_master`), and `DELETE` would fire the trigger families + leave empty tables. Pull/merge needs no change (merge names only `entries`/`sync_tombstones`/`memory_source`, `SyncService.cs:261-343`). Gate: a sync test asserting the pushed snapshot contains no `code_entries`/`code_fts`/`vec_code` (nor `vec_code_%` shadow) tables on both push paths — RED seeds code rows and pushes before the strip change (review F-06).
 
 ### 3.4 Overlapping watches — first-run migration (owner requirement)
 
 Existing banks can hold nested watches (old versions allowed them — no overlap logic exists anywhere in `WatchService`/`WatchStore` today). On the first run with the new rule they must be pruned. **Proposal: a ladder step (v11, `CurrentVersion` 10 → 11), reported, not silent.**
 
-- **Mechanism:** `MigrateToV11Async` runs once per bank, server-side (ADR-0075: only the server writes): per project, keep the outermost watches, delete nested watch rows + cascade their `watch_files` (same transaction pattern as `WatchStore.RemoveWatchAsync:46-75`). Stamped only on success (ladder rule, `MemorySchema.cs:490-494`).
-- **Reporting:** one Information-level log line per pruned watch (`watch overlap migration: removed <path> (covered by <path>)`), plus the pruned count in the same log. `memory_watch_status` and `watch registered` show only winners afterwards — the migration's report is the log, not a persistent surface. Rationale: silent pruning would confuse an agent that "knows" its old watch exists; a persistent tombstone list would be a hand-maintained list (derive-or-delete invariant) nobody reads.
+- **Mechanism:** `MigrateToV11Async` runs once per bank, server-side (ADR-0075: only the server writes): per project, keep the outermost watches, delete nested watch rows + cascade their `watch_files` (same transaction pattern as `WatchStore.RemoveWatchAsync:46-75`). **Tie-break (review F-15): keep the longest literal path; on equal length, the first-registered — never prune a watch whose real path equals the survivor's.** Stamped only on success (ladder rule, `MemorySchema.cs:490-494`).
+- **Reporting — with a channel (review arch-8):** the ladder has no logger (`MemorySchema` is static and logger-less), so `MigrateToV11Async` **returns** the pruned `(path, coveredBy)` list + count, and the one caller that owns a logger (`SqliteConnectionFactory.InitializeAsync`) logs one Information line per pruned watch (`watch overlap migration: removed <path> (covered by <path>)`) plus the count. WP1's gate asserts the log line (RED: migration runs, no log line). `memory_watch_status` and `watch registered` show only winners afterwards — the migration's report is the log, not a persistent surface. Rationale: silent pruning would confuse an agent that "knows" its old watch exists; a persistent tombstone list would be a hand-maintained list (derive-or-delete invariant) nobody reads.
 - Same pruning code path as the runtime rule (§2.4) — one implementation, two call sites.
 
 ### 3.5 Wire-shape backward compatibility
 
-- `memory_search` + `kind` (default `memory`): existing JSON-RPC calls are byte-identical in behavior; the envelope for `kind=memory` is the current `SearchResultList`.
+- `memory_search` + `kind` (default `memory`): existing JSON-RPC calls behave identically; the envelope for `kind=memory` is the current `SearchResultList` — semantically identical modulo `Meta.CorrelationId` (per-call random; review F-02), pinned by the WP1 golden.
 - `WatchAddResult` + `pruned`/`absorbedBy`: additive fields; old clients ignore them.
 - `code_get` is a new tool: tool-count tests and `docs/reference/agent-memory-server.md:19` (27→28) update together — the feature file's live tool-listing assertion (`agent-memory.feature:12-14`) is the gate.
 - `model set code local` writes new `embedding.code*` rows; a bank opened by an older binary simply ignores unknown settings rows (settings is a key-value table, `MemorySchema.cs:110-113`) — no forward-compat hazard. The forward-version guard (`MemorySchema.cs:435-439`) already protects older binaries from newer banks via the version bump in §3.4.
 
-### 3.6 Code re-embed must not block memory tools (contract to the architect lane)
+### 3.6 Code re-embed must not block memory tools (RESOLVED — review arch-1/F-08; engineer D-E9 adopted)
 
-`model set` for the memory engine blocks all tool calls until the re-embed finishes (`CliCommandTree.cs:144-150`). The code corpus must NOT inherit that: a code re-embed on a large repo would lock memory reads behind minutes of embedding. Contract: code re-embed drains through the same outbox/lease machinery **per corpus**; while code vectors drain, `kind=code` search degrades to FTS5-only (code_fts rows exist from ingest time) and memory tools are untouched. This is a design requirement (HYPOTHESIS H4: the shared outbox can express a per-corpus drain without new machinery — engineer lane verifies).
+`model set` for the memory engine blocks all tool calls until the re-embed finishes (`CliCommandTree.cs:144-150`). The code corpus must NOT inherit that — and the shared-outbox idea is impossible (single-row outbox `MemorySchema.cs:372-382`, hard-coded relay query `ModelMigrationJob.cs:36-43`, ADR-0076 all-tools gate). **Adopted: the code drain is outbox-free** — `model set code local` writes settings + invalidates `embed_state` in ONE transaction (the `vec_code_pending` trigger empties `vec_code` at commit — no stale-vector window); the `code-reindex` maintenance job drains pending code rows; **no ToolGate interaction — memory tools never blocked**; while code vectors drain, `kind=code` search degrades to FTS5-only (code_fts rows exist from ingest time). H4 deleted; no `model_migration` corpus column (ladder v11 = overlap prune only).
 
 ---
 
@@ -253,19 +254,19 @@ The engine generalization (WP1–WP4 of the arbitrary-models plan) is **assumed 
 | P0 | architect+ops | **Owner review of this plan** (combined MoE doc) — activation UX (§2.2), ignore contract (§2.3), no-overlap rule (§2.4), sync-strip correction (§3.3), migration report (§3.4), eval contents (§5) | G0: owner approves in Rider |
 | P1 | architect+eng | **Corpus schema + settings + CLI**: `code_entries/code_fts/vec_code` in `Ddl` (digest gate); `embedding.codeModel/codeEngine` rows; `model set code local`; `settings model code show/reset`; `settings model show` code block; ladder v11 (overlapping-watch prune, reported); **no code indexing yet** | G1: existing-bank copy opens, `doctor` reports the new tables, `code` rows round-trip through show/reset, v11 migration prunes a fixture bank with nested watches (RED→GREEN), memory tables byte-identical |
 | P2 | eng | **Chunker + ingest**: `CodeChunker` (line-range, 126-token budget = 128 ctx − 2, exploration §4.3/D6), `CodeFileTypeHandler` + extension map, `CodeIngestor`; unhandled-extension skip unchanged (`FileIngestor.cs:35-38`); `ai-raccoon.ignore` matcher in the scan path (both pipelines) | G2: ingest fixtures — `.cs` file → `code_entries` rows with `line_start < line_end`, FTS + vec0 rows; ignored file → no rows in EITHER corpus; memory corpus row-for-row unchanged |
-| P3 | eng | **Watch channeling**: digest dispatch by extension (memory and/or code), deletion from both corpora in one transaction; overlap prune-on-add (§2.4) with `pruned`/`absorbedBy`; `WatchAddResult` additive fields; `memory_watch_add` description | G3: watch tests — add root watch prunes nested (result lists them, status shows winners); add-inside-existing → `absorbedBy`; removal deletes from both corpora |
-| P4 | eng | **Search + tools**: `kind` param (`memory` default), `CombinedSearchResultList`, `code_get`, `CodeSearchService` (FTS5 + vec0 + RRF, project scope); per-corpus drain (§3.6); sync strip for `code_%` (§3.3) | G4: memory wire-shape compat tests green (default `kind=memory` byte-identical envelope); code search returns path+line hits; pushed snapshot has no `code_%` tables; tool-count gate 28 |
-| P5 | ops+eng+eval | **Eval A/B on a bank copy** (WP5 harness of the engine plan): code-daemon-embed-v1 vs jina-code-v2 vs MiniLM-384 baseline on the same chunks; heuristic-chunker vs whole-file arm; include a Python repo; timed index + query | G5: **owner decision point** — eval report (§5.1) reviewed; default code model blessed (registry pin) or v1 ships activation-only with no default; **default memory model unchanged** |
+| P3 | eng | **Watch channeling**: digest dispatch by extension (memory and/or code), deletion from both corpora in one transaction; overlap prune-on-add (§2.4) with `pruned`; nested add rejected (`WatchOverlapException`); `WatchAddResult` additive fields; `memory_watch_add` description | G3: watch tests — add root watch prunes nested (result lists them, status shows winners); add-inside-existing → rejection naming the covering watch; removal deletes from both corpora |
+| P4 | eng | **Search + tools**: `kind` param (`memory` default), `CombinedSearchResultList` (`results`/`code` keys, `WhenWritingNull` omission), `code_get`, `CodeSearchService` (FTS5 + vec0 + RRF, project scope); outbox-free code drain (§3.6); sync DROP-strip (§3.3) | G4: memory wire-shape compat tests green (default `kind=memory` semantically identical to the WP1 golden, no `code` key); code search returns path+line hits; pushed snapshot has NO code tables (both push paths); tool-count gate 28 |
+| P5 | ops+eng+eval | **Eval A/B on a bank copy** (WP5 harness of the engine plan): code-daemon-embed-v1 vs jina-code-v2 (after the parity probe) on the same chunks; heuristic-chunker vs **token-window** arm (span-overlap scoring); MiniLM-on-same-chunks = scratch-only reference, NOT a gate arm (review F-26); include a Python repo; timed index + query; **negative controls: random-vector leg AND FTS-only both < floor** (review F-01) | G5: **owner decision point** — eval report (§5.1) reviewed; default code model blessed (registry pin) or v1 ships activation-only with no default; **default memory model unchanged** |
 | P6 | arch+ops | **Docs + ADR + release**: ADR (0084+), architecture.md, reference doc, how-to, feature file, README What's-new, version bump | G6: docs drift audit clean; ADR reviewed; one squash-merge PR |
 
 ### 5.1 What the eval report must contain for the owner to approve (G5)
 
-1. **nDCG@5 per arm** on the eval set: code-daemon-embed-v1, jina-embeddings-v2-base-code, MiniLM-384 baseline (same chunks — the baseline answers "is a code model worth it at all").
+1. **nDCG@5 per arm** on the eval set: code-daemon-embed-v1, jina-embeddings-v2-base-code (after the ≥ 0.999 parity probe — review F-04); MiniLM-on-same-chunks is a scratch-only reference (answers "is a code model worth it" informally, NOT a gate arm — review F-26).
 2. **Per-query regression table**: every eval query × arm → rank of the relevant chunk (the engine plan's regression-table shape, WP5).
-3. **Chunker A/B**: heuristic line-range chunks vs whole-file chunks, per model (settles risk #2).
-4. **Throughput/wall time** per arm: index time + p50/p95 query latency (56 texts/s M4 reference point).
-5. **Recommendation**: which model becomes the registry-pinned default (if any), with the provenance note (risk #1).
-6. Negative control witnessed (engine plan WP5 parity gate: cosine ≥ 0.999 + deliberately-wrong pooling must fail).
+3. **Chunker A/B**: heuristic line-range chunks vs token-window baseline, per model, scored by **span overlap** (per-arm re-anchoring — review arch-7; settles risk #2).
+4. **Negative controls (review F-01):** the same set + queries with (a) the vector leg replaced by seeded random unit vectors and (b) FTS-only — both must score below the fixed 0.50 floor.
+5. **Throughput/wall time** per arm: index time + p50/p95 query latency (56 texts/s M4 reference point).
+6. **Recommendation**: which model becomes the registry-pinned default (if any), with the provenance note (risk #1).
 
 ---
 
@@ -275,7 +276,7 @@ The engine generalization (WP1–WP4 of the arbitrary-models plan) is **assumed 
 |---|---|
 | `docs/explanation/architecture.md` | §Data model: add `code_entries`/`code_fts`/`vec_code` to the ER diagram + a "code corpus" note (separate tables, no sweep/TTL/promotion/sync); §Write path: code-ingest branch + `ai-raccoon.ignore`; §Query flow: `kind`; §Sync cycle: "code corpus never syncs" (strip); §Schema versioning: cite the new tables as the digest-gate additive-DDL instance + v11 step |
 | `docs/reference/agent-memory-server.md` | §2.5 table — every row |
-| `docs/how-to/ignore-files.md` (NEW) | `ai-raccoon.ignore` placement/format/scope, "takes effect on next scan", explicit-file-ingest exception, example file |
+| `docs/how-to/ignore-files.md` (NEW) | `ai-raccoon.ignore` placement/format/scope, **edits trigger an immediate re-scan**, ignore wins for explicit file ingest, example file |
 | `docs/adr/0084-…md` (NEW; number = **next free after the engine-generalization ADR** — both plans are in flight; highest committed today is 0083, so this is 0084 or 0085 — check `docs/adr/README.md` at write time) | Records: code is a second corpus (own tables, 768-dim, no memory semantics); **code corpus never syncs** (push strip + pull-ignores-by-construction); `kind` additive default `memory`; no-overlap watch rule + v11 migration; `ai-raccoon.ignore` contract; code re-embed is per-corpus and never blocks memory |
 | `docs/work/features-code-search/code-search.feature` + `spec.json` (NEW) | Gherkin `@bdd` per `features-agent-memory` convention; FR-* rules: activation (`model set code`), extension dispatch, ignore file, overlap pruning + migration, `kind` default, `code_get`, no-sync, code re-embed non-blocking |
 | `README.md` What's-new | One bullet, existing format: `- **<headline>** (X.Y.Z) [ADR-NNNN](docs/adr/…md)` (`README.md:32-39`) |
@@ -292,10 +293,10 @@ Run against a **bank copy** first, then a real repo:
 3. `ai-raccoon settings model show` → prints the memory block AND a `code:` block.
 4. `ai-raccoon doctor` → reports the schema shape including `code_entries`, `code_fts`, `vec_code` on an **existing** bank (digest-gate Ddl rerun) — no version error.
 5. On an old bank with nested watches: first open logs `watch overlap migration: removed … (covered by …)`; `ai-raccoon watch registered` lists only the outermost watch.
-6. Watch a repo: `settings ingest scope add <pid> <repo>`, `settings watch enable <pid> true`, `memory_watch_add(pid, <repo>)` → result `{projectId, path, pruned: […], absorbedBy: null}`; `memory_watch_status` lists only the repo watch. A second `memory_watch_add` of a subdirectory → `absorbedBy: <repo>`.
+6. Watch a repo: `settings ingest scope add <pid> <repo>`, `settings watch enable <pid> true`, `memory_watch_add(pid, <repo>)` → result `{projectId, path, pruned: […], absorbedBy: null}`; `memory_watch_status` lists only the repo watch. A second `memory_watch_add` of a subdirectory → **rejected with `WatchOverlapException` naming `<repo>`** (not `absorbedBy` — review F-10).
 7. `sqlite3 memory.db "SELECT count(*), min(line_start), max(line_end) FROM code_entries"` → count > 0, ranges sane; `memory_search(kind=code)` returns chunks with `path`+`lineStart`/`lineEnd`; `memory_search()` (no kind) returns the **same envelope as before the feature** (compat).
 8. `code_get(hash)` returns the full chunk source with its line range.
-9. Add `ai-raccoon.ignore` at the repo root ignoring `**/generated/**` → re-scan: no `code_entries` rows and no `entries` rows for those files; explicit `memory_ingest_file` of an ignored file still ingests.
+9. Add `ai-raccoon.ignore` at the repo root ignoring `**/generated/**` → re-scan: no `code_entries` rows and no `entries` rows for those files (stale chunks cleaned); explicit `memory_ingest_file` of an ignored file returns 0 chunks (ignore wins — combined §2.1).
 10. With sync configured: push → download the remote object → no `code_%` tables present; local bank untouched.
 11. `ai-raccoon settings model code reset` → code search degrades to FTS5-only (or empty), memory search and memory vectors untouched; `embedding.code*` rows gone.
 12. Eval report (§5.1) exists with all six items; owner's G5 decision recorded.

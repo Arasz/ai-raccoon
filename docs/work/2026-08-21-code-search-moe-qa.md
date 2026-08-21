@@ -103,9 +103,9 @@ Fixtures: unit tests use a counting tokenizer (repo pattern: `CharCount` in `Mar
 - **Where:** `Unit/Chunking/CodeChunkerTests.cs` — unit.
 
 **WP2-T03 — `Chunk_LineRanges_AreContiguousAndCoverTheFile`**
-- **Behavior:** chunk line ranges are contiguous and cover the file exactly: `Σ(line_end − line_start + 1)` over chunks equals the file's line count, with no gaps and no overlaps.
+- **Behavior:** chunk line ranges cover the file exactly: the union of ranges is `1..N` with no gaps; ranges are disjoint **except** hard-split lines (a line split by WP2-T06 appears in >1 range). The Σ property `Σ(line_end − line_start + 1) = N` holds **only for files with no hard-split lines** (review F-05: T03 and T06 must not contradict each other).
 - **RED:** stub emits ranges with a gap (drops a function) → coverage assertion fails.
-- **GREEN:** for a 40-line file: `ranges` are ordered, adjacent (`next.start == prev.end + 1`), and the union covers lines 1..40.
+- **GREEN:** for a 40-line file: `ranges` are ordered, adjacent (`next.start == prev.end + 1`), and the union covers lines 1..40; for a file with a hard-split line, the union still covers 1..N and only the split line appears twice.
 - **Where:** `Unit/Chunking/CodeChunkerTests.cs` — unit.
 
 **WP2-T04 — `Chunk_BlankLines_ArePreferredSplitPoints`**
@@ -170,10 +170,10 @@ Fixtures: unit tests use a counting tokenizer (repo pattern: `CharCount` in `Mar
 - **GREEN:** `README.CS` → code handler; existing `README.MD` → memory handler (regression).
 - **Where:** `Unit/Ingestion/CodeFileTypeMatcherTests.cs` — unit.
 
-**WP3-T03 — `IngestDirectory_CodeWalk_SkipsHiddenFilesAndDirectories`**
-- **Behavior:** code directory ingest skips dotfiles and hidden directories (`.git`, `.venv`, `*.cs` under `obj/` if hidden policy matches memory's `IsHidden`).
-- **RED:** a naive walk ingests `.git/config` or `obj/…` files into the code corpus.
-- **GREEN:** a scratch tree containing `Program.cs`, `.hidden.cs`, `.git/HEAD` produces code rows only for `Program.cs`. ⚠ HYPOTHESIS: design does not restate the hidden-file rule for code; same policy as memory assumed.
+**WP3-T03 — `IngestDirectory_CodeWalk_SkipsHiddenFilesAndDirectories_AndDenySet`**
+- **Behavior:** code directory ingest skips dotfiles, hidden directories (policy pinned per review arch-10: hidden-directory segments skipped during enumeration), and the v1 built-in deny set for repo-root watches: `node_modules`, `bin`, `obj`, `.git`, `.venv`, `__pycache__`, `dist`, `build`, `target` (owner-approved OQ8; the ignore file is the extension surface).
+- **RED:** a naive walk ingests `.git/config`, `obj/…`, or `node_modules/**/*.js` into the code corpus.
+- **GREEN:** a scratch tree containing `Program.cs`, `.hidden.cs`, `.git/HEAD`, `obj/Debug/x.cs`, `node_modules/pkg/index.js` produces code rows only for `Program.cs`; the deny-set list is a single documented constant.
 - **Where:** `Unit/Ingestion/CodeIngestPathTests.cs` (pure path filter) + integration row-count check — unit + integration.
 
 **WP3-T04 — `IngestFile_OutsideScope_IsRefused_NoCodeRowsNoFingerprint`**
@@ -340,10 +340,10 @@ Extends `WatchTestStack` with a code-ingest fake (`FakeCodeIngestor` recording `
 - **GREEN:** after a repo-root catch-up, no `entries` or `code_entries` row has `source_file`/`path` ending in `ai-raccoon.ignore`.
 - **Where:** `Integration/Watch/WatchCodeChannelingTests.cs` — integration.
 
-**WP4-T20 — `IgnoreChange_TriggersARescanOfTheWatchRoot`** ⚠ HYPOTHESIS G16 (decision-dependent)
-- **Behavior:** editing the watch-root `ai-raccoon.ignore` re-scans the root (fresh-catch-up semantics): newly ignored files stop being digested (existing rows stay, memory semantics), newly unignored files are ingested.
-- **RED:** static rules loaded once → after the edit, a newly unignored file is still skipped and a newly ignored file is still digested.
-- **GREEN:** (as written, pins "re-scan on change"; if the engineer lane decides no re-scan, this assertion flips to "ignore file changes take effect on the next full re-watch" and the case is renamed accordingly — the decision is recorded in G16).
+**WP4-T20 — `IgnoreChange_TriggersARescanOfTheWatchRoot_IncludingMidScanEdits`** (resolved G16: yes, re-scan; review F-16: follow-up when one is in flight)
+- **Behavior:** editing the watch-root `ai-raccoon.ignore` re-scans the root (fresh-catch-up semantics): newly ignored files stop being digested (stale chunks cleaned), newly unignored files are ingested. The trigger is single-flighted, and when a scan is already in flight the edit **queues a follow-up scan** (or re-checks the ignore file's mtime at scan end and re-scans if changed — one of the two, pinned by this test) so the new rules always apply before the scan chain settles.
+- **RED:** static rules loaded once → after the edit, a newly unignored file is still skipped and a newly ignored file is still digested; an edit DURING a long catch-up joins the old scan and the new rules never apply.
+- **GREEN:** edit `ai-raccoon.ignore` → re-scan applies the new rules (newly ignored file's stale chunks deleted, newly unignored file ingested); an edit mid-scan results in the new rules applying before the chain settles (no stale-rule window).
 - **Where:** `Integration/Watch/WatchCodeChannelingTests.cs` — integration.
 
 #### WP4-C — No overlapping watches (broader add prunes narrower)
@@ -354,10 +354,10 @@ Extends `WatchTestStack` with a code-ingest fake (`FakeCodeIngestor` recording `
 - **GREEN:** after the broader add: `watches` contains only `/repo`; no `watch_files` rows at/under `/repo/src`; runtime state empty; `entries` + `code_entries` row counts unchanged; a follow-up catch-up produces no duplicate rows (hash-skip/dedup).
 - **Where:** `Integration/Watch/WatchPruningTests.cs` — integration.
 
-**WP4-T22 — `AddNarrowerInsideBroader_IsRejectedWithAnActionableError`** ⚠ HYPOTHESIS G18
-- **Behavior:** adding a narrower watch under an existing broader watch is refused (recommended: explicit error naming the covering watch) rather than silently ignored.
+**WP4-T22 — `AddNarrowerInsideBroader_IsRejectedWithAnActionableError`** (resolved G18: reject; ops doc amended)
+- **Behavior:** adding a narrower watch under an existing broader watch is **refused** with `WatchOverlapException` naming the covering watch; nothing is written; `absorbedBy` is NEVER set on a rejected add (it reports only the identical-path re-add no-op).
 - **RED:** pre-feature the narrow add succeeds (overlap allowed) or silently no-ops.
-- **GREEN:** `memory_watch_add(/repo/src)` with `/repo` watched → refusal naming `/repo`; no new registration. **If the engineer lane chooses silent-prune instead, the assertion flips to "narrow add no-ops and `/repo` remains the only registration" — decision recorded in G18.**
+- **GREEN:** `memory_watch_add(/repo/src)` with `/repo` watched → refusal naming `/repo`; no new registration, no `absorbedBy` in the result.
 - **Where:** `Integration/Watch/WatchPruningTests.cs` + BDD scenario — integration + bdd.
 
 **WP4-T23 — `DisjointWatches_BothSurvive_NoCrossPrune`**
@@ -366,10 +366,10 @@ Extends `WatchTestStack` with a code-ingest fake (`FakeCodeIngestor` recording `
 - **GREEN:** both registrations + fingerprints present; digests route to the right watch.
 - **Where:** `Integration/Watch/WatchPruningTests.cs` — integration.
 
-**WP4-T24 — `BoundaryContainment_RepoVsRepo2_NoFalsePrune`**
-- **Behavior:** containment respects path separators: adding `/repo` must NOT prune `/repo2` or `/repository` (prefix match without a separator boundary is not containment).
-- **RED:** a naive `StartsWith` prune removes `/repo2`.
-- **GREEN:** after adding `/repo`, `/repo2`'s registration, fingerprints, and runtime state are intact; same for `/repository`.
+**WP4-T24 — `BoundaryContainment_RepoVsRepo2_NoFalsePrune`** + tie-break family (review F-15)
+- **Behavior:** containment respects path separators: adding `/repo` must NOT prune `/repo2` or `/repository` (prefix match without a separator boundary is not containment). **Mutual containment (real-path-equivalent registrations — symlink spellings, case-differing spellings on a case-insensitive host) resolves by tie-break: keep the longest literal path; on equal length, the first-registered; never prune a watch whose real path equals the survivor's.**
+- **RED:** a naive `StartsWith` prune removes `/repo2`; a tie-break-less prune removes BOTH members of a symlink-equivalent pair.
+- **GREEN:** after adding `/repo`, `/repo2`'s registration, fingerprints, and runtime state are intact; same for `/repository`; a symlink-equivalent pair (`/repo` + `/link-to-repo`) → exactly one watch survives (the longest literal path); case-differing pair on a case-insensitive host → exactly one survives.
 - **Where:** `Integration/Watch/WatchPruningTests.cs` — integration.
 
 **WP4-T25 — `Prune_IsIdempotent_ReAddAndRePruneAreNoOps`**
@@ -468,20 +468,20 @@ Extends `WatchTestStack` with a code-ingest fake (`FakeCodeIngestor` recording `
 
 ### WP6 — `memory_search kind` + `code_get`
 
-**WP6-T01 — `Search_NoKind_IsByteForByteCurrentBehavior` (regression guard, see also RG-01)**
-- **Behavior:** `memory_search` without `kind` returns exactly today's envelope (`SearchResultList`, memory-only, no `code` key, same defaults) — the retrieval gates and clients stay green.
-- **RED:** a refactor that changes the default (e.g. `both`) adds a `code` key or alters results.
-- **GREEN:** for the same seeded bank + query, the no-`kind` response equals the pre-feature golden response (serialized shape + result hashes); existing `HeldOutRetrievalGateTests`/`GoldenFileTests`/`RetrievalBaselineTests` run unchanged and pass.
+**WP6-T01 — `Search_NoKind_IsSemanticallyIdenticalToCurrentBehavior` (regression guard, see also RG-01)**
+- **Behavior:** `memory_search` without `kind` returns the legacy envelope — memory-only, **no `code` key**, same defaults. The compat promise is **semantic identity modulo `Meta.CorrelationId`** (the correlation id is per-call random; exact bytes are unachievable — review F-02).
+- **RED (two-phase, review F-03):** (1) the golden response is captured and committed in WP1, BEFORE any `kind` work; (2) this test is witnessed failing against a deliberately broken intermediate — a stub that serializes the `code` key for `kind=memory` (or defaults `kind` to `both`); (3) green after the real change. Both runs recorded in the PR.
+- **GREEN:** for the same seeded bank + query, the no-`kind` response equals the WP1 golden exactly, modulo the correlation id (exact JSON key order pinned); `code` key absent; existing `HeldOutRetrievalGateTests`/`GoldenFileTests`/`RetrievalBaselineTests` run unchanged and pass.
 - **Where:** `Unit/Memory/MemorySearchKindToolTests.cs` (fake store) + gate suites unchanged — unit + integration.
 
-**WP6-T02 — `Search_KindCode_ReturnsCodeSectionWithEmptyMemory`**
-- **Behavior:** `kind=code` returns the code section populated and the memory section empty; both keys present (`{ memory: [], code: [...] }`). ⚠ HYPOTHESIS on "both keys always present" — see §6 gap G2.
+**WP6-T02 — `Search_KindCode_ReturnsCodeSectionWithEmptyResults`**
+- **Behavior:** `kind=code` returns the code section populated and the memory section empty; **both keys present — `results` and `code`** (review F-12: the existing `SearchResultList` key is `results`, `MemoryTools.cs:346`; `memory` is NOT a key). `kind=code` serializes `{ results: [], code: [...] }`.
 - **RED:** `kind` is an unknown argument today → MCP rejects with `invalid-params` (witnessed live against the running server).
-- **GREEN:** `kind=code` returns code hits only; `memory` key present and empty; no memory hits leak in.
+- **GREEN:** `kind=code` returns code hits only; `results` key present and empty; no memory hits leak in; the wire key names are asserted exactly (so the drift cannot recur).
 - **Where:** `Unit/Memory/MemorySearchKindToolTests.cs` + BDD scenario — unit + bdd.
 
 **WP6-T03 — `Search_KindBoth_ReturnsBothSections_EachRankedByItsOwnHybrid`**
-- **Behavior:** `kind=both` runs both hybrids and returns one envelope with both sections, each ranked independently.
+- **Behavior:** `kind=both` runs both hybrids and returns one envelope with both sections (`{ results: [...memory...], code: [...] }`), each ranked independently.
 - **RED:** `kind=both` rejected today (unknown argument).
 - **GREEN:** seeded bank with both corpora → both sections non-empty; ordering within each section matches the single-kind results for the same query.
 - **Where:** `Unit/Memory/MemorySearchKindToolTests.cs` + BDD scenario — unit + bdd.
@@ -560,10 +560,10 @@ Extends `WatchTestStack` with a code-ingest fake (`FakeCodeIngestor` recording `
 - **GREEN:** seed degraded memory rows + healthy code rows → sweep (dry-run and real) removes memory rows only; `code_entries`/`vec_code`/`code_fts` counts unchanged (`SweepHostedServiceTests` pattern).
 - **Where:** `Integration/Sweep/SweepHostedServiceTests.cs` (extend) + `Unit/Rating/DegradationPolicyTests.cs` (extend, query-level) — integration + unit.
 
-**WP7-T04 — `Sync_CodeRows_AreNotInTheSyncPayload`**
-- **Behavior:** cloud sync copies `entries`-family data only; `code_entries`/`vec_code`/`code_fts` are excluded by table separation (no code in pushed or merged snapshots).
-- **RED:** a sync that enumerates all tables would leak code rows into the payload; before WP7 no code rows exist — witness is the payload-shape assertion once code rows land.
-- **GREEN:** `MemorySync_CodeRows_NotInSyncPayload` (mirror `MemorySync_WorkspaceRows_NotInSyncPayload`): after a sync round-trip, the remote snapshot contains no code rows and the local code corpus is untouched by a pull.
+**WP7-T04 — `Sync_CodeTables_AreDroppedFromThePushedSnapshot`**
+- **Behavior:** cloud sync copies `entries`-family data only. `StripNonSyncableAsync` **DROPs** `code_entries`, `code_fts`, `vec_code` (and their shadows/triggers) from every pushed snapshot — row-deletion is NOT the mechanism (the gate asserts table absence; review F-22 + external review B1). Verified: the strip already runs with vec0 loaded (`SyncService.cs:427-429`) and on both push paths (local + merged, `SyncService.cs:70-74,101-107`).
+- **RED (rewritten per review F-06 / external B2):** the fixture SEEDS code rows via the WP3 machinery and runs a sync push **before** the strip change lands → the pushed snapshot contains the code tables → the assertion fails. (The old "before WP7 no code rows exist" witness could never fail.)
+- **GREEN:** `MemorySync_CodeTables_NotInSyncPayload` (mirror `MemorySync_WorkspaceRows_NotInSyncPayload`): after a sync round-trip, the remote snapshot contains NO `code_entries`/`code_fts`/`vec_code` tables (asserted via `sqlite_master` on the pulled snapshot); the local code corpus is untouched by a pull.
 - **Where:** `Integration/Sync/SyncServiceCodeExclusionTests.cs` — integration.
 
 **WP7-T05 — `Promotion_NeverSeesCodeRows`**
@@ -584,10 +584,10 @@ Extends `WatchTestStack` with a code-ingest fake (`FakeCodeIngestor` recording `
 - **GREEN:** kill at a random drain point → bank opens, ToolGate open, job resumes, final state = all code rows embedded, counts consistent.
 - **Where:** `E2E/ModelMigrationCrashRecoveryE2ETests.cs` (extend) — e2e.
 
-**WP7-T08 — `CodeEngineLoadFailure_DegradesCodeOnly_MemoryUnaffected`**
-- **Behavior:** if the code engine fails to load (missing model, bad manifest), memory operations keep working; code search/ingest fail with an actionable error, not a server crash. ⚠ HYPOTHESIS — failure-mode not pinned in design (see §6 gap G12); recommended direction.
-- **RED:** a single `EmbeddingService` that throws on code-engine load takes memory search down with it.
-- **GREEN:** with the code engine missing: `memory_search`/`memory_write` fully functional; `kind=code` returns an actionable configuration error; server stays up.
+**WP7-T08 — `CodeEngineUnconfigured_FtsOnlyWithWarning_ConfiguredButUnloadable_ActionableError`**
+- **Behavior (pinned per review F-11):** with NO `embedding.codeModel`, code files are still ingested (bundled sentencepiece counting tokenizer) and stored pending; `kind=code` returns FTS5-only results with a warning — NOT a configuration error, NOT an empty corpus. A **configured-but-unloadable** engine (missing manifest/files/dims mismatch) fails code operations with an actionable error only; memory is unaffected.
+- **RED:** a single `EmbeddingService` that throws on code-engine load takes memory search down with it (or: unconfigured mode returns an error instead of FTS5-only results).
+- **GREEN:** with no code engine: code ingest still chunks (pending rows), `kind=code` returns FTS5 hits + warning, `memory_search`/`memory_write` fully functional; with a broken code manifest: `kind=code` returns the actionable configuration error, memory untouched, server stays up.
 - **Where:** `Integration/Embedding/EmbeddingServiceConfiguredPathTests.cs` (extend) — integration.
 
 ### WP8 — Eval harness, BDD, provenance, docs
@@ -604,10 +604,10 @@ Extends `WatchTestStack` with a code-ingest fake (`FakeCodeIngestor` recording `
 - **GREEN:** committed fixtures round-trip; the gate reproduces the recorded nDCG within tolerance.
 - **Where:** `tests/AiRaccoon.Tests/Integration/Retrieval/` (new `CodeEvalSet.cs`-family) — integration/gate.
 
-**WP8-T03 — `ChunkerAB_EvalComparesHeuristicChunksVsBaseline`**
-- **Behavior:** the eval reports heuristic line-range chunks vs a baseline (whole-file single chunk and/or MiniLM-on-the-same-chunks) so the v1 chunker is measured, not assumed.
-- **RED:** report without the comparison column fails the gate.
-- **GREEN:** the WP8 report table contains both arms with nDCG@5 and the delta.
+**WP8-T03 — `ChunkerAB_EvalComparesHeuristicChunksVsTokenWindowBaseline`** (arm settled per review arch-7)
+- **Behavior:** the eval reports heuristic line-range chunks vs a **token-window baseline** (fixed 126-token sliding window — NOT whole-file, NOT MiniLM-on-same-chunks; the MiniLM reference is scratch-only, never a gate) so the v1 chunker is measured, not assumed. **Cross-arm anchoring: relevance is scored by span overlap** — a chunk is relevant iff its line range intersects the graded answer span; per-arm re-anchoring regenerates the spans' hashes against that arm's chunks (expectedHash anchoring breaks when chunk boundaries differ). This scoring extension is in-scope for WP8.
+- **RED:** report without the comparison column fails the gate; an arm scored with stale cross-arm hashes fails the span-overlap assertions.
+- **GREEN:** the WP8 report table contains both arms with nDCG@5 and the delta, both scored by span overlap against the same graded spans.
 - **Where:** eval harness + report doc (QA lane runs it; `2026-08-21-parameter-tuning-matrix.md` style) — script gate.
 
 **WP8-T04 — `CodeCorpusFeature_BDDScenarios_WitnessedRedThenGreen`**
@@ -640,7 +640,7 @@ Extends `WatchTestStack` with a code-ingest fake (`FakeCodeIngestor` recording `
 
 | ID | Guard | Witness / failure mode |
 |---|---|---|
-| RG-01 | `memory_search` default (`kind` absent) is byte-for-byte today's envelope (WP6-T01) | any default flip adds the `code` key or reorders results |
+| RG-01 | `memory_search` default (`kind` absent) is today's envelope — semantically identical, no `code` key, modulo `Meta.CorrelationId` (WP6-T01, two-phase RED) | any default flip adds the `code` key or reorders results |
 | RG-02 | Existing retrieval gates run unchanged and green: `HeldOutRetrievalGateTests`, `GoldenFileTests`, `RetrievalBaselineTests`, `SectionTargetedRetrievalTests` | a shared ranking/tuning surface change moves them |
 | RG-03 | Memory chunk budget stays 254; only manifest code engine gets 126 (WP2-T02, WP5-T08) | budget constant shared across corpora |
 | RG-04 | Memory `entries`/`vec_entries float[384]`/`vec_structure` DDL untouched by the code ladder (WP1-T02/T07) | dimension or table drift |
@@ -673,7 +673,7 @@ Rules and scenarios map to the catalog IDs; each must be witnessed RED against t
 | # | Gap | Recommended direction (test pins it once decided) |
 |---|---|---|
 | G1 | `kind` normalization + exact invalid-kind error message | Mirror `scope`: lowercase normalization + `invalid-params: Invalid kind 'x': expected memory, code, or both.` (WP6-T04/T12) |
-| G2 | `CombinedSearchResultList` shape when a section is empty: always both keys vs omitted | Always both keys (`memory: [], code: []`) (WP6-T02/T09) |
+| G2 | `CombinedSearchResultList` shape when a section is empty: always both keys vs omitted | **RESOLVED (review F-12):** keys are `results` + `code`; `kind=code`/`both` always serialize both; `kind=memory` serializes neither (`WhenWritingNull` — no `code` key) (WP6-T01/T02/T03) |
 | G3 | `code_get` surface: params (projectId + hash), unknown-hash refusal type, telemetry tool name | Mirror `memory_get`; `UnknownHashException` refusal (WP6-T08/T09/T11) |
 | G4 | `memory_stats`/`memory_list`/`memory_performance` vs code corpus (counts? file tree?) | Memory tools stay memory-only in v1; code counts surface via the `code-reindex` ledger/metrics only |
 | G5 | Do `memory_ingest_file`/`memory_ingest_directory` route code files (diagram says yes; §4.3 table names only the digest executor)? | Yes — one dispatch mechanism (WP3-T10) |
