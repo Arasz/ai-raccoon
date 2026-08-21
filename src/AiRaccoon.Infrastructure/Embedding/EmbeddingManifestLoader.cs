@@ -81,7 +81,8 @@ public sealed class EmbeddingManifestLoader(
                 ? new SentencePieceTokenizerOptions(
                     manifest.Tokenizer.Options?.AddBeginOfSentence ?? true,
                     manifest.Tokenizer.Options?.AddEndOfSentence ?? true,
-                    manifest.Tokenizer.Options?.SpecialTokens)
+                    manifest.Tokenizer.Options?.SpecialTokens,
+                    manifest.Tokenizer.Options?.VocabOffset ?? 0)
                 : null,
             manifest.RequiresTokenTypeIds,
             manifest.Onnx.Inputs,
