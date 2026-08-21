@@ -716,4 +716,39 @@ internal static class MemorySql
 
         return $"custom:{projectId.Length}:{projectId}:{context}";
     }
+
+    // Code corpus (docs/work/2026-08-21-code-search-implementation-plan.md §3.4): dedup key is
+    // (project_id, path, hash) — no bucket (scope/context_label/workspace_id) columns, code is
+    // project-scoped only. Same ON CONFLICT DO NOTHING + post-conflict re-read shape as
+    // InsertEntry/SelectChunkIdByPathAndHashInBucket above.
+    public const string InsertCodeEntry = """
+                                          INSERT INTO code_entries (hash, path, value, source_file, line_start, line_end,
+                                                                    project_id, created_at, updated_at, chunk_index, total_chunks)
+                                          VALUES (@hash, @path, @value, @sourceFile, @lineStart, @lineEnd,
+                                                  @projectId, @createdAt, @updatedAt, @chunkIndex, @totalChunks)
+                                          ON CONFLICT DO NOTHING
+                                          """;
+
+    public const string SelectCodeChunkIdByPathAndHash = """
+                                                         SELECT id FROM code_entries
+                                                         WHERE project_id = @projectId AND path = @path AND hash = @hash
+                                                         LIMIT 1
+                                                         """;
+
+    // D-E11 (deliberate divergence from the memory path): dedup rediscovery refreshes the line
+    // range too, not just chunk_index/total_chunks — for code, the line range IS the retrieval
+    // payload, so a file that gains lines above an unchanged chunk must not keep a stale range.
+    public const string UpdateCodeChunkPosition = """
+                                                  UPDATE code_entries
+                                                     SET line_start = @lineStart, line_end = @lineEnd,
+                                                         chunk_index = @chunkIndex, total_chunks = @totalChunks,
+                                                         updated_at = @updatedAt
+                                                   WHERE id = @id
+                                                  """;
+
+    public const string DeleteCodeBySourcePath = """
+                                                 DELETE FROM code_entries
+                                                 WHERE project_id = @projectId
+                                                   AND (path = @path OR path LIKE @pathPrefix ESCAPE '\')
+                                                 """;
 }
