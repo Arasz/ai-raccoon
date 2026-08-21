@@ -33,7 +33,8 @@ public sealed class SearchDispatcher(IMemoryStore store, ICodeSearchService code
             {
                 var codeSearchResults = await codeSearch.SearchAsync(
                     new CodeSearchQuery(searchQuery.ProjectId, searchQuery.Query,
-                        codeLimit ?? searchQuery.Limit, codeMinRelativeScore ?? searchQuery.MinRelativeScore),
+                        codeLimit ?? searchQuery.Limit, codeMinRelativeScore ?? searchQuery.MinRelativeScore,
+                        searchQuery.RrfK, searchQuery.FtsWeight, searchQuery.VectorWeight, searchQuery.CandidateWindow),
                     cancellationToken);
                 codeResults = codeSearchResults.Results;
                 codeWarning = codeSearchResults.Warning;

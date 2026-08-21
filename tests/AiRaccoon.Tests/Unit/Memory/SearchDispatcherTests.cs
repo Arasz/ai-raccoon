@@ -32,6 +32,30 @@ public sealed class SearchDispatcherTests
         codeSearch.LastQuery.MinRelativeScore.ShouldBe(0.4);
     }
 
+    /// <summary>
+    ///     ADR-0088 decision 5: rrfK/ftsWeight/vectorWeight/candidateWindow are per-call tuning
+    ///     args that apply to the code section too, same values as memory's — no separate
+    ///     codeRrfK/codeFtsWeight/etc. knobs in v1. Only limit/minRelativeScore get a genuinely
+    ///     separate per-section override.
+    /// </summary>
+    [Fact]
+    public async Task DispatchAsync_PerCallTuningArgs_ReachTheCodeSection_SameValuesAsMemory()
+    {
+        var codeSearch = new SpyCodeSearchService { ResultToReturn = new CodeSearchResults([]) };
+        var dispatcher = new SearchDispatcher(new EmptyMemoryStore(), codeSearch, new NoOpSearchQualityService());
+        var searchQuery = new SearchQuery("acme", "widget", RrfK: 30, FtsWeight: 2, VectorWeight: 5,
+            CandidateWindow: CandidateWindowMode.Max5X50);
+
+        await dispatcher.DispatchAsync(searchQuery, SearchKind.Code, "code", "corr-1",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        var source = (ISearchParametersSource)codeSearch.LastQuery!;
+        source.RrfK.ShouldBe(30);
+        source.FtsWeight.ShouldBe(2);
+        source.VectorWeight.ShouldBe(5);
+        source.CandidateWindow.ShouldBe(CandidateWindowMode.Max5X50);
+    }
+
     [Fact]
     public async Task DispatchAsync_CodeLimitAndMinRelativeScoreOmitted_FallBackToTheSharedQueryValues()
     {

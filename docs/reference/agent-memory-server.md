@@ -73,12 +73,16 @@ config channel (see [Command-line options](#command-line-options)).
   (no cross-corpus fusion — each section is ranked by its own FTS5+vec0 hybrid). Code is always
   project-scoped: `scope=shared` with `kind=code`/`both` returns an empty `code` section.
   `codeLimit`/`codeMinRelativeScore` override `limit`/`minRelativeScore` for the code section
-  only (omit them to use the same values as the memory section). Code search degrades by
-  configuration state: with no `embedding.codeModel` configured, it is FTS5-only and carries a
-  `warning` (`"code engine not configured — FTS5-only results"`); once a code engine is
-  configured (`model set code local`, below) it runs the full vec0 hybrid, fused with the same
-  weighted RRF as memory (`retrieval.rrfK`/`ftsWeight`/`vectorWeight` — `retrieval.structureAlpha`
-  is read but never applied, since code has no structure modality); a query over the engine's
+  only (omit them to use the same values as the memory section) — the only per-section knobs.
+  Every other per-call tuning arg (`rrfK`/`ftsWeight`/`vectorWeight`/`candidateWindow`) applies
+  to the code section too, at the same value passed for memory's (ADR-0088 decision 5; no
+  separate `codeRrfK`/etc. namespace). Code search degrades by configuration state: with no
+  `embedding.codeModel` configured, it is FTS5-only and carries a `warning`
+  (`"code engine not configured — FTS5-only results"`); once a code engine is configured
+  (`model set code local`, below) it runs the full vec0 hybrid, fused with the same weighted RRF
+  as memory (`retrieval.rrfK`/`ftsWeight`/`vectorWeight`, or the per-call args above —
+  `retrieval.structureAlpha` is read but never applied, since code has no structure modality); a
+  query over the engine's
   126-token window is trimmed before embedding and carries a different `warning` naming that; a
   configured-but-**unloadable** engine (missing files, a dimension mismatch) refuses the search
   with `code-engine-unloadable` instead of degrading (see [Error shapes](#error-shapes)) — memory
