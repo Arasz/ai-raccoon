@@ -43,7 +43,7 @@ public sealed class ReingestRepairJobTests : IDisposable
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private ReingestRepairJob NewJob() =>
-        new(new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]), new LocalTokenizer(), _memoryStore,
+        new(new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]), TestData.CreateEmbeddingService(), _memoryStore,
             new FakeTimeProvider(FixedNow));
 
     [Fact]

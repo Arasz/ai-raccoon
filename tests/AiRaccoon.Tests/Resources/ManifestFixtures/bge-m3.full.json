@@ -1,0 +1,36 @@
+{
+  "manifestVersion": 1,
+  "model": "BAAI/bge-m3",
+  "source": { "repo": "BAAI/bge-m3", "revision": "main" },
+  "provider": "local",
+  "dimensions": 1024,
+  "contextWindowTokens": 8192,
+  "normalization": "l2",
+  "queryInstruction": null,
+  "requiresTokenTypeIds": false,
+  "mrl": { "supported": false, "minDimensions": null },
+  "pooling": {
+    "mode": "model-output",
+    "outputNames": { "embedding": "sentence_embedding", "tokenEmbeddings": "token_embeddings" }
+  },
+  "tokenizer": {
+    "family": "sentencepiece",
+    "files": [
+      { "path": "sentencepiece.bpe.model", "sha256": "cfc8146abe2a0488e9e2a0c56de7952f7c11ab059eca145a0a727afce0db2865" }
+    ],
+    "options": {
+      "addBeginOfSentence": true,
+      "addEndOfSentence": true,
+      "specialTokens": { "<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3 }
+    }
+  },
+  "onnx": {
+    "inputs": [ "input_ids", "attention_mask" ],
+    "embeddingOutput": "sentence_embedding",
+    "tokenEmbeddingsOutput": "token_embeddings",
+    "files": [
+      { "path": "model.onnx", "sha256": "f84251230831afb359ab26d9fd37d5936d4d9bb5d1d5410e66442f630f24435b" },
+      { "path": "model.onnx_data", "sha256": "1eebfb28493f67bba03ce0ef64bfdc7fc5a3bd9d7493f818bb1d78cd798416b4" }
+    ]
+  }
+}

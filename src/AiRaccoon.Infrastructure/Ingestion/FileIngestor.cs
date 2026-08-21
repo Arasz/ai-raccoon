@@ -20,12 +20,11 @@ public sealed class FileIngestor(
     IEntryEmbedder embedder,
     IMemorySourceStore sourceStore,
     TimeProvider timeProvider,
-    ILocalTokenizer localTokenizer,
+    IEmbeddingService embeddingService,
     IIgnoreRulesProvider? ignoreRulesProvider = null,
     ICodeFileTypeMatcher? codeFileTypeMatcher = null,
     ICodeIngestor? codeIngestor = null) : IFileIngestor
 {
-    private const int DefaultMaxTokens = 256;
     private readonly ICodeFileTypeMatcher _codeFileTypeMatcher = codeFileTypeMatcher ?? NullCodeFileTypeMatcher.Instance;
     private readonly ICodeIngestor _codeIngestor = codeIngestor ?? NullCodeIngestor.Instance;
     private readonly IIgnoreRulesProvider _ignoreRulesProvider = ignoreRulesProvider ?? NullIgnoreRulesProvider.Instance;
@@ -250,10 +249,10 @@ public sealed class FileIngestor(
 
     /// <summary>
     ///     Resolves the chunk budget from the engine that will embed these chunks (docs/adr/0036):
-    ///     "local" also supplies the real BERT tokenizer as the counting override, so the budget and
-    ///     the counter that enforces it always agree with what will actually embed the chunk. Other
-    ///     providers keep the default o200k counter — the mismatch this fixes is specific to the
-    ///     bundled model.
+    ///     "local" also supplies the real engine tokenizer as the counting override — the manifest
+    ///     tokenizer for manifest models, the bundled wordpiece tokenizer otherwise — so the budget
+    ///     and the counter that enforces it always agree with what will actually embed the chunk
+    ///     (D9). Other providers keep the default o200k counter.
     ///     <para>
     ///         An **unset** provider resolves to the bundled local engine rather than to the default
     ///         o200k budget (docs/adr/0063). Nothing embeds yet at that point, but the boundaries
@@ -263,14 +262,10 @@ public sealed class FileIngestor(
     ///         is safe in the other direction: a chunk that fits the bundled model fits a larger one.
     ///     </para>
     ///     <para>
-    ///         "local" counts with the shared <see cref="LocalTokenizer" /> (docs/adr/0036) — the same
-    ///         real BERT tokenizer that will actually embed the chunk, not the o200k budget proxy.
     ///         Known, deliberately unaddressed gap: a long punctuation-free, newline-joined run (e.g. a
-    ///         hash list) can collapse to a single [UNK] under its pretokenizer, reporting an
-    ///         implausibly small count that a budget ceiling alone would not catch. Measured against
-    ///         the live bank at 1/15,246 entries affecting a 123-char fragment — real but low-impact;
+    ///         hash list) can collapse to a single [UNK] under a pretokenizer, reporting an
+    ///         implausibly small count that a budget ceiling alone would not catch.
     ///         <see cref="OnnxEmbeddingGenerator" />'s embed-time detector makes it visible.
-    ///         Chunker-side remediation is out of scope for this wave.
     ///     </para>
     /// </summary>
     private async Task<ChunkSize> ChunkSizeForAsync(SqliteConnection connection, CancellationToken cancellationToken)
@@ -283,9 +278,12 @@ public sealed class FileIngestor(
         var model = await connection.QuerySingleOrDefaultAsync<string?>(
                 Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Model }, cancellationToken))
             .ConfigureAwait(false);
-        var maxTokens = Math.Min(DefaultMaxTokens, EmbeddingService.SafeChunkBudgetFor(provider, model));
+        var settings = new EmbeddingSettings(provider, model, null, null);
+        var maxTokens = embeddingService.ResolveChunkBudgetFor(settings);
         var overlayTokens = Math.Min(ChunkingDefaults.OverlayTokens, Math.Max(0, maxTokens - 1));
-        TokenCount? countTokens = provider.Equals("local", StringComparison.OrdinalIgnoreCase) ? localTokenizer.CountTokens : null;
+        TokenCount? countTokens = provider.Equals("local", StringComparison.OrdinalIgnoreCase)
+            ? new TokenCount(embeddingService.ResolveTokenizer(settings)!.CountTokens)
+            : null;
         return new ChunkSize(maxTokens, overlayTokens, countTokens);
     }
 

@@ -1,3 +1,4 @@
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using System.Text;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
@@ -95,7 +96,8 @@ public sealed class SearchFixtureBank : IAsyncDisposable
         var options = new InfrastructureOptions { DataRoot = dataRoot, Scope = InstallScope.User };
         var factory = new SqliteConnectionFactory(options, new NoopEncryptionKeyResolver());
         var sourceStore = new SqliteMemorySourceStore(factory);
-        var embeddingService = new EmbeddingService(NullLogger<EmbeddingService>.Instance, new LocalTokenizer());
+        var embeddingService = new EmbeddingService(NullLogger<EmbeddingService>.Instance, new LocalTokenizer(),
+            new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
         var countTokens = new TokenCount(new O200kTokenizer().CountTokens);
         var markdownChunker = new MarkdownChunker(countTokens);
         var fileTypeMatcher = new FileTypeMatcher([
@@ -103,7 +105,7 @@ public sealed class SearchFixtureBank : IAsyncDisposable
             new JsonFileTypeHandler(new JsonFileTypeChunker(countTokens, markdownChunker, ChunkingDefaults.OverlayTokens))
         ]);
         var embedder = new EntryEmbedder(embeddingService, ModelMigrationLease, TimeProvider);
-        var fileIngestor = new FileIngestor(fileTypeMatcher, embedder, sourceStore, TimeProvider.System, new LocalTokenizer());
+        var fileIngestor = new FileIngestor(fileTypeMatcher, embedder, sourceStore, TimeProvider.System, embeddingService);
         var noiseFilteringService = new NoiseFilteringService([]);
         var store = new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, TimeProvider.System,
             NullLogger<SqliteMemoryStore>.Instance, noiseFilteringService, new SqliteSettingsStore(factory));

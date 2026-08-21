@@ -118,18 +118,18 @@ public sealed class EmbeddingServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public void EngineFingerprint_LocalWithoutModel_IsBundled() => EmbeddingService.EngineFingerprint("local", null, null).ShouldBe("local:bundled");
+    public void EngineFingerprint_LocalWithoutModel_IsBundled() => TestData.CreateEmbeddingService().EngineFingerprint("local", null, null).ShouldBe("local:bundled");
 
     [Fact]
-    public void EngineFingerprint_LocalWithModelPath_NamesThePath() => EmbeddingService.EngineFingerprint("local", "/models/custom.onnx", null).ShouldBe("local:/models/custom.onnx");
+    public void EngineFingerprint_LocalWithModelPath_NamesThePath() => TestData.CreateEmbeddingService().EngineFingerprint("local", "/models/custom.onnx", null).ShouldBe("local:/models/custom.onnx");
 
     [Fact]
     public void EngineFingerprint_OpenAi_NamesModelAndEndpoint() =>
-        EmbeddingService.EngineFingerprint("openai", "nomic-embed-text", "http://localhost:11434")
+        TestData.CreateEmbeddingService().EngineFingerprint("openai", "nomic-embed-text", "http://localhost:11434")
             .ShouldBe("openai:nomic-embed-text@http://localhost:11434");
 
     [Fact]
     public void EngineFingerprint_OpenAiWithoutBaseUrl_FallsBackToDefaultEndpoint() =>
-        EmbeddingService.EngineFingerprint("openai", "text-embedding-3-small", null)
+        TestData.CreateEmbeddingService().EngineFingerprint("openai", "text-embedding-3-small", null)
             .ShouldBe("openai:text-embedding-3-small@https://api.openai.com/v1");
 }

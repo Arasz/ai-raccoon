@@ -142,10 +142,24 @@ config channel (see [Command-line options](#command-line-options)).
   pinned); `ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]`
   selects any OpenAI-compatible `baseUrl` (default `https://api.openai.com/v1`).
   `model` is the model id for openai or a custom ONNX path for local; it defaults to
-  the bundled model for local, is required for openai. The API key is persisted in the
-  settings table. Changing the engine re-embeds the bank. The `engine` field in the
+  the bundled model for local, is required for openai. A local **directory** must contain
+  `ai-raccoon.manifest.json` describing its dimensions, tokenizer, pooling and files, and
+  is refused without one; only a `.onnx` file path keeps the pre-manifest defaults.
+  `--dims <n>` declares a remote engine's output dimension (required when it is not 384 —
+  sqlite-vec infers none); `model set openai` probes the endpoint first and refuses a
+  contradicted or undeclared non-384 dimension before the outbox commits. The API key is
+  persisted in the settings table. Changing the engine re-embeds the bank, rebuilding the
+  vector index first when the dimension differs. The `engine` field in the
   result is the stable fingerprint (`local:bundled`, `openai:text-embedding-3-small@<baseUrl>`,
   etc.) — a change triggers the re-embed.
+- **Downloading a local model (CLI, not a tool):** `ai-raccoon model download {repo-id}`
+  resolves a Hugging Face repo, downloads the ONNX model + its external data + tokenizer with
+  SHA-256 pins captured from the LFS oids BEFORE download (verify-or-delete, no half-installed
+  model), runs an ONNX Runtime opset smoke test, and writes `ai-raccoon.manifest.json` into
+  `<data-root>/models/<slug>/` (e.g. `BAAI__bge-m3`). Flags: `--revision`, `--file` (repeatable),
+  `--dir`, `--dry-run` (resolve + print sizes/oids, download nothing), `--yes` (confirm
+  downloads > 500 MB). It never activates the model — `model set local <dir>` is the explicit
+  next step (plan `docs/work/2026-08-21-arbitrary-embedding-models-plan.md`, D4/D8).
 - **Structure alpha (CLI, not a tool):** `ai-raccoon settings retrieval alpha set {0..1}`
   writes the dual-vector fusion alpha (`retrieval.structureAlpha`, 0..1; default 0.5)
   used by search as `score = alpha × content + (1 − alpha) × heading-path structure`.

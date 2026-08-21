@@ -131,8 +131,17 @@ looks exactly like a passing test even if the migration machinery were entirely 
 real migration, change to a genuinely different engine fingerprint — the same model by an explicit
 path counts.
 
-**A migration is minutes, not seconds.** On a 25,917-entry bank the drain took **~6 minutes**, and
-the bank refused every read and write for all of it. Plan it as a maintenance window.
+**A migration is minutes, not seconds — and hours for a big model.** On a 25,917-entry bank the
+drain took **~6 minutes** with the bundled MiniLM, and the bank refused every read and write for all
+of it. A larger engine changes the order of magnitude: bge-m3 (1024-d, fp32, 2.27 GB) measured
+**~1.85 entries/s on 23,520 entries — about 3.4 hours**. Plan it as a maintenance window sized to the
+model, not to the row count.
+
+**When the dimension changes, the drain rebuilds the vector index first.** `vec_entries` and
+`vec_structure` are dropped and recreated at the new width in one `BEGIN IMMEDIATE` transaction
+before the first row is embedded, then refilled through the existing triggers as the drain runs —
+they are never repopulated from the stored blobs, which still hold old-dimension vectors at that
+point. A kill-9 mid-transaction rolls back; the outbox stays open and the next pass redoes it.
 
 **Until 1.21.1 the recorded duration was wrong.** `finished_at` was stamped from a timestamp captured
 *before* the drain loop, so that 357-second migration recorded as 6 seconds. Data integrity was never

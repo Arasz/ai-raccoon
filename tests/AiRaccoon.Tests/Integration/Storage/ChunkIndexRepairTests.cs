@@ -102,7 +102,7 @@ public sealed class ChunkIndexRepairTests : IDisposable
     private static ChunkIndexRepair Repair()
     {
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]);
-        return new ChunkIndexRepair(matcher, new LocalTokenizer());
+        return new ChunkIndexRepair(matcher, TestData.CreateEmbeddingService());
     }
 
     private static async Task<Dictionary<string, long>> PositionsByValueAsync(SqliteConnection connection, string sourceFile) =>

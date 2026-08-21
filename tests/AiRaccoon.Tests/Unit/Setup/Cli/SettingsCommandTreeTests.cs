@@ -104,11 +104,13 @@ public class SettingsCommandTreeTests
     ];
 
     /// <summary>
-    ///     Leaves outside `settings` that are allowed to write configuration: `model set` re-embeds the
-    ///     bank (§5.2) and `encryption` is the bootstrap path (§5.3). `serve` starts a process.
+    ///     Leaves outside `settings` that are exempt from the bare-argv no-write check: verbs that
+    ///     legitimately write configuration outside settings (`model set` re-embeds the bank §5.2,
+    ///     `encryption` is the bootstrap path §5.3), commands that start a process (`serve`), or
+    ///     that cannot run with no arguments at all (`model download` needs a repo-id).
     /// </summary>
     private static readonly string[] WriteOptOuts =
-        ["model set local", "model set openai", "encryption bitwarden", "encryption show", "encryption unset", "encryption migrate", "serve", "serve observability"];
+        ["model set local", "model set openai", "model download", "encryption bitwarden", "encryption show", "encryption unset", "encryption migrate", "serve", "serve observability"];
 
     public static TheoryData<string[]> SettingsArgv()
     {

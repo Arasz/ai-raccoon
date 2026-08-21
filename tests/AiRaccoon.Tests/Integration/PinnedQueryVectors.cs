@@ -106,6 +106,8 @@ internal sealed record PinnedQueryVector(string Id, string Query, string Sha256,
 /// </summary>
 internal sealed class PinnedQueryEmbeddingService(PinnedQueryVectorFile file) : IEmbeddingService
 {
+    public string EngineFingerprint(string provider, string? model, string? baseUrl) =>
+        $"test:{provider}:{model}@{baseUrl}";
     private readonly PinnedGenerator _generator = new(file);
 
     public IEmbeddingGenerator<string, Embedding<float>> CreateGenerator(EmbeddingSettings settings)
@@ -116,6 +118,16 @@ internal sealed class PinnedQueryEmbeddingService(PinnedQueryVectorFile file) : 
 
     /// <summary>Pinned vectors are keyed by the exact query text, so trimming here would miss every pin.</summary>
     public string TrimQueryToWindow(EmbeddingSettings settings, string query) => query;
+
+    public int ResolveChunkBudgetFor(EmbeddingSettings settings) => OnnxEmbeddingGenerator.MaxContentTokens;
+
+    public int ResolveDimensions(EmbeddingSettings settings) => 384;
+
+    /// <summary>The real bundled tokenizer — the resolver contract says local ⇒ a tokenizer exists (D9).</summary>
+    public IEmbeddingTokenizer? ResolveTokenizer(EmbeddingSettings settings) =>
+        string.Equals(settings.Provider, "local", StringComparison.OrdinalIgnoreCase)
+            ? WordPieceEmbeddingTokenizer.Create(BundledModel.ResolveVocabPath())
+            : null;
 
     private sealed class PinnedGenerator : IEmbeddingGenerator<string, Embedding<float>>
     {

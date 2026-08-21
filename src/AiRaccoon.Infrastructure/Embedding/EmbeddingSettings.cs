@@ -5,4 +5,5 @@ public sealed record EmbeddingSettings(
     string Provider,
     string? Model,
     string? BaseUrl,
-    string? ApiKey);
+    string? ApiKey,
+    int? Dimensions = null);

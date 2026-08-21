@@ -106,7 +106,7 @@ public sealed class Vec0ReclaimJob : IMaintenanceJob
 ///     Once ever: it heals a defect the write paths no longer create, so a second pass would find
 ///     nothing and cost a full-table tokenize to discover that.
 /// </summary>
-public sealed class ChunkBackfillJob(IMarkdownChunker chunker, TimeProvider timeProvider, ILocalTokenizer localTokenizer) : IMaintenanceJob
+public sealed class ChunkBackfillJob(IMarkdownChunker chunker, TimeProvider timeProvider, IEmbeddingService embeddingService) : IMaintenanceJob
 {
     public const string JobName = "chunk-backfill";
 
@@ -119,7 +119,7 @@ public sealed class ChunkBackfillJob(IMarkdownChunker chunker, TimeProvider time
     public async Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
-        var report = await new ChunkBackfill(chunker, timeProvider, localTokenizer)
+        var report = await new ChunkBackfill(chunker, timeProvider, embeddingService)
             .RunAsync(connection, dryRun: false, cancellationToken).ConfigureAwait(false);
         // Only a backfill that actually replaced rows leaves anything to embed.
         return report.RowsReplaced > 0;
