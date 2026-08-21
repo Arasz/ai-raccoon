@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Sync;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sync;
 using Microsoft.Data.Sqlite;
@@ -71,6 +72,27 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
         await insert.ExecuteNonQueryAsync(ct);
     }
 
+    /// <summary>Seeds a code row and drives it through embed_state='embedded' with a real 768-float
+    /// BLOB, so the vec_code_au trigger fires and populates vec0's shadow tables (chunks/rowids/etc)
+    /// — the shape the strip's DROP TABLE IF EXISTS vec_code must actually tear down, not just an
+    /// empty pending row (integration review S9).</summary>
+    private static async Task SeedEmbeddedCodeRowAsync(SqliteConnection conn, CancellationToken ct)
+    {
+        await SeedCodeRowAsync(conn, ct);
+
+        var vector = EmbeddingBlob.ToBytes(Enumerable.Repeat(0.5f, 768).ToArray());
+        await using var update = conn.CreateCommand();
+        update.CommandText = "UPDATE code_entries SET embed_state = 'embedded', embedding = @embedding WHERE id = 1";
+        update.Parameters.AddWithValue("@embedding", vector);
+        await update.ExecuteNonQueryAsync(ct);
+
+        await using var count = conn.CreateCommand();
+        count.CommandText = "SELECT count(*) FROM vec_code WHERE rowid = 1";
+        var vecCount = (long)(await count.ExecuteScalarAsync(ct))!;
+        vecCount.ShouldBe(1L, "the vec_code_au trigger must have populated vec_code before the push runs, " +
+                              "or this test proves nothing about a populated corpus.");
+    }
+
     private static async Task SeedRemoteEntryAsync(string remoteSeedPath, CancellationToken ct)
     {
         await using var remoteConn = await CreateAndOpenAsync(remoteSeedPath, ct);
@@ -127,6 +149,33 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
         var pulled = await cloud.PullAsync("test-object", TestContext.Current.CancellationToken);
         pulled.ShouldNotBeNull();
         var pulledPath = Path.Combine(_dataRoot, "pulled-local.db");
+        await File.WriteAllBytesAsync(pulledPath, pulled.Data, TestContext.Current.CancellationToken);
+
+        AssertNoCodeTables(await TableNamesAsync(pulledPath, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    ///     Integration review S9: every other push test seeds embed_state='pending', so vec_code
+    ///     stays empty and the strip's DROP TABLE IF EXISTS vec_code never actually tears down a
+    ///     populated vec0 shadow-table set. Seeds a real embedded row (vec_code_au fires) and
+    ///     proves the push both survives it and leaves nothing behind.
+    /// </summary>
+    [Fact]
+    public async Task Sync_LocalPush_WithPopulatedVecCode_DropsSucceed_AndNoVecCodeTablesRemain()
+    {
+        var cloud = new FakeCloudStore();
+        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        {
+            await SeedEmbeddedCodeRowAsync(conn, TestContext.Current.CancellationToken);
+        }
+
+        var service = new SyncService(cloud, ct => CreateAndOpenAsync(BankPath, ct), OpenSnapshot(), OpenReadOnly(),
+            TimeProvider.System, NullLogger<SyncService>.Instance);
+        await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+
+        var pulled = await cloud.PullAsync("test-object", TestContext.Current.CancellationToken);
+        pulled.ShouldNotBeNull();
+        var pulledPath = Path.Combine(_dataRoot, "pulled-populated-vec-code.db");
         await File.WriteAllBytesAsync(pulledPath, pulled.Data, TestContext.Current.CancellationToken);
 
         AssertNoCodeTables(await TableNamesAsync(pulledPath, TestContext.Current.CancellationToken));
@@ -217,6 +266,57 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
         ((long)scalar!).ShouldBe(1L, "a pull/merge must never touch the local code corpus — it names entries/sync_tombstones only.");
     }
 
+    // --- Schema digest: a pushed snapshot must not lie about the shape it strips away -----------
+
+    /// <summary>
+    ///     Integration review S11: the strip drops code_entries/code_fts/vec_code but leaves
+    ///     application_id stamped at SchemaDigest — the digest computed from a Ddl block that
+    ///     still declares those tables. A snapshot restored as a working bank (e.g. by a human
+    ///     recovering from a pushed backup) is opened through the ordinary MemorySchema.EnsureAsync
+    ///     path, which reads a matching digest as "nothing to do" and skips the Ddl block entirely
+    ///     — so the restored bank never gets code_entries back, permanently. The strip must reset
+    ///     application_id so the next EnsureAsync re-runs the Ddl block and recreates the code
+    ///     corpus tables it stripped.
+    /// </summary>
+    [Fact]
+    public async Task Sync_LocalPush_ResetsSchemaDigest_SoARestoredSnapshotRecreatesCodeTables()
+    {
+        var cloud = new FakeCloudStore();
+        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        {
+            await SeedCodeRowAsync(conn, TestContext.Current.CancellationToken);
+        }
+
+        var service = new SyncService(cloud, ct => CreateAndOpenAsync(BankPath, ct), OpenSnapshot(), OpenReadOnly(),
+            TimeProvider.System, NullLogger<SyncService>.Instance);
+        await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+
+        var pulled = await cloud.PullAsync("test-object", TestContext.Current.CancellationToken);
+        pulled.ShouldNotBeNull();
+        var restoredPath = Path.Combine(_dataRoot, "restored-from-snapshot.db");
+        await File.WriteAllBytesAsync(restoredPath, pulled.Data, TestContext.Current.CancellationToken);
+
+        // A hand-restore opens the pushed snapshot exactly like any other bank, through the
+        // ordinary EnsureAsync path.
+        await using var restored = new SqliteConnection($"Data Source={restoredPath}");
+        await restored.OpenAsync(TestContext.Current.CancellationToken);
+        restored.EnableExtensions();
+        restored.LoadVector();
+        await MemorySchema.EnsureAsync(restored, TestContext.Current.CancellationToken);
+
+        (await TableExistsAsync(restored, "code_entries")).ShouldBeTrue(
+            "the strip must reset application_id, or a restored snapshot's EnsureAsync sees a " +
+            "matching digest, skips the Ddl block, and never gets code_entries back.");
+    }
+
+    private static async Task<bool> TableExistsAsync(SqliteConnection connection, string name)
+    {
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = @name";
+        cmd.Parameters.AddWithValue("@name", name);
+        return await cmd.ExecuteScalarAsync(TestContext.Current.CancellationToken) is not null;
+    }
+
     // --- Backward compat: a pre-code-corpus snapshot has none of these tables ------------------
 
     /// <summary>
@@ -302,6 +402,85 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
                           """;
         await cmd.ExecuteNonQueryAsync(ct);
         return conn;
+    }
+
+    // --- Encrypted bank: the code corpus must strip the same way through the password path -----
+
+    private const string EncryptedKey = "sync-code-exclusion-encrypted-key";
+
+    /// <summary>
+    ///     Integration review S9: every other test in this file uses an unencrypted bank, so the
+    ///     strip's encrypted path (SqliteConnectionStringBuilder.Password, mirrored from
+    ///     SyncServiceEncryptedTests) never ran against a populated code corpus. Full production
+    ///     schema via MemorySchema.EnsureAsync (as CreateAndOpenAsync does), just with a password
+    ///     on every connection string.
+    /// </summary>
+    private static async Task<SqliteConnection> CreateAndOpenEncryptedAsync(string path, CancellationToken ct)
+    {
+        var conn = new SqliteConnection($"Data Source={path};Password={EncryptedKey}");
+        await conn.OpenAsync(ct);
+        conn.EnableExtensions();
+        conn.LoadVector();
+        await MemorySchema.EnsureAsync(conn, ct);
+        return conn;
+    }
+
+    private static Func<string, CancellationToken, Task<SqliteConnection>> OpenSnapshotEncrypted() =>
+        async (path, ct) =>
+        {
+            var conn = new SqliteConnection($"Data Source={path};Password={EncryptedKey}");
+            await conn.OpenAsync(ct);
+            conn.EnableExtensions();
+            conn.LoadVector();
+            return conn;
+        };
+
+    private static Func<string, CancellationToken, Task<SqliteConnection>> OpenReadOnlyEncrypted() =>
+        async (path, ct) =>
+        {
+            var conn = new SqliteConnection($"Data Source={path};Password={EncryptedKey};Mode=ReadOnly");
+            await conn.OpenAsync(ct);
+            conn.EnableExtensions();
+            conn.LoadVector();
+            return conn;
+        };
+
+    [Fact]
+    public async Task Sync_LocalPush_EncryptedBank_WithPopulatedCodeCorpus_DropsCodeTablesFromSnapshot()
+    {
+        var cloud = new FakeCloudStore();
+        await using (var conn = await CreateAndOpenEncryptedAsync(BankPath, TestContext.Current.CancellationToken))
+        {
+            await SeedEmbeddedCodeRowAsync(conn, TestContext.Current.CancellationToken);
+        }
+
+        var service = new SyncService(cloud, ct => CreateAndOpenEncryptedAsync(BankPath, ct), OpenSnapshotEncrypted(),
+            OpenReadOnlyEncrypted(), TimeProvider.System, NullLogger<SyncService>.Instance);
+        var result = await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+        result.Sent.ShouldBe(1);
+
+        var pulled = await cloud.PullAsync("test-object", TestContext.Current.CancellationToken);
+        pulled.ShouldNotBeNull();
+        var pulledPath = Path.Combine(_dataRoot, "pulled-encrypted.db");
+        await File.WriteAllBytesAsync(pulledPath, pulled.Data, TestContext.Current.CancellationToken);
+
+        // The pulled snapshot is itself encrypted (VACUUM INTO of an encrypted bank stays
+        // encrypted, docs/work/archive/2026-08-06-sqlite3mc-feature-surface.md F9), so table
+        // names must be read back through the same password.
+        var tables = new List<string>();
+        await using (var check = new SqliteConnection($"Data Source={pulledPath};Password={EncryptedKey};Mode=ReadOnly"))
+        {
+            await check.OpenAsync(TestContext.Current.CancellationToken);
+            await using var cmd = check.CreateCommand();
+            cmd.CommandText = "SELECT name FROM sqlite_master WHERE type = 'table'";
+            await using var reader = await cmd.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+            while (await reader.ReadAsync(TestContext.Current.CancellationToken))
+            {
+                tables.Add(reader.GetString(0));
+            }
+        }
+
+        AssertNoCodeTables(tables);
     }
 
     /// <summary>Forces exactly one SyncConflictException on the first push, then delegates (mirrors
