@@ -107,8 +107,10 @@ public sealed class SettingsCommands
             manifestDescriptor.RequireWp3Supported(descriptor);
         }
 
-        // A remote API key is meaningless for the local engine; don't leave it in settings.
+        // A remote API key and a remote dimension are both meaningless for the local engine; don't
+        // leave either in settings, or a 384 local model inherits the last remote model's dims (D2).
         await store.DeleteSettingAsync(EmbeddingSettingsKeys.ApiKey, cancellationToken);
+        await store.DeleteSettingAsync(EmbeddingSettingsKeys.Dimensions, cancellationToken);
         await modelMigrations.StartModelMigrationAsync("local", path, null, cancellationToken);
         var modelLabel = path ?? "bundled ONNX model";
         // ADR-0076: the outbox commits synchronously; the re-embed itself runs on the server's
@@ -137,6 +139,15 @@ public sealed class SettingsCommands
                 "ai-raccoon: warning — no API key set; run 'ai-raccoon model set openai <model> --api-key <key>' or embeddings will fail");
         }
 
+        // Written before the outbox commits: the relay reconciles vec0 to this dimension as its
+        // first drain phase, so the row has to be readable by the time the migration opens (D2/D3).
+        var dims = parseResult.GetResult("--dims") is not null ? parseResult.GetValue<int?>("--dims") : null;
+        if (dims is not null)
+        {
+            await store.SetSettingAsync(EmbeddingSettingsKeys.Dimensions,
+                dims.Value.ToString(CultureInfo.InvariantCulture), cancellationToken);
+        }
+
         await modelMigrations.StartModelMigrationAsync("openai", model, baseUrl, cancellationToken);
         await streams.WriteOutputLineAsync($"embedding engine set to openai:{model}; re-embedding in the background");
         return 0;
@@ -148,7 +159,8 @@ public sealed class SettingsCommands
         foreach (var key in new[]
                  {
                      EmbeddingSettingsKeys.Provider, EmbeddingSettingsKeys.Model, EmbeddingSettingsKeys.BaseUrl,
-                     EmbeddingSettingsKeys.Engine, EmbeddingSettingsKeys.ApiKey
+                     EmbeddingSettingsKeys.Engine, EmbeddingSettingsKeys.ApiKey,
+                     EmbeddingSettingsKeys.Dimensions
                  })
         {
             await store.DeleteSettingAsync(key, cancellationToken);

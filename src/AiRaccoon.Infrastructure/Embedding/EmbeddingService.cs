@@ -190,7 +190,7 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
         ArgumentNullException.ThrowIfNull(settings);
         if (!string.Equals(settings.Provider, "local", StringComparison.OrdinalIgnoreCase))
         {
-            return LegacyManifestSemantics.LegacyDimensions;
+            return settings.Dimensions ?? LegacyManifestSemantics.LegacyDimensions;
         }
 
         return ManifestDescriptorFor(settings.Model)?.Dimensions ?? BundledDescriptor.Dimensions;

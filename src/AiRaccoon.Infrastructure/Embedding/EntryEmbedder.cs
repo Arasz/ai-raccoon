@@ -1,3 +1,4 @@
+using System.Globalization;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Maintenance;
@@ -296,7 +297,13 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
                 .ConfigureAwait(false) ?? "",
             await ReadSettingAsync(connection, EmbeddingSettingsKeys.Model, cancellationToken).ConfigureAwait(false),
             await ReadSettingAsync(connection, EmbeddingSettingsKeys.BaseUrl, cancellationToken).ConfigureAwait(false),
-            await ReadSettingAsync(connection, EmbeddingSettingsKeys.ApiKey, cancellationToken).ConfigureAwait(false));
+            await ReadSettingAsync(connection, EmbeddingSettingsKeys.ApiKey, cancellationToken).ConfigureAwait(false),
+            int.TryParse(
+                await ReadSettingAsync(connection, EmbeddingSettingsKeys.Dimensions, cancellationToken)
+                    .ConfigureAwait(false),
+                NumberStyles.Integer, CultureInfo.InvariantCulture, out var dimensions)
+                ? dimensions
+                : null);
 
     /// <summary>Embeds a set of rows with the configured engine; missing rows are skipped.</summary>
     private async Task<int> EmbedAsync(SqliteConnection connection, IReadOnlyList<EmbedRow> rows,

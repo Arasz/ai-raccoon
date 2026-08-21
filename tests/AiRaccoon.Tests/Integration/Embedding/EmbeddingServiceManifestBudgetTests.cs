@@ -222,4 +222,20 @@ public sealed class EmbeddingServiceManifestBudgetTests
 
         ReferenceEquals(first, second).ShouldBeTrue("the resolver must cache one tokenizer per engine fingerprint");
     }
+
+    /// <summary>D2/D3: the drain reconciles vec0 to whatever the remote endpoint returns, so the
+    /// declared `embedding.dimensions` is what ResolveDimensions must answer — not the 384 default.</summary>
+    [Fact]
+    public void ResolveDimensions_RemoteWithDeclaredDimensions_ReturnsTheDeclaredValue() =>
+        Service().ResolveDimensions(new EmbeddingSettings("openai", "text-embedding-3-large", null, null, 3072))
+            .ShouldBe(3072);
+
+    [Fact]
+    public void ResolveDimensions_RemoteWithoutDeclaredDimensions_KeepsTheLegacyAssumption() =>
+        Service().ResolveDimensions(new EmbeddingSettings("openai", "text-embedding-3-small", null, null))
+            .ShouldBe(384);
+
+    [Fact]
+    public void ResolveDimensions_BundledLocal_Is384() =>
+        Service().ResolveDimensions(new EmbeddingSettings("local", null, null, null)).ShouldBe(384);
 }
