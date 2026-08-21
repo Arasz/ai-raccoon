@@ -70,6 +70,38 @@ full 2026-08-21), `config.json`, `tokenizer_config.json`, `manifest.json`, and a
   re-indexes of very large repos (700k units ≈ 3.5 h on this CPU) are the GPU/OpenVINO story,
   not the local-default story.
 
+## 1.1 The field — other code-embedding models considered (2026-08-21)
+
+The model is not alone in its niche; the comparison below is what a local-first, ONNX,
+permissive-license pipeline can actually consider. Facts from HF APIs/configs and the CoIR
+leaderboard (archersama.github.io/coir), all read 2026-08-21.
+
+| Model | Params | Dims | Ctx | ONNX shipped | License | Provenance | Fit for AiRaccoon |
+|---|---|---|---|---|---|---|---|
+| **faxenoff/code-daemon-embed-v1** | 46.8M | 768 | **128 hard cap** | yes (INT8 QAT 187 MB) | MIT | 66 dl / 0 likes / 2 weeks | purpose-built hybrid dense channel, agent-style queries, rerank distilled — but unproven |
+| **jinaai/jina-embeddings-v2-base-code** | 161M | 768 | 8192 (ALiBi) | yes (int8 154 MB) | Apache-2.0 | 396k dl / 143 likes | established, 30 languages, symmetric, no prefix; generic code embeddings, not agent-query-trained |
+| nomic-ai/CodeRankEmbed | 137M | 768 | 8192 | **no** (safetensors) | MIT | 414k dl / 77 likes | CoIR-competitive; needs ONNX export + `tokenizer-json` family (deferred in engine plan) |
+| codesage/codesage-small-v2 | ~130M | 1024 | 2048 | no | Apache-2.0 | 1.3k dl | CoIR strong (large-v2 64.18 avg); no ONNX, dims 1024 |
+| BAAI/bge-code-v1 | ~1.5B (qwen2, 28L) | 1536 | 32k | no | Apache-2.0 | 12k dl | too big for on-device memory server |
+| nomic-ai/nomic-embed-code | 7B (qwen2, 28L) | 3584 | 32k | no | Apache-2.0 | 412k dl | far too big |
+| Salesforce/SFR-Embedding-Code-400M_R / 2B_R | 400M/2B | — | — | 400M only | **CC-BY-NC-4.0** | 16k dl | top CoIR (61.89 / 67.41 avg) but non-commercial license — dealbreaker |
+| Voyage Code 3 / OpenAI text-embedding-3-large | API | 256–2048 / 3072 | 32k / 8191 | n/a | proprietary | — | remote-only; reachable via the existing `openai` provider once dims land, not local |
+
+CoIR context (NDCG@10 mean, original leaderboard): SFR-2B_R 67.41, CodeSage-large-v2 64.18,
+SFR-400M_R 61.89, Voyage-Code-002 56.26, E5-Base-v2 50.90, BGE-M3 39.31. Neither
+code-daemon-embed-v1 nor jina-code-v2 appears on it — the leaderboard shortlists, our own
+eval harness decides (same lesson as F1 in
+`docs/work/2026-08-21-embedding-model-replacement.md`).
+
+**Verdict for the code-corpus plan:** two on-device candidates, both 768-dim (same
+`vec_code float[768]` schema, so the A/B costs only a re-embed, not a rebuild):
+code-daemon-embed-v1 (purpose-built for exactly our hybrid + agent-query shape, tiny, fast;
+unproven provenance) vs jina-embeddings-v2-base-code (established, 8k ctx, Apache; 3.5×
+bigger, trained on QA/docstring pairs rather than captured agent traffic). The evaluation
+phase (plan §Phase D) A/Bs both on the code corpus. CodeRankEmbed and codesage need ONNX
+export + tokenizer families the engine plan defers — v2 candidates. Remote code search via
+Voyage/OpenAI works through the openai provider as an opt-in.
+
 ## 2. Why it fits (and where it does not)
 
 **The fit is structural, not aspirational.** The card's target workload is a sentence-for-
