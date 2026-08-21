@@ -24,4 +24,12 @@ public interface IEmbeddingService
     ///     providers (they keep the chunker's default o200k proxy).
     /// </summary>
     IEmbeddingTokenizer? ResolveTokenizer(EmbeddingSettings settings);
+
+    /// <summary>
+    ///     Stable engine identity recorded in settings; a change re-embeds the bank (D7: local
+    ///     manifest directories hash the manifest's content including per-file sha256s). Instance
+    ///     member — the fingerprint touches the filesystem, so it lives on the injected service,
+    ///     not in a static class.
+    /// </summary>
+    string EngineFingerprint(string provider, string? model, string? baseUrl);
 }

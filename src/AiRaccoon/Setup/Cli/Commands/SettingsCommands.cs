@@ -102,8 +102,9 @@ public sealed class SettingsCommands
         // BEFORE the outbox commits — a refused model set must never mark the bank pending.
         if (path is not null && Directory.Exists(path))
         {
-            var descriptor = ProvisionalManifestDescriptor.Load(Path.GetFullPath(path));
-            ProvisionalManifestDescriptor.RequireWp3Supported(descriptor);
+            var manifestDescriptor = new ProvisionalManifestDescriptor();
+            var descriptor = manifestDescriptor.Load(Path.GetFullPath(path));
+            manifestDescriptor.RequireWp3Supported(descriptor);
         }
 
         // A remote API key is meaningless for the local engine; don't leave it in settings.

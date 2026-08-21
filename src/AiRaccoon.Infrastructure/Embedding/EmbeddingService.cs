@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Chunking;
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using System.ClientModel;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
@@ -16,7 +17,8 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     endpoint. A fingerprint change triggers a full re-embed (D7: a manifest's content — including
 ///     per-file sha256s — is part of the local fingerprint, so re-downloaded weights re-embed).
 /// </summary>
-public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, ILocalTokenizer localTokenizer) : IEmbeddingService
+public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, ILocalTokenizer localTokenizer,
+    ITokenizerFactory tokenizerFactory, IProvisionalManifestDescriptor manifestDescriptor) : IEmbeddingService
 {
     public const string DefaultOpenAiEndpoint = "https://api.openai.com/v1";
 
@@ -205,12 +207,12 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
     ///     re-download with new weights changes the file hashes, so the fingerprint changes and the
     ///     re-embed fires. Bundled and legacy-file identities are unchanged.
     /// </summary>
-    public static string EngineFingerprint(string provider, string? model, string? baseUrl)
+    public string EngineFingerprint(string provider, string? model, string? baseUrl)
     {
         var lower = provider.ToLowerInvariant();
         if (lower == "local" && !string.IsNullOrWhiteSpace(model) && Directory.Exists(model))
         {
-            var manifestPath = Path.Combine(Path.GetFullPath(model), "manifest.json");
+            var manifestPath = Path.Combine(Path.GetFullPath(model), EmbeddingManifest.FileName);
             if (File.Exists(manifestPath))
             {
                 return $"local:{Path.GetFullPath(model)}#{Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(manifestPath))).ToLowerInvariant()}";
@@ -236,8 +238,8 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
         {
             // WP3 directory activation (M3): a directory REQUIRES a manifest.json — only the legacy
             // .onnx-file path keeps the bundled defaults. M4 refuses non-384 manifests here.
-            var descriptor = ProvisionalManifestDescriptor.Load(modelPath);
-            ProvisionalManifestDescriptor.RequireWp3Supported(descriptor);
+            var descriptor = manifestDescriptor.Load(modelPath);
+            manifestDescriptor.RequireWp3Supported(descriptor);
             var tokenizer = ResolveManifestTokenizer(modelPath)!;
             return new OnnxEmbeddingGenerator(Path.Combine(modelPath, descriptor.OnnxModelFile), tokenizer, descriptor, _logger);
         }
@@ -262,7 +264,7 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
             return null;
         }
 
-        var manifestPath = Path.Combine(Path.GetFullPath(model), "manifest.json");
+        var manifestPath = Path.Combine(Path.GetFullPath(model), EmbeddingManifest.FileName);
         if (!File.Exists(manifestPath))
         {
             return null;
@@ -271,22 +273,22 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
         var fingerprint = EngineFingerprint("local", model, null);
         return _tokenizers.GetOrAdd(fingerprint, _ =>
         {
-            var descriptor = ProvisionalManifestDescriptor.Load(Path.GetFullPath(model));
-            ProvisionalManifestDescriptor.RequireWp3Supported(descriptor);
-            return EmbeddingTokenizerFactory.Create(descriptor, Path.GetFullPath(model));
+            var descriptor = manifestDescriptor.Load(Path.GetFullPath(model));
+            manifestDescriptor.RequireWp3Supported(descriptor);
+            return tokenizerFactory.Create(descriptor, Path.GetFullPath(model));
         });
     }
 
     /// <summary>The D6 content budget for a manifest model, or null when the model is not manifest-based.</summary>
-    private static int? ManifestContentBudget(string? model)
+    private int? ManifestContentBudget(string? model)
     {
         if (string.IsNullOrWhiteSpace(model) || !Directory.Exists(model)
-            || !File.Exists(Path.Combine(Path.GetFullPath(model), "manifest.json")))
+            || !File.Exists(Path.Combine(Path.GetFullPath(model), EmbeddingManifest.FileName)))
         {
             return null;
         }
 
-        var descriptor = ProvisionalManifestDescriptor.Load(Path.GetFullPath(model));
+        var descriptor = manifestDescriptor.Load(Path.GetFullPath(model));
         return Math.Min(MaxManifestChunkTokens,
             descriptor.ContextWindowTokens - descriptor.SpecialTokenReservation);
     }

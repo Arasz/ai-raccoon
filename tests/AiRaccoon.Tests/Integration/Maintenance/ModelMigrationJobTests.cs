@@ -224,6 +224,8 @@ public sealed class ModelMigrationJobTests : IAsyncLifetime
     /// <summary>Advances a <see cref="FakeTimeProvider"/> by a fixed step on every generator call, standing in for real embedding latency without sleeping.</summary>
     private sealed class ClockAdvancingEmbeddingService(FakeTimeProvider time, TimeSpan perCallAdvance) : IEmbeddingService
     {
+    public string EngineFingerprint(string provider, string? model, string? baseUrl) =>
+        $"test:{provider}:{model}@{baseUrl}";
         public IEmbeddingGenerator<string, Embedding<float>> CreateGenerator(EmbeddingSettings settings) => new ClockAdvancingGenerator(time, perCallAdvance);
 
         public string TrimQueryToWindow(EmbeddingSettings settings, string query) => query;

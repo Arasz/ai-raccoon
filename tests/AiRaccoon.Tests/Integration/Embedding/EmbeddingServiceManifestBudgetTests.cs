@@ -13,6 +13,7 @@ namespace AiRaccoon.Tests.Integration.Embedding;
 ///     openai stays at today's min(256, 8191) = 256.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class EmbeddingServiceManifestBudgetTests
 {
     private static string WriteManifestDir(JsonObject manifest, params (string Name, string Content)[] files)
@@ -55,7 +56,8 @@ public sealed class EmbeddingServiceManifestBudgetTests
     };
 
     private static EmbeddingService Service() =>
-        new(new FakeLogger<EmbeddingService>(), new LocalTokenizer());
+        new(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(),
+            new ProvisionalManifestDescriptor());
 
     [Fact]
     public void ResolveChunkBudgetFor_BundledLocal_Stays254()
@@ -144,28 +146,28 @@ public sealed class EmbeddingServiceManifestBudgetTests
                        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(manifestPath)))
                            .ToLowerInvariant();
 
-        EmbeddingService.EngineFingerprint("local", dir, null).ShouldBe(expected);
+        Service().EngineFingerprint("local", dir, null).ShouldBe(expected);
     }
 
     [Fact]
     public void EngineFingerprint_ManifestWithNewFileShas_ChangesTheFingerprint()
     {
         var dir = WriteManifestDir(Manifest(), ("vocab.txt", "vocab"), ("model.onnx", "model"));
-        var first = EmbeddingService.EngineFingerprint("local", dir, null);
+        var first = Service().EngineFingerprint("local", dir, null);
 
         // A re-download with new weights rewrites the manifest with new per-file sha256s (D7).
         var manifest = Manifest();
         manifest["onnx"]!["files"] = new JsonArray(new JsonObject { ["path"] = "model.onnx", ["sha256"] = ShaOf("model-v2") });
         File.WriteAllText(Path.Combine(dir, "manifest.json"), manifest.ToJsonString());
 
-        EmbeddingService.EngineFingerprint("local", dir, null).ShouldNotBe(first);
+        Service().EngineFingerprint("local", dir, null).ShouldNotBe(first);
     }
 
     [Fact]
     public void EngineFingerprint_LegacyAndBundled_AreUnchanged()
     {
-        EmbeddingService.EngineFingerprint("local", null, null).ShouldBe("local:bundled");
-        EmbeddingService.EngineFingerprint("local", "/models/custom.onnx", null).ShouldBe("local:/models/custom.onnx");
+        Service().EngineFingerprint("local", null, null).ShouldBe("local:bundled");
+        Service().EngineFingerprint("local", "/models/custom.onnx", null).ShouldBe("local:/models/custom.onnx");
     }
 
     [Fact]

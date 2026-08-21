@@ -25,7 +25,8 @@ public sealed class ManifestDirectoryActivationTests : IAsyncLifetime
             System.Text.Encoding.UTF8.GetBytes(content))).ToLowerInvariant();
 
     private static EmbeddingService Service() =>
-        new(new FakeLogger<EmbeddingService>(), new LocalTokenizer());
+        new(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(),
+            new ProvisionalManifestDescriptor());
 
     private static JsonObject Manifest(int dimensions = 384) => new()
     {

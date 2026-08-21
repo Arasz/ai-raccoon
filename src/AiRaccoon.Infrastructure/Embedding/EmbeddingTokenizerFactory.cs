@@ -1,9 +1,15 @@
 namespace AiRaccoon.Infrastructure.Embedding;
 
 /// <summary>Builds the <see cref="IEmbeddingTokenizer" /> a manifest descriptor selects (D5/D9).</summary>
-internal static class EmbeddingTokenizerFactory
+public interface ITokenizerFactory
 {
-    public static IEmbeddingTokenizer Create(EngineDescriptor descriptor, string modelDirectory) =>
+    IEmbeddingTokenizer Create(EngineDescriptor descriptor, string modelDirectory);
+}
+
+/// <inheritdoc cref="ITokenizerFactory" />
+public sealed class EmbeddingTokenizerFactory : ITokenizerFactory
+{
+    public IEmbeddingTokenizer Create(EngineDescriptor descriptor, string modelDirectory) =>
         descriptor.TokenizerFamily switch
         {
             "bert-wordpiece" => WordPieceEmbeddingTokenizer.Create(Path.Combine(modelDirectory, descriptor.TokenizerFile)),

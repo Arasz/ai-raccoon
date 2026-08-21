@@ -106,6 +106,8 @@ internal sealed record PinnedQueryVector(string Id, string Query, string Sha256,
 /// </summary>
 internal sealed class PinnedQueryEmbeddingService(PinnedQueryVectorFile file) : IEmbeddingService
 {
+    public string EngineFingerprint(string provider, string? model, string? baseUrl) =>
+        $"test:{provider}:{model}@{baseUrl}";
     private readonly PinnedGenerator _generator = new(file);
 
     public IEmbeddingGenerator<string, Embedding<float>> CreateGenerator(EmbeddingSettings settings)

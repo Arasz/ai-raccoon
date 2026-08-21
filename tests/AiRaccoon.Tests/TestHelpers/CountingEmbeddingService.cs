@@ -12,6 +12,8 @@ namespace AiRaccoon.Tests.TestHelpers;
 /// </summary>
 public sealed class CountingEmbeddingService : IEmbeddingService
 {
+    public string EngineFingerprint(string provider, string? model, string? baseUrl) =>
+        $"test:{provider}:{model}@{baseUrl}";
     private readonly CountingGenerator _generator = new();
 
     /// <summary>Every generator call's input list, in call order.</summary>

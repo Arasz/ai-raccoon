@@ -9,7 +9,7 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     parallel; at the join this adapter and <see cref="ProvisionalManifestDescriptor" /> are
 ///     replaced by it. Do not build new features on this type's surface beyond the WP3 gate.
 /// </summary>
-internal sealed record EngineDescriptor(
+public sealed record EngineDescriptor(
     string Model,
     string? SourceRepo,
     string? SourceRevision,

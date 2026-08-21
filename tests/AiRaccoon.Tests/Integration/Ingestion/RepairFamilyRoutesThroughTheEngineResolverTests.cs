@@ -17,6 +17,7 @@ namespace AiRaccoon.Tests.Integration.Ingestion;
 ///     backfills with the manifest engine's tokenizer — never the bundled one.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class RepairFamilyRoutesThroughTheEngineResolverTests
 {
     private static string ShaOf(string content) =>
@@ -84,7 +85,7 @@ public sealed class RepairFamilyRoutesThroughTheEngineResolverTests
         [new MarkdownFileTypeHandler(new MarkdownChunker(new TokenCount(new O200kTokenizer().CountTokens)))]);
 
     private static EmbeddingService Service() =>
-        new(new FakeLogger<EmbeddingService>(), new LocalTokenizer());
+        new(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(), new ProvisionalManifestDescriptor());
 
     [Fact]
     public async Task ChunkPositionScanner_BudgetAsync_ManifestModel_ResolvesBudgetAndCounterFromTheManifest()

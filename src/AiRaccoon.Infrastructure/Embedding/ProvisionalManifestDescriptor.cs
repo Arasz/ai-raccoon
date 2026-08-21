@@ -1,33 +1,43 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
+using AiRaccoon.Infrastructure.Embedding.Manifest;
+
 namespace AiRaccoon.Infrastructure.Embedding;
 
 /// <summary>
-///     PROVISIONAL — lane B's WP3 manifest loader (D1/D5, M3/M4): reads <c>manifest.json</c> from a
-///     model directory and validates it with actionable errors. Replaced at the join by lane A's
-///     canonical record + loader (WP1); do not extend its surface beyond the WP3 gate.
+///     PROVISIONAL — WP3's manifest loader (D1/D5, M3/M4): reads <c>ai-raccoon.manifest.json</c>
+///     from a model directory and validates it with actionable errors. Replaced at the join by
+///     the canonical record + loader (WP1); do not extend its surface beyond the WP3 gate.
 ///     Validation is structural (family/pooling/dims/shape + file existence); per-file sha256
 ///     verification on every load is deliberately NOT done — the download verb verifies before the
 ///     manifest is written, and the engine fingerprint (D7) hashes the manifest itself, so a
 ///     tampered file changes the fingerprint and re-embeds (a tampered manifest is a tampered
 ///     engine — engineer doc §11).
 /// </summary>
-internal static class ProvisionalManifestDescriptor
+public interface IProvisionalManifestDescriptor
+{
+    EngineDescriptor Load(string modelDirectory);
+
+    void RequireWp3Supported(EngineDescriptor descriptor);
+}
+
+/// <inheritdoc cref="IProvisionalManifestDescriptor" />
+public sealed class ProvisionalManifestDescriptor : IProvisionalManifestDescriptor
 {
     private static readonly HashSet<string> KnownFamilies = ["bert-wordpiece", "sentencepiece", "tokenizer-json"];
     private static readonly HashSet<string> KnownPoolingModes = ["mean", "cls", "model-output", "last-token"];
     private static readonly HashSet<string> KnownNormalizations = ["l2", "none"];
 
-    public static EngineDescriptor Load(string modelDirectory)
+    public EngineDescriptor Load(string modelDirectory)
     {
         ArgumentNullException.ThrowIfNull(modelDirectory);
-        var manifestPath = Path.Combine(modelDirectory, "manifest.json");
+        var manifestPath = Path.Combine(modelDirectory, EmbeddingManifest.FileName);
         if (!File.Exists(manifestPath))
         {
             throw new InvalidOperationException(
-                $"Configured embedding model directory '{modelDirectory}' has no manifest.json. " +
-                "A local model directory must contain a manifest.json describing its files, tokenizer, pooling and " +
+                $"Configured embedding model directory '{modelDirectory}' has no {EmbeddingManifest.FileName}. " +
+                $"A local model directory must contain a {EmbeddingManifest.FileName} describing its files, tokenizer, pooling and " +
                 "dimensions — run 'ai-raccoon model download <repo-id>' to create one, or point embedding.model at a " +
                 ".onnx file for the legacy path.");
         }
@@ -197,7 +207,7 @@ internal static class ProvisionalManifestDescriptor
     ///     WP3 activation gate (M4): only 384-dimension manifest models are loadable until the
     ///     dimension-reconcile work (WP4) lands. Everything else is refused with an actionable error.
     /// </summary>
-    public static void RequireWp3Supported(EngineDescriptor descriptor)
+    public void RequireWp3Supported(EngineDescriptor descriptor)
     {
         if (descriptor.Dimensions != 384)
         {

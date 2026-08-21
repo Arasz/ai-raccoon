@@ -34,7 +34,7 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
         await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.BaseUrl, baseUrl, cancellationToken)
             .ConfigureAwait(false);
 
-        var engine = EmbeddingService.EngineFingerprint(provider, model, baseUrl);
+        var engine = embeddings.EngineFingerprint(provider, model, baseUrl);
         await connection.ExecuteAsync(Def(MemorySql.UpsertSetting,
             new { key = EmbeddingSettingsKeys.Engine, value = engine }, cancellationToken)).ConfigureAwait(false);
 
@@ -56,7 +56,7 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
     {
         var previous = await ReadSettingAsync(connection, EmbeddingSettingsKeys.Engine, cancellationToken)
             .ConfigureAwait(false);
-        var engine = EmbeddingService.EngineFingerprint(provider, model, baseUrl);
+        var engine = embeddings.EngineFingerprint(provider, model, baseUrl);
 
         // A null `previous` is a bank being configured for the first time, not a migration: there is
         // no prior engine's vectors to make stale, so there is nothing to owe and no lease to take.

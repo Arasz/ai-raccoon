@@ -37,7 +37,7 @@ public sealed class ChunkBudgetIsEngineAwareTests : IAsyncLifetime
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _logger = new FakeLogger<EmbeddingService>();
         _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
-            new EmbeddingService(_logger, new LocalTokenizer()));
+            new EmbeddingService(_logger, new LocalTokenizer(), new EmbeddingTokenizerFactory(), new ProvisionalManifestDescriptor()));
         await _store.ConfigureEmbeddingAsync("local", null, null, TestContext.Current.CancellationToken);
     }
 
