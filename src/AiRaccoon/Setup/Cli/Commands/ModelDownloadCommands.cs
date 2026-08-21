@@ -18,6 +18,7 @@ internal sealed class ModelDownloadCommands(
     IOnnxGraphProbeReader? probeReader = null,
     IOnnxSmokeTester? smokeTester = null,
     IDiskSpaceProvider? diskSpace = null,
+    ISentencePieceVocabularyReader? vocabularyReader = null,
     string? endpoint = null)
 {
     public async Task<int> RunAsync(ParseResult parseResult, string dataRoot, StandardStreams streams,
@@ -45,7 +46,8 @@ internal sealed class ModelDownloadCommands(
             smokeTester ?? new OrtOnnxSmokeTester(),
             diskSpace ?? new DiskSpaceProvider(),
             new EmbeddingManifestSerializer(),
-            new EmbeddingManifestValidator());
+            new EmbeddingManifestValidator(),
+            vocabularyReader ?? new SentencePieceVocabularyReader());
         var request = new ModelDownloadRequest(repoId, revision, targetDir, explicitFiles, dryRun, yes,
             message => PromptConfirm(streams, message));
 

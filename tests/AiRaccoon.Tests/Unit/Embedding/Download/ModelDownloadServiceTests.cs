@@ -233,6 +233,44 @@ public class ModelDownloadServiceTests : IDisposable
         LoadManifest().Tokenizer.Family.ShouldBe(TokenizerFamily.BertWordpiece);
     }
 
+    /// <summary>
+    ///     Issue #417: faxenoff/code-daemon-embed-v1's tokenizer_config.json ships no
+    ///     added_tokens_decoder. The service must NOT refuse the download — it derives the
+    ///     special-token ids from the downloaded sp model's own piece table (D1-compatible option
+    ///     2) once the tokenizer file is on disk.
+    /// </summary>
+    [Fact]
+    public async Task SentencePieceModel_WithoutAddedTokensDecoder_DerivesSpecialTokensFromPieceTable()
+    {
+        var repo = FakeRepo.CodeDaemon(_server);
+
+        var result = await Service(repo).DownloadAsync(Request(repo), TestContext.Current.CancellationToken);
+
+        result.ManifestPath.ShouldNotBeNull();
+        var manifest = LoadManifest();
+        manifest.Tokenizer.Family.ShouldBe(TokenizerFamily.SentencePiece);
+        manifest.Tokenizer.Options!.SpecialTokens!["<s>"].ShouldBe(2);
+        manifest.Tokenizer.Options!.SpecialTokens!["</s>"].ShouldBe(3);
+        manifest.Tokenizer.Options!.SpecialTokens!["<pad>"].ShouldBe(0);
+        manifest.Tokenizer.Options!.SpecialTokens!["<unk>"].ShouldBe(1);
+    }
+
+    /// <summary>Negative control: D1 still applies even through the sp-derivation fallback — a
+    /// declared token whose content is not a piece in the sp model's vocabulary is still refused,
+    /// naming the missing piece, not guessed.</summary>
+    [Fact]
+    public async Task SentencePieceModel_WithoutAddedTokensDecoder_PieceMissingFromVocabulary_Fails()
+    {
+        var repo = FakeRepo.CodeDaemon(_server, declareUnresolvablePiece: true);
+
+        var ex = await Should.ThrowAsync<ModelDownloadException>(
+            () => Service(repo).DownloadAsync(Request(repo), TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldContain("<not-a-real-piece>");
+        Directory.Exists(_targetDir).ShouldBeFalse();
+        File.Exists(Path.Combine(_targetDir, EmbeddingManifest.FileName)).ShouldBeFalse();
+    }
+
     [Fact]
     public void ModelSlug_SanitizesRepoId()
     {
@@ -256,7 +294,8 @@ public class ModelDownloadServiceTests : IDisposable
             smoke ?? new FakeSmokeTester(ok: true),
             disk ?? new FakeDiskSpace(long.MaxValue),
             new EmbeddingManifestSerializer(),
-            new EmbeddingManifestValidator());
+            new EmbeddingManifestValidator(),
+            new SentencePieceVocabularyReader());
     }
 
     private EmbeddingManifest LoadManifest() =>

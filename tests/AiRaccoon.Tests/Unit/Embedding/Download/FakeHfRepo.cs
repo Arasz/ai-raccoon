@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using AiRaccoon.Infrastructure.Embedding;
 
 namespace AiRaccoon.Tests.Unit.Embedding.Download;
 
@@ -129,6 +130,56 @@ namespace AiRaccoon.Tests.Unit.Embedding.Download;
             server.Resolve(repo.RepoId, "model.onnx", onnx);
             server.Resolve(repo.RepoId, "model.onnx_data", data);
             server.Resolve(repo.RepoId, "vocab.txt", vocab);
+            server.Resolve(repo.RepoId, "config.json", Encoding.UTF8.GetBytes(repo.ConfigJson));
+            server.Resolve(repo.RepoId, "tokenizer_config.json", Encoding.UTF8.GetBytes(repo.TokenizerConfigJson));
+            return repo;
+        }
+
+        /// <summary>
+        ///     The faxenoff/code-daemon-embed-v1 shape (issue #417): a sentencepiece repo whose
+        ///     tokenizer_config.json ships no added_tokens_decoder. Uses the REAL bundled
+        ///     code-sentencepiece.bpe.model bytes (not a fake placeholder) — the fix derives
+        ///     special-token ids from this file's own piece table, so the fixture must be a piece
+        ///     table an actual sentencepiece parse can read.
+        /// </summary>
+        public static FakeRepo CodeDaemon(FakeHfServer server, bool declareUnresolvablePiece = false)
+        {
+            var onnx = TestOnnx.MinimalModelWithExternalData("model.onnx_data");
+            var data = "external-weights-bytes"u8.ToArray();
+            var spm = File.ReadAllBytes(CodeTokenizer.ResolveModelPath());
+            var padToken = declareUnresolvablePiece ? "<not-a-real-piece>" : "<pad>";
+            var repo = new FakeRepo
+            {
+                RepoId = "faxenoff/code-daemon-embed-v1",
+                Revision = "main",
+                OnnxBytes = onnx,
+                DataBytes = data,
+                SpmBytes = spm,
+                OnnxSha = Sha(onnx),
+                DataSha = Sha(data),
+                SpmSha = Sha(spm),
+                ConfigJson = """{"model_type": "roberta", "hidden_size": 768, "max_position_embeddings": 130, "vocab_size": 22739}""",
+                TokenizerConfigJson =
+                    $$"""
+                    {
+                      "model_max_length": 128,
+                      "bos_token": "<s>", "eos_token": "</s>", "unk_token": "<unk>", "pad_token": "{{padToken}}"
+                    }
+                    """
+            };
+            server.Tree(repo.RepoId, repo.Revision,
+                $$"""
+                [
+                  { "path": "model.onnx", "type": "file", "size": {{onnx.Length}}, "lfs": { "oid": "{{repo.OnnxSha}}" } },
+                  { "path": "model.onnx_data", "type": "file", "size": {{data.Length}}, "lfs": { "oid": "{{repo.DataSha}}" } },
+                  { "path": "sentencepiece.bpe.model", "type": "file", "size": {{spm.Length}}, "lfs": { "oid": "{{repo.SpmSha}}" } },
+                  { "path": "config.json", "type": "file", "size": 100, "lfs": null },
+                  { "path": "tokenizer_config.json", "type": "file", "size": 100, "lfs": null }
+                ]
+                """);
+            server.Resolve(repo.RepoId, "model.onnx", onnx);
+            server.Resolve(repo.RepoId, "model.onnx_data", data);
+            server.Resolve(repo.RepoId, "sentencepiece.bpe.model", spm);
             server.Resolve(repo.RepoId, "config.json", Encoding.UTF8.GetBytes(repo.ConfigJson));
             server.Resolve(repo.RepoId, "tokenizer_config.json", Encoding.UTF8.GetBytes(repo.TokenizerConfigJson));
             return repo;
