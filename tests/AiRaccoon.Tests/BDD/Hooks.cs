@@ -20,6 +20,11 @@ public sealed class Hooks(ScenarioContext scenarioContext)
         // The encryption-bitwarden feature's context (real resolver-backed bank + fake-bws
         // runner); registered under its own type — the native-memory registrations stay as-is.
         scenarioContext.ScenarioContainer.RegisterInstanceAs(new EncryptionBitwardenFeatureContext());
+
+        // The code-corpus feature's context: its own SqliteMemoryStore composed with an
+        // IIgnoreRulesProvider + IWatchStore wired into FileIngestor (ctx above does not carry
+        // those), registered under its own type only.
+        scenarioContext.ScenarioContainer.RegisterInstanceAs(new CodeCorpusFeatureContext());
     }
 
     /// <summary>
@@ -57,5 +62,6 @@ public sealed class Hooks(ScenarioContext scenarioContext)
 
         ctx.Dispose();
         scenarioContext.ScenarioContainer.Resolve<EncryptionBitwardenFeatureContext>().Dispose();
+        scenarioContext.ScenarioContainer.Resolve<CodeCorpusFeatureContext>().Dispose();
     }
 }

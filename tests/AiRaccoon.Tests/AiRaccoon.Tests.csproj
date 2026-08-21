@@ -54,6 +54,9 @@
         <ReqnrollFeatureFiles Include="..\..\docs\features\encryption-bitwarden\encryption-bitwarden.feature">
             <Link>BDD\features-encryption-bitwarden\encryption-bitwarden.feature</Link>
         </ReqnrollFeatureFiles>
+        <ReqnrollFeatureFiles Include="..\..\docs\features\code-corpus\code-corpus.feature">
+            <Link>BDD\features-code-corpus\code-corpus.feature</Link>
+        </ReqnrollFeatureFiles>
     </ItemGroup>
 
     <ItemGroup>
