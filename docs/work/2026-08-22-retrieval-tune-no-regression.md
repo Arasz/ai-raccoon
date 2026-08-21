@@ -88,6 +88,40 @@ better on both axes).
    exact expectedHash rank; sextant-6 mean nDCG@5; drift check; pinned sextant
    probe; winner re-evaluated twice. [pending]
 
+## Staircase distillation (owner feedback) — WHY the two stubborn queries collapse
+
+From defaults (both correct at rank 1) toward the lead config, one knob at a time:
+
+| step | mean nDCG@5 | n_reg | E048 (rating-fix/pow) | E028 (memory_get-by-hash) |
+|---|---|---|---|---|
+| defaults | 0.6105 | 0 | 1.0 @1 | 1.0 @1 |
+| +rrfK 60→23 | 0.6309 | 9 | **0.5 @3** | 1.0 @1 |
+| +ftsWeight 1→3 | 0.6022 | 12 | 1.0 @1 | **0.5 @3** |
+| +consolidation 0.1→0.163 | 0.5946 | 18 | 1.0 @1 | 0.63 @2 |
+| +structureAlpha 0.5→0.597 | 0.6039 | 2 | 1.0 @1 | 1.0 @1 |
+| +docScoreFormula max→sum | 0.6105 | 0 | 1.0 @1 | 1.0 @1 |
+| rrfK + fts together | 0.6384 | 13 | **0.0 —** | 0.63 @2 |
+| lead (all five) | 0.6624 | 7 | 0.39 @5 | 0.63 @2 |
+
+Distilled reason: **the two stubborn queries have different, complementary
+sensitivities, and both are victims of the FTS-leg dominance that creates the
+mean gain.**
+
+- E048's target is the VECTOR leg's rank-1 choice; the FTS leg ranks same-file
+  siblings higher. rrfK 60→23 sharpens RRF so the FTS leg's top ranks win the
+  fusion → E048 falls. (k=60's spread lets the vector leg's rank-1 win.)
+- E028's target is likewise the vector leg's choice; ftsWeight 1→3 (and
+  consolidation 0.1→0.163, which drops fewer weak siblings) lets the FTS leg's
+  wrong top rank win → E028 falls.
+- structureAlpha and docScoreFormula are innocent for both (α alone: 2 minor
+  regressions; doc alone: 0).
+
+Consequence: keeping BOTH at rank 1 requires the fusion balance near defaults —
+which forfeits the gain, because the gain IS the FTS-dominant balance. No
+in-window configuration reconciles them; the lead config (below) is the
+best-trade-off point found (0.6624, 7 regressions, 2 collapses, both stubborn
+queries still retrievable in top-5).
+
 ## 1. Was it possible?
 
 [pending — see 3-set validation]
