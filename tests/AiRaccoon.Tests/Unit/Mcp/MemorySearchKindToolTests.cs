@@ -156,9 +156,13 @@ public sealed class MemorySearchKindToolTests
     }
 
     [Fact]
-    public async Task Search_KindCode_CarriesTheEngineNotConfiguredWarning()
+    public async Task Search_KindCode_ForwardsTheCodeService_OwnWarning()
     {
+        // WP5: the warning is no longer SearchDispatcher's own hardcoded constant -- it is
+        // whatever CodeSearchResults.Warning the real SqliteCodeSearchService computed
+        // (EngineNotConfigured, QueryTrimmedToCodeWindow, or null), forwarded verbatim.
         _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
+        _codeSearch.StubWarning = CodeSearchWarnings.EngineNotConfigured;
 
         var envelope = await _tools.Search("acme", "widgets", kind: "code",
             cancellationToken: TestContext.Current.CancellationToken);
@@ -313,12 +317,14 @@ public sealed class MemorySearchKindToolTests
     {
         public IReadOnlyList<CodeSearchResult> StubResults { get; set; } = [];
 
+        public string? StubWarning { get; set; }
+
         public int SearchCallCount { get; private set; }
 
         public Task<CodeSearchResults> SearchAsync(CodeSearchQuery query, CancellationToken cancellationToken = default)
         {
             SearchCallCount++;
-            return Task.FromResult(new CodeSearchResults(StubResults));
+            return Task.FromResult(new CodeSearchResults(StubResults, StubWarning));
         }
 
         public Task<CodeEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
