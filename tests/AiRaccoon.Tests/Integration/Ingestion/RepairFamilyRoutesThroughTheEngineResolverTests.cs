@@ -42,6 +42,7 @@ public sealed class RepairFamilyRoutesThroughTheEngineResolverTests
     {
         ["manifestVersion"] = 1,
         ["model"] = "repair-routing-model",
+        ["source"] = new JsonObject { ["repo"] = "test/repair-routing-model", ["revision"] = "main" },
         ["provider"] = "local",
         ["dimensions"] = 384,
         ["contextWindowTokens"] = 8192,

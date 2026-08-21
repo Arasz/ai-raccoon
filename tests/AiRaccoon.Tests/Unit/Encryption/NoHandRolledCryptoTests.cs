@@ -20,6 +20,9 @@ public sealed class NoHandRolledCryptoTests
         // WP2 model download: SHA-256 file-integrity pins (LFS oid verification, BundledResource
         // IsVerified pattern) — content addressing, never key material.
         "AiRaccoon.Infrastructure/Embedding/Download/ModelDownloadService.cs",
+        // D7 engine fingerprint: SHA-256 over the manifest file's bytes so a re-download with new
+        // weights changes the fingerprint and re-embeds — content addressing, never key material.
+        "AiRaccoon.Infrastructure/Embedding/EmbeddingService.cs",
         "AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs",
         "AiRaccoon.Infrastructure/Sqlite/SnippetFallback.cs",
         "AiRaccoon.Infrastructure/Sqlite/Memory/SqliteMemoryStore.cs",
