@@ -105,7 +105,9 @@ public sealed partial class MemoryTools(
             "The search query. Semantic matching only sees roughly the first 254 tokens (~1,000 " +
             "characters of English prose, approximate) — for a long paste (a log, stack trace, test " +
             "output), search its identifying line (exception type, error code, failing test name) " +
-            "instead of the whole dump. Keyword matching still covers the query in full.")]
+            "instead of the whole dump. Keyword matching still covers the query in full. When kind " +
+            "is code or both, the code leg's own engine window is narrower still (126 tokens for " +
+            "code-daemon-embed-v1) — a query trimmed for code may still fit the memory leg in full.")]
         string query,
         [Description("Search scope: all (default), project, or shared.")]
         string scope = "all",
@@ -161,6 +163,7 @@ public sealed partial class MemoryTools(
             _ => throw new McpException($"invalid-params: Invalid scope '{scope}': expected all, project, or shared.")
         };
         var parsedKind = ParseKind(kind);
+        ValidateCodeOverrides(codeLimit, codeMinRelativeScore);
 
         // Enum wire names are validated here (not silently defaulted) so a typo fails fast,
         // and provided tuning values are range-checked before any bank work.
@@ -221,6 +224,24 @@ public sealed partial class MemoryTools(
         "both" => SearchKind.Both,
         _ => throw new McpException($"invalid-params: Invalid kind '{kind}': expected memory, code, or both.")
     };
+
+    /// <summary>S5: codeLimit/codeMinRelativeScore override limit/minRelativeScore for the code
+    /// section only — SearchQueryValidator enforces the same two rules for their un-prefixed
+    /// counterparts, so a section override must fail exactly the same way, not pass through
+    /// silently into an empty section.</summary>
+    private static void ValidateCodeOverrides(int? codeLimit, double? codeMinRelativeScore)
+    {
+        if (codeLimit is <= 0)
+        {
+            throw new McpException($"invalid-params: codeLimit must be greater than 0 (was {codeLimit}).");
+        }
+
+        if (codeMinRelativeScore is < 0.0 or > 1.0)
+        {
+            throw new McpException(
+                $"invalid-params: codeMinRelativeScore must be between 0 and 1 inclusive (was {codeMinRelativeScore}).");
+        }
+    }
 
     private static string? ComposeWarning(string? primary, string? extra) => (primary, extra) switch
     {

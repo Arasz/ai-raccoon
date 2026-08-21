@@ -432,12 +432,13 @@ internal static class MemorySchema
                                               total_chunks INTEGER NOT NULL DEFAULT 0
                                           );
 
-                                          -- S2: a row that keeps failing to embed (poison content) must not starve
-                                          -- its batch or retry every maintenance poll forever. Added via ALTER, not
-                                          -- the CREATE TABLE column list above, so the SAME statement brings both a
-                                          -- brand-new bank (table just created, column still missing) and an
-                                          -- already-existing one to the same shape exactly once per digest change.
-                                          ALTER TABLE code_entries ADD COLUMN embed_attempts INTEGER NOT NULL DEFAULT 0;
+                                          -- embed_attempts (S2) is NOT declared here: ALTER TABLE ADD COLUMN isn't
+                                          -- idempotent under a race (two connections opening the bank at once, e.g.
+                                          -- the maintenance hosted service and the first real request, can both see
+                                          -- it missing before either commits), unlike every CREATE/DROP ... IF
+                                          -- [NOT] EXISTS statement in this block — see EnsureCodeEmbedAttemptsColumnAsync,
+                                          -- which runs on every open (like MigrateIngestScopeKeysAsync below) and
+                                          -- tolerates losing that race.
 
                                           CREATE UNIQUE INDEX IF NOT EXISTS uq_code_chunk ON code_entries(project_id, path, hash);
                                           CREATE INDEX IF NOT EXISTS idx_code_entries_project ON code_entries(project_id);
@@ -558,6 +559,12 @@ internal static class MemorySchema
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             await StampSchemaDigestAsync(connection, cancellationToken).ConfigureAwait(false);
         }
+
+        // Runs on every open, version or not, same shape as the two calls below: code_entries
+        // itself is created by the Ddl block just above (on a fresh bank) or already exists (on
+        // an upgraded one) — either way this brings it to the embed_attempts (S2) shape exactly
+        // once, tolerating a race with another connection doing the same thing concurrently.
+        await EnsureCodeEmbedAttemptsColumnAsync(connection, cancellationToken).ConfigureAwait(false);
 
         // Runs on every open, version or not: it is a data move guarding a deny-by-default gate,
         // it costs one indexed count, and a bank that was stamped by a newer build and then
@@ -940,6 +947,45 @@ internal static class MemorySchema
     /// <summary>The unconditional no-overlapping-watches prune step's outcome for one bank open.</summary>
     internal sealed record WatchOverlapPruneResult(
         IReadOnlyList<PrunedWatch> Pruned, IReadOnlyList<WatchOverlapPruneWarning> Warnings);
+
+    /// <summary>
+    ///     S2: adds code_entries.embed_attempts if it is missing — additive, no ladder step, same
+    ///     as code_entries itself. A no-op on a bank that already has it (the common case: this
+    ///     runs on every open). Tolerates losing a race against another connection doing the same
+    ///     thing concurrently (the maintenance hosted service and the first real request can both
+    ///     open the bank at once): the loser's ALTER fails with "duplicate column name", which
+    ///     means the column is already there — exactly the outcome being verified.
+    /// </summary>
+    private static async Task EnsureCodeEmbedAttemptsColumnAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'code_entries'",
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false) > 0;
+        if (!hasTable)
+        {
+            return; // the Ddl block just above creates code_entries; nothing to alter yet
+        }
+
+        var hasColumn = (await connection.QueryAsync<string>(new CommandDefinition(
+                "SELECT name FROM pragma_table_info('code_entries')", cancellationToken: cancellationToken))
+            .ConfigureAwait(false)).Contains("embed_attempts", StringComparer.Ordinal);
+        if (hasColumn)
+        {
+            return;
+        }
+
+        try
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                    "ALTER TABLE code_entries ADD COLUMN embed_attempts INTEGER NOT NULL DEFAULT 0",
+                    cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
+        {
+        }
+    }
 
     /// <summary>
     ///     The scope allowlist bounds every disk-reading surface, not just watching, so its keys

@@ -86,6 +86,34 @@ public sealed class MemorySearchKindToolTests
         _store.SearchCallCount.ShouldBe(0, "an invalid kind must fail fast, before any bank work");
     }
 
+    /// <summary>S5: codeLimit/codeMinRelativeScore override limit/minRelativeScore for the code
+    /// section only — they must be validated the same way, not passed through silently.</summary>
+    [Fact]
+    public async Task Search_CodeLimitZeroOrNegative_IsRejectedWithInvalidParams()
+    {
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.Search("acme", "widgets", kind: "code", codeLimit: 0,
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldStartWith("invalid-params: ");
+        ex.Message.ShouldContain("codeLimit");
+        _codeSearch.SearchCallCount.ShouldBe(0, "an invalid codeLimit must fail fast, before either corpus is queried");
+    }
+
+    [Theory]
+    [InlineData(-0.1)]
+    [InlineData(1.1)]
+    public async Task Search_CodeMinRelativeScoreOutOfRange_IsRejectedWithInvalidParams(double codeMinRelativeScore)
+    {
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.Search("acme", "widgets", kind: "code", codeMinRelativeScore: codeMinRelativeScore,
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldStartWith("invalid-params: ");
+        ex.Message.ShouldContain("codeMinRelativeScore");
+        _codeSearch.SearchCallCount.ShouldBe(0);
+    }
+
     [Theory]
     [InlineData("CODE")]
     [InlineData("Code")]
