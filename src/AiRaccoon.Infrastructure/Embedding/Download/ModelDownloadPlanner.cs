@@ -116,7 +116,7 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
                 + "tokenizer_config.json ships no added_tokens_decoder, so the special-token ids can only be read "
                 + "from the sentencepiece piece table — which numbers them differently. Deriving them would embed "
                 + "the wrong <s>/<unk> for every sequence. Hand-write ai-raccoon.manifest.json for this model with "
-                + "its real special-token ids.");
+                + "its real special-token ids (docs/how-to/configure-embedding-engines.md, Recipe 4).");
         }
 
         var dimensions = RequiredInt(configJson, "hidden_size", "dimensions");
