@@ -67,22 +67,6 @@ public sealed class ManifestDirectoryActivationTests : IAsyncLifetime
     }
 
     [Fact]
-    public void CreateGenerator_DirectoryWithNon384Manifest_RefusesWithActionableError()
-    {
-        var dir = Path.Combine(Path.GetTempPath(), "ai-raccoon-activation-tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "vocab.txt"), "vocab");
-        File.WriteAllText(Path.Combine(dir, "model.onnx"), "model");
-        File.WriteAllText(Path.Combine(dir, EmbeddingManifest.FileName), Manifest(dimensions: 1024).ToJsonString());
-
-        var ex = Should.Throw<InvalidOperationException>(() =>
-            Service().CreateGenerator(new EmbeddingSettings("local", dir, null, null)));
-
-        ex.Message.ShouldContain("1024");
-        ex.Message.ShouldContain("384");
-    }
-
-    [Fact]
     public async Task CreateGenerator_Valid384ManifestDirectory_BuildsAndEmbeds()
     {
         // The manifest points at copies of the REAL bundled model + vocab, so the whole manifest

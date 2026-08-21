@@ -86,6 +86,7 @@ public sealed class CliContractTests : IAsyncLifetime
             "  <url>\n\n" +
             "Options:\n" +
             "  --api-key <key>  API key persisted in the settings table\n" +
+            "  --dims <n>       Output dimension the endpoint returns (sqlite-vec cannot infer it)\n" +
             "  -?, -h, --help   Show help and usage information")
     ];
 

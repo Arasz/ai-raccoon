@@ -265,10 +265,10 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
 
         if (Directory.Exists(modelPath))
         {
-            // WP3 directory activation (M3): a directory REQUIRES a manifest.json — only the legacy
-            // .onnx-file path keeps the bundled defaults. M4 refuses non-384 manifests here.
+            // Directory activation (M3): a directory REQUIRES a manifest — only the legacy
+            // .onnx-file path keeps the bundled defaults. Any dimension is loadable now that the
+            // drain reconciles vec0 to the engine's dimension before writing (WP4/D3).
             var descriptor = manifestDescriptor.Load(modelPath);
-            manifestDescriptor.RequireWp3Supported(descriptor);
             var tokenizer = ResolveManifestTokenizer(modelPath)!;
             return new OnnxEmbeddingGenerator(Path.Combine(modelPath, descriptor.OnnxModelFile), tokenizer, descriptor, _logger);
         }
@@ -303,7 +303,6 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
         return _tokenizers.GetOrAdd(fingerprint, _ =>
         {
             var descriptor = manifestDescriptor.Load(Path.GetFullPath(model));
-            manifestDescriptor.RequireWp3Supported(descriptor);
             return tokenizerFactory.Create(descriptor, Path.GetFullPath(model));
         });
     }

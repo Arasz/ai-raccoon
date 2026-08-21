@@ -97,14 +97,12 @@ public sealed class SettingsCommands
     {
         var path = parseResult.GetResult("path") is not null ? ExpandTilde(parseResult.GetValue<string>("path")) : null;
 
-        // WP3 directory activation (M3/M4): a directory REQUIRES a valid manifest.json, and only
-        // 384-dimension manifests are loadable until the dimension-reconcile work lands. Refuse
-        // BEFORE the outbox commits — a refused model set must never mark the bank pending.
+        // Directory activation (M3): a directory REQUIRES a valid manifest, validated BEFORE the
+        // outbox commits — a refused model set must never mark the bank pending. Any dimension is
+        // accepted; the drain reconciles vec0 to it as its first phase (WP4/D3).
         if (path is not null && Directory.Exists(path))
         {
-            var manifestDescriptor = new ProvisionalManifestDescriptor();
-            var descriptor = manifestDescriptor.Load(Path.GetFullPath(path));
-            manifestDescriptor.RequireWp3Supported(descriptor);
+            new ProvisionalManifestDescriptor().Load(Path.GetFullPath(path));
         }
 
         // A remote API key and a remote dimension are both meaningless for the local engine; don't

@@ -159,7 +159,7 @@ internal static class CliCommandTree
                 {
                     new Argument<string>("model") { HelpName = "model-id" }, new Argument<string?>("base-url") { HelpName = "url", Arity = ArgumentArity.ZeroOrOne },
                     new Option<string>("--api-key") { Description = "API key persisted in the settings table", HelpName = "key" },
-                    new Option<int?>("--dims") { Description = "Output dimension the endpoint returns; required when it is not 384 (sqlite-vec cannot infer it)", HelpName = "n" }
+                    new Option<int?>("--dims") { Description = "Output dimension the endpoint returns (sqlite-vec cannot infer it)", HelpName = "n" }
                 }
             },
             new Command("download",

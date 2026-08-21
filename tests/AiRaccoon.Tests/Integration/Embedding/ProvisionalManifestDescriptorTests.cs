@@ -206,25 +206,18 @@ public sealed class ProvisionalManifestDescriptorTests
         ex.Message.ShouldContain("numeric");
     }
 
+    /// <summary>
+    ///     WP4 lifted the 384-only activation gate: the drain reconciles vec0 to the engine's
+    ///     dimension before it writes (D3), so any declared dimension loads.
+    /// </summary>
     [Fact]
-    public void RequireWp3Supported_Non384Dimensions_IsRefusedWithActionableError()
+    public void Load_Non384Manifest_IsAccepted()
     {
         var dir = WriteModelDir(BertManifest(dimensions: 1024).ToJsonString(), ("vocab.txt", "vocab"), ("model.onnx", "model"));
+
         var descriptor = new ProvisionalManifestDescriptor().Load(dir);
 
-        var ex = Should.Throw<InvalidOperationException>(() => new ProvisionalManifestDescriptor().RequireWp3Supported(descriptor));
-
-        ex.Message.ShouldContain("1024");
-        ex.Message.ShouldContain("384");
-    }
-
-    [Fact]
-    public void RequireWp3Supported_384Dimensions_Passes()
-    {
-        var dir = WriteModelDir(BertManifest().ToJsonString(), ("vocab.txt", "vocab"), ("model.onnx", "model"));
-        var descriptor = new ProvisionalManifestDescriptor().Load(dir);
-
-        Should.NotThrow(() => new ProvisionalManifestDescriptor().RequireWp3Supported(descriptor));
+        descriptor.Dimensions.ShouldBe(1024, "the 384-only refusal was WP3's placeholder, removed by WP4");
     }
 
     /// <summary>

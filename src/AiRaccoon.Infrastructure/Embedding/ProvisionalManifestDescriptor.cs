@@ -18,8 +18,6 @@ namespace AiRaccoon.Infrastructure.Embedding;
 public interface IProvisionalManifestDescriptor
 {
     EngineDescriptor Load(string modelDirectory);
-
-    void RequireWp3Supported(EngineDescriptor descriptor);
 }
 
 /// <inheritdoc cref="IProvisionalManifestDescriptor" />
@@ -205,21 +203,6 @@ public sealed class ProvisionalManifestDescriptor : IProvisionalManifestDescript
             EmbeddingOutput: embeddingOutput,
             OnnxModelFile: onnxFiles[0].Path,
             Files: allFiles);
-    }
-
-    /// <summary>
-    ///     WP3 activation gate (M4): only 384-dimension manifest models are loadable until the
-    ///     dimension-reconcile work (WP4) lands. Everything else is refused with an actionable error.
-    /// </summary>
-    public void RequireWp3Supported(EngineDescriptor descriptor)
-    {
-        if (descriptor.Dimensions != 384)
-        {
-            throw new InvalidOperationException(
-                $"Manifest model '{descriptor.Model}' declares {descriptor.Dimensions} dimensions; this build supports only " +
-                "384-dimension local models (arbitrary-dimension support ships with the dimension-reconcile work). " +
-                "Pick a 384-dimension model, or reset to the bundled default with 'ai-raccoon model reset'.");
-        }
     }
 
     private static SentencePieceTokenizerOptions ReadSentencePieceOptions(JsonObject tokenizer, string manifestPath)

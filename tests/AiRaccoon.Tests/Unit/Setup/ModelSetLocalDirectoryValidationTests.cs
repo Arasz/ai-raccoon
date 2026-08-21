@@ -45,7 +45,7 @@ public sealed class ModelSetLocalDirectoryValidationTests
     }
 
     [Fact]
-    public async Task ModelSetLocal_DirectoryWithNon384Manifest_RefusesBeforeTheOutboxCommits()
+    public async Task ModelSetLocal_DirectoryWithNon384Manifest_NowCommits()
     {
         var dir = TempDir();
         File.WriteAllText(Path.Combine(dir, "vocab.txt"), "vocab");
@@ -73,11 +73,11 @@ public sealed class ModelSetLocalDirectoryValidationTests
             """);
         var store = new FakeConfigStore();
 
-        var ex = await Should.ThrowAsync<InvalidOperationException>(() => Run(["model", "set", "local", dir], store));
+        var (exit, _, _) = await Run(["model", "set", "local", dir], store);
 
-        ex.Message.ShouldContain("1024");
-        ex.Message.ShouldContain("384");
-        store.Configured.ShouldBeNull("a refused model set must not commit the migration outbox");
+        exit.ShouldBe(0);
+        store.Configured.ShouldNotBeNull(
+            "WP4's drain reconciles vec0 to the engine dimension, so a non-384 manifest activates");
     }
 
     [Fact]
