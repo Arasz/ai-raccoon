@@ -378,11 +378,11 @@ Extends `WatchTestStack` with a code-ingest fake (`FakeCodeIngestor` recording `
 - **GREEN:** add `/repo` twice + re-prune a gone path → single registration, no throw, `watch_files` consistent.
 - **Where:** `Integration/Watch/WatchPruningTests.cs` — integration.
 
-**WP4-T26 — `Prune_ConcurrentWithInFlightDigest_NoResurrect`**
-- **Behavior:** the existing UnregisterWatch contract holds under concurrency: a digest in flight for the narrow watch while the broader watch prunes it must not re-register or re-apply the narrow watch afterwards (no resurrect); the fingerprint writes it completes do not recreate narrow watch state.
-- **RED:** a digest that re-checks/re-writes after prune resurrects the narrow registration.
-- **GREEN:** gate the digest mid-flight (existing `WatchDigestConcurrencyTests`/`OnListFiles` seam), prune concurrently, release → final state: only `/repo` registered; no narrow `watch_files` rows; no exception; the in-flight file's rows exist under the broader watch (ingested, correct corpus).
-- **Where:** `Integration/Watch/WatchPruningTests.cs` (or extend `WatchDigestConcurrencyTests`) — integration.
+**WP4-T26 — `Prune_ConcurrentWithInFlightDigest_NoResurrect`** + kill-9 atomicity (review codereviewer MUST-FIX 7)
+- **Behavior:** the existing UnregisterWatch contract holds under concurrency: a digest in flight for the narrow watch while the broader watch prunes it must not re-register or re-apply the narrow watch afterwards (no resurrect); the fingerprint writes it completes do not recreate narrow watch state. **Plus: prune+register is ONE `BEGIN IMMEDIATE` transaction — a kill-9 between the prune step and the register step leaves EITHER the old watches OR the new watch, never an unwatched path (no coverage gap).**
+- **RED:** a digest that re-checks/re-writes after prune resurrects the narrow registration; a non-transactional prune+register loses the path on a crash between the two.
+- **GREEN:** gate the digest mid-flight (existing `WatchDigestConcurrencyTests`/`OnListFiles` seam), prune concurrently, release → final state: only `/repo` registered; no narrow `watch_files` rows; no exception; the in-flight file's rows exist under the broader watch (ingested, correct corpus). Kill-9 at each step of `PruneAndAddAsync` (before/inside/after the tx) → bank reopens with old watches or the new watch, consistent.
+- **Where:** `Integration/Watch/WatchPruningTests.cs` (or extend `WatchDigestConcurrencyTests`) + `E2E/` kill-9 family — integration + e2e.
 
 #### WP4-D — Repo watch by default
 

@@ -69,18 +69,21 @@ pins the exclusion (WP7). Memory searches record exactly as today.
 2. **No overlapping watches** — the watch whose scope contains the other wins; the included
    watch is pruned. Containment = `IngestPath.IsWithinScope(inner, outer)` (separator-aware
    real-path prefix — `/repo2` ⊄ `/repo`). Adding a broader watch prunes every contained
-   watch (per-watch `RemoveWatchAsync` tx + `UnregisterWatch`; entries stay, fingerprints
-   cascade-deleted; new watch registers with `lastChangeTs=0` → full catch-up); adding a
-   narrower watch inside a broader one is **rejected** with `WatchOverlapException` naming the
-   covering watch (nothing written); equal-path re-add stays an idempotent no-op (the only
-   case that reports `absorbedBy`). **Transaction boundary (review F-14):** the add is NOT one
-   transaction — prune (per-watch tx) then register (own tx); a crash between leaves the path
-   **transiently unwatched**, the failed MCP call tells the client to retry, and the next
-   `AddAsync` re-prunes. **Tie-break (review F-15):** mutual containment (real-path-equivalent
-   registrations via symlink/case spellings) keeps the **longest literal path; on equal
-   length, the first-registered** — never prune a watch whose real path equals the survivor's;
-   pinned by the WP4-T24 family. Ordering in `AddAsync`: reject-if-contained → prune-contained
-   → register.
+   watch (entries stay, fingerprints cascade-deleted; new watch registers with
+   `lastChangeTs=0` → full catch-up); adding a narrower watch inside a broader one is
+   **rejected** with `WatchOverlapException` naming the covering watch (nothing written);
+   equal-path re-add stays an idempotent no-op (the only case that reports `absorbedBy`).
+   **Atomicity (review codereviewer MUST-FIX 7 — UPGRADED from the rev-1 documented-gap
+   resolution):** the prune + register are ONE `BEGIN IMMEDIATE` store transaction (a
+   composite `PruneAndAddAsync` over the watch rows + `watch_files` cascade) — a crash
+   leaves either the old watches or the new watch, never an unwatched path; the runtime
+   `UnregisterWatch` calls run after commit (idempotent; a crash between commit and
+   unregister leaves stale runtime state that the hosted service's registration poll
+   reconciles, and digest ownership stays deterministic). Kill-9 test in the WP4-T26 family.
+   **Tie-break (review F-15):** mutual containment (real-path-equivalent registrations via
+   symlink/case spellings) keeps the **longest literal path; on equal length, the
+   first-registered** — never prune a watch whose real path equals the survivor's; pinned by
+   the WP4-T24 family. Ordering in `AddAsync`: reject-if-contained → prune+register (one tx).
 3. **Repo watch by default** — registering a watch on a repo root applies rule 2 to every
    existing watch inside it, then catch-up scans the whole repo into the correct corpora.
    **Hidden directories and dependency trees (review, arch-10):** enumeration skips hidden
@@ -292,7 +295,7 @@ witnessed, gate named.
 | WP1 | Corpus schema in `Ddl` + triggers + indexes (incl. `idx_code_entries_path`); `embedding.codeModel` rows; `model set code local` (incl. non-768 refusal); settings show/reset; ladder v11 (fixture bank with nested watches prunes — incl. symlink tie-break — RED→GREEN; log line asserted); **golden `kind=memory` response captured pre-feature** | existing-bank copy opens; `doctor` reports new tables; code rows round-trip; memory tables byte-identical; v11 migration RED→GREEN + log assertion; non-768 manifest refused (witnessed) | WP1-T01…T08 + golden capture |
 | WP2 | `CodeChunker` (line-range, 126 budget, brace-balance, hard-split, no overlay) | chunker fixtures: budget ≤126; **union of ranges covers lines 1..N with no gaps; ranges disjoint except hard-split lines (T03 restated per review F-05)**; real-sentencepiece cap check | WP2-T01…T11 (T03/T06 reconciled) |
 | WP3 | Extension registry + `CodeIngestor` (+ post-conflict re-read) + mixed-tree directory ingest + hidden-dir/deny-set skip; bundled sentencepiece counting | `.cs` → code rows with line_start<line_end + FTS + vec0; routing code/docs/neither; hidden files AND hidden dirs + deny set skipped; scope refusal; pending→embedded; dedup incl. concurrent double-ingest RED (re-read) | WP3-T01…T10 (T03 pins hidden-dir/deny; T07 concurrent) |
-| WP4 | Watch channeling + `ai-raccoon.ignore` + overlap prune/reject + repo-watch-by-default + tie-break + mid-scan ignore re-scan; `WatchAddResult` gains `pruned`/`absorbedBy` (additive); ignore-change re-scan | watch fixtures: root-add prunes nested (result lists them); add-inside → `WatchOverlapException` (NOT absorbedBy); `.md` edit → memory only; `.cs` edit → code only; deletion removes from both in one tx; crash-mid-delete rolls back; ignored file → no rows in EITHER corpus; ignore edit → re-scan incl. mid-scan follow-up; symlink-equivalent pair → exactly one watch survives; `/repo2` not pruned by `/repo`; `EXPLAIN QUERY PLAN` on the delete leg shows the path index | WP4-T01…T29 |
+| WP4 | Watch channeling + `ai-raccoon.ignore` + overlap prune/reject + repo-watch-by-default + tie-break + mid-scan ignore re-scan + **prune+register one-transaction atomicity (kill-9)**; `WatchAddResult` gains `pruned`/`absorbedBy` (additive); ignore-change re-scan | watch fixtures: root-add prunes nested (result lists them); add-inside → `WatchOverlapException` (NOT absorbedBy); `.md` edit → memory only; `.cs` edit → code only; deletion removes from both in one tx; crash-mid-delete rolls back; **kill-9 between prune and register → either old watches or new watch, never unwatched**; ignored file → no rows in EITHER corpus; ignore edit → re-scan incl. mid-scan follow-up; symlink-equivalent pair → exactly one watch survives; `/repo2` not pruned by `/repo`; `EXPLAIN QUERY PLAN` on the delete leg shows the path index | WP4-T01…T29 |
 | WP5 | Code search: `CodeSearchService` (FTS5 + vec0 + RRF, project scope) + code-engine query embed + 126 trim + per-section limit/minRelativeScore | hybrid present; no shared/workspace leakage; weight-flip fusion; empty corpus; per-call tuning args apply to code section; unconfigured engine → FTS5-only + warning | WP5-T01…T10 |
 | WP6 | `memory_search kind` + `code_get` + envelope (`results`/`code` keys; `WhenWritingNull` omission) | kind=memory semantically identical (golden, modulo correlation id; NO `code` key); invalid kind refused; both keys for both/code; code_get unknown-hash refused; QueryGuard applies; code-budget warning; **two-phase RED for WP6-T01 recorded** | WP6-T01…T12 (keys amended) |
 | WP7 | Maintenance + non-interference: `code-reindex` job (D-E9 drain, no outbox), sync **DROP**-strip on both push paths, sweep/promotion untouched, search_quality exclusion for code searches | code-engine fingerprint change re-embeds code only + memory tools never blocked (no ToolGate close); pushed snapshot has NO code tables (both push paths; RED seeds rows pre-strip); sweep never sees code rows; `kind=code/both` writes no search_quality rows | WP7-T01…T08 (T04 rewritten) |
@@ -410,7 +413,7 @@ SHOULD-FIX/5 INFO): drain mechanism (arch-1/F-08 → §3.3, disposition 2), enve
 eval floor + negative controls (F-01 → §3.9), jina probe bar (F-04 → §3.9), WP2-T03/T06
 coverage (F-05 → QA amended), WP7-T04 RED (F-06 → rewritten), ops-ignore contradictions
 (F-09 → ops §2.3 amended), ops absorbedBy (F-10 → ops §2.4 amended), unconfigured mode
-(F-11 → §3.3), arch WP-D gate (F-13 → §3.6), prune/register atomicity (F-14 → §2.2),
+(F-11 → §3.3), arch WP-D gate (F-13 → §3.6), prune/register atomicity (F-14 → §2.2; **upgraded to a single `BEGIN IMMEDIATE` `PruneAndAddAsync` per the reviewer's MUST-FIX 7** — kill-9 leaves old watches or the new watch, never an unwatched path),
 tie-break (F-15 → §2.2/v11), mid-scan ignore re-scan (F-16 → §2.1/WP4-T20), grandfathering
 (F-17 → §4), vec_code reconcile vacuity (F-18 → §3.3), idx_code_entries_path (F-19 → §3.1),
 v11 log channel (arch-8 → §4), hidden dirs + deny set (arch-10 → §2.3/OQ8), dedup re-read
