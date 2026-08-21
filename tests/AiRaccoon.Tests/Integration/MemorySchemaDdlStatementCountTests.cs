@@ -34,13 +34,9 @@ public sealed class MemorySchemaDdlStatementCountTests
     }
 
     /// <summary>
-    ///     KNOWN PRE-EXISTING FAILURE, not from this task: CountDdl(statements) is currently ~59,
-    ///     not the 42 asserted below. The code-corpus feature (code_entries/code_fts/vec_code and
-    ///     their triggers/indexes, WP1-WP8) landed in the Ddl block across many lanes without any
-    ///     of them updating this count — this task's scope (Wave-3 code-corpus review fixes) is not
-    ///     a full re-audit of every prior lane's contribution to it, so the assertion is left as-is
-    ///     rather than silently re-derived or skipped. The "digest matches" sibling test above (0
-    ///     Ddl statements on the fast path) is the one that actually protects WP1's cost claim.
+    ///     56 = the pre-code-corpus 42 plus the corpus's Ddl (code_entries/code_fts/vec_code,
+    ///     trigger families, indexes, and the idx_code_entries_path DROP) — re-derived from the
+    ///     trace, per-statement provenance on the assert below.
     /// </summary>
     [Fact]
     public async Task EnsureAsync_WhenTheDigestIsStale_RunsTheFiftySixStatementDdlBlock()
