@@ -452,6 +452,15 @@ public partial class SyncService(
         dropVecCode.CommandText = "DROP TABLE IF EXISTS vec_code";
         await dropVecCode.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
 
+        // The stamped application_id is a digest of the Ddl block that still declares the code
+        // corpus (MemorySchema.SchemaDigest) — leaving it in place would make a hand-restored
+        // snapshot's EnsureAsync see a matching digest, skip the Ddl block, and never get
+        // code_entries/code_fts/vec_code back (integration review S11). Reset it so the next
+        // EnsureAsync re-runs the Ddl block unconditionally.
+        await using var resetDigest = snap.CreateCommand();
+        resetDigest.CommandText = "PRAGMA application_id = 0";
+        await resetDigest.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
         await using var vac = snap.CreateCommand();
         vac.CommandText = "VACUUM";
         await vac.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);

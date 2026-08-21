@@ -417,12 +417,12 @@ internal static class MemorySchema
                                           -- in v1).
                                           CREATE TABLE IF NOT EXISTS code_entries (
                                               id           INTEGER PRIMARY KEY,
-                                              hash         TEXT,
-                                              path         TEXT,
-                                              value        TEXT,
-                                              source_file  TEXT,
-                                              line_start   INTEGER,
-                                              line_end     INTEGER,
+                                              hash         TEXT NOT NULL,
+                                              path         TEXT NOT NULL,
+                                              value        TEXT NOT NULL,
+                                              source_file  TEXT NOT NULL,
+                                              line_start   INTEGER NOT NULL,
+                                              line_end     INTEGER NOT NULL,
                                               project_id   TEXT NOT NULL,
                                               created_at   INTEGER NOT NULL,
                                               updated_at   INTEGER NOT NULL,
@@ -436,9 +436,13 @@ internal static class MemorySchema
                                           CREATE INDEX IF NOT EXISTS idx_code_entries_project ON code_entries(project_id);
                                           CREATE INDEX IF NOT EXISTS idx_code_entries_hash ON code_entries(hash);
                                           CREATE INDEX IF NOT EXISTS idx_code_entries_embed_state ON code_entries(embed_state, project_id);
-                                          -- The digest-event delete legs run per project over the whole chunk set; code chunk
-                                          -- counts per project are an order of magnitude larger than notes (review F-19).
-                                          CREATE INDEX IF NOT EXISTS idx_code_entries_path ON code_entries(project_id, path);
+                                          -- idx_code_entries_path (project_id, path) was a redundant left-prefix of
+                                          -- uq_code_chunk (project_id, path, hash): the planner already uses uq_code_chunk
+                                          -- for the digest-event delete legs (proven: dropping this index left the plan
+                                          -- unchanged), so the index cost a B-tree write per insert for no query it alone
+                                          -- served. Self-cleans dev banks that already created it — the digest change
+                                          -- re-runs this block (integration review, code-search-implementation-plan §3.1).
+                                          DROP INDEX IF EXISTS idx_code_entries_path;
 
                                           CREATE VIRTUAL TABLE IF NOT EXISTS code_fts USING fts5(
                                               value,

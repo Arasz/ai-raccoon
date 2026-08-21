@@ -3,6 +3,7 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.QueryGuard;
+using AiRaccoon.Core.Metrics;
 using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
@@ -175,6 +176,87 @@ public sealed class MemorySearchKindToolTests
         envelope.Data!.Warning.ShouldBeNull();
     }
 
+    /// <summary>
+    ///     Integration review S6: SearchDispatcher only records a search_quality row for
+    ///     kind=memory, so a kind=code/both correlation id in the envelope has no row behind it —
+    ///     a later memory_record_grade/memory_record_followthrough call keyed on it silently
+    ///     no-ops. The envelope must not hand out a correlation id it cannot back.
+    /// </summary>
+    [Fact]
+    public async Task Search_KindCode_HasNoCorrelationIdInMeta()
+    {
+        _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
+
+        var envelope = await _tools.Search("acme", "widgets", kind: "code",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        envelope.Meta.CorrelationId.ShouldBeNull(
+            "no search_quality row backs a kind=code correlation id -- grade/follow-through would silently no-op");
+    }
+
+    [Fact]
+    public async Task Search_KindBoth_HasNoCorrelationIdInMeta()
+    {
+        _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
+        _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
+
+        var envelope = await _tools.Search("acme", "widgets", kind: "both",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        envelope.Meta.CorrelationId.ShouldBeNull("kind=both is excluded from search_quality exactly like kind=code");
+    }
+
+    [Fact]
+    public async Task Search_KindMemory_Default_HasCorrelationIdInMeta()
+    {
+        _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
+
+        var envelope = await _tools.Search("acme", "widgets", cancellationToken: TestContext.Current.CancellationToken);
+
+        envelope.Meta.CorrelationId.ShouldNotBeNullOrEmpty("kind=memory records search_quality, so the correlation id is real");
+    }
+
+    /// <summary>
+    ///     Integration review S6 asymmetry note: search_quality is excluded for kind=code/both
+    ///     specifically because its rows sync off-machine and would leak a code-adjacent query.
+    ///     The metrics table also syncs, and RecordSearchMeasurements still ran for kind=both
+    ///     (the memory leg's SearchResults are non-null) carrying ContentHash.OfValue(query) —
+    ///     the same leak vector the search_quality exclusion exists to close. Chosen fix: keep
+    ///     recording performance metrics for kind=both (still useful telemetry, no content), but
+    ///     null out the query-hash field rather than skip metrics recording entirely.
+    /// </summary>
+    [Fact]
+    public async Task Search_KindBoth_RecordsMetricsWithoutAQueryHash()
+    {
+        _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
+        _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
+        var recorder = new SpyMeasurementRecorder();
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue()),
+            new SearchDispatcher(_store, _codeSearch, _quality), new QueryGuardService(new InMemorySettings()),
+            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
+
+        await tools.Search("acme", "widgets", kind: "both", cancellationToken: TestContext.Current.CancellationToken);
+
+        recorder.Recorded.ShouldNotBeEmpty("kind=both must still record performance metrics -- only the query hash is excluded");
+        recorder.Recorded.ShouldAllBe(m => m.QueryHash == null,
+            "a kind=both query hash would leak a code-adjacent query the same way search_quality's exclusion prevents");
+    }
+
+    [Fact]
+    public async Task Search_KindMemory_Default_RecordsMetricsWithAQueryHash()
+    {
+        _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
+        var recorder = new SpyMeasurementRecorder();
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue()),
+            new SearchDispatcher(_store, _codeSearch, _quality), new QueryGuardService(new InMemorySettings()),
+            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
+
+        await tools.Search("acme", "widgets", cancellationToken: TestContext.Current.CancellationToken);
+
+        recorder.Recorded.ShouldNotBeEmpty();
+        recorder.Recorded.ShouldAllBe(m => m.QueryHash != null, "kind=memory is not code-adjacent -- its query hash is unchanged");
+    }
+
     [Fact]
     public async Task Search_KindCode_RefuseTierQuery_IsRefused_AndNeverReachesTheCodeSearch()
     {
@@ -241,6 +323,13 @@ public sealed class MemorySearchKindToolTests
 
         public Task<CodeEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
             Task.FromResult<CodeEntry?>(null);
+    }
+
+    private sealed class SpyMeasurementRecorder : IMeasurementRecorder
+    {
+        public List<Measurement> Recorded { get; } = [];
+
+        public void Record(Measurement measurement) => Recorded.Add(measurement);
     }
 
     private sealed class SpySearchQualityService : ISearchQualityService

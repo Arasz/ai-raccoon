@@ -131,6 +131,59 @@ public sealed class MemorySchemaCodeCorpusTests
     }
 
     /// <summary>
+    ///     Integration review: <c>uq_code_chunk(project_id, path, hash)</c> is defeated by NULL
+    ///     rows — SQLite treats NULLs as distinct in a unique index, so two rows with a NULL
+    ///     <c>hash</c> (or <c>path</c>) for the same project/path never collide. CodeIngestor
+    ///     always supplies these columns, so a NULL there is a bug, not a legitimate state.
+    /// </summary>
+    [Fact]
+    public async Task CodeEntries_DedupAndAlwaysSuppliedColumns_AreNotNull()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var notNullColumns = (await connection.QueryAsync<(string Name, long NotNull)>(new CommandDefinition(
+                """SELECT name, "notnull" FROM pragma_table_info('code_entries')""",
+                cancellationToken: TestContext.Current.CancellationToken)))
+            .Where(c => c.NotNull == 1)
+            .Select(c => c.Name)
+            .ToHashSet(StringComparer.Ordinal);
+
+        notNullColumns.ShouldContain("hash");
+        notNullColumns.ShouldContain("path");
+        notNullColumns.ShouldContain("value");
+        notNullColumns.ShouldContain("source_file");
+        notNullColumns.ShouldContain("line_start");
+        notNullColumns.ShouldContain("line_end");
+    }
+
+    [Fact]
+    public async Task CodeEntries_InsertingANullHash_ViolatesNotNullConstraint()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        await Should.ThrowAsync<SqliteException>(() => connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO code_entries (hash, path, value, source_file, line_start, line_end, project_id, created_at, updated_at)
+            VALUES (NULL, 'p1.cs', 'v', 'p1.cs', 1, 1, 'acme', 1, 1)
+            """, cancellationToken: TestContext.Current.CancellationToken)));
+    }
+
+    [Fact]
+    public async Task CodeEntries_InsertingANullPath_ViolatesNotNullConstraint()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        await Should.ThrowAsync<SqliteException>(() => connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO code_entries (hash, path, value, source_file, line_start, line_end, project_id, created_at, updated_at)
+            VALUES ('h1', NULL, 'v', 'p1.cs', 1, 1, 'acme', 1, 1)
+            """, cancellationToken: TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
     ///     Acceptance criterion 4: adding the code corpus to the digest-gated Ddl block must not
     ///     change a single memory object's stored SQL — the two corpora share only the file.
     /// </summary>

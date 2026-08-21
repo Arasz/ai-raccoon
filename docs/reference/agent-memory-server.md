@@ -76,7 +76,10 @@ config channel (see [Command-line options](#command-line-options)).
   Code hits carry `lineStart`/`lineEnd` (1-based) instead of `chunkIndex`/`totalChunks`; read
   the full chunk with `code_get`. `kind=code`/`both` searches are never recorded in
   `search_quality` (unlike `kind=memory`, which records exactly as today) — code identifiers
-  and paths must not leave the machine through a syncing table.
+  and paths must not leave the machine through a syncing table. `meta.correlationId` follows
+  that same rule: it is present only on `kind=memory` (the id `memory_record_grade`/
+  `memory_record_followthrough` key off), and absent — not a `null` value, an absent key — on
+  `kind=code`/`both`, since no `search_quality` row exists for either to back it.
 - **`memory_ingest_file`/`memory_ingest_directory` feed the code corpus too:** a file is routed
   by extension — the memory-owned extensions (`.md`/`.markdown`/`.txt`/`.json`) always win on
   overlap; a recognized code extension (`.cs`, `.py`, `.ts`, `.go`, `.rs`, … — the v1 list is

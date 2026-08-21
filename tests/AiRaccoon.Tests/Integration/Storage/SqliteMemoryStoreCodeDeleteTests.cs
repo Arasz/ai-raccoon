@@ -82,18 +82,21 @@ public sealed class SqliteMemoryStoreCodeDeleteTests : IDisposable
         (await CountCodeAsync(file, "other-project")).ShouldBeGreaterThan(0);
     }
 
-    /// <summary>WP4-T29's shape: the per-digest-event delete leg must use idx_code_entries_path, not
-    /// a full table scan — code chunk counts per project are an order of magnitude larger than notes.</summary>
+    /// <summary>WP4-T29's shape: the per-digest-event delete leg must use an index on (project_id,
+    /// path), not a full table scan — code chunk counts per project are an order of magnitude
+    /// larger than notes. idx_code_entries_path was dropped as a redundant left-prefix of
+    /// uq_code_chunk(project_id, path, hash) (integration review): the planner already picks
+    /// uq_code_chunk for this query, so that is what the test pins.</summary>
     [Fact]
-    public async Task DeleteBySourcePath_UsesTheCodePathIndex_NotAFullTableScan()
+    public async Task DeleteBySourcePath_UsesTheCodeChunkIndex_NotAFullTableScan()
     {
         var rows = await _conn.QueryAsync<dynamic>(
             "EXPLAIN QUERY PLAN " + MemorySql.DeleteCodeBySourcePath,
             new { projectId = "acme", path = "/does/not/matter.cs", pathPrefix = "/does/not/matter.cs/%" });
         var plan = string.Join(" | ", rows.Select(r => (string)r.detail));
 
-        plan.ShouldNotContain("SCAN code_entries", Case.Sensitive,
-            $"the code delete leg must use idx_code_entries_path, not a full-table scan; actual plan: {plan}");
+        plan.ShouldContain("uq_code_chunk", Case.Sensitive,
+            $"the code delete leg must use uq_code_chunk, not a full-table scan; actual plan: {plan}");
     }
 
     [Fact]
