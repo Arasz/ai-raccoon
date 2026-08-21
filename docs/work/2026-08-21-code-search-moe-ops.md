@@ -145,10 +145,10 @@ Settings rows **removed/changed**: none from the memory family. `settings model 
 
 **Rule statement (for the reference docs):** *"A project holds at most one watch per path: a watch may not be nested inside another watch of the same project. Registering a directory watch prunes every watch it contains. Registering a watch inside an existing directory watch is **rejected** with an error naming the covering watch. `memory_watch_status` lists only the surviving (outermost) watches."*
 
-**Behavior on `memory_watch_add` (review F-10/F-14 — per-watch prune transactions + register transaction, NOT one big transaction):**
+**Behavior on `memory_watch_add` (review F-10/F-14 + codereviewer MUST-FIX 7 — ONE `BEGIN IMMEDIATE` store transaction `PruneAndAddAsync`):**
 1. If the new path already has a watch (identical path) → no-op, `absorbedBy = path`.
 2. If the new path is inside an existing watch → **rejected**: `WatchOverlapException(projectId, newPath, coveringPath)` naming the covering watch; nothing is written; `absorbedBy` is never set on a rejection.
-3. Else (the new path contains zero or more existing watches) → prune each contained watch (per watch: `RemoveWatchAsync` transaction + `UnregisterWatch`), then register the new watch (its own transaction, `lastChangeTs=0` → full catch-up), `pruned = [<nested paths>]`. A crash between prune and register leaves the path transiently unwatched — the failed MCP call tells the client to retry; the next `AddAsync` re-prunes.
+3. Else (the new path contains zero or more existing watches) → **one transaction**: delete every contained watch row + cascade its `watch_files` (the `RemoveWatchAsync` pattern, `WatchStore.cs:46-75`) AND insert the new watch (`lastChangeTs=0` → full catch-up), `pruned = [<nested paths>]`. A kill-9 anywhere in the step leaves EITHER the old watches OR the new watch — never an unwatched path. Runtime `UnregisterWatch` runs after commit (idempotent; a crash between commit and unregister leaves stale runtime state that the hosted service's registration poll reconciles; digest ownership stays deterministic).
 4. **Tie-break (review F-15):** mutual containment (real-path-equivalent registrations via symlink/case spellings) keeps the **longest literal path; on equal length, the first-registered** — never prune a watch whose real path equals the survivor's.
 
 **Result shape:** `WatchAddResult(ProjectId, Path)` (`WatchTools.cs:64`) gains two **additive** fields:
