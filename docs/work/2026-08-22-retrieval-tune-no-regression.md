@@ -132,10 +132,11 @@ keeps the balance at 5 regressions — the minimum observed over 60 search trial
   below (M2) restores E048, E028, E049, E052, E002, E047 to perfect rank 1,
   reduces regressions 14 → 5, and passes the held-out test set.
 
-The residual 5 regressions (1 full collapse, 4 rank shuffles, all retrievable in
-top-5) are the measured floor of knob tuning; closing the last gap needs an
-algorithmic change (e.g., an exact-match/identifier priority in the fusion), not
-another parameter sweep — the parameter space is exhausted.
+The residual 5 regressions (2 from perfect rank 1 — E046 1.0→0.5, E051 1.0→0.63
+— plus 3 minor rank shuffles; all retrievable in top-5) are the measured floor
+of knob tuning; closing the last gap needs an algorithmic change (e.g., an
+exact-match/identifier priority in the fusion), not another parameter sweep —
+the parameter space is exhausted.
 
 ## 2. New parameters
 
@@ -223,10 +224,10 @@ PASS — M2 evaluated twice in one session: identical per-query outcomes.
 - The M2 config is a measurement finding, not shipped configuration. Shipping it
   as new defaults requires an ADR + a controlled live-bank experiment (same
   gate as the previous report's owner review: "numbers ship; config does not").
-- The one remaining full collapse (E046) and the four minor shuffles are the
-  measured knob-tuning floor; an algorithmic exact-match priority for
-  identifier-heavy queries (owner review + code review recommendation) is the
-  path to zero.
+- The remaining regressions at M2 (E046 and E051 from perfect; E074/E018/E050
+  rank shuffles) are the measured knob-tuning floor; an algorithmic exact-match
+  priority for identifier-heavy queries (owner review + code review
+  recommendation) is the path to zero.
 - Cross-copy tie sensitivity (~0.005 nDCG@5, 1-3 queries) means absolute
   comparisons between separately created bank copies are noisy; within-run
   comparisons (this report's method) are exact.
