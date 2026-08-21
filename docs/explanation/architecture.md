@@ -752,6 +752,49 @@ engine's maximum input tokens:
 > **Evidence:** `src/AiRaccoon.Core/Chunking/MarkdownChunker.cs:19-55` (split),
 > `src/AiRaccoon.Infrastructure/Chunking/O200kTokenizer.cs:6-11` (tokenizer)
 
+### Line-range code chunking
+
+The code corpus does not reuse the markdown chunker: `CodeChunker`
+(`src/AiRaccoon.Infrastructure/Chunking/CodeChunker.cs`) emits line-ranged
+`CodeChunk(Text, LineStart, LineEnd)` records (1-based, inclusive) instead of
+prose strings, and there is no AST — the splitting heuristic is purely
+line/brace based:
+
+1. **Build blank-line-block units.** A unit is a maximal run of non-blank
+   lines plus its trailing blank-line run (leading blank lines merge into the
+   first real block, so every line in the file belongs to exactly one unit).
+2. **Fall back to per-line units** when a block doesn't fit the budget alone;
+   a single line that still doesn't fit alone is hard-split via
+   `TokenBudget.Trim`'s binary search — the same idiom
+   `EmbeddingService.TrimQueryToWindow` uses for queries.
+3. **Pack units into chunks**, preferring to end a chunk at the *last*
+   candidate boundary within budget whose cumulative brace balance
+   (`{` count minus `}` count from the start of the file) is zero — so a
+   chunk boundary avoids landing inside an open scope when a zero-balance
+   point is reachable; otherwise the budget wins and the chunk fills to the
+   greedy maximum.
+4. **Exact joined-recount** the chosen unit range against the real
+   tokenizer and shed trailing units if the summed per-unit estimate drifted
+   over budget (token counts are not composable across a join, ADR-0036) —
+   the same shape `MarkdownChunker`'s packing uses, minus overlay: code
+   chunks are always overlay 0 (line ranges, not prose continuity).
+
+The budget is a fixed **126** tokens — `min(510, ctx − reservation)` for
+code-daemon-embed-v1's 128-token context and 2-token `<s>`/`</s>`
+reservation, never the flat 510 an earlier engine-plan draft described and
+never the memory chunker's 254/256. Counting uses `ICodeTokenizer`: the
+bundled code-daemon-embed-v1 sentencepiece tokenizer
+(`src/AiRaccoon/Models/code-sentencepiece.bpe.model`, 626 KB, sha256-pinned)
+whenever no code engine is configured (`embedding.codeModel` absent) — the
+v1 default; a configured code engine's own tokenizer is a later extension
+point, not exercised in v1.
+
+> **Evidence:** `src/AiRaccoon.Infrastructure/Chunking/CodeChunker.cs`
+> (splitter), `src/AiRaccoon.Infrastructure/Embedding/CodeTokenizer.cs`
+> (bundled counting tokenizer), `src/AiRaccoon.Core/Chunking/TokenBudget.cs`
+> (hard-split), `src/AiRaccoon.Infrastructure/Embedding/EmbeddingService.cs:170-180`
+> (`ResolveChunkBudgetFor`, the shared min(510, ctx−reservation) rule)
+
 ## Layering
 
 ```
@@ -789,12 +832,16 @@ src/AiRaccoon.Infrastructure/   Adapters — Dapper over SQLite, sync, embedding
   Sqlite/                   SqliteMemoryStore, MemorySchema, ReciprocalRankFusion,
                             SearchContexts, SearchResultMerger, EntryBucket
   Sqlite/Encryption/        EncryptionKeyResolver, EncryptionSourceSidecar, key Providers
-  Embedding/                EmbeddingService, OnnxEmbeddingGenerator, BundledModel, EntryEmbedder
+  Embedding/                EmbeddingService, OnnxEmbeddingGenerator, BundledModel, EntryEmbedder,
+                            ICodeTokenizer/CodeTokenizer (bundled code-daemon-embed-v1 sentencepiece
+                            counting tokenizer, unconfigured-code-engine default)
   Ingestion/                FileIngestor (scope containment, chunking, chunk insertion; WI-8),
                             FileTypeMatcher, MarkdownFileTypeHandler, JsonFileTypeHandler, IFileIngestor,
                             CodeIngestor, CodeFileTypeMatcher (code corpus, self-filtering)
   Sync/                     SyncService, SyncCloudStoreFactory, S3CloudStore, AzureBlobCloudStore, NullCloudStore, FakeCloudStore
-  Chunking/                 O200kTokenizer (o200k_base), JsonFileTypeChunker, NoOpCodeChunker (interim ICodeChunker)
+  Chunking/                 O200kTokenizer (o200k_base), JsonFileTypeChunker, CodeChunker (line-range,
+                            budget 126, brace-balance boundary preference), NoOpCodeChunker (retained
+                            as a zero-chunk test stand-in, not the production ICodeChunker)
   Workspace/                WorkspaceService
   Watch/                    WatchService, WatchPipeline, WatchScheduler, WatchHostedService
   Promotion/                PromotionQueueService (propose-tier queue, ADR-0007)
