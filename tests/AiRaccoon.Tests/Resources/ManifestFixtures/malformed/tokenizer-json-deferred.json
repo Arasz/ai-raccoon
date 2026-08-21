@@ -1,0 +1,35 @@
+{
+  "manifestVersion": 1,
+  "model": "Qwen/Qwen2.5-0.5B",
+  "source": { "repo": "Qwen/Qwen2.5-0.5B", "revision": "main" },
+  "provider": "local",
+  "dimensions": 1024,
+  "contextWindowTokens": 32768,
+  "normalization": "l2",
+  "queryInstruction": null,
+  "requiresTokenTypeIds": false,
+  "mrl": { "supported": false, "minDimensions": null },
+  "pooling": {
+    "mode": "mean",
+    "outputNames": { "embedding": "", "tokenEmbeddings": "last_hidden_state" }
+  },
+  "tokenizer": {
+    "family": "tokenizer-json",
+    "files": [
+      { "path": "tokenizer.json", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+    ],
+    "options": {
+      "addBeginOfSentence": false,
+      "addEndOfSentence": false,
+      "specialTokens": { "<|endoftext|>": 151645 }
+    }
+  },
+  "onnx": {
+    "inputs": [ "input_ids", "attention_mask" ],
+    "embeddingOutput": null,
+    "tokenEmbeddingsOutput": "last_hidden_state",
+    "files": [
+      { "path": "model.onnx", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }
+    ]
+  }
+}

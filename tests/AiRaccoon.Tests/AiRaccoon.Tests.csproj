@@ -34,6 +34,8 @@
     </ItemGroup>
 
     <ItemGroup>
+        <!-- WP1 golden fixtures (D1 schema pins): the malformed set carries exactly one defect per file. -->
+        <Content Include="Resources\ManifestFixtures\**\*.json" CopyToOutputDirectory="PreserveNewest"/>
         <Content Include="Unit\Retrieval\assets\manifest.json" CopyToOutputDirectory="PreserveNewest"/>
         <Content Include="Resources/jsaa-memory.db" CopyToOutputDirectory="PreserveNewest"/>
         <Content Include="Resources/gate-query-vectors.json" CopyToOutputDirectory="PreserveNewest"/>
