@@ -11,7 +11,9 @@ public sealed record PinnedFile(string Path, long Size, string? LfsSha256);
 /// <summary>
 ///     Everything the downloader needs: the file set with pins, the tokenizer pairing, dims/ctx,
 ///     special-token ids, and the pooling decision (D11: sentence-transformers provenance when
-///     <c>1_Pooling</c> is present, else a WP5 placeholder).
+///     <c>1_Pooling</c> is present, else a WP5 placeholder). <c>SpecialTokensPending</c> is true
+///     when a sentencepiece repo ships no <c>added_tokens_decoder</c> and ids still need deriving
+///     from the sp model's own piece table once it is on disk (issue #417, D1-compatible).
 /// </summary>
 public sealed record ModelDownloadPlan(
     string RepoId,
@@ -34,7 +36,8 @@ public sealed record ModelDownloadPlan(
     bool AddEndOfSentence,
     IReadOnlyDictionary<string, int> SpecialTokens,
     string PoolingProvenance,
-    int VocabOffset = 0);
+    int VocabOffset = 0,
+    bool SpecialTokensPending = false);
 
 /// <summary>A repo cannot be turned into a download plan: missing model file, unsupported
 /// tokenizer family, unpinnable special tokens, etc. Messages are actionable.</summary>
@@ -52,7 +55,8 @@ public interface IModelDownloadPlanner
         IReadOnlyList<HfTreeEntry> tree,
         IReadOnlyDictionary<string, string> rawFiles,
         OnnxGraphProbe? probe,
-        IReadOnlyList<string>? explicitFiles = null);
+        IReadOnlyList<string>? explicitFiles = null,
+        IReadOnlyDictionary<string, int>? sentencePieceVocabulary = null);
 }
 
 /// <summary>
@@ -62,7 +66,8 @@ public interface IModelDownloadPlanner
 ///     --dry-run), pairs the tokenizer from <c>config.json</c> model_type, derives dims/ctx from
 ///     <c>hidden_size</c>/<c>max_position_embeddings − 2</c>, and pins numeric special-token ids
 ///     from <c>tokenizer_config.json</c>'s added_tokens_decoder — never a guessed mask mapping (D1).
-///     Stateless and injectable.
+///     A sentencepiece repo without a decoder defers to the sp model's own piece table instead of
+///     refusing outright (issue #417); every other family is unaffected. Stateless and injectable.
 /// </summary>
 public sealed class ModelDownloadPlanner : IModelDownloadPlanner
 {
@@ -75,7 +80,8 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
         IReadOnlyList<HfTreeEntry> tree,
         IReadOnlyDictionary<string, string> rawFiles,
         OnnxGraphProbe? probe,
-        IReadOnlyList<string>? explicitFiles = null)
+        IReadOnlyList<string>? explicitFiles = null,
+        IReadOnlyDictionary<string, int>? sentencePieceVocabulary = null)
     {
         var modelFilePath = SelectModelFilePath(tree, explicitFiles);
         var modelDir = DirectoryOf(modelFilePath);
@@ -89,7 +95,7 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
 
         var (family, tokenizerFileName) = PairTokenizer(configJson);
         var tokenizerFilePath = TokenizerFilePath(tree, modelDir, tokenizerFileName, family);
-        var specialTokens = SpecialTokenIds(tokenizerConfigJson);
+        var (specialTokens, specialTokensPending) = ResolveSpecialTokens(tokenizerConfigJson, family, sentencePieceVocabulary);
         // HF puts the wrapper behaviour in the tokenizer CLASS, not the config: xlm-roberta's
         // tokenizer_config.json declares neither flag, yet the tokenizer always emits <s> … </s>.
         // Defaulting those to false embeds a token sequence the model never saw in training.
@@ -144,7 +150,8 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
             addEos,
             specialTokens,
             poolingProvenance,
-            vocabOffset);
+            vocabOffset,
+            specialTokensPending);
     }
 
     public string SelectModelFilePath(IReadOnlyList<HfTreeEntry> tree, IReadOnlyList<string>? explicitFiles = null)
@@ -255,31 +262,62 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
             $"no tokenizer file found for family '{family}': expected '{besideModel}' or '{fileName}' in the repo tree");
     }
 
-    /// <summary>Numeric special-token ids from tokenizer_config.json's added_tokens_decoder, for the
-    /// tokens actually declared (bos/eos/unk/pad/cls/sep). No <mask> mapping — its id is
-    /// model-specific (xlm-roberta: 250001) and must never be guessed (D1).</summary>
-    private static IReadOnlyDictionary<string, int> SpecialTokenIds(string tokenizerConfigJson)
+    /// <summary>
+    ///     Numeric special-token ids for the tokens actually declared (bos/eos/unk/pad/cls/sep). No
+    ///     &lt;mask&gt; mapping — its id is model-specific (xlm-roberta: 250001) and must never be
+    ///     guessed (D1).
+    /// </summary>
+    /// <remarks>
+    ///     tokenizer_config.json's own <c>added_tokens_decoder</c> is the primary source. When it is
+    ///     absent AND the tokenizer family is sentencepiece, ids are instead derivable from the sp
+    ///     model file's own piece table (issue #417, D1-compatible option 2) — but that file is not
+    ///     on disk yet when the plan is built pre-download, so resolution is deferred
+    ///     (<c>Pending</c> true, empty map) until the caller supplies <paramref name="sentencePieceVocabulary" />
+    ///     from the downloaded file. Every other family is unaffected: no piece table, no fallback.
+    /// </remarks>
+    private static (IReadOnlyDictionary<string, int> Tokens, bool Pending) ResolveSpecialTokens(
+        string tokenizerConfigJson, TokenizerFamily family, IReadOnlyDictionary<string, int>? sentencePieceVocabulary)
     {
         using var doc = JsonDocument.Parse(tokenizerConfigJson);
         var root = doc.RootElement;
 
-        if (!root.TryGetProperty("added_tokens_decoder", out var decoder) || decoder.ValueKind != JsonValueKind.Object)
+        if (root.TryGetProperty("added_tokens_decoder", out var decoder) && decoder.ValueKind == JsonValueKind.Object)
+        {
+            var contentById = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (var property in decoder.EnumerateObject())
+            {
+                if (int.TryParse(property.Name, out var id)
+                    && property.Value.TryGetProperty("content", out var content)
+                    && content.ValueKind == JsonValueKind.String)
+                {
+                    contentById[content.GetString()!] = id;
+                }
+            }
+
+            return (ResolveFromContentMap(root, contentById,
+                "is not in tokenizer_config.json's added_tokens_decoder; its id is never guessed — fix the tokenizer_config.json or hand-write the manifest"), false);
+        }
+
+        if (family != TokenizerFamily.SentencePiece)
         {
             throw new ModelDownloadPlanException(
                 "tokenizer_config.json has no added_tokens_decoder object; special-token ids are never guessed — cannot pin them");
         }
 
-        var contentById = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var property in decoder.EnumerateObject())
+        if (sentencePieceVocabulary is null)
         {
-            if (int.TryParse(property.Name, out var id)
-                && property.Value.TryGetProperty("content", out var content)
-                && content.ValueKind == JsonValueKind.String)
-            {
-                contentById[content.GetString()!] = id;
-            }
+            // Deferred: the sentencepiece .model file isn't downloaded yet — the caller re-plans
+            // with its piece table once the tokenizer file lands on disk (never guessed, D1).
+            return (new Dictionary<string, int>(StringComparer.Ordinal), true);
         }
 
+        return (ResolveFromContentMap(root, sentencePieceVocabulary,
+            "is not a piece in the sentencepiece model's vocabulary; its id is never guessed — fix tokenizer_config.json or hand-write the manifest"), false);
+    }
+
+    private static IReadOnlyDictionary<string, int> ResolveFromContentMap(
+        JsonElement root, IReadOnlyDictionary<string, int> contentById, string missingSuffix)
+    {
         var specials = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var key in new[] { "bos_token", "eos_token", "unk_token", "pad_token", "cls_token", "sep_token" })
         {
@@ -291,8 +329,7 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
             var name = token.GetString()!;
             if (!contentById.TryGetValue(name, out var id))
             {
-                throw new ModelDownloadPlanException(
-                    $"special token '{name}' ({key}) is not in tokenizer_config.json's added_tokens_decoder; its id is never guessed — fix the tokenizer_config.json or hand-write the manifest");
+                throw new ModelDownloadPlanException($"special token '{name}' ({key}) {missingSuffix}");
             }
 
             specials[name] = id;
