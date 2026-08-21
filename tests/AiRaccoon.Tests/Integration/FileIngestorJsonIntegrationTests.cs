@@ -90,6 +90,6 @@ public class FileIngestorJsonIntegrationTests : IDisposable
 
         var count = await _ingestor.IngestDirectoryAsync(_conn, "test_project", _testDir, null, TestContext.Current.CancellationToken);
 
-        Assert.Equal(2, count); // json + md = 2 files indexed, png skipped
+        Assert.Equal(2, count.Indexed); // json + md = 2 files indexed, png skipped
     }
 }

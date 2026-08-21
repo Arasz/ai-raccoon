@@ -129,8 +129,8 @@ public sealed class FileIngestor(
         return Path.GetDirectoryName(path) ?? path;
     }
 
-    public async Task<int> IngestDirectoryAsync(SqliteConnection connection, string projectId, string path,
-        string? context, CancellationToken cancellationToken)
+    public async Task<DirectoryIngestResult> IngestDirectoryAsync(SqliteConnection connection, string projectId,
+        string path, string? context, CancellationToken cancellationToken)
     {
         var scope = await ReadScopeAsync(connection, projectId, cancellationToken).ConfigureAwait(false);
         RequireInScope(scope, path);
@@ -141,6 +141,7 @@ public sealed class FileIngestor(
             .OrderBy(file => file, StringComparer.Ordinal);
 
         var indexed = 0;
+        var walked = new List<WalkedFile>();
         foreach (var file in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -156,13 +157,14 @@ public sealed class FileIngestor(
             }
 
             var content = await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false);
-            var (walked, _) = await InsertChunksAsync(connection, projectId, file, content, handler, context,
+            var (rows, hashes) = await InsertChunksAsync(connection, projectId, file, content, handler, context,
                     cancellationToken)
                 .ConfigureAwait(false);
-            indexed += walked;
+            indexed += rows;
+            walked.Add(new WalkedFile(file, hashes));
         }
 
-        return indexed;
+        return new DirectoryIngestResult(indexed, walked);
     }
 
     /// <summary>

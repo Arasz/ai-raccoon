@@ -397,8 +397,20 @@ public sealed partial class SqliteMemoryStore(
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        return await fileIngestor.IngestDirectoryAsync(connection, projectId, path, context, cancellationToken)
+        var result = await fileIngestor.IngestDirectoryAsync(connection, projectId, path, context, cancellationToken)
             .ConfigureAwait(false);
+
+        // Defect B, directory leg: the walk ingests per file, so each walked file's stale chunks are
+        // pruned per file. Files the walk did not reach — gone from disk, newly ignored — keep their
+        // chunks here; removing those is the watch digest's job, which sees deletes and ignore
+        // transitions that a one-shot directory ingest cannot distinguish from "not walked this time".
+        foreach (var file in result.Files)
+        {
+            await PruneChunksNotIn(connection, projectId, file.Path, file.ChunkHashes, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return result.Indexed;
     }
 
     public async Task<EmbeddingConfig> ConfigureEmbeddingAsync(

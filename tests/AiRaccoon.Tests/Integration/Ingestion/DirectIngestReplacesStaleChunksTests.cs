@@ -138,4 +138,30 @@ public sealed class DirectIngestReplacesStaleChunksTests : IDisposable
                 TestContext.Current.CancellationToken)).Results
             .ShouldBeEmpty("the ignored file's content must no longer be reachable by search");
     }
+
+    /// <summary>
+    ///     B6 — `memory_ingest_directory` walks per file and must replace each walked file's chunk
+    ///     set for the same reason the single-file path does; otherwise the defect just moves.
+    /// </summary>
+    [Fact]
+    public async Task ReIngestingADirectory_ReplacesEachWalkedFilesChunkSet()
+    {
+        var dir = Path.Combine(_dataRoot, "docs");
+        Directory.CreateDirectory(dir);
+        var shrinking = Path.Combine(dir, "shrinking.md");
+        var stable = Path.Combine(dir, "stable.md");
+        await ScopeDataRootAsync();
+        await File.WriteAllTextAsync(shrinking, LargeContent(), TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(stable, "magnetostrictive stable note", TestContext.Current.CancellationToken);
+        await _store.IngestDirectoryAsync("acme", dir, null, TestContext.Current.CancellationToken);
+        (await ChunksAsync(shrinking)).Count.ShouldBeGreaterThan(1, "precondition: it starts multi-chunk");
+
+        await File.WriteAllTextAsync(shrinking, "now a single short chunk", TestContext.Current.CancellationToken);
+        await _store.IngestDirectoryAsync("acme", dir, null, TestContext.Current.CancellationToken);
+
+        var chunks = await ChunksAsync(shrinking);
+        chunks.Count.ShouldBe(1, "the previous multi-chunk set must not survive a directory re-ingest");
+        chunks[0].TotalChunks.ShouldBe(1);
+        (await ChunksAsync(stable)).Count.ShouldBe(1, "an unchanged sibling in the walk is untouched");
+    }
 }

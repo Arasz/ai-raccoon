@@ -24,6 +24,12 @@ public readonly record struct FileIngestResult(
     bool FingerprintEligible,
     IReadOnlyList<string>? ChunkHashes = null);
 
+/// <summary>One walked file's current memory-corpus chunk set, so the caller can prune the rest.</summary>
+public readonly record struct WalkedFile(string Path, IReadOnlyList<string> ChunkHashes);
+
+/// <summary>A directory walk's outcome: files indexed, plus each walked file's current chunk set.</summary>
+public readonly record struct DirectoryIngestResult(int Indexed, IReadOnlyList<WalkedFile> Files);
+
 public interface IFileIngestor
 {
     /// <summary>
@@ -33,7 +39,7 @@ public interface IFileIngestor
     Task<FileIngestResult> IngestFileAsync(SqliteConnection connection, string projectId, string path,
         string? context, CancellationToken cancellationToken, bool embedInline = true);
 
-    Task<int> IngestDirectoryAsync(SqliteConnection connection, string projectId, string path,
+    Task<DirectoryIngestResult> IngestDirectoryAsync(SqliteConnection connection, string projectId, string path,
         string? context, CancellationToken cancellationToken);
 
     /// <summary>

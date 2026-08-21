@@ -159,6 +159,12 @@ No `watch_files` fingerprint is written on the direct path, as the plan required
 rollback/fingerprint tests assert that contract by inserting their own row, and writing one
 from the direct path breaks them.
 
+`memory_ingest_directory` gets the same treatment, as this plan required: the walk reports each
+walked file's chunk set and the store prunes per file. Files the walk did **not** reach — gone
+from disk, or newly ignored — keep their chunks. Removing those is the watch digest's job: it
+sees deletes and ignore transitions as events, whereas a one-shot directory ingest cannot tell
+"deleted" from "not walked this time".
+
 **Known gap, deliberately not fixed here:** the prune covers the memory corpus only. A code
 file whose chunk count shrinks can still strand `code_entries` rows. That needs the same
 hash-reporting from `ICodeIngestor` and is a separate change.
