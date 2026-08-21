@@ -68,7 +68,7 @@ C# .NET 10 MCP server exposing agent memory management over sqlite-memory: proje
 - **High-performance logging** — Use a nested static partial `Log` class with static `[LoggerMessage]`-attributed methods (taking `ILogger` as a parameter, with an explicit `EventId`) instead of calling `logger.LogInformation(...)`/`LogError(...)` etc. directly — it avoids boxing/allocation on the hot path and keeps event ids centrally discoverable.
   → `.ai-badger/invariants/high-performance-logging.md`
 
-- **Static classes: extensions, constants, and pure functions only** — Static classes are allowed for extensions, constants, and pure functions — no state, no I/O, no injectable dependencies.
+- **Static classes: extensions and constants only** — Static classes are allowed for extension methods and constants; everything else is an injectable component. "Pure function" justifies a small helper, never a whole component (Reader/Parser/Planner/Validator/Factory…) — state, I/O, or dependencies make it injectable regardless.
   → `.ai-badger/invariants/static-classes.md`
 
 - **MCP stays thin** — An MCP server maps its tools 1:1 onto the backend REST/API surface and holds no business logic of its own.
