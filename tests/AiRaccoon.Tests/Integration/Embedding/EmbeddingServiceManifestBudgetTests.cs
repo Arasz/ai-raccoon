@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
@@ -25,7 +26,7 @@ public sealed class EmbeddingServiceManifestBudgetTests
             File.WriteAllText(Path.Combine(dir, name), content);
         }
 
-        File.WriteAllText(Path.Combine(dir, "manifest.json"), manifest.ToJsonString());
+        File.WriteAllText(Path.Combine(dir, EmbeddingManifest.FileName), manifest.ToJsonString());
         return dir;
     }
 
@@ -141,7 +142,7 @@ public sealed class EmbeddingServiceManifestBudgetTests
     public void EngineFingerprint_ManifestDirectory_HashesTheManifestContent()
     {
         var dir = WriteManifestDir(Manifest(), ("vocab.txt", "vocab"), ("model.onnx", "model"));
-        var manifestPath = Path.Combine(dir, "manifest.json");
+        var manifestPath = Path.Combine(dir, EmbeddingManifest.FileName);
         var expected = "local:" + Path.GetFullPath(dir) + "#" +
                        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(manifestPath)))
                            .ToLowerInvariant();
@@ -158,7 +159,7 @@ public sealed class EmbeddingServiceManifestBudgetTests
         // A re-download with new weights rewrites the manifest with new per-file sha256s (D7).
         var manifest = Manifest();
         manifest["onnx"]!["files"] = new JsonArray(new JsonObject { ["path"] = "model.onnx", ["sha256"] = ShaOf("model-v2") });
-        File.WriteAllText(Path.Combine(dir, "manifest.json"), manifest.ToJsonString());
+        File.WriteAllText(Path.Combine(dir, EmbeddingManifest.FileName), manifest.ToJsonString());
 
         Service().EngineFingerprint("local", dir, null).ShouldNotBe(first);
     }

@@ -1,3 +1,4 @@
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
@@ -49,7 +50,7 @@ public sealed class ModelSetLocalDirectoryValidationTests
         var dir = TempDir();
         File.WriteAllText(Path.Combine(dir, "vocab.txt"), "vocab");
         File.WriteAllText(Path.Combine(dir, "model.onnx"), "model");
-        File.WriteAllText(Path.Combine(dir, "manifest.json"), """
+        File.WriteAllText(Path.Combine(dir, EmbeddingManifest.FileName), """
             {
               "manifestVersion": 1,
               "model": "cli-refusal-test",
@@ -84,7 +85,7 @@ public sealed class ModelSetLocalDirectoryValidationTests
         var dir = TempDir();
         File.WriteAllText(Path.Combine(dir, "vocab.txt"), "vocab");
         File.WriteAllText(Path.Combine(dir, "model.onnx"), "model");
-        File.WriteAllText(Path.Combine(dir, "manifest.json"), """
+        File.WriteAllText(Path.Combine(dir, EmbeddingManifest.FileName), """
             {
               "manifestVersion": 1,
               "model": "cli-ok-test",

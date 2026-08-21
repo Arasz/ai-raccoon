@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using Shouldly;
 using Xunit;
 
@@ -27,7 +28,7 @@ public sealed class ProvisionalManifestDescriptorTests
             File.WriteAllText(path, content);
         }
 
-        File.WriteAllText(Path.Combine(dir, "manifest.json"), manifestJson);
+        File.WriteAllText(Path.Combine(dir, EmbeddingManifest.FileName), manifestJson);
         return dir;
     }
 

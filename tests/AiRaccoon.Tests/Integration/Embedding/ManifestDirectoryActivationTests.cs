@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
@@ -71,7 +72,7 @@ public sealed class ManifestDirectoryActivationTests : IAsyncLifetime
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "vocab.txt"), "vocab");
         File.WriteAllText(Path.Combine(dir, "model.onnx"), "model");
-        File.WriteAllText(Path.Combine(dir, "manifest.json"), Manifest(dimensions: 1024).ToJsonString());
+        File.WriteAllText(Path.Combine(dir, EmbeddingManifest.FileName), Manifest(dimensions: 1024).ToJsonString());
 
         var ex = Should.Throw<InvalidOperationException>(() =>
             Service().CreateGenerator(new EmbeddingSettings("local", dir, null, null)));
@@ -89,7 +90,7 @@ public sealed class ManifestDirectoryActivationTests : IAsyncLifetime
         Directory.CreateDirectory(dir);
         File.Copy(BundledModel.ResolveVocabPath(), Path.Combine(dir, "vocab.txt"));
         File.Copy(BundledModel.ResolveModelPath(), Path.Combine(dir, "model.onnx"));
-        File.WriteAllText(Path.Combine(dir, "manifest.json"), Manifest().ToJsonString());
+        File.WriteAllText(Path.Combine(dir, EmbeddingManifest.FileName), Manifest().ToJsonString());
 
         using var generator = Service().CreateGenerator(new EmbeddingSettings("local", dir, null, null));
 

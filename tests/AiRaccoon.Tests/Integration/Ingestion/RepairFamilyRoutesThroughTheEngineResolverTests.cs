@@ -3,6 +3,7 @@ using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Infrastructure.Ingestion;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Testing;
@@ -33,7 +34,7 @@ public sealed class RepairFamilyRoutesThroughTheEngineResolverTests
             File.WriteAllText(Path.Combine(dir, name), content);
         }
 
-        File.WriteAllText(Path.Combine(dir, "manifest.json"), manifest.ToJsonString());
+        File.WriteAllText(Path.Combine(dir, EmbeddingManifest.FileName), manifest.ToJsonString());
         return dir;
     }
 
