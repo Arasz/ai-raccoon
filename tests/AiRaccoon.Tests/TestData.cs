@@ -48,7 +48,10 @@ public static class TestData
     }
 
     /// <summary>Builds a real <see cref="SqliteMemoryStore"/> wired to a <see cref="FileIngestor"/> backed by the given
-    /// chunkers — the pre-DI-refactor convenience, kept as one place so tests stay decoupled from the ingest graph.</summary>
+    /// chunkers — the pre-DI-refactor convenience, kept as one place so tests stay decoupled from the ingest graph.
+    /// A <paramref name="codeChunker"/> wires code-corpus support too (e.g. <see cref="NoOpCodeChunker"/> or
+    /// <see cref="StubCodeChunker"/>); omitted, the store behaves as a memory-only bank, matching every
+    /// existing caller.</summary>
     public static SqliteMemoryStore CreateMemoryStore(
         ISqliteConnectionFactory factory,
         ILogger<SqliteMemoryStore> logger,
@@ -59,13 +62,17 @@ public static class TestData
         IModelMigrationLease? modelMigrationLease = null,
         IJsonChunker? jsonChunker = null,
         IEnumerable<INoiseFilterPolicy>? noisePolicies = null,
-        ISettingsStore? settings = null)
+        ISettingsStore? settings = null,
+        ICodeChunker? codeChunker = null)
     {
         jsonChunker ??= RealJsonChunker(markdownChunker);
         var embedder = new EntryEmbedder(embeddings, modelMigrationLease ?? ModelMigrationLease, timeProvider);
         var matcher = new FileTypeMatcher(
             [new MarkdownFileTypeHandler(markdownChunker), new JsonFileTypeHandler(jsonChunker)]);
-        var fileIngestor = new FileIngestor(matcher, embedder, sourceStore, timeProvider, new LocalTokenizer());
+        var codeFileTypeMatcher = codeChunker is null ? null : new CodeFileTypeMatcher();
+        var codeIngestor = codeChunker is null ? null : new CodeIngestor(new CodeFileTypeMatcher(), codeChunker, timeProvider);
+        var fileIngestor = new FileIngestor(matcher, embedder, sourceStore, timeProvider, new LocalTokenizer(),
+            codeFileTypeMatcher: codeFileTypeMatcher, codeIngestor: codeIngestor);
         var noiseFilteringService = new NoiseFilteringService(noisePolicies ?? []);
         return new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService,
             settings ?? new SqliteSettingsStore(factory));

@@ -1,8 +1,10 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Workspace;
+using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -453,6 +455,56 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         (await _store.SearchAsync(new SearchQuery("acme", "adamant revised"), TestContext.Current.CancellationToken))
             .Results.ShouldNotBeEmpty(
                 "ReplaceAsync must replace unconditionally — the given fingerprint already matched what was stored");
+    }
+
+    /// <summary>
+    ///     B1: while the code corpus's chunker is <see cref="NoOpCodeChunker" /> (Wave 2 — always 0
+    ///     chunks), the fingerprint must NOT be written for a code-only file, or the file is hash-skipped
+    ///     forever and never re-attempted once a real chunker lands (Wave 3). Two identical digests
+    ///     against the NoOp chunker must both actually run (never hash-skip); once a store wired to a
+    ///     real chunker digests the SAME unchanged content, it must chunk successfully and record the
+    ///     fingerprint — no watch re-registration needed, since nothing was ever fingerprinted.
+    /// </summary>
+    [Fact]
+    public async Task ReplaceIfFileChangedAsync_CodeFileWithNoOpChunker_NeverFingerprints_UntilARealChunkerLands()
+    {
+        var file = Path.Combine(_dataRoot, "Program.cs");
+        await File.WriteAllTextAsync(file, "class Program\n{\n}\n", TestContext.Current.CancellationToken);
+        await ScopeDataRootAsync();
+        var storeWithNoOpChunker = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
+            new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
+            TestData.CreateEmbeddingService(), codeChunker: new NoOpCodeChunker(NullLogger<NoOpCodeChunker>.Instance));
+
+        var first = await storeWithNoOpChunker.ReplaceIfFileChangedAsync(
+            "acme", file, "unchanged-hash", TestContext.Current.CancellationToken);
+        first.ShouldBeTrue("no fingerprint on file yet, so the first digest must run");
+        (await CountCodeEntriesAsync(file)).ShouldBe(0, "the NoOp chunker never produces rows");
+
+        var second = await storeWithNoOpChunker.ReplaceIfFileChangedAsync(
+            "acme", file, "unchanged-hash", TestContext.Current.CancellationToken);
+        second.ShouldBeTrue(
+            "a code file the NoOp chunker produced zero rows for must not be fingerprinted — RED " +
+            "before the fix: this hash-skips (returns false) and the file is stuck that way forever");
+
+        var storeWithRealChunker = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
+            new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
+            TestData.CreateEmbeddingService(), codeChunker: new StubCodeChunker());
+
+        var third = await storeWithRealChunker.ReplaceIfFileChangedAsync(
+            "acme", file, "unchanged-hash", TestContext.Current.CancellationToken);
+        third.ShouldBeTrue("a real chunker landing must still be able to digest the file — no watch re-add needed");
+        (await CountCodeEntriesAsync(file)).ShouldBeGreaterThan(0);
+
+        var fourth = await storeWithRealChunker.ReplaceIfFileChangedAsync(
+            "acme", file, "unchanged-hash", TestContext.Current.CancellationToken);
+        fourth.ShouldBeFalse("chunking succeeded this time, so the fingerprint is now recorded and hash-skip resumes");
+    }
+
+    private async Task<int> CountCodeEntriesAsync(string path)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM code_entries WHERE path = @path",
+            new { path = IngestPath.Normalize(path) });
     }
 
     private async Task SeedWatchFingerprintAsync(string projectId, string path, string fileHash)
