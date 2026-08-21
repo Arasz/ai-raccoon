@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 
@@ -15,15 +16,20 @@ public interface IWatchStore
     Task RemoveWatchAsync(string projectId, string path, CancellationToken cancellationToken = default);
 
     /// <summary>
-    ///     No-overlapping-watches atomicity (docs/work/2026-08-21-code-search-implementation-plan.md
-    ///     §2.2, review codereviewer MUST-FIX 7): prunes every watch in <paramref name="prunePaths" />
-    ///     (row + cascaded <c>watch_files</c>) and registers the new watch, in ONE
-    ///     <c>BEGIN IMMEDIATE</c> transaction — a crash anywhere in the step leaves either the old
-    ///     watches or the new watch, never an unwatched path. The caller updates runtime
-    ///     (<c>WatchPipeline</c>) state AFTER this commits.
+    ///     No-overlapping-watches atomicity, resolved AND committed under one lock
+    ///     (docs/work/2026-08-21-code-search-implementation-plan.md §2.2, review codereviewer
+    ///     MUST-FIX 7 + TOCTOU close): opens ONE <c>BEGIN IMMEDIATE</c> transaction, reads the
+    ///     project's CURRENT watches from inside it, resolves <paramref name="candidate" /> against
+    ///     that just-acquired snapshot via <paramref name="overlapResolver" />, then (when accepted)
+    ///     prunes the losers (row + cascaded <c>watch_files</c>) and registers the new watch — all
+    ///     before <c>COMMIT</c>. Two concurrent callers can never both decide "I win" against the
+    ///     same stale pre-lock snapshot: the second caller's own <c>BEGIN IMMEDIATE</c> blocks until
+    ///     the first commits, so it can only ever resolve against the first caller's already-durable
+    ///     state. The caller updates runtime (<c>WatchPipeline</c>) state AFTER this returns, driven
+    ///     by the returned <see cref="WatchOverlapDecision" />.
     /// </summary>
-    Task PruneAndAddAsync(string projectId, string path, long createdAt, IReadOnlyList<string> prunePaths,
-        CancellationToken cancellationToken = default);
+    Task<WatchOverlapDecision> ResolveAndAddAsync(string projectId, WatchOverlapCandidate candidate,
+        IWatchOverlapResolver overlapResolver, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<WatchRegistration>> ListWatchesAsync(CancellationToken cancellationToken = default);
 
@@ -34,13 +40,6 @@ public interface IWatchStore
 
     Task UpsertFileHashAsync(string projectId, string path, string fileHash, long updatedAt,
         CancellationToken cancellationToken = default);
-
-    /// <summary>
-    ///     Removes one path's fingerprint without touching its watch's `last_change_ts` — a path
-    ///     that transitions to ignored must not keep a stale fingerprint, or a later un-ignore with
-    ///     unchanged content would hash-skip and never re-ingest.
-    /// </summary>
-    Task DeleteFileHashAsync(string projectId, string path, CancellationToken cancellationToken = default);
 
     /// <summary>Lists every fingerprinted file path for the project (catch-up reconciliation).</summary>
     Task<IReadOnlyList<string>> ListFilesAsync(string projectId, CancellationToken cancellationToken = default);
@@ -92,8 +91,8 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
         }
     }
 
-    public async Task PruneAndAddAsync(string projectId, string path, long createdAt,
-        IReadOnlyList<string> prunePaths, CancellationToken cancellationToken = default)
+    public async Task<WatchOverlapDecision> ResolveAndAddAsync(string projectId, WatchOverlapCandidate candidate,
+        IWatchOverlapResolver overlapResolver, CancellationToken cancellationToken = default)
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
 
@@ -102,27 +101,49 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
             .ConfigureAwait(false);
         try
         {
-            foreach (var prunePath in prunePaths)
+            // S4 TOCTOU close: read the project's CURRENT watches and resolve the candidate against
+            // them from INSIDE the same write-locked transaction that then commits the outcome — a
+            // concurrent writer either already committed before this BEGIN IMMEDIATE succeeded (so
+            // its watch is visible here) or is still waiting for this transaction's own COMMIT (so
+            // it will see THIS decision once it gets its turn). Either way, no two callers can ever
+            // resolve against the same stale snapshot.
+            var rows = await connection.QueryAsync<WatchRegistration>(
+                    new CommandDefinition(MemorySql.SelectWatches, cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            var existing = rows
+                .Where(w => w.ProjectId == projectId)
+                .Select(w => new WatchOverlapCandidate(w.Path, w.CreatedAt))
+                .ToArray();
+            var decision = overlapResolver.Resolve(existing, candidate);
+
+            if (decision.Outcome == WatchOverlapOutcome.Accepted)
             {
-                var pathPrefix = LikePattern.Escape(prunePath) + "/%";
+                foreach (var pruned in decision.Pruned)
+                {
+                    var pathPrefix = LikePattern.Escape(pruned.Path) + "/%";
+                    await connection.ExecuteAsync(
+                            new CommandDefinition(MemorySql.DeleteWatchFilesByProjectPathCascade,
+                                new { projectId, path = pruned.Path, pathPrefix }, cancellationToken: cancellationToken))
+                        .ConfigureAwait(false);
+                    await connection.ExecuteAsync(
+                            new CommandDefinition(MemorySql.DeleteWatch, new { projectId, path = pruned.Path },
+                                cancellationToken: cancellationToken))
+                        .ConfigureAwait(false);
+                }
+
                 await connection.ExecuteAsync(
-                        new CommandDefinition(MemorySql.DeleteWatchFilesByProjectPathCascade,
-                            new { projectId, path = prunePath, pathPrefix }, cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
-                await connection.ExecuteAsync(
-                        new CommandDefinition(MemorySql.DeleteWatch, new { projectId, path = prunePath },
-                            cancellationToken: cancellationToken))
+                        new CommandDefinition(MemorySql.InsertWatchIfAbsent,
+                            new
+                            {
+                                projectId, path = candidate.Path, createdAt = candidate.CreatedAt, lastChangeTs = 0L
+                            }, cancellationToken: cancellationToken))
                     .ConfigureAwait(false);
             }
 
             await connection.ExecuteAsync(
-                    new CommandDefinition(MemorySql.InsertWatchIfAbsent,
-                        new { projectId, path, createdAt, lastChangeTs = 0L }, cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
-
-            await connection.ExecuteAsync(
                     new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
+            return decision;
         }
         catch
         {
@@ -170,15 +191,6 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
         await connection.ExecuteAsync(
                 new CommandDefinition(MemorySql.UpsertWatchFile,
                     new { projectId, path, fileHash, updatedAt }, cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
-    }
-
-    public async Task DeleteFileHashAsync(string projectId, string path, CancellationToken cancellationToken = default)
-    {
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        await connection.ExecuteAsync(
-                new CommandDefinition(MemorySql.DeleteWatchFile, new { projectId, path },
-                    cancellationToken: cancellationToken))
             .ConfigureAwait(false);
     }
 

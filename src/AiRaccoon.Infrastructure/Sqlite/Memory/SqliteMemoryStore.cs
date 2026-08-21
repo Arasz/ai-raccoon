@@ -383,8 +383,9 @@ public sealed partial class SqliteMemoryStore(
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        return await fileIngestor.IngestFileAsync(connection, projectId, path, context, cancellationToken)
+        var result = await fileIngestor.IngestFileAsync(connection, projectId, path, context, cancellationToken)
             .ConfigureAwait(false);
+        return result.RowsInserted;
     }
 
     public async Task<int> IngestDirectoryAsync(string projectId, string path, string? context,

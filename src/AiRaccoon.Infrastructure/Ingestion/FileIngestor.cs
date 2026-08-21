@@ -5,6 +5,7 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Watch;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
@@ -23,24 +24,36 @@ public sealed class FileIngestor(
     IEmbeddingService embeddingService,
     IIgnoreRulesProvider? ignoreRulesProvider = null,
     ICodeFileTypeMatcher? codeFileTypeMatcher = null,
-    ICodeIngestor? codeIngestor = null) : IFileIngestor
+    ICodeIngestor? codeIngestor = null,
+    IWatchStore? watchStore = null) : IFileIngestor
 {
     private readonly ICodeFileTypeMatcher _codeFileTypeMatcher = codeFileTypeMatcher ?? NullCodeFileTypeMatcher.Instance;
     private readonly ICodeIngestor _codeIngestor = codeIngestor ?? NullCodeIngestor.Instance;
     private readonly IIgnoreRulesProvider _ignoreRulesProvider = ignoreRulesProvider ?? NullIgnoreRulesProvider.Instance;
+    private readonly IWatchStore _watchStore = watchStore ?? NullWatchStore.Instance;
 
     /// <summary>
     ///     Set <paramref name="embedInline" /> false when the caller holds a write transaction: embedding
     ///     runs the engine per chunk, and a lock held that long stalls another process's first bank open.
+    ///     Ignore rules apply here too, ahead of routing (B2/§2.1: ignore wins for both the memory
+    ///     and the code pipeline) — <see cref="ResolveIgnoreRootAsync" /> finds the right root even
+    ///     though (unlike <see cref="IngestDirectoryAsync" />) no walk root is given directly.
     /// </summary>
-    public async Task<int> IngestFileAsync(SqliteConnection connection, string projectId, string path,
+    public async Task<FileIngestResult> IngestFileAsync(SqliteConnection connection, string projectId, string path,
         string? context, CancellationToken cancellationToken, bool embedInline = true)
     {
         await RequireInScopeAsync(connection, projectId, path, cancellationToken).ConfigureAwait(false);
 
         if (IsHidden(path))
         {
-            return 0;
+            return new FileIngestResult(0, true);
+        }
+
+        var ignoreRoot = await ResolveIgnoreRootAsync(connection, projectId, path, cancellationToken).ConfigureAwait(false);
+        var ignoreRules = await _ignoreRulesProvider.LoadAsync(ignoreRoot, cancellationToken).ConfigureAwait(false);
+        if (IsIgnored(ignoreRules, ignoreRoot, path))
+        {
+            return new FileIngestResult(0, true);
         }
 
         if (!fileTypeMatcher.TryGetHandler(path, out var handler))
@@ -49,33 +62,65 @@ public sealed class FileIngestor(
         }
 
         var content = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
-        return await InsertChunksAsync(connection, projectId, path, content, handler, context, cancellationToken, embedInline)
+        var rows = await InsertChunksAsync(connection, projectId, path, content, handler, context, cancellationToken, embedInline)
             .ConfigureAwait(false);
+        return new FileIngestResult(rows, true);
     }
 
     /// <summary>
     ///     OQ4 (docs/work/2026-08-21-code-search-implementation-plan.md §12.4): explicit single-file
-    ///     ingest routes code extensions to the code corpus too. No watch/ingest root is known here,
-    ///     so the file's own parent directory is treated as the `ai-raccoon.ignore` root — the
-    ///     closest analogue to `memory_ingest_directory` pointed at that directory.
+    ///     ingest routes code extensions to the code corpus too. Not a code file at all — fingerprint
+    ///     eligible as before, nothing will ever come of it regardless of chunker. A code file the
+    ///     chunker produced zero rows for is NOT fingerprint eligible (B1): a stand-in chunker (e.g.
+    ///     `NoOpCodeChunker`) must not let the watch digest settle into treating the file as done.
     /// </summary>
-    private async Task<int> IngestAsCodeAsync(SqliteConnection connection, string projectId, string path,
+    private async Task<FileIngestResult> IngestAsCodeAsync(SqliteConnection connection, string projectId, string path,
         CancellationToken cancellationToken)
     {
         if (!_codeFileTypeMatcher.IsCodeFile(path))
         {
-            return 0;
+            return new FileIngestResult(0, true);
         }
 
-        var root = Path.GetDirectoryName(path) ?? path;
-        var ignoreRules = await _ignoreRulesProvider.LoadAsync(root, cancellationToken).ConfigureAwait(false);
-        if (IsIgnored(ignoreRules, root, path))
-        {
-            return 0;
-        }
-
-        return await _codeIngestor.IngestFileAsync(connection, projectId, path, cancellationToken)
+        var rows = await _codeIngestor.IngestFileAsync(connection, projectId, path, cancellationToken)
             .ConfigureAwait(false);
+        return new FileIngestResult(rows, rows > 0);
+    }
+
+    /// <summary>
+    ///     B2: the `ai-raccoon.ignore` root for an explicit single-file ingest — the containing
+    ///     registered watch if one exists (longest/most specific match), else the ingest-scope
+    ///     allowlist entry that admits the path (same tie-break), else the file's own parent
+    ///     directory as the last resort. `IgnoreRulesProvider` reads exactly one file at whatever
+    ///     root it is given — no nested discovery — so picking the wrong root here silently misses
+    ///     the real ignore file instead of erroring.
+    /// </summary>
+    private async Task<string> ResolveIgnoreRootAsync(SqliteConnection connection, string projectId, string path,
+        CancellationToken cancellationToken)
+    {
+        var normalized = IngestPath.Normalize(path);
+
+        var watches = await _watchStore.ListWatchesAsync(cancellationToken).ConfigureAwait(false);
+        var containingWatch = watches
+            .Where(w => w.ProjectId == projectId && IngestPath.IsWithinScope(normalized, w.Path))
+            .OrderByDescending(w => w.Path.Length)
+            .FirstOrDefault();
+        if (containingWatch is not null)
+        {
+            return containingWatch.Path;
+        }
+
+        var scope = await ReadScopeAsync(connection, projectId, cancellationToken).ConfigureAwait(false);
+        var admittingScopeEntry = scope
+            .Where(entry => IngestPath.IsWithinScope(normalized, entry))
+            .OrderByDescending(entry => entry.Length)
+            .FirstOrDefault();
+        if (admittingScopeEntry is not null)
+        {
+            return admittingScopeEntry;
+        }
+
+        return Path.GetDirectoryName(path) ?? path;
     }
 
     public async Task<int> IngestDirectoryAsync(SqliteConnection connection, string projectId, string path,
@@ -97,7 +142,7 @@ public sealed class FileIngestor(
             {
                 if (_codeFileTypeMatcher.IsCodeFile(file))
                 {
-                    indexed += await _codeIngestor.IngestFileAsync(connection, projectId, file, cancellationToken)
+                    indexed += await _codeIngestor.IngestFileAsync(connection, projectId, file, cancellationToken, scope)
                         .ConfigureAwait(false);
                 }
 

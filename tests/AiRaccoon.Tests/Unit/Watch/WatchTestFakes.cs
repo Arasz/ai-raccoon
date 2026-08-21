@@ -140,20 +140,33 @@ internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
         return Task.CompletedTask;
     }
 
-    /// <summary>The fake has no transaction to fail mid-way; the real store's atomicity is proven
-    /// against SQLite (kill-9 E2E), not this in-memory fake.</summary>
-    public int PruneAndAddCalls { get; private set; }
+    /// <summary>The fake has no transaction to fail mid-way, and no real SQLite lock to serialize
+    /// concurrent callers on; the real store's atomicity/TOCTOU-closure is proven against SQLite
+    /// (WatchPruningTests), not this in-memory fake.</summary>
+    public int ResolveAndAddCalls { get; private set; }
 
-    public async Task PruneAndAddAsync(string projectId, string path, long createdAt, IReadOnlyList<string> prunePaths,
-        CancellationToken cancellationToken = default)
+    public async Task<WatchOverlapDecision> ResolveAndAddAsync(string projectId, WatchOverlapCandidate candidate,
+        IWatchOverlapResolver overlapResolver, CancellationToken cancellationToken = default)
     {
-        PruneAndAddCalls++;
-        foreach (var prunePath in prunePaths)
+        ResolveAndAddCalls++;
+        var existing = Watches
+            .Where(w => w.Key.ProjectId == projectId)
+            .Select(w => new WatchOverlapCandidate(w.Key.Path, w.Value.CreatedAt))
+            .ToArray();
+        var decision = overlapResolver.Resolve(existing, candidate);
+
+        if (decision.Outcome == WatchOverlapOutcome.Accepted)
         {
-            await RemoveWatchAsync(projectId, prunePath, cancellationToken).ConfigureAwait(false);
+            foreach (var pruned in decision.Pruned)
+            {
+                await RemoveWatchAsync(projectId, pruned.Path, cancellationToken).ConfigureAwait(false);
+            }
+
+            await AddWatchAsync(projectId, candidate.Path, candidate.CreatedAt, 0, cancellationToken)
+                .ConfigureAwait(false);
         }
 
-        await AddWatchAsync(projectId, path, createdAt, 0, cancellationToken).ConfigureAwait(false);
+        return decision;
     }
 
     public Task<IReadOnlyList<WatchRegistration>> ListWatchesAsync(CancellationToken cancellationToken = default) =>
@@ -181,12 +194,6 @@ internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
         CancellationToken cancellationToken = default)
     {
         SetFingerprint(projectId, path, fileHash, updatedAt);
-        return Task.CompletedTask;
-    }
-
-    public Task DeleteFileHashAsync(string projectId, string path, CancellationToken cancellationToken = default)
-    {
-        RemoveFingerprint(projectId, path);
         return Task.CompletedTask;
     }
 
@@ -230,6 +237,7 @@ internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
 internal sealed class FakeIgnoreRulesProvider : IIgnoreRulesProvider
 {
     private readonly Dictionary<string, IgnoreRules> _rulesByRoot = new(IngestPath.PathComparer);
+    private readonly Dictionary<string, IgnoreRules> _afterFirstCallByRoot = new(IngestPath.PathComparer);
 
     public List<string> LoadCalls { get; } = [];
 
@@ -237,10 +245,29 @@ internal sealed class FakeIgnoreRulesProvider : IIgnoreRulesProvider
 
     public void Set(string root, string content) => Set(root, IgnoreRules.Parse(content));
 
+    /// <summary>
+    ///     S5: a deterministic mid-scan edit, independent of any hook timing — the very first
+    ///     <see cref="LoadAsync" /> call for <paramref name="root" /> returns <paramref name="before" />;
+    ///     every call after that returns <paramref name="after" />, forever. Drives
+    ///     <c>WatchCatchUp</c>'s own re-read-at-end-of-pass comparison to disagree exactly once, so a
+    ///     genuine second pass is the only way the loop settles.
+    /// </summary>
+    public void SetTransition(string root, IgnoreRules before, IgnoreRules after)
+    {
+        _rulesByRoot[root] = before;
+        _afterFirstCallByRoot[root] = after;
+    }
+
     public Task<IgnoreRules> LoadAsync(string root, CancellationToken cancellationToken = default)
     {
         LoadCalls.Add(root);
-        return Task.FromResult(_rulesByRoot.GetValueOrDefault(root, IgnoreRules.Empty));
+        var current = _rulesByRoot.GetValueOrDefault(root, IgnoreRules.Empty);
+        if (_afterFirstCallByRoot.TryGetValue(root, out var after))
+        {
+            _rulesByRoot[root] = after;
+        }
+
+        return Task.FromResult(current);
     }
 }
 

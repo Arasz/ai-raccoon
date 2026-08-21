@@ -3,6 +3,7 @@ using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -95,7 +96,7 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
         var result = await ingestor.IngestFileAsync(_conn, "test_project", file, null,
             TestContext.Current.CancellationToken);
 
-        result.ShouldBe(1);
+        result.RowsInserted.ShouldBe(1);
         (await CountCodeAsync(file)).ShouldBeGreaterThan(0);
         (await CountAsync("entries")).ShouldBe(0);
     }
@@ -109,23 +110,85 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
         var result = await ingestor.IngestFileAsync(_conn, "test_project", file, null,
             TestContext.Current.CancellationToken);
 
-        result.ShouldBe(0);
+        result.RowsInserted.ShouldBe(0);
         (await CountCodeAsync(file)).ShouldBe(0);
     }
 
+    /// <summary>
+    ///     B2 fix (1): a nested target with NO ignore file co-located next to it — only the ROOT
+    ///     (here, the ingest-scope allowlist entry, since no watch is registered) carries
+    ///     `ai-raccoon.ignore`. The old "parent directory as root" shape would look for the ignore
+    ///     file at `src/gen/` (where it does not exist) and miss it entirely; this is the case that
+    ///     the original co-located version of this test could never catch.
+    /// </summary>
     [Fact]
-    public async Task IngestFileAsync_ExplicitlyIgnoredCodeFile_ReturnsZeroChunks()
+    public async Task IngestFileAsync_IgnoredCodeFile_NoWatch_FallsBackToScopeAllowlistRoot()
     {
-        await File.WriteAllTextAsync(Path.Combine(_testDir, IgnoreRulesProvider.FileName), "secret.cs\n",
+        await File.WriteAllTextAsync(Path.Combine(_testDir, IgnoreRulesProvider.FileName), "src/gen/*.cs\n",
             TestContext.Current.CancellationToken);
         var ingestor = CreateIngestorWithIgnoreProvider();
-        var file = await WriteAsync("secret.cs", "class Secret\n{\n}\n");
+        var file = await WriteAsync(Path.Combine("src", "gen", "secret.cs"), "class Secret\n{\n}\n");
 
         var result = await ingestor.IngestFileAsync(_conn, "test_project", file, null,
             TestContext.Current.CancellationToken);
 
-        result.ShouldBe(0);
+        result.RowsInserted.ShouldBe(0);
         (await CountCodeAsync(file)).ShouldBe(0);
+    }
+
+    /// <summary>B2 fix (1): a registered watch takes priority as the ignore root over the parent
+    /// directory (and is checked before falling back to the scope allowlist).</summary>
+    [Fact]
+    public async Task IngestFileAsync_ExplicitlyIgnoredCodeFile_UnderWatchRoot_ReturnsZeroChunks()
+    {
+        await File.WriteAllTextAsync(Path.Combine(_testDir, IgnoreRulesProvider.FileName), "src/gen/*.cs\n",
+            TestContext.Current.CancellationToken);
+        var watchStore = await RegisterWatchAsync(_testDir);
+        var ingestor = CreateIngestorWithIgnoreProvider(watchStore);
+        var file = await WriteAsync(Path.Combine("src", "gen", "secret.cs"), "class Secret\n{\n}\n");
+
+        var result = await ingestor.IngestFileAsync(_conn, "test_project", file, null,
+            TestContext.Current.CancellationToken);
+
+        result.RowsInserted.ShouldBe(0);
+        (await CountCodeAsync(file)).ShouldBe(0);
+    }
+
+    /// <summary>B2 fix (2): the ignore check now sits above the memory/code handler branch, so a
+    /// memory file (`.md`) under an ignored path is skipped too — not just code files.</summary>
+    [Fact]
+    public async Task IngestFileAsync_ExplicitlyIgnoredMemoryFile_UnderWatchRoot_ReturnsZeroChunks()
+    {
+        await File.WriteAllTextAsync(Path.Combine(_testDir, IgnoreRulesProvider.FileName), "docs/*.md\n",
+            TestContext.Current.CancellationToken);
+        var watchStore = await RegisterWatchAsync(_testDir);
+        var ingestor = CreateIngestorWithIgnoreProvider(watchStore);
+        var file = await WriteAsync(Path.Combine("docs", "secret.md"), "# secret\n");
+
+        var result = await ingestor.IngestFileAsync(_conn, "test_project", file, null,
+            TestContext.Current.CancellationToken);
+
+        result.RowsInserted.ShouldBe(0);
+        (await CountAsync("entries")).ShouldBe(0);
+    }
+
+    /// <summary>B2 fix (1): `IgnoreRulesProvider` reads exactly one file per resolved root — a
+    /// stray `ai-raccoon.ignore` sitting next to the target (not at the watch root) must never be
+    /// discovered or honored.</summary>
+    [Fact]
+    public async Task IngestFileAsync_StrayNestedIgnoreFile_IsNotHonored()
+    {
+        var watchStore = await RegisterWatchAsync(_testDir);
+        var ingestor = CreateIngestorWithIgnoreProvider(watchStore);
+        var file = await WriteAsync(Path.Combine("src", "gen", "a.cs"), "class A\n{\n}\n");
+        await File.WriteAllTextAsync(Path.Combine(_testDir, "src", "gen", IgnoreRulesProvider.FileName),
+            "a.cs\n", TestContext.Current.CancellationToken);
+
+        var result = await ingestor.IngestFileAsync(_conn, "test_project", file, null,
+            TestContext.Current.CancellationToken);
+
+        result.RowsInserted.ShouldBe(1);
+        (await CountCodeAsync(file)).ShouldBeGreaterThan(0);
     }
 
     [Fact]
@@ -145,7 +208,7 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
         (await TotalCodeCountAsync()).ShouldBe(await CountCodeAsync(Path.Combine(_testDir, "Program.cs")));
     }
 
-    private FileIngestor CreateIngestorWithIgnoreProvider()
+    private FileIngestor CreateIngestorWithIgnoreProvider(IWatchStore? watchStore = null)
     {
         var sourceStore = new SqliteMemorySourceStore(
             new SqliteConnectionFactory(
@@ -155,7 +218,15 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
         var embedder = new EntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider);
         var codeIngestor = new CodeIngestor(new CodeFileTypeMatcher(), new StubCodeChunker(), TimeProvider.System);
         return new FileIngestor(matcher, embedder, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
-            new IgnoreRulesProvider(), new CodeFileTypeMatcher(), codeIngestor);
+            new IgnoreRulesProvider(), new CodeFileTypeMatcher(), codeIngestor, watchStore);
+    }
+
+    private async Task<IWatchStore> RegisterWatchAsync(string path)
+    {
+        var opts = new InfrastructureOptions { DataRoot = _testDir, Rid = "osx-arm64", Scope = InstallScope.User };
+        var watchStore = new WatchStore(new SqliteConnectionFactory(opts, NullKeyProvider.Resolver(opts)));
+        await watchStore.AddWatchAsync("test_project", path, 0, 0, TestContext.Current.CancellationToken);
+        return watchStore;
     }
 
     private async Task<string> WriteAsync(string relative, string content)

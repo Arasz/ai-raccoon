@@ -91,20 +91,27 @@ public sealed partial class SqliteMemoryStore
             // fileIngestor self-filters by extension and, when the path is a code file, dispatches
             // to ICodeIngestor internally (FileIngestor.IngestFileAsync) — one re-ingest call
             // covers both corpora; each ingestor's own matcher decides whether it does anything.
-            await fileIngestor
+            var ingestResult = await fileIngestor
                 .IngestFileAsync(connection, projectId, path, null, cancellationToken, false)
                 .ConfigureAwait(false);
             await connection.ExecuteAsync(
                     Def(MemorySql.RestoreQueueRowsStillBacked, null, cancellationToken))
                 .ConfigureAwait(false);
-            await connection.ExecuteAsync(
-                    Def(MemorySql.UpsertWatchFile,
-                        new
-                        {
-                            projectId, path, fileHash,
-                            updatedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds()
-                        }, cancellationToken))
-                .ConfigureAwait(false);
+            // B1: a code-only file a stand-in chunker (e.g. NoOpCodeChunker) produced zero rows for
+            // must NOT be fingerprinted — a fingerprint here would hash-skip it forever, even past
+            // the point a real chunker starts producing rows for unchanged content. Every other
+            // outcome (memory match, mixed match, no corpus matches at all) fingerprints as before.
+            if (ingestResult.FingerprintEligible)
+            {
+                await connection.ExecuteAsync(
+                        Def(MemorySql.UpsertWatchFile,
+                            new
+                            {
+                                projectId, path, fileHash,
+                                updatedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds()
+                            }, cancellationToken))
+                    .ConfigureAwait(false);
+            }
 
             await connection.ExecuteAsync(
                     new CommandDefinition("COMMIT", cancellationToken: cancellationToken))

@@ -1053,46 +1053,33 @@ public sealed class MemorySchemaVersionTests
     }
 
     /// <summary>
-    ///     Ladder step 11 (docs/work/2026-08-21-code-search-implementation-plan.md §4): per-project
-    ///     outermost-watch prune — the same algorithm the runtime add-time rule uses
-    ///     (WatchOverlapResolverTests), reused here rather than reimplemented (WatchOverlapResolver).
+    ///     Unconditional no-overlapping-watches prune (orchestrator ruling, S7 — no longer a v11
+    ///     ladder step): per-project outermost-watch prune, the same algorithm the runtime add-time
+    ///     rule uses (WatchOverlapResolverTests), reused here rather than reimplemented
+    ///     (WatchOverlapResolver). Proven against a bank ALREADY stamped at CurrentVersion — the
+    ///     ladder-gated shape this superseded would have skipped it entirely at that point.
     /// </summary>
     [Fact]
     public async Task EnsureAsync_BankWithNestedWatches_PrunesTheNarrower_ReturnsThePrunedList()
     {
         await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
         await connection.ExecuteAsync(new CommandDefinition(
             """
-            CREATE TABLE watches (
-                project_id            TEXT NOT NULL,
-                path                  TEXT NOT NULL,
-                created_at            INTEGER NOT NULL,
-                last_change_ts        INTEGER NOT NULL,
-                scan_owner            TEXT NULL,
-                scan_lease_expires_at INTEGER NOT NULL DEFAULT 0,
-                PRIMARY KEY (project_id, path)
-            );
-            CREATE TABLE watch_files (
-                project_id TEXT NOT NULL,
-                path       TEXT NOT NULL,
-                file_hash  TEXT NOT NULL,
-                updated_at INTEGER NOT NULL,
-                PRIMARY KEY (project_id, path)
-            );
             INSERT INTO watches (project_id, path, created_at, last_change_ts) VALUES ('acme', '/repo', 1, 0);
             INSERT INTO watches (project_id, path, created_at, last_change_ts) VALUES ('acme', '/repo/src', 2, 0);
             INSERT INTO watches (project_id, path, created_at, last_change_ts) VALUES ('acme', '/repo2', 3, 0);
             INSERT INTO watch_files (project_id, path, file_hash, updated_at)
                 VALUES ('acme', '/repo/src/a.md', 'h1', 1);
-            PRAGMA user_version = 10;
             """,
             cancellationToken: TestContext.Current.CancellationToken));
 
-        var pruned = await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        var result = await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
 
-        pruned.ShouldHaveSingleItem();
-        pruned[0].Path.ShouldBe("/repo/src");
-        pruned[0].CoveredBy.ShouldBe("/repo");
+        result.Pruned.ShouldHaveSingleItem();
+        result.Pruned[0].Path.ShouldBe("/repo/src");
+        result.Pruned[0].CoveredBy.ShouldBe("/repo");
+        result.Warnings.ShouldBeEmpty();
         var remaining = (await connection.QueryAsync<string>(new CommandDefinition(
                 "SELECT path FROM watches WHERE project_id = 'acme' ORDER BY path",
                 cancellationToken: TestContext.Current.CancellationToken)))
@@ -1109,33 +1096,75 @@ public sealed class MemorySchemaVersionTests
     public async Task EnsureAsync_BankWithNoOverlap_MigratesCleanly_EmptyPrunedList()
     {
         await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
         await connection.ExecuteAsync(new CommandDefinition(
             """
-            CREATE TABLE watches (
-                project_id            TEXT NOT NULL,
-                path                  TEXT NOT NULL,
-                created_at            INTEGER NOT NULL,
-                last_change_ts        INTEGER NOT NULL,
-                scan_owner            TEXT NULL,
-                scan_lease_expires_at INTEGER NOT NULL DEFAULT 0,
-                PRIMARY KEY (project_id, path)
-            );
-            CREATE TABLE watch_files (
-                project_id TEXT NOT NULL,
-                path       TEXT NOT NULL,
-                file_hash  TEXT NOT NULL,
-                updated_at INTEGER NOT NULL,
-                PRIMARY KEY (project_id, path)
-            );
             INSERT INTO watches (project_id, path, created_at, last_change_ts) VALUES ('acme', '/repo-a', 1, 0);
             INSERT INTO watches (project_id, path, created_at, last_change_ts) VALUES ('acme', '/repo-b', 2, 0);
-            PRAGMA user_version = 10;
             """,
             cancellationToken: TestContext.Current.CancellationToken));
 
-        var pruned = await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        var result = await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
 
-        pruned.ShouldBeEmpty();
+        result.Pruned.ShouldBeEmpty();
+        result.Warnings.ShouldBeEmpty();
         (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
+    }
+
+    /// <summary>
+    ///     S8 hardening: a single malformed watch row (a blank path <see cref="AiRaccoon.Core.Ingestion.IngestPath.ResolveReal" />
+    ///     cannot resolve) must never fail the whole bank open. That project is skipped (its rows
+    ///     stay untouched, no crash) and reported as a warning; every OTHER project, including a
+    ///     genuinely overlapping one, still resolves and prunes normally.
+    /// </summary>
+    [Fact]
+    public async Task EnsureAsync_OneProjectHasAMalformedWatchRow_SkipsThatProject_StillOpensAndPrunesOthers()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO watches (project_id, path, created_at, last_change_ts) VALUES ('broken', '', 1, 0);
+            INSERT INTO watches (project_id, path, created_at, last_change_ts) VALUES ('broken', '/also-broken-group', 2, 0);
+            INSERT INTO watches (project_id, path, created_at, last_change_ts) VALUES ('healthy', '/repo', 1, 0);
+            INSERT INTO watches (project_id, path, created_at, last_change_ts) VALUES ('healthy', '/repo/src', 2, 0);
+            """,
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        // A throw here (rather than a graceful skip-and-warn) IS the test failure — no
+        // Should.NotThrowAsync wrapper needed, an uncaught exception fails the test either way.
+        var result = await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        result.Pruned.ShouldHaveSingleItem("the healthy project must still resolve and prune normally");
+        result.Pruned[0].Path.ShouldBe("/repo/src");
+        result.Warnings.ShouldHaveSingleItem();
+        result.Warnings[0].ProjectId.ShouldBe("broken");
+
+        var brokenCount = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT count(*) FROM watches WHERE project_id = 'broken'",
+            cancellationToken: TestContext.Current.CancellationToken));
+        brokenCount.ShouldBe(2L, "the malformed project's rows must be left completely untouched, not pruned");
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
+    }
+
+    /// <summary>Reopen-is-a-no-op: once the bank has no overlaps left, a second open prunes and warns nothing.</summary>
+    [Fact]
+    public async Task EnsureAsync_ReopenAfterAPriorPrune_PrunesNothing_WarnsNothing()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO watches (project_id, path, created_at, last_change_ts) VALUES ('acme', '/repo', 1, 0);
+            INSERT INTO watches (project_id, path, created_at, last_change_ts) VALUES ('acme', '/repo/src', 2, 0);
+            """,
+            cancellationToken: TestContext.Current.CancellationToken));
+        var first = await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        first.Pruned.ShouldHaveSingleItem();
+
+        var second = await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        second.Pruned.ShouldBeEmpty();
+        second.Warnings.ShouldBeEmpty();
     }
 }

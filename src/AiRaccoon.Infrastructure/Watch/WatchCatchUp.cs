@@ -12,8 +12,10 @@ namespace AiRaccoon.Infrastructure.Watch;
 ///     Enumeration also skips hidden directory segments, the built-in deny set, and
 ///     `ai-raccoon.ignore` matches (docs/work/2026-08-21-code-search-implementation-plan.md §2.1/
 ///     §2.3); <see cref="ReconcileIgnoredAsync" /> cleans fingerprinted-but-now-ignored paths, and a
-///     mid-scan edit to the ignore file is caught by re-comparing the loaded rules at the end of
-///     each pass — no new queue state on <see cref="WatchScanGuard" /> (pinned H10).
+///     mid-scan edit to the ignore file is caught by re-comparing the loaded <see cref="IgnoreRules" />
+///     for value equality (its source text, not a filesystem mtime check) at the end of each pass —
+///     no new queue state on <see cref="WatchScanGuard" /> (pinned H10, which named mtime-recheck;
+///     this is the shape actually built, and both are §2.1-permitted).
 /// </summary>
 public sealed partial class WatchCatchUp(
     WatchPipeline pipeline,

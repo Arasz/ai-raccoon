@@ -541,8 +541,25 @@ public sealed class WatchCatchUpTests
             .ShouldBeNull();
     }
 
+    /// <summary>
+    ///     S5: the original version of this test asserted <c>LoadCalls.Count &gt; 1</c>, which can
+    ///     never fail — one settling attempt (no re-walk at all) already costs 2 LoadAsync calls
+    ///     (top-of-loop + end-of-loop reread), so the assertion passed whether the loop's re-walk
+    ///     existed or not. Its outcome assertion was equally unable to discriminate: a newly-ignored
+    ///     file never lands in memory regardless, because <c>WatchDigestExecutor</c> re-reads ignore
+    ///     rules fresh per event anyway (§2.1 "no cache") — so the scan's OWN re-walk could be deleted
+    ///     entirely and this test would still pass.
+    ///     <para>
+    ///         Fixed by counting passes precisely instead of loosely: <see cref="FakeIgnoreRulesProvider.SetTransition" />
+    ///         deterministically changes the loaded rules exactly once (no hook-timing dependency),
+    ///         forcing exactly one genuine extra pass. Two attempts cost exactly 4 LoadAsync calls
+    ///         (2 each); a single, never-re-running attempt costs exactly 2 — asserting the exact
+    ///         count of 4 is only satisfied by a real second walk, not by the loop's own per-attempt
+    ///         double-load.
+    ///     </para>
+    /// </summary>
     [Fact]
-    public async Task EnqueueInitialScan_IgnoreFileEditedMidScan_ReReadsRulesBeforeTheScanSettles()
+    public async Task EnqueueInitialScan_IgnoreFileEditedMidScan_RunsAGenuineSecondPass()
     {
         using var dir = TempDir.New("catchup-midscan-ignore-edit");
         var file = dir.File("newly-ignored.md");
@@ -552,24 +569,19 @@ public sealed class WatchCatchUpTests
         stack.AllowScope(dir.Path);
         stack.Memory.Settings[WatchConfigKeys.ConcurrencyProject(Project)] = "1";
         await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        stack.IgnoreRules.SetTransition(dir.Path, IgnoreRules.Empty, IgnoreRules.Parse("newly-ignored.md\n"));
         var catchUp = NewCatchUp(stack);
-
-        // Mid-scan (inside ReconcileMissingAsync's ListFilesAsync call): the ignore file changes.
-        // No new WatchScanGuard state — the running scan re-checks and redoes its own walk.
-        stack.Store.OnListFiles = () =>
-        {
-            stack.IgnoreRules.Set(dir.Path, "newly-ignored.md\n");
-            return Task.CompletedTask;
-        };
 
         catchUp.EnqueueInitialScan(Project, dir.Path, TestContext.Current.CancellationToken);
         await catchUp.LastScan!;
-        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
 
-        // The loop re-ran the walk with the fresh rules (more than the one load at scan start).
-        stack.IgnoreRules.LoadCalls.Count(root => IngestPath.PathComparer.Equals(root, dir.Path)).ShouldBeGreaterThan(1);
-        // Outcome: the newly-ignored file never lands in memory, whether caught by the scan's own
-        // re-walk or by the digest's own fresh per-event rules read (§2.1 "no cache").
+        stack.IgnoreRules.LoadCalls.Count(root => IngestPath.PathComparer.Equals(root, dir.Path)).ShouldBe(4,
+            "one settling attempt costs 2 loads (top + end-of-pass reread); a genuine second pass costs 4 — " +
+            "this is the count a deleted re-walk loop cannot produce");
+
+        // Outcome, kept from the original test: the second (real) pass sees the updated rules and
+        // never re-enqueues the file, so it never lands in memory either.
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
         stack.Memory.Ingested.Select(i => i.Path).ShouldNotContain(file);
     }
 }

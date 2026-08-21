@@ -244,9 +244,11 @@ public sealed partial class SqliteConnectionFactory(
     /// <summary>
     ///     Loads vec0 and ensures the schema on an already-open connection. Disposes and
     ///     rethrows on failure so a failed post-open step never leaks a pooled, checked-out
-    ///     connection. The one caller with a logger (this method) reports every watch the v11
-    ///     ladder step pruned (docs/work/2026-08-21-code-search-implementation-plan.md §4) — the
-    ///     migration itself stays silent and only returns the list.
+    ///     connection. The one caller with a logger (this method) reports every watch the
+    ///     unconditional no-overlapping-watches prune step removed
+    ///     (docs/work/2026-08-21-code-search-implementation-plan.md §4) and every project whose
+    ///     resolution failed and was skipped (S8) — the migration itself stays silent and only
+    ///     returns the data.
     /// </summary>
     internal static async Task<SqliteConnection> InitializeAsync(SqliteConnection connection,
         CancellationToken cancellationToken, ILogger<SqliteConnectionFactory>? logger = null)
@@ -256,15 +258,23 @@ public sealed partial class SqliteConnectionFactory(
             connection.EnableExtensions();
             // vec0 ships in the NuGet package — always available, no provisioning.
             connection.LoadVector();
-            var pruned = await MemorySchema.EnsureAsync(connection, cancellationToken).ConfigureAwait(false);
-            if (pruned.Count > 0 && logger is not null)
+            var overlapResult = await MemorySchema.EnsureAsync(connection, cancellationToken).ConfigureAwait(false);
+            if (logger is not null)
             {
-                foreach (var watch in pruned)
+                if (overlapResult.Pruned.Count > 0)
                 {
-                    Log.WatchOverlapMigrationPruned(logger, watch.Path, watch.CoveredBy);
+                    foreach (var watch in overlapResult.Pruned)
+                    {
+                        Log.WatchOverlapMigrationPruned(logger, watch.Path, watch.CoveredBy);
+                    }
+
+                    Log.WatchOverlapMigrationSummary(logger, overlapResult.Pruned.Count);
                 }
 
-                Log.WatchOverlapMigrationSummary(logger, pruned.Count);
+                foreach (var warning in overlapResult.Warnings)
+                {
+                    Log.WatchOverlapMigrationSkippedProject(logger, warning.ProjectId, warning.Reason);
+                }
             }
 
             return connection;
@@ -347,5 +357,9 @@ public sealed partial class SqliteConnectionFactory(
         [LoggerMessage(EventId = 902, Level = LogLevel.Information,
             Message = "watch overlap migration: removed {Count} overlapping watch(es)")]
         public static partial void WatchOverlapMigrationSummary(ILogger logger, int count);
+
+        [LoggerMessage(EventId = 903, Level = LogLevel.Warning,
+            Message = "watch overlap migration: skipped project {ProjectId}, its watches were left untouched ({Reason})")]
+        public static partial void WatchOverlapMigrationSkippedProject(ILogger logger, string projectId, string reason);
     }
 }

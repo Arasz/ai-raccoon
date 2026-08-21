@@ -57,8 +57,10 @@ public sealed partial class WatchDigestExecutor(
             {
                 // Never fingerprinted (a later un-ignore must not hash-skip on unchanged content),
                 // never chunked — only stale chunks from before the ignore rule existed are cleaned.
+                // DeleteSourcePathAsync already cascades the fingerprint delete for this exact path
+                // (MemorySql.DeleteWatchFilesByProjectPathCascade) — a second, separate
+                // DeleteFileHashAsync call here was a dead no-op repeating the same row delete.
                 await store.DeleteSourcePathAsync(projectId, normalized, cancellationToken).ConfigureAwait(false);
-                await watchStore.DeleteFileHashAsync(projectId, normalized, cancellationToken).ConfigureAwait(false);
                 await watchStore.UpdateLastChangeAsync(projectId, normalizedWatch, Now(), cancellationToken)
                     .ConfigureAwait(false);
                 return;

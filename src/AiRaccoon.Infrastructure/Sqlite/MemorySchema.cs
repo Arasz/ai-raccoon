@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
 using Dapper;
@@ -42,13 +43,15 @@ internal static class MemorySchema
     ///     <see cref="MigrateToV3Async" />/<see cref="MigrateToV4Async" />/<see cref="MigrateToV5Async" />/<see cref="MigrateToV6Async" />/
     ///     <see cref="MigrateToV7Async" />/<see cref="MigrateToV8Async" />/
     ///     <see cref="MigrateToV9Async" />/
-    ///     <see cref="MigrateToV10Async" />/
-    ///     <see cref="MigrateToV11Async" /> (ADR-0011). Not every schema
+    ///     <see cref="MigrateToV10Async" /> (ADR-0011). Not every schema
     ///     change needs a ladder step: a trigger body replacement that is safely re-runnable on every
     ///     open belongs in the unconditional <see cref="Ddl" /> instead (ADR-0023 amendment) — the
-    ///     ladder is for changes that need guarded, one-time work.
+    ///     ladder is for changes that need guarded, one-time work. The no-overlapping-watches prune
+    ///     (originally a v11 ladder step) was demoted to an unconditional, ungated, every-open step
+    ///     (<see cref="PruneOverlappingWatchesAsync" />, orchestrator ruling) — no version bump, since
+    ///     its own logic is idempotent and it must reach fresh banks too.
     /// </summary>
-    internal const int CurrentVersion = 11;
+    internal const int CurrentVersion = 10;
 
     /// <summary>
     ///     The promotion_queue_entries_ad body (ADR-0023, amended by H4 and again by ADR-0046):
@@ -508,12 +511,14 @@ internal static class MemorySchema
     }
 
     /// <summary>
-    ///     Returns every watch the v11 overlap-prune ladder step removed on THIS call (empty on a
-    ///     fresh bank, on a bank already at <see cref="CurrentVersion" />, or when nothing
-    ///     overlapped) — <see cref="SqliteConnectionFactory.InitializeAsync" /> is the one caller
-    ///     that owns a logger and reports it (docs/work/2026-08-21-code-search-implementation-plan.md §4).
+    ///     Returns the unconditional no-overlapping-watches prune step's outcome for THIS call
+    ///     (pruned list empty on a fresh bank or when nothing overlapped; warnings non-empty only
+    ///     when a project's rows could not be resolved) — <see cref="SqliteConnectionFactory.InitializeAsync" />
+    ///     is the one caller that owns a logger and reports both
+    ///     (docs/work/2026-08-21-code-search-implementation-plan.md §4). MemorySchema itself stays
+    ///     silent and only returns data.
     /// </summary>
-    public static async Task<IReadOnlyList<PrunedWatch>> EnsureAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    public static async Task<WatchOverlapPruneResult> EnsureAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var storedVersion = await ReadVersionAsync(connection, cancellationToken).ConfigureAwait(false);
 
@@ -556,6 +561,12 @@ internal static class MemorySchema
         // write only when the stored trigger body still needs the H4 scope guard.
         await EnsurePromotionQueueTriggerScopeGuardAsync(connection, cancellationToken).ConfigureAwait(false);
 
+        // Runs on every open, version or not (orchestrator ruling, S7): no-overlapping-watches was
+        // originally a one-time v11 ladder step; demoted to an unconditional, ungated step in the
+        // same "runs regardless" family as the two calls above — it must reach a fresh bank too
+        // (harmlessly no-ops: no watches rows yet) and a bank already at CurrentVersion.
+        var overlapResult = await PruneOverlappingWatchesAsync(connection, cancellationToken).ConfigureAwait(false);
+
         if (fresh)
         {
             await connection.ExecuteAsync(
@@ -567,12 +578,12 @@ internal static class MemorySchema
                     "CREATE INDEX IF NOT EXISTS idx_entries_source_id ON entries(source_id)",
                     cancellationToken: cancellationToken)).ConfigureAwait(false);
             await StampAsync(connection, CurrentVersion, cancellationToken).ConfigureAwait(false);
-            return [];
+            return overlapResult;
         }
 
         if (storedVersion >= CurrentVersion)
         {
-            return [];
+            return overlapResult;
         }
 
         // Stamped only when the ladder completed: the v1 step's bucket-index dedupe is
@@ -641,18 +652,12 @@ internal static class MemorySchema
             await MigrateToV10Async(connection, cancellationToken).ConfigureAwait(false);
         }
 
-        var pruned = (IReadOnlyList<PrunedWatch>)[];
-        if (healthy && storedVersion < 11)
-        {
-            pruned = await MigrateToV11Async(connection, cancellationToken).ConfigureAwait(false);
-        }
-
         if (healthy)
         {
             await StampAsync(connection, CurrentVersion, cancellationToken).ConfigureAwait(false);
         }
 
-        return pruned;
+        return overlapResult;
     }
 
     private static async Task MigrateToV6Async(SqliteConnection connection, CancellationToken cancellationToken)
@@ -837,16 +842,20 @@ internal static class MemorySchema
             .ConfigureAwait(false);
 
     /// <summary>
-    ///     Ladder step 11 (docs/work/2026-08-21-code-search-implementation-plan.md §4): per-project
-    ///     outermost-watch prune — no-overlapping-watches is retroactively applied to every existing
-    ///     bank. Resolved through <see cref="WatchOverlapResolver" />, the SAME implementation the
-    ///     runtime <c>WatchService.AddAsync</c>/<c>WatchStore.PruneAndAddAsync</c> path uses (one
-    ///     implementation, two call sites) — tie-break for mutual (real-path-equivalent)
-    ///     registrations: longest literal path, then earliest registration. Prune + cascade in one
-    ///     transaction, mirroring <c>WatchStore.RemoveWatchAsync</c>'s shape; the surviving watch's
-    ///     fingerprint set is completed by its next scheduled scan (accepted, INFO F-20).
+    ///     Unconditional, ungated, every-open no-overlapping-watches prune (orchestrator ruling, S7:
+    ///     demoted from a one-time v11 ladder step — see <see cref="CurrentVersion" />'s doc comment).
+    ///     Per-project outermost-watch prune, resolved through <see cref="WatchOverlapResolver" />,
+    ///     the SAME implementation the runtime <c>WatchService.AddAsync</c>/<c>WatchStore.ResolveAndAddAsync</c>
+    ///     path uses (one implementation, many call sites) — tie-break for mutual (real-path-
+    ///     equivalent) registrations: longest literal path, then earliest registration. Prune +
+    ///     cascade in one transaction, mirroring <c>WatchStore.RemoveWatchAsync</c>'s shape, and only
+    ///     opened when there is something to prune — idempotent and cheap otherwise (one SELECT,
+    ///     grouped and resolved in memory, no write). S8 hardening: one project's malformed row
+    ///     (e.g. a blank path <see cref="IngestPath.ResolveReal" /> cannot resolve) must never fail
+    ///     the whole bank open — that project's resolution is skipped and reported as a warning
+    ///     instead of pruned, and every other project still resolves normally.
     /// </summary>
-    private static async Task<IReadOnlyList<PrunedWatch>> MigrateToV11Async(SqliteConnection connection,
+    private static async Task<WatchOverlapPruneResult> PruneOverlappingWatchesAsync(SqliteConnection connection,
         CancellationToken cancellationToken)
     {
         var rows = await connection.QueryAsync<WatchRow>(
@@ -857,18 +866,29 @@ internal static class MemorySchema
 
         var resolver = new WatchOverlapResolver();
         var toPrune = new List<(string ProjectId, PrunedWatch Pruned)>();
+        var warnings = new List<WatchOverlapPruneWarning>();
         foreach (var group in rows.GroupBy(r => r.ProjectId, StringComparer.Ordinal))
         {
             var candidates = group.Select(r => new WatchOverlapCandidate(r.Path, r.CreatedAt)).ToArray();
-            foreach (var pruned in resolver.SelectPruned(candidates))
+            try
             {
-                toPrune.Add((group.Key, pruned));
+                foreach (var pruned in resolver.SelectPruned(candidates))
+                {
+                    toPrune.Add((group.Key, pruned));
+                }
+            }
+            catch (Exception ex)
+            {
+                // Broad by design: any failure resolving one project's watches (a blank path, an
+                // unresolvable symlink chain, ...) must skip that project, never crash the bank
+                // open every other project still depends on.
+                warnings.Add(new WatchOverlapPruneWarning(group.Key, ex.Message));
             }
         }
 
         if (toPrune.Count == 0)
         {
-            return [];
+            return new WatchOverlapPruneResult([], warnings);
         }
 
         await connection.ExecuteAsync(
@@ -901,10 +921,18 @@ internal static class MemorySchema
             throw;
         }
 
-        return [.. toPrune.Select(t => t.Pruned)];
+        return new WatchOverlapPruneResult([.. toPrune.Select(t => t.Pruned)], warnings);
     }
 
     private sealed record WatchRow(string ProjectId, string Path, long CreatedAt);
+
+    /// <summary>One project's watch-overlap resolution failed on this bank open and was skipped —
+    /// its watches are left untouched rather than risk failing the whole bank open (S8).</summary>
+    internal sealed record WatchOverlapPruneWarning(string ProjectId, string Reason);
+
+    /// <summary>The unconditional no-overlapping-watches prune step's outcome for one bank open.</summary>
+    internal sealed record WatchOverlapPruneResult(
+        IReadOnlyList<PrunedWatch> Pruned, IReadOnlyList<WatchOverlapPruneWarning> Warnings);
 
     /// <summary>
     ///     The scope allowlist bounds every disk-reading surface, not just watching, so its keys
