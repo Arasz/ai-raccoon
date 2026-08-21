@@ -292,7 +292,10 @@ pruned path vanish. Harmless because the new watch is born with `lastChangeTs = 
 scan, `WatchService.cs:34-37`) and re-fingerprints everything; crash between prune and
 register is repaired by the next `AddAsync` re-running the flow. The plan's "transient
 overlap harmless" claim checks out — worth one sentence in the ADR so future readers don't
-re-litigate it. Note `watch_files` has no FK to `watches` (`MemorySchema.cs:259-265`), so
+re-litigate it. **SUPERSEDED by codereviewer MUST-FIX 7 (see plan §2 atomicity):**
+`PruneAndAddAsync` is now ONE `BEGIN IMMEDIATE` transaction, so there is no crash window at
+all — the ADR must describe the one-transaction shape, not this finding's crash-repair
+reasoning. Note `watch_files` has no FK to `watches` (`MemorySchema.cs:259-265`), so
 an in-flight digest's fingerprint upsert after a prune recreates a *shared* `(project_id,
 path)` row with no parent — harmless and idempotent with the broad watch's catch-up; QA
 WP4-T26's "no-resurrect" should be scoped to the registration row + runtime state (which
