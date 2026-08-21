@@ -103,7 +103,7 @@ public sealed class SearchFixtureBank : IAsyncDisposable
             new JsonFileTypeHandler(new JsonFileTypeChunker(countTokens, markdownChunker, ChunkingDefaults.OverlayTokens))
         ]);
         var embedder = new EntryEmbedder(embeddingService, ModelMigrationLease, TimeProvider);
-        var fileIngestor = new FileIngestor(fileTypeMatcher, embedder, sourceStore, TimeProvider.System, new LocalTokenizer());
+        var fileIngestor = new FileIngestor(fileTypeMatcher, embedder, sourceStore, TimeProvider.System, embeddingService);
         var noiseFilteringService = new NoiseFilteringService([]);
         var store = new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, TimeProvider.System,
             NullLogger<SqliteMemoryStore>.Instance, noiseFilteringService, new SqliteSettingsStore(factory));
