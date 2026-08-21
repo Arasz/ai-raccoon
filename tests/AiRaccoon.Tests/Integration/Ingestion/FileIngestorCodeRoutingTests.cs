@@ -60,11 +60,11 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
 
         if (!withCodeSupport)
         {
-            return new FileIngestor(matcher, embedder, sourceStore, TimeProvider.System, new LocalTokenizer());
+            return new FileIngestor(matcher, embedder, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService());
         }
 
         var codeIngestor = new CodeIngestor(new CodeFileTypeMatcher(), new StubCodeChunker(), TimeProvider.System);
-        return new FileIngestor(matcher, embedder, sourceStore, TimeProvider.System, new LocalTokenizer(),
+        return new FileIngestor(matcher, embedder, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
             codeFileTypeMatcher: new CodeFileTypeMatcher(), codeIngestor: codeIngestor);
     }
 
@@ -154,7 +154,7 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker())]);
         var embedder = new EntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider);
         var codeIngestor = new CodeIngestor(new CodeFileTypeMatcher(), new StubCodeChunker(), TimeProvider.System);
-        return new FileIngestor(matcher, embedder, sourceStore, TimeProvider.System, new LocalTokenizer(),
+        return new FileIngestor(matcher, embedder, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
             new IgnoreRulesProvider(), new CodeFileTypeMatcher(), codeIngestor);
     }
 

@@ -37,7 +37,7 @@ public sealed class FileIngestorIgnoreTests : IDisposable
         var sourceStore = new SqliteMemorySourceStore(factory);
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker())]);
         _ingestor = new FileIngestor(matcher, new EntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider),
-            sourceStore, TimeProvider.System, new LocalTokenizer(), new IgnoreRulesProvider());
+            sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(), new IgnoreRulesProvider());
 
         using var scopeCmd = _conn.CreateCommand();
         scopeCmd.CommandText = "INSERT INTO settings (key, value) VALUES (@key, @scope);";
