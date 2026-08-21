@@ -437,8 +437,8 @@ internal static class MemorySchema
                                           -- the maintenance hosted service and the first real request, can both see
                                           -- it missing before either commits), unlike every CREATE/DROP ... IF
                                           -- [NOT] EXISTS statement in this block — see EnsureCodeEmbedAttemptsColumnAsync,
-                                          -- which runs on every open (like MigrateIngestScopeKeysAsync below) and
-                                          -- tolerates losing that race.
+                                          -- called right after this block runs (same digest-mismatch-only cadence,
+                                          -- never on a steady-state open) and tolerant of losing that race.
 
                                           CREATE UNIQUE INDEX IF NOT EXISTS uq_code_chunk ON code_entries(project_id, path, hash);
                                           CREATE INDEX IF NOT EXISTS idx_code_entries_project ON code_entries(project_id);
@@ -557,14 +557,19 @@ internal static class MemorySchema
             await using var command = connection.CreateCommand();
             command.CommandText = Ddl;
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+            // S2: same cadence as the Ddl block above (only on a digest change, not every open —
+            // WP1/ADR-0075's whole point is a steady-state open pays four statements, not this
+            // block's ~40) — but NOT folded into the Ddl string itself: unlike every CREATE/DROP
+            // ... IF [NOT] EXISTS statement there, a bare ALTER TABLE ADD COLUMN is not idempotent
+            // under a race (two connections both detecting the SAME digest mismatch, e.g. the
+            // maintenance hosted service and the first real request opening a stale bank at once),
+            // so it stays its own step with its own column-existence check and a tolerated loss of
+            // that race (see EnsureCodeEmbedAttemptsColumnAsync).
+            await EnsureCodeEmbedAttemptsColumnAsync(connection, cancellationToken).ConfigureAwait(false);
+
             await StampSchemaDigestAsync(connection, cancellationToken).ConfigureAwait(false);
         }
-
-        // Runs on every open, version or not, same shape as the two calls below: code_entries
-        // itself is created by the Ddl block just above (on a fresh bank) or already exists (on
-        // an upgraded one) — either way this brings it to the embed_attempts (S2) shape exactly
-        // once, tolerating a race with another connection doing the same thing concurrently.
-        await EnsureCodeEmbedAttemptsColumnAsync(connection, cancellationToken).ConfigureAwait(false);
 
         // Runs on every open, version or not: it is a data move guarding a deny-by-default gate,
         // it costs one indexed count, and a bank that was stamped by a newer build and then
@@ -950,11 +955,13 @@ internal static class MemorySchema
 
     /// <summary>
     ///     S2: adds code_entries.embed_attempts if it is missing — additive, no ladder step, same
-    ///     as code_entries itself. A no-op on a bank that already has it (the common case: this
-    ///     runs on every open). Tolerates losing a race against another connection doing the same
-    ///     thing concurrently (the maintenance hosted service and the first real request can both
-    ///     open the bank at once): the loser's ALTER fails with "duplicate column name", which
-    ///     means the column is already there — exactly the outcome being verified.
+    ///     as code_entries itself. Called only from inside the Ddl block's own digest-mismatch
+    ///     branch (never on a steady-state open where the digest already matches — WP1/ADR-0075's
+    ///     four-statements-not-forty budget applies here too). Tolerates losing a race against
+    ///     another connection doing the same thing concurrently (two connections can both detect
+    ///     the same digest mismatch, e.g. the maintenance hosted service and the first real request
+    ///     opening a stale bank at once): the loser's ALTER fails with "duplicate column name",
+    ///     which means the column is already there — exactly the outcome being verified.
     /// </summary>
     private static async Task EnsureCodeEmbedAttemptsColumnAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
