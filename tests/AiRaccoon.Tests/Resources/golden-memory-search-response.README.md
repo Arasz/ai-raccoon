@@ -6,6 +6,14 @@ exist. Produced by `GoldenMemorySearchResponseTests.Search_TodaysPreKindEnvelope
 (`tests/AiRaccoon.Tests/Integration/GoldenMemorySearchResponseTests.cs`) against a small,
 deterministic two-entry fixture bank (fixed content, fixed embedding endpoint, fixed clock).
 
+Serialized with `McpJsonUtilities.DefaultOptions` — the exact options the MCP wire serializes
+every tool response with, not `JsonSerializerDefaults.Web`. `DefaultOptions` sets
+`DefaultIgnoreCondition = WhenWritingNull`, so a null property (`SourceFile`, `Warning`,
+`Capacity`, `OldestWaitSeconds`, `PromotionsWaitTimeSeconds`) is genuinely absent from this
+file, matching what the server actually emits — not present with a JSON `null` value
+(integration review S1: a fixture captured through the wrong serializer pins keys the wire
+never sends).
+
 `Meta.CorrelationId` is a per-call random value (`Guid.CreateVersion7()`,
 `src/AiRaccoon/Tools/MemoryTools.cs`); this file pins it to the literal placeholder
 `<CORRELATION_ID>` rather than a real id, and the capturing test normalizes its own fresh
