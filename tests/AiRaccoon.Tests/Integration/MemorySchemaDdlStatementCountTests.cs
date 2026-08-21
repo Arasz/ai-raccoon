@@ -11,7 +11,8 @@ namespace AiRaccoon.Tests.Integration;
 ///     Counts the SQLite statements <see cref="MemorySchema.EnsureAsync" /> executes, via
 ///     <c>sqlite3_trace</c> on the real connection handle — not by splitting the <c>Ddl</c> source
 ///     string, which would misparse the trigger bodies' embedded semicolons. Pins both sides of
-///     ADR-0075's digest gate: 4 statements when the digest matches, 42 in the block when it does not.
+///     ADR-0075's digest gate: 8 statements when the digest matches (4 gate reads + 4 code-corpus
+///     every-open probes), 56 in the block when it does not.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -27,13 +28,13 @@ public sealed class MemorySchemaDdlStatementCountTests
 
         var statements = await TraceAsync(connection);
 
-        // The whole point of WP1: an install past its first run pays four statements, not forty-two.
+        // The whole point of the gate: an install past its first run pays 8 cheap reads, not the 56-statement block.
         CountDdl(statements).ShouldBe(0, Report(statements));
-        statements.Count.ShouldBe(4, Report(statements));
+        statements.Count.ShouldBe(8, Report(statements));
     }
 
     [Fact]
-    public async Task EnsureAsync_WhenTheDigestIsStale_RunsTheFortyStatementDdlBlock()
+    public async Task EnsureAsync_WhenTheDigestIsStale_RunsTheFiftySixStatementDdlBlock()
     {
         await using var connection = await OpenAsync();
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
@@ -45,10 +46,10 @@ public sealed class MemorySchemaDdlStatementCountTests
 
         var statements = await TraceAsync(connection);
 
-        // 39 measured at ADR-0075 (not the plan's "~30"/"roughly thirty-two", §4.2 — the plan
-        // undercounted), +1 for ADR-0076's model_migration table, +1 for the ADR-0075 amendment's
-        // repair_requests table, +1 for this amendment's promotion_queue_prune_requests table.
-        CountDdl(statements).ShouldBe(42, Report(statements));
+        // 39 measured at ADR-0075, +1 model_migration (ADR-0076), +1 repair_requests, +1
+        // promotion_queue_prune_requests, +14 the code corpus (ADR-0085: code_entries + code_fts +
+        // vec_code, their trigger families, indexes, and the idx_code_entries_path DROP).
+        CountDdl(statements).ShouldBe(56, Report(statements));
     }
 
     private static async Task<List<string>> TraceAsync(SqliteConnection connection)
@@ -68,7 +69,12 @@ public sealed class MemorySchemaDdlStatementCountTests
         - statements.Count(s => s.Contains("PRAGMA application_id", StringComparison.Ordinal))
         - statements.Count(s => s.Contains("watch.scope.", StringComparison.Ordinal))
         - statements.Count(s =>
-            s.Contains("type = 'trigger' AND name = 'promotion_queue_entries_ad'", StringComparison.Ordinal));
+            s.Contains("type = 'trigger' AND name = 'promotion_queue_entries_ad'", StringComparison.Ordinal))
+        // code-corpus every-open probes (S2 column ensure + S7 unconditional overlap prune):
+        - statements.Count(s => s.Contains("name = 'code_entries'", StringComparison.Ordinal))
+        - statements.Count(s => s.Contains("table_info('code_entries')", StringComparison.Ordinal))
+        - statements.Count(s => s.Contains("table_info='code_entries'", StringComparison.Ordinal))
+        - statements.Count(s => s.Contains("FROM watches", StringComparison.Ordinal));
 
     private static string Report(List<string> statements) =>
         $"{statements.Count} statements traced, {CountDdl(statements)} of them Ddl:\n"
