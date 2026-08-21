@@ -22,7 +22,8 @@ internal sealed class ConfigCommands(
     NoiseEntriesCommands noiseEntries,
     ChunkIndexRepairCommands chunkIndexRepair,
     ReingestRepairCommands reingestRepair,
-    DoctorCommands doctor)
+    DoctorCommands doctor,
+    ModelDownloadCommands modelDownload)
 {
     public async Task<int> RunAsync(CliInput cliInput,
         StandardStreams streams,
@@ -50,6 +51,7 @@ internal sealed class ConfigCommands(
                 ["settings", "access", "list"] => await settings.AccessListAsync(store, streams, ctx),
                 ["model", "set", "local"] => await settings.ModelSetLocalAsync(parsedCliArgs, store, modelMigrations, streams, ctx),
                 ["model", "set", "openai"] => await settings.ModelSetOpenAiAsync(parsedCliArgs, store, modelMigrations, streams, ctx),
+                ["model", "download"] => await modelDownload.RunAsync(parsedCliArgs, cliInput.Options.DataRoot, streams, ctx),
                 ["settings", "model", "reset"] => await settings.ModelResetAsync(store, streams, ctx),
                 ["settings", "model", "show"] => await settings.ModelShowAsync(store, streams, ctx),
                 ["settings", "retrieval", "alpha", "set"] => await settings.RetrievalAlphaSetAsync(parsedCliArgs, store, streams, ctx),

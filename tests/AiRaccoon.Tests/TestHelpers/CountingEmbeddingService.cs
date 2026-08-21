@@ -12,6 +12,8 @@ namespace AiRaccoon.Tests.TestHelpers;
 /// </summary>
 public sealed class CountingEmbeddingService : IEmbeddingService
 {
+    public string EngineFingerprint(string provider, string? model, string? baseUrl) =>
+        $"test:{provider}:{model}@{baseUrl}";
     private readonly CountingGenerator _generator = new();
 
     /// <summary>Every generator call's input list, in call order.</summary>
@@ -24,6 +26,16 @@ public sealed class CountingEmbeddingService : IEmbeddingService
     }
 
     public string TrimQueryToWindow(EmbeddingSettings settings, string query) => query;
+
+    public int ResolveChunkBudgetFor(EmbeddingSettings settings) => OnnxEmbeddingGenerator.MaxContentTokens;
+
+    public int ResolveDimensions(EmbeddingSettings settings) => 384;
+
+    /// <summary>The real bundled tokenizer — the resolver contract says local ⇒ a tokenizer exists (D9).</summary>
+    public IEmbeddingTokenizer? ResolveTokenizer(EmbeddingSettings settings) =>
+        string.Equals(settings.Provider, "local", StringComparison.OrdinalIgnoreCase)
+            ? WordPieceEmbeddingTokenizer.Create(BundledModel.ResolveVocabPath())
+            : null;
 
     /// <summary>How many calls embedded exactly <paramref name="value" /> alone (no heading path riding along).</summary>
     public int CallCountFor(string value) => Calls.Count(inputs => inputs.Count == 1 && inputs[0] == value);

@@ -56,5 +56,10 @@ public static class ExitCode
     /// <summary>`doctor`: the bank's stored user_version is newer than this binary's MemorySchema.CurrentVersion — a newer build wrote it, not a shape mismatch.</summary>
     public const int SchemaNewerThanBinary = 20;
 
+    /// <summary>`model download` (plan D4/D8): a verified download failed — SHA mismatch, fetch
+    /// failure, or the ORT opset smoke test rejected the graph. Distinct from InvalidArgument so
+    /// a script can tell "you mistyped" from "the repo/network misbehaved".</summary>
+    public const int ModelDownloadFailed = 21;
+
     public const int Success = 0;
 }

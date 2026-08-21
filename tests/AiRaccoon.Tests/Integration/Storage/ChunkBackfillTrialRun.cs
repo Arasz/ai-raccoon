@@ -45,7 +45,7 @@ public sealed class ChunkBackfillTrialRun
         connection.EnableExtensions();
         connection.LoadVector();
 
-        var backfill = new ChunkBackfill(TestData.RealMarkdownChunker(), TimeProvider.System, new LocalTokenizer());
+        var backfill = new ChunkBackfill(TestData.RealMarkdownChunker(), TimeProvider.System, TestData.CreateEmbeddingService());
         var started = DateTimeOffset.UtcNow;
         var report = await backfill.RunAsync(connection, dryRun: !apply, TestContext.Current.CancellationToken);
         var elapsed = DateTimeOffset.UtcNow - started;

@@ -148,7 +148,7 @@ public sealed class PlatformNumericsProbe : IDisposable
         var dense = (DenseTensor<float>)results.First(r => r.Name == "last_hidden_state").AsTensor<float>();
         var maskRow = new int[len];
         Array.Fill(maskRow, 1);
-        return EmbeddingMath.MeanPoolAndNormalize(dense.Buffer.Span, maskRow, len, EmbeddingMath.Dimension);
+        return EmbeddingMath.MeanPoolAndNormalize(dense.Buffer.Span, maskRow, len, 384);
     }
 
     private static BaselineQuery[] LoadQueries() =>

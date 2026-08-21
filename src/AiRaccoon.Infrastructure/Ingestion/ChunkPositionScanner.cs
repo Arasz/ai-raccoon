@@ -1,6 +1,7 @@
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -22,11 +23,11 @@ public sealed record ChunkPositionScan(
 ///     Shared chunk-position detection (GH #371): re-chunks a source file with the current chunker
 ///     and matches stored rows to it by content hash. Used by <see cref="ChunkIndexRepair" /> to
 ///     re-derive chunk_index/total_chunks, and by repair reingest to find files a chunker change
-///     left with rows it can no longer reproduce.
+///     left with rows it can no longer reproduce. Budget AND counter resolve through
+///     <see cref="IEmbeddingService" /> so they always match the configured engine (D9/ADR-0036).
 /// </summary>
-public sealed class ChunkPositionScanner(IFileTypeMatcher fileTypeMatcher, ILocalTokenizer localTokenizer)
+public sealed class ChunkPositionScanner(IFileTypeMatcher fileTypeMatcher, IEmbeddingService embeddingService)
 {
-    private const int DefaultMaxTokens = 256;
 
     public ChunkPositionScan Scan(string sourceFile, IReadOnlyList<(long Id, string Hash)> rows,
         int maxTokens, int overlayTokens, TokenCount countTokens)
@@ -69,9 +70,16 @@ public sealed class ChunkPositionScanner(IFileTypeMatcher fileTypeMatcher, ILoca
             .ConfigureAwait(false);
         provider = string.IsNullOrWhiteSpace(provider) ? "local" : provider;
 
-        var budget = Math.Min(DefaultMaxTokens, EmbeddingService.SafeChunkBudgetFor(provider, model));
+        var settings = new EmbeddingSettings(provider, model, null, null);
+        var budget = embeddingService.ResolveChunkBudgetFor(settings);
         var overlay = Math.Min(ChunkingDefaults.OverlayTokens, Math.Max(0, budget - 1));
-        return new ChunkBudget(budget, overlay, localTokenizer.CountTokens);
+        // local counts with the engine's own tokenizer; non-local uses the same o200k proxy the
+        // ingest path's chunker-default counter uses (D9 — the repair family and the ingest path
+        // must count with the same tokenizer per engine).
+        TokenCount countTokens = provider.Equals("local", StringComparison.OrdinalIgnoreCase)
+            ? new TokenCount(embeddingService.ResolveTokenizer(settings)!.CountTokens)
+            : new TokenCount(new O200kTokenizer().CountTokens);
+        return new ChunkBudget(budget, overlay, countTokens);
     }
 
     private static bool TryReadFile(string path, out string content)

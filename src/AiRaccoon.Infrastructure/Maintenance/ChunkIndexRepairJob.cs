@@ -17,7 +17,7 @@ namespace AiRaccoon.Infrastructure.Maintenance;
 ///     is against clock-scheduled unattended runs, not against ever appearing on the maintenance job
 ///     list — see <c>ChunkIndexRepairDoesNotAutoStartTests</c>).
 /// </summary>
-public sealed class ChunkIndexRepairJob(IFileTypeMatcher fileTypeMatcher, ILocalTokenizer localTokenizer, TimeProvider timeProvider)
+public sealed class ChunkIndexRepairJob(IFileTypeMatcher fileTypeMatcher, IEmbeddingService embeddingService, TimeProvider timeProvider)
     : IMaintenanceJob
 {
     public const string JobName = "repair-chunk-index";
@@ -37,7 +37,7 @@ public sealed class ChunkIndexRepairJob(IFileTypeMatcher fileTypeMatcher, ILocal
     /// <summary>Re-scans and applies, then marks the request finished. Pure UPDATE — never leaves anything newly pending for embedding.</summary>
     public async Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
-        await new ChunkIndexRepair(fileTypeMatcher, localTokenizer)
+        await new ChunkIndexRepair(fileTypeMatcher, embeddingService)
             .RunAsync(connection, apply: true, cancellationToken).ConfigureAwait(false);
 
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.FinishRepairRequest,

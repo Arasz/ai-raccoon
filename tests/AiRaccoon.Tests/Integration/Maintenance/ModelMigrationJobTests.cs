@@ -224,9 +224,21 @@ public sealed class ModelMigrationJobTests : IAsyncLifetime
     /// <summary>Advances a <see cref="FakeTimeProvider"/> by a fixed step on every generator call, standing in for real embedding latency without sleeping.</summary>
     private sealed class ClockAdvancingEmbeddingService(FakeTimeProvider time, TimeSpan perCallAdvance) : IEmbeddingService
     {
+    public string EngineFingerprint(string provider, string? model, string? baseUrl) =>
+        $"test:{provider}:{model}@{baseUrl}";
         public IEmbeddingGenerator<string, Embedding<float>> CreateGenerator(EmbeddingSettings settings) => new ClockAdvancingGenerator(time, perCallAdvance);
 
         public string TrimQueryToWindow(EmbeddingSettings settings, string query) => query;
+
+        public int ResolveChunkBudgetFor(EmbeddingSettings settings) => OnnxEmbeddingGenerator.MaxContentTokens;
+
+        public int ResolveDimensions(EmbeddingSettings settings) => 384;
+
+        /// <summary>The real bundled tokenizer — the resolver contract says local ⇒ a tokenizer exists (D9).</summary>
+        public IEmbeddingTokenizer? ResolveTokenizer(EmbeddingSettings settings) =>
+            string.Equals(settings.Provider, "local", StringComparison.OrdinalIgnoreCase)
+                ? WordPieceEmbeddingTokenizer.Create(BundledModel.ResolveVocabPath())
+                : null;
 
         private sealed class ClockAdvancingGenerator(FakeTimeProvider time, TimeSpan perCallAdvance)
             : IEmbeddingGenerator<string, Embedding<float>>

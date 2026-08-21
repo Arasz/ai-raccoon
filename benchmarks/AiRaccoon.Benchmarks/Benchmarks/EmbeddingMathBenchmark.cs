@@ -4,16 +4,20 @@ using BenchmarkDotNet.Attributes;
 namespace AiRaccoon.Benchmarks.Benchmarks;
 
 /// <summary>
-///     Measures <see cref="EmbeddingMath.MeanPoolAndNormalize" /> at the fixed model dimension
-///     (384) across sequence length and mask density. Mask is laid out active-first, then
-///     padding, matching <c>OnnxEmbeddingGenerator.RunBatch</c>. <c>MaskDensity = 0</c> is a
-///     public-API edge (the early-return path), not a reachable production state — every
-///     tokenized item carries at least <c>[CLS] [SEP]</c>.
+///     Measures <see cref="EmbeddingMath.MeanPoolAndNormalize" /> at the bundled model's dimension
+///     (384) across sequence length and mask density. The pooling math itself is dimension-agnostic
+///     (dim is a parameter — WP3 made it a runtime engine property, so no static engine constant is
+///     referenced); this benchmark pins 384 because that is the dimension the bundled engine emits.
+///     Mask is laid out active-first, then padding, matching <c>OnnxEmbeddingGenerator.RunBatch</c>.
+///     <c>MaskDensity = 0</c> is a public-API edge (the early-return path), not a reachable
+///     production state — every tokenized item carries at least <c>[CLS] [SEP]</c>.
 /// </summary>
 [MemoryDiagnoser]
 public class EmbeddingMathBenchmark
 {
-    private const int Dim = EmbeddingMath.Dimension;
+    // The bundled all-MiniLM-L6-v2 engine's output dimension (runtime engine property since WP3;
+    // benchmark-scoped because this harness measures the pooling math, not the engine).
+    private const int Dim = 384;
 
     private float[] _hidden = [];
     private int[] _mask = [];

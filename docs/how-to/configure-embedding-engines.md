@@ -62,11 +62,48 @@ Point to a local Ollama or LM Studio OpenAI-compatible endpoint:
 ai-raccoon model set openai bge-m3 http://localhost:11434/v1 --api-key "ollama"
 ```
 
+Declare the output dimension whenever it is not 384 — sqlite-vec cannot infer it, and
+the vector index has to be rebuilt to match:
+
+```bash
+ai-raccoon model set openai text-embedding-3-large --api-key "sk-..." --dims 3072
+```
+
+`model set` probes the endpoint before it commits. A `--dims` the endpoint contradicts,
+an endpoint that returns something other than 384 with no `--dims`, or an endpoint that
+cannot be reached are all refused with nothing written.
+
+### Recipe 4: Run an arbitrary Hugging Face model locally
+
+Download a model into `<data-root>/models/<slug>`, verified against the SHA-256 pins
+Hugging Face publishes as LFS oids, then activate it as a second step:
+
+```bash
+ai-raccoon model download BAAI/bge-m3 --dry-run   # resolve, print files, sizes and pins
+ai-raccoon model download BAAI/bge-m3 --yes       # >500 MB needs --yes
+ai-raccoon model set local <data-root>/models/bge-m3
+```
+
+The download writes `ai-raccoon.manifest.json` beside the model files, describing its
+dimensions, context window, tokenizer family, pooling and normalization — read from the
+repo's own `config.json`, `tokenizer_config.json`, `1_Pooling/config.json` and
+`modules.json` rather than guessed. **A model directory without that manifest is
+refused**; only the legacy `model set local <file>.onnx` path keeps the bundled defaults.
+
+Downloading never activates: `model set local` is always the explicit next step.
+
 ---
 
 ## Re-embedding lifecycle
 
-Switching embedding engines re-embeds all memories in the active bank:
+Switching embedding engines re-embeds all memories in the active bank. When the new
+engine's dimension differs, the drain's **first** step rebuilds `vec_entries` and
+`vec_structure` at the new width in one transaction, then refills them as it re-embeds.
+
+**Budget the time before you switch.** The bank refuses every tool call until the drain
+finishes. Measured on a 23,520-entry bank: the bundled MiniLM re-embeds in minutes;
+bge-m3 (1024-d, fp32, 2.27 GB) runs at ~1.85 entries/s — about **3.4 hours**. A dimension
+change costs this in both directions.
 
 ```mermaid
 sequenceDiagram

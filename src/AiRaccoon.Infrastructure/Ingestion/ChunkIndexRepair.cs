@@ -21,9 +21,9 @@ namespace AiRaccoon.Infrastructure.Ingestion;
 ///         unattended against a live bank on open (docs/plans/2026-08-08-search-knn-perf.md §3.3).
 ///     </para>
 /// </summary>
-public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, ILocalTokenizer localTokenizer)
+public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddingService embeddingService)
 {
-    private readonly ChunkPositionScanner _scanner = new(fileTypeMatcher, localTokenizer);
+    private readonly ChunkPositionScanner _scanner = new(fileTypeMatcher, embeddingService);
 
     public async Task<ChunkIndexRepairReport> RunAsync(SqliteConnection connection, bool apply,
         CancellationToken cancellationToken = default)

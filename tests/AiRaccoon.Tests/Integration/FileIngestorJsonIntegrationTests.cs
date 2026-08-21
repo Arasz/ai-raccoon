@@ -32,7 +32,7 @@ public class FileIngestorJsonIntegrationTests : IDisposable
         var sourceStore = new SqliteMemorySourceStore(factory);
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker()), new JsonFileTypeHandler(TestData.RealJsonChunker())]);
         _ingestor = new FileIngestor(matcher, new EntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider), sourceStore, TimeProvider.System,
-            new LocalTokenizer());
+            TestData.CreateEmbeddingService());
 
         // Configure global scope to include testDir
         using var scopeCmd = _conn.CreateCommand();

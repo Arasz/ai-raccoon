@@ -1,3 +1,4 @@
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using System.CommandLine;
 using System.Globalization;
 using AiRaccoon.Core.Access;
@@ -11,8 +12,11 @@ using AiRaccoon.Infrastructure.Embedding;
 namespace AiRaccoon.Setup.Cli.Commands;
 
 /// <summary>One-shot settings verb handlers: access modes, embedding model, retrieval alpha, sweep policy.</summary>
-public sealed class SettingsCommands
+public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = null)
 {
+    /// <summary>The dimension a remote engine is assumed to return when it declares none.</summary>
+    private const int DefaultRemoteDimensions = 384;
+
     public async Task<int> AccessDefaultSetAsync(ParseResult parseResult, IMemoryStore store,
         StandardStreams streams, CancellationToken cancellationToken)
     {
@@ -96,8 +100,19 @@ public sealed class SettingsCommands
         IModelMigrationStore modelMigrations, StandardStreams streams, CancellationToken cancellationToken)
     {
         var path = parseResult.GetResult("path") is not null ? ExpandTilde(parseResult.GetValue<string>("path")) : null;
-        // A remote API key is meaningless for the local engine; don't leave it in settings.
+
+        // Directory activation (M3): a directory REQUIRES a valid manifest, validated BEFORE the
+        // outbox commits — a refused model set must never mark the bank pending. Any dimension is
+        // accepted; the drain reconciles vec0 to it as its first phase (WP4/D3).
+        if (path is not null && Directory.Exists(path))
+        {
+            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()).Load(Path.GetFullPath(path));
+        }
+
+        // A remote API key and a remote dimension are both meaningless for the local engine; don't
+        // leave either in settings, or a 384 local model inherits the last remote model's dims (D2).
         await store.DeleteSettingAsync(EmbeddingSettingsKeys.ApiKey, cancellationToken);
+        await store.DeleteSettingAsync(EmbeddingSettingsKeys.Dimensions, cancellationToken);
         await modelMigrations.StartModelMigrationAsync("local", path, null, cancellationToken);
         var modelLabel = path ?? "bundled ONNX model";
         // ADR-0076: the outbox commits synchronously; the re-embed itself runs on the server's
@@ -126,9 +141,62 @@ public sealed class SettingsCommands
                 "ai-raccoon: warning — no API key set; run 'ai-raccoon model set openai <model> --api-key <key>' or embeddings will fail");
         }
 
+        var dims = parseResult.GetResult("--dims") is not null ? parseResult.GetValue<int?>("--dims") : null;
+        dims = await ProbeDimensionsAsync(model!, baseUrl, apiKey, dims, cancellationToken);
+
+        // Written before the outbox commits: the relay reconciles vec0 to this dimension as its
+        // first drain phase, so the row has to be readable by the time the migration opens (D2/D3).
+        if (dims is not null)
+        {
+            await store.SetSettingAsync(EmbeddingSettingsKeys.Dimensions,
+                dims.Value.ToString(CultureInfo.InvariantCulture), cancellationToken);
+        }
+
         await modelMigrations.StartModelMigrationAsync("openai", model, baseUrl, cancellationToken);
         await streams.WriteOutputLineAsync($"embedding engine set to openai:{model}; re-embedding in the background");
         return 0;
+    }
+
+    /// <summary>
+    ///     D10: refuse a dimension the endpoint contradicts, and refuse silence when the endpoint is
+    ///     not 384 — both BEFORE the outbox commits. Returns the dimension to persist, or null when
+    ///     the endpoint is the legacy 384 shape and nothing was declared.
+    /// </summary>
+    private async Task<int?> ProbeDimensionsAsync(string model, string? baseUrl, string? apiKey, int? declared,
+        CancellationToken cancellationToken)
+    {
+        if (dimensionProbe is null)
+        {
+            return declared;
+        }
+
+        int probed;
+        try
+        {
+            probed = await dimensionProbe.ProbeAsync(model, baseUrl, apiKey, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            throw new InvalidOperationException(
+                $"The embedding endpoint for '{model}' could not be reached, so its output dimension is unknown: " +
+                $"{ex.Message}. Fix the endpoint or the API key and re-run; nothing has been changed.", ex);
+        }
+
+        if (declared is not null && declared.Value != probed)
+        {
+            throw new InvalidOperationException(
+                $"Declared --dims {declared.Value} but '{model}' returns {probed}-dimension embeddings. " +
+                $"Re-run with --dims {probed}, or point at a model that matches; nothing has been changed.");
+        }
+
+        if (declared is null && probed != DefaultRemoteDimensions)
+        {
+            throw new InvalidOperationException(
+                $"'{model}' returns {probed}-dimension embeddings, not the assumed {DefaultRemoteDimensions}. " +
+                $"Re-run with --dims {probed} so the bank's vector index can be rebuilt to match.");
+        }
+
+        return declared;
     }
 
     public async Task<int> ModelResetAsync(IMemoryStore store, StandardStreams streams,
@@ -137,7 +205,8 @@ public sealed class SettingsCommands
         foreach (var key in new[]
                  {
                      EmbeddingSettingsKeys.Provider, EmbeddingSettingsKeys.Model, EmbeddingSettingsKeys.BaseUrl,
-                     EmbeddingSettingsKeys.Engine, EmbeddingSettingsKeys.ApiKey
+                     EmbeddingSettingsKeys.Engine, EmbeddingSettingsKeys.ApiKey,
+                     EmbeddingSettingsKeys.Dimensions
                  })
         {
             await store.DeleteSettingAsync(key, cancellationToken);

@@ -38,7 +38,7 @@ public sealed class SqliteRepairStoreTests : IDisposable
             new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
             TestData.CreateEmbeddingService());
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]);
-        _store = new SqliteRepairStore(_factory, matcher, new LocalTokenizer(), _memoryStore, new FakeTimeProvider(FixedNow));
+        _store = new SqliteRepairStore(_factory, matcher, TestData.CreateEmbeddingService(), _memoryStore, new FakeTimeProvider(FixedNow));
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);

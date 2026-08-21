@@ -1,3 +1,4 @@
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
@@ -13,6 +14,7 @@ using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Embedding.Download;
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Extraction;
 using AiRaccoon.Infrastructure.Ingestion;
@@ -155,7 +157,7 @@ public static partial class AppRegistrations
             services.AddSingleton<IReadOnlyList<IMaintenanceJob>>(sp =>
             [
                 new ChunkBackfillJob(sp.GetRequiredService<IMarkdownChunker>(), sp.GetRequiredService<TimeProvider>(),
-                    sp.GetRequiredService<ILocalTokenizer>()),
+                    sp.GetRequiredService<IEmbeddingService>()),
                 new Vec0ReclaimJob(),
                 new VacuumJob(),
                 new MetricsRetentionJob(sp.GetRequiredService<TimeProvider>()),
@@ -166,9 +168,9 @@ public static partial class AppRegistrations
                 // Before PendingEmbedJob for the same reason ChunkBackfillJob is: a reingest repair
                 // leaves rows pending, and PendingEmbedJob, last in this list, already sees them by
                 // the time this same foreach reaches it.
-                new ChunkIndexRepairJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<ILocalTokenizer>(),
+                new ChunkIndexRepairJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IEmbeddingService>(),
                     sp.GetRequiredService<TimeProvider>()),
-                new ReingestRepairJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<ILocalTokenizer>(),
+                new ReingestRepairJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IEmbeddingService>(),
                     sp.GetRequiredService<IMemoryStore>(), sp.GetRequiredService<TimeProvider>()),
                 // ADR-0075 amendment: on-demand, same shape as the two repair jobs above —
                 // HasWorkAsync reads the promotion_queue_prune_requests row `extract prune --apply`
@@ -270,9 +272,19 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<IBundledModel, BundledModel>();
             services.AddRequiredSingleton<ILocalTokenizer, LocalTokenizer>();
             services.AddRequiredSingleton<IEmbeddingService, EmbeddingService>();
+            services.AddRequiredSingleton<ITokenizerFactory, EmbeddingTokenizerFactory>();
+            services.AddRequiredSingleton<IRemoteDimensionProbe, RemoteDimensionProbe>();
+            services.AddRequiredSingleton<IEmbeddingManifestSerializer, EmbeddingManifestSerializer>();
+            services.AddRequiredSingleton<IEmbeddingManifestValidator, EmbeddingManifestValidator>();
+            services.AddRequiredSingleton<IEmbeddingManifestLoader, EmbeddingManifestLoader>();
+            services.AddRequiredSingleton<IModelDownloadPlanner, ModelDownloadPlanner>();
+            services.AddRequiredSingleton<IOnnxGraphProbeReader, OnnxGraphProbeReader>();
+            services.AddRequiredSingleton<IOnnxSmokeTester, OrtOnnxSmokeTester>();
+            services.AddRequiredSingleton<IDiskSpaceProvider, DiskSpaceProvider>();
             // ADR-0076: the migration lease EntryEmbedder's DrainMigrationAsync needs; registered
             // before IEntryEmbedder so constructor injection resolves it.
             services.AddRequiredSingleton<IModelMigrationLease, SqliteModelMigrationLease>();
+            services.AddRequiredSingleton<IVecDimensionReconciler, VecDimensionReconciler>();
             services.AddRequiredSingleton<IEntryEmbedder, EntryEmbedder>();
             services.AddRequiredSingleton<IEmbeddingAvailability, EmbeddingAvailability>();
         }

@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
@@ -18,8 +19,9 @@ public sealed record ChunkBackfillReport(
 /// <summary>
 ///     WP3 step 4: splits rows holding more text than the embedding window into in-budget pieces.
 ///     Operates on each row's own stored value — it never reads the source file (docs/adr/0069).
+///     Budget AND counter resolve through <see cref="IEmbeddingService" /> (D9/ADR-0036).
 /// </summary>
-public sealed class ChunkBackfill(IMarkdownChunker chunker, TimeProvider timeProvider, ILocalTokenizer localTokenizer)
+public sealed class ChunkBackfill(IMarkdownChunker chunker, TimeProvider timeProvider, IEmbeddingService embeddingService)
 {
     public async Task<ChunkBackfillReport> RunAsync(SqliteConnection connection, bool dryRun,
         CancellationToken cancellationToken = default)
@@ -106,8 +108,9 @@ public sealed class ChunkBackfill(IMarkdownChunker chunker, TimeProvider timePro
         return new ChunkBackfillReport(rows.Count, replaced, pieces, charsBefore, charsAfter);
     }
 
-    /// <summary>The same resolution the ingest path uses, read from the same settings.</summary>
-    private async Task<ChunkBudget> BudgetAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    /// <summary>The same resolution the ingest path uses, read from the same settings. Internal for the
+    /// D9 routing tests; the resolver IS the single source of budget + counter for the repair family.</summary>
+    internal async Task<ChunkBudget> BudgetAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var provider = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
             "SELECT value FROM settings WHERE key = 'embedding.provider'", cancellationToken: cancellationToken))
@@ -117,9 +120,16 @@ public sealed class ChunkBackfill(IMarkdownChunker chunker, TimeProvider timePro
             .ConfigureAwait(false);
         provider = string.IsNullOrWhiteSpace(provider) ? "local" : provider;
 
-        var budget = Math.Min(256, EmbeddingService.SafeChunkBudgetFor(provider, model));
+        var settings = new EmbeddingSettings(provider, model, null, null);
+        var budget = embeddingService.ResolveChunkBudgetFor(settings);
         var overlay = Math.Min(ChunkingDefaults.OverlayTokens, Math.Max(0, budget - 1));
-        return new ChunkBudget(budget, overlay, localTokenizer.CountTokens);
+        // local counts with the engine's own tokenizer; non-local uses the same o200k proxy the
+        // ingest path's chunker-default counter uses (D9 — the repair family and the ingest path
+        // must count with the same tokenizer per engine).
+        TokenCount countTokens = provider.Equals("local", StringComparison.OrdinalIgnoreCase)
+            ? new TokenCount(embeddingService.ResolveTokenizer(settings)!.CountTokens)
+            : new TokenCount(new O200kTokenizer().CountTokens);
+        return new ChunkBudget(budget, overlay, countTokens);
     }
 
     private sealed record Row(

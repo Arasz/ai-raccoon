@@ -1,12 +1,18 @@
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Tests.TestHelpers;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests.Unit.Setup;
 
 /// <summary>In-memory IMemoryStore for config-command tests: settings dict + configure recording.</summary>
 internal sealed class FakeConfigStore : FakeMemoryStore
 {
+    private static EmbeddingService Fingerprint() =>
+        new(NullLogger<EmbeddingService>.Instance, new LocalTokenizer(), new EmbeddingTokenizerFactory(),
+            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
+
     public Dictionary<string, string> Settings { get; } = new(StringComparer.Ordinal);
 
     public (string Provider, string? Model, string? BaseUrl)? Configured { get; private set; }
@@ -34,9 +40,9 @@ internal sealed class FakeConfigStore : FakeMemoryStore
             Settings[EmbeddingSettingsKeys.BaseUrl] = baseUrl;
         }
 
-        Settings[EmbeddingSettingsKeys.Engine] = EmbeddingService.EngineFingerprint(provider, model, baseUrl);
+        Settings[EmbeddingSettingsKeys.Engine] = Fingerprint().EngineFingerprint(provider, model, baseUrl);
         return Task.FromResult(new EmbeddingConfig(provider, model ?? "bundled",
-            EmbeddingService.EngineFingerprint(provider, model, baseUrl)));
+            Fingerprint().EngineFingerprint(provider, model, baseUrl)));
     }
 
     /// <summary>ADR-0076: model set now reaches this via IModelMigrationStore, not ConfigureEmbeddingAsync — same recording shape.</summary>
