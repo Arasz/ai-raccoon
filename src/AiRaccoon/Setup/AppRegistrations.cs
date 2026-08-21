@@ -224,7 +224,8 @@ public static partial class AppRegistrations
         {
             services.AddSingleton(sp => new SqliteConnectionFactory(
                 sp.GetRequiredService<InfrastructureOptions>(),
-                sp.GetRequiredService<IEncryptionKeyResolver>()));
+                sp.GetRequiredService<IEncryptionKeyResolver>(),
+                sp.GetRequiredService<ILogger<SqliteConnectionFactory>>()));
             services.AddSingleton<ISqliteConnectionFactory>(sp => sp.GetRequiredService<SqliteConnectionFactory>());
             services.AddRequiredSingleton<IWatchStore, WatchStore>();
             // ADR-0075 amendment: the server-side default for `watch registered` — overridden by

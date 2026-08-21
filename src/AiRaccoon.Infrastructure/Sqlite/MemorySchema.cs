@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Watch;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
@@ -41,12 +42,13 @@ internal static class MemorySchema
     ///     <see cref="MigrateToV3Async" />/<see cref="MigrateToV4Async" />/<see cref="MigrateToV5Async" />/<see cref="MigrateToV6Async" />/
     ///     <see cref="MigrateToV7Async" />/<see cref="MigrateToV8Async" />/
     ///     <see cref="MigrateToV9Async" />/
-    ///     <see cref="MigrateToV10Async" /> (ADR-0011). Not every schema
+    ///     <see cref="MigrateToV10Async" />/
+    ///     <see cref="MigrateToV11Async" /> (ADR-0011). Not every schema
     ///     change needs a ladder step: a trigger body replacement that is safely re-runnable on every
     ///     open belongs in the unconditional <see cref="Ddl" /> instead (ADR-0023 amendment) — the
     ///     ladder is for changes that need guarded, one-time work.
     /// </summary>
-    internal const int CurrentVersion = 10;
+    internal const int CurrentVersion = 11;
 
     /// <summary>
     ///     The promotion_queue_entries_ad body (ADR-0023, amended by H4 and again by ADR-0046):
@@ -425,7 +427,13 @@ internal static class MemorySchema
         return BinaryPrimitives.ReadInt32BigEndian(hash);
     }
 
-    public static async Task EnsureAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    /// <summary>
+    ///     Returns every watch the v11 overlap-prune ladder step removed on THIS call (empty on a
+    ///     fresh bank, on a bank already at <see cref="CurrentVersion" />, or when nothing
+    ///     overlapped) — <see cref="SqliteConnectionFactory.InitializeAsync" /> is the one caller
+    ///     that owns a logger and reports it (docs/work/2026-08-21-code-search-implementation-plan.md §4).
+    /// </summary>
+    public static async Task<IReadOnlyList<PrunedWatch>> EnsureAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var storedVersion = await ReadVersionAsync(connection, cancellationToken).ConfigureAwait(false);
 
@@ -479,12 +487,12 @@ internal static class MemorySchema
                     "CREATE INDEX IF NOT EXISTS idx_entries_source_id ON entries(source_id)",
                     cancellationToken: cancellationToken)).ConfigureAwait(false);
             await StampAsync(connection, CurrentVersion, cancellationToken).ConfigureAwait(false);
-            return;
+            return [];
         }
 
         if (storedVersion >= CurrentVersion)
         {
-            return;
+            return [];
         }
 
         // Stamped only when the ladder completed: the v1 step's bucket-index dedupe is
@@ -553,10 +561,18 @@ internal static class MemorySchema
             await MigrateToV10Async(connection, cancellationToken).ConfigureAwait(false);
         }
 
+        var pruned = (IReadOnlyList<PrunedWatch>)[];
+        if (healthy && storedVersion < 11)
+        {
+            pruned = await MigrateToV11Async(connection, cancellationToken).ConfigureAwait(false);
+        }
+
         if (healthy)
         {
             await StampAsync(connection, CurrentVersion, cancellationToken).ConfigureAwait(false);
         }
+
+        return pruned;
     }
 
     private static async Task MigrateToV6Async(SqliteConnection connection, CancellationToken cancellationToken)
@@ -739,6 +755,76 @@ internal static class MemorySchema
                 )
                 """, cancellationToken: cancellationToken))
             .ConfigureAwait(false);
+
+    /// <summary>
+    ///     Ladder step 11 (docs/work/2026-08-21-code-search-implementation-plan.md §4): per-project
+    ///     outermost-watch prune — no-overlapping-watches is retroactively applied to every existing
+    ///     bank. Resolved through <see cref="WatchOverlapResolver" />, the SAME implementation the
+    ///     runtime <c>WatchService.AddAsync</c>/<c>WatchStore.PruneAndAddAsync</c> path uses (one
+    ///     implementation, two call sites) — tie-break for mutual (real-path-equivalent)
+    ///     registrations: longest literal path, then earliest registration. Prune + cascade in one
+    ///     transaction, mirroring <c>WatchStore.RemoveWatchAsync</c>'s shape; the surviving watch's
+    ///     fingerprint set is completed by its next scheduled scan (accepted, INFO F-20).
+    /// </summary>
+    private static async Task<IReadOnlyList<PrunedWatch>> MigrateToV11Async(SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        var rows = await connection.QueryAsync<WatchRow>(
+                new CommandDefinition(
+                    "SELECT project_id AS ProjectId, path AS Path, created_at AS CreatedAt FROM watches",
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+
+        var resolver = new WatchOverlapResolver();
+        var toPrune = new List<(string ProjectId, PrunedWatch Pruned)>();
+        foreach (var group in rows.GroupBy(r => r.ProjectId, StringComparer.Ordinal))
+        {
+            var candidates = group.Select(r => new WatchOverlapCandidate(r.Path, r.CreatedAt)).ToArray();
+            foreach (var pruned in resolver.SelectPruned(candidates))
+            {
+                toPrune.Add((group.Key, pruned));
+            }
+        }
+
+        if (toPrune.Count == 0)
+        {
+            return [];
+        }
+
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        try
+        {
+            foreach (var (projectId, pruned) in toPrune)
+            {
+                var pathPrefix = LikePattern.Escape(pruned.Path) + "/%";
+                await connection.ExecuteAsync(
+                        new CommandDefinition(MemorySql.DeleteWatchFilesByProjectPathCascade,
+                            new { projectId, path = pruned.Path, pathPrefix }, cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                await connection.ExecuteAsync(
+                        new CommandDefinition(MemorySql.DeleteWatch, new { projectId, path = pruned.Path },
+                            cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+            }
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
+        }
+
+        return [.. toPrune.Select(t => t.Pruned)];
+    }
+
+    private sealed record WatchRow(string ProjectId, string Path, long CreatedAt);
 
     /// <summary>
     ///     The scope allowlist bounds every disk-reading surface, not just watching, so its keys

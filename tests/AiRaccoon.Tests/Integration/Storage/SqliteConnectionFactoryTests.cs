@@ -4,6 +4,8 @@ using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using Dapper;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
 
@@ -113,6 +115,68 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
             await SqliteConnectionFactory.InitializeAsync(connection, TestContext.Current.CancellationToken));
 
         connection.State.ShouldBe(ConnectionState.Closed);
+    }
+
+    /// <summary>
+    ///     v11 log channel (docs/work/2026-08-21-code-search-implementation-plan.md §4, review
+    ///     arch-8): the migration itself is silent (returns the pruned list); InitializeAsync — the
+    ///     one caller with a logger — reports it. RED first: before the logger is threaded through,
+    ///     the migration still runs and prunes, but no log line is emitted.
+    /// </summary>
+    [Fact]
+    public async Task InitializeAsync_BankWithNestedWatches_LogsOnePrunedLinePerWatch_AndTheCount()
+    {
+        var bankPath = Path.Combine(_dataRoot, "v11-migration.db");
+        SeedBankWithNestedWatches(bankPath);
+        var logger = new FakeLogger<SqliteConnectionFactory>();
+
+        var connection = new SqliteConnection($"Data Source={bankPath}");
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await using var opened = await SqliteConnectionFactory.InitializeAsync(connection,
+            TestContext.Current.CancellationToken, logger);
+
+        var remaining = (await connection.QueryAsync<string>(
+                new CommandDefinition("SELECT path FROM watches WHERE project_id = 'acme' ORDER BY path",
+                    cancellationToken: TestContext.Current.CancellationToken)))
+            .ToArray();
+        remaining.ShouldBe(["/repo"]);
+
+        var records = logger.Collector.GetSnapshot();
+        records.ShouldContain(r => r.Message.Contains("/repo/src", StringComparison.Ordinal) &&
+                                    r.Message.Contains("/repo", StringComparison.Ordinal) &&
+                                    r.Level == LogLevel.Information);
+        records.ShouldContain(r => r.Message.Contains('1') && r.Level == LogLevel.Information);
+    }
+
+    /// <summary>A pre-v11 bank (stamped user_version = 10) with a watch nested inside another.</summary>
+    private static void SeedBankWithNestedWatches(string bankPath)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(bankPath)!);
+        using var seed = new SqliteConnection($"Data Source={bankPath}");
+        seed.Open();
+        using var cmd = seed.CreateCommand();
+        cmd.CommandText = """
+                           CREATE TABLE watches (
+                               project_id            TEXT NOT NULL,
+                               path                   TEXT NOT NULL,
+                               created_at             INTEGER NOT NULL,
+                               last_change_ts         INTEGER NOT NULL,
+                               scan_owner             TEXT NULL,
+                               scan_lease_expires_at  INTEGER NOT NULL DEFAULT 0,
+                               PRIMARY KEY (project_id, path)
+                           );
+                           CREATE TABLE watch_files (
+                               project_id TEXT NOT NULL,
+                               path       TEXT NOT NULL,
+                               file_hash  TEXT NOT NULL,
+                               updated_at INTEGER NOT NULL,
+                               PRIMARY KEY (project_id, path)
+                           );
+                           INSERT INTO watches (project_id, path, created_at, last_change_ts) VALUES ('acme', '/repo', 1, 0);
+                           INSERT INTO watches (project_id, path, created_at, last_change_ts) VALUES ('acme', '/repo/src', 2, 0);
+                           PRAGMA user_version = 10;
+                           """;
+        cmd.ExecuteNonQuery();
     }
 
     /// <summary>Pre-creates an "entries" table missing the columns MemorySchema's DDL indexes
