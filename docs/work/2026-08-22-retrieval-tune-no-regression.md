@@ -166,7 +166,9 @@ All nine knobs inside the matrix's measured safe windows. Three knobs move
 | hit@3 rate | 0.650 | **0.720** | +0.070 |
 | hit@1 rate | 0.470 | **0.510** | +0.040 |
 
-Per-query outcome of the ORIGINAL 14 regressions (trial31's list) at M2:
+Per-query outcome at M2 of the regression union — the old session's 14
+(PR #400 report) plus today's reproduction list (E018 is today-only, absent
+from the old environment's baseline):
 
 | query | defaults | M2 | status |
 |---|---|---|---|
