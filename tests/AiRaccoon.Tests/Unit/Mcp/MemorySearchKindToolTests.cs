@@ -41,9 +41,10 @@ public sealed class MemorySearchKindToolTests
     {
         var access = new MemoryAccessGuard(_store);
         var gate = new ToolGate(access, new FakePromotionQueue());
-        _tools = new MemoryTools(_store, gate, _quality, new QueryGuardService(new InMemorySettings()),
+        _tools = new MemoryTools(_store, gate, new SearchDispatcher(_store, _codeSearch, _quality),
+            new QueryGuardService(new InMemorySettings()),
             new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(),
-            _codeSearch, NullLogger<MemoryTools>.Instance);
+            NullLogger<MemoryTools>.Instance);
     }
 
     [Fact]

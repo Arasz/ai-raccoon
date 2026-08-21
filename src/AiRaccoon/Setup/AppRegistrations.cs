@@ -79,6 +79,9 @@ public static partial class AppRegistrations
             // WP2 (docs/adr/0067): composes the store and the queue, which the store itself cannot —
             // PromotionQueueService already takes IMemoryStore, so store -> queue -> store is a cycle.
             services.AddRequiredSingleton<IMemoryWriteService, MemoryWriteService>();
+            // WP6: memory_search's kind dispatch (which legs run, the code-scope rule, the
+            // search_quality exclusion) lives here, off the tool layer (mcp.instructions.md).
+            services.AddRequiredSingleton<ISearchDispatcher, SearchDispatcher>();
         }
 
         private void RegisterSyncServices()
