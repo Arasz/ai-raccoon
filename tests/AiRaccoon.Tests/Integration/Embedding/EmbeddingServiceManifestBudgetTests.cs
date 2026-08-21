@@ -38,6 +38,7 @@ public sealed class EmbeddingServiceManifestBudgetTests
     {
         ["manifestVersion"] = 1,
         ["model"] = "budget-test-model",
+        ["source"] = new JsonObject { ["repo"] = "test/budget-test-model", ["revision"] = "main" },
         ["provider"] = "local",
         ["dimensions"] = 384,
         ["contextWindowTokens"] = contextWindowTokens,

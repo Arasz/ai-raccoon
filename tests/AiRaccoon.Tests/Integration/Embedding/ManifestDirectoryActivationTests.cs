@@ -33,6 +33,7 @@ public sealed class ManifestDirectoryActivationTests : IAsyncLifetime
     {
         ["manifestVersion"] = 1,
         ["model"] = "activation-test-model",
+        ["source"] = new JsonObject { ["repo"] = "test/activation-test-model", ["revision"] = "main" },
         ["provider"] = "local",
         ["dimensions"] = dimensions,
         ["contextWindowTokens"] = 256,

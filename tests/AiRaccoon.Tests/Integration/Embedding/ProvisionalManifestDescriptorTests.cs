@@ -226,4 +226,20 @@ public sealed class ProvisionalManifestDescriptorTests
 
         Should.NotThrow(() => new ProvisionalManifestDescriptor().RequireWp3Supported(descriptor));
     }
+
+    /// <summary>
+    ///     D1 marks <c>source</c> required and the WP1 validator enforces it; the read path must
+    ///     agree with the pinned contract, not accept a manifest the writer could never emit.
+    /// </summary>
+    [Fact]
+    public void Load_ManifestWithoutSource_IsRejected()
+    {
+        var manifest = BertManifest();
+        manifest.Remove("source");
+        var dir = WriteModelDir(manifest.ToJsonString(), ("vocab.txt", "vocab"), ("model.onnx", "model"));
+
+        var ex = Should.Throw<InvalidOperationException>(() => new ProvisionalManifestDescriptor().Load(dir));
+
+        ex.Message.ShouldContain("source", customMessage: "the refusal must name the missing required field");
+    }
 }

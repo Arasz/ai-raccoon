@@ -182,11 +182,15 @@ public sealed class ProvisionalManifestDescriptor : IProvisionalManifestDescript
             }
         }
 
-        var source = root["source"] as JsonObject;
+        // D1 marks source required and the WP1 validator enforces repo+revision; the read path
+        // agrees with the pinned contract rather than accepting a manifest the writer never emits.
+        var source = root["source"] as JsonObject
+                     ?? throw new InvalidOperationException(
+                         $"Manifest '{manifestPath}' is missing required field 'source' (repo and revision).");
         return new EngineDescriptor(
             Model: model,
-            SourceRepo: source?["repo"]?.GetValue<string>(),
-            SourceRevision: source?["revision"]?.GetValue<string>(),
+            SourceRepo: RequiredString(source, "repo", manifestPath),
+            SourceRevision: RequiredString(source, "revision", manifestPath),
             Dimensions: dimensions,
             ContextWindowTokens: contextWindow,
             Normalization: normalization,
