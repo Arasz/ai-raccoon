@@ -7,6 +7,9 @@
 reviewers (code-reviewer + architect)** — review round 1 findings folded into rev 2. The
 reviewers' verdicts: REQUEST-CHANGES (code-reviewer) / APPROVE-WITH-CHANGES (architect); every
 finding is decision-level, no redesign required.
+**G0 — owner review (2026-08-21): APPROVED.** Owner decisions: (1) rev 2 approved; (2) **no
+default model changes** — WP5's eval report never changes the shipped default in this task;
+(3) the `model download` verb ships in the same PR.
 
 Section sources (read for depth):
 - `docs/work/2026-08-21-embedding-moe-architecture.md` · `-engineer.md` · `-ops.md`
