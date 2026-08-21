@@ -48,6 +48,18 @@ public class ModelDownloadPlannerTests
         }
         """;
 
+    /// <summary>The faxenoff/code-daemon-embed-v1 shape (issue #417): a sentencepiece repo whose
+    /// tokenizer_config.json declares the well-known token strings but ships no
+    /// added_tokens_decoder object at all.</summary>
+    private const string XlmRobertaTokenizerConfigNoDecoder =
+        """
+        {
+          "model_max_length": 8192,
+          "bos_token": "<s>", "eos_token": "</s>", "unk_token": "<unk>", "pad_token": "<pad>",
+          "add_bos_token": true, "add_eos_token": true
+        }
+        """;
+
     private static OnnxGraphProbe BgeM3Probe() => new(
         ExternalDataFiles: ["model.onnx_data"],
         InputNames: ["input_ids", "attention_mask"],
@@ -261,6 +273,89 @@ public class ModelDownloadPlannerTests
                 }, BgeM3Probe()));
 
         ex.Message.ShouldContain("<s>");
+        ex.Message.ShouldContain("added_tokens_decoder");
+    }
+
+    /// <summary>
+    ///     Issue #417 (D1-compatible option 2): a sentencepiece repo whose tokenizer_config.json
+    ///     ships no added_tokens_decoder (faxenoff/code-daemon-embed-v1) must NOT refuse the
+    ///     download outright — resolution is deferred until the sp model file is on disk and its
+    ///     piece table can be consulted (SpecialTokens empty, SpecialTokensPending true).
+    /// </summary>
+    [Fact]
+    public void MissingAddedTokensDecoder_SentencePieceFamily_WithoutVocabulary_DefersInsteadOfThrowing()
+    {
+        var raw = BgeM3Raw();
+        raw["onnx/tokenizer_config.json"] = XlmRobertaTokenizerConfigNoDecoder;
+
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), raw, BgeM3Probe());
+
+        plan.SpecialTokens.ShouldBeEmpty();
+        plan.SpecialTokensPending.ShouldBeTrue();
+    }
+
+    /// <summary>The post-download derivation: given the sp model's own piece table (read from disk
+    /// by the caller, never inside the pure planner), the same six well-known keys resolve to the
+    /// pieces' real ids — a derivation from the model's own data, not a guess (D1).</summary>
+    [Fact]
+    public void MissingAddedTokensDecoder_SentencePieceFamily_WithVocabulary_DerivesIds()
+    {
+        var raw = BgeM3Raw();
+        raw["onnx/tokenizer_config.json"] = XlmRobertaTokenizerConfigNoDecoder;
+        var vocabulary = new Dictionary<string, int> { ["<pad>"] = 0, ["<unk>"] = 1, ["<s>"] = 2, ["</s>"] = 3 };
+
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), raw, BgeM3Probe(),
+            sentencePieceVocabulary: vocabulary);
+
+        plan.SpecialTokensPending.ShouldBeFalse();
+        plan.SpecialTokens.Count.ShouldBe(4);
+        plan.SpecialTokens["<s>"].ShouldBe(2);
+        plan.SpecialTokens["</s>"].ShouldBe(3);
+        plan.SpecialTokens["<pad>"].ShouldBe(0);
+        plan.SpecialTokens["<unk>"].ShouldBe(1);
+    }
+
+    /// <summary>Negative control: D1 still applies — a piece the sp model's vocabulary does not
+    /// contain is never guessed, even when the derivation path is exercised.</summary>
+    [Fact]
+    public void MissingAddedTokensDecoder_SentencePieceFamily_VocabularyMissingPiece_Fails()
+    {
+        var raw = BgeM3Raw();
+        raw["onnx/tokenizer_config.json"] = XlmRobertaTokenizerConfigNoDecoder;
+        var vocabulary = new Dictionary<string, int> { ["<unk>"] = 1, ["<s>"] = 2, ["</s>"] = 3 }; // no <pad>
+
+        var ex = Should.Throw<ModelDownloadPlanException>(() =>
+            Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), raw, BgeM3Probe(),
+                sentencePieceVocabulary: vocabulary));
+
+        ex.Message.ShouldContain("<pad>");
+        ex.Message.ShouldContain("sentencepiece");
+    }
+
+    /// <summary>Wordpiece (and every other non-sentencepiece family) is completely unaffected by
+    /// the D1-option-2 fallback: no piece table to derive from, so the original refusal stands.</summary>
+    [Fact]
+    public void MissingAddedTokensDecoder_NonSentencePieceFamily_StillThrows()
+    {
+        var tree = new List<HfTreeEntry> { RootOnnx, Vocab, new("config.json", "file", 100, null), new("tokenizer_config.json", "file", 100, null) };
+        var tokenizerConfig = BertTokenizerConfig.Replace(
+            """
+            "added_tokens_decoder": {
+                "0": { "content": "[PAD]", "special": true },
+                "101": { "content": "[CLS]", "special": true },
+                "102": { "content": "[SEP]", "special": true },
+                "100": { "content": "[UNK]", "special": true }
+              }
+            """, "\"model_max_length\": 512");
+
+        var ex = Should.Throw<ModelDownloadPlanException>(() =>
+            Planner().BuildPlan("test/model", "main", tree,
+                new Dictionary<string, string>
+                {
+                    ["config.json"] = """{"model_type": "bert", "hidden_size": 384, "max_position_embeddings": 258}""",
+                    ["tokenizer_config.json"] = tokenizerConfig
+                }, probe: null));
+
         ex.Message.ShouldContain("added_tokens_decoder");
     }
 

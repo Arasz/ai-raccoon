@@ -306,6 +306,7 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<IEmbeddingManifestLoader, EmbeddingManifestLoader>();
             services.AddRequiredSingleton<IModelDownloadPlanner, ModelDownloadPlanner>();
             services.AddRequiredSingleton<IOnnxGraphProbeReader, OnnxGraphProbeReader>();
+            services.AddRequiredSingleton<ISentencePieceVocabularyReader, SentencePieceVocabularyReader>();
             services.AddRequiredSingleton<IOnnxSmokeTester, OrtOnnxSmokeTester>();
             services.AddRequiredSingleton<IDiskSpaceProvider, DiskSpaceProvider>();
             // ADR-0076: the migration lease EntryEmbedder's DrainMigrationAsync needs; registered

@@ -31,6 +31,7 @@ flowchart LR
 
 ## What's new
 
+- **`model download` now derives sentencepiece special-token ids from the model itself — repos without `added_tokens_decoder` work.** (1.30.1) [#417](https://github.com/Arasz/ai-raccoon/issues/417)
 - **A second corpus indexes your code, searchable via `memory_search kind=code` — never synced, never mixed with memory.** (1.30.0) [Feature](docs/features/code-corpus/) · [ADR-0085](docs/adr/0085-a-second-code-only-corpus-in-the-same-bank.md)
 - **The server probe's retry is real — a warming server now gets all three attempts, not one.** (1.29.1)
 - **Bring your own embedding model: manifest-driven engines, `ai-raccoon model download`, sentencepiece support.** (1.29.0) [ADR-0084](docs/adr/0084-arbitrary-embedding-models-are-manifest-described.md)
