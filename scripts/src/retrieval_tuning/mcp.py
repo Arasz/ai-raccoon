@@ -112,18 +112,29 @@ class MCPClient:
         return result
 
     @staticmethod
-    def _extract_results(parsed: Any) -> list[dict]:
-        """Dig the ranked result list out of the tool text payload."""
+    def _extract_results(parsed: Any, kind: Optional[str] = None) -> list[dict]:
+        """Dig the ranked result list out of the tool text payload.
+
+        `kind="code"` reads the 'code' key (the code-corpus section, plan
+        docs/work/2026-08-21-code-search-implementation-plan.md §3.6); any other
+        kind (including None/"memory"/"both") reads the 'results' key — the
+        harness only ever scores one section per call, so kind="both" reads the
+        memory leg, matching every existing corpus entry's (non-code) scoring.
+        """
+        key = "code" if kind == "code" else "results"
         if isinstance(parsed, list):
             return parsed
         if isinstance(parsed, dict):
-            for key in ("results", "data"):
-                value = parsed.get(key)
-                if isinstance(value, list):
-                    return value
-                if isinstance(value, dict) and isinstance(value.get("results"), list):
-                    return value["results"]
-        raise McpError(f"memory_search response carries no results list: {str(parsed)[:300]}")
+            value = parsed.get(key)
+            if isinstance(value, list):
+                return value
+            if key != "data":
+                fallback = parsed.get("data")
+                if isinstance(fallback, list):
+                    return fallback
+                if isinstance(fallback, dict) and isinstance(fallback.get(key), list):
+                    return fallback[key]
+        raise McpError(f"memory_search response carries no '{key}' list: {str(parsed)[:300]}")
 
     def memory_search(
         self,
@@ -132,8 +143,15 @@ class MCPClient:
         scope: str = "all",
         limit: int = 5,
         min_relative_score: float = 0.0,
+        kind: Optional[str] = None,
     ) -> list[dict]:
-        """Settings-driven search: NO tuning args — the bank settings table drives the knobs."""
+        """Settings-driven search: NO tuning args — the bank settings table drives the knobs.
+
+        `kind` (plan §12.2 H8) is omitted from the wire entirely when None, so the
+        default memory-only call is byte-identical to before this parameter existed;
+        pass "code" to search the code corpus (see docs/features/code-corpus/) or
+        "both" to search both (the memory leg is what gets scored).
+        """
         arguments = {
             "projectId": project_id,
             "query": query,
@@ -141,7 +159,9 @@ class MCPClient:
             "limit": limit,
             "minRelativeScore": min_relative_score,
         }
-        return self._extract_results(self._call_tool("memory_search", arguments))
+        if kind is not None:
+            arguments["kind"] = kind
+        return self._extract_results(self._call_tool("memory_search", arguments), kind=kind)
 
     def memory_search_with_knobs(
         self,

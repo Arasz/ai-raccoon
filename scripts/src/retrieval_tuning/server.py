@@ -89,14 +89,22 @@ class ScratchServer:
         return f"http://127.0.0.1:{self.port}/mcp"
 
     def search(self, corpus_entry: dict) -> list[dict]:
-        """One memory_search for a corpus entry — settings-driven (no tuning args)."""
-        return self.client.memory_search(
-            project_id=corpus_entry.get("targetProjectId") or "ai-raccoon",
-            query=corpus_entry["query"],
-            scope=corpus_entry.get("targetScope") or "all",
-            limit=int(corpus_entry.get("searchLimit") or 5),
-            min_relative_score=0.0,
-        )
+        """One memory_search for a corpus entry — settings-driven (no tuning args).
+
+        `kind` (plan §12.2 H8) is read from the entry and forwarded only when
+        present; entries with no 'kind' key pass no kind kwarg at all, so an
+        ordinary memory eval-set's call shape is byte-for-byte unchanged.
+        """
+        kwargs: dict = {
+            "project_id": corpus_entry.get("targetProjectId") or "ai-raccoon",
+            "query": corpus_entry["query"],
+            "scope": corpus_entry.get("targetScope") or "all",
+            "limit": int(corpus_entry.get("searchLimit") or 5),
+            "min_relative_score": 0.0,
+        }
+        if corpus_entry.get("kind") is not None:
+            kwargs["kind"] = corpus_entry["kind"]
+        return self.client.memory_search(**kwargs)
 
     def stop(self) -> None:
         if self.proc is None or self.proc.poll() is not None:
