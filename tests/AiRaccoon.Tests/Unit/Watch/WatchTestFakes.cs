@@ -1,6 +1,7 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
+using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -23,11 +24,13 @@ internal sealed class WatchTestStack
         Memory.ReadFingerprint = Store.PeekFingerprint;
         Memory.WriteFingerprint = (projectId, path, hash) =>
             Store.SetFingerprint(projectId, path, hash, Time.GetUtcNow().ToUnixTimeSeconds());
-        Executor = new WatchDigestExecutor(Memory, Store, Time, NullLogger<WatchDigestExecutor>.Instance);
+        var scanInitiatorLazy = new Lazy<IWatchScanInitiator>(() => ScanInitiator);
+        Executor = new WatchDigestExecutor(Memory, Store, Time, NullLogger<WatchDigestExecutor>.Instance,
+            IgnoreRules, scanInitiatorLazy);
         Pipeline = new WatchPipeline(
             new WatchScheduler(), Executor, new WatchRetryPolicy(), ScanGuard,
             Memory, Time, NullLogger<WatchPipeline>.Instance);
-        Service = new WatchService(Store, Memory, Pipeline, Time);
+        Service = new WatchService(Store, Memory, Pipeline, Time, OverlapResolver);
     }
 
     public FakeTimeProvider Time { get; } = new(FixedNow);
@@ -39,6 +42,12 @@ internal sealed class WatchTestStack
     public WatchScanGuard ScanGuard { get; } = new();
 
     public FakeWatchScanLease ScanLease { get; } = new();
+
+    public FakeIgnoreRulesProvider IgnoreRules { get; } = new();
+
+    public FakeWatchScanInitiator ScanInitiator { get; } = new();
+
+    public IWatchOverlapResolver OverlapResolver { get; } = new WatchOverlapResolver();
 
     public WatchDigestExecutor Executor { get; }
 
@@ -131,6 +140,35 @@ internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
         return Task.CompletedTask;
     }
 
+    /// <summary>The fake has no transaction to fail mid-way, and no real SQLite lock to serialize
+    /// concurrent callers on; the real store's atomicity/TOCTOU-closure is proven against SQLite
+    /// (WatchPruningTests), not this in-memory fake.</summary>
+    public int ResolveAndAddCalls { get; private set; }
+
+    public async Task<WatchOverlapDecision> ResolveAndAddAsync(string projectId, WatchOverlapCandidate candidate,
+        IWatchOverlapResolver overlapResolver, CancellationToken cancellationToken = default)
+    {
+        ResolveAndAddCalls++;
+        var existing = Watches
+            .Where(w => w.Key.ProjectId == projectId)
+            .Select(w => new WatchOverlapCandidate(w.Key.Path, w.Value.CreatedAt))
+            .ToArray();
+        var decision = overlapResolver.Resolve(existing, candidate);
+
+        if (decision.Outcome == WatchOverlapOutcome.Accepted)
+        {
+            foreach (var pruned in decision.Pruned)
+            {
+                await RemoveWatchAsync(projectId, pruned.Path, cancellationToken).ConfigureAwait(false);
+            }
+
+            await AddWatchAsync(projectId, candidate.Path, candidate.CreatedAt, 0, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return decision;
+    }
+
     public Task<IReadOnlyList<WatchRegistration>> ListWatchesAsync(CancellationToken cancellationToken = default) =>
         ListWatchesError is not null
             ? throw ListWatchesError
@@ -192,6 +230,53 @@ internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
     public void RemoveFingerprint(string projectId, string path) => FileHashes.Remove(Key(projectId, path));
 
     private static string Key(string projectId, string path) => $"{projectId}\u0000{path}";
+}
+
+/// <summary>IIgnoreRulesProvider fake: per-root rules, defaulting to IgnoreRules.Empty; records
+/// every LoadAsync call's root so mid-scan re-read timing can be asserted.</summary>
+internal sealed class FakeIgnoreRulesProvider : IIgnoreRulesProvider
+{
+    private readonly Dictionary<string, IgnoreRules> _rulesByRoot = new(IngestPath.PathComparer);
+    private readonly Dictionary<string, IgnoreRules> _afterFirstCallByRoot = new(IngestPath.PathComparer);
+
+    public List<string> LoadCalls { get; } = [];
+
+    public void Set(string root, IgnoreRules rules) => _rulesByRoot[root] = rules;
+
+    public void Set(string root, string content) => Set(root, IgnoreRules.Parse(content));
+
+    /// <summary>
+    ///     S5: a deterministic mid-scan edit, independent of any hook timing — the very first
+    ///     <see cref="LoadAsync" /> call for <paramref name="root" /> returns <paramref name="before" />;
+    ///     every call after that returns <paramref name="after" />, forever. Drives
+    ///     <c>WatchCatchUp</c>'s own re-read-at-end-of-pass comparison to disagree exactly once, so a
+    ///     genuine second pass is the only way the loop settles.
+    /// </summary>
+    public void SetTransition(string root, IgnoreRules before, IgnoreRules after)
+    {
+        _rulesByRoot[root] = before;
+        _afterFirstCallByRoot[root] = after;
+    }
+
+    public Task<IgnoreRules> LoadAsync(string root, CancellationToken cancellationToken = default)
+    {
+        LoadCalls.Add(root);
+        var current = _rulesByRoot.GetValueOrDefault(root, IgnoreRules.Empty);
+        if (_afterFirstCallByRoot.TryGetValue(root, out var after))
+        {
+            _rulesByRoot[root] = after;
+        }
+
+        return Task.FromResult(current);
+    }
+}
+
+/// <summary>IWatchScanInitiator fake: records every EnqueueInitialScan call.</summary>
+internal sealed class FakeWatchScanInitiator : IWatchScanInitiator
+{
+    public List<(string ProjectId, string Path)> Calls { get; } = [];
+
+    public void EnqueueInitialScan(string projectId, string path) => Calls.Add((projectId, path));
 }
 
 /// <summary>IWatchScanLease fake: grants by default, with injectable results and call counters.</summary>

@@ -421,7 +421,11 @@ public partial class SyncService(
         }
     }
 
-    /// <summary>Deletes workspace-scoped entries and all settings rows from a snapshot file, then VACUUMs it. Every path that pushes a snapshot must call this — settings hold the cloud credentials the push itself authenticates with.</summary>
+    /// <summary>Deletes workspace-scoped entries and all settings rows, DROPs the code corpus
+    /// (code_entries/code_fts/vec_code — table absence, not row-deletion, so their shadow tables
+    /// and triggers drop with them, docs/adr/0014), then VACUUMs the snapshot. Every path that
+    /// pushes a snapshot must call this — settings hold the cloud credentials the push itself
+    /// authenticates with, and the code corpus never leaves the machine.</summary>
     private async Task StripNonSyncableAsync(string snapshotPath, CancellationToken cancellationToken)
     {
         // The snapshot of an encrypted bank is itself encrypted, so the strip opens through
@@ -434,6 +438,29 @@ public partial class SyncService(
         await using var delSettings = snap.CreateCommand();
         delSettings.CommandText = "DELETE FROM settings";
         await delSettings.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+        // IF EXISTS: a snapshot opened via openSnapshot never ran EnsureAsync, so a bank that
+        // predates the code corpus produces a snapshot with none of these tables — a bare DROP
+        // would throw SqliteException ("no such table") and abort the push.
+        await using var dropCodeEntries = snap.CreateCommand();
+        dropCodeEntries.CommandText = "DROP TABLE IF EXISTS code_entries";
+        await dropCodeEntries.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await using var dropCodeFts = snap.CreateCommand();
+        dropCodeFts.CommandText = "DROP TABLE IF EXISTS code_fts";
+        await dropCodeFts.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await using var dropVecCode = snap.CreateCommand();
+        dropVecCode.CommandText = "DROP TABLE IF EXISTS vec_code";
+        await dropVecCode.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+        // The stamped application_id is a digest of the Ddl block that still declares the code
+        // corpus (MemorySchema.SchemaDigest) — leaving it in place would make a hand-restored
+        // snapshot's EnsureAsync see a matching digest, skip the Ddl block, and never get
+        // code_entries/code_fts/vec_code back (integration review S11). Reset it so the next
+        // EnsureAsync re-runs the Ddl block unconditionally.
+        await using var resetDigest = snap.CreateCommand();
+        resetDigest.CommandText = "PRAGMA application_id = 0";
+        await resetDigest.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
         await using var vac = snap.CreateCommand();
         vac.CommandText = "VACUUM";
         await vac.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);

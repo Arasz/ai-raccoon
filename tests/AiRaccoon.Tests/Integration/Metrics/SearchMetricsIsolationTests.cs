@@ -62,8 +62,10 @@ public sealed class SearchMetricsIsolationTests : IDisposable
 
     private MemoryTools BuildTools(IMeasurementRecorder recorder) =>
         new(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue()),
-            new NoOpSearchQualityService(), new QueryGuardService(new InMemorySettings()),
-            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
+            new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
+            new QueryGuardService(new InMemorySettings()),
+            new MemoryWriteService(_store, new FakePromotionQueue()), recorder,
+            NullLogger<MemoryTools>.Instance);
 
     private async Task<int> CountMetricsRowsAsync()
     {

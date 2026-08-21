@@ -28,3 +28,17 @@ def test_urls_point_at_pinned_filenames():
     assert bundle.MODEL_URL.endswith("/" + bundle.MODEL_NAME)
     assert bundle.VOCAB_URL.endswith("/" + bundle.VOCAB_NAME)
     assert bundle.GGUF_URL.endswith("/" + bundle.GGUF_NAME)
+
+
+def test_code_tokenizer_pins():
+    assert bundle.CODE_TOKENIZER_NAME == "code-sentencepiece.bpe.model"
+    assert bundle.CODE_TOKENIZER_SHA256 == "3236c10b708765fdfd0720ea6ea932e1472450cd927b331107f05bfacdba7549"
+    assert len(bundle.CODE_TOKENIZER_SHA256) == 64
+    int(bundle.CODE_TOKENIZER_SHA256, 16)
+
+
+def test_code_tokenizer_url_points_at_the_upstream_filename():
+    # The bundled asset is renamed locally with a `code-` prefix (disambiguates it from a future
+    # memory-side sentencepiece asset in the same Models/ folder); the URL still points at the
+    # exact upstream HF filename (faxenoff/code-daemon-embed-v1), not the renamed local one.
+    assert bundle.CODE_TOKENIZER_URL.endswith("/sentencepiece.bpe.model")

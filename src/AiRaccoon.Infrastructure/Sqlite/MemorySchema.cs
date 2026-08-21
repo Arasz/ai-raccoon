@@ -3,7 +3,9 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Watch;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
@@ -44,7 +46,10 @@ internal static class MemorySchema
     ///     <see cref="MigrateToV10Async" /> (ADR-0011). Not every schema
     ///     change needs a ladder step: a trigger body replacement that is safely re-runnable on every
     ///     open belongs in the unconditional <see cref="Ddl" /> instead (ADR-0023 amendment) — the
-    ///     ladder is for changes that need guarded, one-time work.
+    ///     ladder is for changes that need guarded, one-time work. The no-overlapping-watches prune
+    ///     (originally a v11 ladder step) was demoted to an unconditional, ungated, every-open step
+    ///     (<see cref="PruneOverlappingWatchesAsync" />, orchestrator ruling) — no version bump, since
+    ///     its own logic is idempotent and it must reach fresh banks too.
     /// </summary>
     internal const int CurrentVersion = 10;
 
@@ -404,6 +409,94 @@ internal static class MemorySchema
                                               finished_at  INTEGER NULL
                                           );
 
+                                          -- Code corpus (docs/work/2026-08-21-code-search-implementation-plan.md §3.1): a second,
+                                          -- code-only corpus alongside entries — additive, digest-gated, no ladder step, no
+                                          -- CurrentVersion bump (metrics-table precedent above). Project-scoped only: no
+                                          -- scope/workspace_id/agent_id, no rating/ttl_days/access_count (no degradation — code is
+                                          -- a re-derivable cache, §3.2), no heading_path/section/source_id (no structure modality
+                                          -- in v1).
+                                          CREATE TABLE IF NOT EXISTS code_entries (
+                                              id           INTEGER PRIMARY KEY,
+                                              hash         TEXT NOT NULL,
+                                              path         TEXT NOT NULL,
+                                              value        TEXT NOT NULL,
+                                              source_file  TEXT NOT NULL,
+                                              line_start   INTEGER NOT NULL,
+                                              line_end     INTEGER NOT NULL,
+                                              project_id   TEXT NOT NULL,
+                                              created_at   INTEGER NOT NULL,
+                                              updated_at   INTEGER NOT NULL,
+                                              embed_state  TEXT NOT NULL DEFAULT 'pending' CHECK(embed_state IN ('pending','embedded')),
+                                              embedding    BLOB NULL,
+                                              chunk_index  INTEGER NOT NULL DEFAULT -1,
+                                              total_chunks INTEGER NOT NULL DEFAULT 0
+                                          );
+
+                                          -- embed_attempts (S2) is NOT declared here: ALTER TABLE ADD COLUMN isn't
+                                          -- idempotent under a race (two connections opening the bank at once, e.g.
+                                          -- the maintenance hosted service and the first real request, can both see
+                                          -- it missing before either commits), unlike every CREATE/DROP ... IF
+                                          -- [NOT] EXISTS statement in this block — see EnsureCodeEmbedAttemptsColumnAsync,
+                                          -- called right after this block runs (same digest-mismatch-only cadence,
+                                          -- never on a steady-state open) and tolerant of losing that race.
+
+                                          CREATE UNIQUE INDEX IF NOT EXISTS uq_code_chunk ON code_entries(project_id, path, hash);
+                                          CREATE INDEX IF NOT EXISTS idx_code_entries_project ON code_entries(project_id);
+                                          CREATE INDEX IF NOT EXISTS idx_code_entries_hash ON code_entries(hash);
+                                          CREATE INDEX IF NOT EXISTS idx_code_entries_embed_state ON code_entries(embed_state, project_id);
+                                          -- idx_code_entries_path (project_id, path) was a redundant left-prefix of
+                                          -- uq_code_chunk (project_id, path, hash): the planner already uses uq_code_chunk
+                                          -- for the digest-event delete legs (proven: dropping this index left the plan
+                                          -- unchanged), so the index cost a B-tree write per insert for no query it alone
+                                          -- served. Self-cleans dev banks that already created it — the digest change
+                                          -- re-runs this block (integration review, code-search-implementation-plan §3.1).
+                                          DROP INDEX IF EXISTS idx_code_entries_path;
+
+                                          CREATE VIRTUAL TABLE IF NOT EXISTS code_fts USING fts5(
+                                              value,
+                                              source_file,
+                                              content='code_entries',
+                                              content_rowid='id'
+                                          );
+
+                                          CREATE TRIGGER IF NOT EXISTS code_fts_ai AFTER INSERT ON code_entries BEGIN
+                                              INSERT INTO code_fts(rowid, value, source_file)
+                                              VALUES (new.id, new.value, new.source_file);
+                                          END;
+
+                                          CREATE TRIGGER IF NOT EXISTS code_fts_ad AFTER DELETE ON code_entries BEGIN
+                                              INSERT INTO code_fts(code_fts, rowid, value, source_file)
+                                              VALUES ('delete', old.id, old.value, old.source_file);
+                                          END;
+
+                                          CREATE TRIGGER IF NOT EXISTS code_fts_au AFTER UPDATE OF value, source_file ON code_entries BEGIN
+                                              INSERT INTO code_fts(code_fts, rowid, value, source_file)
+                                              VALUES ('delete', old.id, old.value, old.source_file);
+                                              INSERT INTO code_fts(rowid, value, source_file)
+                                              VALUES (new.id, new.value, new.source_file);
+                                          END;
+
+                                          -- vec0 for the code corpus: `ctx` is the project id directly — code is project-scoped
+                                          -- only, so it never needs ContextKeyExpression's shared/workspace/custom branching.
+                                          CREATE VIRTUAL TABLE IF NOT EXISTS vec_code USING vec0(ctx TEXT, embedding float[768] distance_metric=cosine);
+
+                                          CREATE TRIGGER IF NOT EXISTS vec_code_au AFTER UPDATE OF embed_state ON code_entries
+                                          WHEN NEW.embed_state = 'embedded' AND NEW.embedding IS NOT NULL
+                                          BEGIN
+                                              DELETE FROM vec_code WHERE rowid = NEW.id;
+                                              INSERT INTO vec_code(rowid, ctx, embedding) VALUES (NEW.id, NEW.project_id, NEW.embedding);
+                                          END;
+
+                                          CREATE TRIGGER IF NOT EXISTS vec_code_pending AFTER UPDATE OF embed_state ON code_entries
+                                          WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
+                                          BEGIN
+                                              DELETE FROM vec_code WHERE rowid = OLD.id;
+                                          END;
+
+                                          CREATE TRIGGER IF NOT EXISTS vec_code_ad AFTER DELETE ON code_entries BEGIN
+                                              DELETE FROM vec_code WHERE rowid = OLD.id;
+                                          END;
+
                                           """;
 
     /// <summary>
@@ -425,7 +518,15 @@ internal static class MemorySchema
         return BinaryPrimitives.ReadInt32BigEndian(hash);
     }
 
-    public static async Task EnsureAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    /// <summary>
+    ///     Returns the unconditional no-overlapping-watches prune step's outcome for THIS call
+    ///     (pruned list empty on a fresh bank or when nothing overlapped; warnings non-empty only
+    ///     when a project's rows could not be resolved) — <see cref="SqliteConnectionFactory.InitializeAsync" />
+    ///     is the one caller that owns a logger and reports both
+    ///     (docs/work/2026-08-21-code-search-implementation-plan.md §4). MemorySchema itself stays
+    ///     silent and only returns data.
+    /// </summary>
+    public static async Task<WatchOverlapPruneResult> EnsureAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var storedVersion = await ReadVersionAsync(connection, cancellationToken).ConfigureAwait(false);
 
@@ -456,6 +557,17 @@ internal static class MemorySchema
             await using var command = connection.CreateCommand();
             command.CommandText = Ddl;
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+            // S2: same cadence as the Ddl block above (only on a digest change, not every open —
+            // WP1/ADR-0075's whole point is a steady-state open pays four statements, not this
+            // block's ~40) — but NOT folded into the Ddl string itself: unlike every CREATE/DROP
+            // ... IF [NOT] EXISTS statement there, a bare ALTER TABLE ADD COLUMN is not idempotent
+            // under a race (two connections both detecting the SAME digest mismatch, e.g. the
+            // maintenance hosted service and the first real request opening a stale bank at once),
+            // so it stays its own step with its own column-existence check and a tolerated loss of
+            // that race (see EnsureCodeEmbedAttemptsColumnAsync).
+            await EnsureCodeEmbedAttemptsColumnAsync(connection, cancellationToken).ConfigureAwait(false);
+
             await StampSchemaDigestAsync(connection, cancellationToken).ConfigureAwait(false);
         }
 
@@ -468,6 +580,12 @@ internal static class MemorySchema
         // write only when the stored trigger body still needs the H4 scope guard.
         await EnsurePromotionQueueTriggerScopeGuardAsync(connection, cancellationToken).ConfigureAwait(false);
 
+        // Runs on every open, version or not (orchestrator ruling, S7): no-overlapping-watches was
+        // originally a one-time v11 ladder step; demoted to an unconditional, ungated step in the
+        // same "runs regardless" family as the two calls above — it must reach a fresh bank too
+        // (harmlessly no-ops: no watches rows yet) and a bank already at CurrentVersion.
+        var overlapResult = await PruneOverlappingWatchesAsync(connection, cancellationToken).ConfigureAwait(false);
+
         if (fresh)
         {
             await connection.ExecuteAsync(
@@ -479,12 +597,12 @@ internal static class MemorySchema
                     "CREATE INDEX IF NOT EXISTS idx_entries_source_id ON entries(source_id)",
                     cancellationToken: cancellationToken)).ConfigureAwait(false);
             await StampAsync(connection, CurrentVersion, cancellationToken).ConfigureAwait(false);
-            return;
+            return overlapResult;
         }
 
         if (storedVersion >= CurrentVersion)
         {
-            return;
+            return overlapResult;
         }
 
         // Stamped only when the ladder completed: the v1 step's bucket-index dedupe is
@@ -557,6 +675,8 @@ internal static class MemorySchema
         {
             await StampAsync(connection, CurrentVersion, cancellationToken).ConfigureAwait(false);
         }
+
+        return overlapResult;
     }
 
     private static async Task MigrateToV6Async(SqliteConnection connection, CancellationToken cancellationToken)
@@ -739,6 +859,140 @@ internal static class MemorySchema
                 )
                 """, cancellationToken: cancellationToken))
             .ConfigureAwait(false);
+
+    /// <summary>
+    ///     Unconditional, ungated, every-open no-overlapping-watches prune (orchestrator ruling, S7:
+    ///     demoted from a one-time v11 ladder step — see <see cref="CurrentVersion" />'s doc comment).
+    ///     Per-project outermost-watch prune, resolved through <see cref="WatchOverlapResolver" />,
+    ///     the SAME implementation the runtime <c>WatchService.AddAsync</c>/<c>WatchStore.ResolveAndAddAsync</c>
+    ///     path uses (one implementation, many call sites) — tie-break for mutual (real-path-
+    ///     equivalent) registrations: longest literal path, then earliest registration. Prune +
+    ///     cascade in one transaction, mirroring <c>WatchStore.RemoveWatchAsync</c>'s shape, and only
+    ///     opened when there is something to prune — idempotent and cheap otherwise (one SELECT,
+    ///     grouped and resolved in memory, no write). S8 hardening: one project's malformed row
+    ///     (e.g. a blank path <see cref="IngestPath.ResolveReal" /> cannot resolve) must never fail
+    ///     the whole bank open — that project's resolution is skipped and reported as a warning
+    ///     instead of pruned, and every other project still resolves normally.
+    /// </summary>
+    private static async Task<WatchOverlapPruneResult> PruneOverlappingWatchesAsync(SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        var rows = await connection.QueryAsync<WatchRow>(
+                new CommandDefinition(
+                    "SELECT project_id AS ProjectId, path AS Path, created_at AS CreatedAt FROM watches",
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+
+        var resolver = new WatchOverlapResolver();
+        var toPrune = new List<(string ProjectId, PrunedWatch Pruned)>();
+        var warnings = new List<WatchOverlapPruneWarning>();
+        foreach (var group in rows.GroupBy(r => r.ProjectId, StringComparer.Ordinal))
+        {
+            var candidates = group.Select(r => new WatchOverlapCandidate(r.Path, r.CreatedAt)).ToArray();
+            try
+            {
+                foreach (var pruned in resolver.SelectPruned(candidates))
+                {
+                    toPrune.Add((group.Key, pruned));
+                }
+            }
+            catch (Exception ex)
+            {
+                // Broad by design: any failure resolving one project's watches (a blank path, an
+                // unresolvable symlink chain, ...) must skip that project, never crash the bank
+                // open every other project still depends on.
+                warnings.Add(new WatchOverlapPruneWarning(group.Key, ex.Message));
+            }
+        }
+
+        if (toPrune.Count == 0)
+        {
+            return new WatchOverlapPruneResult([], warnings);
+        }
+
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        try
+        {
+            foreach (var (projectId, pruned) in toPrune)
+            {
+                var pathPrefix = LikePattern.Escape(pruned.Path) + "/%";
+                await connection.ExecuteAsync(
+                        new CommandDefinition(MemorySql.DeleteWatchFilesByProjectPathCascade,
+                            new { projectId, path = pruned.Path, pathPrefix }, cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                await connection.ExecuteAsync(
+                        new CommandDefinition(MemorySql.DeleteWatch, new { projectId, path = pruned.Path },
+                            cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+            }
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
+        }
+
+        return new WatchOverlapPruneResult([.. toPrune.Select(t => t.Pruned)], warnings);
+    }
+
+    private sealed record WatchRow(string ProjectId, string Path, long CreatedAt);
+
+    /// <summary>One project's watch-overlap resolution failed on this bank open and was skipped —
+    /// its watches are left untouched rather than risk failing the whole bank open (S8).</summary>
+    internal sealed record WatchOverlapPruneWarning(string ProjectId, string Reason);
+
+    /// <summary>The unconditional no-overlapping-watches prune step's outcome for one bank open.</summary>
+    internal sealed record WatchOverlapPruneResult(
+        IReadOnlyList<PrunedWatch> Pruned, IReadOnlyList<WatchOverlapPruneWarning> Warnings);
+
+    /// <summary>
+    ///     S2: adds code_entries.embed_attempts if it is missing — additive, no ladder step, same
+    ///     as code_entries itself. Called only from inside the Ddl block's own digest-mismatch
+    ///     branch (never on a steady-state open where the digest already matches — WP1/ADR-0075's
+    ///     four-statements-not-forty budget applies here too). Tolerates losing a race against
+    ///     another connection doing the same thing concurrently (two connections can both detect
+    ///     the same digest mismatch, e.g. the maintenance hosted service and the first real request
+    ///     opening a stale bank at once): the loser's ALTER fails with "duplicate column name",
+    ///     which means the column is already there — exactly the outcome being verified.
+    /// </summary>
+    private static async Task EnsureCodeEmbedAttemptsColumnAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'code_entries'",
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false) > 0;
+        if (!hasTable)
+        {
+            return; // the Ddl block just above creates code_entries; nothing to alter yet
+        }
+
+        var hasColumn = (await connection.QueryAsync<string>(new CommandDefinition(
+                "SELECT name FROM pragma_table_info('code_entries')", cancellationToken: cancellationToken))
+            .ConfigureAwait(false)).Contains("embed_attempts", StringComparer.Ordinal);
+        if (hasColumn)
+        {
+            return;
+        }
+
+        try
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                    "ALTER TABLE code_entries ADD COLUMN embed_attempts INTEGER NOT NULL DEFAULT 0",
+                    cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
+        {
+        }
+    }
 
     /// <summary>
     ///     The scope allowlist bounds every disk-reading surface, not just watching, so its keys

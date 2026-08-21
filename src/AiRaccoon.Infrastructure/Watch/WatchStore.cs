@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 
@@ -13,6 +14,22 @@ public interface IWatchStore
         CancellationToken cancellationToken = default);
 
     Task RemoveWatchAsync(string projectId, string path, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     No-overlapping-watches atomicity, resolved AND committed under one lock
+    ///     (docs/work/2026-08-21-code-search-implementation-plan.md §2.2, review codereviewer
+    ///     MUST-FIX 7 + TOCTOU close): opens ONE <c>BEGIN IMMEDIATE</c> transaction, reads the
+    ///     project's CURRENT watches from inside it, resolves <paramref name="candidate" /> against
+    ///     that just-acquired snapshot via <paramref name="overlapResolver" />, then (when accepted)
+    ///     prunes the losers (row + cascaded <c>watch_files</c>) and registers the new watch — all
+    ///     before <c>COMMIT</c>. Two concurrent callers can never both decide "I win" against the
+    ///     same stale pre-lock snapshot: the second caller's own <c>BEGIN IMMEDIATE</c> blocks until
+    ///     the first commits, so it can only ever resolve against the first caller's already-durable
+    ///     state. The caller updates runtime (<c>WatchPipeline</c>) state AFTER this returns, driven
+    ///     by the returned <see cref="WatchOverlapDecision" />.
+    /// </summary>
+    Task<WatchOverlapDecision> ResolveAndAddAsync(string projectId, WatchOverlapCandidate candidate,
+        IWatchOverlapResolver overlapResolver, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<WatchRegistration>> ListWatchesAsync(CancellationToken cancellationToken = default);
 
@@ -64,6 +81,69 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
             await connection.ExecuteAsync(
                     new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    public async Task<WatchOverlapDecision> ResolveAndAddAsync(string projectId, WatchOverlapCandidate candidate,
+        IWatchOverlapResolver overlapResolver, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        try
+        {
+            // S4 TOCTOU close: read the project's CURRENT watches and resolve the candidate against
+            // them from INSIDE the same write-locked transaction that then commits the outcome — a
+            // concurrent writer either already committed before this BEGIN IMMEDIATE succeeded (so
+            // its watch is visible here) or is still waiting for this transaction's own COMMIT (so
+            // it will see THIS decision once it gets its turn). Either way, no two callers can ever
+            // resolve against the same stale snapshot.
+            var rows = await connection.QueryAsync<WatchRegistration>(
+                    new CommandDefinition(MemorySql.SelectWatches, cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            var existing = rows
+                .Where(w => w.ProjectId == projectId)
+                .Select(w => new WatchOverlapCandidate(w.Path, w.CreatedAt))
+                .ToArray();
+            var decision = overlapResolver.Resolve(existing, candidate);
+
+            if (decision.Outcome == WatchOverlapOutcome.Accepted)
+            {
+                foreach (var pruned in decision.Pruned)
+                {
+                    var pathPrefix = LikePattern.Escape(pruned.Path) + "/%";
+                    await connection.ExecuteAsync(
+                            new CommandDefinition(MemorySql.DeleteWatchFilesByProjectPathCascade,
+                                new { projectId, path = pruned.Path, pathPrefix }, cancellationToken: cancellationToken))
+                        .ConfigureAwait(false);
+                    await connection.ExecuteAsync(
+                            new CommandDefinition(MemorySql.DeleteWatch, new { projectId, path = pruned.Path },
+                                cancellationToken: cancellationToken))
+                        .ConfigureAwait(false);
+                }
+
+                await connection.ExecuteAsync(
+                        new CommandDefinition(MemorySql.InsertWatchIfAbsent,
+                            new
+                            {
+                                projectId, path = candidate.Path, createdAt = candidate.CreatedAt, lastChangeTs = 0L
+                            }, cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+            }
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            return decision;
         }
         catch
         {

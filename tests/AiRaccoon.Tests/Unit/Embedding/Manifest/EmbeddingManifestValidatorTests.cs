@@ -28,6 +28,24 @@ public class EmbeddingManifestValidatorTests
         new EmbeddingManifestValidator().Validate(BgeM3()).ShouldBeEmpty();
     }
 
+    /// <summary>The code corpus's own fixture (§3.3/WP1-remainder): 768-dim, 128-ctx, sentencepiece
+    /// + numeric specialTokens, model-output pooling + a named onnx.embeddingOutput — both
+    /// conditionals the code-daemon-embed-v1 shape triggers at once.</summary>
+    [Fact]
+    public void ValidCodeDaemonManifest_HasNoErrors()
+    {
+        new EmbeddingManifestValidator().Validate(Parse("code-daemon-embed-v1.json")).ShouldBeEmpty();
+    }
+
+    /// <summary>The non-768 variant is otherwise valid at the manifest-schema level — the refusal
+    /// belongs to the code corpus's own activation gate (SettingsCommands.ModelSetCodeLocalAsync),
+    /// not the generic validator (§3.3: non-768 code manifests are refused at configure time).</summary>
+    [Fact]
+    public void NonCodeDaemonManifest_WithWrongDimensions_IsOtherwiseValidAtTheManifestLevel()
+    {
+        new EmbeddingManifestValidator().Validate(Parse("code-daemon-embed-v1-non768.json")).ShouldBeEmpty();
+    }
+
     [Fact]
     public void BadDimensions_Rejected_WithActionableMessage()
     {

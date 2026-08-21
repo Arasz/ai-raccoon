@@ -1,0 +1,26 @@
+{
+  "data": {
+    "results": [
+      {
+        "hash": "803791bc77d74fa809f2a53560a915890b859aeae2470fb71ab622cd36637a2f",
+        "ranking": 1,
+        "path": "e835c7bd2adc251db767e6e61af2f85b779dbfdc410bd6e66ba63f19c451063e.md",
+        "snippet": "the quick brown fox leaps over the lazy dog",
+        "chunkIndex": -1,
+        "totalChunks": 0
+      },
+      {
+        "hash": "04c82790357d40d5d84d6ffa5f37ab0b015f73e03cd84eb92c4e427b0c172b4a",
+        "ranking": 0.9838709677419354,
+        "path": "e56475624815df289e8ff286571bde1e364fb6d1e455a4fd29818f1c1bf6da68.md",
+        "snippet": "a second note about narwhals and tusks",
+        "chunkIndex": -1,
+        "totalChunks": 0
+      }
+    ]
+  },
+  "meta": {
+    "waitingPromotionsCount": 0,
+    "correlationId": "<CORRELATION_ID>"
+  }
+}

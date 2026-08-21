@@ -29,6 +29,7 @@
     <ItemGroup>
         <None Include="Models/vocab.txt" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="Models/"/>
         <None Include="Models/*.onnx" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="Models/"/>
+        <None Include="Models/code-sentencepiece.bpe.model" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="Models/"/>
     </ItemGroup>
 
     <ItemGroup>

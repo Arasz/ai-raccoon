@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Text;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Watch;
+using AiRaccoon.Infrastructure.Ingestion;
 using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Infrastructure.Watch;
@@ -10,18 +12,25 @@ namespace AiRaccoon.Infrastructure.Watch;
 ///     Replace-by-path digest: hash-skip (SHA-256 of normalized path + content), delete-by-source-path,
 ///     re-digest through the existing ingest path, rename = remove old path + digest new path with
 ///     overwrite (docs/plans/file-watcher-implementation.md D2). File gone → chunks removed.
+///     `ai-raccoon.ignore` (docs/work/2026-08-21-code-search-implementation-plan.md §2.1/§5.3): an
+///     ignored path is never fingerprinted or chunked — stale chunks and any stale fingerprint are
+///     removed instead; the ignore file itself is never matched against its own rules, and an edit
+///     to it (including its deletion) triggers a full re-scan of the watch.
 /// </summary>
 public sealed partial class WatchDigestExecutor(
     IMemoryStore store,
     IWatchStore watchStore,
     TimeProvider timeProvider,
-    ILogger<WatchDigestExecutor> logger) : IWatchDigestExecutor
+    ILogger<WatchDigestExecutor> logger,
+    IIgnoreRulesProvider ignoreRulesProvider,
+    Lazy<IWatchScanInitiator> scanInitiator) : IWatchDigestExecutor
 {
     public async Task DigestAsync(string projectId, string watchPath, string filePath, WatchEventKind kind,
         string? oldPath, CancellationToken cancellationToken = default)
     {
         var normalizedWatch = IngestPath.Normalize(watchPath);
         var normalized = IngestPath.Normalize(filePath);
+        var isIgnoreFile = IsIgnoreFileItself(normalizedWatch, normalized);
 
         if (kind == WatchEventKind.Renamed && oldPath is not null)
         {
@@ -32,7 +41,30 @@ public sealed partial class WatchDigestExecutor(
         if (!File.Exists(normalized))
         {
             await DeletePathAsync(projectId, normalizedWatch, normalized, cancellationToken).ConfigureAwait(false);
+            if (isIgnoreFile)
+            {
+                scanInitiator.Value.EnqueueInitialScan(projectId, normalizedWatch);
+            }
+
             return;
+        }
+
+        if (!isIgnoreFile)
+        {
+            var ignoreRules = await ignoreRulesProvider.LoadAsync(normalizedWatch, cancellationToken)
+                .ConfigureAwait(false);
+            if (ignoreRules.HasRules && IsIgnored(ignoreRules, normalizedWatch, normalized))
+            {
+                // Never fingerprinted (a later un-ignore must not hash-skip on unchanged content),
+                // never chunked — only stale chunks from before the ignore rule existed are cleaned.
+                // DeleteSourcePathAsync already cascades the fingerprint delete for this exact path
+                // (MemorySql.DeleteWatchFilesByProjectPathCascade) — a second, separate
+                // DeleteFileHashAsync call here was a dead no-op repeating the same row delete.
+                await store.DeleteSourcePathAsync(projectId, normalized, cancellationToken).ConfigureAwait(false);
+                await watchStore.UpdateLastChangeAsync(projectId, normalizedWatch, Now(), cancellationToken)
+                    .ConfigureAwait(false);
+                return;
+            }
         }
 
         var content = await File.ReadAllTextAsync(normalized, cancellationToken).ConfigureAwait(false);
@@ -58,7 +90,19 @@ public sealed partial class WatchDigestExecutor(
 
         await watchStore.UpdateLastChangeAsync(projectId, normalizedWatch, Now(), cancellationToken)
             .ConfigureAwait(false);
+
+        if (isIgnoreFile)
+        {
+            scanInitiator.Value.EnqueueInitialScan(projectId, normalizedWatch);
+        }
     }
+
+    private static bool IsIgnoreFileItself(string normalizedWatch, string normalizedPath) =>
+        string.Equals(Path.GetFileName(normalizedPath), IgnoreRulesProvider.FileName, StringComparison.Ordinal) &&
+        IngestPath.PathComparer.Equals(Path.GetDirectoryName(normalizedPath), normalizedWatch);
+
+    private static bool IsIgnored(IgnoreRules rules, string root, string path) =>
+        rules.IsIgnored(Path.GetRelativePath(root, path), isDirectory: false);
 
     /// <summary>
     ///     Embeds the rows the replace transaction left pending — it defers embedding rather than

@@ -7,12 +7,19 @@ namespace AiRaccoon.Infrastructure.Watch;
 /// <summary>
 ///     IWatchService impl: add/remove/status with enable + scope + existence validation, per-
 ///     (projectId, path) idempotency and normalized identity (docs/plans/file-watcher-implementation.md D3);
-///     the pipeline owns runtime status.
+///     the pipeline owns runtime status. No-overlapping-watches
+///     (docs/work/2026-08-21-code-search-implementation-plan.md §2.2/§5.5): reject-if-contained
+///     before prune+register, both resolved through the shared <see cref="IWatchOverlapResolver" />
+///     (the same instance the v11 ladder migration uses).
 /// </summary>
-public sealed class WatchService(IWatchStore store, IMemoryStore memory, WatchPipeline pipeline, TimeProvider timeProvider)
-    : IWatchService
+public sealed class WatchService(
+    IWatchStore store,
+    IMemoryStore memory,
+    WatchPipeline pipeline,
+    TimeProvider timeProvider,
+    IWatchOverlapResolver overlapResolver) : IWatchService
 {
-    public async Task AddAsync(string projectId, string path, CancellationToken cancellationToken = default)
+    public async Task<WatchAddOutcome> AddAsync(string projectId, string path, CancellationToken cancellationToken = default)
     {
         var config = await ResolveConfigAsync(projectId, cancellationToken).ConfigureAwait(false);
         if (!config.Enabled)
@@ -33,10 +40,38 @@ public sealed class WatchService(IWatchStore store, IMemoryStore memory, WatchPi
 
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
         // lastChangeTs 0 = never synced: catch-up treats a fresh watch as a full initial scan
-        // (docs/plans/file-watcher-implementation.md D1).
-        await store.AddWatchAsync(projectId, normalized, now, 0, cancellationToken)
-            .ConfigureAwait(false);
-        pipeline.RegisterWatch(projectId, normalized);
+        // (docs/plans/file-watcher-implementation.md D1). Resolve + prune + register all happen
+        // inside ONE BEGIN IMMEDIATE transaction in the store (codereviewer MUST-FIX 7 + TOCTOU
+        // close) — the read that decides the outcome and the write that commits it share the same
+        // lock, so two concurrent AddAsync calls can never both decide "I win" against a stale
+        // pre-transaction snapshot.
+        var decision = await store.ResolveAndAddAsync(projectId, new WatchOverlapCandidate(normalized, now),
+            overlapResolver, cancellationToken).ConfigureAwait(false);
+
+        switch (decision.Outcome)
+        {
+            case WatchOverlapOutcome.Idempotent:
+                // Exact literal-path re-add: idempotent no-op — still ensure the pipeline's
+                // runtime state exists (RegisterWatch is itself idempotent).
+                pipeline.RegisterWatch(projectId, normalized);
+                return new WatchAddOutcome([], decision.CoveringPath);
+
+            case WatchOverlapOutcome.Rejected:
+                throw new WatchOverlapException(normalized, decision.CoveringPath!);
+
+            default:
+                var prunedPaths = decision.Pruned.Select(p => p.Path).ToArray();
+                // Runtime state updates only after the transaction commits (idempotent; a crash
+                // between commit and here leaves stale runtime state the hosted service's
+                // registration poll reconciles).
+                foreach (var prunedPath in prunedPaths)
+                {
+                    pipeline.UnregisterWatch(projectId, prunedPath);
+                }
+
+                pipeline.RegisterWatch(projectId, normalized);
+                return new WatchAddOutcome(prunedPaths, null);
+        }
     }
 
     public async Task RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default)

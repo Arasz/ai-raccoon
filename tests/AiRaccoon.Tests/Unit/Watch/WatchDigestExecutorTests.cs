@@ -1,3 +1,4 @@
+using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Watch;
 using Shouldly;
 using Xunit;
@@ -210,6 +211,120 @@ public sealed class WatchDigestExecutorTests
 
         stack.Memory.DeletedPaths.ShouldContain((Project, aFile));
         stack.Memory.Ingested.ShouldHaveSingleItem();
+    }
+
+    [Fact]
+    public async Task Digest_IgnoredFile_NotIngested_NotFingerprinted_UpdatesLastChangeOnly()
+    {
+        using var dir = TempDir.New("digest-ignored");
+        var file = dir.File("secret.md");
+        await File.WriteAllTextAsync(file, "hush", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        stack.IgnoreRules.Set(dir.Path, "secret.md");
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+
+        await Executor(stack).DigestAsync(Project, dir.Path, file, WatchEventKind.Created, null,
+            TestContext.Current.CancellationToken);
+
+        stack.Memory.Ingested.ShouldBeEmpty();
+        (await stack.Store.GetFileHashAsync(Project, file, TestContext.Current.CancellationToken)).ShouldBeNull();
+        stack.Store.Watches[(Project, dir.Path)].LastChangeTs.ShouldBe(WatchTestStack.FixedNow.ToUnixTimeSeconds());
+    }
+
+    [Fact]
+    public async Task Digest_PreviouslyIndexedFile_ThenIgnoreLineAdded_ThenDigest_DeletesStaleChunksAndFingerprint()
+    {
+        using var dir = TempDir.New("digest-newly-ignored");
+        var file = dir.File("was-tracked.md");
+        await File.WriteAllTextAsync(file, "content", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        stack.Memory.OnDeletePath = stack.Store.RemoveFingerprint;
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+        await Executor(stack).DigestAsync(Project, dir.Path, file, WatchEventKind.Created, null,
+            TestContext.Current.CancellationToken);
+        stack.Memory.Ingested.ShouldHaveSingleItem();
+
+        // The ignore line is added AFTER the file was already indexed.
+        stack.IgnoreRules.Set(dir.Path, "was-tracked.md");
+        await Executor(stack).DigestAsync(Project, dir.Path, file, WatchEventKind.Changed, null,
+            TestContext.Current.CancellationToken);
+
+        stack.Memory.DeletedPaths.ShouldContain((Project, file));
+        (await stack.Store.GetFileHashAsync(Project, file, TestContext.Current.CancellationToken)).ShouldBeNull();
+    }
+
+    // Digest_ExplicitMemoryIngestFile_OfAnIgnoredPath_Unaffected_IgnoreAppliesOnlyToTheWatchPath
+    // removed (B2 finding, small item 3): it set no ignore rules and exercised WatchDigestExecutor
+    // (the watch pipeline, which already resolves its own correct watch-scoped ignore root) rather
+    // than the explicit `memory_ingest_file` pipeline its name and comment described — so it could
+    // never fail on the contract it claimed to pin, and that claimed contract (explicit
+    // memory_ingest_file bypassing a watch's ignore rules) is exactly what §2.1/B2 forbids: ignore
+    // now wins for BOTH pipelines. The correct-contract witness for explicit memory_ingest_file
+    // honoring ignore rules lives with FileIngestor, which owns that pipeline:
+    // FileIngestorCodeRoutingTests.IngestFileAsync_ExplicitlyIgnoredMemoryFile_UnderWatchRoot_ReturnsZeroChunks.
+
+    [Fact]
+    public async Task Digest_IgnoreFileItself_IsNeverMatchedAgainstItsOwnRules()
+    {
+        using var dir = TempDir.New("digest-ignore-self");
+        var ignoreFile = dir.File(IgnoreRulesProvider.FileName);
+        await File.WriteAllTextAsync(ignoreFile, "*\n", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        stack.IgnoreRules.Set(dir.Path, "*");
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+
+        await Executor(stack).DigestAsync(Project, dir.Path, ignoreFile, WatchEventKind.Created, null,
+            TestContext.Current.CancellationToken);
+
+        // Unindexable extension either way, but the digest must still fingerprint it (never
+        // routed through the "ignored, no fingerprint" branch) so future edits are detected.
+        (await stack.Store.GetFileHashAsync(Project, ignoreFile, TestContext.Current.CancellationToken))
+            .ShouldNotBeNull();
+    }
+
+    [Fact]
+    public async Task Digest_IgnoreFileEdited_TriggersAFullRescan()
+    {
+        using var dir = TempDir.New("digest-ignore-edit-rescan");
+        var ignoreFile = dir.File(IgnoreRulesProvider.FileName);
+        await File.WriteAllTextAsync(ignoreFile, "bin/\n", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+
+        await Executor(stack).DigestAsync(Project, dir.Path, ignoreFile, WatchEventKind.Created, null,
+            TestContext.Current.CancellationToken);
+
+        stack.ScanInitiator.Calls.ShouldContain((Project, dir.Path));
+    }
+
+    [Fact]
+    public async Task Digest_IgnoreFileDeleted_TriggersAFullRescan()
+    {
+        using var dir = TempDir.New("digest-ignore-delete-rescan");
+        var ignoreFile = dir.File(IgnoreRulesProvider.FileName);
+        var stack = new WatchTestStack();
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+
+        // File does not exist on disk — mirrors a Deleted event for the ignore file.
+        await Executor(stack).DigestAsync(Project, dir.Path, ignoreFile, WatchEventKind.Deleted, null,
+            TestContext.Current.CancellationToken);
+
+        stack.ScanInitiator.Calls.ShouldContain((Project, dir.Path));
+    }
+
+    [Fact]
+    public async Task Digest_UnrelatedFileEdited_NeverTriggersARescan()
+    {
+        using var dir = TempDir.New("digest-no-spurious-rescan");
+        var file = dir.File("a.md");
+        await File.WriteAllTextAsync(file, "hello", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+
+        await Executor(stack).DigestAsync(Project, dir.Path, file, WatchEventKind.Created, null,
+            TestContext.Current.CancellationToken);
+
+        stack.ScanInitiator.Calls.ShouldBeEmpty();
     }
 
     [Fact]

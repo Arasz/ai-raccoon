@@ -18,7 +18,7 @@ public class ConfigCommandsAccessModelTests
 {
     private static Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store) =>
         CliRun.RunAsync(args,
-            TestData.CreateConfigCommands(store, settings: new SettingsCommands(), modelMigrations: store));
+            TestData.CreateConfigCommands(store, settings: new SettingsCommands(), modelMigrations: store, codeEngine: store));
 
 
     [Fact]
@@ -292,6 +292,97 @@ public class ConfigCommandsAccessModelTests
 
         exit.ShouldBe(0);
         stdout.ShouldContain("provider: (none");
+        stdout.ShouldContain("codeModel: (none",
+            customMessage: "the code engine rows are shown too, independent of the memory engine");
+    }
+
+    /// <summary>§3.3: the code rows are independent of the memory engine — they must show even when
+    /// no memory provider is configured, not get skipped by the "no engine" early return.</summary>
+    [Fact]
+    public async Task ModelShow_WithNoMemoryEngine_StillShowsCodeRows()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["embedding.codeModel"] = "/models/code-daemon",
+                ["embedding.codeEngine"] = "local:/models/code-daemon#deadbeef"
+            }
+        };
+
+        var (exit, stdout, _) = await Run(["settings", "model", "show"], store);
+
+        exit.ShouldBe(0);
+        stdout.ShouldContain("provider: (none");
+        stdout.ShouldContain("codeModel: /models/code-daemon");
+        stdout.ShouldContain("codeEngine: local:/models/code-daemon#deadbeef");
+    }
+
+    [Fact]
+    public async Task ModelShow_WithCodeEngineConfigured_IncludesCodeRows()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["embedding.provider"] = "local",
+                ["embedding.engine"] = "local:bundled",
+                ["embedding.codeModel"] = "/models/code-daemon",
+                ["embedding.codeEngine"] = "local:/models/code-daemon#deadbeef"
+            }
+        };
+
+        var (_, stdout, _) = await Run(["settings", "model", "show"], store);
+
+        stdout.ShouldContain("codeModel: /models/code-daemon");
+        stdout.ShouldContain("codeEngine: local:/models/code-daemon#deadbeef");
+    }
+
+    /// <summary>§3.3: `settings model reset` must never touch the code engine's rows.</summary>
+    [Fact]
+    public async Task ModelReset_DoesNotTouchCodeEngineRows()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["embedding.provider"] = "local",
+                ["embedding.engine"] = "local:bundled",
+                ["embedding.codeModel"] = "/models/code-daemon",
+                ["embedding.codeEngine"] = "local:/models/code-daemon#deadbeef"
+            }
+        };
+
+        await Run(["settings", "model", "reset"], store);
+
+        store.Settings["embedding.codeModel"].ShouldBe("/models/code-daemon");
+        store.Settings["embedding.codeEngine"].ShouldBe("local:/models/code-daemon#deadbeef");
+    }
+
+    /// <summary>§3.3: `settings model code reset` deletes ONLY the code rows.</summary>
+    [Fact]
+    public async Task ModelCodeReset_DeletesOnlyTheCodeRows()
+    {
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                ["embedding.provider"] = "local",
+                ["embedding.engine"] = "local:bundled",
+                ["embedding.codeModel"] = "/models/code-daemon",
+                ["embedding.codeEngine"] = "local:/models/code-daemon#deadbeef"
+            }
+        };
+
+        var (exit, stdout, _) = await Run(["settings", "model", "code", "reset"], store);
+
+        exit.ShouldBe(0);
+        stdout.ShouldContain("FTS5");
+        store.Settings.ShouldNotContainKey("embedding.codeModel");
+        store.Settings.ShouldNotContainKey("embedding.codeEngine");
+        store.Settings["embedding.provider"].ShouldBe("local",
+            customMessage: "the memory engine's rows must be untouched");
+        store.Settings["embedding.engine"].ShouldBe("local:bundled");
     }
 
     [Fact]

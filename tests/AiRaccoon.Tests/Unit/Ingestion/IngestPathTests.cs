@@ -87,4 +87,89 @@ public sealed class IngestPathTests
         Should.Throw<ArgumentException>(() => IngestPath.IsWithinScope(" ", "/repo"));
         Should.Throw<ArgumentException>(() => IngestPath.IsWithinScope("/repo", " "));
     }
+
+    [Fact]
+    public void HasHiddenOrDeniedSegment_NestedDotDirectory_IsHidden()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "watch-hidden-root", "repo");
+        var file = Path.Combine(root, ".git", "hooks", "pre-commit");
+
+        IngestPath.HasHiddenOrDeniedSegment(root, file, WatchDenySet.Names).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void HasHiddenOrDeniedSegment_OrdinaryNestedFile_IsNotHidden()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "watch-hidden-root", "repo");
+        var file = Path.Combine(root, "src", "Program.cs");
+
+        IngestPath.HasHiddenOrDeniedSegment(root, file, WatchDenySet.Names).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void HasHiddenOrDeniedSegment_RootItselfUnderADotAncestor_IsNotHidden()
+    {
+        // Only segments BELOW the enumeration root count — the root's own ancestry (e.g. a
+        // worktree checked out under a dot-prefixed directory) must never disqualify every file.
+        var root = Path.Combine(Path.GetTempPath(), ".watch-hidden-dotroot", "repo");
+        var file = Path.Combine(root, "src", "Program.cs");
+
+        IngestPath.HasHiddenOrDeniedSegment(root, file, WatchDenySet.Names).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void HasHiddenOrDeniedSegment_DenySetDirectory_IsDenied()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "watch-hidden-root", "repo");
+        var file = Path.Combine(root, "node_modules", "pkg", "index.js");
+
+        IngestPath.HasHiddenOrDeniedSegment(root, file, WatchDenySet.Names).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void HasHiddenOrDeniedSegment_DeniedLookalikeName_IsNotDenied()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "watch-hidden-root", "repo");
+        var file = Path.Combine(root, "bins", "x.cs");
+
+        IngestPath.HasHiddenOrDeniedSegment(root, file, WatchDenySet.Names).ShouldBeFalse();
+    }
+
+    /// <summary>
+    ///     A symlink's stored target can itself have a symlinked ANCESTOR (macOS: `/var` →
+    ///     `/private/var`, so `Path.GetTempPath()` lands under a symlinked root) —
+    ///     `File.ResolveLinkTarget`'s "final target" does not walk that; only re-resolving the
+    ///     substituted target from scratch does. Without it, a symlink and its real target
+    ///     resolve to two DIFFERENT "real" paths, defeating containment/tie-break entirely.
+    /// </summary>
+    [Fact]
+    public void ResolveReal_SymlinkTargetWithASymlinkedAncestor_ResolvesToTheSameRealPathAsTheTargetItself()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ingest-path-symlink-ancestor-tests", Guid.NewGuid().ToString("N"));
+        var real = Path.Combine(root, "real-repo");
+        Directory.CreateDirectory(real);
+        var linkParent = Path.Combine(root, "links");
+        Directory.CreateDirectory(linkParent);
+        var link = Path.Combine(linkParent, "link-to-repo");
+        try
+        {
+            Directory.CreateSymbolicLink(link, real);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Assert.Skip($"platform/user does not permit symlink creation: {ex.Message}");
+            return;
+        }
+
+        IngestPath.ResolveReal(link).ShouldBe(IngestPath.ResolveReal(real));
+    }
+
+    [Fact]
+    public void HasHiddenOrDeniedSegment_HiddenLeafFile_IsHidden()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "watch-hidden-root", "repo");
+        var file = Path.Combine(root, ".env");
+
+        IngestPath.HasHiddenOrDeniedSegment(root, file, WatchDenySet.Names).ShouldBeTrue();
+    }
 }

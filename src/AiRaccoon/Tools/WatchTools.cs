@@ -16,7 +16,7 @@ public sealed class WatchTools(
 
     [McpServerTool(Name = TnWatchAdd)]
     [Description(
-        "Registers a file or directory to be mirrored into the project's memory. Watching must be enabled and the path inside the scope allowlist — both configured via the CLI ('ai-raccoon settings watch enable' / 'settings ingest scope add'). Already-watched paths are a no-op. Returns immediately — the initial scan runs in the background (status reports scanning).")]
+        "Registers a file or directory to be mirrored into the project's memory. Watching must be enabled and the path inside the scope allowlist — both configured via the CLI ('ai-raccoon settings watch enable' / 'settings ingest scope add'). No overlapping watches: a path already covered by an existing watch is refused (watch-overlap, naming the covering watch); registering a broader watch prunes every watch it contains (reported in `pruned`; already-ingested entries are kept and the broader watch re-scans them). An exact re-add of an already-watched path is a no-op (`absorbedBy` reports it). Returns immediately — the initial scan runs in the background (status reports scanning).")]
     public async Task<ApiEnvelope<WatchAddResult>> Add(
         [Description("The project id; watches are scoped to a project.")]
         string projectId,
@@ -26,8 +26,9 @@ public sealed class WatchTools(
     {
         await gate.RequireAsync(projectId, AccessRequirement.Write, TnWatchAdd, cancellationToken);
 
-        await watch.AddAsync(projectId, path, cancellationToken);
-        var envelope = await gate.WrapAsync(projectId, new WatchAddResult(projectId, path), cancellationToken);
+        var outcome = await watch.AddAsync(projectId, path, cancellationToken);
+        var envelope = await gate.WrapAsync(projectId,
+            new WatchAddResult(projectId, path, outcome.Pruned, outcome.AbsorbedBy), cancellationToken);
 
         return envelope;
     }
@@ -61,7 +62,10 @@ public sealed class WatchTools(
         return envelope;
     }
 
-    public sealed record WatchAddResult(string ProjectId, string Path);
+    /// <summary>Pruned/AbsorbedBy are additive (docs/work/2026-08-21-code-search-implementation-plan.md
+    /// §5 WP4): Pruned lists watches this add contained (empty when none); AbsorbedBy is set only
+    /// for an exact-literal-path re-add (never together with a non-empty Pruned).</summary>
+    public sealed record WatchAddResult(string ProjectId, string Path, IReadOnlyList<string> Pruned, string? AbsorbedBy);
 
     public sealed record WatchStatusResult(IReadOnlyList<WatchStatus> Watches);
 

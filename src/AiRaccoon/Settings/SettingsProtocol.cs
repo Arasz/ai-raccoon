@@ -11,6 +11,9 @@ internal static class SettingsProtocol
     /// <summary>ADR-0076: the model-migration outbox write. Not a settings key/value route — POST-only, no GET twin, since the CLI never reads a migration record directly.</summary>
     public const string ModelPath = "/settings/model";
 
+    /// <summary>§3.3 D-E9: the code corpus's own activation write — POST-only, same reason as <see cref="ModelPath" />, but no outbox/migration record: the settings rows and the code_entries invalidation commit in one transaction and return.</summary>
+    public const string ModelCodePath = "/settings/model/code";
+
     public static string ForKey(string key) => $"{Path}?key={Uri.EscapeDataString(key)}";
 
     public static string ForPrefix(string prefix) => $"{Path}?prefix={Uri.EscapeDataString(prefix)}";
@@ -30,3 +33,9 @@ internal sealed record ModelMigrationRequest(string Provider, string? Model, str
 
 /// <summary>What the outbox transaction actually committed — the CLI's only feedback; the re-embed itself is reported nowhere (ruled: no progress channel).</summary>
 internal sealed record ModelMigrationResponse(string Provider, string Model, string Engine);
+
+/// <summary>A `model set code local` request (§3.3 D-E9): the directory is validated (manifest present, 768 dims) by the CLI before this is sent.</summary>
+internal sealed record ModelCodeActivationRequest(string Directory);
+
+/// <summary>What the activation transaction actually committed — the CLI's only feedback.</summary>
+internal sealed record ModelCodeActivationResponse(string Model, string Engine);

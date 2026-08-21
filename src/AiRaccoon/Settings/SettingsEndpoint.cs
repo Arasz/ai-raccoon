@@ -86,6 +86,22 @@ internal static partial class SettingsEndpoint
                         return Results.Conflict(ex.Message);
                     }
                 });
+
+            // §3.3 D-E9: commits the settings rows + code_entries invalidation in one transaction
+            // and returns — no outbox, no relay, no ToolGate interaction. The code-reindex
+            // maintenance job drains the pending rows separately.
+            webApplication.MapPost(SettingsProtocol.ModelCodePath,
+                async (ModelCodeActivationRequest request, ICodeEngineStore store, CancellationToken ctx) =>
+                {
+                    if (string.IsNullOrWhiteSpace(request.Directory))
+                    {
+                        return Results.BadRequest("ai-raccoon: a code model activation needs a directory");
+                    }
+
+                    var config = await store.ActivateCodeEngineAsync(request.Directory, ctx);
+                    Log.CodeEngineActivated(logger, config.Engine);
+                    return Results.Ok(new ModelCodeActivationResponse(config.Model, config.Engine));
+                });
         }
     }
 
@@ -107,5 +123,9 @@ internal static partial class SettingsEndpoint
         [LoggerMessage(EventId = 674, Level = LogLevel.Information,
             Message = "ai-raccoon: model migration to {Engine} committed; the maintenance loop's relay will finish it")]
         public static partial void ModelMigrationStarted(ILogger logger, string engine);
+
+        [LoggerMessage(EventId = 675, Level = LogLevel.Information,
+            Message = "ai-raccoon: code engine activation to {Engine} committed; the code-reindex maintenance job will drain the pending rows")]
+        public static partial void CodeEngineActivated(ILogger logger, string engine);
     }
 }

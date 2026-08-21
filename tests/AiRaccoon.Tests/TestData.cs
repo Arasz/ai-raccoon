@@ -2,6 +2,7 @@ using AiRaccoon.Infrastructure.Embedding.Manifest;
 using System.Security.Cryptography;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Metrics;
 using AiRaccoon.Core.SearchQuality;
@@ -50,7 +51,10 @@ public static class TestData
     }
 
     /// <summary>Builds a real <see cref="SqliteMemoryStore"/> wired to a <see cref="FileIngestor"/> backed by the given
-    /// chunkers — the pre-DI-refactor convenience, kept as one place so tests stay decoupled from the ingest graph.</summary>
+    /// chunkers — the pre-DI-refactor convenience, kept as one place so tests stay decoupled from the ingest graph.
+    /// A <paramref name="codeChunker"/> wires code-corpus support too (e.g. <see cref="NoOpCodeChunker"/> or
+    /// <see cref="StubCodeChunker"/>); omitted, the store behaves as a memory-only bank, matching every
+    /// existing caller.</summary>
     public static SqliteMemoryStore CreateMemoryStore(
         ISqliteConnectionFactory factory,
         ILogger<SqliteMemoryStore> logger,
@@ -61,13 +65,17 @@ public static class TestData
         IModelMigrationLease? modelMigrationLease = null,
         IJsonChunker? jsonChunker = null,
         IEnumerable<INoiseFilterPolicy>? noisePolicies = null,
-        ISettingsStore? settings = null)
+        ISettingsStore? settings = null,
+        ICodeChunker? codeChunker = null)
     {
         jsonChunker ??= RealJsonChunker(markdownChunker);
         var embedder = new EntryEmbedder(embeddings, modelMigrationLease ?? ModelMigrationLease, timeProvider);
         var matcher = new FileTypeMatcher(
             [new MarkdownFileTypeHandler(markdownChunker), new JsonFileTypeHandler(jsonChunker)]);
-        var fileIngestor = new FileIngestor(matcher, embedder, sourceStore, timeProvider, embeddings);
+        var codeFileTypeMatcher = codeChunker is null ? null : new CodeFileTypeMatcher();
+        var codeIngestor = codeChunker is null ? null : new CodeIngestor(new CodeFileTypeMatcher(), codeChunker, timeProvider);
+        var fileIngestor = new FileIngestor(matcher, embedder, sourceStore, timeProvider, embeddings,
+            codeFileTypeMatcher: codeFileTypeMatcher, codeIngestor: codeIngestor);
         var noiseFilteringService = new NoiseFilteringService(noisePolicies ?? []);
         return new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService,
             settings ?? new SqliteSettingsStore(factory));
@@ -105,8 +113,9 @@ public static class TestData
         ChunkIndexRepairCommands? chunkIndexRepair = null,
         ReingestRepairCommands? reingestRepair = null,
         DoctorCommands? doctor = null,
-        ModelDownloadCommands? modelDownload = null) =>
-        new(store, modelMigrations!, settings!, sync!, watch!, encryptionCommands!, extract!, maintenance!, performance!, serve!, noiseEntries!, chunkIndexRepair!, reingestRepair!, doctor!, modelDownload!);
+        ModelDownloadCommands? modelDownload = null,
+        ICodeEngineStore? codeEngine = null) =>
+        new(store, modelMigrations!, codeEngine!, settings!, sync!, watch!, encryptionCommands!, extract!, maintenance!, performance!, serve!, noiseEntries!, chunkIndexRepair!, reingestRepair!, doctor!, modelDownload!);
 
     /// <summary>A <see cref="ServerProbe"/> backed by a plain loopback HttpClient (the pre-DI-refactor ForLoopback shape).</summary>
     public static ServerProbe CreateServerProbe() => new(new LoopbackHttpClientFactory());
@@ -248,6 +257,24 @@ public static class TestData
         }
 
         return dot;
+    }
+
+    /// <summary>A real <see cref="IEmbeddingManifestLoader" /> — no fake: the B1 activation gate
+    /// (§3.3 D-E9) depends on the loader's own validation, not a stand-in.</summary>
+    public static IEmbeddingManifestLoader CreateManifestLoader() =>
+        new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator());
+
+    /// <summary>Stages the code-daemon-embed-v1 fixture manifest (768-dim, 128-ctx) into
+    /// <paramref name="dir" /> with stub tokenizer/onnx files, so a real
+    /// <see cref="IEmbeddingManifestLoader" /> accepts it — for tests that activate a real code
+    /// engine and need the B1 manifest gate (§3.3 D-E9) to pass.</summary>
+    public static void SeedCodeManifestDirectory(string dir)
+    {
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "sentencepiece.bpe.model"), "tokenizer");
+        File.WriteAllText(Path.Combine(dir, "model.onnx"), "model");
+        File.Copy(RepoFile("tests/AiRaccoon.Tests/Resources/ManifestFixtures/code-daemon-embed-v1.json"),
+            Path.Combine(dir, EmbeddingManifest.FileName));
     }
 
     /// <summary>Locates a repo-relative file by walking up from the test output directory.</summary>
@@ -434,6 +461,16 @@ public sealed class NoOpSearchQualityService : ISearchQualityService
     public Task<SearchQualityMetrics> GetMetricsAsync(string? projectId, DateTimeOffset from,
         CancellationToken ct = default) =>
         Task.FromResult(new SearchQualityMetrics(0, 0, 0, 0, 0, 0, 0));
+}
+
+/// <summary>Empty-results implementation of <see cref="ICodeSearchService"/> for unit tests that construct <see cref="MemoryTools"/> directly and do not exercise kind=code/both.</summary>
+public sealed class NoOpCodeSearchService : ICodeSearchService
+{
+    public Task<CodeSearchResults> SearchAsync(CodeSearchQuery query, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new CodeSearchResults([]));
+
+    public Task<CodeEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
+        Task.FromResult<CodeEntry?>(null);
 }
 
 /// <summary>Discards every measurement — for tests that need an <see cref="IMeasurementRecorder" /> but do not assert on it.</summary>

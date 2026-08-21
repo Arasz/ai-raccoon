@@ -87,6 +87,23 @@ erDiagram
         INTEGER recorded_at
     }
 
+    code_entries {
+        INTEGER id PK
+        TEXT hash
+        TEXT path
+        TEXT value
+        TEXT source_file
+        INTEGER line_start
+        INTEGER line_end
+        TEXT project_id
+        INTEGER created_at
+        INTEGER updated_at
+        TEXT embed_state
+        BLOB embedding
+        INTEGER chunk_index
+        INTEGER total_chunks
+    }
+
     workspaces ||--o{ entries : "workspace_id"
     memory_source ||--o{ entries : "source_id"
 ```
@@ -164,6 +181,52 @@ denormalized FTS-backing columns (see `docs/work/2026-08-11-memory-source-normal
 
 > **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:59-117`
 
+### Code corpus
+
+A second, code-only corpus lives in the same `memory.db` file, added additively in the
+digest-gated DDL block (no `CurrentVersion` bump — the metrics-table precedent above):
+
+- `code_entries` — one row per code chunk: `hash`/`path`/`value`/`source_file` mirror
+  `entries`; `line_start`/`line_end` (1-based, inclusive) replace `section`/`heading_path`,
+  since code has no structure modality. `uq_code_chunk UNIQUE(project_id, path, hash)` is the
+  dedup bucket; `idx_code_entries_project`, `idx_code_entries_hash`, and
+  `idx_code_entries_embed_state` mirror the `entries` indexes. There is no separate
+  `idx_code_entries_path(project_id, path)`: it was a redundant left-prefix of `uq_code_chunk`
+  (the planner already picks `uq_code_chunk` for the per-project-path delete legs), so it was
+  dropped rather than kept as dead weight on every insert.
+  `project_id` is `NOT NULL` — code has no shared/workspace/custom context, so there is no
+  `scope`/`context_label`/`workspace_id`/`agent_id` column, and no
+  `rating`/`ttl_days`/`access_count` (no degradation: a code row is a re-derivable cache, not
+  curated knowledge).
+- `code_fts` — FTS5 external-content index over `code_entries(value, source_file)`, with the
+  same insert/delete/update trigger family as `entries_fts`.
+- `vec_code` — vec0 virtual table, `float[768]` (`code-daemon-embed-v1`'s dimension, distinct
+  from `vec_entries`' 384) with `ctx = project_id` directly — no `ContextKeyExpression`
+  branching, since code is project-scoped only. `embed_state` UPDATE triggers keep it in sync
+  with `code_entries`, mirroring `vec_entries`.
+
+**Lifecycle exclusions** (deliberate, not oversights): the code corpus never syncs (a pushed
+snapshot `DROP`s `code_entries`/`code_fts`/`vec_code` rather than stripping rows), never
+sweeps, carries no TTL, and never promotes to the shared tier. Losing it costs a re-ingest
+from disk, not knowledge — the opposite of `entries`.
+
+**Its own embedding engine and drain, deliberately simpler than the memory engine's:**
+`ai-raccoon model set code local <dir>` writes `embedding.codeModel`/`embedding.codeEngine`
+and marks every currently-embedded code row `pending`, in one transaction — the
+`vec_code_pending` trigger empties `vec_code` at that same commit, so there is no
+stale-vector window. Unlike a memory engine change, this does **not** go through the
+`model_migration` outbox: that mechanism is single-row, its relay hard-codes the memory
+query, and its `ToolGate` closes every tool for the migration's duration — none of which
+fits a second, independent corpus. Instead, a standing `code-reindex` maintenance job (same
+on-demand shape as `PendingEmbedJob`: `HasWorkAsync` reads `code_entries.embed_state`
+directly, so a bank with no code engine configured is never "due") drains pending rows in
+batches of 32 on its own poll — no relay wait, no gate, memory tools stay fully available
+the whole time. While rows drain, `kind=code` search naturally degrades to FTS5-only for
+them (`code_fts` is populated at ingest time, independent of `embed_state`).
+
+> **Evidence:** `docs/work/2026-08-21-code-search-implementation-plan.md` §3.1/§3.2/§3.3/§3.8,
+> `src/AiRaccoon.Infrastructure/Maintenance/CodeReindexJob.cs`
+
 ### Schema versioning
 
 `MemorySchema.EnsureAsync` reads `PRAGMA user_version` before the DDL runs and walks an
@@ -237,13 +300,16 @@ opens the bank once for the whole call and hands the open connection to `FileIng
 against the project's declared ingest scope (`ingest.scope.<project>`, falling back to
 `ingest.scope.global`) and refuses with `PathOutsideScopeException` when it falls outside — the
 same rule and primitive `memory_watch_add` uses. An unscoped project refuses every ingest. Past
-the scope check, a non-indexable file (not `.md`/`.markdown`/`.txt`, or hidden) is silently
-skipped; an indexable file's content is split into **token-aware chunks** before hashing and
-insertion. Each new chunk is embedded immediately through `EntryEmbedder` when an engine is
-configured — no extension-host hook sits on this path (that pipeline was removed entirely,
-ADR-0016); without an engine the chunk stays `pending` for `memory_embed_pending` to pick up
-later. The chunker uses the o200k_base tokenizer with code-fence-aware splitting and an overlay
-window for context continuity between chunks.
+the scope check, a memory-indexable file (`.md`/`.markdown`/`.txt`/`.json`) is split into
+**token-aware chunks** before hashing and insertion; a recognized code extension (`.cs`, `.py`,
+`.ts`, `.go`, `.rs`, … — the v1 list, `CodeExtensions`) routes instead to `CodeIngestor` and the
+code corpus (`code_entries`) — memory extensions always win on overlap, so a `.md` file inside a
+code directory still lands in `entries`. Anything neither pipeline claims, or hidden, is silently
+skipped in both. Each new memory chunk is embedded immediately through `EntryEmbedder` when an
+engine is configured — no extension-host hook sits on this path (that pipeline was removed
+entirely, ADR-0016); without an engine the chunk stays `pending` for `memory_embed_pending` to
+pick up later. The chunker uses the o200k_base tokenizer with code-fence-aware splitting and an
+overlay window for context continuity between chunks.
 
 **Chunk bounds** are clamped to the configured embedding engine's maximum input
 tokens: 256 for the bundled all-MiniLM-L6-v2, 8191 for OpenAI-compatible models.
@@ -447,7 +513,8 @@ sequenceDiagram
 
     Note over S,L: 1. Snapshot
     S->>L: VACUUM INTO temp snapshot
-    S->>L: DELETE workspace entries from snapshot
+    S->>L: DELETE workspace entries + settings from snapshot
+    S->>L: DROP code_entries/code_fts/vec_code IF EXISTS
     S->>L: VACUUM (compact snapshot)
     S->>L: PRAGMA quick_check
 
@@ -483,6 +550,15 @@ sequenceDiagram
 **Settings never sync:** the `settings` table (cloud credentials, embedding endpoint/key)
 is stripped from every snapshot before it's pushed and is never read from a pulled
 remote — settings stay per-machine in both directions (ADR 0014).
+
+**The code corpus never syncs either:** `StripNonSyncableAsync` DROPs `code_entries`,
+`code_fts`, and `vec_code` (table absence, not row-deletion — their FTS5/vec0 shadow
+tables and trigger families drop with them) from every pushed snapshot, on all three
+push paths (local, merged, retry-merged). `DROP TABLE IF EXISTS`: a snapshot is opened
+through `openSnapshot`, which never runs `MemorySchema.EnsureAsync`, so a snapshot taken
+from a bank that predates the code corpus has none of these tables — a bare `DROP TABLE`
+would abort the push. Pull/merge never names the code tables at all, so a pull leaves the
+local code corpus untouched (ADR 0014 amendment).
 
 **Tombstone GC:** tombstones older than `last_pull_at` are deleted after each
 merge — they've done their job and the cloud copy has the deletion record.
@@ -691,6 +767,49 @@ engine's maximum input tokens:
 > **Evidence:** `src/AiRaccoon.Core/Chunking/MarkdownChunker.cs:19-55` (split),
 > `src/AiRaccoon.Infrastructure/Chunking/O200kTokenizer.cs:6-11` (tokenizer)
 
+### Line-range code chunking
+
+The code corpus does not reuse the markdown chunker: `CodeChunker`
+(`src/AiRaccoon.Infrastructure/Chunking/CodeChunker.cs`) emits line-ranged
+`CodeChunk(Text, LineStart, LineEnd)` records (1-based, inclusive) instead of
+prose strings, and there is no AST — the splitting heuristic is purely
+line/brace based:
+
+1. **Build blank-line-block units.** A unit is a maximal run of non-blank
+   lines plus its trailing blank-line run (leading blank lines merge into the
+   first real block, so every line in the file belongs to exactly one unit).
+2. **Fall back to per-line units** when a block doesn't fit the budget alone;
+   a single line that still doesn't fit alone is hard-split via
+   `TokenBudget.Trim`'s binary search — the same idiom
+   `EmbeddingService.TrimQueryToWindow` uses for queries.
+3. **Pack units into chunks**, preferring to end a chunk at the *last*
+   candidate boundary within budget whose cumulative brace balance
+   (`{` count minus `}` count from the start of the file) is zero — so a
+   chunk boundary avoids landing inside an open scope when a zero-balance
+   point is reachable; otherwise the budget wins and the chunk fills to the
+   greedy maximum.
+4. **Exact joined-recount** the chosen unit range against the real
+   tokenizer and shed trailing units if the summed per-unit estimate drifted
+   over budget (token counts are not composable across a join, ADR-0036) —
+   the same shape `MarkdownChunker`'s packing uses, minus overlay: code
+   chunks are always overlay 0 (line ranges, not prose continuity).
+
+The budget is a fixed **126** tokens — `min(510, ctx − reservation)` for
+code-daemon-embed-v1's 128-token context and 2-token `<s>`/`</s>`
+reservation, never the flat 510 an earlier engine-plan draft described and
+never the memory chunker's 254/256. Counting uses `ICodeTokenizer`: the
+bundled code-daemon-embed-v1 sentencepiece tokenizer
+(`src/AiRaccoon/Models/code-sentencepiece.bpe.model`, 626 KB, sha256-pinned)
+whenever no code engine is configured (`embedding.codeModel` absent) — the
+v1 default; a configured code engine's own tokenizer is a later extension
+point, not exercised in v1.
+
+> **Evidence:** `src/AiRaccoon.Infrastructure/Chunking/CodeChunker.cs`
+> (splitter), `src/AiRaccoon.Infrastructure/Embedding/CodeTokenizer.cs`
+> (bundled counting tokenizer), `src/AiRaccoon.Core/Chunking/TokenBudget.cs`
+> (hard-split), `src/AiRaccoon.Infrastructure/Embedding/EmbeddingService.cs:170-180`
+> (`ResolveChunkBudgetFor`, the shared min(510, ctx−reservation) rule)
+
 ## Layering
 
 ```
@@ -711,10 +830,12 @@ src/AiRaccoon.Core/         Pure domain layer — zero framework deps
                             MetricsConfigKeys (buffer/flush/retention settings)
   Metrics/                  Measurement, MeasurementKind, IMeasurementRecorder,
                             Statistics (pure percentile/min/max/mean), PerformanceReport/Builder
-  Chunking/                 IChunker base, IMarkdownChunker, IJsonChunker, MarkdownChunker (pure splitter)
+  Chunking/                 IChunker base, IMarkdownChunker, IJsonChunker, MarkdownChunker (pure splitter),
+                            ICodeChunker, CodeChunk (line-ranged, code corpus)
   Access/                   AccessMode enum, AccessModePolicy, AccessRequirement, AccessDeniedException
   Ingestion/                IFileTypeHandler, IFileTypeMatcher, IngestPath, IngestScopeKeys/List,
-                            PathOutsideScopeException, PathNotFoundException
+                            PathOutsideScopeException, PathNotFoundException, CodeExtensions,
+                            ICodeFileTypeMatcher, CorpusKind, IngestDispatcher (code corpus routing)
   Rating/                   RatingPolicy
   Degradation/              DegradationPolicy
   Workspace/                Workspace record, ConsolidationResult
@@ -726,11 +847,16 @@ src/AiRaccoon.Infrastructure/   Adapters — Dapper over SQLite, sync, embedding
   Sqlite/                   SqliteMemoryStore, MemorySchema, ReciprocalRankFusion,
                             SearchContexts, SearchResultMerger, EntryBucket
   Sqlite/Encryption/        EncryptionKeyResolver, EncryptionSourceSidecar, key Providers
-  Embedding/                EmbeddingService, OnnxEmbeddingGenerator, BundledModel, EntryEmbedder
+  Embedding/                EmbeddingService, OnnxEmbeddingGenerator, BundledModel, EntryEmbedder,
+                            ICodeTokenizer/CodeTokenizer (bundled code-daemon-embed-v1 sentencepiece
+                            counting tokenizer, unconfigured-code-engine default)
   Ingestion/                FileIngestor (scope containment, chunking, chunk insertion; WI-8),
-                            FileTypeMatcher, MarkdownFileTypeHandler, JsonFileTypeHandler, IFileIngestor
+                            FileTypeMatcher, MarkdownFileTypeHandler, JsonFileTypeHandler, IFileIngestor,
+                            CodeIngestor, CodeFileTypeMatcher (code corpus, self-filtering)
   Sync/                     SyncService, SyncCloudStoreFactory, S3CloudStore, AzureBlobCloudStore, NullCloudStore, FakeCloudStore
-  Chunking/                 O200kTokenizer (o200k_base), JsonFileTypeChunker
+  Chunking/                 O200kTokenizer (o200k_base), JsonFileTypeChunker, CodeChunker (line-range,
+                            budget 126, brace-balance boundary preference), NoOpCodeChunker (retained
+                            as a zero-chunk test stand-in, not the production ICodeChunker)
   Workspace/                WorkspaceService
   Watch/                    WatchService, WatchPipeline, WatchScheduler, WatchHostedService
   Promotion/                PromotionQueueService (propose-tier queue, ADR-0007)

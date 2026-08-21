@@ -19,6 +19,9 @@ C# .NET 10 MCP server exposing agent memory management over sqlite-memory: proje
 - **Derive the list, or delete it** — A hand-maintained list meant to mirror something else — the gates on disk, the copies of a helper, the skills in the catalog — drifts the moment someone adds to one side and not the other, and nothing notices because nothing compares them.
   → `.ai-badger/invariants/derive-or-delete-the-list.md`
 
+- **Fix what you find** — An observed issue is fixed now, before the work that surfaced it continues — whether your changes caused it is irrelevant; a report or a "pre-existing" label is not a fix.
+  → `.ai-badger/invariants/fix-what-you-find.md`
+
 - **Guard clauses over hand-rolled null checks** — Prefer a dedicated guard/throw-helper for argument validation over hand-rolled `x ?? throw ...` or ad hoc `if (x == null) throw` blocks — a guard reads as intent, not boilerplate, and keeps the exception type/message consistent across the codebase.
   → `.ai-badger/invariants/guard-clauses.md`
 

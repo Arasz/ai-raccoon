@@ -16,7 +16,7 @@ watches, watch_files, FTS5, vec0, sync_meta, and sync_tombstones — live in
 starts clean with the new native schema. A re-hash + re-embed migration path is
 deferred to a deployment that needs it (D11).
 
-## Tools (27)
+## Tools (28)
 
 Every tool requires `projectId` (camelCase — all parameters are camelCase), except
 `memory_promotion_list` where it is optional. Writes land in `project:<id>` by
@@ -25,16 +25,16 @@ default; naming a `workspaceId` routes them into that workspace's isolated conte
 10 memory tools (including `memory_get`, ADR-0035), 4 workspace tools, 3 watch tools,
 2 promotion tools, 2 share tools, 2 sweep tools (`memory_sweep`, `memory_set_ttl`),
 2 search-feedback tools (`memory_record_followthrough`, `memory_record_grade`),
-1 sync tool, 1 performance tool (`memory_performance`). `memory_configure` and
-`memory_set_structure_alpha` were removed by the CLI-config refactor: configuration
-is no longer an MCP tool — the CLI verbs are the single config channel (see
-[Command-line options](#command-line-options)).
+1 sync tool, 1 performance tool (`memory_performance`), 1 code tool (`code_get`).
+`memory_configure` and `memory_set_structure_alpha` were removed by the CLI-config
+refactor: configuration is no longer an MCP tool — the CLI verbs are the single
+config channel (see [Command-line options](#command-line-options)).
 
 | Tool                           | Parameters                                                                                                                                                  | Returns                                                                                            |
 |--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
 | `memory_write`                 | `projectId`, `content`, `workspaceId?`, `agentId?`, `context?`, `sourceFile?`, `section?`                                                                   | `{hash, path, context, createdAt}`                                                                 |
 | `memory_get`                   | `projectId`, `hash`                                                                                                                                         | `{hash, value, path, context, createdAt}`                                                          |
-| `memory_search`                | `projectId`, `query`, `scope=all\|project\|shared`, `workspaceId?`, `limit=20`, `minRelativeScore=0`, `rrfK=60`, `ftsWeight=1`, `vectorWeight=1`, `contextLabel?` | `{results:[{hash, ranking, path, snippet, sourceFile?, chunkIndex, totalChunks}], projectId}`      |
+| `memory_search`                | `projectId`, `query`, `scope=all\|project\|shared`, `workspaceId?`, `limit=20`, `minRelativeScore=0`, `rrfK=60`, `ftsWeight=1`, `vectorWeight=1`, `contextLabel?`, `kind=memory\|code\|both` | `{results:[{hash, ranking, path, snippet, sourceFile?, chunkIndex, totalChunks}], code?:[{hash, ranking, path, snippet, lineStart, lineEnd}], warning?}` |
 | `memory_record_followthrough`  | `projectId`, `correlationId`, `filePath`                                                                                                                    | `{recorded: true}`                                                                                 |
 | `memory_record_grade`          | `projectId`, `correlationId`, `grade`, `note?`                                                                                                              | `{recorded: true}`                                                                                 |
 | `memory_list`                  | `projectId`                                                                                                                                                 | `{files: <json tree>}`                                                                             |
@@ -59,6 +59,7 @@ is no longer an MCP tool — the CLI verbs are the single config channel (see
 | `memory_promotion_list`        | `projectId?`, `limit=50`, `includeFullValue=false`                                                                                                                                  | `{rows: [PromotionQueueRow]}`                                                                       |
 | `memory_promotion_discard`     | `projectId`, `hash?`                                                                                                                                        | `{discarded: n}`                                                                                   |
 | `memory_performance`           | `projectId`, `windowMinutes?=180`, `bucketMinutes?=1`                                                                                                       | `{generatedAt, window, bucket, bucketCount, series: [{tool, count, p50, p95, p99, min, max, buckets: [{start, count, average}]}]}` |
+| `code_get`                     | `projectId`, `hash`                                                                                                                                         | `{hash, value, path, lineStart, lineEnd}`                                                          |
 
 ### Notes on the less obvious tools
 
@@ -66,6 +67,45 @@ is no longer an MCP tool — the CLI verbs are the single config channel (see
   when named); `scope=project` searches `project:<id>` only; `scope=shared` searches the
   `shared` promotion tier only. Workspace scratch is never included in `scope=all` — it is
   only visible to a search that names that `workspaceId`.
+- **`memory_search` `kind` values:** `kind=memory` (default) is today's behavior, unchanged —
+  no `code` key in the response at all. `kind=code` searches the code corpus only (`results`
+  is present but empty); `kind=both` runs both hybrids independently and returns both sections
+  (no cross-corpus fusion — each section is ranked by its own FTS5+vec0 hybrid). Code is always
+  project-scoped: `scope=shared` with `kind=code`/`both` returns an empty `code` section.
+  `codeLimit`/`codeMinRelativeScore` override `limit`/`minRelativeScore` for the code section
+  only (omit them to use the same values as the memory section) — the only per-section knobs.
+  Every other per-call tuning arg (`rrfK`/`ftsWeight`/`vectorWeight`/`candidateWindow`) applies
+  to the code section too, at the same value passed for memory's (ADR-0088 decision 5; no
+  separate `codeRrfK`/etc. namespace). Code search degrades by configuration state: with no
+  `embedding.codeModel` configured, it is FTS5-only and carries a `warning`
+  (`"code engine not configured — FTS5-only results"`); once a code engine is configured
+  (`model set code local`, below) it runs the full vec0 hybrid, fused with the same weighted RRF
+  as memory (`retrieval.rrfK`/`ftsWeight`/`vectorWeight`, or the per-call args above —
+  `retrieval.structureAlpha` is read but never applied, since code has no structure modality); a
+  query over the engine's
+  126-token window is trimmed before embedding and carries a different `warning` naming that; a
+  configured-but-**unloadable** engine (missing files, a dimension mismatch) refuses the search
+  with `code-engine-unloadable` instead of degrading (see [Error shapes](#error-shapes)) — memory
+  searches are unaffected, since the two engines are independent settings rows. A code hit's
+  `relativeScore` is hybrid-score-relative like memory's (the top hit is always 1.0, others
+  proportional to their fused score) — not the positional, rank-derived placeholder of an earlier
+  wave. Code hits carry `lineStart`/`lineEnd` (1-based) instead of `chunkIndex`/`totalChunks`;
+  read the full chunk with `code_get`. `kind=code`/`both` searches are never recorded in
+  `search_quality` (unlike `kind=memory`, which records exactly as today) — code identifiers
+  and paths must not leave the machine through a syncing table. `meta.correlationId` follows
+  that same rule: it is present only on `kind=memory` (the id `memory_record_grade`/
+  `memory_record_followthrough` key off), and absent — not a `null` value, an absent key — on
+  `kind=code`/`both`, since no `search_quality` row exists for either to back it.
+- **`memory_ingest_file`/`memory_ingest_directory` feed the code corpus too:** a file is routed
+  by extension — the memory-owned extensions (`.md`/`.markdown`/`.txt`/`.json`) always win on
+  overlap; a recognized code extension (`.cs`, `.py`, `.ts`, `.go`, `.rs`, … — the v1 list is
+  owner-adjustable) goes to the code corpus instead; anything else is skipped in both. A `.md`
+  file inside a directory of otherwise-code files still routes to memory. `ai-raccoon.ignore`
+  and the hidden-file/deny-set (`node_modules`, `bin`, `obj`, `.git`, `.venv`, `__pycache__`,
+  `dist`, `build`, `target`) rules apply identically to both corpora. In this release the code
+  chunker is not yet wired (the engine-generalization work it depends on ships in a later wave):
+  code files route correctly but every ingest produces 0 code rows until then — memory ingest is
+  unaffected.
 - **`memory_share`:** promotes the entry whose `hash` you pass (from a `memory_write`
   or `memory_search` result) into `shared`. It is additive — the source project row
   stays. There is no un-share; `memory_delete` on the shared row's hash removes it from
@@ -136,6 +176,22 @@ is no longer an MCP tool — the CLI verbs are the single config channel (see
   `--dir`, `--dry-run` (resolve + print sizes/oids, download nothing), `--yes` (confirm
   downloads > 500 MB). It never activates the model — `model set local <dir>` is the explicit
   next step (plan `docs/work/2026-08-21-arbitrary-embedding-models-plan.md`, D4/D8).
+- **Code corpus embedding engine (CLI, not a tool):** `ai-raccoon model set code local <dir>`
+  activates a manifest directory for the code corpus — independent of the memory engine above,
+  its own `embedding.codeModel`/`embedding.codeEngine` settings rows. `<dir>` must contain
+  `ai-raccoon.manifest.json` declaring exactly `dimensions: 768`: `vec_code` is a fixed
+  `float[768]` index with no dimension-reconcile phase (unlike `model set local`), so any other
+  declared dimension is refused before anything commits, naming the declared value and the
+  required 768. A missing/invalid manifest is refused with the same loader error `model set
+  local` surfaces. On success the write commits in one transaction with invalidating every
+  already-embedded code row back to `pending` — `vec_code` empties at that same commit, no
+  stale-vector window — and the `code-reindex` maintenance job re-embeds the pending rows on its
+  own cadence; there is no outbox, no relay wait, and memory tools are never blocked. Typical
+  flow: `ai-raccoon model download faxenoff/code-daemon-embed-v1` then `ai-raccoon model set
+  code local <data-root>/models/faxenoff__code-daemon-embed-v1`. `ai-raccoon settings model
+  show` includes the `codeModel`/`codeEngine` rows when set; `ai-raccoon settings model reset`
+  never touches them; `ai-raccoon settings model code reset` deletes only them, leaving the
+  memory engine untouched (`docs/work/2026-08-21-code-search-implementation-plan.md` §3.3).
 - **Structure alpha (CLI, not a tool):** `ai-raccoon settings retrieval alpha set {0..1}`
   writes the dual-vector fusion alpha (`retrieval.structureAlpha`, 0..1; default 0.5)
   used by search as `score = alpha × content + (1 − alpha) × heading-path structure`.
@@ -204,12 +260,33 @@ is no longer an MCP tool — the CLI verbs are the single config channel (see
   (`'*'` clears only the global config; a file-name ghost row — written by an unquoted `*` —
   is removed individually, e.g. `settings watch remove CLAUDE.md`). `memory_watch_add` registers a
   file or directory and returns immediately (the initial scan runs in the background —
-  status reports `scanning`); already-watched paths are a no-op. `memory_watch_status`
-  lists every registered watch with live state (`scanning`/`healthy`/`retrying`/`stopped`),
-  last error and last sync; it is available in every access tier. `memory_watch_remove`
-  stops and unregisters; a non-existent watch is a no-op. Registration failures surface
-  as `watching-disabled:` / `path-outside-scope:` / `path-not-found:` tool errors;
-  watch failures never fail the server.
+  status reports `scanning`); an exact re-add of an already-watched path is a no-op
+  (`absorbedBy` in the result names it). **No overlapping watches**
+  (docs/work/2026-08-21-code-search-implementation-plan.md §2.2/§5.5): a path already covered
+  by an existing watch is refused (`watch-overlap:`, naming the covering watch — nothing is
+  written); registering a broader watch instead prunes every watch it contains (registration
+  row + fingerprints removed, listed in the result's `pruned`) — already-ingested entries are
+  kept, and the broader watch's catch-up scan re-covers them (idempotent, hash-skip cheap).
+  `memory_watch_status` lists every registered watch with live state
+  (`scanning`/`healthy`/`retrying`/`stopped`), last error and last sync; it is available in
+  every access tier. `memory_watch_remove` stops and unregisters; a non-existent watch is a
+  no-op. Registration failures surface as `watching-disabled:` / `path-outside-scope:` /
+  `path-not-found:` / `watch-overlap:` tool errors; watch failures never fail the server.
+- **`ai-raccoon.ignore`:** an optional gitignore-subset exclude file at the root of a watched
+  directory (or a `memory_ingest_directory` call's root) — `<root>/ai-raccoon.ignore`, one file
+  per root, never discovered in subdirectories. An explicit `memory_ingest_file` call has no walk
+  root of its own, so it resolves one: the containing registered watch if the path falls under
+  one, else the ingest-scope allowlist entry that admits it, else the file's own parent directory
+  as a last resort — and the same rule applies whether the file routes to memory or to the code
+  corpus. Syntax: `*` (one path segment), `**` (zero or
+  more segments), a trailing `/` for a directory pattern (matches the directory and everything
+  beneath it), a leading `/` (or any `/` elsewhere in the pattern) anchors it to the root — a
+  pattern with no `/` at all matches at any depth; `#` comments and blank lines are inert; no
+  `!` negation in v1; case sensitivity follows the host OS. A matched file is never
+  fingerprinted or chunked; a file that was already indexed before a matching rule appeared has
+  its stale chunks removed (and its fingerprint cleared) the next time its watch digests it or
+  its watch rescans. Editing the ignore file itself triggers a full re-scan of that watch. The
+  ignore file is never matched against its own rules.
 - **Deferred writes:** until an engine is configured, writes are stored deferred
   (`memory_stats.pending > 0`) and only become searchable after `memory_embed_pending`.
 - **`memory_performance`:** project-scoped only (the whole-bank scope is deferred). The
@@ -569,6 +646,11 @@ ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]
 ai-raccoon settings model reset
 ai-raccoon settings model show
 
+# model set code: the code corpus's own engine — independent settings rows, refuses non-768
+# manifests before anything commits (§3.3 D-E9), no memory-bank re-embed
+ai-raccoon model set code local <dir>
+ai-raccoon settings model code reset
+
 # settings retrieval: hybrid-search blend weight
 ai-raccoon settings retrieval alpha set {0..1}
 ai-raccoon settings retrieval alpha show
@@ -819,6 +901,7 @@ source of truth; a test cross-checks this table against it.
 | `unknown-hash` | `hash` (e.g. passed to `memory_share`) does not exist in the project's scope | `unknown-hash: No entry with hash '<hash>' in project '<project>'.` |
 | `schema-version-unsupported` | The bank's stored schema version is newer than this binary supports (issue #200) | `schema-version-unsupported: bank schema v<n> is newer than this binary supports (v<m>); update ai-raccoon` |
 | `watching-disabled` | Watching is disabled for the project | `watching-disabled: Watching is disabled for project '<project>'.` |
+| `watch-overlap` | `memory_watch_add`'s path is already covered by an existing watch (no overlapping watches — the broader watch wins; adding a broader watch instead prunes the narrower ones rather than refusing) | `watch-overlap: Path '<path>' is already covered by watch '<covering-path>'.` |
 | `sync-not-configured` | No sync credentials configured | `sync-not-configured: Memory sync is not configured or its connection string is invalid. Run 'ai-raccoon sync add s3 <url> --bucket <name>' or 'ai-raccoon sync add azure <container>' and enter the credentials when prompted.` |
 | `sync-auth-failed` | Sync credentials missing/invalid, or a 401/403 from the cloud provider | `sync-auth-failed: Azure auth failed — run 'az login' (or set AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET for headless use).` (Azure) / `sync-auth-failed: AWS auth failed — run 'aws configure' or 'aws sso login', or verify the keys with 'ai-raccoon sync show'.` (S3) |
 | `sync-conflict` | Remote snapshot kept changing mid-merge, past the 3 re-pull/re-merge/re-push retries | `sync-conflict: <detail>` |
@@ -831,6 +914,7 @@ source of truth; a test cross-checks this table against it.
 | `confirm-required` | `memory_share_extract` called with `autoPromote=true` but `confirm` not set to `true` — an explicit enable gate for a promotion that shares data across all listed projects | `confirm-required: autoPromote shares candidates with ALL projects — pass confirm=true to enable` |
 | `model-migration-in-progress` | Every bank operation is refused for the duration of an embedding-model migration (`model set`, ADR-0076) — a bank whose rows are half old-model and half new-model vectors is not detectably broken, it just retrieves worse, so the migration locks the bank rather than serving through it | `model-migration-in-progress: ai-raccoon: a model migration is in progress; try again once it finishes` |
 | `embedding-install-replaced` | The bundled embedding model/vocab could not be resolved because the install this server process started from (`AppContext.BaseDirectory`) no longer exists on disk — replaced or removed out from under a still-running server (e.g. `dotnet tool update` moving the outgoing version into `.store/.stage` and deleting it; already-mapped assemblies keep the process serving MCP calls even though its own install root is gone). A plain `InvalidOperationException` from the same lookup still means the asset is genuinely missing next to a live install and stays unmapped — only this replaced-install case is refused, because only a restart fixes it | `embedding-install-replaced: Bundled embedding model 'model_qint8_arm64.onnx' could not be resolved: the install this server started from ('<dir>') no longer exists, likely replaced by a tool update (e.g. 'dotnet tool update'). Restart the MCP server (or its host) to pick up the new install.` |
+| `code-engine-unloadable` | A code engine IS configured (`embedding.codeModel`) but its manifest or model/tokenizer files fail to load at search time (missing files, a dimension mismatch, a corrupt asset) — distinct from "no engine configured" (which degrades to FTS5-only silently, no refusal). Affects `memory_search kind=code/both` only; `kind=memory` is unaffected, since the memory and code engines are independent settings rows | `code-engine-unloadable: The configured code engine at '<dir>' could not be loaded: <detail> Run 'ai-raccoon model set code local <dir>' to reconfigure it, or clear it with 'ai-raccoon settings model code reset'.` |
 
 Anything `ToolRefusals` does not recognize — a remote embedding provider called without
 a key, or any other unmapped exception — is a genuine failure, not a refusal, and its message

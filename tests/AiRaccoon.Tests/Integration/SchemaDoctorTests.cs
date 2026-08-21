@@ -66,6 +66,21 @@ public sealed class SchemaDoctorTests
         report.Findings.ShouldContain(f => f.ObjectName == "idx_entries_hash" && f.Detail.Contains("missing index"));
     }
 
+    /// <summary>WP1 acceptance criterion 2: the doctor's schema inventory reaches the code corpus, same as any other Ddl table.</summary>
+    [Fact]
+    public async Task DiagnoseAsync_OnABankMissingTheCodeCorpus_DetectsTheMissingCodeTables()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "DROP TABLE code_entries", cancellationToken: TestContext.Current.CancellationToken));
+
+        var report = await SchemaDoctor.DiagnoseAsync(connection, TestContext.Current.CancellationToken);
+
+        report.Status.ShouldBe(SchemaDoctorStatus.ShapeMismatch);
+        report.Findings.ShouldContain(f => f.ObjectName == "code_entries" && f.Detail.Contains("missing table"));
+    }
+
     [Fact]
     public async Task DiagnoseAsync_OnABankStampedNewerThanThisBinary_ReportsVersionAheadNotAShapeMismatch()
     {

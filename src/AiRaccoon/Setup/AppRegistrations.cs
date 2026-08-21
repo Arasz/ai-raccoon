@@ -4,6 +4,7 @@ using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Memory.Filtering.Policies;
 using AiRaccoon.Core.Memory.QueryGuard;
@@ -23,6 +24,7 @@ using AiRaccoon.Infrastructure.Metrics;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Promotion;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite.Code;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Infrastructure.Sync;
@@ -79,6 +81,9 @@ public static partial class AppRegistrations
             // WP2 (docs/adr/0067): composes the store and the queue, which the store itself cannot —
             // PromotionQueueService already takes IMemoryStore, so store -> queue -> store is a cycle.
             services.AddRequiredSingleton<IMemoryWriteService, MemoryWriteService>();
+            // WP6: memory_search's kind dispatch (which legs run, the code-scope rule, the
+            // search_quality exclusion) lives here, off the tool layer (mcp.instructions.md).
+            services.AddRequiredSingleton<ISearchDispatcher, SearchDispatcher>();
         }
 
         private void RegisterSyncServices()
@@ -178,7 +183,11 @@ public static partial class AppRegistrations
                 // PendingEmbedJob, so its position relative to it does not matter.
                 new PromotionQueuePruneJob(sp.GetRequiredService<TimeProvider>()),
                 // .NET-F1: on-demand — HasWorkAsync reads entries.embed_state itself, not a cadence.
-                new PendingEmbedJob(sp.GetRequiredService<IEntryEmbedder>())
+                new PendingEmbedJob(sp.GetRequiredService<IEntryEmbedder>()),
+                // WP5/WP7-remainder (§3.3 D-E9/§3.8): on-demand, same shape as PendingEmbedJob —
+                // drains code_entries rows a code-engine activation or fingerprint change left
+                // pending. No outbox, no ToolGate interaction.
+                new CodeReindexJob(sp.GetRequiredService<ICodeEmbedder>())
             ]);
             services.AddHostedService<BankMaintenanceHostedService>();
         }
@@ -210,8 +219,19 @@ public static partial class AppRegistrations
             services.AddSingleton<IFileTypeHandler>(sp => new MarkdownFileTypeHandler(sp.GetRequiredService<IMarkdownChunker>()));
             services.AddSingleton<IFileTypeHandler>(sp => new JsonFileTypeHandler(sp.GetRequiredService<IJsonChunker>()));
             services.AddSingleton<IReadOnlyCollection<IFileTypeHandler>>(sp => sp.GetServices<IFileTypeHandler>().ToList());
-            services.AddRequiredSingleton<IFileIngestor, FileIngestor>();
+            services.AddRequiredSingleton<IIgnoreRulesProvider, IgnoreRulesProvider>();
             services.AddRequiredSingleton<IFileTypeMatcher, FileTypeMatcher>();
+
+            // Code corpus (docs/work/2026-08-21-code-search-implementation-plan.md §3.4, WP2):
+            // real line-range CodeChunker, budget 126 (§12.1 H3), counted with the bundled
+            // code-daemon-embed-v1 sentencepiece tokenizer — the v1 default until a configured
+            // code engine (embedding.codeModel, WP5) replaces the counting path. Always-ingest
+            // per §3.3: code files chunk + store `pending` even with no engine configured.
+            services.AddRequiredSingleton<ICodeFileTypeMatcher, CodeFileTypeMatcher>();
+            services.AddRequiredSingleton<ICodeTokenizer, CodeTokenizer>();
+            services.AddRequiredSingleton<ICodeChunker, CodeChunker>();
+            services.AddRequiredSingleton<ICodeIngestor, CodeIngestor>();
+            services.AddRequiredSingleton<IFileIngestor, FileIngestor>();
         }
 
         private void RegisterPromotionQueue()
@@ -225,7 +245,8 @@ public static partial class AppRegistrations
         {
             services.AddSingleton(sp => new SqliteConnectionFactory(
                 sp.GetRequiredService<InfrastructureOptions>(),
-                sp.GetRequiredService<IEncryptionKeyResolver>()));
+                sp.GetRequiredService<IEncryptionKeyResolver>(),
+                sp.GetRequiredService<ILogger<SqliteConnectionFactory>>()));
             services.AddSingleton<ISqliteConnectionFactory>(sp => sp.GetRequiredService<SqliteConnectionFactory>());
             services.AddRequiredSingleton<IWatchStore, WatchStore>();
             // ADR-0075 amendment: the server-side default for `watch registered` — overridden by
@@ -250,9 +271,15 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<INoiseShadowObserver, NoiseShadowObserver>();
 
             services.AddRequiredSingleton<IMemoryStore, SqliteMemoryStore>();
+            // WP6 (docs/work/2026-08-21-code-search-implementation-plan.md §3.6): FTS5-only v1 leg —
+            // the seam where WP5 adds the vec0 leg + RRF fusion.
+            services.AddRequiredSingleton<ICodeSearchService, SqliteCodeSearchService>();
             // ADR-0076: same instance as IMemoryStore — split out for the same reason ISettingsStore
             // was (ADR-0075), so the CLI can route model-set through the server independently.
             services.AddSingleton<IModelMigrationStore>(sp => sp.GetRequiredService<SqliteMemoryStore>());
+            // §3.3 D-E9: a store of its own, not another SqliteMemoryStore constructor parameter —
+            // same ADR-0075 reason the two registrations above are split out.
+            services.AddRequiredSingleton<ICodeEngineStore, SqliteCodeEngineStore>();
             services.AddRequiredSingleton<IMemorySourceStore, SqliteMemorySourceStore>();
             services.AddRequiredSingleton<ISettingsStore, SqliteSettingsStore>();
             // ADR-0075 amendment: the server-side default for `repair` — overridden by
@@ -287,6 +314,9 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<IVecDimensionReconciler, VecDimensionReconciler>();
             services.AddRequiredSingleton<IEntryEmbedder, EntryEmbedder>();
             services.AddRequiredSingleton<IEmbeddingAvailability, EmbeddingAvailability>();
+            // WP5 (§12.2 H5): the code corpus's own embedder — a second engine in the same keyed
+            // CreateGenerator cache, no IModelMigrationLease (the code corpus has no outbox).
+            services.AddRequiredSingleton<ICodeEmbedder, CodeEmbedder>();
         }
 
         /// <summary>Loops that only pay off in a long-lived host; a pure-stdio process is per-connection and recycled.</summary>
@@ -304,6 +334,7 @@ public static partial class AppRegistrations
         private void RegisterWatchServices()
         {
             services.AddRequiredSingleton<IWatchRetryPolicy, WatchRetryPolicy>();
+            services.AddRequiredSingleton<IWatchOverlapResolver, WatchOverlapResolver>();
             services.AddRequiredSingleton<IWatchDigestExecutor, WatchDigestExecutor>();
             services.AddRequiredSingleton<IWatchScheduler, WatchScheduler>();
             services.AddRequiredSingleton<IWatchScanGuard, WatchScanGuard>();
@@ -316,6 +347,12 @@ public static partial class AppRegistrations
         private void RegisterWatchSyncBackgroundService()
         {
             services.AddSingleton<WatchCatchUp>();
+            // WatchCatchUp implements IWatchScanInitiator; WatchDigestExecutor takes a Lazy<> of it
+            // so its own construction never eagerly resolves WatchCatchUp — which needs
+            // WatchPipeline, which needs IWatchDigestExecutor, which would otherwise cycle back
+            // here (docs/work/2026-08-21-code-search-implementation-plan.md §5.3).
+            services.AddSingleton<IWatchScanInitiator>(sp => sp.GetRequiredService<WatchCatchUp>());
+            services.AddSingleton(sp => new Lazy<IWatchScanInitiator>(() => sp.GetRequiredService<IWatchScanInitiator>()));
             services.AddSingleton(sp =>
             {
                 var logger = sp.GetRequiredService<ILogger<WatchEventSource>>();

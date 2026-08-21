@@ -168,3 +168,37 @@ class TestStartServerWithFakeBinary:
             "min_relative_score": 0.0,
         }
         assert "rrfK" not in client.kwargs  # tuning is settings-driven, never per-call
+
+    def test_search_passes_kind_through_when_the_corpus_entry_carries_one(self):
+        """H8 (plan §12.2): a code eval-set entry's 'kind' reaches memory_search."""
+
+        class FakeClient:
+            def __init__(self):
+                self.kwargs = None
+
+            def memory_search(self, **kwargs):
+                self.kwargs = kwargs
+                return [{"hash": "code-hash"}]
+
+        client = FakeClient()
+        server = ScratchServer(
+            data_root="/tmp/scratch",
+            port=39851,
+            token="t",
+            proc=None,
+            log_path="/tmp/scratch/serve.log",
+            binary="ai-raccoon",
+            client=client,
+        )
+        results = server.search(
+            {
+                "id": "C1",
+                "query": "line-range chunker",
+                "targetProjectId": "ai-raccoon",
+                "targetScope": "project",
+                "searchLimit": 5,
+                "kind": "code",
+            }
+        )
+        assert results == [{"hash": "code-hash"}]
+        assert client.kwargs["kind"] == "code"

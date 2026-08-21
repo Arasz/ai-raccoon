@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
+using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Watch;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -24,7 +25,7 @@ public sealed class WatchCatchUpTests
 
     private static WatchCatchUp NewCatchUp(WatchTestStack stack, ILogger<WatchCatchUp>? logger = null) =>
         new(stack.Pipeline, stack.Store, stack.ScanGuard, stack.ScanLease, stack.Time,
-            logger ?? NullLogger<WatchCatchUp>.Instance);
+            logger ?? NullLogger<WatchCatchUp>.Instance, stack.IgnoreRules);
 
     private static void Stamp(string path, DateTimeOffset at) => SetLastWriteTimeUtc(path, at.UtcDateTime);
 
@@ -437,5 +438,150 @@ public sealed class WatchCatchUpTests
         stack.ScanLease.ReleaseCalls.ShouldBe(1);
         await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
         stack.Memory.Ingested.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void EnumerateFiles_HiddenDirectorySegment_IsSkipped()
+    {
+        using var dir = TempDir.New("catchup-hidden-segment");
+        var visible = dir.File("README.md");
+        var hidden = Path.Combine(dir.Path, ".git", "HEAD");
+        Directory.CreateDirectory(Path.GetDirectoryName(hidden)!);
+        WriteAllText(visible, "kept");
+        WriteAllText(hidden, "git internals");
+
+        var files = WatchCatchUp.EnumerateFiles(dir.Path, null, Fingerprints()).ToList();
+
+        files.ShouldContain(visible);
+        files.ShouldNotContain(hidden);
+    }
+
+    [Fact]
+    public void EnumerateFiles_DenySetDirectory_IsSkipped()
+    {
+        using var dir = TempDir.New("catchup-denyset");
+        var visible = dir.File("README.md");
+        var denied = Path.Combine(dir.Path, "node_modules", "pkg", "index.js");
+        Directory.CreateDirectory(Path.GetDirectoryName(denied)!);
+        WriteAllText(visible, "kept");
+        WriteAllText(denied, "dependency tree");
+
+        var files = WatchCatchUp.EnumerateFiles(dir.Path, null, Fingerprints()).ToList();
+
+        files.ShouldContain(visible);
+        files.ShouldNotContain(denied);
+    }
+
+    [Fact]
+    public void EnumerateFiles_IgnoredFile_IsSkipped()
+    {
+        using var dir = TempDir.New("catchup-ignored-enum");
+        var kept = dir.File("keep.md");
+        var ignored = dir.File("secret.md");
+        WriteAllText(kept, "kept");
+        WriteAllText(ignored, "secret");
+        var rules = IgnoreRules.Parse("secret.md\n");
+
+        var files = WatchCatchUp.EnumerateFiles(dir.Path, null, Fingerprints(), rules).ToList();
+
+        files.ShouldContain(kept);
+        files.ShouldNotContain(ignored);
+    }
+
+    [Fact]
+    public async Task EnqueueInitialScan_RepoWithIgnoreFile_ScanSkipsIgnoredFiles()
+    {
+        using var dir = TempDir.New("catchup-scan-ignored");
+        var kept = dir.File("keep.md");
+        var ignored = dir.File("secret.md");
+        await WriteAllTextAsync(kept, "kept", TestContext.Current.CancellationToken);
+        await WriteAllTextAsync(ignored, "secret", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        stack.Enable();
+        stack.AllowScope(dir.Path);
+        stack.Memory.Settings[WatchConfigKeys.ConcurrencyProject(Project)] = "1";
+        stack.IgnoreRules.Set(dir.Path, "secret.md\n");
+        await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        var catchUp = NewCatchUp(stack);
+
+        catchUp.EnqueueInitialScan(Project, dir.Path, TestContext.Current.CancellationToken);
+        await catchUp.LastScan!;
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+
+        stack.Memory.Ingested.Select(i => i.Path).ShouldContain(kept);
+        stack.Memory.Ingested.Select(i => i.Path).ShouldNotContain(ignored);
+    }
+
+    [Fact]
+    public async Task EnqueueInitialScan_FingerprintedFileNewlyIgnored_ReconcileDeletesIt()
+    {
+        using var dir = TempDir.New("catchup-reconcile-ignored");
+        var file = dir.File("was-tracked.md");
+        await WriteAllTextAsync(file, "content", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        stack.Enable();
+        stack.AllowScope(dir.Path);
+        stack.Memory.Settings[WatchConfigKeys.ConcurrencyProject(Project)] = "1";
+        stack.Memory.OnDeletePath = stack.Store.RemoveFingerprint;
+        // Registers with both the store and the pipeline's runtime state (FindContainingWatch) —
+        // required for the reconcile-enqueued Deleted event to actually digest below.
+        await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        await stack.Store.UpsertFileHashAsync(Project, IngestPath.Normalize(file), "stale-hash",
+            0, TestContext.Current.CancellationToken);
+
+        // The next scan's rules now ignore the previously-fingerprinted file.
+        stack.IgnoreRules.Set(dir.Path, "was-tracked.md\n");
+        var catchUp = NewCatchUp(stack);
+        catchUp.EnqueueChangedSince(Project, dir.Path, 0, TestContext.Current.CancellationToken);
+        await catchUp.LastScan!;
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+
+        stack.Memory.DeletedPaths.ShouldContain((Project, IngestPath.Normalize(file)));
+        (await stack.Store.GetFileHashAsync(Project, IngestPath.Normalize(file), TestContext.Current.CancellationToken))
+            .ShouldBeNull();
+    }
+
+    /// <summary>
+    ///     S5: the original version of this test asserted <c>LoadCalls.Count &gt; 1</c>, which can
+    ///     never fail — one settling attempt (no re-walk at all) already costs 2 LoadAsync calls
+    ///     (top-of-loop + end-of-loop reread), so the assertion passed whether the loop's re-walk
+    ///     existed or not. Its outcome assertion was equally unable to discriminate: a newly-ignored
+    ///     file never lands in memory regardless, because <c>WatchDigestExecutor</c> re-reads ignore
+    ///     rules fresh per event anyway (§2.1 "no cache") — so the scan's OWN re-walk could be deleted
+    ///     entirely and this test would still pass.
+    ///     <para>
+    ///         Fixed by counting passes precisely instead of loosely: <see cref="FakeIgnoreRulesProvider.SetTransition" />
+    ///         deterministically changes the loaded rules exactly once (no hook-timing dependency),
+    ///         forcing exactly one genuine extra pass. Two attempts cost exactly 4 LoadAsync calls
+    ///         (2 each); a single, never-re-running attempt costs exactly 2 — asserting the exact
+    ///         count of 4 is only satisfied by a real second walk, not by the loop's own per-attempt
+    ///         double-load.
+    ///     </para>
+    /// </summary>
+    [Fact]
+    public async Task EnqueueInitialScan_IgnoreFileEditedMidScan_RunsAGenuineSecondPass()
+    {
+        using var dir = TempDir.New("catchup-midscan-ignore-edit");
+        var file = dir.File("newly-ignored.md");
+        await WriteAllTextAsync(file, "content", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        stack.Enable();
+        stack.AllowScope(dir.Path);
+        stack.Memory.Settings[WatchConfigKeys.ConcurrencyProject(Project)] = "1";
+        await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        stack.IgnoreRules.SetTransition(dir.Path, IgnoreRules.Empty, IgnoreRules.Parse("newly-ignored.md\n"));
+        var catchUp = NewCatchUp(stack);
+
+        catchUp.EnqueueInitialScan(Project, dir.Path, TestContext.Current.CancellationToken);
+        await catchUp.LastScan!;
+
+        stack.IgnoreRules.LoadCalls.Count(root => IngestPath.PathComparer.Equals(root, dir.Path)).ShouldBe(4,
+            "one settling attempt costs 2 loads (top + end-of-pass reread); a genuine second pass costs 4 — " +
+            "this is the count a deleted re-walk loop cannot produce");
+
+        // Outcome, kept from the original test: the second (real) pass sees the updated rules and
+        // never re-enqueues the file, so it never lands in memory either.
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+        stack.Memory.Ingested.Select(i => i.Path).ShouldNotContain(file);
     }
 }

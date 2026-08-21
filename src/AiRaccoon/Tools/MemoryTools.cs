@@ -1,12 +1,13 @@
 using System.ComponentModel;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Memory.QueryGuard.Structural;
 using AiRaccoon.Core.Metrics;
-using AiRaccoon.Core.SearchQuality;
 using FluentValidation;
 using JetBrains.Annotations;
 using ModelContextProtocol;
@@ -20,7 +21,7 @@ namespace AiRaccoon.Tools;
 public sealed partial class MemoryTools(
     IMemoryStore store,
     IToolGate gate,
-    ISearchQualityService qualityService,
+    ISearchDispatcher searchDispatcher,
     IQueryGuardService queryGuard,
     IMemoryWriteService writes,
     IMeasurementRecorder measurements,
@@ -104,7 +105,9 @@ public sealed partial class MemoryTools(
             "The search query. Semantic matching only sees roughly the first 254 tokens (~1,000 " +
             "characters of English prose, approximate) — for a long paste (a log, stack trace, test " +
             "output), search its identifying line (exception type, error code, failing test name) " +
-            "instead of the whole dump. Keyword matching still covers the query in full.")]
+            "instead of the whole dump. Keyword matching still covers the query in full. When kind " +
+            "is code or both, the code leg's own engine window is narrower still (126 tokens for " +
+            "code-daemon-embed-v1) — a query trimmed for code may still fit the memory leg in full.")]
         string query,
         [Description("Search scope: all (default), project, or shared.")]
         string scope = "all",
@@ -139,6 +142,15 @@ public sealed partial class MemoryTools(
         [Description("Narrows the project scope to one context. Omit it to search every context in " +
                      "the project (the default); memory_stats lists the labels in use.")]
         string? contextLabel = null,
+        [Description(
+            "Which corpus to search: memory (default — today's behavior, unchanged), code (the " +
+            "indexed code corpus only), or both. Code is always project-scoped: scope=shared " +
+            "returns an empty code section. Code hits carry lineStart/lineEnd instead of chunkIndex/totalChunks.")]
+        string kind = "memory",
+        [Description("Code section only: maximum results, overriding limit for the code section (bank setting unaffected).")]
+        int? codeLimit = null,
+        [Description("Code section only: relative floor, overriding minRelativeScore for the code section.")]
+        double? codeMinRelativeScore = null,
         CancellationToken cancellationToken = default)
     {
         await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemorySearch, cancellationToken);
@@ -150,6 +162,8 @@ public sealed partial class MemoryTools(
             "shared" => SearchScope.Shared,
             _ => throw new McpException($"invalid-params: Invalid scope '{scope}': expected all, project, or shared.")
         };
+        var parsedKind = ParseKind(kind);
+        ValidateCodeOverrides(codeLimit, codeMinRelativeScore);
 
         // Enum wire names are validated here (not silently defaulted) so a typo fails fast,
         // and provided tuning values are range-checked before any bank work.
@@ -169,22 +183,73 @@ public sealed partial class MemoryTools(
             throw new McpException($"invalid-params: {guard.Verdict.Guidance} Refused query: {QuerySnippet(query)}");
         }
 
-        var searchResults = await store.SearchAsync(searchQuery, cancellationToken);
-        var results = searchResults.Results;
-
         var correlationId = Guid.CreateVersion7().ToString("N");
-        await qualityService.RecordSearchSafeAsync(correlationId, query, scope, projectId, results.Count,
-            [.. results.Where(r => r.SourceFile is not null).Select(r => r.SourceFile!).Take(5)], cancellationToken);
-        RecordSearchMeasurements(searchResults, ContentHash.OfValue(query), correlationId, projectId);
+        var dispatch = await searchDispatcher.DispatchAsync(searchQuery, parsedKind, scope, correlationId,
+            codeLimit, codeMinRelativeScore, cancellationToken);
+
+        if (dispatch.MemorySearchResults is not null)
+        {
+            // SearchDispatcher's search_quality exclusion (kind=code/both never records: rows
+            // sync off-machine, and a code-adjacent query's content hash would leak the same
+            // way) applies here too — the metrics table syncs as well, and RecordSearchMeasurements
+            // still runs for kind=both (the memory leg's SearchResults are non-null). Performance
+            // metrics stay useful telemetry either way, so only the content-identifying query hash
+            // is excluded, not the whole recording (integration review S6).
+            var queryHash = parsedKind == SearchKind.Memory ? ContentHash.OfValue(query) : null;
+            RecordSearchMeasurements(dispatch.MemorySearchResults, queryHash, correlationId, projectId);
+        }
 
         // QueryLengthGuard is always on -- a fact about the embedding window, not a togglable
         // policy like the guard above -- so it is evaluated unconditionally, never through
-        // IQueryGuardService (a disabled guard must not silence it).
-        var warning = SearchWarnings.Compose(guard.Verdict, QueryLengthGuard.Evaluate(query));
-        var result = new SearchResultList(results, warning);
+        // IQueryGuardService (a disabled guard must not silence it). It applies identically
+        // whichever kind was requested, since both corpora search the same query text.
+        var warning = ComposeWarning(SearchWarnings.Compose(guard.Verdict, QueryLengthGuard.Evaluate(query)), dispatch.CodeWarning);
+        var result = new SearchResultList(dispatch.Results, warning, dispatch.CodeResults);
         var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
-        return envelope with { Meta = envelope.Meta with { CorrelationId = correlationId } };
+
+        // SearchDispatcher records a search_quality row only for kind=memory, so a kind=code/both
+        // correlation id would be a promise the envelope cannot keep: a later
+        // memory_record_grade/memory_record_followthrough call keyed on it would silently no-op
+        // against a row that was never written (integration review S6).
+        return parsedKind == SearchKind.Memory
+            ? envelope with { Meta = envelope.Meta with { CorrelationId = correlationId } }
+            : envelope;
     }
+
+    /// <summary>Mirrors the scope validation pattern: normalized case-insensitively, rejected fail-fast on a typo.</summary>
+    private static SearchKind ParseKind(string kind) => kind.ToLowerInvariant() switch
+    {
+        "memory" => SearchKind.Memory,
+        "code" => SearchKind.Code,
+        "both" => SearchKind.Both,
+        _ => throw new McpException($"invalid-params: Invalid kind '{kind}': expected memory, code, or both.")
+    };
+
+    /// <summary>S5: codeLimit/codeMinRelativeScore override limit/minRelativeScore for the code
+    /// section only — SearchQueryValidator enforces the same two rules for their un-prefixed
+    /// counterparts, so a section override must fail exactly the same way, not pass through
+    /// silently into an empty section.</summary>
+    private static void ValidateCodeOverrides(int? codeLimit, double? codeMinRelativeScore)
+    {
+        if (codeLimit is <= 0)
+        {
+            throw new McpException($"invalid-params: codeLimit must be greater than 0 (was {codeLimit}).");
+        }
+
+        if (codeMinRelativeScore is < 0.0 or > 1.0)
+        {
+            throw new McpException(
+                $"invalid-params: codeMinRelativeScore must be between 0 and 1 inclusive (was {codeMinRelativeScore}).");
+        }
+    }
+
+    private static string? ComposeWarning(string? primary, string? extra) => (primary, extra) switch
+    {
+        (null, null) => null,
+        (not null, null) => primary,
+        (null, not null) => extra,
+        _ => $"{primary} {extra}"
+    };
 
     /// <summary>
     ///     Builds the query from the wire values: enum strings are parsed and rejected on typo,
@@ -341,9 +406,19 @@ public sealed partial class MemoryTools(
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record GetResult(string Hash, string Value, string Path, string Context, long CreatedAt);
 
-    /// <summary>Warning is set only by the query guard's annotate tier (docs/adr/0040): a non-null value never changes Results.</summary>
+    /// <summary>
+    ///     Warning is set only by the query guard's annotate tier (docs/adr/0040) or the code
+    ///     section's degraded-mode note: a non-null value never changes Results. Code is null (and
+    ///     omitted from the wire, <see cref="JsonIgnoreCondition.WhenWritingNull" />) for kind=memory
+    ///     — the pinned envelope contract (docs/work/2026-08-21-code-search-implementation-plan.md
+    ///     §3.6): kind=memory serializes the exact legacy shape, no "code" key at all.
+    /// </summary>
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
-    public sealed record SearchResultList(IReadOnlyList<MemorySearchResult> Results, string? Warning = null);
+    public sealed record SearchResultList(
+        IReadOnlyList<MemorySearchResult> Results,
+        string? Warning = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IReadOnlyList<CodeSearchResult>? Code = null);
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record ListResult(JsonNode Files);
@@ -370,10 +445,12 @@ public sealed partial class MemoryTools(
     ///     Tags each of the eight search phases plus the measured total — plus the fusion diff,
     ///     present only when the no-fusion-regression flag is on (docs/adr/0078) — with the query
     ///     hash and correlation id and hands them to the recorder; never the query text itself
-    ///     (SqliteMetricsStore's save-time allowlist rejects it). Best-effort: a throwing recorder
-    ///     must never fail or slow the search (WP3).
+    ///     (SqliteMetricsStore's save-time allowlist rejects it). queryHash is null for a
+    ///     code-adjacent kind (kind=both): the metrics table syncs off-machine like search_quality,
+    ///     so a code-adjacent query's content hash is excluded the same way. Best-effort: a
+    ///     throwing recorder must never fail or slow the search (WP3).
     /// </summary>
-    private void RecordSearchMeasurements(SearchResults results, string queryHash, string correlationId, string projectId)
+    private void RecordSearchMeasurements(SearchResults results, string? queryHash, string correlationId, string projectId)
     {
         try
         {

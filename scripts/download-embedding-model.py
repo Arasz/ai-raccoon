@@ -8,6 +8,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
 from bundle import (  # noqa: E402
+    CODE_TOKENIZER_NAME,
+    CODE_TOKENIZER_SHA256,
+    CODE_TOKENIZER_URL,
     GGUF_NAME,
     GGUF_SHA256,
     GGUF_URL,
@@ -28,7 +31,11 @@ def main(argv):
     out_dir = argv[1] if len(argv) > 1 else None
     if model == "onnx":
         target_dir = Path(out_dir) if out_dir else REPO_ROOT / "src" / "AiRaccoon" / "Models"
-        entries = [(MODEL_NAME, MODEL_URL, MODEL_SHA256), (VOCAB_NAME, VOCAB_URL, VOCAB_SHA256)]
+        entries = [
+            (MODEL_NAME, MODEL_URL, MODEL_SHA256),
+            (VOCAB_NAME, VOCAB_URL, VOCAB_SHA256),
+            (CODE_TOKENIZER_NAME, CODE_TOKENIZER_URL, CODE_TOKENIZER_SHA256),
+        ]
     elif model == "gguf":
         default_root = os.environ.get("AIRACCOON_DATA_ROOT") or str(Path.home() / ".ai-raccoon")
         target_dir = Path(out_dir) if out_dir else Path(default_root) / "models"

@@ -99,7 +99,7 @@ public class MemoryToolsInstrumentationTests
 
         var store = new SimpleFakeStore { Entry = new MemoryEntry("h1", "p.md", "project:acme", "content", 5) };
         var queue = new FakePromotionQueue { GetMetaError = new InvalidOperationException("meta boom") };
-        var tools = new MemoryTools(store, new ToolGate(new MemoryAccessGuard(store), queue), new NoOpSearchQualityService(), new QueryGuardService(new InMemorySettings()), new MemoryWriteService(store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), NullLogger<MemoryTools>.Instance);
+        var tools = new MemoryTools(store, new ToolGate(new MemoryAccessGuard(store), queue), new SearchDispatcher(store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(new InMemorySettings()), new MemoryWriteService(store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), NullLogger<MemoryTools>.Instance);
 
         await Should.ThrowAsync<InvalidOperationException>(() => WriteThroughFilterAsync(metrics, tools));
 
@@ -122,7 +122,7 @@ public class MemoryToolsInstrumentationTests
 
         var store = new SimpleFakeStore { Entry = new MemoryEntry("h1", "p.md", "project:acme", "content", 5) };
         var queue = new FakePromotionQueue { GetMetaDelay = TimeSpan.FromMilliseconds(60) };
-        var tools = new MemoryTools(store, new ToolGate(new MemoryAccessGuard(store), queue), new NoOpSearchQualityService(), new QueryGuardService(new InMemorySettings()), new MemoryWriteService(store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), NullLogger<MemoryTools>.Instance);
+        var tools = new MemoryTools(store, new ToolGate(new MemoryAccessGuard(store), queue), new SearchDispatcher(store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(new InMemorySettings()), new MemoryWriteService(store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), NullLogger<MemoryTools>.Instance);
 
         await WriteThroughFilterAsync(metrics, tools);
 
@@ -192,7 +192,7 @@ public class MemoryToolsInstrumentationTests
     }
 
     private static MemoryTools CreateTools(SimpleFakeStore store) =>
-        new(store, new ToolGate(new MemoryAccessGuard(store), new FakePromotionQueue()), new NoOpSearchQualityService(), new QueryGuardService(new InMemorySettings()), new MemoryWriteService(store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), NullLogger<MemoryTools>.Instance);
+        new(store, new ToolGate(new MemoryAccessGuard(store), new FakePromotionQueue()), new SearchDispatcher(store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(new InMemorySettings()), new MemoryWriteService(store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), NullLogger<MemoryTools>.Instance);
 
     private static Task WriteThroughFilterAsync(ToolCallMetrics metrics, MemoryTools tools) =>
         ThroughFilterAsync(metrics, "memory_write", token => tools.Write("acme", "content", cancellationToken: token));

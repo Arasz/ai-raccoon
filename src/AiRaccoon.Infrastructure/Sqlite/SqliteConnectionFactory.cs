@@ -4,6 +4,7 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using CommunityToolkit.Diagnostics;
 using Dapper;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 
@@ -12,7 +13,10 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 ///     vec0 (NuGet), and initializes our schema on first open. There is no second meta database:
 ///     every table lives in memory.db (FR-NM-1; see docs/work/features-native-memory/native-memory.feature).
 /// </summary>
-public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncryptionKeyResolver keyResolver) : ISqliteConnectionFactory
+public sealed partial class SqliteConnectionFactory(
+    InfrastructureOptions options,
+    IEncryptionKeyResolver keyResolver,
+    ILogger<SqliteConnectionFactory>? logger = null) : ISqliteConnectionFactory
 {
     static SqliteConnectionFactory()
     {
@@ -87,7 +91,7 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
 
         // Post-open failures (extensions, vector load, schema DDL) are not key-related and
         // must propagate unchanged — only the open above proves whether the key is wrong.
-        return await InitializeAsync(connection, cancellationToken).ConfigureAwait(false);
+        return await InitializeAsync(connection, cancellationToken, logger).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -135,7 +139,7 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
     public async Task<SqliteConnection> OpenBankWithKeyAsync(string? key, CancellationToken cancellationToken = default)
     {
         var connection = await OpenConnectionAsync(key, cancellationToken).ConfigureAwait(false);
-        return await InitializeAsync(connection, cancellationToken).ConfigureAwait(false);
+        return await InitializeAsync(connection, cancellationToken, logger).ConfigureAwait(false);
     }
 
     /// <inheritdoc cref="ISqliteConnectionFactory.OpenBankSkippingEnsureAsync" />
@@ -240,16 +244,39 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
     /// <summary>
     ///     Loads vec0 and ensures the schema on an already-open connection. Disposes and
     ///     rethrows on failure so a failed post-open step never leaks a pooled, checked-out
-    ///     connection.
+    ///     connection. The one caller with a logger (this method) reports every watch the
+    ///     unconditional no-overlapping-watches prune step removed
+    ///     (docs/work/2026-08-21-code-search-implementation-plan.md §4) and every project whose
+    ///     resolution failed and was skipped (S8) — the migration itself stays silent and only
+    ///     returns the data.
     /// </summary>
-    internal static async Task<SqliteConnection> InitializeAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    internal static async Task<SqliteConnection> InitializeAsync(SqliteConnection connection,
+        CancellationToken cancellationToken, ILogger<SqliteConnectionFactory>? logger = null)
     {
         try
         {
             connection.EnableExtensions();
             // vec0 ships in the NuGet package — always available, no provisioning.
             connection.LoadVector();
-            await MemorySchema.EnsureAsync(connection, cancellationToken).ConfigureAwait(false);
+            var overlapResult = await MemorySchema.EnsureAsync(connection, cancellationToken).ConfigureAwait(false);
+            if (logger is not null)
+            {
+                if (overlapResult.Pruned.Count > 0)
+                {
+                    foreach (var watch in overlapResult.Pruned)
+                    {
+                        Log.WatchOverlapMigrationPruned(logger, watch.Path, watch.CoveredBy);
+                    }
+
+                    Log.WatchOverlapMigrationSummary(logger, overlapResult.Pruned.Count);
+                }
+
+                foreach (var warning in overlapResult.Warnings)
+                {
+                    Log.WatchOverlapMigrationSkippedProject(logger, warning.ProjectId, warning.Reason);
+                }
+            }
+
             return connection;
         }
         catch
@@ -319,5 +346,20 @@ public sealed class SqliteConnectionFactory(InfrastructureOptions options, IEncr
         await using var busy = connection.CreateCommand();
         busy.CommandText = "PRAGMA busy_timeout=5000";
         await busy.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 901, Level = LogLevel.Information,
+            Message = "watch overlap migration: removed {Path} (covered by {CoveredBy})")]
+        public static partial void WatchOverlapMigrationPruned(ILogger logger, string path, string coveredBy);
+
+        [LoggerMessage(EventId = 902, Level = LogLevel.Information,
+            Message = "watch overlap migration: removed {Count} overlapping watch(es)")]
+        public static partial void WatchOverlapMigrationSummary(ILogger logger, int count);
+
+        [LoggerMessage(EventId = 903, Level = LogLevel.Warning,
+            Message = "watch overlap migration: skipped project {ProjectId}, its watches were left untouched ({Reason})")]
+        public static partial void WatchOverlapMigrationSkippedProject(ILogger logger, string projectId, string reason);
     }
 }

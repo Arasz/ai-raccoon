@@ -3,9 +3,9 @@
 **Date:** 2026-08-21
 **Task:** code-search-implementation-plan (**plan-only — this task finishes when the plan is
 ready; no implementation in this task**)
-**Status:** rev 2 — MoE lanes combined → MoE review round (architect + code-reviewer, 3+11
-MUST-FIX) → external review round 1 (2 blocking) → **all folded**. §7 carries the full
-disposition register; §11 the review dispositions.
+**Status:** rev 3 — rev 2 (MoE + reviews folded) + **pre-implementation audit (§12)**: the
+engine base assumed by §1 is unmerged (H1–H3 → re-sequenced into waves, §12.5); H4–H12 folded
+into WP contracts. Where §12 contradicts earlier sections, §12 wins.
 
 ## 0. How to read this plan
 
@@ -421,3 +421,113 @@ v11 log channel (arch-8 → §4), hidden dirs + deny set (arch-10 → §2.3/OQ8)
 strip DROP vs DELETE (F-22 → §3.7), feature-file path (arch-12 → QA/ops aligned on
 `code-corpus.feature`), tool-count 28 + stale assertion (arch-13 → WP8 gate), INFO F-07/F-20/
 F-23/F-24/F-25 recorded.
+
+## 12. Pre-implementation audit (rev 3 — 2026-08-21, architect audit at implementation start)
+
+Audited by the implementation task (`code-mem-implementation`) before any code. All 14 §10
+anchors verify with zero drift; `CurrentVersion = 10` confirmed (`MemorySchema.cs:49`), 10→11
+correct; ADRs top out at 0083 (§11 R2 moot); nothing merged to main since 571c751b. Twelve
+holes found; dispositions below are **binding** and, where they contradict earlier sections,
+win.
+
+### 12.1 Blocking (engine base) — resolved by re-sequencing
+
+- **H1 — §1's "assumed already implemented" engine base does not exist on main.** #402 merged
+  plan docs only (its `feat:` title is false); PR #404 carries a tracker file, no code. The
+  engine work lives on local unpushed branches `lane/wp1-manifest` (manifest records/validator)
+  and `lane/wp3-engine` (tokenizer seam, sentencepiece), never integrated with each other
+  (wp3 carries a provisional duplicate of wp1's manifest loader). → **WP0 (external
+  dependency): the engine-integration packet — owned by the #404 task, not this one.** This
+  task's engine-blocked WPs start only after WP0 lands on main.
+- **H2 — D4/D8 `model download` verb and D2 `embedding.dimensions` row exist nowhere** (verb:
+  infra only on lane/wp1, no CLI command; D2/D3: engine WP4 never started). → D2/D3 are SOFT
+  for this plan (non-768 refused at configure time; D3 explicitly unexercised). The download
+  verb is needed only for §3.3's UX: if WP0 lands without it, WP1 documents manual model
+  placement + a hand-authored D1 manifest fixture, and the how-to is amended when the verb
+  ships.
+- **H3 — D6 contradiction.** The engine plan's text pins `MaxManifestChunkTokens = 510, NOT
+  derived from ctx` (`2026-08-21-arbitrary-embedding-models-plan.md:90`), while this plan's
+  126 assumes ctx−2; only the unmerged lane code implements `min(510, ctx − reservation)`.
+  → Flagged to the engine lanes on PR #404: engine D6 must be amended to the min() rule that
+  is actually implemented. **WP2 gate here asserts a 128-ctx manifest resolves to budget 126,
+  not 510** — this gate also guards against a re-derivation of WP3 from the stale plan text.
+
+### 12.2 Should-fix — folded into WP contracts
+
+- **H4 — `manifest.json` name collision:** the D1 sidecar filename equals the file
+  code-daemon-embed-v1 ships in its own repo. §3.3 gains: download/placement must keep the D1
+  manifest authoritative (the resolution is pinned in WP0/engine docs; flagged on #404); WP1
+  adds a fixture with both files present.
+- **H5 — no WP owned the code embedder:** `ICodeEmbedder`/`CodeEmbedder` + the
+  `EmbeddingService` second-engine resolution are now **named WP5 deliverables** (design per
+  engineer lane §6.5, D-E8/E14/E15); WP3's pending→embedded gate depends on them; no
+  `IModelMigrationLease` in the code path.
+- **H6 — sync strip has THREE call sites**, not two: `SyncService.cs:74`, `:105`, and `:161`
+  (retry-merged push). §3.7/§10 corrected; WP7-T04 covers all three; the strip uses
+  `DROP TABLE IF EXISTS` (snapshots opened via `openSnapshot` never ran `EnsureAsync`).
+- **H7 — settings-tier tuning params:** the code section resolves `SearchParameters.FromSources`
+  like memory, but `retrieval.structureAlpha` is **inert** for code (no structure modality,
+  §3.1). §3.6 gains the honored/inert list; WP5 test pins that `retrieval.structureAlpha`
+  does not move code ranking.
+- **H8 — WP8 eval is not CI-runnable:** the harness is Python (not a CI gate in this repo) and
+  needs `kind=code` plumbing + a code fixture bank, which WP8 now names as deliverables. The
+  eval gate is a **recorded manual run with a committed artifact**, not CI-enforced.
+- **H12 — feature-file path:** WP8 pins `docs/features/code-corpus/code-corpus.feature` **+
+  sibling `spec.json`** per `docs/features/README.md`; the QA catalog's bdd-kind reference to
+  the legacy `docs/work/features-*` layout is repointed.
+
+### 12.3 Notes (recorded decisions)
+
+- **H9 — release:** WP8 gains "VERSION 1.28.1 → 1.29.0 via `scripts/version-bump.py`", landing
+  in the final PR (release itself remains behind the repo's two human gates).
+- **H10 — mid-scan ignore-edit semantics pinned:** mtime-recheck-at-scan-end (no new queue
+  state in `WatchScanGuard`); WP4-T20 asserts that shape.
+- **H11 — drain wording:** §3.5's "memory outbox" means `PendingEmbedJob`; the 8.5 texts/s
+  figure holds only when the memory pending queue is idle (shared poll + `BatchSize = 32`).
+
+### 12.4 Owner-question decisions (away-mode, registered)
+
+- **OQ4:** `memory_ingest_file` **routes code files** (QA G5; one dispatch mechanism;
+  ignore-wins already pinned by §2.1). WP3-T10 in scope.
+- **OQ5:** eval repos picked provisionally at WP8 time (2–3 permissive-license repos, pinned
+  commits, ≥1 Python), **marked provisional for owner sign-off** before the report is
+  treated as authoritative. All other OQs take the plan's stated defaults.
+
+### 12.5 Execution sequencing (supersedes any implied WP order)
+
+- **Wave 1 (engine-independent, parallel):** (A) WP1-partial — corpus `Ddl` block + golden
+  `kind=memory` capture; (B) WP4-core — `IgnoreRules`, overlap prune/reject/tie-break,
+  one-transaction `PruneAndAddAsync` + kill-9, ladder v11 (both call sites), hidden-dir +
+  deny-set enumeration skip.
+- **Wave 2 (after A merges):** WP6 (kind/envelope/`code_get`), WP7-partial (DROP-strip ×3 +
+  search_quality exclusion), WP3-partial (registry, `CodeIngestor`, routing, digest delete-both
+  legs).
+- **Wave 3 (after WP0 = engine base on main):** WP2, WP3-remainder (counting tokenizer),
+  WP1-remainder (`model set code local`, non-768 refusal), WP5, WP7-remainder
+  (`code-reindex` drain), then WP8.
+
+### 12.6 Waves 1–2 integration-review dispositions (Opus gate, 2026-08-21)
+
+Review found 2 blocking + 12 should-fix; all fixed in the same task except the following
+recorded dispositions:
+
+- **v11 REVERTED (S7/S8, orchestrator ruling — owner review requested):** the plan-§4
+  `CurrentVersion 10→11` bump is replaced by an unconditional, ungated, idempotent
+  overlap-prune at bank open (`MigrateIngestScopeKeysAsync` shape, soft per-row failure
+  handling). Reason: the bump hard-fails concurrent sessions/peers on the older binary
+  (user_version survives `VACUUM INTO`; sync refuses newer snapshots) — repo precedent
+  ADR-0023, and this repo runs concurrent sessions as standard practice. `CurrentVersion`
+  stays 10.
+- **`idx_code_entries_path` DROPPED (S2):** proven inert — `uq_code_chunk` is the covering
+  index; the EXPLAIN gate is re-pointed at it. §3.1's index list amended accordingly.
+- **WP6 "code-budget warning" ownership (review note):** belongs to WP5 (the 126 trim), Wave
+  3 — §5's WP6 gate row is corrected by this disposition; not a Wave-2 gap.
+- **Per-call `limit`/`minRelativeScore` are shared across sections in Wave 2** (documented as
+  provisional); per-section split is WP5. WP5 must also resolve the `relativeScore` semantics
+  asymmetry: the FTS5-only code leg's score is positional (rank-derived), not
+  relevance-relative — carrying the same field name with different semantics is a Wave-3
+  design point, not a bug fix.
+- **`WatchScanGuard` drop-window (review note):** an ignore-edit digest landing between a
+  scan's final re-read and slot release is dropped, not queued — Wave-3 WP4-polish item.
+- **`kind=both` metrics row** records a query hash while `kind=code` records nothing —
+  asymmetry resolved in the S6 fix (see code); correlationId omitted for code/both envelopes.

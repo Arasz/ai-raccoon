@@ -9,7 +9,7 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **140** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **145** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
@@ -44,6 +44,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 410-413 | `src/AiRaccoon.Infrastructure/Embedding/BundledModel.cs` |
 | 414-415 | `src/AiRaccoon.Infrastructure/Embedding/OnnxEmbeddingGenerator.cs` (docs/adr/0036: embed-time truncation and possible-[UNK]-collapse detectors — 414 is STORED CONTENT only since ADR-0071) |
 | 416 | `src/AiRaccoon.Infrastructure/Embedding/EmbeddingService.cs` (added 2026-08-15: a search query trimmed to the model window, ADR-0071 — split out of 414 so each is countable) |
+| 420 | `src/AiRaccoon.Infrastructure/Chunking/NoOpCodeChunker.cs` (added 2026-08-21: the interim `ICodeChunker` — one Information line marking the code-engine-wave gap, logged once per process, docs/work/2026-08-21-code-search-implementation-plan.md §12.5) |
 | 500-506, 508 | `src/AiRaccoon.Infrastructure/Extraction/ExtractionHostedService.cs` (507/509 removed 2026-08-11: per-element candidate/failure logs de-noised) |
 | 525-526 | `src/AiRaccoon.Infrastructure/Maintenance/MaintenanceJobRunner.cs` (added 2026-08-15: one line per maintenance job that ran or failed, ADR-0070 — 530+ was taken by SweepHostedService and the uniqueness gate caught it) |
 | 510-524 | `src/AiRaccoon.Infrastructure/Maintenance/BankMaintenanceHostedService.cs` (517-519 added 2026-08-14: the pending-embed retry sweep, .NET-F1 — a watch-driven embedding failure used to leave a row permanently pending; 520-521 added 2026-08-14: the noise-entry retention purge, ADR-0039; 522-524 added 2026-08-15: the promotion-discard and search-quality retention purges, ADR-0055. **512 and 516 are retired**: both are still declared here but have had no call site since ADR-0070 moved vacuuming into `MaintenanceJobRunner`, which logs 525 instead — they cannot fire. Retired rather than deleted so the numbers are not reused; found by the 2026-08-16 checklist run. ADR-0076's on-demand poll loop deliberately reuses `RunFailed` (513) instead of minting a new id — a second near-duplicate would have interleaved with `MaintenanceJobRunner`'s adjacent 525-526 block) |
@@ -57,7 +58,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 640 | `src/AiRaccoon/Observability/OtlpExport.cs` (ADR-0009; OTLP export disabled warning) |
 | 650-656 | `src/AiRaccoon/Hosting/Node/ServerRestart.cs` (ADR-0022; 656 is the unanswered probe, ADR-0043) |
 | 660 | `src/AiRaccoon/Hosting/Node/ShutdownEndpoint.cs` (ADR-0022) |
-| 670-674 | `src/AiRaccoon/Settings/SettingsEndpoint.cs` (ADR-0075: the control-plane settings resource; 672/673 log the key only, never the value — sync credentials and the embedding API key go through here; 674 is the model-migration outbox commit, ADR-0076) |
+| 670-675 | `src/AiRaccoon/Settings/SettingsEndpoint.cs` (ADR-0075: the control-plane settings resource; 672/673 log the key only, never the value — sync credentials and the embedding API key go through here; 674 is the model-migration outbox commit, ADR-0076; 675 added 2026-08-21: the code corpus's own activation commit, no outbox, docs/work/2026-08-21-code-search-implementation-plan.md §3.3) |
 | 680-681 | `src/AiRaccoon/Settings/RepairEndpoint.cs` (ADR-0075 amendment: the control-plane repair resource — 680 is a report served, 681 is a repair_requests outbox commit) |
 | 682-683 | `src/AiRaccoon/Settings/PromotionQueuePruneEndpoint.cs` (ADR-0075 amendment: the control-plane promotion-queue-prune resource — 682 is a report served, 683 is a promotion_queue_prune_requests outbox commit) |
 | 684 | `src/AiRaccoon/Settings/MaintenanceStatsEndpoint.cs` (ADR-0075 amendment: the control-plane maintenance-stats resource — read-only, no outbox) |
@@ -66,6 +67,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 700, 702-704, 707-709 | `src/AiRaccoon.Infrastructure/Promotion/PromotionQueueService.cs` (701/705/706 removed 2026-08-11: per-element eviction/failure logs de-noised; 708 = prune summary; 709 added 2026-08-14 = stale promotion claims reclaimed, ADR-0037) |
 | 800-807 | `src/AiRaccoon/Setup/Cli/Commands/EncryptionCommands.cs` |
 | 900 | `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs` |
+| 901, 902, 903 | `src/AiRaccoon.Infrastructure/Sqlite/SqliteConnectionFactory.cs` (added 2026-08-21: the overlap-prune report (formerly the v11 ladder step, now an unconditional open-time step)'s overlap-prune report — one line per pruned watch + a count, docs/work/2026-08-21-code-search-implementation-plan.md §4; the migration itself is silent and only returns the pruned list, since `SqliteConnectionFactory.InitializeAsync` is the one caller in the chain that owns a logger) |
 | 910-912 | `src/AiRaccoon/Tools/ToolRefusals.cs` |
 | 920-921 | `src/AiRaccoon/Tools/MemoryTools.cs` (docs/adr/0040: read-path query guard shadow-mode verdict; 921 added — WP10, docs/plans/2026-08-15-performance-metrics-implementation.md: best-effort phase-measurement recording failure) |
 | 950 | `src/AiRaccoon.Infrastructure/Sqlite/SqliteNoiseClusterStore.cs` (ADR-0039: noise-learning substrate) |

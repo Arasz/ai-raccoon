@@ -1,6 +1,7 @@
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -74,6 +75,47 @@ public sealed class ChunkBudgetIsEngineAwareTests : IAsyncLifetime
         entries.ShouldAllBe(entry => bert.EncodeToIds(entry.Value, true, true, true).Count <= 256);
 
         _logger.Collector.GetSnapshot().ShouldNotContain(record => record.Id.Id == 414);
+    }
+
+    /// <summary>
+    ///     WP2-T11: with the real code-daemon-embed-v1 sentencepiece tokenizer (special ids
+    ///     2/3/0/1), a representative real C# source file chunks entirely within the 126-token
+    ///     budget — the graph does not truncate, so the caller (the chunker) must never emit an
+    ///     over-cap chunk (plan §3.4/§12.1 H3).
+    /// </summary>
+    [Fact]
+    public void CodeChunker_WithTheRealSentencePieceTokenizer_RespectsTheHardCap()
+    {
+        var tokenizer = new CodeTokenizer();
+        var chunker = new CodeChunker(tokenizer);
+        var source = File.ReadAllText(TestData.RepoFile("src/AiRaccoon.Core/Chunking/MarkdownChunker.cs"));
+
+        var chunks = chunker.Chunk(source);
+
+        chunks.ShouldNotBeEmpty();
+        chunks.ShouldAllBe(c => tokenizer.CountTokens(c.Text) <= CodeChunker.DefaultBudget,
+            "no chunk may exceed the 126-token budget once counted with the real sentencepiece tokenizer");
+    }
+
+    /// <summary>
+    ///     QA WP2 gate: a pathological single line (minified, no whitespace/braces) hard-splits
+    ///     under the real sentencepiece cap — the fake-tokenizer unit test (`CodeChunkerTests.
+    ///     Chunk_SingleLineOverflow_HardSplitsTheLine`) pins the algorithm; this pins it against
+    ///     the real counting tokenizer, where char-count and token-count are not 1:1.
+    /// </summary>
+    [Fact]
+    public void CodeChunker_WithTheRealSentencePieceTokenizer_HardSplitsAPathologicalLongLine()
+    {
+        var tokenizer = new CodeTokenizer();
+        var chunker = new CodeChunker(tokenizer);
+        var pathologicalLine = string.Concat(Enumerable.Range(0, 400).Select(i => $"x{i:D3}")) + "\n";
+
+        var chunks = chunker.Chunk(pathologicalLine);
+
+        chunks.Count.ShouldBeGreaterThan(1, "a 1600+ char single line must hard-split under the 126-token cap");
+        chunks.ShouldAllBe(c => tokenizer.CountTokens(c.Text) <= CodeChunker.DefaultBudget);
+        string.Concat(chunks.Select(c => c.Text)).ShouldBe(pathologicalLine,
+            "concatenating chunk values must reproduce the original line");
     }
 
     /// <summary>Real repo prose (not synthetic repeated paragraphs): the review measured that
