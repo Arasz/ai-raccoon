@@ -253,22 +253,15 @@ public sealed class WatchDigestExecutorTests
         (await stack.Store.GetFileHashAsync(Project, file, TestContext.Current.CancellationToken)).ShouldBeNull();
     }
 
-    [Fact]
-    public async Task Digest_ExplicitMemoryIngestFile_OfAnIgnoredPath_Unaffected_IgnoreAppliesOnlyToTheWatchPath()
-    {
-        // Regression guard: the ignore gate lives on the (watchPath, filePath) digest signature —
-        // it must never fire for a path outside any watch (documents the boundary, not a new tool).
-        using var dir = TempDir.New("digest-ignore-boundary");
-        var file = dir.File("keep.md");
-        await File.WriteAllTextAsync(file, "kept", TestContext.Current.CancellationToken);
-        var stack = new WatchTestStack();
-        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
-
-        await Executor(stack).DigestAsync(Project, dir.Path, file, WatchEventKind.Created, null,
-            TestContext.Current.CancellationToken);
-
-        stack.Memory.Ingested.ShouldHaveSingleItem();
-    }
+    // Digest_ExplicitMemoryIngestFile_OfAnIgnoredPath_Unaffected_IgnoreAppliesOnlyToTheWatchPath
+    // removed (B2 finding, small item 3): it set no ignore rules and exercised WatchDigestExecutor
+    // (the watch pipeline, which already resolves its own correct watch-scoped ignore root) rather
+    // than the explicit `memory_ingest_file` pipeline its name and comment described — so it could
+    // never fail on the contract it claimed to pin, and that claimed contract (explicit
+    // memory_ingest_file bypassing a watch's ignore rules) is exactly what §2.1/B2 forbids: ignore
+    // now wins for BOTH pipelines. The correct-contract witness for explicit memory_ingest_file
+    // honoring ignore rules lives with FileIngestor, which owns that pipeline:
+    // FileIngestorCodeRoutingTests.IngestFileAsync_ExplicitlyIgnoredMemoryFile_UnderWatchRoot_ReturnsZeroChunks.
 
     [Fact]
     public async Task Digest_IgnoreFileItself_IsNeverMatchedAgainstItsOwnRules()
