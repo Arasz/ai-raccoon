@@ -43,7 +43,7 @@ public sealed class CustomContextDiscoverabilityTests : IDisposable
         var embedder = new EntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider);
         return new SqliteMemoryStore(_factory, new SqliteMemorySourceStore(_factory),
             new FileIngestor(new FileTypeMatcher([]), embedder, new SqliteMemorySourceStore(_factory),
-                new FakeTimeProvider(FixedNow), new LocalTokenizer()),
+                new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService()),
             embedder, new FakeTimeProvider(FixedNow), NullLogger<SqliteMemoryStore>.Instance,
             new NoiseFilteringService([]), new SqliteSettingsStore(_factory));
     }

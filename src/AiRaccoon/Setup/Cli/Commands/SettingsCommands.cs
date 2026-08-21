@@ -96,6 +96,16 @@ public sealed class SettingsCommands
         IModelMigrationStore modelMigrations, StandardStreams streams, CancellationToken cancellationToken)
     {
         var path = parseResult.GetResult("path") is not null ? ExpandTilde(parseResult.GetValue<string>("path")) : null;
+
+        // WP3 directory activation (M3/M4): a directory REQUIRES a valid manifest.json, and only
+        // 384-dimension manifests are loadable until the dimension-reconcile work lands. Refuse
+        // BEFORE the outbox commits — a refused model set must never mark the bank pending.
+        if (path is not null && Directory.Exists(path))
+        {
+            var descriptor = ProvisionalManifestDescriptor.Load(Path.GetFullPath(path));
+            ProvisionalManifestDescriptor.RequireWp3Supported(descriptor);
+        }
+
         // A remote API key is meaningless for the local engine; don't leave it in settings.
         await store.DeleteSettingAsync(EmbeddingSettingsKeys.ApiKey, cancellationToken);
         await modelMigrations.StartModelMigrationAsync("local", path, null, cancellationToken);

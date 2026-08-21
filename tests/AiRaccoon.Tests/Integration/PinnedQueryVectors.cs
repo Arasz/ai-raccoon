@@ -117,6 +117,14 @@ internal sealed class PinnedQueryEmbeddingService(PinnedQueryVectorFile file) : 
     /// <summary>Pinned vectors are keyed by the exact query text, so trimming here would miss every pin.</summary>
     public string TrimQueryToWindow(EmbeddingSettings settings, string query) => query;
 
+    public int ResolveChunkBudgetFor(EmbeddingSettings settings) => OnnxEmbeddingGenerator.MaxContentTokens;
+
+    /// <summary>The real bundled tokenizer — the resolver contract says local ⇒ a tokenizer exists (D9).</summary>
+    public IEmbeddingTokenizer? ResolveTokenizer(EmbeddingSettings settings) =>
+        string.Equals(settings.Provider, "local", StringComparison.OrdinalIgnoreCase)
+            ? WordPieceEmbeddingTokenizer.Create(BundledModel.ResolveVocabPath())
+            : null;
+
     private sealed class PinnedGenerator : IEmbeddingGenerator<string, Embedding<float>>
     {
         private readonly Dictionary<string, float[]> _byQuery;

@@ -1,0 +1,12 @@
+{
+  "description": "SentencePiece fixture pin for WP3 sentencepiece-family tests (D5). The binary is not committed — tests bootstrap a sha-verified copy from this pin, mirroring the Retrieval-assets precedent.",
+  "files": [
+    {
+      "name": "xlm-roberta-sentencepiece.bpe.model",
+      "url": "https://huggingface.co/BAAI/bge-m3/resolve/main/onnx/sentencepiece.bpe.model",
+      "sha256": "cfc8146abe2a0488e9e2a0c56de7952f7c11ab059eca145a0a727afce0db2865",
+      "bytes": 5069051,
+      "note": "The sentencepiece.bpe.model shipped in BAAI/bge-m3's onnx/ export (xlm-roberta base); size and sha measured 2026-08-21 (plan facts table, row 6)."
+    }
+  ]
+}

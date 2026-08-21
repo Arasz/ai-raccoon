@@ -38,7 +38,7 @@ public sealed class ChunkIndexRepairJobTests : IDisposable
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private static ChunkIndexRepairJob NewJob() =>
-        new(new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]), new LocalTokenizer(),
+        new(new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]), TestData.CreateEmbeddingService(),
             new FakeTimeProvider(FixedNow));
 
     [Fact]

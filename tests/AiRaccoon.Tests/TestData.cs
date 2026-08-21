@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
@@ -6,6 +7,7 @@ using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
 using AiRaccoon.Hosting.Proxy;
+using AiRaccoon.Infrastructure.Assets;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
@@ -64,7 +66,7 @@ public static class TestData
         var embedder = new EntryEmbedder(embeddings, modelMigrationLease ?? ModelMigrationLease, timeProvider);
         var matcher = new FileTypeMatcher(
             [new MarkdownFileTypeHandler(markdownChunker), new JsonFileTypeHandler(jsonChunker)]);
-        var fileIngestor = new FileIngestor(matcher, embedder, sourceStore, timeProvider, new LocalTokenizer());
+        var fileIngestor = new FileIngestor(matcher, embedder, sourceStore, timeProvider, embeddings);
         var noiseFilteringService = new NoiseFilteringService(noisePolicies ?? []);
         return new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService,
             settings ?? new SqliteSettingsStore(factory));
@@ -182,6 +184,41 @@ public static class TestData
 
     /// <summary>EmbeddingService with a null logger — the constructor requires a real <see cref="ILogger{TCategoryName}"/> now that it is DI-registered, so tests that don't care about logging use this.</summary>
     public static EmbeddingService CreateEmbeddingService() => new(NullLogger<EmbeddingService>.Instance, new LocalTokenizer());
+
+    /// <summary>
+    ///     Bootstraps the pinned sentencepiece fixture (tests/AiRaccoon.Tests/Resources/tokenizers/manifest.json)
+    ///     into the scratch dir, sha-verified, mirroring the Retrieval-assets precedent: the pin is
+    ///     committed, the 5 MB binary is not. Returns the model file path.
+    /// </summary>
+    public static async Task<string> EnsureSentencePieceFixtureAsync(CancellationToken cancellationToken)
+    {
+        var scratchDir = Path.Combine(Path.GetTempPath(), "ai-raccoon-test-fixtures");
+        var target = Path.Combine(scratchDir, "xlm-roberta-sentencepiece.bpe.model");
+        if (File.Exists(target) && BundledResource.Sha256Of(target)
+                .Equals(SentencePieceFixtureSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            return target;
+        }
+
+        Directory.CreateDirectory(scratchDir);
+        var bytes = await new AssetDownloader(new HttpClient()).GetAsync(SentencePieceFixtureUrl, cancellationToken)
+            .ConfigureAwait(false);
+        var actual = Convert.ToHexString(SHA256.HashData(bytes));
+        if (!actual.Equals(SentencePieceFixtureSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"sentencepiece fixture download failed sha verification: expected {SentencePieceFixtureSha256}, got {actual}");
+        }
+
+        await File.WriteAllBytesAsync(target, bytes, cancellationToken).ConfigureAwait(false);
+        return target;
+    }
+
+    public const string SentencePieceFixtureUrl =
+        "https://huggingface.co/BAAI/bge-m3/resolve/main/onnx/sentencepiece.bpe.model";
+
+    public const string SentencePieceFixtureSha256 =
+        "cfc8146abe2a0488e9e2a0c56de7952f7c11ab059eca145a0a727afce0db2865";
 
     /// <summary>Returns the p-th percentile (0–1) of the samples.</summary>
     public static double Percentile(IReadOnlyList<double> samples, double quantile)

@@ -155,7 +155,7 @@ public static partial class AppRegistrations
             services.AddSingleton<IReadOnlyList<IMaintenanceJob>>(sp =>
             [
                 new ChunkBackfillJob(sp.GetRequiredService<IMarkdownChunker>(), sp.GetRequiredService<TimeProvider>(),
-                    sp.GetRequiredService<ILocalTokenizer>()),
+                    sp.GetRequiredService<IEmbeddingService>()),
                 new Vec0ReclaimJob(),
                 new VacuumJob(),
                 new MetricsRetentionJob(sp.GetRequiredService<TimeProvider>()),
@@ -166,9 +166,9 @@ public static partial class AppRegistrations
                 // Before PendingEmbedJob for the same reason ChunkBackfillJob is: a reingest repair
                 // leaves rows pending, and PendingEmbedJob, last in this list, already sees them by
                 // the time this same foreach reaches it.
-                new ChunkIndexRepairJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<ILocalTokenizer>(),
+                new ChunkIndexRepairJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IEmbeddingService>(),
                     sp.GetRequiredService<TimeProvider>()),
-                new ReingestRepairJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<ILocalTokenizer>(),
+                new ReingestRepairJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IEmbeddingService>(),
                     sp.GetRequiredService<IMemoryStore>(), sp.GetRequiredService<TimeProvider>()),
                 // ADR-0075 amendment: on-demand, same shape as the two repair jobs above —
                 // HasWorkAsync reads the promotion_queue_prune_requests row `extract prune --apply`

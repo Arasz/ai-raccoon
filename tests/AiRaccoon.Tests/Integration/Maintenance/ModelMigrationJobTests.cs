@@ -228,6 +228,14 @@ public sealed class ModelMigrationJobTests : IAsyncLifetime
 
         public string TrimQueryToWindow(EmbeddingSettings settings, string query) => query;
 
+        public int ResolveChunkBudgetFor(EmbeddingSettings settings) => OnnxEmbeddingGenerator.MaxContentTokens;
+
+        /// <summary>The real bundled tokenizer — the resolver contract says local ⇒ a tokenizer exists (D9).</summary>
+        public IEmbeddingTokenizer? ResolveTokenizer(EmbeddingSettings settings) =>
+            string.Equals(settings.Provider, "local", StringComparison.OrdinalIgnoreCase)
+                ? WordPieceEmbeddingTokenizer.Create(BundledModel.ResolveVocabPath())
+                : null;
+
         private sealed class ClockAdvancingGenerator(FakeTimeProvider time, TimeSpan perCallAdvance)
             : IEmbeddingGenerator<string, Embedding<float>>
         {

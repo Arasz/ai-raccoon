@@ -12,20 +12,20 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 ///     per call; a request writes the repair_requests outbox row.
 /// </summary>
 public sealed class SqliteRepairStore(
-    ISqliteConnectionFactory factory, IFileTypeMatcher fileTypeMatcher, ILocalTokenizer localTokenizer,
+    ISqliteConnectionFactory factory, IFileTypeMatcher fileTypeMatcher, IEmbeddingService embeddingService,
     IMemoryStore store, TimeProvider timeProvider) : IRepairStore
 {
     public async Task<ReingestRepairReport> ReportReingestAsync(CancellationToken cancellationToken = default)
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        return await new ReingestRepair(new ChunkPositionScanner(fileTypeMatcher, localTokenizer))
+        return await new ReingestRepair(new ChunkPositionScanner(fileTypeMatcher, embeddingService))
             .RunAsync(connection, store, apply: false, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<ChunkIndexRepairReport> ReportChunkIndexAsync(CancellationToken cancellationToken = default)
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        return await new ChunkIndexRepair(fileTypeMatcher, localTokenizer)
+        return await new ChunkIndexRepair(fileTypeMatcher, embeddingService)
             .RunAsync(connection, apply: false, cancellationToken).ConfigureAwait(false);
     }
 

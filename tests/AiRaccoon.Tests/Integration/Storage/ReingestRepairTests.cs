@@ -156,7 +156,7 @@ public sealed class ReingestRepairTests : IDisposable
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]);
-        var repair = new ReingestRepair(new ChunkPositionScanner(matcher, new LocalTokenizer()));
+        var repair = new ReingestRepair(new ChunkPositionScanner(matcher, TestData.CreateEmbeddingService()));
         return await repair.RunAsync(connection, _store, apply, TestContext.Current.CancellationToken);
     }
 
