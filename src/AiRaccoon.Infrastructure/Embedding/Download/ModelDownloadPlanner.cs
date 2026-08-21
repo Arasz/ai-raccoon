@@ -89,8 +89,12 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
         var (family, tokenizerFileName) = PairTokenizer(configJson);
         var tokenizerFilePath = TokenizerFilePath(tree, modelDir, tokenizerFileName, family);
         var specialTokens = SpecialTokenIds(tokenizerConfigJson);
-        var addBos = ReadBool(tokenizerConfigJson, "add_bos_token") ?? ReadBool(tokenizerConfigJson, "add_bos") ?? false;
-        var addEos = ReadBool(tokenizerConfigJson, "add_eos_token") ?? ReadBool(tokenizerConfigJson, "add_eos") ?? false;
+        // HF puts the wrapper behaviour in the tokenizer CLASS, not the config: xlm-roberta's
+        // tokenizer_config.json declares neither flag, yet the tokenizer always emits <s> … </s>.
+        // Defaulting those to false embeds a token sequence the model never saw in training.
+        var wrapsByDefault = WrapsWithBosEos(tokenizerConfigJson);
+        var addBos = ReadBool(tokenizerConfigJson, "add_bos_token") ?? ReadBool(tokenizerConfigJson, "add_bos") ?? wrapsByDefault;
+        var addEos = ReadBool(tokenizerConfigJson, "add_eos_token") ?? ReadBool(tokenizerConfigJson, "add_eos") ?? wrapsByDefault;
 
         var dimensions = RequiredInt(configJson, "hidden_size", "dimensions");
         var contextWindowTokens = RequiredInt(configJson, "max_position_embeddings", "contextWindowTokens") - 2;
@@ -351,15 +355,29 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
             "1_Pooling/config.json declares no pooling_mode_* flag; pooling is never assumed — hand-write the manifest for this model");
     }
 
+    /// <summary>True for the RoBERTa family (incl. XLM-R), whose tokenizers always wrap input.</summary>
+    private static bool WrapsWithBosEos(string tokenizerConfigJson)
+    {
+        using var doc = JsonDocument.Parse(tokenizerConfigJson);
+        return doc.RootElement.TryGetProperty("tokenizer_class", out var cls)
+               && cls.ValueKind == JsonValueKind.String
+               && cls.GetString()?.Contains("Roberta", StringComparison.OrdinalIgnoreCase) == true;
+    }
+
+    /// <summary>
+    ///     A sentence-transformers module list declares normalization by TYPE. `name` is the module
+    ///     index ("2") and `path` the folder ("2_Normalize"), so matching on name misses every real
+    ///     repo — bge-m3 included.
+    /// </summary>
     private static bool ModulesDeclareNormalize(string modulesJson)
     {
         using var doc = JsonDocument.Parse(modulesJson);
         return doc.RootElement.ValueKind == JsonValueKind.Array
                && doc.RootElement.EnumerateArray().Any(m =>
                    m.ValueKind == JsonValueKind.Object
-                   && m.TryGetProperty("name", out var name)
-                   && name.ValueKind == JsonValueKind.String
-                   && name.GetString() == "2_Normalize");
+                   && m.TryGetProperty("type", out var type)
+                   && type.ValueKind == JsonValueKind.String
+                   && type.GetString()?.EndsWith(".Normalize", StringComparison.Ordinal) == true);
     }
 
     private static string SelectTokenEmbeddingsOutput(IReadOnlyList<string> outputs)

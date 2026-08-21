@@ -355,4 +355,65 @@ public class ModelDownloadPlannerTests
           }
         }
         """;
+
+    /// <summary>
+    ///     Regression from the real WP5 download: bge-m3's modules.json names the Normalize module
+    ///     `"name": "2"` with `"path": "2_Normalize"` — the name is an index, not the folder. Matching
+    ///     on name reported "no Normalize" and wrote `normalization: none` for a model that is
+    ///     L2-normalized. The fixture that let this through matched the code, not Hugging Face.
+    /// </summary>
+    [Fact]
+    public void Normalization_FromRealModulesJsonShape_IsL2()
+    {
+        var tree = BgeM3Tree().Append(PoolingConfig).Append(Modules).ToList();
+        var raw = BgeM3Raw();
+        raw["1_Pooling/config.json"] = """{"word_embedding_dimension": 1024, "pooling_mode_cls_token": true}""";
+        raw["modules.json"] = """
+            [{"idx": 0, "name": "0", "path": "", "type": "sentence_transformers.models.Transformer"},
+             {"idx": 1, "name": "1", "path": "1_Pooling", "type": "sentence_transformers.models.Pooling"},
+             {"idx": 2, "name": "2", "path": "2_Normalize", "type": "sentence_transformers.models.Normalize"}]
+            """;
+
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", tree, raw, BgeM3Probe());
+
+        plan.Normalization.ShouldBe(NormalizationMode.L2,
+            "modules.json declares a Normalize module; match on its type, not the folder-shaped name");
+    }
+
+    /// <summary>
+    ///     Also from the real download: bge-m3's tokenizer_config.json declares NEITHER
+    ///     add_bos_token NOR add_eos_token — HF puts that behaviour in the tokenizer class. Defaulting
+    ///     to false made every embedding skip the `&lt;s&gt;`/`&lt;/s&gt;` wrapper the model was trained
+    ///     with, which is a silent quality regression, not a crash.
+    /// </summary>
+    [Fact]
+    public void BosEos_AbsentFromAnXlmRobertaConfig_DefaultToTrue()
+    {
+        var raw = BgeM3Raw();
+        raw["onnx/tokenizer_config.json"] = """
+            {"tokenizer_class": "XLMRobertaTokenizer", "bos_token": "<s>", "eos_token": "</s>",
+             "unk_token": "<unk>", "pad_token": "<pad>",
+             "added_tokens_decoder": {"0": {"content": "<s>"}, "1": {"content": "<pad>"},
+                                      "2": {"content": "</s>"}, "3": {"content": "<unk>"}}}
+            """;
+
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), raw, BgeM3Probe());
+
+        plan.AddBeginOfSentence.ShouldBeTrue("XLM-R always wraps input in <s> … </s>");
+        plan.AddEndOfSentence.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void BosEos_AbsentFromANonRobertaConfig_StayFalse()
+    {
+        var raw = BgeM3Raw();
+        raw["onnx/tokenizer_config.json"] = """
+            {"tokenizer_class": "T5Tokenizer", "unk_token": "<unk>", "pad_token": "<pad>",
+             "added_tokens_decoder": {"0": {"content": "<pad>"}, "1": {"content": "<unk>"}}}
+            """;
+
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), raw, BgeM3Probe());
+
+        plan.AddBeginOfSentence.ShouldBeFalse("only the Roberta family has the implicit wrapper");
+    }
 }
