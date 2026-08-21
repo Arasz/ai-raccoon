@@ -9,7 +9,7 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **144** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **145** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
@@ -58,7 +58,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 640 | `src/AiRaccoon/Observability/OtlpExport.cs` (ADR-0009; OTLP export disabled warning) |
 | 650-656 | `src/AiRaccoon/Hosting/Node/ServerRestart.cs` (ADR-0022; 656 is the unanswered probe, ADR-0043) |
 | 660 | `src/AiRaccoon/Hosting/Node/ShutdownEndpoint.cs` (ADR-0022) |
-| 670-674 | `src/AiRaccoon/Settings/SettingsEndpoint.cs` (ADR-0075: the control-plane settings resource; 672/673 log the key only, never the value — sync credentials and the embedding API key go through here; 674 is the model-migration outbox commit, ADR-0076) |
+| 670-675 | `src/AiRaccoon/Settings/SettingsEndpoint.cs` (ADR-0075: the control-plane settings resource; 672/673 log the key only, never the value — sync credentials and the embedding API key go through here; 674 is the model-migration outbox commit, ADR-0076; 675 added 2026-08-21: the code corpus's own activation commit, no outbox, docs/work/2026-08-21-code-search-implementation-plan.md §3.3) |
 | 680-681 | `src/AiRaccoon/Settings/RepairEndpoint.cs` (ADR-0075 amendment: the control-plane repair resource — 680 is a report served, 681 is a repair_requests outbox commit) |
 | 682-683 | `src/AiRaccoon/Settings/PromotionQueuePruneEndpoint.cs` (ADR-0075 amendment: the control-plane promotion-queue-prune resource — 682 is a report served, 683 is a promotion_queue_prune_requests outbox commit) |
 | 684 | `src/AiRaccoon/Settings/MaintenanceStatsEndpoint.cs` (ADR-0075 amendment: the control-plane maintenance-stats resource — read-only, no outbox) |

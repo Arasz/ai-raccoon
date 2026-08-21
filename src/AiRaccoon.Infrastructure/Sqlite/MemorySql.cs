@@ -358,6 +358,12 @@ internal static class MemorySql
     public const string MarkAllEmbeddedPending =
         "UPDATE entries SET embed_state = 'pending' WHERE embed_state = 'embedded'";
 
+    /// <summary>The code corpus's own invalidation (§3.3 D-E9, no outbox): every currently-embedded code_entries
+    /// row is stale under the new code engine. Fires vec_code_pending, so the old vectors leave vec_code the
+    /// instant this commits — the code-reindex maintenance job re-embeds the pending rows, not this call.</summary>
+    public const string MarkAllCodeEmbeddedPending =
+        "UPDATE code_entries SET embed_state = 'pending' WHERE embed_state = 'embedded'";
+
     // ---- model_migration (ADR-0076) ----
 
     public const string SelectModelMigration =

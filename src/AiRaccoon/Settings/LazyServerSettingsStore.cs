@@ -14,7 +14,7 @@ namespace AiRaccoon.Settings;
 ///     probes or auto-starts anything. The acquire result is cached for the lifetime of this
 ///     instance; a failed acquire is not cached and is retried on the next call.
 /// </summary>
-internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationStore, IRepairStore,
+internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationStore, ICodeEngineStore, IRepairStore,
     IPromotionQueuePruneStore, IMaintenanceStatsStore, INoiseSummaryStore, IWatchRegisteredStore
 {
     private readonly Func<CancellationToken, Task<ISettingsStore>> _acquire;
@@ -49,6 +49,12 @@ internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationS
     /// <inheritdoc />
     public async Task<bool> HasOpenModelMigrationAsync(CancellationToken cancellationToken = default) =>
         await AsMigrationStore(await InnerAsync(cancellationToken)).HasOpenModelMigrationAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<EmbeddingConfig> ActivateCodeEngineAsync(string directory,
+        CancellationToken cancellationToken = default) =>
+        await AsCodeEngineStore(await InnerAsync(cancellationToken))
+            .ActivateCodeEngineAsync(directory, cancellationToken);
 
     /// <inheritdoc />
     public async Task<ReingestRepairReport> ReportReingestAsync(CancellationToken cancellationToken = default) =>
@@ -90,6 +96,11 @@ internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationS
     private static IModelMigrationStore AsMigrationStore(ISettingsStore store) =>
         store as IModelMigrationStore ?? throw new NotSupportedException(
             $"ai-raccoon: {store.GetType().Name} does not support model migration");
+
+    /// <summary>Same reasoning as <see cref="AsMigrationStore" />, for the code-engine-activation capability.</summary>
+    private static ICodeEngineStore AsCodeEngineStore(ISettingsStore store) =>
+        store as ICodeEngineStore ?? throw new NotSupportedException(
+            $"ai-raccoon: {store.GetType().Name} does not support code engine activation");
 
     /// <summary>Same reasoning as <see cref="AsMigrationStore" />, for the repair capability.</summary>
     private static IRepairStore AsRepairStore(ISettingsStore store) =>

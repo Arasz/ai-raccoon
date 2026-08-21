@@ -19,4 +19,11 @@ public static class EmbeddingSettingsKeys
     /// <summary>Remote engines declare their output dimension here — sqlite-vec infers none, so the
     /// drain needs it to reconcile vec0 before writing (D2).</summary>
     public const string Dimensions = "embedding.dimensions";
+
+    /// <summary>The manifest-activated local code engine's directory (§3.3 D-E9); `ai-raccoon model set code local`
+    /// writes this. Independent of <see cref="Model" /> — the code corpus has its own engine.</summary>
+    public const string CodeModel = "embedding.codeModel";
+
+    /// <summary>Code engine fingerprint; a change invalidates the code corpus's embedded rows to 'pending'.</summary>
+    public const string CodeEngine = "embedding.codeEngine";
 }
