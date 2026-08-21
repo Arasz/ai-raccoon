@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Code;
@@ -10,6 +11,7 @@ using AiRaccoon.Tools;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
+using ModelContextProtocol;
 using Shouldly;
 using Xunit;
 
@@ -79,6 +81,13 @@ public sealed class MemorySearchCodeIntegrationTests : IAsyncLifetime
         envelope.Data!.Code.ShouldBeEmpty();
     }
 
+    /// <summary>
+    ///     Integration review small item 2: the previous version of this test asserted
+    ///     envelope.Data.Code (a C# property) is null, which only proves the .NET object's shape
+    ///     -- not the claim in the test's own name, that the serialized response has no "code" key
+    ///     at all. Serializes through the real wire options (McpJsonUtilities.DefaultOptions, the
+    ///     same ones the golden fixture family pins) and asserts the JSON key itself is absent.
+    /// </summary>
     [Fact]
     public async Task Search_KindMemory_Default_ResponseHasNoCodeKeyAtAll_EvenWithCodeRowsInTheBank()
     {
@@ -88,7 +97,9 @@ public sealed class MemorySearchCodeIntegrationTests : IAsyncLifetime
         var envelope = await _tools.Search("acme", "WombatRunner",
             cancellationToken: TestContext.Current.CancellationToken);
 
-        envelope.Data!.Code.ShouldBeNull();
+        var data = JsonSerializer.SerializeToNode(envelope, McpJsonUtilities.DefaultOptions)!.AsObject()["data"]!.AsObject();
+
+        data.ContainsKey("code").ShouldBeFalse("kind=memory must serialize the exact legacy shape -- no \"code\" key at all");
     }
 
     private async Task SeedAsync(long id, string projectId, string path, string value, int lineStart, int lineEnd)
