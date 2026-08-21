@@ -17,13 +17,18 @@ maintenance jobs (D6), settings channel (C2), auto-start (C1) — rank higher by
 | Branch | State | Files it owns |
 |---|---|---|
 | **PR #405** `task/code-mem-implementation` | draft, 167 files | `MemorySchema.cs`, `SqliteMemoryStore.cs` + `.Replace.cs`, `MemorySql.cs`, `SqliteConnectionFactory.cs`, `SyncService.cs`, `ServerSettingsStore.cs`, `ConfigCommands.cs`, `SettingsEndpoint.cs`, `AppRegistrations.cs`, `MemoryTools.cs`, `ToolRefusals.cs`, `FileIngestor.cs`, `WatchIntegrationTests.cs`, `SchemaDoctorTests.cs`, `EmbeddingManifestValidatorTests.cs`, `README.md`, `docs/reference/logging-event-ids.md`, … |
-| **restart PR 1** (Defect A — probe retry) | implementing now, on main | `ResiliencePipelineFactory.cs`, `ServerProbe.cs`, `NodeRegistration.cs:14`, `NodeRunner.cs` (logging) |
-| **restart PR 2** (Defect B — stale re-ingest chunks) | held until #405 merges | `FileIngestor.cs`, `SqliteMemoryStore.cs`, `SqliteMemoryStore.Replace.cs` |
+| **PR #415** (Defect A — probe retry) | in flight now | `ServerProbe.cs`, `NodeRegistration.cs`, `ServerProbeVerdictTests.cs`, its plan doc — **and nothing else** |
+| **restart follow-up** (Defect B — stale re-ingest chunks; no PR yet) | held until #405 merges | `FileIngestor.cs`, `SqliteMemoryStore.cs`, `SqliteMemoryStore.Replace.cs` |
 
-Restart PR 1/2 plan: `docs/work/2026-08-21-restart-probe-and-reingest-stale-chunks-plan.md`
-(currently in that session's worktree). The 1.29.0 checklist `server-lifecycle` failure
-**remains unexplained** — the warming-server explanation was retracted. Nothing in this plan
-claims to fix it.
+**Corrected 2026-08-21 (from the restart session directly):** the restart plan
+(`docs/work/2026-08-21-restart-probe-and-reingest-stale-chunks-plan.md`) proposed the
+Polly-native shape in `ResiliencePipelineFactory` and raising a `NodeRunner` log level, but the
+implementation deliberately diverged: PR #415 uses an in-delegate conversion precisely so the
+probe fix does not reach into a factory shared by `ServerProbe`, `ServerRestart` and
+`ObservabilityRunner`. **`ResiliencePipelineFactory.cs` and `NodeRunner.cs` are NOT in #415.**
+There is one restart PR, not two. The 1.29.0 checklist `server-lifecycle` failure
+**remains unexplained** — #415 fixes a real measured defect (attempts 1→3) but does not explain
+that symptom. Nothing in this plan claims otherwise.
 
 ---
 
@@ -187,7 +192,12 @@ test resources.
 
 ---
 
-## Wave 2 — after restart PR 1 merges
+## Wave 2 — coordinate with PR #415 (gate dissolved — see correction above)
+
+Originally gated on "restart PR 1 merges" because the restart *plan* claimed
+`ResiliencePipelineFactory.cs` and `NodeRunner.cs`. PR #415's actual scope touches neither, so
+both items below are file-unblocked today; they stay a separate wave only to keep Wave 1's lanes
+clean and because C1's messaging should be written with #415's new probe verdicts in view.
 
 #### D3 — Dimension reconcile also runs at open when engine dim ≠ vec dim
 **Resolves:** M2 = data F3. Owner note: *"What about performance hit for dimension check? Will this
@@ -257,10 +267,9 @@ inside the 25 ms budget; **no CLI verb ever reconciles**.
 (Integration) — RED today because reconcile only runs in the drain;
 `AMatchingDimension_PerformsNoDdl`; `ACliVerbOpeningTheBank_DoesNotReconcile` (the hard-invariant
 guard); plus the Slow timing test above.
-**Sequencing:** `VecDimensionReconciler.cs` and `EntryEmbedder.cs` are free of #405 — but
-`NodeRunner.cs` is **restart PR 1 territory** (it adds `ServerProbe` logging and touches
-`NodeRunner.cs:287`). **Start D3 after restart PR 1 merges**; expect a merge conflict around the
-`NodeRunner` startup sequence if it starts earlier. If D3 needs a DI registration,
+**Sequencing:** `VecDimensionReconciler.cs` and `EntryEmbedder.cs` are free of #405, and
+`NodeRunner.cs` is in **neither #405 nor PR #415** (corrected — the restart plan proposed touching
+it; the implementation did not). **D3 is file-unblocked and may start now.** If D3 needs a DI registration,
 `AppRegistrations.cs` is in #405 — prefer promoting the method on the existing port over a new
 registration, which avoids that file entirely.
 
@@ -284,8 +293,8 @@ actionable message naming `serve`; under the packaged apphost, auto-start is unc
 **Gate (RED first):** `BackendLaunchArgumentsTests.AnUnpackagedInvocation_IsDetected` (Unit, RED —
 no test covers `Executable()` today) plus
 `BackendLauncherTests.AFailedChild_SurfacesItsStderr` (RED — currently drained).
-**Sequencing:** neither file is in #405, and neither is in restart PR 1's named set — C1 is
-*technically* unblocked today. It sits in Wave 2 on a design argument: PR 1 and C1 both rewrite
+**Sequencing:** neither file is in #405, and neither is in PR #415's set — C1 is
+*technically* unblocked today. It sits in Wave 2 on a design argument: #415 and C1 both rewrite
 what a failed server start tells the operator, and designing that message in two places at once
 produces two vocabularies. If wall-clock matters more, C1 can move to Wave 1 safely (owner flag O4).
 
@@ -312,7 +321,7 @@ Five items; no two share a file with each other. Each names its #405 collision.
 | **M5** — thin out-of-sample control (retrieval F3/F4): 3 pinned queries, eval-100 is one ADR family | A corpus problem, not a defect. Belongs to the next tuning round, with the second family or internal split decided then. No owner ruling was sought. |
 | **M10** — README "What's new" missing 1.29.0 (surface F1) | #405 rewrites `README.md`. Folding it in here guarantees a conflict for a one-line docs edit. **Hand it to whoever merges #405**, or to the next release checklist. |
 | **H-C / H7** — access mode resolves from the caller-named project (`MemoryAccessGuard.cs:9-17`, MEASURED, HIGH) | Carried unchanged from 0814; **no owner ruling in this campaign's 14**. Needs a server-side project-identity design before it can be scoped — an ADR, not a fix item. Highest-severity unplanned finding — owner flag O2. |
-| **H18** — `ResiliencePipelineFactory.cs:62` string-matches `"EmptyDownloadException"` (security F6, MEASURED) | **Proposed handoff to restart PR 1** — it is already rewriting that file's predicate (`:32-35`) to add `TimeoutRejectedException`; the string-match fix is one line for whoever is already there. **The restart session has not yet accepted this** — owner flag O5. |
+| **H18** — `ResiliencePipelineFactory.cs:62` string-matches `"EmptyDownloadException"` (security F6, MEASURED) | **Handoff to the restart PR was proposed and DECLINED** (2026-08-21, with reasons that check out): #415 does not touch that factory — deliberately, to keep the probe fix out of a component shared by `ServerProbe`/`ServerRestart`/`ObservabilityRunner`; H18 sits in `CreateAssetDownloaderPipeline`, a different builder than the probe's; and the fix is an architecture decision (where should the exception type live, should a name-match predicate exist at all), not a line edit. **H18 stays open, unassigned — route to whoever next owns the download path** (Lane A's D1/D2 PR is the natural neighbour if the owner agrees) — owner flag O5. |
 | **H20** — `WorkspaceService`/`IWorkspaceService` in Infrastructure; **arch F1** — `IPromotionQueuePruneStore`/`IWatchRegisteredStore` in Infrastructure; **arch F2** — RRF/affinity outside Core | Port-placement drift. Worth one generic ArchUnitNET rule instead of three moves, but no owner ruling exists and #405 adds new ports. Re-raise after #405 as a single "port placement rule" item. |
 | **H21** — `IMemoryStore` at 27 members; arch F3 (partial split is file-level), arch F7 (4 duplicate settings members) | D4 removes two members as a side effect. Real decomposition is a multi-PR carve-out that #405 would collide with wholesale. Defer. |
 | **H16** — CI still ubuntu-only, no matrix | Carried from 0814, no ruling. Cost/benefit belongs with the release checklist owner. |
@@ -321,7 +330,7 @@ Five items; no two share a file with each other. Each names its #405 collision.
 | Still-open: has any Nightly run executed recently | **Answered 2026-08-21 (metadata read):** scheduled run 32442237251 on main completed **success** in 25m32s at 03:07Z today; the 2026-08-20 scheduled run failed and was fixed the same day via `workflow_dispatch` runs on `task/nightly-2026-08-20-fixes`. The schedule fires and the dispatch leg works. |
 | Still-open: leave-one-family-out on RRF parameters | Moot for eval-100 per retrieval F4 (single family); returns with M5. |
 | Still-open (data lane): does vec0 actually raise dimension-mismatch on insert against an empty old-dim table; `storedVersion >= CurrentVersion` early-return at `MemorySchema.cs:485-488` | Both are questions D5 and D3's implementers will stand in front of anyway. Answer them in those PRs; do not open separate items. |
-| **1.29.0 checklist `server-lifecycle` failure** | **Unexplained.** The warming-server explanation was retracted and measurements refute it. Not fixed by restart PR 1, not fixed by this plan. Stays open. |
+| **1.29.0 checklist `server-lifecycle` failure** | **Unexplained.** The warming-server explanation was retracted and measurements refute it. Not fixed by PR #415 (confirmed by that session directly), not fixed by this plan. Stays open. |
 
 ## Owner flags — decisions or notices that survive this plan
 
@@ -333,10 +342,14 @@ Five items; no two share a file with each other. Each names its #405 collision.
   finding with no owner decision. It needs a project-identity ADR, not a fix item.
 - **O3 — S2 branch decision owed:** keyed-hash verification vs documented acceptance. The ruling
   as approved offers both; the plan cannot pick for you.
-- **O4 — C1 sits in Wave 2 by design choice** (unify the failure-message vocabulary with restart
-  PR 1), not by file collision. Safe to pull into Wave 1 if speed matters more.
-- **O5 — H18 handoff to restart PR 1 is proposed, not accepted.** Their plan does not include it
-  today; it needs a one-line scope extension on their side or it falls back into Wave 2 here.
+- **O4 — C1 sits in Wave 2 by design choice** (write its failure messaging with #415's new probe
+  verdicts in view), not by file collision. Safe to pull into Wave 1 if speed matters more. D3's
+  original file gate dissolved with #415's final scope — it is likewise startable now.
+- **O5 — H18 needs an owner.** The restart session declined the handoff (its PR #415 deliberately
+  avoids `ResiliencePipelineFactory.cs`, and H18 is in the *downloader* pipeline builder, not the
+  probe's). H18 is also architecture-shaped: decide where `EmptyDownloadException` should live —
+  or whether a name-match predicate should exist at all — before anyone edits the line. Natural
+  home: the Lane A (D1/D2) PR, subject to your ruling.
 - **O6 — S1 deviates from the ruling's literal wording.** The ruling said "global read-all mode";
   no such mode exists (`AccessMode` is `{Ro, Rw, Full}`), and building one is entangled with the
   unruled H-C. The plan substitutes an explicit `allProjects=true` argument as the consent
