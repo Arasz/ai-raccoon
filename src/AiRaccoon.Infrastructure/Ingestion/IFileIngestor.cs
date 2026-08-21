@@ -13,7 +13,16 @@ namespace AiRaccoon.Infrastructure.Ingestion;
 ///     a memory match (regardless of row count), a mixed match, or no corpus matching the file at
 ///     all — which all fingerprint exactly as before.
 /// </summary>
-public readonly record struct FileIngestResult(int RowsInserted, bool FingerprintEligible);
+/// <param name="ChunkHashes">
+///     Every memory-corpus chunk hash this ingest wrote OR rediscovered unchanged — the file's
+///     current chunk set. A caller replacing by path deletes the complement: anything still stored
+///     for the path that this ingest did not account for is a leftover of a previous chunking.
+///     Empty when the path produced no memory chunks at all (ignored, hidden, or not a memory file).
+/// </param>
+public readonly record struct FileIngestResult(
+    int RowsInserted,
+    bool FingerprintEligible,
+    IReadOnlyList<string>? ChunkHashes = null);
 
 public interface IFileIngestor
 {

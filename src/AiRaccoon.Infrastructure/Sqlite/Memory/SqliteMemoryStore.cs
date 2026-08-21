@@ -382,10 +382,12 @@ public sealed partial class SqliteMemoryStore(
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        var result = await fileIngestor.IngestFileAsync(connection, projectId, path, context, cancellationToken)
+        // Defect B: re-ingesting a path must replace its chunk set, not add to it — a file that
+        // re-chunks to a different count would otherwise strand every index the new set does not
+        // overwrite, and search keeps serving content the file no longer has. Same transaction the
+        // watch digest uses, minus the fingerprint.
+        return await ReplaceForDirectIngestAsync(projectId, path, context, cancellationToken)
             .ConfigureAwait(false);
-        return result.RowsInserted;
     }
 
     public async Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
