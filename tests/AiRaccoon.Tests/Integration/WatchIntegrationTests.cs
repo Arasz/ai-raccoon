@@ -1,9 +1,11 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
+using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Watch;
+using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -643,13 +645,17 @@ public sealed class WatchIntegrationTests
                 TestData.CreateEmbeddingService());
             WatchStore = new WatchStore(_factory);
             ScanGuard = new WatchScanGuard();
+            WatchCatchUp? catchUp = null;
             Pipeline = new WatchPipeline(new WatchScheduler(),
-                new WatchDigestExecutor(Memory, WatchStore, Time, NullLogger<WatchDigestExecutor>.Instance), new WatchRetryPolicy(),
+                new WatchDigestExecutor(Memory, WatchStore, Time, NullLogger<WatchDigestExecutor>.Instance,
+                    new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => catchUp!)),
+                new WatchRetryPolicy(),
                 ScanGuard, Memory, Time, NullLogger<WatchPipeline>.Instance);
             EventSource = new WatchEventSource(Pipeline.Enqueue, Errors.Add,
                 NullLogger<WatchEventSource>.Instance);
-            CatchUp = new WatchCatchUp(Pipeline, WatchStore, ScanGuard,
-                new SqliteWatchScanLease(_factory, Time), Time, NullLogger<WatchCatchUp>.Instance);
+            CatchUp = catchUp = new WatchCatchUp(Pipeline, WatchStore, ScanGuard,
+                new SqliteWatchScanLease(_factory, Time), Time, NullLogger<WatchCatchUp>.Instance,
+                new IgnoreRulesProvider());
             Hosted = new WatchHostedService(Memory, WatchStore, Pipeline, EventSource, CatchUp, Time,
                 TestTelemetry.None, NullLogger<WatchHostedService>.Instance);
             Service = new WatchService(WatchStore, Memory, Pipeline, Time);
