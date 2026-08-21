@@ -7,12 +7,19 @@ namespace AiRaccoon.Infrastructure.Watch;
 /// <summary>
 ///     IWatchService impl: add/remove/status with enable + scope + existence validation, per-
 ///     (projectId, path) idempotency and normalized identity (docs/plans/file-watcher-implementation.md D3);
-///     the pipeline owns runtime status.
+///     the pipeline owns runtime status. No-overlapping-watches
+///     (docs/work/2026-08-21-code-search-implementation-plan.md §2.2/§5.5): reject-if-contained
+///     before prune+register, both resolved through the shared <see cref="IWatchOverlapResolver" />
+///     (the same instance the v11 ladder migration uses).
 /// </summary>
-public sealed class WatchService(IWatchStore store, IMemoryStore memory, WatchPipeline pipeline, TimeProvider timeProvider)
-    : IWatchService
+public sealed class WatchService(
+    IWatchStore store,
+    IMemoryStore memory,
+    WatchPipeline pipeline,
+    TimeProvider timeProvider,
+    IWatchOverlapResolver overlapResolver) : IWatchService
 {
-    public async Task AddAsync(string projectId, string path, CancellationToken cancellationToken = default)
+    public async Task<WatchAddOutcome> AddAsync(string projectId, string path, CancellationToken cancellationToken = default)
     {
         var config = await ResolveConfigAsync(projectId, cancellationToken).ConfigureAwait(false);
         if (!config.Enabled)
@@ -32,11 +39,42 @@ public sealed class WatchService(IWatchStore store, IMemoryStore memory, WatchPi
         }
 
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
-        // lastChangeTs 0 = never synced: catch-up treats a fresh watch as a full initial scan
-        // (docs/plans/file-watcher-implementation.md D1).
-        await store.AddWatchAsync(projectId, normalized, now, 0, cancellationToken)
-            .ConfigureAwait(false);
-        pipeline.RegisterWatch(projectId, normalized);
+        var existing = (await store.ListWatchesAsync(cancellationToken).ConfigureAwait(false))
+            .Where(w => w.ProjectId == projectId)
+            .Select(w => new WatchOverlapCandidate(w.Path, w.CreatedAt))
+            .ToArray();
+        var decision = overlapResolver.Resolve(existing, new WatchOverlapCandidate(normalized, now));
+
+        switch (decision.Outcome)
+        {
+            case WatchOverlapOutcome.Idempotent:
+                // Exact literal-path re-add: idempotent no-op — still ensure the pipeline's
+                // runtime state exists (RegisterWatch is itself idempotent).
+                pipeline.RegisterWatch(projectId, normalized);
+                return new WatchAddOutcome([], decision.CoveringPath);
+
+            case WatchOverlapOutcome.Rejected:
+                throw new WatchOverlapException(normalized, decision.CoveringPath!);
+
+            default:
+                var prunedPaths = decision.Pruned.Select(p => p.Path).ToArray();
+                // lastChangeTs 0 = never synced: catch-up treats a fresh watch as a full initial
+                // scan (docs/plans/file-watcher-implementation.md D1). Prune + register in one
+                // BEGIN IMMEDIATE transaction (codereviewer MUST-FIX 7) — a crash anywhere in the
+                // step leaves either the old watches or the new watch, never an unwatched path.
+                await store.PruneAndAddAsync(projectId, normalized, now, prunedPaths, cancellationToken)
+                    .ConfigureAwait(false);
+                // Runtime state updates only after the transaction commits (idempotent; a crash
+                // between commit and here leaves stale runtime state the hosted service's
+                // registration poll reconciles).
+                foreach (var prunedPath in prunedPaths)
+                {
+                    pipeline.UnregisterWatch(projectId, prunedPath);
+                }
+
+                pipeline.RegisterWatch(projectId, normalized);
+                return new WatchAddOutcome(prunedPaths, null);
+        }
     }
 
     public async Task RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default)

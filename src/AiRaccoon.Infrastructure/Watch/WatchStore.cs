@@ -14,6 +14,17 @@ public interface IWatchStore
 
     Task RemoveWatchAsync(string projectId, string path, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    ///     No-overlapping-watches atomicity (docs/work/2026-08-21-code-search-implementation-plan.md
+    ///     §2.2, review codereviewer MUST-FIX 7): prunes every watch in <paramref name="prunePaths" />
+    ///     (row + cascaded <c>watch_files</c>) and registers the new watch, in ONE
+    ///     <c>BEGIN IMMEDIATE</c> transaction — a crash anywhere in the step leaves either the old
+    ///     watches or the new watch, never an unwatched path. The caller updates runtime
+    ///     (<c>WatchPipeline</c>) state AFTER this commits.
+    /// </summary>
+    Task PruneAndAddAsync(string projectId, string path, long createdAt, IReadOnlyList<string> prunePaths,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<WatchRegistration>> ListWatchesAsync(CancellationToken cancellationToken = default);
 
     Task UpdateLastChangeAsync(string projectId, string path, long lastChangeTs,
@@ -68,6 +79,47 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
                     new CommandDefinition(MemorySql.DeleteWatch, new { projectId, path },
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    public async Task PruneAndAddAsync(string projectId, string path, long createdAt,
+        IReadOnlyList<string> prunePaths, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        try
+        {
+            foreach (var prunePath in prunePaths)
+            {
+                var pathPrefix = LikePattern.Escape(prunePath) + "/%";
+                await connection.ExecuteAsync(
+                        new CommandDefinition(MemorySql.DeleteWatchFilesByProjectPathCascade,
+                            new { projectId, path = prunePath, pathPrefix }, cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                await connection.ExecuteAsync(
+                        new CommandDefinition(MemorySql.DeleteWatch, new { projectId, path = prunePath },
+                            cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+            }
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition(MemorySql.InsertWatchIfAbsent,
+                        new { projectId, path, createdAt, lastChangeTs = 0L }, cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+
             await connection.ExecuteAsync(
                     new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
                 .ConfigureAwait(false);

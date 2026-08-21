@@ -30,7 +30,7 @@ internal sealed class WatchTestStack
         Pipeline = new WatchPipeline(
             new WatchScheduler(), Executor, new WatchRetryPolicy(), ScanGuard,
             Memory, Time, NullLogger<WatchPipeline>.Instance);
-        Service = new WatchService(Store, Memory, Pipeline, Time);
+        Service = new WatchService(Store, Memory, Pipeline, Time, OverlapResolver);
     }
 
     public FakeTimeProvider Time { get; } = new(FixedNow);
@@ -46,6 +46,8 @@ internal sealed class WatchTestStack
     public FakeIgnoreRulesProvider IgnoreRules { get; } = new();
 
     public FakeWatchScanInitiator ScanInitiator { get; } = new();
+
+    public IWatchOverlapResolver OverlapResolver { get; } = new WatchOverlapResolver();
 
     public WatchDigestExecutor Executor { get; }
 
@@ -136,6 +138,22 @@ internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
 
         RemoveWatchCalls++;
         return Task.CompletedTask;
+    }
+
+    /// <summary>The fake has no transaction to fail mid-way; the real store's atomicity is proven
+    /// against SQLite (kill-9 E2E), not this in-memory fake.</summary>
+    public int PruneAndAddCalls { get; private set; }
+
+    public async Task PruneAndAddAsync(string projectId, string path, long createdAt, IReadOnlyList<string> prunePaths,
+        CancellationToken cancellationToken = default)
+    {
+        PruneAndAddCalls++;
+        foreach (var prunePath in prunePaths)
+        {
+            await RemoveWatchAsync(projectId, prunePath, cancellationToken).ConfigureAwait(false);
+        }
+
+        await AddWatchAsync(projectId, path, createdAt, 0, cancellationToken).ConfigureAwait(false);
     }
 
     public Task<IReadOnlyList<WatchRegistration>> ListWatchesAsync(CancellationToken cancellationToken = default) =>

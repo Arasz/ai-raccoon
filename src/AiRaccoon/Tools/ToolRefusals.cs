@@ -29,6 +29,7 @@ internal static partial class ToolRefusals
         [typeof(UnknownHashException)] = "unknown-hash",
         [typeof(UnsupportedSchemaVersionException)] = "schema-version-unsupported",
         [typeof(WatchDisabledException)] = "watching-disabled",
+        [typeof(WatchOverlapException)] = "watch-overlap",
         [typeof(SyncNotConfiguredException)] = "sync-not-configured",
         [typeof(SyncAuthFailedException)] = "sync-auth-failed",
         [typeof(SyncConflictException)] = "sync-conflict",
