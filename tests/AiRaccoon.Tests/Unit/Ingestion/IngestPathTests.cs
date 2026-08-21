@@ -87,4 +87,60 @@ public sealed class IngestPathTests
         Should.Throw<ArgumentException>(() => IngestPath.IsWithinScope(" ", "/repo"));
         Should.Throw<ArgumentException>(() => IngestPath.IsWithinScope("/repo", " "));
     }
+
+    [Fact]
+    public void HasHiddenOrDeniedSegment_NestedDotDirectory_IsHidden()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "watch-hidden-root", "repo");
+        var file = Path.Combine(root, ".git", "hooks", "pre-commit");
+
+        IngestPath.HasHiddenOrDeniedSegment(root, file, WatchDenySet.Names).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void HasHiddenOrDeniedSegment_OrdinaryNestedFile_IsNotHidden()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "watch-hidden-root", "repo");
+        var file = Path.Combine(root, "src", "Program.cs");
+
+        IngestPath.HasHiddenOrDeniedSegment(root, file, WatchDenySet.Names).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void HasHiddenOrDeniedSegment_RootItselfUnderADotAncestor_IsNotHidden()
+    {
+        // Only segments BELOW the enumeration root count — the root's own ancestry (e.g. a
+        // worktree checked out under a dot-prefixed directory) must never disqualify every file.
+        var root = Path.Combine(Path.GetTempPath(), ".watch-hidden-dotroot", "repo");
+        var file = Path.Combine(root, "src", "Program.cs");
+
+        IngestPath.HasHiddenOrDeniedSegment(root, file, WatchDenySet.Names).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void HasHiddenOrDeniedSegment_DenySetDirectory_IsDenied()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "watch-hidden-root", "repo");
+        var file = Path.Combine(root, "node_modules", "pkg", "index.js");
+
+        IngestPath.HasHiddenOrDeniedSegment(root, file, WatchDenySet.Names).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void HasHiddenOrDeniedSegment_DeniedLookalikeName_IsNotDenied()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "watch-hidden-root", "repo");
+        var file = Path.Combine(root, "bins", "x.cs");
+
+        IngestPath.HasHiddenOrDeniedSegment(root, file, WatchDenySet.Names).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void HasHiddenOrDeniedSegment_HiddenLeafFile_IsHidden()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "watch-hidden-root", "repo");
+        var file = Path.Combine(root, ".env");
+
+        IngestPath.HasHiddenOrDeniedSegment(root, file, WatchDenySet.Names).ShouldBeTrue();
+    }
 }

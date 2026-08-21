@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
@@ -19,9 +20,11 @@ public sealed class FileIngestor(
     IEntryEmbedder embedder,
     IMemorySourceStore sourceStore,
     TimeProvider timeProvider,
-    ILocalTokenizer localTokenizer) : IFileIngestor
+    ILocalTokenizer localTokenizer,
+    IIgnoreRulesProvider? ignoreRulesProvider = null) : IFileIngestor
 {
     private const int DefaultMaxTokens = 256;
+    private readonly IIgnoreRulesProvider _ignoreRulesProvider = ignoreRulesProvider ?? NullIgnoreRulesProvider.Instance;
 
     /// <summary>
     ///     Set <paramref name="embedInline" /> false when the caller holds a write transaction: embedding
@@ -48,8 +51,9 @@ public sealed class FileIngestor(
         var scope = await ReadScopeAsync(connection, projectId, cancellationToken).ConfigureAwait(false);
         RequireInScope(scope, path);
 
+        var ignoreRules = await _ignoreRulesProvider.LoadAsync(path, cancellationToken).ConfigureAwait(false);
         var files = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
-            .Where(file => !IsHidden(file) && IsInScope(scope, file))
+            .Where(file => !IsHidden(path, file) && !IsIgnored(ignoreRules, path, file) && IsInScope(scope, file))
             .OrderBy(file => file, StringComparer.Ordinal);
 
         var indexed = 0;
@@ -299,6 +303,34 @@ public sealed class FileIngestor(
     {
         var name = Path.GetFileName(path);
         return name.StartsWith('.');
+    }
+
+    /// <summary>
+    ///     Directory-walk form: hidden not just when the leaf itself starts with `.`, but when any
+    ///     segment between <paramref name="root" /> and <paramref name="path" /> does (`.git/hooks/
+    ///     pre-commit`), or matches the built-in deny set (<see cref="WatchDenySet" /> —
+    ///     node_modules/bin/obj/.git/.venv/__pycache__/dist/build/target).
+    /// </summary>
+    private static bool IsHidden(string root, string path) => IngestPath.HasHiddenOrDeniedSegment(root, path, WatchDenySet.Names);
+
+    /// <summary>`ai-raccoon.ignore` check against the walk root's rules (§2.1): never true for the
+    /// ignore file's own path — it is unindexable by extension anyway, but a `*` pattern must not
+    /// hide it from the caller's own re-scan/reconcile bookkeeping.</summary>
+    private static bool IsIgnored(IgnoreRules rules, string root, string path)
+    {
+        if (!rules.HasRules)
+        {
+            return false;
+        }
+
+        if (string.Equals(Path.GetFileName(path), IgnoreRulesProvider.FileName, StringComparison.Ordinal) &&
+            IngestPath.PathComparer.Equals(Path.GetDirectoryName(path), Path.TrimEndingDirectorySeparator(root)))
+        {
+            return false;
+        }
+
+        var relative = Path.GetRelativePath(root, path);
+        return rules.IsIgnored(relative, isDirectory: false);
     }
 
     private static CommandDefinition Def(string sql, object? parameters = null,

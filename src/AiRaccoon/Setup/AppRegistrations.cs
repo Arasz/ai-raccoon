@@ -208,6 +208,7 @@ public static partial class AppRegistrations
             services.AddSingleton<IFileTypeHandler>(sp => new MarkdownFileTypeHandler(sp.GetRequiredService<IMarkdownChunker>()));
             services.AddSingleton<IFileTypeHandler>(sp => new JsonFileTypeHandler(sp.GetRequiredService<IJsonChunker>()));
             services.AddSingleton<IReadOnlyCollection<IFileTypeHandler>>(sp => sp.GetServices<IFileTypeHandler>().ToList());
+            services.AddRequiredSingleton<IIgnoreRulesProvider, IgnoreRulesProvider>();
             services.AddRequiredSingleton<IFileIngestor, FileIngestor>();
             services.AddRequiredSingleton<IFileTypeMatcher, FileTypeMatcher>();
         }
@@ -292,6 +293,7 @@ public static partial class AppRegistrations
         private void RegisterWatchServices()
         {
             services.AddRequiredSingleton<IWatchRetryPolicy, WatchRetryPolicy>();
+            services.AddRequiredSingleton<IWatchOverlapResolver, WatchOverlapResolver>();
             services.AddRequiredSingleton<IWatchDigestExecutor, WatchDigestExecutor>();
             services.AddRequiredSingleton<IWatchScheduler, WatchScheduler>();
             services.AddRequiredSingleton<IWatchScanGuard, WatchScanGuard>();
@@ -304,6 +306,12 @@ public static partial class AppRegistrations
         private void RegisterWatchSyncBackgroundService()
         {
             services.AddSingleton<WatchCatchUp>();
+            // WatchCatchUp implements IWatchScanInitiator; WatchDigestExecutor takes a Lazy<> of it
+            // so its own construction never eagerly resolves WatchCatchUp — which needs
+            // WatchPipeline, which needs IWatchDigestExecutor, which would otherwise cycle back
+            // here (docs/work/2026-08-21-code-search-implementation-plan.md §5.3).
+            services.AddSingleton<IWatchScanInitiator>(sp => sp.GetRequiredService<WatchCatchUp>());
+            services.AddSingleton(sp => new Lazy<IWatchScanInitiator>(() => sp.GetRequiredService<IWatchScanInitiator>()));
             services.AddSingleton(sp =>
             {
                 var logger = sp.GetRequiredService<ILogger<WatchEventSource>>();

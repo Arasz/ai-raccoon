@@ -59,6 +59,27 @@ public static class IngestPath
                string.Compare(candidate, 0, prefix, 0, prefix.Length, Comparison) == 0;
     }
 
+    /// <summary>
+    ///     True when any path segment strictly below <paramref name="root" /> (the leaf filename
+    ///     included) starts with `.` or matches <paramref name="denySet" /> — enumeration skip for
+    ///     directory watches/ingests. Segments at or above <paramref name="root" /> itself never
+    ///     count, so a root that happens to live under a dot-prefixed ancestor (e.g. a worktree
+    ///     checkout) does not disqualify everything beneath it.
+    /// </summary>
+    public static bool HasHiddenOrDeniedSegment(string root, string path, IReadOnlySet<string> denySet)
+    {
+        var relative = Path.GetRelativePath(Normalize(root), Normalize(path));
+        foreach (var segment in relative.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (segment.StartsWith('.') || denySet.Contains(segment))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static string ResolveSegment(string path)
     {
         try

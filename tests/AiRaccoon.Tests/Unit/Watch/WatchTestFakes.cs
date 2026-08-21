@@ -1,6 +1,7 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
+using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -23,7 +24,9 @@ internal sealed class WatchTestStack
         Memory.ReadFingerprint = Store.PeekFingerprint;
         Memory.WriteFingerprint = (projectId, path, hash) =>
             Store.SetFingerprint(projectId, path, hash, Time.GetUtcNow().ToUnixTimeSeconds());
-        Executor = new WatchDigestExecutor(Memory, Store, Time, NullLogger<WatchDigestExecutor>.Instance);
+        var scanInitiatorLazy = new Lazy<IWatchScanInitiator>(() => ScanInitiator);
+        Executor = new WatchDigestExecutor(Memory, Store, Time, NullLogger<WatchDigestExecutor>.Instance,
+            IgnoreRules, scanInitiatorLazy);
         Pipeline = new WatchPipeline(
             new WatchScheduler(), Executor, new WatchRetryPolicy(), ScanGuard,
             Memory, Time, NullLogger<WatchPipeline>.Instance);
@@ -39,6 +42,10 @@ internal sealed class WatchTestStack
     public WatchScanGuard ScanGuard { get; } = new();
 
     public FakeWatchScanLease ScanLease { get; } = new();
+
+    public FakeIgnoreRulesProvider IgnoreRules { get; } = new();
+
+    public FakeWatchScanInitiator ScanInitiator { get; } = new();
 
     public WatchDigestExecutor Executor { get; }
 
@@ -159,6 +166,12 @@ internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
         return Task.CompletedTask;
     }
 
+    public Task DeleteFileHashAsync(string projectId, string path, CancellationToken cancellationToken = default)
+    {
+        RemoveFingerprint(projectId, path);
+        return Task.CompletedTask;
+    }
+
     public async Task<IReadOnlyList<string>> ListFilesAsync(string projectId,
         CancellationToken cancellationToken = default)
     {
@@ -192,6 +205,33 @@ internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
     public void RemoveFingerprint(string projectId, string path) => FileHashes.Remove(Key(projectId, path));
 
     private static string Key(string projectId, string path) => $"{projectId}\u0000{path}";
+}
+
+/// <summary>IIgnoreRulesProvider fake: per-root rules, defaulting to IgnoreRules.Empty; records
+/// every LoadAsync call's root so mid-scan re-read timing can be asserted.</summary>
+internal sealed class FakeIgnoreRulesProvider : IIgnoreRulesProvider
+{
+    private readonly Dictionary<string, IgnoreRules> _rulesByRoot = new(IngestPath.PathComparer);
+
+    public List<string> LoadCalls { get; } = [];
+
+    public void Set(string root, IgnoreRules rules) => _rulesByRoot[root] = rules;
+
+    public void Set(string root, string content) => Set(root, IgnoreRules.Parse(content));
+
+    public Task<IgnoreRules> LoadAsync(string root, CancellationToken cancellationToken = default)
+    {
+        LoadCalls.Add(root);
+        return Task.FromResult(_rulesByRoot.GetValueOrDefault(root, IgnoreRules.Empty));
+    }
+}
+
+/// <summary>IWatchScanInitiator fake: records every EnqueueInitialScan call.</summary>
+internal sealed class FakeWatchScanInitiator : IWatchScanInitiator
+{
+    public List<(string ProjectId, string Path)> Calls { get; } = [];
+
+    public void EnqueueInitialScan(string projectId, string path) => Calls.Add((projectId, path));
 }
 
 /// <summary>IWatchScanLease fake: grants by default, with injectable results and call counters.</summary>
