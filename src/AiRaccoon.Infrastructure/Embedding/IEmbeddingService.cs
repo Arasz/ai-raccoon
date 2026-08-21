@@ -32,4 +32,11 @@ public interface IEmbeddingService
     ///     not in a static class.
     /// </summary>
     string EngineFingerprint(string provider, string? model, string? baseUrl);
+
+    /// <summary>
+    ///     The dimension the configured engine embeds at, so the drain can reconcile vec0 before it
+    ///     writes (D3): the manifest's value for a local model directory, 384 for bundled/legacy, and
+    ///     the declared `embedding.dimensions` for a remote provider.
+    /// </summary>
+    int ResolveDimensions(EmbeddingSettings settings);
 }

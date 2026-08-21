@@ -280,6 +280,7 @@ public static partial class AppRegistrations
             // ADR-0076: the migration lease EntryEmbedder's DrainMigrationAsync needs; registered
             // before IEntryEmbedder so constructor injection resolves it.
             services.AddRequiredSingleton<IModelMigrationLease, SqliteModelMigrationLease>();
+            services.AddRequiredSingleton<IVecDimensionReconciler, VecDimensionReconciler>();
             services.AddRequiredSingleton<IEntryEmbedder, EntryEmbedder>();
             services.AddRequiredSingleton<IEmbeddingAvailability, EmbeddingAvailability>();
         }

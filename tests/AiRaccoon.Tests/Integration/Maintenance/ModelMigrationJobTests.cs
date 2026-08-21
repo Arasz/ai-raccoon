@@ -232,6 +232,8 @@ public sealed class ModelMigrationJobTests : IAsyncLifetime
 
         public int ResolveChunkBudgetFor(EmbeddingSettings settings) => OnnxEmbeddingGenerator.MaxContentTokens;
 
+        public int ResolveDimensions(EmbeddingSettings settings) => 384;
+
         /// <summary>The real bundled tokenizer — the resolver contract says local ⇒ a tokenizer exists (D9).</summary>
         public IEmbeddingTokenizer? ResolveTokenizer(EmbeddingSettings settings) =>
             string.Equals(settings.Provider, "local", StringComparison.OrdinalIgnoreCase)

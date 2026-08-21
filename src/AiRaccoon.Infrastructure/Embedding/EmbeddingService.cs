@@ -180,6 +180,35 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
     }
 
     /// <summary>
+    ///     The dimension the configured engine embeds at (D3), so the drain reconciles vec0 to it
+    ///     before writing. Remote providers declare theirs in `embedding.dimensions`; until that row
+    ///     exists the legacy 384 assumption stands, which WP4's pre-commit probe replaces with a
+    ///     fail-closed refusal.
+    /// </summary>
+    public int ResolveDimensions(EmbeddingSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        if (!string.Equals(settings.Provider, "local", StringComparison.OrdinalIgnoreCase))
+        {
+            return LegacyManifestSemantics.LegacyDimensions;
+        }
+
+        return ManifestDescriptorFor(settings.Model)?.Dimensions ?? BundledDescriptor.Dimensions;
+    }
+
+    /// <summary>The manifest descriptor for a local model directory, or null for bundled/legacy paths.</summary>
+    private EngineDescriptor? ManifestDescriptorFor(string? model)
+    {
+        if (string.IsNullOrWhiteSpace(model))
+        {
+            return null;
+        }
+
+        var full = Path.GetFullPath(model);
+        return Directory.Exists(full) ? manifestDescriptor.Load(full) : null;
+    }
+
+    /// <summary>
     ///     The tokenizer the configured LOCAL engine will embed with (D9): the manifest tokenizer
     ///     for manifest models, the bundled wordpiece tokenizer otherwise. Null for non-local
     ///     providers — they keep the chunker's default o200k proxy (unchanged). Instances are

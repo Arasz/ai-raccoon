@@ -13,7 +13,8 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     re-embed everything when the engine changes. Takes an open connection rather than opening
 ///     its own, since every caller is already inside one and embedding is never its own transaction.
 /// </summary>
-public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationLease migrationLease, TimeProvider timeProvider) : IEntryEmbedder
+public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationLease migrationLease,
+    TimeProvider timeProvider, IVecDimensionReconciler? vecDimensions = null) : IEntryEmbedder
 {
     /// <summary>Rows per generator call. Internal so PendingEmbedJob can derive its own per-run bound from it instead of duplicating the number.</summary>
     internal const int BatchSize = 32;
@@ -144,6 +145,11 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
                 return false; // finished by another relay between the caller's check and our lease
             }
 
+            // Phase 1 (D3): bring vec0 to the new engine's dimension BEFORE the first row is
+            // embedded. After the loop the DROP would discard everything just written, and the rows
+            // are no longer pending, so nothing re-drives them — a green migration over empty tables.
+            await ReconcileVecDimensionsAsync(connection, cancellationToken).ConfigureAwait(false);
+
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -167,6 +173,23 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
         {
             await migrationLease.ReleaseAsync(connection, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    ///     Reconciles vec0 to the configured engine's dimension. A bank with no engine has nothing to
+    ///     reconcile against, so it is left alone.
+    /// </summary>
+    private async Task ReconcileVecDimensionsAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var reconciler = vecDimensions ?? new VecDimensionReconciler();
+        var settings = await ReadSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(settings.Provider))
+        {
+            return;
+        }
+
+        await reconciler.ReconcileAsync(connection, embeddings.ResolveDimensions(settings), cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>Embeds one row when an engine is configured; a bank with no engine is left pending.</summary>

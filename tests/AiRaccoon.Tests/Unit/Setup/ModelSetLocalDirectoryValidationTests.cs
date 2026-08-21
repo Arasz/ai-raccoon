@@ -54,6 +54,7 @@ public sealed class ModelSetLocalDirectoryValidationTests
             {
               "manifestVersion": 1,
               "model": "cli-refusal-test",
+              "source": { "repo": "test/cli-manifest", "revision": "main" },
               "provider": "local",
               "dimensions": 1024,
               "contextWindowTokens": 8192,
@@ -89,6 +90,7 @@ public sealed class ModelSetLocalDirectoryValidationTests
             {
               "manifestVersion": 1,
               "model": "cli-ok-test",
+              "source": { "repo": "test/cli-manifest", "revision": "main" },
               "provider": "local",
               "dimensions": 384,
               "contextWindowTokens": 256,
