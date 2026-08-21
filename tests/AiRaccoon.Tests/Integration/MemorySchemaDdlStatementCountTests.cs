@@ -12,7 +12,7 @@ namespace AiRaccoon.Tests.Integration;
 ///     <c>sqlite3_trace</c> on the real connection handle — not by splitting the <c>Ddl</c> source
 ///     string, which would misparse the trigger bodies' embedded semicolons. Pins both sides of
 ///     ADR-0075's digest gate: 5 statements when the digest matches (4 gate/repair reads + the S7
-///     watches probe), 57 in the block when it does not.
+///     watches probe), 56 in the block when it does not.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
