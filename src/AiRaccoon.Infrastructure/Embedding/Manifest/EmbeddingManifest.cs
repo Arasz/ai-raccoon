@@ -39,10 +39,11 @@ public enum ManifestProvider
 }
 
 /// <summary>
-///     The pinned v1 manifest contract (plan D1, architecture §5.6): a sidecar manifest.json next
-///     to a local model's files. Every field below is part of the pinned schema — the golden
-///     fixtures in tests/AiRaccoon.Tests/Resources/ManifestFixtures pin it. No runtime use before
-///     WP3 (lane B consumes these records); WP1 ships the contract, serializer and validation only.
+///     The pinned v1 manifest contract (plan D1, architecture §5.6): a sidecar
+///     <see cref="FileName" /> next to a local model's files. Every field below is part of the
+///     pinned schema — the golden fixtures in tests/AiRaccoon.Tests/Resources/ManifestFixtures
+///     pin it. No runtime use before WP3 (lane B consumes these records); WP1 ships the
+///     contract, serializer and validation only.
 /// </summary>
 public sealed record EmbeddingManifest(
     [property: JsonRequired] int ManifestVersion,
@@ -57,7 +58,16 @@ public sealed record EmbeddingManifest(
     [property: JsonRequired] MRLInfo MRL,
     [property: JsonRequired] PoolingManifest Pooling,
     [property: JsonRequired] TokenizerManifest Tokenizer,
-    [property: JsonRequired] OnnxManifest Onnx);
+    [property: JsonRequired] OnnxManifest Onnx)
+{
+    /// <summary>
+    ///     The sidecar file name, pinned by amended D1: <c>ai-raccoon.manifest.json</c> — NOT
+    ///     <c>manifest.json</c>, because HF model repos can ship their own manifest.json
+    ///     (e.g. faxenoff/code-daemon-embed-v1), which would overwrite or be misread as our
+    ///     sidecar.
+    /// </summary>
+    public const string FileName = "ai-raccoon.manifest.json";
+}
 
 /// <summary>Where the model came from: the Hugging Face repo id and the revision that was resolved.</summary>
 public sealed record ManifestSource(

@@ -7,7 +7,7 @@
 
 ## 1. Shape
 
-`manifest.json` sits next to a local model's files (plan §5.4). Serialization: camelCase field
+`ai-raccoon.manifest.json` sits next to a local model's files (plan §5.4; amended D1 — NOT `manifest.json`, which HF repos can ship themselves). Serialization: camelCase field
 names, kebab-case enum values, explicit `null` for nullable fields. Unknown enum values and
 malformed JSON fail deserialization with an actionable message naming the field path;
 `[JsonRequired]` fields missing from the document fail the same way.
@@ -83,7 +83,7 @@ Provider `openai` (settings-row engine, no files) is exempt from the file-list r
 
 ## 3. Null-manifest legacy semantics (golden case (a))
 
-A model directory **without** `manifest.json` keeps the pre-manifest custom-path contract
+A model directory **without** `ai-raccoon.manifest.json` keeps the pre-manifest custom-path contract
 (plan §9, `LegacyManifestSemantics` in `EmbeddingManifest.cs`):
 
 - tokenizer: `bert-wordpiece` from the **bundled** vocab.txt (a custom `.onnx` path never

@@ -74,6 +74,25 @@ public class ModelDownloadServiceTests : IDisposable
         EmbeddingManifestValidator.Validate(manifest).ShouldBeEmpty();
     }
 
+    /// <summary>
+    ///     Regression: a repo's own sentence-transformers 1_Pooling/config.json must never be
+    ///     mistaken for the model's config.json — dims/ctx still come from onnx/config.json and
+    ///     the pooling layout is read separately (the real BAAI/bge-m3 ships both).
+    /// </summary>
+    [Fact]
+    public async Task PoolingLayoutInRepo_DoesNotShadowTheModelConfig()
+    {
+        var repo = FakeRepo.BgeM3(_server, withSentenceTransformersLayout: true);
+
+        var result = await Service(repo).DownloadAsync(Request(repo), TestContext.Current.CancellationToken);
+
+        result.Plan.Dimensions.ShouldBe(1024);
+        result.Plan.ContextWindowTokens.ShouldBe(8192);
+        result.Plan.PoolingMode.ShouldBe(PoolingMode.Cls);
+        result.Plan.PoolingProvenance.ShouldBe("sentence-transformers");
+        File.Exists(Path.Combine(_targetDir, EmbeddingManifest.FileName)).ShouldBeTrue();
+    }
+
     [Fact]
     public async Task ShaMismatch_DeletesArtifact_LeavesNoManifest_Throws()
     {
@@ -87,7 +106,7 @@ public class ModelDownloadServiceTests : IDisposable
         // verify-or-delete: no half-installed model, no .part residue, no manifest.
         File.Exists(Path.Combine(_targetDir, "model.onnx")).ShouldBeFalse();
         Directory.Exists(_targetDir).ShouldBeFalse();
-        File.Exists(Path.Combine(_targetDir, "manifest.json")).ShouldBeFalse();
+        File.Exists(Path.Combine(_targetDir, EmbeddingManifest.FileName)).ShouldBeFalse();
     }
 
     [Fact]
@@ -107,7 +126,7 @@ public class ModelDownloadServiceTests : IDisposable
         _server.Hits.ShouldNotContain(h => h.Key.EndsWith("/model.onnx", StringComparison.Ordinal) && h.Key.Contains("/resolve/", StringComparison.Ordinal));
         _server.Hits.ShouldNotContain(h => h.Key.EndsWith("/model.onnx_data", StringComparison.Ordinal) && h.Key.Contains("/resolve/", StringComparison.Ordinal));
         // The manifest is (re)written so provenance is complete.
-        File.Exists(Path.Combine(_targetDir, "manifest.json")).ShouldBeTrue();
+        File.Exists(Path.Combine(_targetDir, EmbeddingManifest.FileName)).ShouldBeTrue();
     }
 
     [Fact]
@@ -180,7 +199,7 @@ public class ModelDownloadServiceTests : IDisposable
             () => service.DownloadAsync(Request(repo), TestContext.Current.CancellationToken));
 
         ex.Message.ShouldContain("ONNX Runtime");
-        File.Exists(Path.Combine(_targetDir, "manifest.json")).ShouldBeFalse();
+        File.Exists(Path.Combine(_targetDir, EmbeddingManifest.FileName)).ShouldBeFalse();
         Directory.Exists(_targetDir).ShouldBeFalse();
     }
 
@@ -232,12 +251,14 @@ public class ModelDownloadServiceTests : IDisposable
         return new ModelDownloadService(
             new HfTreeClient(http, _server.BaseUrl),
             new AssetDownloader(http),
+            new ModelDownloadPlanner(),
+            new OnnxGraphProbeReader(),
             smoke ?? new FakeSmokeTester(ok: true),
             disk ?? new FakeDiskSpace(long.MaxValue));
     }
 
     private EmbeddingManifest LoadManifest() =>
-        EmbeddingManifestSerializer.Deserialize(File.ReadAllText(Path.Combine(_targetDir, "manifest.json")));
+        EmbeddingManifestSerializer.Deserialize(File.ReadAllText(Path.Combine(_targetDir, EmbeddingManifest.FileName)));
 
     private sealed class FakeSmokeTester(bool ok) : IOnnxSmokeTester
     {

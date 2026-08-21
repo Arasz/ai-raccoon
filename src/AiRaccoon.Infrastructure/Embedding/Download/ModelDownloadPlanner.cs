@@ -39,6 +39,21 @@ public sealed record ModelDownloadPlan(
 /// tokenizer family, unpinnable special tokens, etc. Messages are actionable.</summary>
 public sealed class ModelDownloadPlanException(string message, Exception? inner = null) : Exception(message, inner);
 
+/// <summary>Turns a resolved tree + fetched configs into a download plan (pure, no I/O).</summary>
+public interface IModelDownloadPlanner
+{
+    /// <summary>The auto-selected (or --file) model path; throws when no ONNX file is present.</summary>
+    string SelectModelFilePath(IReadOnlyList<HfTreeEntry> tree, IReadOnlyList<string>? explicitFiles = null);
+
+    ModelDownloadPlan BuildPlan(
+        string repoId,
+        string revision,
+        IReadOnlyList<HfTreeEntry> tree,
+        IReadOnlyDictionary<string, string> rawFiles,
+        OnnxGraphProbe? probe,
+        IReadOnlyList<string>? explicitFiles = null);
+}
+
 /// <summary>
 ///     Pure planning over the resolved tree + fetched configs (plan §8.2 steps 2-4): auto-selects
 ///     <c>onnx/model.onnx</c> else root <c>model.onnx</c>, enumerates external-data siblings from
@@ -46,13 +61,14 @@ public sealed class ModelDownloadPlanException(string message, Exception? inner 
 ///     --dry-run), pairs the tokenizer from <c>config.json</c> model_type, derives dims/ctx from
 ///     <c>hidden_size</c>/<c>max_position_embeddings − 2</c>, and pins numeric special-token ids
 ///     from <c>tokenizer_config.json</c>'s added_tokens_decoder — never a guessed mask mapping (D1).
+///     Stateless and injectable.
 /// </summary>
-public static class ModelDownloadPlanner
+public sealed class ModelDownloadPlanner : IModelDownloadPlanner
 {
     private static readonly string[] SupportedModelTypes =
         ["bert*", "xlm-roberta", "roberta", "t5", "gpt2", "llama", "qwen2"];
 
-    public static ModelDownloadPlan BuildPlan(
+    public ModelDownloadPlan BuildPlan(
         string repoId,
         string revision,
         IReadOnlyList<HfTreeEntry> tree,
@@ -60,7 +76,7 @@ public static class ModelDownloadPlanner
         OnnxGraphProbe? probe,
         IReadOnlyList<string>? explicitFiles = null)
     {
-        var modelFilePath = SelectModelFile(tree, explicitFiles);
+        var modelFilePath = SelectModelFilePath(tree, explicitFiles);
         var modelDir = DirectoryOf(modelFilePath);
 
         var modelFiles = SelectModelFiles(tree, modelFilePath, modelDir, probe);
@@ -124,7 +140,7 @@ public static class ModelDownloadPlanner
             poolingProvenance);
     }
 
-    private static string SelectModelFile(IReadOnlyList<HfTreeEntry> tree, IReadOnlyList<string>? explicitFiles)
+    public string SelectModelFilePath(IReadOnlyList<HfTreeEntry> tree, IReadOnlyList<string>? explicitFiles = null)
     {
         if (explicitFiles is { Count: > 0 })
         {

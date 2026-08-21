@@ -28,7 +28,7 @@ namespace AiRaccoon.Tests.Unit.Embedding.Download;
         public required string TokenizerConfigJson { get; init; }
 
         public static FakeRepo BgeM3(FakeHfServer server, bool corruptOnnx = false, bool corruptSpm = false,
-            long? declaredDataSize = null)
+            long? declaredDataSize = null, bool withSentenceTransformersLayout = false)
         {
             var onnx = TestOnnx.MinimalModelWithExternalData("model.onnx_data");
             var data = "external-weights-bytes"u8.ToArray();
@@ -58,14 +58,17 @@ namespace AiRaccoon.Tests.Unit.Embedding.Download;
                     }
                     """
             };
+            var stEntries = withSentenceTransformersLayout
+                ? ",\n  { \"path\": \"1_Pooling/config.json\", \"type\": \"file\", \"size\": 100, \"lfs\": null },\n  { \"path\": \"modules.json\", \"type\": \"file\", \"size\": 100, \"lfs\": null }"
+                : string.Empty;
             server.Tree(repo.RepoId, repo.Revision,
                 $$"""
                 [
-                  { "path": "onnx/model.onnx", "type": "file", "size": {{(declaredDataSize is null ? onnx.Length : onnx.Length)}}, "lfs": { "oid": "{{repo.OnnxSha}}" } },
+                  { "path": "onnx/model.onnx", "type": "file", "size": {{onnx.Length}}, "lfs": { "oid": "{{repo.OnnxSha}}" } },
                   { "path": "onnx/model.onnx_data", "type": "file", "size": {{declaredDataSize ?? data.Length}}, "lfs": { "oid": "{{repo.DataSha}}" } },
                   { "path": "onnx/sentencepiece.bpe.model", "type": "file", "size": {{spm.Length}}, "lfs": { "oid": "{{repo.SpmSha}}" } },
                   { "path": "onnx/config.json", "type": "file", "size": 100, "lfs": null },
-                  { "path": "onnx/tokenizer_config.json", "type": "file", "size": 100, "lfs": null }
+                  { "path": "onnx/tokenizer_config.json", "type": "file", "size": 100, "lfs": null }{{stEntries}}
                 ]
                 """);
             server.Resolve(repo.RepoId, "onnx/model.onnx", corruptOnnx ? "corrupted-bytes"u8.ToArray() : onnx);
@@ -73,6 +76,14 @@ namespace AiRaccoon.Tests.Unit.Embedding.Download;
             server.Resolve(repo.RepoId, "onnx/sentencepiece.bpe.model", corruptSpm ? "corrupted-spm"u8.ToArray() : spm);
             server.Resolve(repo.RepoId, "onnx/config.json", Encoding.UTF8.GetBytes(repo.ConfigJson));
             server.Resolve(repo.RepoId, "onnx/tokenizer_config.json", Encoding.UTF8.GetBytes(repo.TokenizerConfigJson));
+            if (withSentenceTransformersLayout)
+            {
+                server.Resolve(repo.RepoId, "1_Pooling/config.json",
+                    Encoding.UTF8.GetBytes("""{"word_embedding_dimension": 1024, "pooling_mode_cls_token": true, "pooling_mode_mean_tokens": false}"""));
+                server.Resolve(repo.RepoId, "modules.json",
+                    Encoding.UTF8.GetBytes("""[{"idx": 0, "name": "1_Pooling", "path": "", "type": "sentence_transformers.models.Pooling"}, {"idx": 1, "name": "2_Normalize", "path": "", "type": "sentence_transformers.models.Normalize"}]"""));
+            }
+
             return repo;
         }
 

@@ -104,6 +104,8 @@ public static class ModelSlug
 public sealed class ModelDownloadService(
     HfTreeClient treeClient,
     AssetDownloader downloader,
+    IModelDownloadPlanner planner,
+    IOnnxGraphProbeReader probeReader,
     IOnnxSmokeTester smokeTester,
     IDiskSpaceProvider diskSpace)
 {
@@ -116,7 +118,7 @@ public sealed class ModelDownloadService(
         var rawFiles = await FetchProvenanceAsync(request, tree, cancellationToken).ConfigureAwait(false);
 
         // Phase 1: glob-based plan (external data by filename pattern — nothing downloaded yet).
-        var preliminary = ModelDownloadPlanner.BuildPlan(request.RepoId, request.Revision, tree, rawFiles, probe: null, request.ExplicitFiles);
+        var preliminary = planner.BuildPlan(request.RepoId, request.Revision, tree, rawFiles, probe: null, request.ExplicitFiles);
         if (request.DryRun)
         {
             return new ModelDownloadResult(preliminary, request.TargetDirectory, null, []);
@@ -137,8 +139,8 @@ public sealed class ModelDownloadService(
             var stub = preliminary.Files.Single(f => f.Path == preliminary.ModelFilePath);
             await DownloadVerifiedAsync(request, stub, preliminary.ModelFilePath, targetDir, downloaded, cleanup, cancellationToken).ConfigureAwait(false);
 
-            var probe = OnnxGraphProbeReader.Read(Path.Combine(targetDir, TargetPath(stub.Path, preliminary.ModelFilePath)));
-            var plan = ModelDownloadPlanner.BuildPlan(request.RepoId, request.Revision, tree, rawFiles, probe, request.ExplicitFiles);
+            var probe = probeReader.Read(File.ReadAllBytes(Path.Combine(targetDir, TargetPath(stub.Path, preliminary.ModelFilePath))));
+            var plan = planner.BuildPlan(request.RepoId, request.Revision, tree, rawFiles, probe, request.ExplicitFiles);
 
             if (plan.TotalSize() > preliminary.TotalSize())
             {
@@ -173,24 +175,45 @@ public sealed class ModelDownloadService(
     }
 
     /// <summary>Fetches config.json + tokenizer_config.json (the dims/ctx and special-token-id
-    /// sources) and, when present, 1_Pooling/config.json + modules.json (D11 pooling provenance).</summary>
+    /// sources) and, when present, 1_Pooling/config.json + modules.json (D11 pooling provenance).
+    /// The config candidates are resolved exactly like the planner resolves them (beside the
+    /// model file first, then the repo root) so a repo's own 1_Pooling/config.json is never
+    /// mistaken for the model config.</summary>
     private async Task<Dictionary<string, string>> FetchProvenanceAsync(
         ModelDownloadRequest request, IReadOnlyList<HfTreeEntry> tree, CancellationToken cancellationToken)
     {
-        var names = new[] { "config.json", "tokenizer_config.json", "1_Pooling/config.json", "modules.json" };
+        var modelDir = ModelDirectoryOf(planner.SelectModelFilePath(tree, request.ExplicitFiles));
         var rawFiles = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var name in names)
-        {
-            var candidate = tree.FirstOrDefault(e => e.Path == name || e.Path.EndsWith("/" + name, StringComparison.Ordinal));
-            if (candidate is null)
-            {
-                continue;
-            }
 
-            rawFiles[candidate.Path] = await FetchRawAsync(request, candidate.Path, cancellationToken).ConfigureAwait(false);
+        foreach (var name in new[] { "config.json", "tokenizer_config.json" })
+        {
+            var candidate = TreeEntryAt(tree, modelDir, name);
+            if (candidate is not null)
+            {
+                rawFiles[candidate] = await FetchRawAsync(request, candidate, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        foreach (var name in new[] { "1_Pooling/config.json", "modules.json" })
+        {
+            if (tree.Any(e => e.Path == name))
+            {
+                rawFiles[name] = await FetchRawAsync(request, name, cancellationToken).ConfigureAwait(false);
+            }
         }
 
         return rawFiles;
+    }
+
+    private static string ModelDirectoryOf(string modelFilePath) =>
+        modelFilePath.Contains('/') ? modelFilePath[..modelFilePath.LastIndexOf('/')] : string.Empty;
+
+    private static string? TreeEntryAt(IReadOnlyList<HfTreeEntry> tree, string modelDir, string name)
+    {
+        var besideModel = modelDir.Length == 0 ? name : $"{modelDir}/{name}";
+        return tree.Any(e => e.Path == besideModel) ? besideModel
+            : tree.Any(e => e.Path == name) ? name
+            : null;
     }
 
     private async Task<string> FetchRawAsync(ModelDownloadRequest request, string path, CancellationToken cancellationToken)
@@ -350,7 +373,7 @@ public sealed class ModelDownloadService(
                 "the download succeeded but the manifest failed validation — this is a bug: " + string.Join("; ", errors));
         }
 
-        var path = Path.Combine(targetDir, "manifest.json");
+        var path = Path.Combine(targetDir, EmbeddingManifest.FileName);
         await File.WriteAllTextAsync(path, EmbeddingManifestSerializer.Serialize(manifest), cancellationToken).ConfigureAwait(false);
         return path;
     }

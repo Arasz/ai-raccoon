@@ -162,7 +162,7 @@ internal static class CliCommandTree
                 }
             },
             new Command("download",
-                "Downloads a Hugging Face embedding model into <data-root>/models/<slug> with SHA-256 pins from the LFS oids (plan D4/D8): resolves the tree, verifies every file, writes manifest.json. Does NOT activate — 'model set local <dir>' is the explicit next step.")
+                "Downloads a Hugging Face embedding model into <data-root>/models/<slug> with SHA-256 pins from the LFS oids (plan D4/D8): resolves the tree, verifies every file, writes ai-raccoon.manifest.json. Does NOT activate — 'model set local <dir>' is the explicit next step.")
             {
                 new Argument<string>("repo-id") { HelpName = "repo-id" },
                 new Option<string>("--revision") { Description = "Revision to resolve (default main)", HelpName = "revision" },

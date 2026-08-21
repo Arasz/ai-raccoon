@@ -1,5 +1,6 @@
 using System.Net.Http;
 using AiRaccoon.Infrastructure.Embedding.Download;
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tests.Unit.Embedding.Download;
@@ -42,11 +43,11 @@ public class ModelDownloadCommandTests : IDisposable
 
         exit.ShouldBe(ExitCode.Success);
         @out.ShouldContain($"downloaded {repo.RepoId}");
-        @out.ShouldContain("manifest.json");
+        @out.ShouldContain(EmbeddingManifest.FileName);
         @out.ShouldContain("model set local");
         err.ShouldBeEmpty();
         var targetDir = Path.Combine(_dataRoot, "models", ModelSlug.Sanitize(repo.RepoId));
-        File.Exists(Path.Combine(targetDir, "manifest.json")).ShouldBeTrue();
+        File.Exists(Path.Combine(targetDir, EmbeddingManifest.FileName)).ShouldBeTrue();
         File.Exists(Path.Combine(targetDir, "model.onnx_data")).ShouldBeTrue();
     }
 
@@ -113,7 +114,7 @@ public class ModelDownloadCommandTests : IDisposable
 
         exit.ShouldBe(ExitCode.Success);
         err.ShouldContain("[y/N]");
-        File.Exists(Path.Combine(_dataRoot, "models", ModelSlug.Sanitize(repo.RepoId), "manifest.json")).ShouldBeTrue();
+        File.Exists(Path.Combine(_dataRoot, "models", ModelSlug.Sanitize(repo.RepoId), EmbeddingManifest.FileName)).ShouldBeTrue();
     }
 
     [Fact]
@@ -125,7 +126,7 @@ public class ModelDownloadCommandTests : IDisposable
 
         exit.ShouldBe(ExitCode.Success);
         err.ShouldNotContain("[y/N]");
-        File.Exists(Path.Combine(_dataRoot, "models", ModelSlug.Sanitize(repo.RepoId), "manifest.json")).ShouldBeTrue();
+        File.Exists(Path.Combine(_dataRoot, "models", ModelSlug.Sanitize(repo.RepoId), EmbeddingManifest.FileName)).ShouldBeTrue();
     }
 
     [Fact]
@@ -133,7 +134,10 @@ public class ModelDownloadCommandTests : IDisposable
     {
         var repo = FakeRepo.BgeM3(_server);
         var httpFactory = new SingletonHttpClientFactory(new HttpClient());
-        var modelDownload = new ModelDownloadCommands(httpFactory, new FakeSmokeTester(ok: true), new FakeDiskSpace(long.MaxValue), _server.BaseUrl);
+        var modelDownload = new ModelDownloadCommands(httpFactory,
+            smokeTester: new FakeSmokeTester(ok: true),
+            diskSpace: new FakeDiskSpace(long.MaxValue),
+            endpoint: _server.BaseUrl);
         var commands = TestData.CreateConfigCommands(store: null!, modelDownload: modelDownload);
 
         var (exit, @out, _) = await CliRun.RunAsync(["model", "download", repo.RepoId, "--dry-run"], commands);
@@ -152,13 +156,16 @@ public class ModelDownloadCommandTests : IDisposable
 
         exit.ShouldBe(ExitCode.Success);
         @out.ShouldContain(customDir);
-        File.Exists(Path.Combine(customDir, "manifest.json")).ShouldBeTrue();
+        File.Exists(Path.Combine(customDir, EmbeddingManifest.FileName)).ShouldBeTrue();
     }
 
     private async Task<(int Exit, string Out, string Err)> Run(FakeRepo repo, string[] args, string? stdin = null)
     {
         var httpFactory = new SingletonHttpClientFactory(new HttpClient());
-        var commands = new ModelDownloadCommands(httpFactory, new FakeSmokeTester(ok: true), new FakeDiskSpace(long.MaxValue), _server.BaseUrl);
+        var commands = new ModelDownloadCommands(httpFactory,
+            smokeTester: new FakeSmokeTester(ok: true),
+            diskSpace: new FakeDiskSpace(long.MaxValue),
+            endpoint: _server.BaseUrl);
         return await CliRun.RunAsync(args, (parsed, streams, ct) =>
             commands.RunAsync(parsed.ParsedCliArgs, _dataRoot, streams, ct), stdin is null ? null : new StringReader(stdin));
     }

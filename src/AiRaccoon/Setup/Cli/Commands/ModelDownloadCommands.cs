@@ -13,6 +13,8 @@ namespace AiRaccoon.Setup.Cli.Commands;
 /// </summary>
 internal sealed class ModelDownloadCommands(
     IHttpClientFactory httpClientFactory,
+    IModelDownloadPlanner? planner = null,
+    IOnnxGraphProbeReader? probeReader = null,
     IOnnxSmokeTester? smokeTester = null,
     IDiskSpaceProvider? diskSpace = null,
     string? endpoint = null)
@@ -37,6 +39,8 @@ internal sealed class ModelDownloadCommands(
         var service = new ModelDownloadService(
             new HfTreeClient(http, endpoint ?? "https://huggingface.co"),
             new AssetDownloader(http),
+            planner ?? new ModelDownloadPlanner(),
+            probeReader ?? new OnnxGraphProbeReader(),
             smokeTester ?? new OrtOnnxSmokeTester(),
             diskSpace ?? new DiskSpaceProvider());
         var request = new ModelDownloadRequest(repoId, revision, targetDir, explicitFiles, dryRun, yes,
@@ -52,7 +56,7 @@ internal sealed class ModelDownloadCommands(
             }
 
             await streams.WriteOutputLineAsync(
-                $"downloaded {repoId}@{revision} to {targetDir} ({result.DownloadedFiles.Count} file(s)); manifest.json written. " +
+                $"downloaded {repoId}@{revision} to {targetDir} ({result.DownloadedFiles.Count} file(s)); {AiRaccoon.Infrastructure.Embedding.Manifest.EmbeddingManifest.FileName} written. " +
                 $"Activate with 'ai-raccoon model set local {targetDir}'. " +
                 "Trust note: the SHA-256 pins were captured from Hugging Face's LFS oids before download — the first pin trusts the channel once; registry pins are the reviewed tier (plan D8).");
             return ExitCode.Success;
