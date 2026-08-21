@@ -64,9 +64,9 @@ public class FileIngestorJsonIntegrationTests : IDisposable
                           """;
         await File.WriteAllTextAsync(jsonPath, jsonContent, TestContext.Current.CancellationToken);
 
-        var count = await _ingestor.IngestFileAsync(_conn, "test_project", jsonPath, null, TestContext.Current.CancellationToken);
+        var result = await _ingestor.IngestFileAsync(_conn, "test_project", jsonPath, null, TestContext.Current.CancellationToken);
 
-        Assert.Equal(1, count);
+        Assert.Equal(1, result.RowsInserted);
 
         using var checkCmd = _conn.CreateCommand();
         checkCmd.CommandText = "SELECT COUNT(*) FROM entries WHERE source_file = @path;";

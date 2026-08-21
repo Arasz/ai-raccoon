@@ -2,13 +2,24 @@ using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Ingestion;
 
+/// <summary>
+///     One file's ingest outcome: rows written, and whether the watch digest may record a
+///     fingerprint for it. <see cref="FingerprintEligible" /> is false only when the file's ONLY
+///     matched corpus is code and the code chunker produced zero chunks (B1) — a stand-in chunker
+///     (e.g. <c>NoOpCodeChunker</c>) must never let the file settle into a fingerprinted,
+///     permanently hash-skipped state before a real chunker ever ran on it. Every other outcome —
+///     a memory match (regardless of row count), a mixed match, or no corpus matching the file at
+///     all — fingerprints exactly as before.
+/// </summary>
+public readonly record struct FileIngestResult(int RowsInserted, bool FingerprintEligible);
+
 public interface IFileIngestor
 {
     /// <summary>
     ///     Set <paramref name="embedInline" /> false when the caller holds a write transaction: embedding
     ///     runs the engine per chunk, and a lock held that long stalls another process's first bank open.
     /// </summary>
-    Task<int> IngestFileAsync(SqliteConnection connection, string projectId, string path,
+    Task<FileIngestResult> IngestFileAsync(SqliteConnection connection, string projectId, string path,
         string? context, CancellationToken cancellationToken, bool embedInline = true);
 
     Task<int> IngestDirectoryAsync(SqliteConnection connection, string projectId, string path,

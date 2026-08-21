@@ -19,16 +19,25 @@ public sealed class CodeIngestor(
     TimeProvider timeProvider) : ICodeIngestor
 {
     public async Task<int> IngestFileAsync(SqliteConnection connection, string projectId, string path,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, IReadOnlyList<string>? scope = null)
     {
-        await RequireInScopeAsync(connection, projectId, path, cancellationToken).ConfigureAwait(false);
-
+        // S12: cheap self-filtering first — a hidden or non-code file returns 0 regardless of
+        // scope, so it must not pay for (or fail on) a scope check it can never affect the outcome of.
         if (IsHidden(path) || !codeFileTypeMatcher.IsCodeFile(path))
         {
             return 0;
         }
 
         var normalizedPath = IngestPath.Normalize(path);
+        if (scope is null)
+        {
+            await RequireInScopeAsync(connection, projectId, path, cancellationToken).ConfigureAwait(false);
+        }
+        else if (!scope.Any(entry => IngestPath.IsWithinScope(normalizedPath, entry)))
+        {
+            throw new PathOutsideScopeException(normalizedPath);
+        }
+
         var content = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
         var chunks = codeChunker.Chunk(content);
         if (chunks.Count == 0)
