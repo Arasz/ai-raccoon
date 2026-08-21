@@ -1,0 +1,90 @@
+{
+    "name": "code-corpus",
+    "title": "Code corpus — semantic code retrieval alongside the memory bank (code-daemon-embed-v1)",
+    "status": "agreed",
+    "specFile": "docs/features/code-corpus/code-corpus.feature",
+    "gate": {
+        "ownerGateReview": {
+            "form": "MoE plan + pre-implementation audit, docs/work/2026-08-21-code-search-implementation-plan.md rev 3",
+            "feedback": "docs/work/2026-08-21-code-search-plan-review-{architect,codereviewer}.md; §11 review dispositions; §12 pre-implementation audit",
+            "answered": 14,
+            "open": 2,
+            "note": "Plan §7 records 14 join dispositions (lane conflicts resolved) and §9 lists 9 owner open questions, most resolved away-mode in §12.4. Still open at this feature's authoring: OQ5 (eval-set repo approval) and the champion-model default flip (owner decides from the WP8 report, never this feature)."
+        }
+    },
+    "cards": [
+        { "id": "H12", "card": "Feature-file path and layout", "ruling": "docs/features/code-corpus/code-corpus.feature + sibling spec.json per docs/features/README.md — NOT the legacy docs/work/features-* layout the QA catalog originally referenced (repointed by this task)." },
+        { "id": "envelope", "card": "Wire shape for kind=code/both", "ruling": "Keys are 'results' (existing) and 'code' (new). kind=memory serializes the exact legacy envelope with NO 'code' key at all (WhenWritingNull); kind=code/both always carry both keys, even when a section is empty (review F-02/03/12/13)." },
+        { "id": "ignore-v1", "card": "ai-raccoon.ignore syntax scope", "ruling": "gitignore subset: '*' (one segment), '**' (zero-or-more segments as a whole segment), trailing '/' directory patterns, leading/anchored '/'; NO '!' negation in v1 (additive later); any-match-wins; case per host OS." },
+        { "id": "overlap", "card": "Overlapping watch resolution", "ruling": "The watch whose scope contains the other wins. A broader add prunes every contained watch (entries stay; fingerprints cascade-deleted; new watch full-catches-up). A narrower add inside an existing watch is REJECTED with the covering watch named, not silently absorbed. Equal-path re-add is an idempotent no-op." },
+        { "id": "unconfigured", "card": "Unconfigured code engine behavior", "ruling": "Always-ingest: code files are chunked (bundled counting tokenizer) and stored pending regardless of engine configuration. kind=code degrades to FTS5-only with a warning. A configured-but-unloadable engine (bad manifest/dims) is the only case that refuses code search outright — memory is never affected either way." },
+        { "id": "dims", "card": "Non-768 code manifest", "ruling": "Refused at 'model set code local' configure time — vec_code is a fixed float[768] index with no dimension-reconcile phase (unlike the memory bank), so this is the only gate. D3 dimension-reconcile machinery is documented as an extension point, not exercised in v1." },
+        { "id": "sync", "card": "Code corpus and sync", "ruling": "Code never syncs. StripNonSyncableAsync DROPs code_entries/code_fts/vec_code (and shadow tables) from every pushed snapshot, on all push paths (local, merged, retry-merged). Pull/merge never name the code tables." },
+        { "id": "drain", "card": "Code re-embed mechanism", "ruling": "NOT the model_migration outbox (single-row, hard-coded memory relay query, ToolGate closes all tools — three disqualifying facts). Instead: 'model set code local' invalidates pending code rows in the SAME transaction as the settings write; a separate code-reindex maintenance job drains them; no ToolGate interaction, so memory tools are never blocked." },
+        { "id": "search-quality", "card": "search_quality recording for code queries", "ruling": "kind=code/both searches are excluded from RecordSearchSafeAsync (rows sync off-machine; recording would leak code identifiers/paths). Performance metrics still record for kind=both's memory leg, with the query hash omitted rather than the whole row (integration review S6). kind=memory records exactly as today." },
+        { "id": "scope", "card": "kind=code with scope=shared/workspace", "ruling": "Returns an empty code section, documented in the tool description — not a refusal. Code is always project-scoped." }
+    ],
+    "scope": {
+        "in": [
+            "A second, code-only corpus in the same memory.db: code_entries + code_fts (FTS5) + vec_code (vec0, float[768], distance_metric=cosine)",
+            "memory_search gains kind: memory (default) | code | both; envelope keys 'results' + 'code', kind=memory byte-shape-unchanged (no 'code' key)",
+            "code_get(projectId, hash) mirrors memory_get; unknown hash refused",
+            "One watch row serves both corpora — no digest-level classification; each ingestor self-filters by its own file-extension matcher",
+            "ai-raccoon.ignore: one file per watch/tree root, gitignore-subset syntax, filters BOTH pipelines (watch catch-up scans and memory_ingest_directory/memory_ingest_file); ignore wins over an explicit single-file ingest; editing the ignore file triggers a full re-scan",
+            "Overlapping watch containment: broader watch wins and prunes contained watches (one transaction); narrower-inside-broader is rejected naming the covering watch; equal-path re-add is idempotent",
+            "Repo-watch-by-default applies containment to every watch inside the registered root, then catch-up scans the whole repo; hidden directories and a built-in dependency-tree deny set are skipped for repo-root watches",
+            "Always-ingest: code files are chunked and stored pending even with no code engine configured; kind=code degrades to FTS5-only with a warning until an engine embeds them",
+            "model set code local activates a local code embedding engine; refuses any manifest whose declared dimensions are not 768",
+            "The code-reindex maintenance job drains pending code rows after a code engine change — configure-transaction invalidation, no model_migration outbox, no ToolGate interaction",
+            "Code lifecycle exclusions: no sync (DROP-stripped from every pushed snapshot), no sweep, no TTL, no promotion, no workspace scope — an explicit, re-derivable cache",
+            "search_quality exclusion: kind=code/both searches are never recorded (privacy — the table syncs); kind=memory recording is unchanged"
+        ],
+        "out": [
+            "Flipping the shipped default embedding model or chunker arm to the eval report's champion — an owner decision, never made by this feature",
+            "The full multi-repo evaluation corpus (2-3 vendored repos incl. a mandatory Python repo) — deferred pending owner approval of the specific repos (OQ5); only a small in-repo smoke eval-set ships with this feature",
+            "Remote code embedding (Voyage/OpenAI) — v2",
+            "Tree-sitter AST chunking — v2 lever; v1 is line-range with brace-balance boundary preference",
+            "'!' negation in ai-raccoon.ignore — additive later",
+            "vec0 dimension reconcile for the code corpus — the D3 machinery is documented as an extension point, not exercised",
+            "codeRetrieval.* settings namespace — v1 reuses the existing RRF/fusion constants for the code section",
+            "Code chunk_index repair/backfill jobs — code is a re-derivable cache; loss costs a re-ingest, not a repair job"
+        ]
+    },
+    "nonFunctional": [
+        "Code is project-scoped only; no workspace or shared-tier code search (kind=code + scope=shared/workspace returns an empty code section, not an error)",
+        "Drain rate: the maintenance poll's default batch size is acceptable for incremental fingerprint-change re-embeds; a large-repo initial re-embed's wall time is a documented, not a hidden, cost",
+        "Non-interference: a code engine change never blocks a memory tool call; a code search's failure (unconfigured/unloadable engine) never affects a memory search in the same call",
+        "Privacy: code content and identifiers never leave the machine — no sync, no search_quality recording for code-adjacent queries",
+        "TDD mandatory: every scenario in code-corpus.feature is witnessed RED before the corresponding production code lands (plan §5, §6)",
+        "dotnet build + dotnet test green; existing memory retrieval gates unchanged by default (plan §5 regression guards)"
+    ],
+    "constraints": {
+        "packages": [],
+        "targets": {
+            "feature": "docs/features/code-corpus/code-corpus.feature",
+            "manifest": "docs/features/code-corpus/spec.json",
+            "implementation": "src/AiRaccoon.Core (CodeChunk, IgnoreRules, WatchOverlapResolver, code domain types) + src/AiRaccoon.Infrastructure (CodeChunker, code schema/store, sync strip, code-reindex job) + src/AiRaccoon (CodeTools, MemoryTools kind param, model set code local CLI)",
+            "tests": "tests/AiRaccoon.Tests (scenario + unit + integration, per the WP1-WP8 catalog in docs/work/2026-08-21-code-search-moe-qa.md)"
+        },
+        "risks": [
+            "Sync leakage is the highest-risk surface: a snapshot missing even one code-adjacent table (or its FTS5/vec0 shadow tables) leaks source content off-machine — gated on all three push call sites",
+            "Chunker quality without AST (line-range + brace-balance only) is unmeasured until the WP8 eval report lands; the token-window baseline arm and span-overlap scoring exist specifically to make this measurable, not to guarantee a result",
+            "A repo-watch-by-default without the hidden-dir/deny-set skip would index dependency trees (node_modules, .venv, etc.) at real embedding cost",
+            "The non-768 refusal is the ONLY protection for vec_code's fixed dimension — there is no post-hoc reconcile path for code the way there is for memory"
+        ]
+    },
+    "deferred": [
+        {
+            "id": "OQ5",
+            "decision": "Which 2-3 external repos (incl. a mandatory Python repo) form the full code eval-set",
+            "fallback": "scripts/src/retrieval_tuning/eval-sets/code-smoke.json ships as a small, in-repo sanity fixture only; the full vendored-repo eval-set is deferred pending owner sign-off",
+            "tag": "deferred"
+        },
+        {
+            "id": "champion-model",
+            "decision": "Whether code-daemon-embed-v1 or the jina-code-v2 A/B candidate ships as the default, and whether the heuristic or token-window chunker arm wins",
+            "fallback": "The owner decides from the WP8 eval report; this feature never flips a default itself",
+            "tag": "deferred"
+        }
+    ]
+}

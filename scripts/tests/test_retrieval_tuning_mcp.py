@@ -166,6 +166,76 @@ class TestMemorySearch:
             stub.close()
 
 
+class TestMemorySearchKind:
+    """H8 (plan §12.2): kind plumbing so a code eval can drive memory_search kind=code."""
+
+    def test_kind_omitted_by_default_regression(self):
+        """No kind arg is sent when the caller passes none — today's memory-only wire shape."""
+        envelope = json.dumps({"results": [{"hash": "abc"}]})
+        stub = StubMcpServer(
+            [
+                (200, "application/json", sse_frame(rpc_result(1, {}))),
+                (200, "application/json", sse_frame(rpc_result(2, {}))),
+                (200, "application/json", sse_frame(tools_call_result(3, envelope))),
+            ]
+        )
+        try:
+            client = make_client(stub)
+            client.initialize()
+            client.memory_search(project_id="ai-raccoon", query="hello")
+            args = stub.requests[2]["body"]["params"]["arguments"]
+            assert "kind" not in args
+        finally:
+            stub.close()
+
+    def test_kind_code_is_sent_on_the_wire_and_extracts_the_code_key(self):
+        envelope = json.dumps(
+            {
+                "results": [],
+                "code": [{"hash": "def456", "sourceFile": "src/Widget.cs", "lineStart": 10, "lineEnd": 24}],
+            }
+        )
+        stub = StubMcpServer(
+            [
+                (200, "application/json", sse_frame(rpc_result(1, {}))),
+                (200, "application/json", sse_frame(rpc_result(2, {}))),
+                (200, "application/json", sse_frame(tools_call_result(3, envelope))),
+            ]
+        )
+        try:
+            client = make_client(stub)
+            client.initialize()
+            results = client.memory_search(project_id="ai-raccoon", query="widget", kind="code")
+            args = stub.requests[2]["body"]["params"]["arguments"]
+            assert args["kind"] == "code"
+            assert results == [{"hash": "def456", "sourceFile": "src/Widget.cs", "lineStart": 10, "lineEnd": 24}]
+        finally:
+            stub.close()
+
+    def test_kind_both_extracts_the_memory_results_key_not_code(self):
+        """kind=both is not used by the smoke eval-set today, but must not silently merge sections."""
+        envelope = json.dumps(
+            {
+                "results": [{"hash": "mem1"}],
+                "code": [{"hash": "code1"}],
+            }
+        )
+        stub = StubMcpServer(
+            [
+                (200, "application/json", sse_frame(rpc_result(1, {}))),
+                (200, "application/json", sse_frame(rpc_result(2, {}))),
+                (200, "application/json", sse_frame(tools_call_result(3, envelope))),
+            ]
+        )
+        try:
+            client = make_client(stub)
+            client.initialize()
+            results = client.memory_search(project_id="ai-raccoon", query="widget", kind="both")
+            assert results == [{"hash": "mem1"}]
+        finally:
+            stub.close()
+
+
 class TestToolsList:
     def test_returns_tool_names(self):
         stub = StubMcpServer(

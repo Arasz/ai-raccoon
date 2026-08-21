@@ -31,6 +31,7 @@ flowchart LR
 
 ## What's new
 
+- **A second corpus indexes your code, searchable via `memory_search kind=code` — never synced, never mixed with memory.** (1.29.0) [Feature](docs/features/code-corpus/) · [ADR-0085](docs/adr/0085-a-second-code-only-corpus-in-the-same-bank.md)
 - **Every search parameter is now configurable — per call and per bank — no rebuild needed.** (1.28.0) [ADR-0083](docs/adr/0083-search-parameters-unified-source.md)
 - **The CLI no longer opens the bank itself — `noise entries` and `watch registered` reach the server too, completing the single-writer rule.** (1.27.0) [ADR-0075](docs/adr/0075-only-the-server-writes-to-the-bank.md)
 - **A repair now finishes on its own — it embeds what it re-ingested, instead of leaving it unsearchable.** (1.26.0) [ADR-0075](docs/adr/0075-only-the-server-writes-to-the-bank.md)

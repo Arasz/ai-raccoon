@@ -10,7 +10,7 @@
 ## 0. How to read this catalog
 
 - **One row = one named, behavior-focused test.** Each case lists: the behavior it pins, the **RED** precondition (what is witnessed failing *before* the production change), the **GREEN** assertion (the observable after), where it lives, and its kind.
-- **Kinds:** `unit` (pure logic, fakes, no SQLite / no model download) · `integration` (scratch bank via the existing `TestSqliteInit`/`BankContent` helpers, real SQLite, fake or counting embedders — `CountingEmbeddingService`, `FakeEmbeddingEndpoint`) · `bdd` (Reqnroll `.feature` + steps, style of `docs/work/features-native-memory/native-memory.feature`) · `e2e` (spawned server, `McpServerToolSurfaceE2ETests` family).
+- **Kinds:** `unit` (pure logic, fakes, no SQLite / no model download) · `integration` (scratch bank via the existing `TestSqliteInit`/`BankContent` helpers, real SQLite, fake or counting embedders — `CountingEmbeddingService`, `FakeEmbeddingEndpoint`) · `bdd` (Reqnroll `.feature` + steps, style of `docs/features/file-watcher/file-watcher.feature` — this task's own feature lives at `docs/features/code-corpus/code-corpus.feature` per the current `docs/features/README.md` convention, not the legacy `docs/work/features-*` layout referenced by earlier drafts of this catalog) · `e2e` (spawned server, `McpServerToolSurfaceE2ETests` family).
 - **RED honesty:** for a *new type/tool*, the first witnessed RED is a compile failure (`CodeChunker` does not exist) or an MCP `invalid-params` rejection (`kind` argument unknown); after a minimal stub exists, the same test is re-witnessed failing on its assertion. Both witnesses are recorded when the test lands, per the *prove-the-check-fails* invariant.
 - **Naming:** repo convention `MethodName_Condition_Expected` (e.g. `Digest_NewFile_IngestsFingerprintsAdvancesWatermark`, `Search_WithConfiguredEngine_ReturnsVectorOnlyHit_WhenKeywordHasNoMatch`); traits `[Trait(TestCategories.Category, TestCategories.Unit|Integration)]` + `[Trait(TestCategories.Speed, TestCategories.Fast)]`; Shouldly assertions.
 - **Hypotheses** (design doc does not pin the detail) are marked `⚠ HYPOTHESIS` and collected in §6. They are written as tests only where the direction is safe; otherwise the decision is left to the owner with a pointer.
@@ -611,10 +611,10 @@ Extends `WatchTestStack` with a code-ingest fake (`FakeCodeIngestor` recording `
 - **Where:** eval harness + report doc (QA lane runs it; `2026-08-21-parameter-tuning-matrix.md` style) — script gate.
 
 **WP8-T04 — `CodeCorpusFeature_BDDScenarios_WitnessedRedThenGreen`**
-- **Behavior:** the Reqnroll feature (`docs/work/features-native-memory/code-corpus.feature`) pins the tool-level behaviors: routing (WP3-T10), channeling (WP4), `kind` semantics (WP6-T02…T07), `code_get` (WP6-T08), no-cross-fusion (WP5-T07).
+- **Behavior:** the Reqnroll feature (`docs/features/code-corpus/code-corpus.feature`, per `docs/features/README.md`) pins the tool-level behaviors: routing (WP3-T10), channeling (WP4), `kind` semantics (WP6-T02…T07), `code_get` (WP6-T08), no-cross-fusion (WP5-T07).
 - **RED:** each scenario runs against the pre-feature server and fails (tool unknown / `kind` rejected) — RED witnessed in the PR's test log.
-- **GREEN:** all scenarios pass; tags follow the `@FR-CODE-n @AC-n` convention; steps live in `BDD/CodeCorpusSteps.cs` (`NativeMemorySteps.cs` style).
-- **Where:** `docs/work/features-native-memory/code-corpus.feature` + `BDD/CodeCorpusSteps.cs` — bdd.
+- **GREEN:** all scenarios pass; tags follow the `@FR-CODE-n @AC-n` convention; steps live in `BDD/CodeCorpusSteps.cs` (`FileWatcherSteps.cs` style).
+- **Where:** `docs/features/code-corpus/code-corpus.feature` + `docs/features/code-corpus/spec.json` + `BDD/CodeCorpusSteps.cs` — bdd.
 
 **WP8-T05 — `CodeEngineManifest_GoldenFixture_RoundTrips`**
 - **Behavior:** the code engine's manifest (sentencepiece, `model-output` pooling, 768 dims, ctx 128, numeric special tokens 2/3/0/1) is pinned by a golden fixture that round-trips through the D1 serializer and validation (G1-style).
