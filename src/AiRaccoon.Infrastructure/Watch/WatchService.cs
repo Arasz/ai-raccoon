@@ -39,11 +39,14 @@ public sealed class WatchService(
         }
 
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
-        var existing = (await store.ListWatchesAsync(cancellationToken).ConfigureAwait(false))
-            .Where(w => w.ProjectId == projectId)
-            .Select(w => new WatchOverlapCandidate(w.Path, w.CreatedAt))
-            .ToArray();
-        var decision = overlapResolver.Resolve(existing, new WatchOverlapCandidate(normalized, now));
+        // lastChangeTs 0 = never synced: catch-up treats a fresh watch as a full initial scan
+        // (docs/plans/file-watcher-implementation.md D1). Resolve + prune + register all happen
+        // inside ONE BEGIN IMMEDIATE transaction in the store (codereviewer MUST-FIX 7 + TOCTOU
+        // close) — the read that decides the outcome and the write that commits it share the same
+        // lock, so two concurrent AddAsync calls can never both decide "I win" against a stale
+        // pre-transaction snapshot.
+        var decision = await store.ResolveAndAddAsync(projectId, new WatchOverlapCandidate(normalized, now),
+            overlapResolver, cancellationToken).ConfigureAwait(false);
 
         switch (decision.Outcome)
         {
@@ -58,12 +61,6 @@ public sealed class WatchService(
 
             default:
                 var prunedPaths = decision.Pruned.Select(p => p.Path).ToArray();
-                // lastChangeTs 0 = never synced: catch-up treats a fresh watch as a full initial
-                // scan (docs/plans/file-watcher-implementation.md D1). Prune + register in one
-                // BEGIN IMMEDIATE transaction (codereviewer MUST-FIX 7) — a crash anywhere in the
-                // step leaves either the old watches or the new watch, never an unwatched path.
-                await store.PruneAndAddAsync(projectId, normalized, now, prunedPaths, cancellationToken)
-                    .ConfigureAwait(false);
                 // Runtime state updates only after the transaction commits (idempotent; a crash
                 // between commit and here leaves stale runtime state the hosted service's
                 // registration poll reconciles).

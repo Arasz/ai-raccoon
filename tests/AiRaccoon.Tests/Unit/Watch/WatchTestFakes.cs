@@ -140,20 +140,33 @@ internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
         return Task.CompletedTask;
     }
 
-    /// <summary>The fake has no transaction to fail mid-way; the real store's atomicity is proven
-    /// against SQLite (kill-9 E2E), not this in-memory fake.</summary>
-    public int PruneAndAddCalls { get; private set; }
+    /// <summary>The fake has no transaction to fail mid-way, and no real SQLite lock to serialize
+    /// concurrent callers on; the real store's atomicity/TOCTOU-closure is proven against SQLite
+    /// (WatchPruningTests), not this in-memory fake.</summary>
+    public int ResolveAndAddCalls { get; private set; }
 
-    public async Task PruneAndAddAsync(string projectId, string path, long createdAt, IReadOnlyList<string> prunePaths,
-        CancellationToken cancellationToken = default)
+    public async Task<WatchOverlapDecision> ResolveAndAddAsync(string projectId, WatchOverlapCandidate candidate,
+        IWatchOverlapResolver overlapResolver, CancellationToken cancellationToken = default)
     {
-        PruneAndAddCalls++;
-        foreach (var prunePath in prunePaths)
+        ResolveAndAddCalls++;
+        var existing = Watches
+            .Where(w => w.Key.ProjectId == projectId)
+            .Select(w => new WatchOverlapCandidate(w.Key.Path, w.Value.CreatedAt))
+            .ToArray();
+        var decision = overlapResolver.Resolve(existing, candidate);
+
+        if (decision.Outcome == WatchOverlapOutcome.Accepted)
         {
-            await RemoveWatchAsync(projectId, prunePath, cancellationToken).ConfigureAwait(false);
+            foreach (var pruned in decision.Pruned)
+            {
+                await RemoveWatchAsync(projectId, pruned.Path, cancellationToken).ConfigureAwait(false);
+            }
+
+            await AddWatchAsync(projectId, candidate.Path, candidate.CreatedAt, 0, cancellationToken)
+                .ConfigureAwait(false);
         }
 
-        await AddWatchAsync(projectId, path, createdAt, 0, cancellationToken).ConfigureAwait(false);
+        return decision;
     }
 
     public Task<IReadOnlyList<WatchRegistration>> ListWatchesAsync(CancellationToken cancellationToken = default) =>
