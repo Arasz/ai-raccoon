@@ -273,6 +273,7 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<ILocalTokenizer, LocalTokenizer>();
             services.AddRequiredSingleton<IEmbeddingService, EmbeddingService>();
             services.AddRequiredSingleton<ITokenizerFactory, EmbeddingTokenizerFactory>();
+            services.AddRequiredSingleton<IRemoteDimensionProbe, RemoteDimensionProbe>();
             services.AddRequiredSingleton<IEmbeddingManifestSerializer, EmbeddingManifestSerializer>();
             services.AddRequiredSingleton<IEmbeddingManifestValidator, EmbeddingManifestValidator>();
             services.AddRequiredSingleton<IEmbeddingManifestLoader, EmbeddingManifestLoader>();
