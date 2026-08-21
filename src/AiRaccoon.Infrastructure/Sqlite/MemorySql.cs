@@ -364,6 +364,18 @@ internal static class MemorySql
     public const string MarkAllCodeEmbeddedPending =
         "UPDATE code_entries SET embed_state = 'pending' WHERE embed_state = 'embedded'";
 
+    /// <summary>Bank-wide pending-row existence check for CodeReindexJob.HasWorkAsync — mirrors HasPendingEmbed.</summary>
+    public const string HasPendingCodeEmbed =
+        "SELECT EXISTS(SELECT 1 FROM code_entries WHERE embed_state = 'pending' LIMIT 1)";
+
+    /// <summary>Bank-wide (not project-scoped) pending code rows for the code-reindex drain — mirrors SelectAllPendingForEmbed.</summary>
+    public const string SelectAllPendingCodeForEmbed =
+        "SELECT id AS Id, value AS Value FROM code_entries WHERE embed_state = 'pending' ORDER BY id LIMIT @limit";
+
+    /// <summary>Fills the embedding column and flips embed_state — fires vec_code_au, which writes the row into vec_code.</summary>
+    public const string MarkCodeEmbedded =
+        "UPDATE code_entries SET embed_state = 'embedded', embedding = @embedding WHERE id = @id";
+
     // ---- model_migration (ADR-0076) ----
 
     public const string SelectModelMigration =
