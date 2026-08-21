@@ -161,7 +161,7 @@ Feature: Code corpus
         # "model set local", code has no dimension-reconcile phase, so this is the
         # only gate protecting it — refused at configure time, before anything commits.
         Scenario: model set code local refuses a non-768-dimension manifest
-            Given a local model manifest declaring 384 embedding dimensions
+            Given a local model manifest declaring 1024 embedding dimensions
             When the user runs model set code local against that manifest's directory
             Then the command errors naming the required 768 dimensions
             And no code engine setting is changed
