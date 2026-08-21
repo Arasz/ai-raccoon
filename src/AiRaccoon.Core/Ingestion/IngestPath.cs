@@ -28,7 +28,16 @@ public static class IngestPath
     ///     symlinked ancestor or leaf both count. Falls back to the normalized segment when it does
     ///     not exist or cannot be inspected, so a not-yet-created path still normalizes instead of throwing.
     /// </summary>
-    public static string ResolveReal(string path)
+    public static string ResolveReal(string path) => ResolveReal(path, 0);
+
+    /// <summary>
+    ///     A symlink's stored target can itself have a symlinked ancestor (e.g. macOS's
+    ///     `/var` → `/private/var`) that <see cref="File.ResolveLinkTarget(string, bool)" />'s
+    ///     "final target" does not walk — only re-resolving the substituted target from scratch
+    ///     catches it. Depth-capped against a symlink cycle (ELOOP is a real OS error; this must
+    ///     never hang).
+    /// </summary>
+    private static string ResolveReal(string path, int depth)
     {
         var normalized = Normalize(path);
         var root = Path.GetPathRoot(normalized) ?? string.Empty;
@@ -38,11 +47,17 @@ public static class IngestPath
         var current = root.Length == 0 ? normalized : Path.TrimEndingDirectorySeparator(root);
         foreach (var segment in segments)
         {
-            current = ResolveSegment(Path.Combine(current, segment));
+            var candidate = Path.Combine(current, segment);
+            var resolved = ResolveSegment(candidate);
+            current = depth < MaxSymlinkDepth && !PathComparer.Equals(resolved, candidate)
+                ? ResolveReal(resolved, depth + 1)
+                : resolved;
         }
 
         return current;
     }
+
+    private const int MaxSymlinkDepth = 40;
 
     /// <summary>True when the path equals the scope entry or lies under it (entry covers all subdirectories), comparing real (symlink-resolved) paths on both sides.</summary>
     public static bool IsWithinScope(string path, string scopeEntry)
