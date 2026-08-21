@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Metrics;
 using AiRaccoon.Core.SearchQuality;
@@ -394,6 +395,16 @@ public sealed class NoOpSearchQualityService : ISearchQualityService
     public Task<SearchQualityMetrics> GetMetricsAsync(string? projectId, DateTimeOffset from,
         CancellationToken ct = default) =>
         Task.FromResult(new SearchQualityMetrics(0, 0, 0, 0, 0, 0, 0));
+}
+
+/// <summary>Empty-results implementation of <see cref="ICodeSearchService"/> for unit tests that construct <see cref="MemoryTools"/> directly and do not exercise kind=code/both.</summary>
+public sealed class NoOpCodeSearchService : ICodeSearchService
+{
+    public Task<CodeSearchResults> SearchAsync(CodeSearchQuery query, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new CodeSearchResults([]));
+
+    public Task<CodeEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
+        Task.FromResult<CodeEntry?>(null);
 }
 
 /// <summary>Discards every measurement — for tests that need an <see cref="IMeasurementRecorder" /> but do not assert on it.</summary>

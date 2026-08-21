@@ -74,7 +74,7 @@ public sealed class GoldenMemorySearchResponseTests : IAsyncLifetime
         var gate = new ToolGate(access, new FakePromotionQueue());
         var tools = new MemoryTools(_store, gate, new NoOpSearchQualityService(), new QueryGuardService(_settings),
             new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(),
-            NullLogger<MemoryTools>.Instance);
+            new NoOpCodeSearchService(), NullLogger<MemoryTools>.Instance);
 
         var response = await tools.Search("acme", "quick fox", cancellationToken: TestContext.Current.CancellationToken);
 
