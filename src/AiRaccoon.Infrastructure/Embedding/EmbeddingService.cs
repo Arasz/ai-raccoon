@@ -18,7 +18,7 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     per-file sha256s — is part of the local fingerprint, so re-downloaded weights re-embed).
 /// </summary>
 public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, ILocalTokenizer localTokenizer,
-    ITokenizerFactory tokenizerFactory, IProvisionalManifestDescriptor manifestDescriptor) : IEmbeddingService
+    ITokenizerFactory tokenizerFactory, IEmbeddingManifestLoader manifestDescriptor) : IEmbeddingService
 {
     public const string DefaultOpenAiEndpoint = "https://api.openai.com/v1";
 

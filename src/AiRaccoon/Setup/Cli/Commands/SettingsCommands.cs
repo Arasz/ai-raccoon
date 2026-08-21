@@ -1,3 +1,4 @@
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using System.CommandLine;
 using System.Globalization;
 using AiRaccoon.Core.Access;
@@ -102,7 +103,7 @@ public sealed class SettingsCommands
         // accepted; the drain reconciles vec0 to it as its first phase (WP4/D3).
         if (path is not null && Directory.Exists(path))
         {
-            new ProvisionalManifestDescriptor().Load(Path.GetFullPath(path));
+            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()).Load(Path.GetFullPath(path));
         }
 
         // A remote API key and a remote dimension are both meaningless for the local engine; don't

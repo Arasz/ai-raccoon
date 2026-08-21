@@ -1,3 +1,4 @@
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Infrastructure.Embedding;
 using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
@@ -23,7 +24,7 @@ public sealed class QueryTrimSharesTheLocalTokenizerTests
             builds++;
             return OnnxEmbeddingGenerator.CreateTokenizer(BundledModel.ResolveVocabPath());
         });
-        var service = new EmbeddingService(new FakeLogger<EmbeddingService>(), localTokenizer, new EmbeddingTokenizerFactory(), new ProvisionalManifestDescriptor());
+        var service = new EmbeddingService(new FakeLogger<EmbeddingService>(), localTokenizer, new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
         var settings = new EmbeddingSettings("local", null, null, null);
 
         service.TrimQueryToWindow(settings, LongQuery());
@@ -44,7 +45,7 @@ public sealed class QueryTrimSharesTheLocalTokenizerTests
             builds++;
             return OnnxEmbeddingGenerator.CreateTokenizer(BundledModel.ResolveVocabPath());
         });
-        var service = new EmbeddingService(new FakeLogger<EmbeddingService>(), localTokenizer, new EmbeddingTokenizerFactory(), new ProvisionalManifestDescriptor());
+        var service = new EmbeddingService(new FakeLogger<EmbeddingService>(), localTokenizer, new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
         var settings = new EmbeddingSettings("openai", "text-embedding-3-small", null, null);
 
         service.TrimQueryToWindow(settings, LongQuery());

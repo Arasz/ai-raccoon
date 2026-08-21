@@ -1,3 +1,4 @@
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
@@ -39,7 +40,7 @@ public sealed class WriteChunksToBudgetTests : IAsyncLifetime
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
-            new EmbeddingService(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(), new ProvisionalManifestDescriptor()));
+            new EmbeddingService(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator())));
         await _store.ConfigureEmbeddingAsync("local", null, null, TestContext.Current.CancellationToken);
     }
 

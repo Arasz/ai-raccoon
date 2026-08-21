@@ -236,10 +236,10 @@ public class ModelDownloadPlannerTests
         var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), BgeM3Probe());
 
         plan.SpecialTokens.Count.ShouldBe(4);
-        plan.SpecialTokens["<s>"].ShouldBe(0);
-        plan.SpecialTokens["<pad>"].ShouldBe(1);
-        plan.SpecialTokens["</s>"].ShouldBe(2);
-        plan.SpecialTokens["<unk>"].ShouldBe(3);
+        plan.SpecialTokens!["<s>"].ShouldBe(0);
+        plan.SpecialTokens!["<pad>"].ShouldBe(1);
+        plan.SpecialTokens!["</s>"].ShouldBe(2);
+        plan.SpecialTokens!["<unk>"].ShouldBe(3);
         // D1: no <mask> mapping — the mask id is model-specific (250001 for xlm-roberta), never guessed.
         plan.SpecialTokens.ContainsKey("<mask>").ShouldBeFalse();
         plan.AddBeginOfSentence.ShouldBeTrue();

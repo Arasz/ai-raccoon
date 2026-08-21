@@ -59,7 +59,7 @@ public sealed class EmbeddingServiceManifestBudgetTests
 
     private static EmbeddingService Service() =>
         new(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(),
-            new ProvisionalManifestDescriptor());
+            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
 
     [Fact]
     public void ResolveChunkBudgetFor_BundledLocal_Stays254()

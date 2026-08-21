@@ -54,11 +54,14 @@ public sealed record EmbeddingManifest(
     [property: JsonRequired] int ContextWindowTokens,
     [property: JsonRequired] NormalizationMode Normalization,
     string? QueryInstruction,
-    [property: JsonRequired] bool RequiresTokenTypeIds,
-    [property: JsonRequired] MRLInfo MRL,
     [property: JsonRequired] PoolingManifest Pooling,
     [property: JsonRequired] TokenizerManifest Tokenizer,
-    [property: JsonRequired] OnnxManifest Onnx)
+    [property: JsonRequired] OnnxManifest Onnx,
+    // Optional with legacy defaults: token_type_ids are fed unless a manifest opts out, and a model
+    // silent about MRL does not support it. Requiring either on a bert-wordpiece manifest is
+    // ceremony — the validator still enforces the conditional rules that matter (D1/D5).
+    bool RequiresTokenTypeIds = true,
+    MRLInfo? MRL = null)
 {
     /// <summary>
     ///     The sidecar file name, pinned by amended D1: <c>ai-raccoon.manifest.json</c> — NOT
@@ -82,7 +85,7 @@ public sealed record MRLInfo(
 
 public sealed record PoolingManifest(
     [property: JsonRequired] PoolingMode Mode,
-    [property: JsonRequired] PoolingOutputNames OutputNames);
+    PoolingOutputNames? OutputNames = null);
 
 /// <summary>Graph output names the pooling strategy reads: <see cref="Embedding" /> is the pooled
 /// output (model-output mode), <see cref="TokenEmbeddings" /> the token-level output.</summary>
@@ -93,12 +96,12 @@ public sealed record PoolingOutputNames(
 public sealed record TokenizerManifest(
     [property: JsonRequired] TokenizerFamily Family,
     [property: JsonRequired] IReadOnlyList<ManifestFile> Files,
-    [property: JsonRequired] TokenizerOptionsManifest Options);
+    TokenizerOptionsManifest? Options = null);
 
 public sealed record TokenizerOptionsManifest(
-    [property: JsonRequired] bool AddBeginOfSentence,
-    [property: JsonRequired] bool AddEndOfSentence,
-    [property: JsonRequired] IReadOnlyDictionary<string, int> SpecialTokens);
+    bool AddBeginOfSentence = true,
+    bool AddEndOfSentence = true,
+    IReadOnlyDictionary<string, int>? SpecialTokens = null);
 
 /// <summary>A pinned file: repo-relative path + SHA-256 (hex). For LFS files the sha256 is the HF
 /// LFS oid captured from the tree API before download (D8); for non-LFS files it is the TOFU pin

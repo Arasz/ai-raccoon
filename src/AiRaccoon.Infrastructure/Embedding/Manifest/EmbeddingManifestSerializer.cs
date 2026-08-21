@@ -14,7 +14,15 @@ public sealed class EmbeddingManifestFormatException(string message, Exception? 
 ///     nulls for the nullable fields. Unknown enum values fail deserialization with an actionable
 ///     message naming the field path; required fields are enforced by <c>[JsonRequired]</c>.
 /// </summary>
-public static class EmbeddingManifestSerializer
+/// <summary>(De)serializes the pinned v1 manifest schema.</summary>
+public interface IEmbeddingManifestSerializer
+{
+    string Serialize(EmbeddingManifest manifest);
+
+    EmbeddingManifest Deserialize(string json);
+}
+
+public sealed class EmbeddingManifestSerializer : IEmbeddingManifestSerializer
 {
     private static readonly JsonSerializerOptions Options = new()
     {
@@ -32,9 +40,9 @@ public static class EmbeddingManifestSerializer
         }
     };
 
-    public static string Serialize(EmbeddingManifest manifest) => JsonSerializer.Serialize(manifest, Options);
+    public string Serialize(EmbeddingManifest manifest) => JsonSerializer.Serialize(manifest, Options);
 
-    public static EmbeddingManifest Deserialize(string json)
+    public EmbeddingManifest Deserialize(string json)
     {
         try
         {
@@ -44,9 +52,17 @@ public static class EmbeddingManifestSerializer
         catch (JsonException ex)
         {
             var at = string.IsNullOrEmpty(ex.Path) ? string.Empty : $" (at {ex.Path})";
-            throw new EmbeddingManifestFormatException($"invalid embedding manifest: {ex.Message}{at}", ex);
+            throw new EmbeddingManifestFormatException(
+                $"invalid embedding manifest: {ex.Message}{at}{Hint(ex.Path)}", ex);
         }
     }
+
+    /// <summary>Extra guidance for the shape mistakes that are easy to make by hand.</summary>
+    private static string Hint(string? path) =>
+        path?.Contains("specialTokens", StringComparison.OrdinalIgnoreCase) == true
+            ? " — tokenizer.options.specialTokens maps special-token names to NUMERIC ids taken from "
+              + "tokenizer_config.json (e.g. {\"<s>\": 0}), never a list or a string"
+            : string.Empty;
 }
 
 /// <summary>Pins the schema's exact string for an enum member where hump-to-kebab would guess
@@ -88,6 +104,8 @@ public sealed class KebabCaseEnumJsonConverter<TEnum> : JsonConverter<TEnum>
         writer.WriteStringValue(SchemaName(value));
 
     private static IEnumerable<string> Supported() => Enum.GetValues<TEnum>().Select(SchemaName);
+
+    internal static string SchemaNameOf(TEnum value) => SchemaName(value);
 
     private static string SchemaName(TEnum value)
     {

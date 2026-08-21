@@ -1,3 +1,4 @@
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
@@ -272,7 +273,9 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<ILocalTokenizer, LocalTokenizer>();
             services.AddRequiredSingleton<IEmbeddingService, EmbeddingService>();
             services.AddRequiredSingleton<ITokenizerFactory, EmbeddingTokenizerFactory>();
-            services.AddRequiredSingleton<IProvisionalManifestDescriptor, ProvisionalManifestDescriptor>();
+            services.AddRequiredSingleton<IEmbeddingManifestSerializer, EmbeddingManifestSerializer>();
+            services.AddRequiredSingleton<IEmbeddingManifestValidator, EmbeddingManifestValidator>();
+            services.AddRequiredSingleton<IEmbeddingManifestLoader, EmbeddingManifestLoader>();
             services.AddRequiredSingleton<IModelDownloadPlanner, ModelDownloadPlanner>();
             services.AddRequiredSingleton<IOnnxGraphProbeReader, OnnxGraphProbeReader>();
             services.AddRequiredSingleton<IOnnxSmokeTester, OrtOnnxSmokeTester>();

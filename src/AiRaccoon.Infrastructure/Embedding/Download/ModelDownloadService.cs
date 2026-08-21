@@ -107,7 +107,9 @@ public sealed class ModelDownloadService(
     IModelDownloadPlanner planner,
     IOnnxGraphProbeReader probeReader,
     IOnnxSmokeTester smokeTester,
-    IDiskSpaceProvider diskSpace)
+    IDiskSpaceProvider diskSpace,
+    IEmbeddingManifestSerializer manifestSerializer,
+    IEmbeddingManifestValidator manifestValidator)
 {
     /// <summary>Downloads above this total size require --yes (plan §8.3 multi-GB guard).</summary>
     public const long LargeDownloadThresholdBytes = 500L * 1024 * 1024;
@@ -366,7 +368,7 @@ public sealed class ModelDownloadService(
             Onnx: new OnnxManifest(plan.Inputs, plan.EmbeddingOutput, plan.TokenEmbeddingsOutput,
                 [.. plan.ModelFiles.Select(f => new ManifestFile(TargetPath(f.Path, plan.ModelFilePath), Sha256Of(Path.Combine(targetDir, TargetPath(f.Path, plan.ModelFilePath)))))]));
 
-        var errors = EmbeddingManifestValidator.Validate(manifest);
+        var errors = manifestValidator.Validate(manifest);
         if (errors.Count > 0)
         {
             throw new ModelDownloadException(
@@ -374,7 +376,7 @@ public sealed class ModelDownloadService(
         }
 
         var path = Path.Combine(targetDir, EmbeddingManifest.FileName);
-        await File.WriteAllTextAsync(path, EmbeddingManifestSerializer.Serialize(manifest), cancellationToken).ConfigureAwait(false);
+        await File.WriteAllTextAsync(path, manifestSerializer.Serialize(manifest), cancellationToken).ConfigureAwait(false);
         return path;
     }
 

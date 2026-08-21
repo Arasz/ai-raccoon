@@ -1,3 +1,4 @@
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using System.Text;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
@@ -96,7 +97,7 @@ public sealed class SearchFixtureBank : IAsyncDisposable
         var factory = new SqliteConnectionFactory(options, new NoopEncryptionKeyResolver());
         var sourceStore = new SqliteMemorySourceStore(factory);
         var embeddingService = new EmbeddingService(NullLogger<EmbeddingService>.Instance, new LocalTokenizer(),
-            new EmbeddingTokenizerFactory(), new ProvisionalManifestDescriptor());
+            new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
         var countTokens = new TokenCount(new O200kTokenizer().CountTokens);
         var markdownChunker = new MarkdownChunker(countTokens);
         var fileTypeMatcher = new FileTypeMatcher([

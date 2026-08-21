@@ -57,10 +57,10 @@ public class ModelDownloadServiceTests : IDisposable
         manifest.Tokenizer.Family.ShouldBe(TokenizerFamily.SentencePiece);
         manifest.Tokenizer.Files.Single().Path.ShouldBe("sentencepiece.bpe.model");
         manifest.Tokenizer.Files.Single().Sha256.ShouldBe(repo.SpmSha);
-        manifest.Tokenizer.Options.SpecialTokens["<s>"].ShouldBe(0);
-        manifest.Tokenizer.Options.SpecialTokens["<pad>"].ShouldBe(1);
-        manifest.Tokenizer.Options.SpecialTokens["</s>"].ShouldBe(2);
-        manifest.Tokenizer.Options.SpecialTokens["<unk>"].ShouldBe(3);
+        manifest.Tokenizer.Options!.SpecialTokens!["<s>"].ShouldBe(0);
+        manifest.Tokenizer.Options!.SpecialTokens!["<pad>"].ShouldBe(1);
+        manifest.Tokenizer.Options!.SpecialTokens!["</s>"].ShouldBe(2);
+        manifest.Tokenizer.Options!.SpecialTokens!["<unk>"].ShouldBe(3);
         manifest.Onnx.Inputs.ShouldBe(["input_ids", "attention_mask"]);
         manifest.Onnx.EmbeddingOutput.ShouldBe("sentence_embedding");
         manifest.Onnx.TokenEmbeddingsOutput.ShouldBe("token_embeddings");
@@ -70,8 +70,8 @@ public class ModelDownloadServiceTests : IDisposable
         manifest.Onnx.Files.Single(f => f.Path == "model.onnx_data").Sha256.ShouldBe(repo.DataSha);
         // D11: no 1_Pooling layout in the fake repo → placeholder pooling.
         manifest.Pooling.Mode.ShouldBe(PoolingMode.ModelOutput);
-        manifest.Pooling.OutputNames.Embedding.ShouldBe("sentence_embedding");
-        EmbeddingManifestValidator.Validate(manifest).ShouldBeEmpty();
+        manifest.Pooling.OutputNames!.Embedding.ShouldBe("sentence_embedding");
+        new EmbeddingManifestValidator().Validate(manifest).ShouldBeEmpty();
     }
 
     /// <summary>
@@ -254,11 +254,13 @@ public class ModelDownloadServiceTests : IDisposable
             new ModelDownloadPlanner(),
             new OnnxGraphProbeReader(),
             smoke ?? new FakeSmokeTester(ok: true),
-            disk ?? new FakeDiskSpace(long.MaxValue));
+            disk ?? new FakeDiskSpace(long.MaxValue),
+            new EmbeddingManifestSerializer(),
+            new EmbeddingManifestValidator());
     }
 
     private EmbeddingManifest LoadManifest() =>
-        EmbeddingManifestSerializer.Deserialize(File.ReadAllText(Path.Combine(_targetDir, EmbeddingManifest.FileName)));
+        new EmbeddingManifestSerializer().Deserialize(File.ReadAllText(Path.Combine(_targetDir, EmbeddingManifest.FileName)));
 
     private sealed class FakeSmokeTester(bool ok) : IOnnxSmokeTester
     {

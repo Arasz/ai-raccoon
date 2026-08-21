@@ -27,7 +27,7 @@ public sealed class ManifestDirectoryActivationTests : IAsyncLifetime
 
     private static EmbeddingService Service() =>
         new(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(),
-            new ProvisionalManifestDescriptor());
+            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
 
     private static JsonObject Manifest(int dimensions = 384) => new()
     {

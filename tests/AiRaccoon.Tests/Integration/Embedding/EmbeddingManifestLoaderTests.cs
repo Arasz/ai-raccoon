@@ -15,7 +15,7 @@ namespace AiRaccoon.Tests.Integration.Embedding;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
-public sealed class ProvisionalManifestDescriptorTests
+public sealed class EmbeddingManifestLoaderTests
 {
     private static string WriteModelDir(string manifestJson, params (string Name, string Content)[] files)
     {
@@ -66,7 +66,7 @@ public sealed class ProvisionalManifestDescriptorTests
     {
         var dir = WriteModelDir(BertManifest().ToJsonString(), ("vocab.txt", "vocab"), ("model.onnx", "model"));
 
-        var descriptor = new ProvisionalManifestDescriptor().Load(dir);
+        var descriptor = new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()).Load(dir);
 
         descriptor.Model.ShouldBe("custom-bert");
         descriptor.SourceRepo.ShouldBe("org/custom-bert");
@@ -103,7 +103,7 @@ public sealed class ProvisionalManifestDescriptorTests
             }
         };
 
-        var descriptor = new ProvisionalManifestDescriptor().Load(WriteModelDir(manifest.ToJsonString(), ("sp.model", "sp"), ("model.onnx", "model")));
+        var descriptor = new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()).Load(WriteModelDir(manifest.ToJsonString(), ("sp.model", "sp"), ("model.onnx", "model")));
 
         descriptor.TokenizerFamily.ShouldBe("sentencepiece");
         descriptor.SentencePieceOptions.ShouldNotBeNull();
@@ -121,7 +121,7 @@ public sealed class ProvisionalManifestDescriptorTests
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "model.onnx"), "model");
 
-        var ex = Should.Throw<InvalidOperationException>(() => new ProvisionalManifestDescriptor().Load(dir));
+        var ex = Should.Throw<InvalidOperationException>(() => new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()).Load(dir));
 
         ex.Message.ShouldContain("manifest.json", customMessage: "the error must name the missing file");
         ex.Message.ShouldContain("model download", customMessage: "the error must point at the fix");
@@ -134,7 +134,7 @@ public sealed class ProvisionalManifestDescriptorTests
         manifest["tokenizer"]!["family"] = "warp-drive";
 
         var ex = Should.Throw<InvalidOperationException>(() =>
-            new ProvisionalManifestDescriptor().Load(WriteModelDir(manifest.ToJsonString(), ("vocab.txt", "vocab"), ("model.onnx", "model"))));
+            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()).Load(WriteModelDir(manifest.ToJsonString(), ("vocab.txt", "vocab"), ("model.onnx", "model"))));
 
         ex.Message.ShouldContain("warp-drive");
         ex.Message.ShouldContain("bert-wordpiece");
@@ -148,7 +148,7 @@ public sealed class ProvisionalManifestDescriptorTests
         manifest["tokenizer"]!["family"] = "tokenizer-json";
 
         var ex = Should.Throw<InvalidOperationException>(() =>
-            new ProvisionalManifestDescriptor().Load(WriteModelDir(manifest.ToJsonString(), ("vocab.txt", "vocab"), ("model.onnx", "model"))));
+            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()).Load(WriteModelDir(manifest.ToJsonString(), ("vocab.txt", "vocab"), ("model.onnx", "model"))));
 
         ex.Message.ShouldContain("tokenizer-json");
     }
@@ -160,7 +160,7 @@ public sealed class ProvisionalManifestDescriptorTests
         manifest["pooling"] = new JsonObject { ["mode"] = "model-output" };
 
         var ex = Should.Throw<InvalidOperationException>(() =>
-            new ProvisionalManifestDescriptor().Load(WriteModelDir(manifest.ToJsonString(), ("vocab.txt", "vocab"), ("model.onnx", "model"))));
+            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()).Load(WriteModelDir(manifest.ToJsonString(), ("vocab.txt", "vocab"), ("model.onnx", "model"))));
 
         ex.Message.ShouldContain("model-output");
         ex.Message.ShouldContain("embeddingOutput");
@@ -173,7 +173,7 @@ public sealed class ProvisionalManifestDescriptorTests
         manifest["onnx"]!["files"] = new JsonArray(new JsonObject { ["path"] = "model.onnx", ["sha256"] = "not-a-sha" });
 
         var ex = Should.Throw<InvalidOperationException>(() =>
-            new ProvisionalManifestDescriptor().Load(WriteModelDir(manifest.ToJsonString(), ("vocab.txt", "vocab"), ("model.onnx", "model"))));
+            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()).Load(WriteModelDir(manifest.ToJsonString(), ("vocab.txt", "vocab"), ("model.onnx", "model"))));
 
         ex.Message.ShouldContain("sha256");
     }
@@ -184,7 +184,7 @@ public sealed class ProvisionalManifestDescriptorTests
         var manifest = BertManifest();
         var dir = WriteModelDir(manifest.ToJsonString(), ("vocab.txt", "vocab")); // model.onnx absent
 
-        var ex = Should.Throw<InvalidOperationException>(() => new ProvisionalManifestDescriptor().Load(dir));
+        var ex = Should.Throw<InvalidOperationException>(() => new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()).Load(dir));
 
         ex.Message.ShouldContain("model.onnx");
     }
@@ -201,7 +201,7 @@ public sealed class ProvisionalManifestDescriptorTests
         };
 
         var ex = Should.Throw<InvalidOperationException>(() =>
-            new ProvisionalManifestDescriptor().Load(WriteModelDir(manifest.ToJsonString(), ("sp.model", "sp"), ("model.onnx", "model"))));
+            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()).Load(WriteModelDir(manifest.ToJsonString(), ("sp.model", "sp"), ("model.onnx", "model"))));
 
         ex.Message.ShouldContain("numeric");
     }
@@ -215,7 +215,7 @@ public sealed class ProvisionalManifestDescriptorTests
     {
         var dir = WriteModelDir(BertManifest(dimensions: 1024).ToJsonString(), ("vocab.txt", "vocab"), ("model.onnx", "model"));
 
-        var descriptor = new ProvisionalManifestDescriptor().Load(dir);
+        var descriptor = new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()).Load(dir);
 
         descriptor.Dimensions.ShouldBe(1024, "the 384-only refusal was WP3's placeholder, removed by WP4");
     }
@@ -231,7 +231,7 @@ public sealed class ProvisionalManifestDescriptorTests
         manifest.Remove("source");
         var dir = WriteModelDir(manifest.ToJsonString(), ("vocab.txt", "vocab"), ("model.onnx", "model"));
 
-        var ex = Should.Throw<InvalidOperationException>(() => new ProvisionalManifestDescriptor().Load(dir));
+        var ex = Should.Throw<InvalidOperationException>(() => new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()).Load(dir));
 
         ex.Message.ShouldContain("source", customMessage: "the refusal must name the missing required field");
     }

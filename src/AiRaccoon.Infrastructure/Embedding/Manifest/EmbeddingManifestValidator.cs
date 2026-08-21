@@ -7,11 +7,17 @@ namespace AiRaccoon.Infrastructure.Embedding.Manifest;
 ///     actionable — it names the offending field path and the accepted values. Pure function: no
 ///     I/O, no exceptions; returns every error, not just the first.
 /// </summary>
-public static class EmbeddingManifestValidator
+/// <summary>Semantic validation of a parsed v1 manifest; returns every error, never throws.</summary>
+public interface IEmbeddingManifestValidator
+{
+    IReadOnlyList<string> Validate(EmbeddingManifest manifest);
+}
+
+public sealed class EmbeddingManifestValidator : IEmbeddingManifestValidator
 {
     private static readonly Regex Sha256Pattern = new("^[0-9a-fA-F]{64}$", RegexOptions.Compiled);
 
-    public static IReadOnlyList<string> Validate(EmbeddingManifest manifest)
+    public IReadOnlyList<string> Validate(EmbeddingManifest manifest)
     {
         var errors = new List<string>();
         if (manifest is null)
@@ -91,8 +97,7 @@ public static class EmbeddingManifestValidator
     {
         if (mrl is null)
         {
-            errors.Add("mrl: must declare { supported, minDimensions }");
-            return;
+            return; // absent means "no MRL", the common case
         }
 
         if (mrl.Supported && mrl.MinDimensions is not > 0)
@@ -112,12 +117,6 @@ public static class EmbeddingManifestValidator
         if (!Enum.IsDefined(pooling.Mode))
         {
             errors.Add($"pooling.mode: unknown mode '{pooling.Mode}' (expected mean, cls, model-output or last-token)");
-            return;
-        }
-
-        if (pooling.OutputNames is null)
-        {
-            errors.Add("pooling.outputNames: must name the embedding and tokenEmbeddings graph outputs");
             return;
         }
 
@@ -155,18 +154,14 @@ public static class EmbeddingManifestValidator
 
         ValidateFileList("tokenizer.files", tokenizer.Files, isLocal, errors);
 
-        if (tokenizer.Options is null)
-        {
-            errors.Add("tokenizer.options: must declare addBeginOfSentence, addEndOfSentence and specialTokens");
-            return;
-        }
-
-        if (isLocal && tokenizer.Options.SpecialTokens.Count == 0)
+        // SentencePiece needs the numeric special-token map; the other families do not use options.
+        if (isLocal && tokenizer.Family == TokenizerFamily.SentencePiece
+                    && (tokenizer.Options?.SpecialTokens is null || tokenizer.Options.SpecialTokens.Count == 0))
         {
             errors.Add("tokenizer.options.specialTokens: must map special-token names to numeric ids taken from tokenizer_config.json (never a guessed mask mapping)");
         }
 
-        foreach (var (name, id) in tokenizer.Options.SpecialTokens)
+        foreach (var (name, id) in tokenizer.Options?.SpecialTokens ?? new Dictionary<string, int>())
         {
             if (id < 0)
             {

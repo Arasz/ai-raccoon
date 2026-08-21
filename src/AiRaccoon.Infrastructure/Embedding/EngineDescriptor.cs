@@ -6,7 +6,7 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     PROVISIONAL engine descriptor — lane B's WP3 adapter over the D1 manifest JSON shape
 ///     (docs/work/2026-08-21-arbitrary-embedding-models-plan.md D1/D5; architecture doc §5.6).
 ///     Lane A (WP1) builds the canonical <c>EmbeddingModelDescriptor</c> record + serializer in
-///     parallel; at the join this adapter and <see cref="ProvisionalManifestDescriptor" /> are
+///     parallel; at the join this adapter and <see cref="EmbeddingManifestLoader" /> are
 ///     replaced by it. Do not build new features on this type's surface beyond the WP3 gate.
 /// </summary>
 public sealed record EngineDescriptor(

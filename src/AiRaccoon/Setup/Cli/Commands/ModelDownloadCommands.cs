@@ -1,3 +1,4 @@
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using System.CommandLine;
 using System.Net.Http;
 using AiRaccoon.Infrastructure.Assets;
@@ -42,7 +43,9 @@ internal sealed class ModelDownloadCommands(
             planner ?? new ModelDownloadPlanner(),
             probeReader ?? new OnnxGraphProbeReader(),
             smokeTester ?? new OrtOnnxSmokeTester(),
-            diskSpace ?? new DiskSpaceProvider());
+            diskSpace ?? new DiskSpaceProvider(),
+            new EmbeddingManifestSerializer(),
+            new EmbeddingManifestValidator());
         var request = new ModelDownloadRequest(repoId, revision, targetDir, explicitFiles, dryRun, yes,
             message => PromptConfirm(streams, message));
 

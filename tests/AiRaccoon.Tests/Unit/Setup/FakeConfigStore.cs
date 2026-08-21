@@ -1,3 +1,4 @@
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Tests.TestHelpers;
@@ -10,7 +11,7 @@ internal sealed class FakeConfigStore : FakeMemoryStore
 {
     private static EmbeddingService Fingerprint() =>
         new(NullLogger<EmbeddingService>.Instance, new LocalTokenizer(), new EmbeddingTokenizerFactory(),
-            new ProvisionalManifestDescriptor());
+            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
 
     public Dictionary<string, string> Settings { get; } = new(StringComparer.Ordinal);
 

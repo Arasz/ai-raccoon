@@ -54,17 +54,17 @@ public class EmbeddingManifestSerializerTests
     [Fact]
     public void FullBgeM3Fixture_Parses_AndRoundTrips_ByteStable()
     {
-        var parsed = EmbeddingManifestSerializer.Deserialize(ReadFixture("bge-m3.full.json"));
+        var parsed = new EmbeddingManifestSerializer().Deserialize(ReadFixture("bge-m3.full.json"));
 
-        EmbeddingManifestSerializer.Serialize(parsed).ShouldBe(
-            EmbeddingManifestSerializer.Serialize(BgeM3()),
+        new EmbeddingManifestSerializer().Serialize(parsed).ShouldBe(
+            new EmbeddingManifestSerializer().Serialize(BgeM3()),
             "the golden fixture must parse to exactly the approved manifest (field names, kebab enums, explicit nulls)");
     }
 
     [Fact]
     public void Serialize_UsesThePinnedSchema_FieldNamesAndKebabEnums()
     {
-        var json = EmbeddingManifestSerializer.Serialize(BgeM3());
+        var json = new EmbeddingManifestSerializer().Serialize(BgeM3());
 
         json.ShouldContain("\"manifestVersion\": 1");
         json.ShouldContain("\"contextWindowTokens\": 8192");
@@ -88,21 +88,21 @@ public class EmbeddingManifestSerializerTests
     {
         var original = BgeM3();
 
-        var reparsed = EmbeddingManifestSerializer.Deserialize(EmbeddingManifestSerializer.Serialize(original));
+        var reparsed = new EmbeddingManifestSerializer().Deserialize(new EmbeddingManifestSerializer().Serialize(original));
 
-        EmbeddingManifestSerializer.Serialize(reparsed).ShouldBe(EmbeddingManifestSerializer.Serialize(original));
+        new EmbeddingManifestSerializer().Serialize(reparsed).ShouldBe(new EmbeddingManifestSerializer().Serialize(original));
         reparsed.Dimensions.ShouldBe(1024);
         reparsed.ContextWindowTokens.ShouldBe(8192);
         reparsed.Tokenizer.Family.ShouldBe(TokenizerFamily.SentencePiece);
-        reparsed.Tokenizer.Options.SpecialTokens.ShouldBe(original.Tokenizer.Options.SpecialTokens);
-        reparsed.Tokenizer.Options.AddBeginOfSentence.ShouldBeTrue();
-        reparsed.Tokenizer.Options.AddEndOfSentence.ShouldBeTrue();
+        reparsed.Tokenizer.Options!.SpecialTokens.ShouldBe(original.Tokenizer.Options!.SpecialTokens);
+        reparsed.Tokenizer.Options!.AddBeginOfSentence.ShouldBeTrue();
+        reparsed.Tokenizer.Options!.AddEndOfSentence.ShouldBeTrue();
         reparsed.Onnx.Inputs.ShouldBe(["input_ids", "attention_mask"]);
         reparsed.Onnx.EmbeddingOutput.ShouldBe("sentence_embedding");
         reparsed.Onnx.TokenEmbeddingsOutput.ShouldBe("token_embeddings");
         reparsed.Pooling.Mode.ShouldBe(PoolingMode.ModelOutput);
-        reparsed.Pooling.OutputNames.Embedding.ShouldBe("sentence_embedding");
-        reparsed.Pooling.OutputNames.TokenEmbeddings.ShouldBe("token_embeddings");
+        reparsed.Pooling.OutputNames!.Embedding.ShouldBe("sentence_embedding");
+        reparsed.Pooling.OutputNames!.TokenEmbeddings.ShouldBe("token_embeddings");
         reparsed.Source.Repo.ShouldBe("BAAI/bge-m3");
         reparsed.Source.Revision.ShouldBe("main");
         reparsed.MRL.ShouldBe(new MRLInfo(false, null));
@@ -128,7 +128,7 @@ public class EmbeddingManifestSerializerTests
     public void UnknownFamily_FailsDeserialization_WithActionableMessage()
     {
         var ex = Should.Throw<EmbeddingManifestFormatException>(
-            () => EmbeddingManifestSerializer.Deserialize(ReadFixture("malformed/unknown-family.json")));
+            () => new EmbeddingManifestSerializer().Deserialize(ReadFixture("malformed/unknown-family.json")));
 
         ex.Message.ShouldContain("tokenizer.family");
         ex.Message.ShouldContain("tiktoken");
@@ -140,7 +140,7 @@ public class EmbeddingManifestSerializerTests
     {
         var json = ReadFixture("bge-m3.full.json").Replace("\"mode\": \"model-output\"", "\"mode\": \"attention\"");
         var ex = Should.Throw<EmbeddingManifestFormatException>(
-            () => EmbeddingManifestSerializer.Deserialize(json));
+            () => new EmbeddingManifestSerializer().Deserialize(json));
 
         ex.Message.ShouldContain("pooling.mode");
         ex.Message.ShouldContain("attention");
@@ -150,7 +150,7 @@ public class EmbeddingManifestSerializerTests
     public void MalformedJson_FailsDeserialization_WithFormatException()
     {
         Should.Throw<EmbeddingManifestFormatException>(
-            () => EmbeddingManifestSerializer.Deserialize(ReadFixture("malformed/not-json.json")));
+            () => new EmbeddingManifestSerializer().Deserialize(ReadFixture("malformed/not-json.json")));
     }
 
     [Fact]
@@ -158,7 +158,7 @@ public class EmbeddingManifestSerializerTests
     {
         var json = ReadFixture("bge-m3.full.json").Replace("\"dimensions\": 1024", "\"dimensions\": \"many\"");
         var ex = Should.Throw<EmbeddingManifestFormatException>(
-            () => EmbeddingManifestSerializer.Deserialize(json));
+            () => new EmbeddingManifestSerializer().Deserialize(json));
 
         ex.Message.ShouldContain("dimensions");
     }
@@ -169,7 +169,7 @@ public class EmbeddingManifestSerializerTests
         var json = ReadFixture("bge-m3.full.json").Replace("\"provider\": \"local\",", string.Empty);
 
         var ex = Should.Throw<EmbeddingManifestFormatException>(
-            () => EmbeddingManifestSerializer.Deserialize(json));
+            () => new EmbeddingManifestSerializer().Deserialize(json));
 
         ex.Message.ShouldContain("provider");
     }
