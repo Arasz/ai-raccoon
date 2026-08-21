@@ -87,6 +87,23 @@ erDiagram
         INTEGER recorded_at
     }
 
+    code_entries {
+        INTEGER id PK
+        TEXT hash
+        TEXT path
+        TEXT value
+        TEXT source_file
+        INTEGER line_start
+        INTEGER line_end
+        TEXT project_id
+        INTEGER created_at
+        INTEGER updated_at
+        TEXT embed_state
+        BLOB embedding
+        INTEGER chunk_index
+        INTEGER total_chunks
+    }
+
     workspaces ||--o{ entries : "workspace_id"
     memory_source ||--o{ entries : "source_id"
 ```
@@ -163,6 +180,34 @@ with a `source_id` FK on entries; `source_file`/`section` remain on entries as
 denormalized FTS-backing columns (see `docs/work/2026-08-11-memory-source-normalization-plan.md`).
 
 > **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:59-117`
+
+### Code corpus
+
+A second, code-only corpus lives in the same `memory.db` file, added additively in the
+digest-gated DDL block (no `CurrentVersion` bump — the metrics-table precedent above):
+
+- `code_entries` — one row per code chunk: `hash`/`path`/`value`/`source_file` mirror
+  `entries`; `line_start`/`line_end` (1-based, inclusive) replace `section`/`heading_path`,
+  since code has no structure modality. `uq_code_chunk UNIQUE(project_id, path, hash)` is the
+  dedup bucket; `idx_code_entries_project`, `idx_code_entries_hash`,
+  `idx_code_entries_embed_state`, and `idx_code_entries_path` mirror the `entries` indexes.
+  `project_id` is `NOT NULL` — code has no shared/workspace/custom context, so there is no
+  `scope`/`context_label`/`workspace_id`/`agent_id` column, and no
+  `rating`/`ttl_days`/`access_count` (no degradation: a code row is a re-derivable cache, not
+  curated knowledge).
+- `code_fts` — FTS5 external-content index over `code_entries(value, source_file)`, with the
+  same insert/delete/update trigger family as `entries_fts`.
+- `vec_code` — vec0 virtual table, `float[768]` (`code-daemon-embed-v1`'s dimension, distinct
+  from `vec_entries`' 384) with `ctx = project_id` directly — no `ContextKeyExpression`
+  branching, since code is project-scoped only. `embed_state` UPDATE triggers keep it in sync
+  with `code_entries`, mirroring `vec_entries`.
+
+**Lifecycle exclusions** (deliberate, not oversights): the code corpus never syncs (a pushed
+snapshot `DROP`s `code_entries`/`code_fts`/`vec_code` rather than stripping rows), never
+sweeps, carries no TTL, and never promotes to the shared tier. Losing it costs a re-ingest
+from disk, not knowledge — the opposite of `entries`.
+
+> **Evidence:** `docs/work/2026-08-21-code-search-implementation-plan.md` §3.1/§3.2
 
 ### Schema versioning
 
