@@ -138,7 +138,14 @@ why small fixtures never showed it.
 
 **Ingest-then-prune, not delete-then-ingest.** `FileIngestor` now reports the chunk hashes it
 wrote *or rediscovered unchanged*, and the direct path deletes the complement for that exact
-path inside one `BEGIN IMMEDIATE`.
+path. The ingest keeps embedding **inline**, as this path always has, so it stays outside the
+prune's transaction — embedding runs the engine per chunk and holding the bank's write lock
+through it stalls another process's first open, which is exactly why the watch path defers.
+Only the prune takes the lock, for one DELETE. (Wrapping both in one transaction with
+`embedInline: false` was tried first and silently stopped `memory_ingest_file` from embedding at
+all — caught by `StructurePopulationTests`, which asserts `vec_entries` is non-empty after an
+ingest.) A crash between ingest and prune leaves the stale rows where today's code already
+leaves them, so the window costs nothing that is not already the status quo.
 
 Delete-then-ingest — what this plan originally proposed — was wrong for a reason the plan did
 not anticipate: it rewrites every row of an **unchanged** file, which re-queues its embeddings.
