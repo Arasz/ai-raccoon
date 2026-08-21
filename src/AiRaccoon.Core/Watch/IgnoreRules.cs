@@ -158,8 +158,11 @@ public sealed class IgnoreRules : IEquatable<IgnoreRules>
                         return true;
                     }
                 }
-                else if (_directoryOnly)
+                else
                 {
+                    // Short of the leaf: the pattern matched an ancestor directory segment, so the
+                    // whole subtree beneath it is excluded — true for bare patterns and
+                    // directory-only patterns alike.
                     return true;
                 }
             }

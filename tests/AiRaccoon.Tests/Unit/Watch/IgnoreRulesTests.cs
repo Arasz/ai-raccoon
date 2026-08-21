@@ -140,4 +140,46 @@ public sealed class IgnoreRulesTests
         rules.IsIgnored("repo/x.cs", isDirectory: false).ShouldBeTrue();
         rules.IsIgnored("repo2/x.cs", isDirectory: false).ShouldBeFalse();
     }
+
+    [Fact]
+    public void IsIgnored_BareDirectoryNamePattern_ExcludesSubtree()
+    {
+        // A bare pattern (no trailing '/') matching an ANCESTOR segment must exclude everything
+        // beneath it too, same as a trailing-'/' pattern does (gitignore semantics).
+        var rules = IgnoreRules.Parse("vendor");
+
+        rules.IsIgnored("vendor/pkg/x.go", isDirectory: false).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void IsIgnored_BareDirectoryNamePattern_StillMatchesALeafFile()
+    {
+        var rules = IgnoreRules.Parse("vendor");
+
+        rules.IsIgnored("vendor", isDirectory: false).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void IsIgnored_TrailingSlashPattern_StillExcludesSubtree()
+    {
+        var rules = IgnoreRules.Parse("vendor/");
+
+        rules.IsIgnored("vendor/pkg/x.go", isDirectory: false).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void IsIgnored_TrailingSlashPattern_StillNeverMatchesALeafFile()
+    {
+        var rules = IgnoreRules.Parse("vendor/");
+
+        rules.IsIgnored("vendor", isDirectory: false).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void IsIgnored_TrailingSlashPattern_StillMatchesALeafDirectory()
+    {
+        var rules = IgnoreRules.Parse("vendor/");
+
+        rules.IsIgnored("vendor", isDirectory: true).ShouldBeTrue();
+    }
 }
