@@ -1,5 +1,10 @@
 # Ops/Ecosystem — MoE section: arbitrary embedding model support (case study: bge-m3)
 
+> **Rev-1 MoE snapshot.** This document is the ops lane's historical MoE record. Where it and the
+> combined plan's §3 decisions disagree, the combined plan wins (notably D3 dimension reconcile
+> and D6 chunk budget). Its factual measurements (bge-m3 files, GGUF repos, LM Studio API, HF
+> oids) remain current.
+
 **Date:** 2026-08-21
 **Lane:** ops/ecosystem — operational facts and ecosystem integration for the "download any embedding model" plan
 **Question:** What are the verified operational facts (files, sizes, validity), ecosystem paths (LM Studio, GGUF), download tooling options with a pinning policy, metadata sources, dims/context manifest data, and failure modes for supporting arbitrary embedding models, with bge-m3 as the case study?

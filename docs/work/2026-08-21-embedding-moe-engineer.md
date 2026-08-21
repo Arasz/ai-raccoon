@@ -1,5 +1,12 @@
 # MoE — Arbitrary embedding model support (engineer lane)
 
+> **Rev-1 MoE snapshot — SUPERSEDED WHERE IT CONFLICTS.** This document is the engineer lane's
+> historical MoE record. Where it and the combined plan's §3 decisions disagree, the combined
+> plan wins — notably **D3** (dimension reconcile: single-transaction DROP+CREATE, NO
+> `RebuildVecTableAsync` repopulate, no every-open-DDL heal, DDL stays `float[384]`) and **D6**
+> (chunk budget: `MaxManifestChunkTokens = 510` deliberate cap — NOT `ctx − SpecialTokenReservation`
+> = 8190). Superseded sections are marked inline.
+
 **Date:** 2026-08-21
 **Worktree:** task/support-for-other-embedding-models-u1
 **Scope:** C# refactor plan for the local/remote embedding engine so that non-BERT models (case study: bge-m3) can be configured, embedded, and searched. Plan only — no code landed.
@@ -146,8 +153,8 @@ DrainMigrationAsync:
   2. resolve NEW engine dimension:
        local   → generator.Dimension (session output shape; descriptor cross-check)
        openai  → probe: one GenerateAsync(["probe"]) and measure vector length
-  3. read declared dims: ReadVecDimensionAsync(vec_entries), ReadVecDimensionAsync(vec_structure)
-  4. if any declared dim != new dim → RebuildVecTableAsync both tables at the NEW dim
+  3. read declared dims: ReadVecDimensionAsync(vec_entries), ReadVecDimensionAsync(vec_structure) **> SUPERSEDED by rev-2 D3:** read table PRESENCE explicitly — ReadVecDimensionAsync returns 384 for a MISSING table, conflating absent with 384
+  4. if any declared dim != new dim → RebuildVecTableAsync both tables at the NEW dim **> SUPERSEDED by rev-2 D3:** RebuildVecTableAsync REPOPULATES from the entries blob columns (which still hold OLD-dim blobs after MarkAllEmbeddedPending) — this wedges the bank. Use a single BEGIN IMMEDIATE DROP+CREATE at float[N] with NO repopulate; the drain's MarkEmbedded refills both tables via the triggers
        (safe: the outbox already marked every row pending, so the tables are empty;
         the ToolGate lock guarantees no query/write interleaves; trigger recreation
         follows the v2-step pattern, MemorySchema.cs:1159-1186)
@@ -181,7 +188,7 @@ Defense-in-depth: `MarkEmbedded` gains a blob-length guard against the declared 
 
 ### 5.2 Target shape
 
-- The descriptor carries `contextTokens` (engine window). `OnnxEmbeddingGenerator.MaxSequenceLength` becomes the descriptor value (bundled default 256, no-behavior-change); `MaxContentTokens = contextTokens − SpecialTokenReservation` (254 for bundled, 8190 for bge-m3).
+- The descriptor carries `contextTokens` (engine window). `OnnxEmbeddingGenerator.MaxSequenceLength` becomes the descriptor value (bundled default 256, no-behavior-change); `MaxContentTokens = contextTokens − SpecialTokenReservation` (254 for bundled, 8190 for bge-m3). **> SUPERSEDED by rev-2 D6:** manifest-local models are capped at `MaxManifestChunkTokens = 510` (deliberate v1 cap — 512-token CLS window − 2 reserved; bge-m3's MCLS pooling applies above 512 and is deferred), NOT `ctx − reservation`; bundled stays 254; the model's full ctx remains recorded in the manifest.
 - `ContextTokensFor`/`SafeChunkBudgetFor`/`TrimQueryToWindow` resolve per engine: local ⇒ descriptor (fall back to bundled defaults when no manifest exists), openai ⇒ 8191 (or optional `embedding.contextTokens` settings override — see §7).
 - The two `DefaultMaxTokens = 256` caps become **per-engine content budget** (descriptor content budget wins for engines with larger windows), with the bundled behavior unchanged (min(256, 254) = 254 today stays 254).
 
@@ -287,7 +294,7 @@ Every step ends with the **bundled-model no-behavior-change invariant**: the ful
 | **S3** | Pooling strategy | `MeanPoolAndNormalize` moves verbatim behind a strategy; `ClsPoolAndNormalize` added; bundled descriptor default `mean`. | Mean path golden bit-identical; CLS unit tests green. |
 | **S4** | Per-engine context | Window/content-budget/ContextTokensFor/SafeChunkBudgetFor/TrimQueryToWindow resolve from descriptor (bundled defaults identical); `DefaultMaxTokens` caps become per-engine content budget. | `EmbeddingContextTests` + corpus guarantee green; bundled budget still 254. |
 | **S5** | Descriptor | `EmbeddingModelDescriptor` + loader + validation; bundled default descriptor; `model set local` without sidecar keeps today's shape (defaults). | Parse/validation unit tests; bundled descriptor equals today's constants; config-error paths tested (unknown family/pooling). |
-| **S6** | Dimension reconcile in drain | Drain phase 1: resolve new dim (session / remote probe) → compare declared vec dims → `RebuildVecTableAsync` under lease → then batch loop; `MarkEmbedded` blob-length guard. | §8.3 integration green (384→1024 swap, fresh-bank variant) + negative test proves the guard fires; ADR-0076 crash-recovery tests unchanged and green. |
+| **S6** | Dimension reconcile in drain | Drain phase 1: resolve new dim (session / remote probe) → compare declared vec dims → `RebuildVecTableAsync` under lease → then batch loop; `MarkEmbedded` blob-length guard. **> SUPERSEDED by plan §5 G4 + rev-2 D3:** reconcile = single-transaction DROP+CREATE at float[N] (no RebuildVecTableAsync repopulate), pre-commit remote probe, wrong-dims refusal with outbox NOT committed, kill-9 between DROP and CREATE covered. | §8.3 integration green (384→1024 swap, fresh-bank variant) + negative test proves the guard fires; ADR-0076 crash-recovery tests unchanged and green. |
 | **S7** | Fingerprint enrichment | `EngineFingerprint` includes descriptor identity; outbox stores it; descriptor-only changes re-embed. | Fingerprint-change triggers migration (updated ADR-0076 tests); identical descriptor ⇒ no migration. |
 | **S8** | bge-m3 | `sentencepiece` family impl + xlm-roberta descriptor + parity fixtures + 415 wording + corpus guarantee under xlm-roberta + scratch-bank swap eval. | Parity green; golden vector ε-match; corpus guarantee zero violations; eval report (nDCG@5 vs 0.6105) committed; no dim-mismatch errors in any path. |
 | **S9** | Qwen3 (future, blocked) | ONNX export (research F9 blocks), BPE spike (`TiktokenTokenizer.CreateForModel` vs Qwen2 files), MRL truncation, 32K context, MRL-384 option evaluation. | Not started this wave; spike findings first. |
