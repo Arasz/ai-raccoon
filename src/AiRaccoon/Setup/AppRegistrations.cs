@@ -218,12 +218,14 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<IIgnoreRulesProvider, IgnoreRulesProvider>();
             services.AddRequiredSingleton<IFileTypeMatcher, FileTypeMatcher>();
 
-            // Code corpus (docs/work/2026-08-21-code-search-implementation-plan.md §12.5, Wave
-            // 2): registry + ingest plumbing land now; NoOpCodeChunker is the interim ICodeChunker
-            // until the real line-range chunker (WP2) replaces this registration in Wave 3
-            // (engine-blocked).
+            // Code corpus (docs/work/2026-08-21-code-search-implementation-plan.md §3.4, WP2):
+            // real line-range CodeChunker, budget 126 (§12.1 H3), counted with the bundled
+            // code-daemon-embed-v1 sentencepiece tokenizer — the v1 default until a configured
+            // code engine (embedding.codeModel, WP5) replaces the counting path. Always-ingest
+            // per §3.3: code files chunk + store `pending` even with no engine configured.
             services.AddRequiredSingleton<ICodeFileTypeMatcher, CodeFileTypeMatcher>();
-            services.AddRequiredSingleton<ICodeChunker, NoOpCodeChunker>();
+            services.AddRequiredSingleton<ICodeTokenizer, CodeTokenizer>();
+            services.AddRequiredSingleton<ICodeChunker, CodeChunker>();
             services.AddRequiredSingleton<ICodeIngestor, CodeIngestor>();
             services.AddRequiredSingleton<IFileIngestor, FileIngestor>();
         }
