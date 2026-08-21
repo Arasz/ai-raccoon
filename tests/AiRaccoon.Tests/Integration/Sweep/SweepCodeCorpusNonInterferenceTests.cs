@@ -2,6 +2,7 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Degradation;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Data.Sqlite;
@@ -54,6 +55,24 @@ public sealed class SweepCodeCorpusNonInterferenceTests : IDisposable
         TestData.DeleteTempRoot(_dataRoot);
     }
 
+    /// <summary>
+    ///     Integration review small item 3: this test previously asserted only code_entries and
+    ///     code_fts survive. Added a vec_code assertion too (the code row is now seeded through
+    ///     embed_state='embedded' with a real vector, so vec_code actually holds a row for the
+    ///     sweep to threaten — the old pending-state seed left vec_code empty regardless of
+    ///     whether the sweep interfered, so an assertion on it there would have proven nothing).
+    ///
+    ///     On a plausible RED for "sweep touches code rows": SweepService (src/AiRaccoon.Infrastructure/
+    ///     Degradation/SweepService.cs) never issues SQL of its own against a table name — it goes
+    ///     through IMemoryStore.ListContextAsync/DeleteInScopeAsync, both of which are hard-coded
+    ///     to the `entries` table inside SqliteMemoryStore. There is no query string, table-name
+    ///     parameter, or shared helper a mis-scoping bug could corrupt into reaching code_entries;
+    ///     the abstraction boundary between "sweep" and "code corpus" is a different C# type, not a
+    ///     WHERE clause. A synthetic "make the sweep aggressive enough to catch a mis-scoped
+    ///     DELETE" scenario therefore has no honest RED to demonstrate — the only way this test
+    ///     could ever fail is a change that makes SweepService (or something it calls) start
+    ///     touching code_entries directly, which this test already catches via the counts below.
+    /// </summary>
     [Fact]
     public async Task ReaperTick_DeletesTheExpiredMemoryRow_ButLeavesTheCodeRowUntouched()
     {
@@ -69,6 +88,8 @@ public sealed class SweepCodeCorpusNonInterferenceTests : IDisposable
             "the sweep must never touch code_entries — the code corpus has no TTL/degradation (§3.8).");
         (await CodeFtsCountAsync(cancellationToken)).ShouldBe(1L,
             "the sweep must never touch code_fts either.");
+        (await VecCodeCountAsync(cancellationToken)).ShouldBe(1L,
+            "the sweep must never touch vec_code either.");
     }
 
     private async Task<string> SeedExpiringEntryAsync()
@@ -85,10 +106,15 @@ public sealed class SweepCodeCorpusNonInterferenceTests : IDisposable
         return entry.Hash;
     }
 
+    /// <summary>Drives the row to embed_state='embedded' with a real 768-float vector, so vec_code
+    /// actually holds a row (the vec_code_au trigger fires) for the sweep to threaten.</summary>
     private async Task SeedCodeRowAsync(CancellationToken cancellationToken)
     {
         await using var conn = new SqliteConnection($"Data Source={_bankPath}");
         await conn.OpenAsync(cancellationToken);
+        conn.EnableExtensions();
+        conn.LoadVector();
+
         await using var insert = conn.CreateCommand();
         insert.CommandText = """
                              INSERT INTO code_entries (id, hash, path, value, source_file, line_start, line_end, project_id, created_at, updated_at)
@@ -96,6 +122,11 @@ public sealed class SweepCodeCorpusNonInterferenceTests : IDisposable
                              """;
         insert.Parameters.AddWithValue("@projectId", ProjectId);
         await insert.ExecuteNonQueryAsync(cancellationToken);
+
+        await using var update = conn.CreateCommand();
+        update.CommandText = "UPDATE code_entries SET embed_state = 'embedded', embedding = @embedding WHERE id = 1";
+        update.Parameters.AddWithValue("@embedding", EmbeddingBlob.ToBytes(Enumerable.Repeat(0.5f, 768).ToArray()));
+        await update.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private async Task<long> CodeEntriesCountAsync(CancellationToken cancellationToken)
@@ -113,6 +144,17 @@ public sealed class SweepCodeCorpusNonInterferenceTests : IDisposable
         await conn.OpenAsync(cancellationToken);
         await using var count = conn.CreateCommand();
         count.CommandText = "SELECT COUNT(*) FROM code_fts WHERE code_fts MATCH 'Foo'";
+        return (long)(await count.ExecuteScalarAsync(cancellationToken))!;
+    }
+
+    private async Task<long> VecCodeCountAsync(CancellationToken cancellationToken)
+    {
+        await using var conn = new SqliteConnection($"Data Source={_bankPath}");
+        await conn.OpenAsync(cancellationToken);
+        conn.EnableExtensions();
+        conn.LoadVector();
+        await using var count = conn.CreateCommand();
+        count.CommandText = "SELECT COUNT(*) FROM vec_code WHERE rowid = 1";
         return (long)(await count.ExecuteScalarAsync(cancellationToken))!;
     }
 
