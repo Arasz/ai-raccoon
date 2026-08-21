@@ -4,6 +4,7 @@ using System.Globalization;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.Memory.QueryGuard;
@@ -199,6 +200,34 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         return declared;
     }
 
+    /// <summary>
+    ///     §3.3 D-E9: refused HERE, before anything commits. vec_code is a fixed float[768] index
+    ///     and, unlike the memory bank's `model set local`, code has no dimension-reconcile phase to
+    ///     fix up a wrong-dimension activation afterward — this is the only gate protecting it. A
+    ///     missing/invalid manifest surfaces the loader's own actionable error unchanged.
+    /// </summary>
+    public async Task<int> ModelSetCodeLocalAsync(ParseResult parseResult, ICodeEngineStore codeEngine,
+        StandardStreams streams, CancellationToken cancellationToken)
+    {
+        var fullPath = Path.GetFullPath(ExpandTilde(parseResult.GetValue<string>("dir"))!);
+
+        var descriptor = new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator())
+            .Load(fullPath);
+        if (descriptor.Dimensions != CodeCorpusSchema.EmbeddingDimensions)
+        {
+            throw new InvalidOperationException(
+                $"Manifest '{fullPath}' declares {descriptor.Dimensions}-dimension embeddings, but the code " +
+                $"corpus's vec_code index is fixed at {CodeCorpusSchema.EmbeddingDimensions} dimensions — there " +
+                "is no dimension-reconcile phase for code, unlike the memory bank. Point 'model set code local' " +
+                $"at a manifest with dimensions: {CodeCorpusSchema.EmbeddingDimensions}.");
+        }
+
+        await codeEngine.ActivateCodeEngineAsync(fullPath, cancellationToken);
+        await streams.WriteOutputLineAsync(
+            $"code embedding engine set to local ({fullPath}); the code-reindex maintenance job will re-embed pending rows");
+        return 0;
+    }
+
     public async Task<int> ModelResetAsync(IMemoryStore store, StandardStreams streams,
         CancellationToken cancellationToken)
     {
@@ -216,6 +245,16 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         return 0;
     }
 
+    /// <summary>§3.3: `settings model code reset` deletes ONLY the code rows — the memory engine's rows are untouched.</summary>
+    public async Task<int> ModelCodeResetAsync(IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken)
+    {
+        await store.DeleteSettingAsync(EmbeddingSettingsKeys.CodeModel, cancellationToken);
+        await store.DeleteSettingAsync(EmbeddingSettingsKeys.CodeEngine, cancellationToken);
+        await streams.WriteOutputLineAsync("code embedding engine reset to default: no engine (FTS5-only code search)");
+        return 0;
+    }
+
     public async Task<int> ModelShowAsync(IMemoryStore store, StandardStreams streams,
         CancellationToken cancellationToken)
     {
@@ -224,15 +263,30 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         if (string.IsNullOrWhiteSpace(provider))
         {
             await streams.WriteOutputLineAsync("provider: (none — FTS5-only search)");
-            return 0;
+        }
+        else
+        {
+            await streams.WriteOutputLineAsync($"provider: {provider}");
+            await streams.WriteOutputLineAsync($"model: {rows.GetValueOrDefault(EmbeddingSettingsKeys.Model) ?? "(unset)"}");
+            await streams.WriteOutputLineAsync($"baseUrl: {rows.GetValueOrDefault(EmbeddingSettingsKeys.BaseUrl) ?? "(unset)"}");
+            await streams.WriteOutputLineAsync($"engine: {rows.GetValueOrDefault(EmbeddingSettingsKeys.Engine) ?? "(unset)"}");
+            var keyState = rows.ContainsKey(EmbeddingSettingsKeys.ApiKey) ? "set" : "unset";
+            await streams.WriteOutputLineAsync($"apiKey: {keyState}");
         }
 
-        await streams.WriteOutputLineAsync($"provider: {provider}");
-        await streams.WriteOutputLineAsync($"model: {rows.GetValueOrDefault(EmbeddingSettingsKeys.Model) ?? "(unset)"}");
-        await streams.WriteOutputLineAsync($"baseUrl: {rows.GetValueOrDefault(EmbeddingSettingsKeys.BaseUrl) ?? "(unset)"}");
-        await streams.WriteOutputLineAsync($"engine: {rows.GetValueOrDefault(EmbeddingSettingsKeys.Engine) ?? "(unset)"}");
-        var keyState = rows.ContainsKey(EmbeddingSettingsKeys.ApiKey) ? "set" : "unset";
-        await streams.WriteOutputLineAsync($"apiKey: {keyState}");
+        // Independent of the memory engine (§3.3): shown even when no memory provider is
+        // configured, since the code corpus can be activated on its own.
+        var codeModel = rows.GetValueOrDefault(EmbeddingSettingsKeys.CodeModel);
+        if (string.IsNullOrWhiteSpace(codeModel))
+        {
+            await streams.WriteOutputLineAsync("codeModel: (none — FTS5-only code search)");
+        }
+        else
+        {
+            await streams.WriteOutputLineAsync($"codeModel: {codeModel}");
+            await streams.WriteOutputLineAsync($"codeEngine: {rows.GetValueOrDefault(EmbeddingSettingsKeys.CodeEngine) ?? "(unset)"}");
+        }
+
         return 0;
     }
 

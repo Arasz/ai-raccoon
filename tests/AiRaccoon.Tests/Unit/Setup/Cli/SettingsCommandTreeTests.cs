@@ -38,6 +38,7 @@ public class SettingsCommandTreeTests
         ("settings access list", ["settings", "access", "list"]),
         ("settings model reset", ["settings", "model", "reset"]),
         ("settings model show", ["settings", "model", "show"]),
+        ("settings model code reset", ["settings", "model", "code", "reset"]),
         ("settings retrieval alpha set", ["settings", "retrieval", "alpha", "set", "0.5"]),
         ("settings retrieval alpha show", ["settings", "retrieval", "alpha", "show"]),
         ("settings retrieval fusion enable", ["settings", "retrieval", "fusion", "enable"]),
@@ -110,7 +111,7 @@ public class SettingsCommandTreeTests
     ///     that cannot run with no arguments at all (`model download` needs a repo-id).
     /// </summary>
     private static readonly string[] WriteOptOuts =
-        ["model set local", "model set openai", "model download", "encryption bitwarden", "encryption show", "encryption unset", "encryption migrate", "serve", "serve observability"];
+        ["model set local", "model set openai", "model set code local", "model download", "encryption bitwarden", "encryption show", "encryption unset", "encryption migrate", "serve", "serve observability"];
 
     public static TheoryData<string[]> SettingsArgv()
     {
@@ -228,6 +229,7 @@ public class SettingsCommandTreeTests
     [Theory]
     [InlineData("local")]
     [InlineData("openai text-embedding-3-small")]
+    [InlineData("code local /tmp")]
     public void ModelSet_StaysTopLevel(string tail)
     {
         var parseResult = CliCommandTree.BuildFullRootCommand().Parse(["model", "set", .. tail.Split(' ')]);

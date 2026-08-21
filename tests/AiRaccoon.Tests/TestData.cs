@@ -113,8 +113,9 @@ public static class TestData
         ChunkIndexRepairCommands? chunkIndexRepair = null,
         ReingestRepairCommands? reingestRepair = null,
         DoctorCommands? doctor = null,
-        ModelDownloadCommands? modelDownload = null) =>
-        new(store, modelMigrations!, settings!, sync!, watch!, encryptionCommands!, extract!, maintenance!, performance!, serve!, noiseEntries!, chunkIndexRepair!, reingestRepair!, doctor!, modelDownload!);
+        ModelDownloadCommands? modelDownload = null,
+        ICodeEngineStore? codeEngine = null) =>
+        new(store, modelMigrations!, codeEngine!, settings!, sync!, watch!, encryptionCommands!, extract!, maintenance!, performance!, serve!, noiseEntries!, chunkIndexRepair!, reingestRepair!, doctor!, modelDownload!);
 
     /// <summary>A <see cref="ServerProbe"/> backed by a plain loopback HttpClient (the pre-DI-refactor ForLoopback shape).</summary>
     public static ServerProbe CreateServerProbe() => new(new LoopbackHttpClientFactory());

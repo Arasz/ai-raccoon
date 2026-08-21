@@ -92,9 +92,45 @@ refused**; only the legacy `model set local <file>.onnx` path keeps the bundled 
 
 Downloading never activates: `model set local` is always the explicit next step.
 
+### Recipe 5: Activate the code corpus's embedding engine
+
+The code corpus (`kind=code`/`kind=both` search) has its **own** embedding engine,
+configured independently of everything above — activating it never touches
+`embedding.provider`/`embedding.model`/`embedding.engine`, and vice versa.
+
+```bash
+ai-raccoon model download faxenoff/code-daemon-embed-v1
+ai-raccoon model set code local <data-root>/models/faxenoff__code-daemon-embed-v1
+```
+
+`vec_code` is a fixed `float[768]` index — unlike the memory engine, there is **no**
+dimension-reconcile phase, so `model set code local` refuses a manifest whose
+`dimensions` is not `768` before anything commits, naming the declared value and the
+required `768`. A missing/invalid manifest is refused the same way, with the loader's
+own error.
+
+On success the settings write (`embedding.codeModel`/`embedding.codeEngine`) and
+invalidating every already-embedded code row to `pending` commit together in one
+transaction — `vec_code` empties in that same commit, so there is no window where it
+holds vectors from the old engine. There is **no outbox and no migration wait**: the
+command returns immediately, memory tools are never blocked, and `kind=code` search
+degrades to FTS5-only until the `code-reindex` maintenance job re-embeds the pending
+rows on its own cadence.
+
+```bash
+ai-raccoon settings model show          # includes codeModel/codeEngine when set
+ai-raccoon settings model code reset    # deletes ONLY the code engine rows
+ai-raccoon settings model reset         # the memory engine's reset; never touches code rows
+```
+
 ---
 
 ## Re-embedding lifecycle
+
+This section covers the **memory** engine (`model set local`/`model set openai`) only.
+`model set code local` (Recipe 5) does not use this outbox/relay/ToolGate machinery at
+all — it invalidates the code corpus in one plain transaction and returns; the
+`code-reindex` maintenance job drains it in the background with no tool-blocking window.
 
 Switching embedding engines re-embeds all memories in the active bank. When the new
 engine's dimension differs, the drain's **first** step rebuilds `vec_entries` and

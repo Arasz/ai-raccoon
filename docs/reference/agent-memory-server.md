@@ -160,6 +160,22 @@ config channel (see [Command-line options](#command-line-options)).
   `--dir`, `--dry-run` (resolve + print sizes/oids, download nothing), `--yes` (confirm
   downloads > 500 MB). It never activates the model — `model set local <dir>` is the explicit
   next step (plan `docs/work/2026-08-21-arbitrary-embedding-models-plan.md`, D4/D8).
+- **Code corpus embedding engine (CLI, not a tool):** `ai-raccoon model set code local <dir>`
+  activates a manifest directory for the code corpus — independent of the memory engine above,
+  its own `embedding.codeModel`/`embedding.codeEngine` settings rows. `<dir>` must contain
+  `ai-raccoon.manifest.json` declaring exactly `dimensions: 768`: `vec_code` is a fixed
+  `float[768]` index with no dimension-reconcile phase (unlike `model set local`), so any other
+  declared dimension is refused before anything commits, naming the declared value and the
+  required 768. A missing/invalid manifest is refused with the same loader error `model set
+  local` surfaces. On success the write commits in one transaction with invalidating every
+  already-embedded code row back to `pending` — `vec_code` empties at that same commit, no
+  stale-vector window — and the `code-reindex` maintenance job re-embeds the pending rows on its
+  own cadence; there is no outbox, no relay wait, and memory tools are never blocked. Typical
+  flow: `ai-raccoon model download faxenoff/code-daemon-embed-v1` then `ai-raccoon model set
+  code local <data-root>/models/faxenoff__code-daemon-embed-v1`. `ai-raccoon settings model
+  show` includes the `codeModel`/`codeEngine` rows when set; `ai-raccoon settings model reset`
+  never touches them; `ai-raccoon settings model code reset` deletes only them, leaving the
+  memory engine untouched (`docs/work/2026-08-21-code-search-implementation-plan.md` §3.3).
 - **Structure alpha (CLI, not a tool):** `ai-raccoon settings retrieval alpha set {0..1}`
   writes the dual-vector fusion alpha (`retrieval.structureAlpha`, 0..1; default 0.5)
   used by search as `score = alpha × content + (1 − alpha) × heading-path structure`.
@@ -613,6 +629,11 @@ ai-raccoon model set local [path]
 ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]
 ai-raccoon settings model reset
 ai-raccoon settings model show
+
+# model set code: the code corpus's own engine — independent settings rows, refuses non-768
+# manifests before anything commits (§3.3 D-E9), no memory-bank re-embed
+ai-raccoon model set code local <dir>
+ai-raccoon settings model code reset
 
 # settings retrieval: hybrid-search blend weight
 ai-raccoon settings retrieval alpha set {0..1}

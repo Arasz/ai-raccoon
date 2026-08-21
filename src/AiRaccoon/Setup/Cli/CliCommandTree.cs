@@ -160,6 +160,17 @@ internal static class CliCommandTree
                     new Argument<string>("model") { HelpName = "model-id" }, new Argument<string?>("base-url") { HelpName = "url", Arity = ArgumentArity.ZeroOrOne },
                     new Option<string>("--api-key") { Description = "API key persisted in the settings table", HelpName = "key" },
                     new Option<int?>("--dims") { Description = "Output dimension the endpoint returns (sqlite-vec cannot infer it)", HelpName = "n" }
+                },
+                new Command("code", "Code corpus embedding engine (local only in v1); configuration is under 'settings model code'")
+                {
+                    new Command("local",
+                        "Activates a manifest directory for the code corpus and invalidates its embedded rows to 'pending' " +
+                        "(§3.3 D-E9, one transaction — no re-embed here, the code-reindex maintenance job drains it). " +
+                        "Refuses a manifest whose dimensions are not 768: vec_code is fixed float[768] and has no " +
+                        "dimension-reconcile phase, unlike 'model set local'.")
+                    {
+                        new Argument<string>("dir") { HelpName = "dir" }
+                    }
                 }
             },
             new Command("download",
@@ -177,13 +188,21 @@ internal static class CliCommandTree
     private static Command SettingsModelCommand()
     {
         var model = new Command("model", "Embedding engine configuration (the engine itself is selected by 'model set')");
-        var reset = new Command("reset", "Back to default: no engine (FTS5-only search)");
+        var reset = new Command("reset", "Back to default: no engine (FTS5-only search). Never touches the code engine's rows — see 'model code reset'.");
         reset.Aliases.Add("unset");
         reset.Aliases.Add("remove");
         model.Add(reset);
-        var show = new Command("show", "Shows the configured provider/model/baseUrl/engine");
+        var show = new Command("show", "Shows the configured provider/model/baseUrl/engine, and the code engine rows when set");
         show.Aliases.Add("list");
         model.Add(show);
+
+        var code = new Command("code", "Code corpus embedding engine configuration (the engine itself is selected by 'model set code local')");
+        var codeReset = new Command("reset", "Deletes ONLY the code engine rows (embedding.codeModel/codeEngine) — the memory engine is untouched");
+        codeReset.Aliases.Add("unset");
+        codeReset.Aliases.Add("remove");
+        code.Add(codeReset);
+        model.Add(code);
+
         return model;
     }
 

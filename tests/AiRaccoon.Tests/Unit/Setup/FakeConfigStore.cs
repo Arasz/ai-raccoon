@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace AiRaccoon.Tests.Unit.Setup;
 
 /// <summary>In-memory IMemoryStore for config-command tests: settings dict + configure recording.</summary>
-internal sealed class FakeConfigStore : FakeMemoryStore
+internal sealed class FakeConfigStore : FakeMemoryStore, ICodeEngineStore
 {
     private static EmbeddingService Fingerprint() =>
         new(NullLogger<EmbeddingService>.Instance, new LocalTokenizer(), new EmbeddingTokenizerFactory(),
@@ -69,5 +69,17 @@ internal sealed class FakeConfigStore : FakeMemoryStore
     {
         Settings.Remove(key);
         return Task.CompletedTask;
+    }
+
+    public (string Directory, string Engine)? CodeActivated { get; private set; }
+
+    /// <summary>§3.3 D-E9: same recording shape as StartModelMigrationAsync, over the code engine's own settings rows.</summary>
+    public Task<EmbeddingConfig> ActivateCodeEngineAsync(string directory, CancellationToken cancellationToken = default)
+    {
+        var fingerprint = Fingerprint().EngineFingerprint("local", directory, null);
+        CodeActivated = (directory, fingerprint);
+        Settings[EmbeddingSettingsKeys.CodeModel] = directory;
+        Settings[EmbeddingSettingsKeys.CodeEngine] = fingerprint;
+        return Task.FromResult(new EmbeddingConfig("local", directory, fingerprint));
     }
 }

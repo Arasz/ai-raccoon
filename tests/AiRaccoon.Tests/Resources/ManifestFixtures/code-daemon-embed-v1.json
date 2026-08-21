@@ -1,0 +1,31 @@
+{
+  "manifestVersion": 1,
+  "model": "faxenoff/code-daemon-embed-v1",
+  "source": { "repo": "faxenoff/code-daemon-embed-v1", "revision": "main" },
+  "provider": "local",
+  "dimensions": 768,
+  "contextWindowTokens": 128,
+  "normalization": "l2",
+  "requiresTokenTypeIds": false,
+  "pooling": {
+    "mode": "model-output"
+  },
+  "tokenizer": {
+    "family": "sentencepiece",
+    "files": [
+      { "path": "sentencepiece.bpe.model", "sha256": "1111111111111111111111111111111111111111111111111111111111111111" }
+    ],
+    "options": {
+      "addBeginOfSentence": true,
+      "addEndOfSentence": true,
+      "specialTokens": { "<s>": 2, "</s>": 3, "<pad>": 0, "<unk>": 1 }
+    }
+  },
+  "onnx": {
+    "inputs": [ "input_ids", "attention_mask" ],
+    "embeddingOutput": "sentence_embedding",
+    "files": [
+      { "path": "model.onnx", "sha256": "2222222222222222222222222222222222222222222222222222222222222222" }
+    ]
+  }
+}
