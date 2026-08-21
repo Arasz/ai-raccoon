@@ -28,8 +28,14 @@ _IMPORT_TO_DISTRIBUTION = {
 
 
 def _local_module_names() -> set[str]:
-    """Module names this project defines itself — never third-party."""
-    return {path.stem for path in SCRIPTS_ROOT.rglob("*.py")}
+    """Module names this project defines itself — never third-party.
+
+    Flat modules are their file stems; packages are their directory names
+    (the directory containing __init__.py), which no stem can express.
+    """
+    names = {path.stem for path in SCRIPTS_ROOT.rglob("*.py")}
+    names.update(path.parent.name for path in SCRIPTS_ROOT.rglob("*/__init__.py"))
+    return names
 
 
 def _top_level_module(dotted_name: str) -> str:

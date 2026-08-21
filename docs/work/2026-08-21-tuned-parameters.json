@@ -1,0 +1,1967 @@
+{
+  "study_id": "retrieval-tune",
+  "run_date": "2026-08-21",
+  "n_trials": 50,
+  "corpus": "eval-set-100.json",
+  "corpus_size": 100,
+  "dataset": "memory",
+  "defaults": {
+    "rrfK": 60,
+    "ftsWeight": 1,
+    "vectorWeight": 1,
+    "sourceLambda": 0.1,
+    "consolidationThreshold": 0.1,
+    "docScoreFormula": "max",
+    "candidateWindow": "max3x100",
+    "structureAlpha": 0.5,
+    "fusion": false
+  },
+  "tuned": {
+    "rrfK": 17,
+    "ftsWeight": 7,
+    "vectorWeight": 2,
+    "sourceLambda": 0.11502133454396771,
+    "consolidationThreshold": 0.4220152708221535,
+    "structureAlpha": 0.9904010870333045,
+    "docScoreFormula": "sum",
+    "candidateWindow": "max3x100",
+    "fusion": false
+  },
+  "eval": {
+    "defaults": {
+      "mean_ndcg5": 0.6105391530585856,
+      "mean_mrr5": 0.5676666666666667,
+      "hit3_rate": 0.65,
+      "hit1_rate": 0.47,
+      "per_query": [
+        {
+          "entry_id": "E001",
+          "category": "ADR (Context)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E002",
+          "category": "ADR (Decision)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E003",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E004",
+          "category": "ADR (Context)",
+          "ndcg5": 0.38685280723454163,
+          "mrr5": 0.2,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": 5
+        },
+        {
+          "entry_id": "E005",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.38685280723454163,
+          "mrr5": 0.2,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": 5
+        },
+        {
+          "entry_id": "E006",
+          "category": "ADR (Consequences)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E007",
+          "category": "ADR (Context)",
+          "ndcg5": 0.5,
+          "mrr5": 0.3333333333333333,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 3
+        },
+        {
+          "entry_id": "E008",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E009",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.6309297535714575,
+          "mrr5": 0.5,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 2
+        },
+        {
+          "entry_id": "E010",
+          "category": "ADR (Context)",
+          "ndcg5": 0.6309297535714575,
+          "mrr5": 0.5,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 2
+        },
+        {
+          "entry_id": "E011",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.5,
+          "mrr5": 0.3333333333333333,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 3
+        },
+        {
+          "entry_id": "E012",
+          "category": "ADR (Consequences)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E013",
+          "category": "ADR (Context)",
+          "ndcg5": 0.43067655807339306,
+          "mrr5": 0.25,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": 4
+        },
+        {
+          "entry_id": "E014",
+          "category": "ADR (Decision)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E015",
+          "category": "ADR (Consequences)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E016",
+          "category": "ADR (Context)",
+          "ndcg5": 0.43067655807339306,
+          "mrr5": 0.25,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": 4
+        },
+        {
+          "entry_id": "E017",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E018",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.6309297535714575,
+          "mrr5": 0.5,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 2
+        },
+        {
+          "entry_id": "E019",
+          "category": "ADR (Context)",
+          "ndcg5": 0.6309297535714575,
+          "mrr5": 0.5,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 2
+        },
+        {
+          "entry_id": "E020",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E021",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E022",
+          "category": "ADR (Context)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E023",
+          "category": "ADR (Decision)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E024",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E025",
+          "category": "ADR (Context)",
+          "ndcg5": 0.43067655807339306,
+          "mrr5": 0.25,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": 4
+        },
+        {
+          "entry_id": "E026",
+          "category": "ADR (Decision)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E027",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E028",
+          "category": "ADR (Context)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E029",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E030",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E031",
+          "category": "ADR (Context)",
+          "ndcg5": 0.6309297535714575,
+          "mrr5": 0.5,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 2
+        },
+        {
+          "entry_id": "E032",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.38685280723454163,
+          "mrr5": 0.2,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": 5
+        },
+        {
+          "entry_id": "E033",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E034",
+          "category": "ADR (Context)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E035",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E036",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E037",
+          "category": "ADR (Context)",
+          "ndcg5": 0.6309297535714575,
+          "mrr5": 0.5,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 2
+        },
+        {
+          "entry_id": "E038",
+          "category": "ADR (Decision)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E039",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.6309297535714575,
+          "mrr5": 0.5,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 2
+        },
+        {
+          "entry_id": "E040",
+          "category": "ADR (Context)",
+          "ndcg5": 0.43067655807339306,
+          "mrr5": 0.25,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": 4
+        },
+        {
+          "entry_id": "E041",
+          "category": "ADR (Decision)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E042",
+          "category": "ADR (Consequences)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E043",
+          "category": "ADR (Context)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E044",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.6309297535714575,
+          "mrr5": 0.5,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 2
+        },
+        {
+          "entry_id": "E045",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E046",
+          "category": "ADR (Content)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E047",
+          "category": "ADR (Decision)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E048",
+          "category": "ADR (Consequences)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E049",
+          "category": "ADR (Context)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E050",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.5,
+          "mrr5": 0.3333333333333333,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 3
+        },
+        {
+          "entry_id": "E051",
+          "category": "ADR (Consequences)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E052",
+          "category": "ADR (Context)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E053",
+          "category": "ADR (Decision)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E054",
+          "category": "ADR (Consequences)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E055",
+          "category": "ADR (Context)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E056",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.5,
+          "mrr5": 0.3333333333333333,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 3
+        },
+        {
+          "entry_id": "E057",
+          "category": "ADR (Content)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E058",
+          "category": "ADR (Context)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E059",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.5,
+          "mrr5": 0.3333333333333333,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 3
+        },
+        {
+          "entry_id": "E060",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.43067655807339306,
+          "mrr5": 0.25,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": 4
+        },
+        {
+          "entry_id": "E061",
+          "category": "ADR (Context)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E062",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E063",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E064",
+          "category": "ADR (Context)",
+          "ndcg5": 0.5,
+          "mrr5": 0.3333333333333333,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 3
+        },
+        {
+          "entry_id": "E065",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E066",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E067",
+          "category": "ADR (Context)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E068",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.5,
+          "mrr5": 0.3333333333333333,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 3
+        },
+        {
+          "entry_id": "E069",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E070",
+          "category": "ADR (Context)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E071",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E072",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E073",
+          "category": "ADR (Context)",
+          "ndcg5": 0.5,
+          "mrr5": 0.3333333333333333,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 3
+        },
+        {
+          "entry_id": "E074",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.6309297535714575,
+          "mrr5": 0.5,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 2
+        },
+        {
+          "entry_id": "E075",
+          "category": "ADR (Consequences)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E076",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E077",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E078",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E079",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E080",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E081",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E082",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 0.43067655807339306,
+          "mrr5": 0.25,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": 4
+        },
+        {
+          "entry_id": "E083",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E084",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E085",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E086",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E087",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E088",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E089",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 0.6309297535714575,
+          "mrr5": 0.5,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 2
+        },
+        {
+          "entry_id": "E090",
+          "category": "Non-file (shared tier)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E091",
+          "category": "Non-file (shared tier)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E092",
+          "category": "Non-file (shared tier)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E093",
+          "category": "Non-file (shared tier)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E094",
+          "category": "Non-file (shared tier)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E095",
+          "category": "Non-file (shared tier)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E096",
+          "category": "Non-file (shared tier)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E097",
+          "category": "Non-file (shared tier)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E098",
+          "category": "Non-file (shared tier)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E099",
+          "category": "Non-file (shared tier)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E100",
+          "category": "Non-file (shared tier)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        }
+      ],
+      "per_category": {
+        "ADR (Consequences)": {
+          "count": 24,
+          "mean_ndcg5": 0.43014440911615687,
+          "mean_mrr5": 0.40625,
+          "hit3_rate": 0.4583333333333333,
+          "hit1_rate": 0.3333333333333333
+        },
+        "ADR (Content)": {
+          "count": 2,
+          "mean_ndcg5": 0.5,
+          "mean_mrr5": 0.5,
+          "hit3_rate": 0.5,
+          "hit1_rate": 0.5
+        },
+        "ADR (Context)": {
+          "count": 24,
+          "mean_ndcg5": 0.6305532522422477,
+          "mean_mrr5": 0.5499999999999999,
+          "hit3_rate": 0.6666666666666666,
+          "hit1_rate": 0.375
+        },
+        "ADR (Decision)": {
+          "count": 25,
+          "mean_ndcg5": 0.50142260486448,
+          "mean_mrr5": 0.44266666666666665,
+          "hit3_rate": 0.6,
+          "hit1_rate": 0.32
+        },
+        "Non-file (hermes transcript)": {
+          "count": 14,
+          "mean_ndcg5": 0.7901147365460607,
+          "mean_mrr5": 0.7678571428571429,
+          "hit3_rate": 0.7857142857142857,
+          "hit1_rate": 0.7142857142857143
+        },
+        "Non-file (shared tier)": {
+          "count": 11,
+          "mean_ndcg5": 1.0,
+          "mean_mrr5": 1.0,
+          "hit3_rate": 1.0,
+          "hit1_rate": 1.0
+        }
+      },
+      "config": {
+        "rrfK": 60,
+        "ftsWeight": 1,
+        "vectorWeight": 1,
+        "sourceLambda": 0.1,
+        "consolidationThreshold": 0.1,
+        "docScoreFormula": "max",
+        "candidateWindow": "max3x100",
+        "structureAlpha": 0.5,
+        "fusion": false
+      }
+    },
+    "tuned": {
+      "mean_ndcg5": 0.6655159313011154,
+      "mean_mrr5": 0.6108333333333333,
+      "hit3_rate": 0.73,
+      "hit1_rate": 0.48,
+      "per_query": [
+        {
+          "entry_id": "E001",
+          "category": "ADR (Context)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E002",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.6309297535714575,
+          "mrr5": 0.5,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 2
+        },
+        {
+          "entry_id": "E003",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.6309297535714575,
+          "mrr5": 0.5,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 2
+        },
+        {
+          "entry_id": "E004",
+          "category": "ADR (Context)",
+          "ndcg5": 0.5,
+          "mrr5": 0.3333333333333333,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 3
+        },
+        {
+          "entry_id": "E005",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.43067655807339306,
+          "mrr5": 0.25,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": 4
+        },
+        {
+          "entry_id": "E006",
+          "category": "ADR (Consequences)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E007",
+          "category": "ADR (Context)",
+          "ndcg5": 0.43067655807339306,
+          "mrr5": 0.25,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": 4
+        },
+        {
+          "entry_id": "E008",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E009",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.6309297535714575,
+          "mrr5": 0.5,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 2
+        },
+        {
+          "entry_id": "E010",
+          "category": "ADR (Context)",
+          "ndcg5": 0.6309297535714575,
+          "mrr5": 0.5,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 2
+        },
+        {
+          "entry_id": "E011",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.5,
+          "mrr5": 0.3333333333333333,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 3
+        },
+        {
+          "entry_id": "E012",
+          "category": "ADR (Consequences)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E013",
+          "category": "ADR (Context)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E014",
+          "category": "ADR (Decision)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E015",
+          "category": "ADR (Consequences)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E016",
+          "category": "ADR (Context)",
+          "ndcg5": 0.38685280723454163,
+          "mrr5": 0.2,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": 5
+        },
+        {
+          "entry_id": "E017",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E018",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.6309297535714575,
+          "mrr5": 0.5,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 2
+        },
+        {
+          "entry_id": "E019",
+          "category": "ADR (Context)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E020",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E021",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E022",
+          "category": "ADR (Context)",
+          "ndcg5": 0.38685280723454163,
+          "mrr5": 0.2,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": 5
+        },
+        {
+          "entry_id": "E023",
+          "category": "ADR (Decision)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E024",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E025",
+          "category": "ADR (Context)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E026",
+          "category": "ADR (Decision)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E027",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E028",
+          "category": "ADR (Context)",
+          "ndcg5": 0.5,
+          "mrr5": 0.3333333333333333,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 3
+        },
+        {
+          "entry_id": "E029",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.5,
+          "mrr5": 0.3333333333333333,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 3
+        },
+        {
+          "entry_id": "E030",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E031",
+          "category": "ADR (Context)",
+          "ndcg5": 0.6309297535714575,
+          "mrr5": 0.5,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 2
+        },
+        {
+          "entry_id": "E032",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.5,
+          "mrr5": 0.3333333333333333,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 3
+        },
+        {
+          "entry_id": "E033",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E034",
+          "category": "ADR (Context)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E035",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E036",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E037",
+          "category": "ADR (Context)",
+          "ndcg5": 0.5,
+          "mrr5": 0.3333333333333333,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 3
+        },
+        {
+          "entry_id": "E038",
+          "category": "ADR (Decision)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E039",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.5,
+          "mrr5": 0.3333333333333333,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 3
+        },
+        {
+          "entry_id": "E040",
+          "category": "ADR (Context)",
+          "ndcg5": 0.6309297535714575,
+          "mrr5": 0.5,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 2
+        },
+        {
+          "entry_id": "E041",
+          "category": "ADR (Decision)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E042",
+          "category": "ADR (Consequences)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E043",
+          "category": "ADR (Context)",
+          "ndcg5": 0.6309297535714575,
+          "mrr5": 0.5,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 2
+        },
+        {
+          "entry_id": "E044",
+          "category": "ADR (Decision)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E045",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E046",
+          "category": "ADR (Content)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E047",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.6309297535714575,
+          "mrr5": 0.5,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 2
+        },
+        {
+          "entry_id": "E048",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.38685280723454163,
+          "mrr5": 0.2,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": 5
+        },
+        {
+          "entry_id": "E049",
+          "category": "ADR (Context)",
+          "ndcg5": 0.5,
+          "mrr5": 0.3333333333333333,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 3
+        },
+        {
+          "entry_id": "E050",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.38685280723454163,
+          "mrr5": 0.2,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": 5
+        },
+        {
+          "entry_id": "E051",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.6309297535714575,
+          "mrr5": 0.5,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 2
+        },
+        {
+          "entry_id": "E052",
+          "category": "ADR (Context)",
+          "ndcg5": 0.6309297535714575,
+          "mrr5": 0.5,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 2
+        },
+        {
+          "entry_id": "E053",
+          "category": "ADR (Decision)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E054",
+          "category": "ADR (Consequences)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E055",
+          "category": "ADR (Context)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E056",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.6309297535714575,
+          "mrr5": 0.5,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 2
+        },
+        {
+          "entry_id": "E057",
+          "category": "ADR (Content)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E058",
+          "category": "ADR (Context)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E059",
+          "category": "ADR (Decision)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E060",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.43067655807339306,
+          "mrr5": 0.25,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": 4
+        },
+        {
+          "entry_id": "E061",
+          "category": "ADR (Context)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E062",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.5,
+          "mrr5": 0.3333333333333333,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 3
+        },
+        {
+          "entry_id": "E063",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.5,
+          "mrr5": 0.3333333333333333,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 3
+        },
+        {
+          "entry_id": "E064",
+          "category": "ADR (Context)",
+          "ndcg5": 0.43067655807339306,
+          "mrr5": 0.25,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": 4
+        },
+        {
+          "entry_id": "E065",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E066",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E067",
+          "category": "ADR (Context)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E068",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.6309297535714575,
+          "mrr5": 0.5,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 2
+        },
+        {
+          "entry_id": "E069",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E070",
+          "category": "ADR (Context)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E071",
+          "category": "ADR (Decision)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E072",
+          "category": "ADR (Consequences)",
+          "ndcg5": 0.0,
+          "mrr5": 0.0,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": null
+        },
+        {
+          "entry_id": "E073",
+          "category": "ADR (Context)",
+          "ndcg5": 0.6309297535714575,
+          "mrr5": 0.5,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 2
+        },
+        {
+          "entry_id": "E074",
+          "category": "ADR (Decision)",
+          "ndcg5": 0.43067655807339306,
+          "mrr5": 0.25,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": 4
+        },
+        {
+          "entry_id": "E075",
+          "category": "ADR (Consequences)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E076",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E077",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E078",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E079",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E080",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 0.6309297535714575,
+          "mrr5": 0.5,
+          "hit3": 1,
+          "hit1": 0,
+          "first_relevant_rank": 2
+        },
+        {
+          "entry_id": "E081",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E082",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E083",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E084",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 0.38685280723454163,
+          "mrr5": 0.2,
+          "hit3": 0,
+          "hit1": 0,
+          "first_relevant_rank": 5
+        },
+        {
+          "entry_id": "E085",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E086",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E087",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E088",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E089",
+          "category": "Non-file (hermes transcript)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E090",
+          "category": "Non-file (shared tier)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E091",
+          "category": "Non-file (shared tier)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E092",
+          "category": "Non-file (shared tier)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E093",
+          "category": "Non-file (shared tier)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E094",
+          "category": "Non-file (shared tier)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E095",
+          "category": "Non-file (shared tier)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E096",
+          "category": "Non-file (shared tier)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E097",
+          "category": "Non-file (shared tier)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E098",
+          "category": "Non-file (shared tier)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E099",
+          "category": "Non-file (shared tier)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        },
+        {
+          "entry_id": "E100",
+          "category": "Non-file (shared tier)",
+          "ndcg5": 1.0,
+          "mrr5": 1.0,
+          "hit3": 1,
+          "hit1": 1,
+          "first_relevant_rank": 1
+        }
+      ],
+      "per_category": {
+        "ADR (Consequences)": {
+          "count": 24,
+          "mean_ndcg5": 0.4308853491497402,
+          "mean_mrr5": 0.37986111111111115,
+          "hit3_rate": 0.5,
+          "hit1_rate": 0.25
+        },
+        "ADR (Content)": {
+          "count": 2,
+          "mean_ndcg5": 0.5,
+          "mean_mrr5": 0.5,
+          "hit3_rate": 0.5,
+          "hit1_rate": 0.5
+        },
+        "ADR (Context)": {
+          "count": 24,
+          "mean_ndcg5": 0.6841932188351922,
+          "mean_mrr5": 0.5930555555555556,
+          "hit3_rate": 0.7916666666666666,
+          "hit1_rate": 0.375
+        },
+        "ADR (Decision)": {
+          "count": 25,
+          "mean_ndcg5": 0.5908769975066863,
+          "mean_mrr5": 0.5213333333333333,
+          "hit3_rate": 0.68,
+          "hit1_rate": 0.36
+        },
+        "Non-file (hermes transcript)": {
+          "count": 14,
+          "mean_ndcg5": 0.9298416114861429,
+          "mean_mrr5": 0.9071428571428571,
+          "hit3_rate": 0.9285714285714286,
+          "hit1_rate": 0.8571428571428571
+        },
+        "Non-file (shared tier)": {
+          "count": 11,
+          "mean_ndcg5": 1.0,
+          "mean_mrr5": 1.0,
+          "hit3_rate": 1.0,
+          "hit1_rate": 1.0
+        }
+      },
+      "config": {
+        "rrfK": 17,
+        "ftsWeight": 7,
+        "vectorWeight": 2,
+        "sourceLambda": 0.11502133454396771,
+        "consolidationThreshold": 0.4220152708221535,
+        "structureAlpha": 0.9904010870333045,
+        "docScoreFormula": "sum",
+        "candidateWindow": "max3x100",
+        "fusion": false
+      }
+    },
+    "improvement_ndcg5": 0.054976778
+  },
+  "drift": {
+    "passed": true,
+    "problems": []
+  },
+  "best_trial": {
+    "number": 31,
+    "value": -0.6655159313011154
+  }
+}

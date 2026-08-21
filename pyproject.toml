@@ -10,6 +10,7 @@ dependencies = [
     "numpy",
     "scikit-learn",
     "pytest",
+    "optuna>=4.9.0",
 ]
 
 [tool.pytest.ini_options]
