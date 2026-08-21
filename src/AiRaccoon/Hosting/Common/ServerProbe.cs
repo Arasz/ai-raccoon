@@ -51,25 +51,44 @@ public sealed class ServerProbe : IServerProbe
                 using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(ctx, attemptToken);
                 attemptCts.CancelAfter(_requestTimeout);
 
-                using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-                request.Content = new StringContent("x", Encoding.UTF8, new MediaTypeHeaderValue("application/json"));
-                request.Headers.Accept.ParseAdd("application/json, text/event-stream");
-
-                using var response = await _httpClientFactory.CreateClient(nameof(ServerProbe)).SendAsync(request, attemptCts.Token);
-
-                if (ResiliencePipelineFactory.IsTransientHttpStatusCode(response.StatusCode))
+                try
                 {
-                    throw new HttpRequestException($"Transient HTTP status {response.StatusCode} from {endpoint}");
-                }
 
-                var body = await response.Content.ReadAsStringAsync(attemptCts.Token);
-                // A reply that is not ai-raccoon's still proves a listener, so it is never NotListening.
-                return body.Contains("jsonrpc", StringComparison.Ordinal) ? ProbeVerdict.Answered : ProbeVerdict.Unanswered;
+                    using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
+                    request.Content = new StringContent("x", Encoding.UTF8, new MediaTypeHeaderValue("application/json"));
+                    request.Headers.Accept.ParseAdd("application/json, text/event-stream");
+
+                    using var response = await _httpClientFactory.CreateClient(nameof(ServerProbe)).SendAsync(request, attemptCts.Token);
+
+                    if (ResiliencePipelineFactory.IsTransientHttpStatusCode(response.StatusCode))
+                    {
+                        throw new HttpRequestException($"Transient HTTP status {response.StatusCode} from {endpoint}");
+                    }
+
+                    var body = await response.Content.ReadAsStringAsync(attemptCts.Token);
+                    // A reply that is not ai-raccoon's still proves a listener, so it is never NotListening.
+                    return body.Contains("jsonrpc", StringComparison.Ordinal) ? ProbeVerdict.Answered : ProbeVerdict.Unanswered;
+                }
+                catch (OperationCanceledException) when (!ctx.IsCancellationRequested)
+                {
+                    // The per-attempt bound expired. Surfaced as a TimeoutException so the pipeline's
+                    // retry actually handles it — an OperationCanceledException escapes ExecuteAsync
+                    // and spends one of three configured attempts. Guarded on the CALLER's token, not
+                    // the linked one: HttpClient's own Timeout cancels an internal source, so the
+                    // linked token reads as un-cancelled in exactly that case.
+                    throw new TimeoutException($"No answer from {endpoint} within {_requestTimeout}");
+                }
             }, ctx);
         }
         catch (HttpRequestException ex)
         {
             return WasRefused(ex) ? ProbeVerdict.NotListening : ProbeVerdict.Unanswered;
+        }
+        catch (TimeoutException)
+        {
+            // Every attempt hit the bound. Polly rethrows the last one, and an unhandled throw here
+            // would take the restart down instead of reporting a verdict.
+            return ProbeVerdict.Unanswered;
         }
         catch (OperationCanceledException) when (!ctx.IsCancellationRequested)
         {
