@@ -89,6 +89,10 @@ public sealed class MiniLmGoldenVectorTests : IAsyncLifetime
             TestContext.Current.CancellationToken))!;
         golden.Entries.Count.ShouldBe(100, "eval-set-100 has exactly 100 queries");
 
+        // The capture records its architecture so this comparison can be made; see the loop below.
+        var sameArchitecture = string.Equals(golden.Provenance.ProcessArchitecture,
+            RuntimeInformation.ProcessArchitecture.ToString(), StringComparison.Ordinal);
+
         var service = TestData.CreateEmbeddingService();
         using var generator = service.CreateGenerator(new EmbeddingSettings("local", null, null, null));
 
@@ -98,20 +102,28 @@ public sealed class MiniLmGoldenVectorTests : IAsyncLifetime
                 cancellationToken: TestContext.Current.CancellationToken);
             var actual = result[0].Vector.ToArray();
 
-            // Byte-identity tripwire (same arch): bit-for-bit float32 equality.
             var expected = FromBase64(entry.Bytes);
             actual.Length.ShouldBe(expected.Length, $"entry {entry.Id}: dimension drift");
-            var mismatchedBits = 0;
-            for (var i = 0; i < expected.Length; i++)
-            {
-                if (BitConverter.SingleToInt32Bits(actual[i]) != BitConverter.SingleToInt32Bits(expected[i]))
-                {
-                    mismatchedBits++;
-                }
-            }
 
-            mismatchedBits.ShouldBe(0,
-                $"entry {entry.Id}: {mismatchedBits}/{expected.Length} float32 values differ bit-for-bit from the golden capture — the WP3 refactor changed engine output");
+            // Byte-identity is the tripwire and it only means anything on the capture's own
+            // architecture (G3, review M2/F9): ONNX Runtime's float results are bit-stable per arch,
+            // not across them, so asserting it on a different arch reports expected FP
+            // non-determinism as a refactor regression. The tolerance secondaries below are the pass
+            // condition and run everywhere — a real behaviour change moves L2 far past 1e-6.
+            if (sameArchitecture)
+            {
+                var mismatchedBits = 0;
+                for (var i = 0; i < expected.Length; i++)
+                {
+                    if (BitConverter.SingleToInt32Bits(actual[i]) != BitConverter.SingleToInt32Bits(expected[i]))
+                    {
+                        mismatchedBits++;
+                    }
+                }
+
+                mismatchedBits.ShouldBe(0,
+                    $"entry {entry.Id}: {mismatchedBits}/{expected.Length} float32 values differ bit-for-bit from the golden capture — the WP3 refactor changed engine output");
+            }
 
             // Tolerance secondary: L2 distance of the difference ≤ 1e-6.
             var l2 = Math.Sqrt(expected.Zip(actual, (a, b) => (double)(a - b) * (a - b)).Sum());
