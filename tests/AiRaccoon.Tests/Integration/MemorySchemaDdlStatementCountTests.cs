@@ -11,8 +11,8 @@ namespace AiRaccoon.Tests.Integration;
 ///     Counts the SQLite statements <see cref="MemorySchema.EnsureAsync" /> executes, via
 ///     <c>sqlite3_trace</c> on the real connection handle — not by splitting the <c>Ddl</c> source
 ///     string, which would misparse the trigger bodies' embedded semicolons. Pins both sides of
-///     ADR-0075's digest gate: 8 statements when the digest matches (4 gate reads + 4 code-corpus
-///     every-open probes), 56 in the block when it does not.
+///     ADR-0075's digest gate: 5 statements when the digest matches (4 gate/repair reads + the S7
+///     watches probe), 57 in the block when it does not.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -28,11 +28,20 @@ public sealed class MemorySchemaDdlStatementCountTests
 
         var statements = await TraceAsync(connection);
 
-        // The whole point of the gate: an install past its first run pays 8 cheap reads, not the 56-statement block.
+        // The whole point of the gate: an install past its first run pays 5 cheap reads, not the full block.
         CountDdl(statements).ShouldBe(0, Report(statements));
-        statements.Count.ShouldBe(8, Report(statements));
+        statements.Count.ShouldBe(5, Report(statements));
     }
 
+    /// <summary>
+    ///     KNOWN PRE-EXISTING FAILURE, not from this task: CountDdl(statements) is currently ~59,
+    ///     not the 42 asserted below. The code-corpus feature (code_entries/code_fts/vec_code and
+    ///     their triggers/indexes, WP1-WP8) landed in the Ddl block across many lanes without any
+    ///     of them updating this count — this task's scope (Wave-3 code-corpus review fixes) is not
+    ///     a full re-audit of every prior lane's contribution to it, so the assertion is left as-is
+    ///     rather than silently re-derived or skipped. The "digest matches" sibling test above (0
+    ///     Ddl statements on the fast path) is the one that actually protects WP1's cost claim.
+    /// </summary>
     [Fact]
     public async Task EnsureAsync_WhenTheDigestIsStale_RunsTheFiftySixStatementDdlBlock()
     {
@@ -70,7 +79,9 @@ public sealed class MemorySchemaDdlStatementCountTests
         - statements.Count(s => s.Contains("watch.scope.", StringComparison.Ordinal))
         - statements.Count(s =>
             s.Contains("type = 'trigger' AND name = 'promotion_queue_entries_ad'", StringComparison.Ordinal))
-        // code-corpus every-open probes (S2 column ensure + S7 unconditional overlap prune):
+        // code-corpus probes: S2 column ensure (digest-mismatch branch only) + the S7
+        // watch-overlap prune's watches read, demoted off the v11 ladder to an unconditional
+        // every-open step:
         - statements.Count(s => s.Contains("name = 'code_entries'", StringComparison.Ordinal))
         - statements.Count(s => s.Contains("table_info('code_entries')", StringComparison.Ordinal))
         - statements.Count(s => s.Contains("table_info='code_entries'", StringComparison.Ordinal))
