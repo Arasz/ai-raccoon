@@ -33,7 +33,8 @@ public sealed record ModelDownloadPlan(
     bool AddBeginOfSentence,
     bool AddEndOfSentence,
     IReadOnlyDictionary<string, int> SpecialTokens,
-    string PoolingProvenance);
+    string PoolingProvenance,
+    int VocabOffset = 0);
 
 /// <summary>A repo cannot be turned into a download plan: missing model file, unsupported
 /// tokenizer family, unpinnable special tokens, etc. Messages are actionable.</summary>
@@ -95,6 +96,7 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
         var wrapsByDefault = WrapsWithBosEos(tokenizerConfigJson);
         var addBos = ReadBool(tokenizerConfigJson, "add_bos_token") ?? ReadBool(tokenizerConfigJson, "add_bos") ?? wrapsByDefault;
         var addEos = ReadBool(tokenizerConfigJson, "add_eos_token") ?? ReadBool(tokenizerConfigJson, "add_eos") ?? wrapsByDefault;
+        var vocabOffset = FairseqVocabOffset(tokenizerConfigJson);
 
         var dimensions = RequiredInt(configJson, "hidden_size", "dimensions");
         var contextWindowTokens = RequiredInt(configJson, "max_position_embeddings", "contextWindowTokens") - 2;
@@ -141,7 +143,8 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
             addBos,
             addEos,
             specialTokens,
-            poolingProvenance);
+            poolingProvenance,
+            vocabOffset);
     }
 
     public string SelectModelFilePath(IReadOnlyList<HfTreeEntry> tree, IReadOnlyList<string>? explicitFiles = null)
@@ -362,6 +365,22 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
         return doc.RootElement.TryGetProperty("tokenizer_class", out var cls)
                && cls.ValueKind == JsonValueKind.String
                && cls.GetString()?.Contains("Roberta", StringComparison.OrdinalIgnoreCase) == true;
+    }
+
+    /// <summary>
+    ///     xlm-roberta's vocabulary is the sentencepiece model's pieces shifted by one, behind
+    ///     fairseq's own four specials — so an ordinary piece's model id is its sentencepiece id + 1.
+    ///     Deliberately narrow: plain RoBERTa is byte-level BPE and never reaches the sentencepiece
+    ///     path, and other fairseq ports (CamemBERT) use different offsets and must be hand-written.
+    /// </summary>
+    private static int FairseqVocabOffset(string tokenizerConfigJson)
+    {
+        using var doc = JsonDocument.Parse(tokenizerConfigJson);
+        return doc.RootElement.TryGetProperty("tokenizer_class", out var cls)
+               && cls.ValueKind == JsonValueKind.String
+               && cls.GetString()?.StartsWith("XLMRoberta", StringComparison.OrdinalIgnoreCase) == true
+            ? 1
+            : 0;
     }
 
     /// <summary>

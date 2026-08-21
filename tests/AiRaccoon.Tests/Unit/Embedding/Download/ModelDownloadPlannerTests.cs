@@ -403,6 +403,42 @@ public class ModelDownloadPlannerTests
         plan.AddEndOfSentence.ShouldBeTrue();
     }
 
+    /// <summary>
+    ///     xlm-roberta numbers its vocabulary as the sentencepiece pieces shifted behind fairseq's
+    ///     four specials, so an ordinary piece's model id is its sentencepiece id + 1. Without the
+    ///     offset the model reads a neighbouring row for every token.
+    /// </summary>
+    [Fact]
+    public void VocabOffset_ForAnXlmRobertaConfig_IsTheFairseqOffset()
+    {
+        var raw = BgeM3Raw();
+        raw["onnx/tokenizer_config.json"] = """
+            {"tokenizer_class": "XLMRobertaTokenizer", "bos_token": "<s>", "eos_token": "</s>",
+             "unk_token": "<unk>", "pad_token": "<pad>",
+             "added_tokens_decoder": {"0": {"content": "<s>"}, "1": {"content": "<pad>"},
+                                      "2": {"content": "</s>"}, "3": {"content": "<unk>"}}}
+            """;
+
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), raw, BgeM3Probe());
+
+        plan.VocabOffset.ShouldBe(1);
+    }
+
+    /// <summary>A plain sentencepiece model numbers its own pieces; shifting them would break it.</summary>
+    [Fact]
+    public void VocabOffset_ForANonFairseqConfig_IsZero()
+    {
+        var raw = BgeM3Raw();
+        raw["onnx/tokenizer_config.json"] = """
+            {"tokenizer_class": "T5Tokenizer", "unk_token": "<unk>", "pad_token": "<pad>",
+             "added_tokens_decoder": {"0": {"content": "<pad>"}, "1": {"content": "<unk>"}}}
+            """;
+
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), raw, BgeM3Probe());
+
+        plan.VocabOffset.ShouldBe(0);
+    }
+
     [Fact]
     public void BosEos_AbsentFromANonRobertaConfig_StayFalse()
     {

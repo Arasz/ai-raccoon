@@ -98,10 +98,17 @@ public sealed record TokenizerManifest(
     [property: JsonRequired] IReadOnlyList<ManifestFile> Files,
     TokenizerOptionsManifest? Options = null);
 
+/// <summary>
+///     <see cref="VocabOffset" /> reconciles a sentencepiece model's own numbering with the model's
+///     embedding matrix. Fairseq-derived families (xlm-roberta, so bge-m3) prepend their own
+///     specials and shift every ordinary piece by 1; feeding raw sentencepiece ids reads the wrong
+///     row for every token. 0 (the default) is the identity a plain sentencepiece model needs.
+/// </summary>
 public sealed record TokenizerOptionsManifest(
     bool AddBeginOfSentence = true,
     bool AddEndOfSentence = true,
-    IReadOnlyDictionary<string, int>? SpecialTokens = null);
+    IReadOnlyDictionary<string, int>? SpecialTokens = null,
+    int VocabOffset = 0);
 
 /// <summary>A pinned file: repo-relative path + SHA-256 (hex). For LFS files the sha256 is the HF
 /// LFS oid captured from the tree API before download (D8); for non-LFS files it is the TOFU pin

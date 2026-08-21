@@ -364,7 +364,8 @@ public sealed class ModelDownloadService(
                 new PoolingOutputNames(plan.EmbeddingOutput ?? string.Empty, plan.TokenEmbeddingsOutput ?? string.Empty)),
             Tokenizer: new TokenizerManifest(plan.TokenizerFamily,
                 [.. plan.TokenizerFiles.Select(f => new ManifestFile(TargetPath(f.Path, plan.ModelFilePath), Sha256Of(Path.Combine(targetDir, TargetPath(f.Path, plan.ModelFilePath)))))],
-                new TokenizerOptionsManifest(plan.AddBeginOfSentence, plan.AddEndOfSentence, plan.SpecialTokens)),
+                new TokenizerOptionsManifest(plan.AddBeginOfSentence, plan.AddEndOfSentence, plan.SpecialTokens,
+                    plan.VocabOffset)),
             Onnx: new OnnxManifest(plan.Inputs, plan.EmbeddingOutput, plan.TokenEmbeddingsOutput,
                 [.. plan.ModelFiles.Select(f => new ManifestFile(TargetPath(f.Path, plan.ModelFilePath), Sha256Of(Path.Combine(targetDir, TargetPath(f.Path, plan.ModelFilePath)))))]));
 
