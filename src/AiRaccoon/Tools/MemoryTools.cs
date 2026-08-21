@@ -1,8 +1,10 @@
 using System.ComponentModel;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Memory.QueryGuard.Structural;
 using AiRaccoon.Core.Metrics;
@@ -24,6 +26,7 @@ public sealed partial class MemoryTools(
     IQueryGuardService queryGuard,
     IMemoryWriteService writes,
     IMeasurementRecorder measurements,
+    ICodeSearchService codeSearch,
     ILogger<MemoryTools> logger,
     TimeProvider? timeProvider = null)
 {
@@ -139,6 +142,11 @@ public sealed partial class MemoryTools(
         [Description("Narrows the project scope to one context. Omit it to search every context in " +
                      "the project (the default); memory_stats lists the labels in use.")]
         string? contextLabel = null,
+        [Description(
+            "Which corpus to search: memory (default — today's behavior, unchanged), code (the " +
+            "indexed code corpus only), or both. Code is always project-scoped: scope=shared " +
+            "returns an empty code section. Code hits carry lineStart/lineEnd instead of chunkIndex/totalChunks.")]
+        string kind = "memory",
         CancellationToken cancellationToken = default)
     {
         await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemorySearch, cancellationToken);
@@ -150,6 +158,7 @@ public sealed partial class MemoryTools(
             "shared" => SearchScope.Shared,
             _ => throw new McpException($"invalid-params: Invalid scope '{scope}': expected all, project, or shared.")
         };
+        var parsedKind = ParseKind(kind);
 
         // Enum wire names are validated here (not silently defaulted) so a typo fails fast,
         // and provided tuning values are range-checked before any bank work.
@@ -169,22 +178,75 @@ public sealed partial class MemoryTools(
             throw new McpException($"invalid-params: {guard.Verdict.Guidance} Refused query: {QuerySnippet(query)}");
         }
 
-        var searchResults = await store.SearchAsync(searchQuery, cancellationToken);
-        var results = searchResults.Results;
+        SearchResults? searchResults = null;
+        IReadOnlyList<MemorySearchResult> results = [];
+        if (parsedKind != SearchKind.Code)
+        {
+            searchResults = await store.SearchAsync(searchQuery, cancellationToken);
+            results = searchResults.Results;
+        }
+
+        IReadOnlyList<CodeSearchResult>? codeResults = null;
+        string? codeWarning = null;
+        if (parsedKind != SearchKind.Memory)
+        {
+            // Code is project-scoped only (§3.1) -- an explicit scope=shared request never
+            // contributes code rows, even under kind=code/both.
+            if (parsedScope == SearchScope.Shared)
+            {
+                codeResults = [];
+            }
+            else
+            {
+                var codeSearchResults = await codeSearch.SearchAsync(
+                    new CodeSearchQuery(projectId, query, limit, minRelativeScore), cancellationToken);
+                codeResults = codeSearchResults.Results;
+                // Every wave until WP5 lands the vec0 leg: no embedding.codeModel can be
+                // configured yet, so the code section is always FTS5-only.
+                codeWarning = CodeSearchWarnings.EngineNotConfigured;
+            }
+        }
 
         var correlationId = Guid.CreateVersion7().ToString("N");
-        await qualityService.RecordSearchSafeAsync(correlationId, query, scope, projectId, results.Count,
-            [.. results.Where(r => r.SourceFile is not null).Select(r => r.SourceFile!).Take(5)], cancellationToken);
-        RecordSearchMeasurements(searchResults, ContentHash.OfValue(query), correlationId, projectId);
+        // search_quality exclusion (§1/§3.6): a code/both query never records -- the recorder's
+        // rows sync, and recording a code-adjacent query would leak identifiers/paths off-machine.
+        if (parsedKind == SearchKind.Memory)
+        {
+            await qualityService.RecordSearchSafeAsync(correlationId, query, scope, projectId, results.Count,
+                [.. results.Where(r => r.SourceFile is not null).Select(r => r.SourceFile!).Take(5)], cancellationToken);
+        }
+
+        if (searchResults is not null)
+        {
+            RecordSearchMeasurements(searchResults, ContentHash.OfValue(query), correlationId, projectId);
+        }
 
         // QueryLengthGuard is always on -- a fact about the embedding window, not a togglable
         // policy like the guard above -- so it is evaluated unconditionally, never through
-        // IQueryGuardService (a disabled guard must not silence it).
-        var warning = SearchWarnings.Compose(guard.Verdict, QueryLengthGuard.Evaluate(query));
-        var result = new SearchResultList(results, warning);
+        // IQueryGuardService (a disabled guard must not silence it). It applies identically
+        // whichever kind was requested, since both corpora search the same query text.
+        var warning = ComposeWarning(SearchWarnings.Compose(guard.Verdict, QueryLengthGuard.Evaluate(query)), codeWarning);
+        var result = new SearchResultList(results, warning, codeResults);
         var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
         return envelope with { Meta = envelope.Meta with { CorrelationId = correlationId } };
     }
+
+    /// <summary>Mirrors the scope validation pattern: normalized case-insensitively, rejected fail-fast on a typo.</summary>
+    private static SearchKind ParseKind(string kind) => kind.ToLowerInvariant() switch
+    {
+        "memory" => SearchKind.Memory,
+        "code" => SearchKind.Code,
+        "both" => SearchKind.Both,
+        _ => throw new McpException($"invalid-params: Invalid kind '{kind}': expected memory, code, or both.")
+    };
+
+    private static string? ComposeWarning(string? primary, string? extra) => (primary, extra) switch
+    {
+        (null, null) => null,
+        (not null, null) => primary,
+        (null, not null) => extra,
+        _ => $"{primary} {extra}"
+    };
 
     /// <summary>
     ///     Builds the query from the wire values: enum strings are parsed and rejected on typo,
@@ -341,9 +403,19 @@ public sealed partial class MemoryTools(
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record GetResult(string Hash, string Value, string Path, string Context, long CreatedAt);
 
-    /// <summary>Warning is set only by the query guard's annotate tier (docs/adr/0040): a non-null value never changes Results.</summary>
+    /// <summary>
+    ///     Warning is set only by the query guard's annotate tier (docs/adr/0040) or the code
+    ///     section's degraded-mode note: a non-null value never changes Results. Code is null (and
+    ///     omitted from the wire, <see cref="JsonIgnoreCondition.WhenWritingNull" />) for kind=memory
+    ///     — the pinned envelope contract (docs/work/2026-08-21-code-search-implementation-plan.md
+    ///     §3.6): kind=memory serializes the exact legacy shape, no "code" key at all.
+    /// </summary>
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
-    public sealed record SearchResultList(IReadOnlyList<MemorySearchResult> Results, string? Warning = null);
+    public sealed record SearchResultList(
+        IReadOnlyList<MemorySearchResult> Results,
+        string? Warning = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IReadOnlyList<CodeSearchResult>? Code = null);
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record ListResult(JsonNode Files);

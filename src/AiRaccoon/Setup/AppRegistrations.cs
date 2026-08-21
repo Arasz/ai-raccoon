@@ -3,6 +3,7 @@ using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Memory.Filtering.Policies;
 using AiRaccoon.Core.Memory.QueryGuard;
@@ -21,6 +22,7 @@ using AiRaccoon.Infrastructure.Metrics;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Promotion;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite.Code;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Infrastructure.Sync;
@@ -248,6 +250,9 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<INoiseShadowObserver, NoiseShadowObserver>();
 
             services.AddRequiredSingleton<IMemoryStore, SqliteMemoryStore>();
+            // WP6 (docs/work/2026-08-21-code-search-implementation-plan.md §3.6): FTS5-only v1 leg —
+            // the seam where WP5 adds the vec0 leg + RRF fusion.
+            services.AddRequiredSingleton<ICodeSearchService, SqliteCodeSearchService>();
             // ADR-0076: same instance as IMemoryStore — split out for the same reason ISettingsStore
             // was (ADR-0075), so the CLI can route model-set through the server independently.
             services.AddSingleton<IModelMigrationStore>(sp => sp.GetRequiredService<SqliteMemoryStore>());

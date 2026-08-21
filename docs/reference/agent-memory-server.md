@@ -16,7 +16,7 @@ watches, watch_files, FTS5, vec0, sync_meta, and sync_tombstones — live in
 starts clean with the new native schema. A re-hash + re-embed migration path is
 deferred to a deployment that needs it (D11).
 
-## Tools (27)
+## Tools (28)
 
 Every tool requires `projectId` (camelCase — all parameters are camelCase), except
 `memory_promotion_list` where it is optional. Writes land in `project:<id>` by
@@ -25,16 +25,16 @@ default; naming a `workspaceId` routes them into that workspace's isolated conte
 10 memory tools (including `memory_get`, ADR-0035), 4 workspace tools, 3 watch tools,
 2 promotion tools, 2 share tools, 2 sweep tools (`memory_sweep`, `memory_set_ttl`),
 2 search-feedback tools (`memory_record_followthrough`, `memory_record_grade`),
-1 sync tool, 1 performance tool (`memory_performance`). `memory_configure` and
-`memory_set_structure_alpha` were removed by the CLI-config refactor: configuration
-is no longer an MCP tool — the CLI verbs are the single config channel (see
-[Command-line options](#command-line-options)).
+1 sync tool, 1 performance tool (`memory_performance`), 1 code tool (`code_get`).
+`memory_configure` and `memory_set_structure_alpha` were removed by the CLI-config
+refactor: configuration is no longer an MCP tool — the CLI verbs are the single
+config channel (see [Command-line options](#command-line-options)).
 
 | Tool                           | Parameters                                                                                                                                                  | Returns                                                                                            |
 |--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
 | `memory_write`                 | `projectId`, `content`, `workspaceId?`, `agentId?`, `context?`, `sourceFile?`, `section?`                                                                   | `{hash, path, context, createdAt}`                                                                 |
 | `memory_get`                   | `projectId`, `hash`                                                                                                                                         | `{hash, value, path, context, createdAt}`                                                          |
-| `memory_search`                | `projectId`, `query`, `scope=all\|project\|shared`, `workspaceId?`, `limit=20`, `minRelativeScore=0`, `rrfK=60`, `ftsWeight=1`, `vectorWeight=1`, `contextLabel?` | `{results:[{hash, ranking, path, snippet, sourceFile?, chunkIndex, totalChunks}], projectId}`      |
+| `memory_search`                | `projectId`, `query`, `scope=all\|project\|shared`, `workspaceId?`, `limit=20`, `minRelativeScore=0`, `rrfK=60`, `ftsWeight=1`, `vectorWeight=1`, `contextLabel?`, `kind=memory\|code\|both` | `{results:[{hash, ranking, path, snippet, sourceFile?, chunkIndex, totalChunks}], code?:[{hash, ranking, path, snippet, lineStart, lineEnd}], warning?}` |
 | `memory_record_followthrough`  | `projectId`, `correlationId`, `filePath`                                                                                                                    | `{recorded: true}`                                                                                 |
 | `memory_record_grade`          | `projectId`, `correlationId`, `grade`, `note?`                                                                                                              | `{recorded: true}`                                                                                 |
 | `memory_list`                  | `projectId`                                                                                                                                                 | `{files: <json tree>}`                                                                             |
@@ -59,6 +59,7 @@ is no longer an MCP tool — the CLI verbs are the single config channel (see
 | `memory_promotion_list`        | `projectId?`, `limit=50`, `includeFullValue=false`                                                                                                                                  | `{rows: [PromotionQueueRow]}`                                                                       |
 | `memory_promotion_discard`     | `projectId`, `hash?`                                                                                                                                        | `{discarded: n}`                                                                                   |
 | `memory_performance`           | `projectId`, `windowMinutes?=180`, `bucketMinutes?=1`                                                                                                       | `{generatedAt, window, bucket, bucketCount, series: [{tool, count, p50, p95, p99, min, max, buckets: [{start, count, average}]}]}` |
+| `code_get`                     | `projectId`, `hash`                                                                                                                                         | `{hash, value, path, lineStart, lineEnd}`                                                          |
 
 ### Notes on the less obvious tools
 
@@ -66,6 +67,16 @@ is no longer an MCP tool — the CLI verbs are the single config channel (see
   when named); `scope=project` searches `project:<id>` only; `scope=shared` searches the
   `shared` promotion tier only. Workspace scratch is never included in `scope=all` — it is
   only visible to a search that names that `workspaceId`.
+- **`memory_search` `kind` values:** `kind=memory` (default) is today's behavior, unchanged —
+  no `code` key in the response at all. `kind=code` searches the code corpus only (`results`
+  is present but empty); `kind=both` runs both hybrids independently and returns both sections
+  (no cross-corpus fusion). Code is always project-scoped: `scope=shared` with `kind=code`/`both`
+  returns an empty `code` section. In this release the code corpus has no configured embedding
+  engine yet, so `kind=code`/`both` searches are FTS5-only and carry a `warning` saying so.
+  Code hits carry `lineStart`/`lineEnd` (1-based) instead of `chunkIndex`/`totalChunks`; read
+  the full chunk with `code_get`. `kind=code`/`both` searches are never recorded in
+  `search_quality` (unlike `kind=memory`, which records exactly as today) — code identifiers
+  and paths must not leave the machine through a syncing table.
 - **`memory_share`:** promotes the entry whose `hash` you pass (from a `memory_write`
   or `memory_search` result) into `shared`. It is additive — the source project row
   stays. There is no un-share; `memory_delete` on the shared row's hash removes it from

@@ -129,7 +129,8 @@ public class ToolInventoryTests
     public void PackagedReadme_ToolsTable_ListsExactlyTheRegisteredTools()
     {
         var readme = File.ReadAllText(RepoFile("docs/reference/agent-memory-server.md"));
-        var documentedTools = Regex.Matches(readme, @"^\|\s*`(memory_\w+)`", RegexOptions.Multiline)
+        // memory_* (10 memory tools et al.) plus code_get (WP6, the code corpus's own tool family).
+        var documentedTools = Regex.Matches(readme, @"^\|\s*`(memory_\w+|code_get)`", RegexOptions.Multiline)
             .Select(m => m.Groups[1].Value)
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
