@@ -1,0 +1,141 @@
+{
+  "_note": "Copy to docs/work/checklist/<yyyy-mm-dd>-<subject>.json. Never fill this file in place. status is pass|fail|skipped|substituted; substituted means checked by a different instrument than the item names, and its reason must say which. accepted stays null until a human answers it, so an unfinished run is visibly unfinished. Delete any item whose feature no longer exists rather than skipping it.",
+  "run": {
+    "date": "2026-08-21",
+    "branch": "main",
+    "commit": "155f281e",
+    "data-root": "/private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/checklist-129",
+    "note": "A scratch --data-root, never ~/.ai-raccoon."
+  },
+  "derived": {
+    "version": "1.29.0",
+    "mcp-tool-count": 27,
+    "mcp-prompt-count": 2,
+    "note": "Produced by scripts/derive-facts.py at run time, never typed from memory or a previous run."
+  },
+  "findings-against-prior-runs": [
+    "No prior run exists for this checklist copy (docs/work/checklist/ was empty), so nothing to contradict. Recording the shape for the next run: (a) the annotate tier's warning lives at data.warning, not meta \u2014 truncating the envelope makes it look like the tier never fired, which it did; (b) 'file#section' is an eval-corpus expectedSource format, NOT a query syntax, so an item worded as an anchor query tests a feature the product does not have."
+  ],
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
+      "command": "ai-raccoon --version ; ls -la $(which ai-raccoon)",
+      "evidence": "1.29.0+155f281e6330e136beb9f60046bbf9d9d20d42fa\n-> .store/ai-raccoon/1.29.0/ai-raccoon.osx-arm64/1.29.0/tools/net10.0/osx-arm64/AiRaccoon",
+      "observed-result": "Installed tool reports derived.version AND carries the git SHA of main's merge commit 155f281e, so the running binary is provably the merged build, not a stale pack.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Version matches derived, and the +SHA suffix closes the 'force-update silently kept the previous build' gap by identity rather than by version string alone."
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+      "command": "ai-raccoon --data-root <scratch> --port 0 serve ; then --port 7788 serve ; then --port 7788 serve --restart",
+      "evidence": "serve --port 0 -> 'Now listening on: http://127.0.0.1:63461', mcp-token minted 0600.\nserve --restart -> 'ai-raccoon: port 7788 is in use but gave the probe no answer; nothing was asked to stop' then IOException: Failed to bind ... address already in use. Incumbent pid unchanged (76062). Reproduced on both an ephemeral port (63461) and an explicit one (7788).\nBy hand: POST /mcp unauthenticated -> 401 with body {\"jsonrpc\":\"2.0\",...}; with the token -> 400 JSON-RPC. Endpoint answers in milliseconds.",
+      "observed-result": "Start works (binds, mints the token). --restart does NOT cycle a live server: the probe reports no answer and the new process dies on AddressInUse. ServerProbe treats a body containing 'jsonrpc' as Answered and does not classify 401 as transient, yet the endpoint demonstrably returns exactly that instantly \u2014 so the verdict contradicts the endpoint's real behaviour.",
+      "status": "fail",
+      "accepted": false,
+      "acceptance-reason": "Not accepted: --restart is unusable against any token-gated server, which is every server. Refusing to kill an unidentified listener is correct behaviour and the message is actionable, so this is a probe-verdict defect rather than a safety one. Root cause not traced here \u2014 the checklist finds what is broken; tracing why belongs elsewhere. Not previously tracked; needs an issue."
+    },
+    {
+      "item": "memory-write-stores-and-reports-truthfully",
+      "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
+      "command": "tools/call memory_write (clean prose) ; tools/call memory_write x3 (the three HermesProcessNoisePolicy shapes)",
+      "evidence": "clean -> {\"hash\":\"c74e8583...\",\"stored\":true}\nrejected x3 -> {\"stored\":false,\"reason\":\"rejected by noise policy 'HermesBackgroundProcessLog'\"}",
+      "observed-result": "A stored write returns a real hash with stored=true; a rejected write returns stored=false and names the policy. No fabricated entry in either direction.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both directions exercised, so the item can fail."
+    },
+    {
+      "item": "memory-search-hybrid-retrieval",
+      "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking",
+      "command": "tools/call memory_search query='an antique navigation instrument reflecting evening light in a stargazing room'",
+      "evidence": "hits: 1 -> hash c74e8583..., ranking 1, snippet 'The observatory kept a brass astrolabe on the sill, and by lamplight...'",
+      "observed-result": "Query shares no literal term with the stored text (antique navigation instrument/astrolabe, evening light/lamplight, stargazing room/observatory) and still returns it at rank 1, so the vector leg is live.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Designed so BM25 alone cannot carry it; a dead vector leg would fail this item."
+    },
+    {
+      "item": "memory-get-returns-content-by-hash",
+      "expected-result": "memory_get returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
+      "command": "tools/call memory_get hash=c74e8583...",
+      "evidence": "{\"data\":{\"hash\":\"c74e8583...\",\"value\":\"The observatory kept a brass astrolabe on the sill...\"}}",
+      "observed-result": "Returns the exact stored content for the hash.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Round-trips the value written in the write item."
+    },
+    {
+      "item": "source-path-anchor-resolves-its-chunk",
+      "expected-result": "a `file#section` query returns that exact chunk within the production result window",
+      "command": "settings ingest scope add ; memory_ingest_file sextant.md (3823 B, 2 sections) ; memory_search 'sextant.md#arc-calibration'",
+      "evidence": "ingest -> {\"indexed\":1}; entries for that path: (0,1,300B) AND (0..4, 5). Search returned chunk 2/5 and chunk 0/5 alongside the stale 0/1.\nNo '#'-anchor handling found in MemoryTools/the store, and none documented in docs/reference/agent-memory-server.md.",
+      "observed-result": "Chunk-level retrieval works \u2014 search returns a specific chunk of a multi-chunk file with chunkIndex/totalChunks. But 'file#section' is NOT a query syntax: it is the eval corpus's expectedSource format, so the item as literally worded tests something the product does not offer. Separately, re-ingesting the SAME path with changed content left the previous chunk set in place (a 300-byte 0/1 row surviving beside the new 0..4/5), so search can return content no longer in the file.",
+      "status": "substituted",
+      "accepted": false,
+      "acceptance-reason": "Substituted: chunk resolution verified via chunkIndex/totalChunks on a deliberately over-budget fixture, because the '#section' query form does not exist. NOT accepted overall \u2014 the stale-chunk observation is a real defect found by this run and needs an issue. The watch digest path deletes-then-replaces by source path; the direct memory_ingest_file path appears not to."
+    },
+    {
+      "item": "write-path-noise-filtering",
+      "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
+      "command": "memory_write x1 clean (negative control) + x3 notification shapes ; sqlite3 'select substr(request_content,1,40) from noise_entries'",
+      "evidence": "clean -> stored=true. Three shapes -> stored=false, 'rejected by noise policy HermesBackgroundProcessLog'. noise_entries holds exactly those 3 rows.\nRegistered policies in AppRegistrations: HermesProcessNoisePolicy only (ADR-0033 removed the rest).",
+      "observed-result": "The one registered write-path policy rejects all three shapes it claims, accepts clean prose, and every rejection is retained in the noise store.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Negative control included, so a policy that rejected everything would fail this item. Steps were written against the policies actually registered, not a remembered list."
+    },
+    {
+      "item": "read-path-query-guard",
+      "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
+      "command": "memory_search with a Hermes notification (refuse tier), with a stack trace (warn tier), and sqlite3 settings for queryGuard.*",
+      "evidence": "refuse -> McpException 'invalid-params: This looks like tool output rather than a question...'\nwarn -> data.warning = 'This query contains what looks like log or stack-trace output...' (results still returned)\nsettings: no queryGuard rows; DefaultStructuralEnabled=false in QueryGuardConfigKeys.",
+      "observed-result": "Refuse tier throws with actionable guidance; annotate tier returns results WITH a warning; the structural detector ships disabled and stays disabled absent an explicit setting.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "All three tiers behave as ADR-0040/0041 specify. Note for future runs: the warning is at data.warning, not in meta \u2014 truncating the envelope makes the annotate tier look broken when it is not."
+    },
+    {
+      "item": "file-watch-status",
+      "expected-result": "memory_watch_status lists live registrations and their sync state",
+      "command": "settings watch enable checklist true ; memory_watch_add ; memory_watch_status",
+      "evidence": "before enabling -> 'watching-disabled: Watching is disabled for project checklist.' and status []\nafter -> add returns the path; status -> 1 watch: {projectId: checklist, path: .../docs, state: Scanning}",
+      "observed-result": "Status reflects live registrations, and reports an empty list truthfully when watching is disabled rather than pretending to register.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both states observed (disabled-refusal and registered), so an always-empty response would fail."
+    },
+    {
+      "item": "promotion-queue-state",
+      "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately",
+      "command": "tools/call memory_promotion_list projectId=checklist",
+      "evidence": "{\"data\":{\"rows\":[]},\"meta\":{\"waitingPromotionsCount\":0}}",
+      "observed-result": "Returns an empty queue on a bank with no promotion candidates.",
+      "status": "skipped",
+      "accepted": null,
+      "acceptance-reason": "Skipped, not passed: an empty list on a fresh bank is the weak check this skill warns about \u2014 it looks identical whether the queue works or is broken. Seeding a real candidate needs cross-project promotion traffic this scratch bank does not have. Left unanswered rather than recorded as a pass."
+    },
+    {
+      "item": "full-mcp-surface",
+      "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+      "command": "tools/list and prompts/list against the scratch server",
+      "evidence": "tools: 27 (memory_delete ... memory_write); prompts: 2 (workspace-consolidation-guide, memory-usage-guide). derived: 27 / 2.",
+      "observed-result": "Every derived tool and prompt is reachable on the running binary; counts match the tree exactly.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Compared against derive-facts.py output, not a remembered number."
+    },
+    {
+      "item": "observability-event-ids",
+      "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+      "command": "grep emitted ids from the serve log, then resolve each against src/ and docs/reference/logging-event-ids.md",
+      "evidence": "emitted: 510 610 672 673 674 910\n510 BankMaintenanceHostedService, 610 IdleWatchdog, 672/673/674 SettingsEndpoint, 910 ToolRefusals \u2014 all six also present in logging-event-ids.md",
+      "observed-result": "Every event id this run emitted resolves to a [LoggerMessage] in source and to a row in the reference.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Only ids actually emitted were checked; the reference is not asserted complete, which this run cannot establish."
+    }
+  ]
+}
