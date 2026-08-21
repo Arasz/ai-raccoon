@@ -181,7 +181,14 @@ public sealed partial class MemoryTools(
 
         if (dispatch.MemorySearchResults is not null)
         {
-            RecordSearchMeasurements(dispatch.MemorySearchResults, ContentHash.OfValue(query), correlationId, projectId);
+            // SearchDispatcher's search_quality exclusion (kind=code/both never records: rows
+            // sync off-machine, and a code-adjacent query's content hash would leak the same
+            // way) applies here too — the metrics table syncs as well, and RecordSearchMeasurements
+            // still runs for kind=both (the memory leg's SearchResults are non-null). Performance
+            // metrics stay useful telemetry either way, so only the content-identifying query hash
+            // is excluded, not the whole recording (integration review S6).
+            var queryHash = parsedKind == SearchKind.Memory ? ContentHash.OfValue(query) : null;
+            RecordSearchMeasurements(dispatch.MemorySearchResults, queryHash, correlationId, projectId);
         }
 
         // QueryLengthGuard is always on -- a fact about the embedding window, not a togglable
@@ -191,7 +198,14 @@ public sealed partial class MemoryTools(
         var warning = ComposeWarning(SearchWarnings.Compose(guard.Verdict, QueryLengthGuard.Evaluate(query)), dispatch.CodeWarning);
         var result = new SearchResultList(dispatch.Results, warning, dispatch.CodeResults);
         var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
-        return envelope with { Meta = envelope.Meta with { CorrelationId = correlationId } };
+
+        // SearchDispatcher records a search_quality row only for kind=memory, so a kind=code/both
+        // correlation id would be a promise the envelope cannot keep: a later
+        // memory_record_grade/memory_record_followthrough call keyed on it would silently no-op
+        // against a row that was never written (integration review S6).
+        return parsedKind == SearchKind.Memory
+            ? envelope with { Meta = envelope.Meta with { CorrelationId = correlationId } }
+            : envelope;
     }
 
     /// <summary>Mirrors the scope validation pattern: normalized case-insensitively, rejected fail-fast on a typo.</summary>
@@ -405,10 +419,12 @@ public sealed partial class MemoryTools(
     ///     Tags each of the eight search phases plus the measured total — plus the fusion diff,
     ///     present only when the no-fusion-regression flag is on (docs/adr/0078) — with the query
     ///     hash and correlation id and hands them to the recorder; never the query text itself
-    ///     (SqliteMetricsStore's save-time allowlist rejects it). Best-effort: a throwing recorder
-    ///     must never fail or slow the search (WP3).
+    ///     (SqliteMetricsStore's save-time allowlist rejects it). queryHash is null for a
+    ///     code-adjacent kind (kind=both): the metrics table syncs off-machine like search_quality,
+    ///     so a code-adjacent query's content hash is excluded the same way. Best-effort: a
+    ///     throwing recorder must never fail or slow the search (WP3).
     /// </summary>
-    private void RecordSearchMeasurements(SearchResults results, string queryHash, string correlationId, string projectId)
+    private void RecordSearchMeasurements(SearchResults results, string? queryHash, string correlationId, string projectId)
     {
         try
         {
