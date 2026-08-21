@@ -103,6 +103,17 @@ ai-raccoon model download faxenoff/code-daemon-embed-v1
 ai-raccoon model set code local <data-root>/models/faxenoff__code-daemon-embed-v1
 ```
 
+> **Known gap (2026-08-22, found by the 1.30.0 checklist):** `model download` currently
+> **refuses this exact model** — its HF repo ships no `added_tokens_decoder`, and the
+> planner (correctly, per D1) never guesses special-token ids and reads no fallback.
+> Until the planner learns one (tracked on the engine surface), activate manually:
+> download the model files yourself, place them in a directory, author an
+> `ai-raccoon.manifest.json` beside them (copy the shape of
+> `tests/AiRaccoon.Tests/Resources/ManifestFixtures/code-daemon-embed-v1.json` — its
+> `tokenizer.options.specialTokens` carries the numeric ids), then run
+> `model set code local <dir>` as above. The refusal legs and everything after
+> activation work as documented.
+
 `vec_code` is a fixed `float[768]` index — unlike the memory engine, there is **no**
 dimension-reconcile phase, so `model set code local` refuses a manifest whose
 `dimensions` is not `768` before anything commits, naming the declared value and the
