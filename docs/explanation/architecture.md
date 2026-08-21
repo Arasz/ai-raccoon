@@ -492,7 +492,8 @@ sequenceDiagram
 
     Note over S,L: 1. Snapshot
     S->>L: VACUUM INTO temp snapshot
-    S->>L: DELETE workspace entries from snapshot
+    S->>L: DELETE workspace entries + settings from snapshot
+    S->>L: DROP code_entries/code_fts/vec_code IF EXISTS
     S->>L: VACUUM (compact snapshot)
     S->>L: PRAGMA quick_check
 
@@ -528,6 +529,15 @@ sequenceDiagram
 **Settings never sync:** the `settings` table (cloud credentials, embedding endpoint/key)
 is stripped from every snapshot before it's pushed and is never read from a pulled
 remote — settings stay per-machine in both directions (ADR 0014).
+
+**The code corpus never syncs either:** `StripNonSyncableAsync` DROPs `code_entries`,
+`code_fts`, and `vec_code` (table absence, not row-deletion — their FTS5/vec0 shadow
+tables and trigger families drop with them) from every pushed snapshot, on all three
+push paths (local, merged, retry-merged). `DROP TABLE IF EXISTS`: a snapshot is opened
+through `openSnapshot`, which never runs `MemorySchema.EnsureAsync`, so a snapshot taken
+from a bank that predates the code corpus has none of these tables — a bare `DROP TABLE`
+would abort the push. Pull/merge never names the code tables at all, so a pull leaves the
+local code corpus untouched (ADR 0014 amendment).
 
 **Tombstone GC:** tombstones older than `last_pull_at` are deleted after each
 merge — they've done their job and the cloud copy has the deletion record.
