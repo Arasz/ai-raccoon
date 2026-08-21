@@ -7,6 +7,7 @@ using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Code;
 using Dapper;
+using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
 
@@ -78,6 +79,44 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
         (await CountVecCodeRowsAsync()).ShouldBe(0,
             "the vec_code_pending trigger must empty vec_code in the SAME commit as the settings write " +
             "— no stale-vector window, no separate reconcile phase for code");
+    }
+
+    /// <summary>
+    ///     S7: the test above only checks POST-commit state — three separate autocommit statements
+    ///     that all happened to succeed would satisfy it exactly as well as a real transaction, so
+    ///     it cannot fail on a broken atomicity guarantee. This one forces the LAST statement
+    ///     (MarkAllCodeEmbeddedPending) to fail via a real (non-temporary, so it fires regardless of
+    ///     which connection ActivateCodeEngineAsync opens internally) trigger, then asserts the TWO
+    ///     EARLIER settings writes were rolled back too — the only outcome that distinguishes one
+    ///     real transaction from three independently-committed statements.
+    /// </summary>
+    [Fact]
+    public async Task ActivateCodeEngineAsync_FailureOnTheLastStatement_RollsBackTheEarlierSettingsWritesToo()
+    {
+        await SeedAnEmbeddedCodeRowAsync();
+        await using (var setupConnection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await setupConnection.ExecuteAsync(new CommandDefinition(
+                """
+                CREATE TRIGGER s7_witness_abort_pending BEFORE UPDATE OF embed_state ON code_entries
+                WHEN NEW.embed_state = 'pending'
+                BEGIN
+                    SELECT RAISE(ABORT, 'S7 witness: forced failure on the invalidate step');
+                END
+                """, cancellationToken: TestContext.Current.CancellationToken));
+        }
+
+        var dir = Path.Combine(_dataRoot, "code-model-s7");
+        TestData.SeedCodeManifestDirectory(dir);
+
+        await Should.ThrowAsync<SqliteException>(
+            () => _store.ActivateCodeEngineAsync(dir, TestContext.Current.CancellationToken));
+
+        (await ReadSettingAsync(EmbeddingSettingsKeys.CodeModel)).ShouldBeNull(
+            "a failed activation must roll back EVERYTHING it wrote, not just skip the statement that threw");
+        (await ReadSettingAsync(EmbeddingSettingsKeys.CodeEngine)).ShouldBeNull();
+        (await ReadCodeEmbedStateAsync(1)).ShouldBe("embedded",
+            "the invalidate step itself must roll back too -- the row must be untouched");
     }
 
     [Fact]
