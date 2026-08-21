@@ -27,8 +27,8 @@ Can parameters be adjusted to eliminate those regressions while keeping the gain
    fused ranking (near-equal RRF scores resolved by candidate order, which the
    file's page layout can change), ~0.005 nDCG@5.
 2. **The scratch server's inherited file-watcher ingests host files mid-run**: the
-   first search run grew the bank 22,511 → 22,740 (236 entries from the live
-   docs/work directory) and its drift check FAILED. Fix: freeze the copy
+   first search run grew the bank from 22,511 to 22,740 entries (236 new hashes,
+   ~7 replaced) from the live docs/work directory and its drift check FAILED. Fix: freeze the copy
    (watch.enabled.*=false, sweep.enabled.global=false, extract.enabled.global=false,
    watches tables cleared) before serving. The authoritative run used a frozen
    bank; its drift check PASSES.
@@ -106,9 +106,10 @@ keeps the balance at 5 regressions — the minimum observed over 60 search trial
    fusion false fixed). Selection post-hoc: min regressions, then min collapses,
    then max mean. Drift check PASS (defaults byte-identical start/end,
    0.6105391530585856).
-3. **Refine**: two targeted passes of single-knob nudges + combos around the lead
-   (~40 evals) — found sourceLambda=0.1 (trial31's 0.115 was harm) and the lead
-   config 0.6624/7reg.
+3. **Refine**: single-knob nudges + combos around the lead (21-config pass 1;
+   an 18-config pass 2 was partially completed — together with the toggle and
+   config diagnostic passes, ~40 completed evals) — found sourceLambda=0.1
+   (trial31's 0.115 was harm) and the lead config 0.6624/7reg.
 4. **Staircase** (owner feedback): defaults → lead one knob at a time — distilled
    E048's rrfK-sensitivity and E028's ftsWeight/consolidation-sensitivity.
 5. **One-shot validation** of the pre-selected candidates (lead, trial21, M2) on
@@ -121,12 +122,14 @@ keeps the balance at 5 regressions — the minimum observed over 60 search trial
 **Partially — with an important caveat, and better than the question asked.**
 
 - **Fully eliminating ALL eval-set regressions while keeping a mean gain: NO.**
-  The minimum regression count observed over the whole search (60 Optuna trials
-  + ~40 refinement evals + 12 staircase steps, all in safe windows) is 5. Every
-  gain-carrying config re-ranks ~5-10 queries; the fused-ranking balance forces
-  a choice between the vector leg's winners and the FTS leg's winners. Zero
-  regressions is only achievable at the defaults themselves (mean 0.6105, no
-  gain).
+  The minimum regression count among all gain-carrying configs evaluated across
+  the entire effort (60 Optuna trials + refinement passes + staircase + the
+  vectorWeight experiment) is 5 (M2); within the search+refine sets alone it was
+  7. Every gain-carrying config re-ranks 5-10 queries; the fused-ranking balance
+  forces a choice between the vector leg's winners and the FTS leg's winners.
+  Zero regressions is only achievable at the defaults themselves (mean 0.6105,
+  no gain) — the study's own trial 0 and the staircase's no-gain steps confirm
+  that.
 - **Eliminating the specific regressions the owner flagged — the exact /
   identifier-heavy collapses (E028, E049, E051, E052, E048): YES.** The config
   below (M2) restores E048, E028, E049, E052, E002, E047 to perfect rank 1,
@@ -184,6 +187,10 @@ from the old environment's baseline):
 | E050 (unrecognised verb) | 0.50 @3 | 0.43 @4 | minor regression |
 | E037, E039, E007, E016, E064 | — | — | unchanged |
 | E046 (rating/access drift, NEW) | 1.0 @1 | 0.50 @3 | **new collapse** (same ADR-0053 file as E048/E047 — displaced by the restored siblings) |
+
+*Table source: a full per-query capture at M2 (in-session run on the frozen
+bank), not just the regression list — "restored"/"unchanged" rows are observed
+ndcg@5/rank values, byte-identical to defaults where marked unchanged.*
 
 ### Test set (10 queries, held out, one-shot proxy grades by exact expectedHash rank)
 
