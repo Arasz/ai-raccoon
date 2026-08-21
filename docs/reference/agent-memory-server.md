@@ -118,8 +118,14 @@ is no longer an MCP tool — the CLI verbs are the single config channel (see
   pinned); `ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]`
   selects any OpenAI-compatible `baseUrl` (default `https://api.openai.com/v1`).
   `model` is the model id for openai or a custom ONNX path for local; it defaults to
-  the bundled model for local, is required for openai. The API key is persisted in the
-  settings table. Changing the engine re-embeds the bank. The `engine` field in the
+  the bundled model for local, is required for openai. A local **directory** must contain
+  `ai-raccoon.manifest.json` describing its dimensions, tokenizer, pooling and files, and
+  is refused without one; only a `.onnx` file path keeps the pre-manifest defaults.
+  `--dims <n>` declares a remote engine's output dimension (required when it is not 384 —
+  sqlite-vec infers none); `model set openai` probes the endpoint first and refuses a
+  contradicted or undeclared non-384 dimension before the outbox commits. The API key is
+  persisted in the settings table. Changing the engine re-embeds the bank, rebuilding the
+  vector index first when the dimension differs. The `engine` field in the
   result is the stable fingerprint (`local:bundled`, `openai:text-embedding-3-small@<baseUrl>`,
   etc.) — a change triggers the re-embed.
 - **Downloading a local model (CLI, not a tool):** `ai-raccoon model download {repo-id}`
