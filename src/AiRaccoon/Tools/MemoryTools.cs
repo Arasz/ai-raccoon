@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.QueryGuard;
@@ -160,12 +161,12 @@ public sealed partial class MemoryTools(
         if (guard.Shadowed is { } suppressed)
         {
             Log.QueryGuardShadowVerdict(logger, suppressed.Tier.ToString(), projectId,
-                suppressed.PolicyName ?? string.Empty);
+                suppressed.PolicyName ?? string.Empty, QuerySnippet(query));
         }
 
         if (guard.Verdict.Tier == QueryGuardTier.Refuse)
         {
-            throw new McpException($"invalid-params: {guard.Verdict.Guidance}");
+            throw new McpException($"invalid-params: {guard.Verdict.Guidance} Refused query: {QuerySnippet(query)}");
         }
 
         var searchResults = await store.SearchAsync(searchQuery, cancellationToken);
@@ -395,12 +396,22 @@ public sealed partial class MemoryTools(
         }
     }
 
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex WhitespaceRunRegex();
+
+    /// <summary>Single-line, whitespace-collapsed echo of the query for refusal diagnostics, capped at 200 chars.</summary>
+    private static string QuerySnippet(string query)
+    {
+        var collapsed = WhitespaceRunRegex().Replace(query, " ").Trim();
+        return collapsed.Length <= 200 ? collapsed : collapsed[..200] + "…";
+    }
+
     private static partial class Log
     {
         /// <summary>Kept here, not in Core: the guard decides, the host reports (docs/adr/0065).</summary>
         [LoggerMessage(EventId = 920, Level = LogLevel.Information,
-            Message = "Query guard (shadow) would have returned {Tier} for project {ProjectId} via {PolicyName}")]
-        public static partial void QueryGuardShadowVerdict(ILogger logger, string tier, string projectId, string policyName);
+            Message = "Query guard (shadow) would have returned {Tier} for project {ProjectId} via {PolicyName}; query: {Query}")]
+        public static partial void QueryGuardShadowVerdict(ILogger logger, string tier, string projectId, string policyName, string query);
 
         [LoggerMessage(EventId = 921, Level = LogLevel.Warning,
             Message = "Failed to record search phase measurements for correlation {CorrelationId}")]
