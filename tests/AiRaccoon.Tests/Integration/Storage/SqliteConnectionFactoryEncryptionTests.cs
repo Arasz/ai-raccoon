@@ -55,6 +55,39 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         reopen.State.ShouldBe(ConnectionState.Open);
     }
 
+    /// <summary>
+    ///     WP1-T08: the code corpus carries no encryption logic of its own — it rides the same
+    ///     whole-bank encryption every other table gets, proven the same way
+    ///     <see cref="OpenBankAsync_WithPassphrase_CreatesEncryptedDatabase" /> proves it for
+    ///     <c>entries</c>: raw file bytes never contain the plaintext value.
+    /// </summary>
+    [Fact]
+    public async Task OpenBankAsync_WithPassphrase_EncryptsCodeEntriesRows()
+    {
+        const string distinctiveValue = "quokka-narwhal-pangolin-secret-code-snippet";
+        var factory = Factory("test-encryption-key");
+
+        await using (var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = """
+                               INSERT INTO code_entries (hash, path, value, project_id, created_at, updated_at)
+                               VALUES ('h1', 'p1', @value, 'acme', 1, 1)
+                               """;
+            cmd.Parameters.AddWithValue("@value", distinctiveValue);
+            await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        // An encrypted bank must never leak code_entries content in its raw file bytes.
+        var bytes = await File.ReadAllBytesAsync(factory.BankPath, TestContext.Current.CancellationToken);
+        Encoding.UTF8.GetString(bytes).ShouldNotContain(distinctiveValue);
+
+        await using var reopen = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await using var check = reopen.CreateCommand();
+        check.CommandText = "SELECT value FROM code_entries WHERE hash = 'h1'";
+        (await check.ExecuteScalarAsync(TestContext.Current.CancellationToken)).ShouldBe(distinctiveValue);
+    }
+
     [Fact]
     public async Task OpenBankAsync_WithoutPassphrase_OpensUnencryptedDatabase()
     {

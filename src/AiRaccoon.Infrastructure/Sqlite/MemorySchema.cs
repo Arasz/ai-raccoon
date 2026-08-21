@@ -406,6 +406,82 @@ internal static class MemorySchema
                                               finished_at  INTEGER NULL
                                           );
 
+                                          -- Code corpus (docs/work/2026-08-21-code-search-implementation-plan.md §3.1): a second,
+                                          -- code-only corpus alongside entries — additive, digest-gated, no ladder step, no
+                                          -- CurrentVersion bump (metrics-table precedent above). Project-scoped only: no
+                                          -- scope/workspace_id/agent_id, no rating/ttl_days/access_count (no degradation — code is
+                                          -- a re-derivable cache, §3.2), no heading_path/section/source_id (no structure modality
+                                          -- in v1).
+                                          CREATE TABLE IF NOT EXISTS code_entries (
+                                              id           INTEGER PRIMARY KEY,
+                                              hash         TEXT,
+                                              path         TEXT,
+                                              value        TEXT,
+                                              source_file  TEXT,
+                                              line_start   INTEGER,
+                                              line_end     INTEGER,
+                                              project_id   TEXT NOT NULL,
+                                              created_at   INTEGER NOT NULL,
+                                              updated_at   INTEGER NOT NULL,
+                                              embed_state  TEXT NOT NULL DEFAULT 'pending' CHECK(embed_state IN ('pending','embedded')),
+                                              embedding    BLOB NULL,
+                                              chunk_index  INTEGER NOT NULL DEFAULT -1,
+                                              total_chunks INTEGER NOT NULL DEFAULT 0
+                                          );
+
+                                          CREATE UNIQUE INDEX IF NOT EXISTS uq_code_chunk ON code_entries(project_id, path, hash);
+                                          CREATE INDEX IF NOT EXISTS idx_code_entries_project ON code_entries(project_id);
+                                          CREATE INDEX IF NOT EXISTS idx_code_entries_hash ON code_entries(hash);
+                                          CREATE INDEX IF NOT EXISTS idx_code_entries_embed_state ON code_entries(embed_state, project_id);
+                                          -- The digest-event delete legs run per project over the whole chunk set; code chunk
+                                          -- counts per project are an order of magnitude larger than notes (review F-19).
+                                          CREATE INDEX IF NOT EXISTS idx_code_entries_path ON code_entries(project_id, path);
+
+                                          CREATE VIRTUAL TABLE IF NOT EXISTS code_fts USING fts5(
+                                              value,
+                                              source_file,
+                                              content='code_entries',
+                                              content_rowid='id'
+                                          );
+
+                                          CREATE TRIGGER IF NOT EXISTS code_fts_ai AFTER INSERT ON code_entries BEGIN
+                                              INSERT INTO code_fts(rowid, value, source_file)
+                                              VALUES (new.id, new.value, new.source_file);
+                                          END;
+
+                                          CREATE TRIGGER IF NOT EXISTS code_fts_ad AFTER DELETE ON code_entries BEGIN
+                                              INSERT INTO code_fts(code_fts, rowid, value, source_file)
+                                              VALUES ('delete', old.id, old.value, old.source_file);
+                                          END;
+
+                                          CREATE TRIGGER IF NOT EXISTS code_fts_au AFTER UPDATE OF value, source_file ON code_entries BEGIN
+                                              INSERT INTO code_fts(code_fts, rowid, value, source_file)
+                                              VALUES ('delete', old.id, old.value, old.source_file);
+                                              INSERT INTO code_fts(rowid, value, source_file)
+                                              VALUES (new.id, new.value, new.source_file);
+                                          END;
+
+                                          -- vec0 for the code corpus: `ctx` is the project id directly — code is project-scoped
+                                          -- only, so it never needs ContextKeyExpression's shared/workspace/custom branching.
+                                          CREATE VIRTUAL TABLE IF NOT EXISTS vec_code USING vec0(ctx TEXT, embedding float[768] distance_metric=cosine);
+
+                                          CREATE TRIGGER IF NOT EXISTS vec_code_au AFTER UPDATE OF embed_state ON code_entries
+                                          WHEN NEW.embed_state = 'embedded' AND NEW.embedding IS NOT NULL
+                                          BEGIN
+                                              DELETE FROM vec_code WHERE rowid = NEW.id;
+                                              INSERT INTO vec_code(rowid, ctx, embedding) VALUES (NEW.id, NEW.project_id, NEW.embedding);
+                                          END;
+
+                                          CREATE TRIGGER IF NOT EXISTS vec_code_pending AFTER UPDATE OF embed_state ON code_entries
+                                          WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
+                                          BEGIN
+                                              DELETE FROM vec_code WHERE rowid = OLD.id;
+                                          END;
+
+                                          CREATE TRIGGER IF NOT EXISTS vec_code_ad AFTER DELETE ON code_entries BEGIN
+                                              DELETE FROM vec_code WHERE rowid = OLD.id;
+                                          END;
+
                                           """;
 
     /// <summary>

@@ -87,6 +87,23 @@ erDiagram
         INTEGER recorded_at
     }
 
+    code_entries {
+        INTEGER id PK
+        TEXT hash
+        TEXT path
+        TEXT value
+        TEXT source_file
+        INTEGER line_start
+        INTEGER line_end
+        TEXT project_id
+        INTEGER created_at
+        INTEGER updated_at
+        TEXT embed_state
+        BLOB embedding
+        INTEGER chunk_index
+        INTEGER total_chunks
+    }
+
     workspaces ||--o{ entries : "workspace_id"
     memory_source ||--o{ entries : "source_id"
 ```
@@ -163,6 +180,34 @@ with a `source_id` FK on entries; `source_file`/`section` remain on entries as
 denormalized FTS-backing columns (see `docs/work/2026-08-11-memory-source-normalization-plan.md`).
 
 > **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:59-117`
+
+### Code corpus
+
+A second, code-only corpus lives in the same `memory.db` file, added additively in the
+digest-gated DDL block (no `CurrentVersion` bump — the metrics-table precedent above):
+
+- `code_entries` — one row per code chunk: `hash`/`path`/`value`/`source_file` mirror
+  `entries`; `line_start`/`line_end` (1-based, inclusive) replace `section`/`heading_path`,
+  since code has no structure modality. `uq_code_chunk UNIQUE(project_id, path, hash)` is the
+  dedup bucket; `idx_code_entries_project`, `idx_code_entries_hash`,
+  `idx_code_entries_embed_state`, and `idx_code_entries_path` mirror the `entries` indexes.
+  `project_id` is `NOT NULL` — code has no shared/workspace/custom context, so there is no
+  `scope`/`context_label`/`workspace_id`/`agent_id` column, and no
+  `rating`/`ttl_days`/`access_count` (no degradation: a code row is a re-derivable cache, not
+  curated knowledge).
+- `code_fts` — FTS5 external-content index over `code_entries(value, source_file)`, with the
+  same insert/delete/update trigger family as `entries_fts`.
+- `vec_code` — vec0 virtual table, `float[768]` (`code-daemon-embed-v1`'s dimension, distinct
+  from `vec_entries`' 384) with `ctx = project_id` directly — no `ContextKeyExpression`
+  branching, since code is project-scoped only. `embed_state` UPDATE triggers keep it in sync
+  with `code_entries`, mirroring `vec_entries`.
+
+**Lifecycle exclusions** (deliberate, not oversights): the code corpus never syncs (a pushed
+snapshot `DROP`s `code_entries`/`code_fts`/`vec_code` rather than stripping rows), never
+sweeps, carries no TTL, and never promotes to the shared tier. Losing it costs a re-ingest
+from disk, not knowledge — the opposite of `entries`.
+
+> **Evidence:** `docs/work/2026-08-21-code-search-implementation-plan.md` §3.1/§3.2
 
 ### Schema versioning
 
@@ -447,7 +492,8 @@ sequenceDiagram
 
     Note over S,L: 1. Snapshot
     S->>L: VACUUM INTO temp snapshot
-    S->>L: DELETE workspace entries from snapshot
+    S->>L: DELETE workspace entries + settings from snapshot
+    S->>L: DROP code_entries/code_fts/vec_code IF EXISTS
     S->>L: VACUUM (compact snapshot)
     S->>L: PRAGMA quick_check
 
@@ -483,6 +529,15 @@ sequenceDiagram
 **Settings never sync:** the `settings` table (cloud credentials, embedding endpoint/key)
 is stripped from every snapshot before it's pushed and is never read from a pulled
 remote — settings stay per-machine in both directions (ADR 0014).
+
+**The code corpus never syncs either:** `StripNonSyncableAsync` DROPs `code_entries`,
+`code_fts`, and `vec_code` (table absence, not row-deletion — their FTS5/vec0 shadow
+tables and trigger families drop with them) from every pushed snapshot, on all three
+push paths (local, merged, retry-merged). `DROP TABLE IF EXISTS`: a snapshot is opened
+through `openSnapshot`, which never runs `MemorySchema.EnsureAsync`, so a snapshot taken
+from a bank that predates the code corpus has none of these tables — a bare `DROP TABLE`
+would abort the push. Pull/merge never names the code tables at all, so a pull leaves the
+local code corpus untouched (ADR 0014 amendment).
 
 **Tombstone GC:** tombstones older than `last_pull_at` are deleted after each
 merge — they've done their job and the cloud copy has the deletion record.
