@@ -1,8 +1,15 @@
 {
-    "lastUpdated": "2026-08-20T22:20:00.000000+00:00",
+    "lastUpdated": "2026-08-21T10:55:00.000000+00:00",
     "notesRef": ".ai-badger/status-notes.json",
     "historyRef": ".ai-badger/status-history.json",
     "completedTasks": [
+        {
+            "id": "refused-search",
+            "title": "Query-guard refusals: log WHAT was refused + document the current gate",
+            "pr": 399,
+            "merged": "2026-08-21",
+            "summary": "User: 'we get a lot of ToolRefusals[910] logs \u2014 can we get what was refused? what is the current refusal gate?' Gate (unchanged, documented in report): QueryGuardPolicy refuse shapes ([IMPORTANT: Background process + completed normally + Command:; [ASYNC DELEGATION BATCH COMPLETE + dispatched earlier has finished; 22/22 graded at 2/5) + warn regexes (stack-frame line, console log-level prefix) + structural shape-score warn (default off, ADR-0041) + always-on QueryLengthGuard; settings queryGuard.enabled.global=true / shadow.global=false. Fix: refuse-path McpException message appends 'Refused query: <snippet>' (whitespace-collapsed, <=200 chars + ellipsis) -> flows to the caller AND the EventId 910 log line; the shadow-mode verdict (EventId 920) carries the same snippet; ADR-0040 consequence note. TDD: RED witnessed for both hunks (new Search_WithAMachineOutputQuery_RefusesEchoingTheQuery; shadow test extended). Gates: MemoryToolsTests/QueryGuardServiceTests/ToolRefusalsTests 119/119, build 0/0, VersionContractTests 8/8. G6's first run hung on the SHARED MSBuild node pool (concurrent session's builds) \u2014 isolated rerun MSBUILDDISABLENODEREUSE=1 -p:UseSharedCompilation=false finished in 21s; durable lesson for concurrent dotnet sessions. VERSION 1.28.1 (no README entry; internal observability fix). PR #399 squash-merged 10212fe0 (user merged mid-task); publish run 32465124962 triggered per user request."
+        },
         {
             "id": "search-parameters",
             "title": "SearchParameters: unified retrieval-parameter source (query > settings > default)",
