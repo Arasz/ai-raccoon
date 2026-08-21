@@ -104,6 +104,9 @@ row that motivated it. This is deliberate: ADR-0033's post-mortem on the write-p
   multi-paragraph task briefs as the query — is not addressed by either tier. It is real noise, but
   it is not machine output, and mislabeling it as "looks like tool output" would be actively wrong
   guidance. Left as a finding for a future ADR, not folded into this one's evidence.
+- **Observability:** the refusal message — and with it the EventId 910 log line — echoes the
+  refused query, whitespace-collapsed and capped at 200 characters, so an operator can see exactly
+  what was refused; the shadow-mode verdict (EventId 920) carries the same snippet.
 
 ## Measurement (search_quality, 399 rows, 181 graded, read-only, 2026-08-14)
 

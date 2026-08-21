@@ -542,6 +542,20 @@ public class MemoryToolsTests
     }
 
     [Fact]
+    public async Task Search_WithAMachineOutputQuery_RefusesEchoingTheQuery()
+    {
+        var query = RealHermesProcessNotification + new string('x', 300);
+
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            _tools.Search("acme", query, cancellationToken: TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldContain("Refused query:");
+        ex.Message.ShouldContain("Background process");
+        ex.Message.ShouldNotContain("\n");
+        ex.Message.ShouldEndWith("…");
+    }
+
+    [Fact]
     public async Task Search_WithALogLikeQuery_ReturnsResultsWithAWarning()
     {
         var result = await _tools.Search("acme", "info: something happened\n at System.Foo.Bar(baz)",
@@ -623,6 +637,7 @@ public class MemoryToolsTests
         _store.LastQuery.ShouldNotBeNull();
         result.Data!.Warning.ShouldBeNull();
         logger.Collector.LatestRecord.Message.ShouldContain("Refuse");
+        logger.Collector.LatestRecord.Message.ShouldContain("Background process");
     }
 
     [Fact]
