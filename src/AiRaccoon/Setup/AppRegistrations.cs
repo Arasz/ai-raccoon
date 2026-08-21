@@ -183,7 +183,11 @@ public static partial class AppRegistrations
                 // PendingEmbedJob, so its position relative to it does not matter.
                 new PromotionQueuePruneJob(sp.GetRequiredService<TimeProvider>()),
                 // .NET-F1: on-demand — HasWorkAsync reads entries.embed_state itself, not a cadence.
-                new PendingEmbedJob(sp.GetRequiredService<IEntryEmbedder>())
+                new PendingEmbedJob(sp.GetRequiredService<IEntryEmbedder>()),
+                // WP5/WP7-remainder (§3.3 D-E9/§3.8): on-demand, same shape as PendingEmbedJob —
+                // drains code_entries rows a code-engine activation or fingerprint change left
+                // pending. No outbox, no ToolGate interaction.
+                new CodeReindexJob(sp.GetRequiredService<ICodeEmbedder>())
             ]);
             services.AddHostedService<BankMaintenanceHostedService>();
         }

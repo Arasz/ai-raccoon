@@ -61,7 +61,8 @@ public sealed class CliBankWriteTests : IAsyncLifetime
         ChunkIndexRepairJob.JobName,
         ReingestRepairJob.JobName,
         PromotionQueuePruneJob.JobName,
-        PendingEmbedJob.JobName
+        PendingEmbedJob.JobName,
+        CodeReindexJob.JobName
     ];
 
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-cli-writes");

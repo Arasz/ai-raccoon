@@ -70,11 +70,23 @@ config channel (see [Command-line options](#command-line-options)).
 - **`memory_search` `kind` values:** `kind=memory` (default) is today's behavior, unchanged —
   no `code` key in the response at all. `kind=code` searches the code corpus only (`results`
   is present but empty); `kind=both` runs both hybrids independently and returns both sections
-  (no cross-corpus fusion). Code is always project-scoped: `scope=shared` with `kind=code`/`both`
-  returns an empty `code` section. In this release the code corpus has no configured embedding
-  engine yet, so `kind=code`/`both` searches are FTS5-only and carry a `warning` saying so.
-  Code hits carry `lineStart`/`lineEnd` (1-based) instead of `chunkIndex`/`totalChunks`; read
-  the full chunk with `code_get`. `kind=code`/`both` searches are never recorded in
+  (no cross-corpus fusion — each section is ranked by its own FTS5+vec0 hybrid). Code is always
+  project-scoped: `scope=shared` with `kind=code`/`both` returns an empty `code` section.
+  `codeLimit`/`codeMinRelativeScore` override `limit`/`minRelativeScore` for the code section
+  only (omit them to use the same values as the memory section). Code search degrades by
+  configuration state: with no `embedding.codeModel` configured, it is FTS5-only and carries a
+  `warning` (`"code engine not configured — FTS5-only results"`); once a code engine is
+  configured (`model set code local`, below) it runs the full vec0 hybrid, fused with the same
+  weighted RRF as memory (`retrieval.rrfK`/`ftsWeight`/`vectorWeight` — `retrieval.structureAlpha`
+  is read but never applied, since code has no structure modality); a query over the engine's
+  126-token window is trimmed before embedding and carries a different `warning` naming that; a
+  configured-but-**unloadable** engine (missing files, a dimension mismatch) refuses the search
+  with `code-engine-unloadable` instead of degrading (see [Error shapes](#error-shapes)) — memory
+  searches are unaffected, since the two engines are independent settings rows. A code hit's
+  `relativeScore` is hybrid-score-relative like memory's (the top hit is always 1.0, others
+  proportional to their fused score) — not the positional, rank-derived placeholder of an earlier
+  wave. Code hits carry `lineStart`/`lineEnd` (1-based) instead of `chunkIndex`/`totalChunks`;
+  read the full chunk with `code_get`. `kind=code`/`both` searches are never recorded in
   `search_quality` (unlike `kind=memory`, which records exactly as today) — code identifiers
   and paths must not leave the machine through a syncing table. `meta.correlationId` follows
   that same rule: it is present only on `kind=memory` (the id `memory_record_grade`/

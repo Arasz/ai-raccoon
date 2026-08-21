@@ -210,7 +210,22 @@ snapshot `DROP`s `code_entries`/`code_fts`/`vec_code` rather than stripping rows
 sweeps, carries no TTL, and never promotes to the shared tier. Losing it costs a re-ingest
 from disk, not knowledge — the opposite of `entries`.
 
-> **Evidence:** `docs/work/2026-08-21-code-search-implementation-plan.md` §3.1/§3.2
+**Its own embedding engine and drain, deliberately simpler than the memory engine's:**
+`ai-raccoon model set code local <dir>` writes `embedding.codeModel`/`embedding.codeEngine`
+and marks every currently-embedded code row `pending`, in one transaction — the
+`vec_code_pending` trigger empties `vec_code` at that same commit, so there is no
+stale-vector window. Unlike a memory engine change, this does **not** go through the
+`model_migration` outbox: that mechanism is single-row, its relay hard-codes the memory
+query, and its `ToolGate` closes every tool for the migration's duration — none of which
+fits a second, independent corpus. Instead, a standing `code-reindex` maintenance job (same
+on-demand shape as `PendingEmbedJob`: `HasWorkAsync` reads `code_entries.embed_state`
+directly, so a bank with no code engine configured is never "due") drains pending rows in
+batches of 32 on its own poll — no relay wait, no gate, memory tools stay fully available
+the whole time. While rows drain, `kind=code` search naturally degrades to FTS5-only for
+them (`code_fts` is populated at ingest time, independent of `embed_state`).
+
+> **Evidence:** `docs/work/2026-08-21-code-search-implementation-plan.md` §3.1/§3.2/§3.3/§3.8,
+> `src/AiRaccoon.Infrastructure/Maintenance/CodeReindexJob.cs`
 
 ### Schema versioning
 
