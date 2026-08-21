@@ -59,7 +59,6 @@ stops generation at the end of the assistant turn. For a deterministic grade, pu
 ## A/B/C decision pattern (measure before shipping a local LLM as a judge)
 
 Run all three on the SAME labeled set and compare rank correlation:
-
 - **A** = incumbent/baseline (e.g. the tuned heuristic scorer).
 - **B** = the model alone.
 - **C** = combined (e.g. mean of A and B).

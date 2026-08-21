@@ -79,7 +79,6 @@ OllamaSharp has no `AddOllamaSharp` DI extension either (no ServiceCollectionExt
 Upstream is `sqliteai/sqlite-memory`; 1.3.5 (2026-06-10) is the deferred-embeddings release (PR #12). READ (GitHub releases). ~60% of the surface is trivial-to-moderate C# work (ingestion, deletes, deferred embeddings, settings, list_files,
 remote embeddings) — and the
 `memory_search` virtual table is an INTERNAL seam (only the store's own SQL consumes it), so replacing it with a C# search method behind the store interface breaks nothing external. Three genuinely hard items:
-
 1. **CRDT cloud sync** → keep the native cloudsync extension (see above). Not a rebuild item.
 2. **Hybrid ranking fusion + snippet parity** — the cosine/BM25 → 0..1 `ranking` normalization lives in unread C source (UNVERIFIED). Ship a golden-retrieval harness (old vs new rankings over a fixed corpus) or the quality regression is
    invisible until users complain.

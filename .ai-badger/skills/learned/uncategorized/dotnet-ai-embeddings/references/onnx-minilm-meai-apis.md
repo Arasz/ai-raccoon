@@ -28,7 +28,6 @@ File `onnx/model_qint8_arm64.onnx` (~23 MB), opset 14, ir_version 7:
 6. Mean-pool per item over its mask row, L2-normalize; `new Embedding<float>(vector)`.
 
 `BertTokenizer.EncodeToIds` overloads (parameter names matter):
-
 - `(string text, bool considerPreTokenization, bool considerNormalization)`
 - `(string text, bool addSpecialTokens, bool considerPreTokenization, bool considerNormalization)`
 - `(string text, int maxTokenCount, bool addSpecialTokens, out string normalizedText, out int charsConsumed, bool considerPreTokenization, bool considerNormalization)`

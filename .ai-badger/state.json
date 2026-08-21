@@ -1,8 +1,16 @@
 {
-    "lastUpdated": "2026-08-21T10:55:00.000000+00:00",
+    "lastUpdated": "2026-08-21",
     "notesRef": ".ai-badger/status-notes.json",
     "historyRef": ".ai-badger/status-history.json",
     "completedTasks": [
+        {
+            "id": "support-for-other-embedding-models",
+            "title": "arbitrary embedding models: MoE plan + MoE review (bge-m3 case study)",
+            "pr": null,
+            "merged": false,
+            "date": "2026-08-21",
+            "summary": "Plan-only task. 3 MoE plan lanes + 2 MoE review lanes; rev 2 folded all findings (transactional vec0 reconcile, pinned manifest schema, pre-commit dims probe). G0 APPROVED by owner: no default model changes; download verb ships in the same PR. Plan: docs/work/2026-08-21-arbitrary-embedding-models-plan.md."
+        },
         {
             "id": "refused-search",
             "title": "Query-guard refusals: log WHAT was refused + document the current gate",
