@@ -118,15 +118,16 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
     }
 
     /// <summary>
-    ///     v11 log channel (docs/work/2026-08-21-code-search-implementation-plan.md §4, review
-    ///     arch-8): the migration itself is silent (returns the pruned list); InitializeAsync — the
-    ///     one caller with a logger — reports it. RED first: before the logger is threaded through,
-    ///     the migration still runs and prunes, but no log line is emitted.
+    ///     Watch-overlap-prune log channel (docs/work/2026-08-21-code-search-implementation-plan.md
+    ///     §4, review arch-8, S7 orchestrator ruling): the unconditional prune step itself is silent
+    ///     (returns pruned + warnings); InitializeAsync — the one caller with a logger — reports it.
+    ///     Asserts the actual EventId-901/902 message shapes, not a loose substring: a `Contains('1')`
+    ///     check would also match an unrelated digit anywhere in any log line and prove nothing.
     /// </summary>
     [Fact]
     public async Task InitializeAsync_BankWithNestedWatches_LogsOnePrunedLinePerWatch_AndTheCount()
     {
-        var bankPath = Path.Combine(_dataRoot, "v11-migration.db");
+        var bankPath = Path.Combine(_dataRoot, "watch-overlap-migration.db");
         SeedBankWithNestedWatches(bankPath);
         var logger = new FakeLogger<SqliteConnectionFactory>();
 
@@ -142,13 +143,16 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
         remaining.ShouldBe(["/repo"]);
 
         var records = logger.Collector.GetSnapshot();
-        records.ShouldContain(r => r.Message.Contains("/repo/src", StringComparison.Ordinal) &&
-                                    r.Message.Contains("/repo", StringComparison.Ordinal) &&
+        // EventId 901's exact message format: "watch overlap migration: removed {Path} (covered by {CoveredBy})".
+        records.ShouldContain(r => r.Message == "watch overlap migration: removed /repo/src (covered by /repo)" &&
                                     r.Level == LogLevel.Information);
-        records.ShouldContain(r => r.Message.Contains('1') && r.Level == LogLevel.Information);
+        // EventId 902's exact message format: "watch overlap migration: removed {Count} overlapping watch(es)".
+        records.ShouldContain(r => r.Message == "watch overlap migration: removed 1 overlapping watch(es)" &&
+                                    r.Level == LogLevel.Information);
     }
 
-    /// <summary>A pre-v11 bank (stamped user_version = 10) with a watch nested inside another.</summary>
+    /// <summary>A bank (stamped user_version = CurrentVersion) with a watch nested inside another —
+    /// the unconditional prune step must still reach it even though the bank is already current.</summary>
     private static void SeedBankWithNestedWatches(string bankPath)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(bankPath)!);
