@@ -310,6 +310,9 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<IVecDimensionReconciler, VecDimensionReconciler>();
             services.AddRequiredSingleton<IEntryEmbedder, EntryEmbedder>();
             services.AddRequiredSingleton<IEmbeddingAvailability, EmbeddingAvailability>();
+            // WP5 (§12.2 H5): the code corpus's own embedder — a second engine in the same keyed
+            // CreateGenerator cache, no IModelMigrationLease (the code corpus has no outbox).
+            services.AddRequiredSingleton<ICodeEmbedder, CodeEmbedder>();
         }
 
         /// <summary>Loops that only pay off in a long-lived host; a pure-stdio process is per-connection and recycled.</summary>

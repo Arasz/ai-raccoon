@@ -1,7 +1,10 @@
+using System.Globalization;
 using AiRaccoon.Core.Memory.Code;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Code;
+using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
@@ -10,10 +13,10 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration.Storage;
 
 /// <summary>
-///     WP6 — SqliteCodeSearchService, the FTS5-only v1 leg of code search
-///     (docs/work/2026-08-21-code-search-implementation-plan.md §3.6): project scoping, ranking
-///     normalization (rank 1 == 1.0, mirroring memory's RRF), minRelativeScore, empty-corpus, and
-///     code_get's hash round-trip. Rows are seeded directly by SQL (no CodeIngestor yet — WP3).
+///     WP5/WP6 — SqliteCodeSearchService: FTS5 + vec0 + RRF hybrid fusion, project scoping, ranking
+///     normalization (hybrid-score-relative, mirroring memory's RRF), minRelativeScore, empty-corpus,
+///     code_get's hash round-trip, and the degraded modes (unconfigured/unloadable engine). Rows are
+///     seeded directly by SQL (no CodeIngestor in this file — WP3).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -21,13 +24,15 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
 {
     private readonly string _dataRoot = TestData.CreateTempRoot("airaccoon-code-search-tests");
     private SqliteConnectionFactory _factory = null!;
+    private FakeCodeEmbedder _embedder = null!;
     private SqliteCodeSearchService _service = null!;
 
     public async ValueTask InitializeAsync()
     {
         var options = new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
-        _service = new SqliteCodeSearchService(_factory);
+        _embedder = new FakeCodeEmbedder();
+        _service = new SqliteCodeSearchService(_factory, _embedder);
         // Opening the bank once runs MemorySchema.EnsureAsync, so the code corpus tables exist
         // before any test seeds rows into them.
         await using var warm = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -156,6 +161,168 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
         var entry = await _service.GetAsync("acme", "hash-1", TestContext.Current.CancellationToken);
 
         entry.ShouldBeNull();
+    }
+
+    // ---- WP5: hybrid vector leg, weight-flip, relativeScore semantics, degraded modes ----
+
+    [Fact]
+    public async Task SearchAsync_VectorLegFindsAHitFtsNeverWouldMatch()
+    {
+        // FTS can never match this row (the query term appears nowhere in its text); only a
+        // genuine vector leg can surface it.
+        var vector = Repeat(1f);
+        await SeedEmbeddedAsync(id: 1, projectId: "acme", path: "src/Only.cs", value: "totally unrelated content",
+            lineStart: 1, lineEnd: 1, vector: vector);
+        _embedder.QueryVectorToReturn = new QueryVector(EmbeddingBlob.ToBytes(vector));
+
+        var results = await _service.SearchAsync(new CodeSearchQuery("acme", "SemanticQuery", 20, 0.0),
+            TestContext.Current.CancellationToken);
+
+        results.Results.ShouldHaveSingleItem().Hash.ShouldBe("hash-1",
+            "FTS alone would never match unrelated text; only the vector leg can surface this hit");
+    }
+
+    [Fact]
+    public async Task SearchAsync_VectorLeg_NeverLeaksAcrossProjects()
+    {
+        var vector = Repeat(1f);
+        await SeedEmbeddedAsync(id: 1, projectId: "other", path: "src/Only.cs", value: "totally unrelated content",
+            lineStart: 1, lineEnd: 1, vector: vector);
+        _embedder.QueryVectorToReturn = new QueryVector(EmbeddingBlob.ToBytes(vector));
+
+        var results = await _service.SearchAsync(new CodeSearchQuery("acme", "SemanticQuery", 20, 0.0),
+            TestContext.Current.CancellationToken);
+
+        results.Results.ShouldBeEmpty("vec_code's ctx = project_id partition must exclude another project's row");
+    }
+
+    [Fact]
+    public async Task SearchAsync_WeightFlip_VectorFavoredVsFtsFavoredOrderingChanges()
+    {
+        // Row A: strong FTS match, weak/opposite vector match. Row B: weak FTS match, exact vector match.
+        await SeedEmbeddedAsync(id: 1, projectId: "acme", path: "src/A.cs",
+            value: "class HeronCatcher HeronCatcher HeronCatcher { }", lineStart: 1, lineEnd: 1, vector: Repeat(-1f));
+        await SeedEmbeddedAsync(id: 2, projectId: "acme", path: "src/B.cs",
+            value: "class HeronCatcher { }", lineStart: 1, lineEnd: 1, vector: Repeat(1f));
+        _embedder.QueryVectorToReturn = new QueryVector(EmbeddingBlob.ToBytes(Repeat(1f)));
+        var query = new CodeSearchQuery("acme", "HeronCatcher", 20, 0.0);
+
+        await SetRetrievalWeightsAsync(ftsWeight: 100, vectorWeight: 1);
+        var ftsFavored = await _service.SearchAsync(query, TestContext.Current.CancellationToken);
+
+        await SetRetrievalWeightsAsync(ftsWeight: 1, vectorWeight: 100);
+        var vectorFavored = await _service.SearchAsync(query, TestContext.Current.CancellationToken);
+
+        ftsFavored.Results[0].Hash.ShouldBe("hash-1", "an FTS-weighted fusion must rank the stronger keyword match first");
+        vectorFavored.Results[0].Hash.ShouldBe("hash-2", "a vector-weighted fusion must rank the exact semantic match first");
+    }
+
+    [Fact]
+    public async Task SearchAsync_RelativeScore_ReflectsFusedRelevance_NotFtsRankAlone()
+    {
+        // row1: FTS-strong (term x3), never embedded -- absent from the vector leg entirely.
+        await SeedAsync(id: 1, projectId: "acme", path: "src/A.cs",
+            value: "class GriffinTracker GriffinTracker GriffinTracker { }", lineStart: 1, lineEnd: 1);
+        // row2: FTS-weak (term once), but its embedding exactly matches the query vector.
+        var vector = Repeat(1f);
+        await SeedEmbeddedAsync(id: 2, projectId: "acme", path: "src/B.cs",
+            value: "class GriffinTracker { }", lineStart: 1, lineEnd: 1, vector: vector);
+        _embedder.QueryVectorToReturn = new QueryVector(EmbeddingBlob.ToBytes(vector));
+
+        var results = await _service.SearchAsync(new CodeSearchQuery("acme", "GriffinTracker", 20, 0.0),
+            TestContext.Current.CancellationToken);
+
+        // Under the old FTS-only positional formula, row2 (FTS rank 2) would score exactly
+        // (k+1)/(k+2) -- a fixed constant derived from its FTS RANK alone. The hybrid fusion
+        // instead ranks it FIRST: a perfect vector match outweighs a merely-repeated keyword
+        // match once both legs are genuinely fused -- something pure rank position can never see.
+        results.Results[0].Hash.ShouldBe("hash-2",
+            "a perfect vector match must be able to outrank a stronger keyword match once both legs are fused");
+        results.Results[0].Ranking.ShouldBe(1.0);
+    }
+
+    [Fact]
+    public async Task SearchAsync_StructureAlphaSetting_DoesNotMoveCodeRanking()
+    {
+        await SeedEmbeddedAsync(id: 1, projectId: "acme", path: "src/A.cs",
+            value: "class KestrelSpotter KestrelSpotter { }", lineStart: 1, lineEnd: 1, vector: Repeat(-1f));
+        await SeedEmbeddedAsync(id: 2, projectId: "acme", path: "src/B.cs",
+            value: "class KestrelSpotter { }", lineStart: 1, lineEnd: 1, vector: Repeat(1f));
+        _embedder.QueryVectorToReturn = new QueryVector(EmbeddingBlob.ToBytes(Repeat(1f)));
+        var query = new CodeSearchQuery("acme", "KestrelSpotter", 20, 0.0);
+
+        await SetSettingAsync("retrieval.structureAlpha", "0.1");
+        var baseline = await _service.SearchAsync(query, TestContext.Current.CancellationToken);
+
+        await SetSettingAsync("retrieval.structureAlpha", "0.99");
+        var afterAlphaChange = await _service.SearchAsync(query, TestContext.Current.CancellationToken);
+
+        afterAlphaChange.Results.Select(r => (r.Hash, r.Ranking)).ShouldBe(
+            baseline.Results.Select(r => (r.Hash, r.Ranking)),
+            "code has no structure modality (§3.1) -- retrieval.structureAlpha must never move code ranking");
+    }
+
+    [Fact]
+    public async Task SearchAsync_NoCodeEngineConfigured_DegradesToFtsOnly_WithWarning()
+    {
+        await SeedAsync(id: 1, projectId: "acme", path: "src/A.cs", value: "class QuokkaFinder { }",
+            lineStart: 1, lineEnd: 1);
+
+        var results = await _service.SearchAsync(new CodeSearchQuery("acme", "QuokkaFinder", 20, 0.0),
+            TestContext.Current.CancellationToken);
+
+        results.Results.ShouldHaveSingleItem();
+        results.Warning.ShouldBe(CodeSearchWarnings.EngineNotConfigured);
+    }
+
+    [Fact]
+    public async Task SearchAsync_QueryTrimmedByEmbedder_CarriesCodeBudgetWarning()
+    {
+        _embedder.QueryVectorToReturn = new QueryVector(EmbeddingBlob.ToBytes(Repeat(1f))) { Trimmed = true };
+
+        var results = await _service.SearchAsync(new CodeSearchQuery("acme", "anything", 20, 0.0),
+            TestContext.Current.CancellationToken);
+
+        results.Warning.ShouldBe(CodeSearchWarnings.QueryTrimmedToCodeWindow);
+    }
+
+    [Fact]
+    public async Task SearchAsync_ConfiguredButUnloadable_ThrowsActionableError()
+    {
+        _embedder.ThrowOnEmbedQuery = new CodeEngineUnloadableException("/models/broken",
+            new InvalidOperationException("model.onnx is not a valid ONNX file"));
+
+        var ex = await Should.ThrowAsync<CodeEngineUnloadableException>(() => _service.SearchAsync(
+            new CodeSearchQuery("acme", "anything", 20, 0.0), TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldContain("/models/broken");
+    }
+
+    private static float[] Repeat(float value) => Enumerable.Repeat(value, 768).ToArray();
+
+    private async Task SetRetrievalWeightsAsync(int ftsWeight, int vectorWeight)
+    {
+        await SetSettingAsync("retrieval.ftsWeight", ftsWeight.ToString(CultureInfo.InvariantCulture));
+        await SetSettingAsync("retrieval.vectorWeight", vectorWeight.ToString(CultureInfo.InvariantCulture));
+    }
+
+    private async Task SetSettingAsync(string key, string value)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO settings (key, value) VALUES (@key, @value) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            new { key, value }, cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>Inserts pending, then flips to embedded via UPDATE -- vec_code_au only fires on UPDATE OF embed_state, never on INSERT.</summary>
+    private async Task SeedEmbeddedAsync(long id, string projectId, string path, string value, int lineStart,
+        int lineEnd, float[] vector)
+    {
+        await SeedAsync(id, projectId, path, value, lineStart, lineEnd);
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE code_entries SET embed_state = 'embedded', embedding = @embedding WHERE id = @id",
+            new { id, embedding = EmbeddingBlob.ToBytes(vector) }, cancellationToken: TestContext.Current.CancellationToken));
     }
 
     private async Task SeedAsync(long id, string projectId, string path, string value, int lineStart, int lineEnd)

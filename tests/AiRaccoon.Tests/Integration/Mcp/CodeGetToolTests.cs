@@ -31,7 +31,7 @@ public sealed class CodeGetToolTests : IAsyncLifetime
     {
         var options = new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
-        var codeSearch = new SqliteCodeSearchService(_factory);
+        var codeSearch = new SqliteCodeSearchService(_factory, new FakeCodeEmbedder());
         var settings = new SqliteSettingsStore(_factory);
         var access = new MemoryAccessGuard(new SettingsOnlyStore(settings));
         var gate = new ToolGate(access, new FakePromotionQueue());
