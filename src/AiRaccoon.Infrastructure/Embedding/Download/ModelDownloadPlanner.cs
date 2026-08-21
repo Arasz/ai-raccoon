@@ -103,6 +103,21 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
         var addBos = ReadBool(tokenizerConfigJson, "add_bos_token") ?? ReadBool(tokenizerConfigJson, "add_bos") ?? wrapsByDefault;
         var addEos = ReadBool(tokenizerConfigJson, "add_eos_token") ?? ReadBool(tokenizerConfigJson, "add_eos") ?? wrapsByDefault;
         var vocabOffset = FairseqVocabOffset(tokenizerConfigJson);
+        if (vocabOffset != 0 && specialTokensPending)
+        {
+            // #417 derives ids from the sp model's piece table, which numbers them its own way
+            // (<unk>=0, <s>=1). #416's vocabOffset exists because a fairseq model numbers them
+            // differently (<s>=0, <unk>=3). Combining the two writes the wrong bos and unk into the
+            // manifest and embeds them for every sequence — silently, exactly the failure the offset
+            // was added to fix. The fairseq convention would predict the right ids, but predicting
+            // is what produced the normalization and bos/eos defects this ADR already records.
+            throw new ModelDownloadPlanException(
+                $"'{ModelType(configJson)}' is a fairseq-offset tokenizer (vocabOffset {vocabOffset}) and its "
+                + "tokenizer_config.json ships no added_tokens_decoder, so the special-token ids can only be read "
+                + "from the sentencepiece piece table — which numbers them differently. Deriving them would embed "
+                + "the wrong <s>/<unk> for every sequence. Hand-write ai-raccoon.manifest.json for this model with "
+                + "its real special-token ids.");
+        }
 
         var dimensions = RequiredInt(configJson, "hidden_size", "dimensions");
         var contextWindowTokens = RequiredInt(configJson, "max_position_embeddings", "contextWindowTokens") - 2;
