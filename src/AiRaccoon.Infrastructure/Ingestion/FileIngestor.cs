@@ -85,15 +85,11 @@ public sealed class FileIngestor(
             return new FileIngestResult(0, true);
         }
 
-        var rows = await _codeIngestor.IngestFileAsync(connection, projectId, path, cancellationToken)
+        var result = await _codeIngestor.IngestFileAsync(connection, projectId, path, cancellationToken)
             .ConfigureAwait(false);
-        if (rows > 0)
-        {
-            return new FileIngestResult(rows, true);
-        }
-
-        var content = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
-        return new FileIngestResult(0, string.IsNullOrWhiteSpace(content));
+        return result.Rows > 0
+            ? new FileIngestResult(result.Rows, true)
+            : new FileIngestResult(0, result.ContentWhitespaceOnly);
     }
 
     /// <summary>
@@ -151,8 +147,8 @@ public sealed class FileIngestor(
             {
                 if (_codeFileTypeMatcher.IsCodeFile(file))
                 {
-                    indexed += await _codeIngestor.IngestFileAsync(connection, projectId, file, cancellationToken, scope)
-                        .ConfigureAwait(false);
+                    indexed += (await _codeIngestor.IngestFileAsync(connection, projectId, file, cancellationToken, scope)
+                        .ConfigureAwait(false)).Rows;
                 }
 
                 continue;

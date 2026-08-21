@@ -75,7 +75,7 @@ public sealed class CodeIngestorTests : IDisposable
 
             var result = await _ingestor.IngestFileAsync(_conn, "acme", file, TestContext.Current.CancellationToken);
 
-            result.ShouldBe(0);
+            result.Rows.ShouldBe(0);
             (await CountCodeEntriesAsync(file)).ShouldBe(0);
         }
         finally
@@ -99,7 +99,7 @@ public sealed class CodeIngestorTests : IDisposable
         var result = await _ingestor.IngestFileAsync(_conn, "acme", file, TestContext.Current.CancellationToken,
             scope: [_dataRoot]);
 
-        result.ShouldBe(1);
+        result.Rows.ShouldBe(1);
         (await CountCodeEntriesAsync(file)).ShouldBeGreaterThan(0);
     }
 
@@ -111,7 +111,7 @@ public sealed class CodeIngestorTests : IDisposable
 
         var result = await _ingestor.IngestFileAsync(_conn, "acme", file, TestContext.Current.CancellationToken);
 
-        result.ShouldBe(1);
+        result.Rows.ShouldBe(1);
         var rows = await CodeRowsAsync(file);
         rows.ShouldNotBeEmpty();
         ((bool)rows.All(r => (string)r.embed_state == "pending" && r.embedding == null)).ShouldBeTrue();
@@ -125,7 +125,7 @@ public sealed class CodeIngestorTests : IDisposable
 
         var result = await _ingestor.IngestFileAsync(_conn, "acme", file, TestContext.Current.CancellationToken);
 
-        result.ShouldBe(0);
+        result.Rows.ShouldBe(0);
         (await CountCodeEntriesAsync(file)).ShouldBe(0);
     }
 
@@ -137,7 +137,7 @@ public sealed class CodeIngestorTests : IDisposable
 
         var result = await _ingestor.IngestFileAsync(_conn, "acme", file, TestContext.Current.CancellationToken);
 
-        result.ShouldBe(0);
+        result.Rows.ShouldBe(0);
         (await CountCodeEntriesAsync(file)).ShouldBe(0);
     }
 

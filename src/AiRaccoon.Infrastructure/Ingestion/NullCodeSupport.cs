@@ -20,8 +20,8 @@ public sealed class NullCodeIngestor : ICodeIngestor
 {
     public static NullCodeIngestor Instance { get; } = new();
 
-    public Task<int> IngestFileAsync(SqliteConnection connection, string projectId, string path,
-        CancellationToken cancellationToken, IReadOnlyList<string>? scope = null) => Task.FromResult(0);
+    public Task<CodeIngestResult> IngestFileAsync(SqliteConnection connection, string projectId, string path,
+        CancellationToken cancellationToken, IReadOnlyList<string>? scope = null) => Task.FromResult(new CodeIngestResult(0, false));
 }
 
 /// <summary>Null object for callers that construct <see cref="FileIngestor" /> without watch-root

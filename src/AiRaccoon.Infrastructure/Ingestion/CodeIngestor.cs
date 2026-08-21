@@ -18,14 +18,14 @@ public sealed class CodeIngestor(
     ICodeChunker codeChunker,
     TimeProvider timeProvider) : ICodeIngestor
 {
-    public async Task<int> IngestFileAsync(SqliteConnection connection, string projectId, string path,
+    public async Task<CodeIngestResult> IngestFileAsync(SqliteConnection connection, string projectId, string path,
         CancellationToken cancellationToken, IReadOnlyList<string>? scope = null)
     {
         // S12: cheap self-filtering first — a hidden or non-code file returns 0 regardless of
         // scope, so it must not pay for (or fail on) a scope check it can never affect the outcome of.
         if (IsHidden(path) || !codeFileTypeMatcher.IsCodeFile(path))
         {
-            return 0;
+            return new CodeIngestResult(0, false);
         }
 
         var normalizedPath = IngestPath.Normalize(path);
@@ -42,7 +42,7 @@ public sealed class CodeIngestor(
         var chunks = codeChunker.Chunk(content);
         if (chunks.Count == 0)
         {
-            return 0;
+            return new CodeIngestResult(0, string.IsNullOrWhiteSpace(content));
         }
 
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
@@ -96,7 +96,7 @@ public sealed class CodeIngestor(
             inserted++;
         }
 
-        return inserted > 0 ? 1 : 0;
+        return new CodeIngestResult(inserted > 0 ? 1 : 0, false);
     }
 
     private static async Task RequireInScopeAsync(SqliteConnection connection, string projectId, string path,
