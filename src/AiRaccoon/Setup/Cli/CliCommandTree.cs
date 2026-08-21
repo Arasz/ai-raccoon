@@ -160,6 +160,16 @@ internal static class CliCommandTree
                     new Argument<string>("model") { HelpName = "model-id" }, new Argument<string?>("base-url") { HelpName = "url", Arity = ArgumentArity.ZeroOrOne },
                     new Option<string>("--api-key") { Description = "API key persisted in the settings table", HelpName = "key" }
                 }
+            },
+            new Command("download",
+                "Downloads a Hugging Face embedding model into <data-root>/models/<slug> with SHA-256 pins from the LFS oids (plan D4/D8): resolves the tree, verifies every file, writes ai-raccoon.manifest.json. Does NOT activate — 'model set local <dir>' is the explicit next step.")
+            {
+                new Argument<string>("repo-id") { HelpName = "repo-id" },
+                new Option<string>("--revision") { Description = "Revision to resolve (default main)", HelpName = "revision" },
+                new Option<string[]>("--file") { Description = "Download this repo-relative file instead of auto-selecting onnx/model.onnx (repeatable; external-data siblings are still enumerated)", HelpName = "path" },
+                new Option<string>("--dir") { Description = "Target directory (default <data-root>/models/<slug>)", HelpName = "path" },
+                new Option<bool>("--dry-run") { Description = "Resolve and print files, sizes and SHA-256 pins without downloading anything" },
+                new Option<bool>("--yes") { Description = "Skip the size confirmation for downloads larger than 500 MB" }
             }
         };
 

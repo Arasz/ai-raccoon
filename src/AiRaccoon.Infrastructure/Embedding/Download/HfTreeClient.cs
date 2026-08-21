@@ -17,22 +17,25 @@ public sealed class HfApiException(string message, Exception? inner = null) : Ex
 /// </summary>
 public sealed class HfTreeClient
 {
-    private const int PageSize = 1000;
     private static readonly Regex NextLinkPattern = new("<([^>]+)>;\\s*rel=\"next\"", RegexOptions.Compiled);
 
     private readonly HttpClient _http;
-    private readonly string _endpoint;
+
+    /// <summary>The shared client (downloads and raw fetches go through the same handler).</summary>
+    internal HttpClient Http => _http;
+
+    public string Endpoint { get; }
 
     public HfTreeClient(HttpClient http, string endpoint = "https://huggingface.co")
     {
         _http = http;
-        _endpoint = endpoint.TrimEnd('/');
+        Endpoint = endpoint.TrimEnd('/');
     }
 
     public async Task<IReadOnlyList<HfTreeEntry>> GetTreeAsync(string repoId, string revision, CancellationToken cancellationToken)
     {
         var entries = new List<HfTreeEntry>();
-        var url = $"{_endpoint}/api/models/{repoId}/tree/{revision}?recursive=true&expand=true&limit={PageSize}";
+        var url = $"{Endpoint}/api/models/{repoId}/tree/{revision}?recursive=true&expand=true";
         while (url is not null)
         {
             using var response = await _http.GetAsync(url, cancellationToken).ConfigureAwait(false);

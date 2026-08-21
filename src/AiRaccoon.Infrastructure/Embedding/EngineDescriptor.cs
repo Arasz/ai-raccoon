@@ -1,7 +1,6 @@
-namespace AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 
-/// <summary>A manifest-declared file: path relative to the model directory + sha256 pin (D1).</summary>
-internal sealed record ManifestFile(string Path, string Sha256);
+namespace AiRaccoon.Infrastructure.Embedding;
 
 /// <summary>
 ///     PROVISIONAL engine descriptor — lane B's WP3 adapter over the D1 manifest JSON shape

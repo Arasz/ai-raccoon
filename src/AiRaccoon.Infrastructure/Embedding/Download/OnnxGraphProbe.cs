@@ -11,20 +11,27 @@ public sealed record OnnxGraphProbe(
 /// <summary>The file is not a parseable ONNX protobuf (or the graph is malformed).</summary>
 public sealed class OnnxProbeException(string message, Exception? inner = null) : Exception(message, inner);
 
+/// <summary>Parses ONNX ModelProto bytes into the graph facts the downloader needs.</summary>
+public interface IOnnxGraphProbeReader
+{
+    /// <summary>Throws <see cref="OnnxProbeException" /> when the bytes are not a valid ONNX protobuf.</summary>
+    OnnxGraphProbe Read(byte[] onnxBytes);
+}
+
 /// <summary>
 ///     Reads the ONNX ModelProto with a minimal hand-rolled protobuf wire-format walker (no
 ///     protobuf dependency): ir_version, opset_import, graph inputs/outputs, and — the load-bearing
 ///     part — each initializer's external_data entries (D4 m6): the official bge-m3 export is a
 ///     stub model.onnx plus a 2.11 GiB model.onnx_data sibling that only the protobuf can name.
 ///     Unknown fields are skipped by wire type; malformed input fails with an actionable message.
+///     Stateless and injectable; file I/O is the caller's job (the service reads the stub it
+///     downloaded and passes the bytes).
 /// </summary>
-public static class OnnxGraphProbeReader
+public sealed class OnnxGraphProbeReader : IOnnxGraphProbeReader
 {
     private const int MaxDepth = 16;
 
-    public static OnnxGraphProbe Read(string onnxPath) => Read(File.ReadAllBytes(onnxPath));
-
-    public static OnnxGraphProbe Read(byte[] onnxBytes)
+    public OnnxGraphProbe Read(byte[] onnxBytes)
     {
         var builder = new ProbeBuilder();
         try

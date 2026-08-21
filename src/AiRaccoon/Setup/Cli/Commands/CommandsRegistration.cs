@@ -32,6 +32,7 @@ public static class CommandsRegistration
                 sp.GetRequiredService<IEncryptionSourceSidecar>(),
                 sp.GetRequiredService<ILogger<EncryptionCommands>>()));
             serviceCollection.AddSingleton<ConfigCommands>();
+            serviceCollection.AddSingleton<ModelDownloadCommands>();
             serviceCollection.RegisterNodeServices();
         }
     }

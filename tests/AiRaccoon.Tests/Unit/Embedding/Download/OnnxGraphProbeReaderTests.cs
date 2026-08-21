@@ -20,7 +20,7 @@ public class OnnxGraphProbeReaderTests
     {
         var model = TestOnnx.MinimalModelWithExternalData("model.onnx_data");
 
-        var probe = OnnxGraphProbeReader.Read(model);
+        var probe = Probe().Read(model);
 
         probe.ExternalDataFiles.ShouldBe(["model.onnx_data"]);
     }
@@ -30,7 +30,7 @@ public class OnnxGraphProbeReaderTests
     {
         var model = TestOnnx.MinimalModelWithExternalData("model.onnx_data");
 
-        var probe = OnnxGraphProbeReader.Read(model);
+        var probe = Probe().Read(model);
 
         probe.InputNames.ShouldBe(["input_ids", "attention_mask"]);
         probe.OutputNames.ShouldBe(["token_embeddings", "sentence_embedding"]);
@@ -39,7 +39,7 @@ public class OnnxGraphProbeReaderTests
     [Fact]
     public void ReadsIrAndOpsetVersions()
     {
-        var probe = OnnxGraphProbeReader.Read(TestOnnx.MinimalModelWithExternalData("w.bin"));
+        var probe = Probe().Read(TestOnnx.MinimalModelWithExternalData("w.bin"));
 
         probe.IrVersion.ShouldBe(6);
         probe.OpsetVersion.ShouldBe(17);
@@ -55,7 +55,7 @@ public class OnnxGraphProbeReaderTests
                 TestOnnx.TensorWithExternalData("w2", "model.onnx_data")
             ]);
 
-        var probe = OnnxGraphProbeReader.Read(model);
+        var probe = Probe().Read(model);
 
         probe.ExternalDataFiles.ShouldBe(["model.onnx_data"]);
     }
@@ -63,7 +63,7 @@ public class OnnxGraphProbeReaderTests
     [Fact]
     public void NoExternalData_YieldsEmptyList()
     {
-        var probe = OnnxGraphProbeReader.Read(TestOnnx.MinimalModel());
+        var probe = Probe().Read(TestOnnx.MinimalModel());
 
         probe.ExternalDataFiles.ShouldBeEmpty();
     }
@@ -75,7 +75,7 @@ public class OnnxGraphProbeReaderTests
         // must not be treated as required siblings.
         var model = TestOnnx.MinimalModel(initializers: [TestOnnx.TensorWithExternalData("w", "stray.bin", dataLocation: 0)]);
 
-        var probe = OnnxGraphProbeReader.Read(model);
+        var probe = Probe().Read(model);
 
         probe.ExternalDataFiles.ShouldBeEmpty();
     }
@@ -83,7 +83,7 @@ public class OnnxGraphProbeReaderTests
     [Fact]
     public void GarbageFile_Throws_WithActionableMessage()
     {
-        var ex = Should.Throw<OnnxProbeException>(() => OnnxGraphProbeReader.Read("not an onnx file"u8.ToArray()));
+        var ex = Should.Throw<OnnxProbeException>(() => Probe().Read("not an onnx file"u8.ToArray()));
 
         ex.Message.ShouldContain("ONNX", Case.Sensitive);
     }
@@ -93,8 +93,10 @@ public class OnnxGraphProbeReaderTests
     {
         var full = TestOnnx.MinimalModelWithExternalData("model.onnx_data");
 
-        Should.Throw<OnnxProbeException>(() => OnnxGraphProbeReader.Read(full[..(full.Length / 2)]));
+        Should.Throw<OnnxProbeException>(() => Probe().Read(full[..(full.Length / 2)]));
     }
+
+    private static OnnxGraphProbeReader Probe() => new();
 }
 
 /// <summary>

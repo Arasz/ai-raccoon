@@ -13,6 +13,7 @@ using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Embedding.Download;
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Extraction;
 using AiRaccoon.Infrastructure.Ingestion;
@@ -155,7 +156,7 @@ public static partial class AppRegistrations
             services.AddSingleton<IReadOnlyList<IMaintenanceJob>>(sp =>
             [
                 new ChunkBackfillJob(sp.GetRequiredService<IMarkdownChunker>(), sp.GetRequiredService<TimeProvider>(),
-                    sp.GetRequiredService<IEmbeddingService>()),
+                    sp.GetRequiredService<ILocalTokenizer>()),
                 new Vec0ReclaimJob(),
                 new VacuumJob(),
                 new MetricsRetentionJob(sp.GetRequiredService<TimeProvider>()),
@@ -166,9 +167,9 @@ public static partial class AppRegistrations
                 // Before PendingEmbedJob for the same reason ChunkBackfillJob is: a reingest repair
                 // leaves rows pending, and PendingEmbedJob, last in this list, already sees them by
                 // the time this same foreach reaches it.
-                new ChunkIndexRepairJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IEmbeddingService>(),
+                new ChunkIndexRepairJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<ILocalTokenizer>(),
                     sp.GetRequiredService<TimeProvider>()),
-                new ReingestRepairJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IEmbeddingService>(),
+                new ReingestRepairJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<ILocalTokenizer>(),
                     sp.GetRequiredService<IMemoryStore>(), sp.GetRequiredService<TimeProvider>()),
                 // ADR-0075 amendment: on-demand, same shape as the two repair jobs above —
                 // HasWorkAsync reads the promotion_queue_prune_requests row `extract prune --apply`
@@ -270,6 +271,12 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<IBundledModel, BundledModel>();
             services.AddRequiredSingleton<ILocalTokenizer, LocalTokenizer>();
             services.AddRequiredSingleton<IEmbeddingService, EmbeddingService>();
+            // WP2 model download: the planner and the ONNX protobuf probe are stateless services
+            // (repo invariant: no static classes with logic).
+            services.AddRequiredSingleton<IModelDownloadPlanner, ModelDownloadPlanner>();
+            services.AddRequiredSingleton<IOnnxGraphProbeReader, OnnxGraphProbeReader>();
+            services.AddRequiredSingleton<IOnnxSmokeTester, OrtOnnxSmokeTester>();
+            services.AddRequiredSingleton<IDiskSpaceProvider, DiskSpaceProvider>();
             // ADR-0076: the migration lease EntryEmbedder's DrainMigrationAsync needs; registered
             // before IEntryEmbedder so constructor injection resolves it.
             services.AddRequiredSingleton<IModelMigrationLease, SqliteModelMigrationLease>();

@@ -56,6 +56,8 @@ public class ModelDownloadPlannerTests
         OpsetVersion: 17);
 
     /// <summary>Probe for ad-hoc trees that omit the external-data sibling.</summary>
+    private static ModelDownloadPlanner Planner() => new();
+
     private static OnnxGraphProbe NoExternalProbe() => BgeM3Probe() with { ExternalDataFiles = [] };
 
     private static IReadOnlyList<HfTreeEntry> BgeM3Tree() =>
@@ -75,7 +77,7 @@ public class ModelDownloadPlannerTests
     {
         var tree = BgeM3Tree().Append(RootOnnx).ToList();
 
-        var plan = ModelDownloadPlanner.BuildPlan("BAAI/bge-m3", "main", tree, BgeM3Raw(), BgeM3Probe());
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", tree, BgeM3Raw(), BgeM3Probe());
 
         plan.ModelFilePath.ShouldBe("onnx/model.onnx");
     }
@@ -85,7 +87,7 @@ public class ModelDownloadPlannerTests
     {
         var tree = new List<HfTreeEntry> { RootOnnx, Vocab, new("config.json", "file", 100, null), new("tokenizer_config.json", "file", 100, null) };
 
-        var plan = ModelDownloadPlanner.BuildPlan("test/model", "main", tree,
+        var plan = Planner().BuildPlan("test/model", "main", tree,
             new Dictionary<string, string>
             {
                 ["config.json"] = """{"model_type": "bert", "hidden_size": 384, "max_position_embeddings": 258}""",
@@ -103,7 +105,7 @@ public class ModelDownloadPlannerTests
         var tree = new List<HfTreeEntry> { Spm };
 
         var ex = Should.Throw<ModelDownloadPlanException>(() =>
-            ModelDownloadPlanner.BuildPlan("BAAI/bge-m3", "main", tree, BgeM3Raw(), BgeM3Probe()));
+            Planner().BuildPlan("BAAI/bge-m3", "main", tree, BgeM3Raw(), BgeM3Probe()));
 
         ex.Message.ShouldContain("onnx/model.onnx");
         ex.Message.ShouldContain("model.onnx");
@@ -112,7 +114,7 @@ public class ModelDownloadPlannerTests
     [Fact]
     public void ExternalData_FromProbe_Appended_AndLfsPinned()
     {
-        var plan = ModelDownloadPlanner.BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), BgeM3Probe());
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), BgeM3Probe());
 
         plan.ModelFiles.Select(f => f.Path).ShouldBe(["onnx/model.onnx", "onnx/model.onnx_data"]);
         plan.ModelFiles.Single(f => f.Path == "onnx/model.onnx_data").LfsSha256.ShouldBe(DataOid);
@@ -121,7 +123,7 @@ public class ModelDownloadPlannerTests
     [Fact]
     public void ExternalData_GlobFallback_WhenProbeIsNull_DryRun()
     {
-        var plan = ModelDownloadPlanner.BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), probe: null);
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), probe: null);
 
         plan.ModelFiles.Select(f => f.Path).ShouldBe(["onnx/model.onnx", "onnx/model.onnx_data"]);
         plan.ModelFiles.Single(f => f.Path == "onnx/model.onnx_data").Size.ShouldBe(2_266_820_608);
@@ -133,7 +135,7 @@ public class ModelDownloadPlannerTests
         var tree = BgeM3Tree().Where(e => e.Path != "onnx/model.onnx_data").ToList();
 
         var ex = Should.Throw<ModelDownloadPlanException>(() =>
-            ModelDownloadPlanner.BuildPlan("BAAI/bge-m3", "main", tree, BgeM3Raw(), BgeM3Probe()));
+            Planner().BuildPlan("BAAI/bge-m3", "main", tree, BgeM3Raw(), BgeM3Probe()));
 
         ex.Message.ShouldContain("model.onnx_data");
         ex.Message.ShouldContain("external");
@@ -164,12 +166,12 @@ public class ModelDownloadPlannerTests
         {
             // D5 gate: tokenizer-json downloads are refused until ML.Tokenizers can consume them.
             var ex = Should.Throw<ModelDownloadPlanException>(() =>
-                ModelDownloadPlanner.BuildPlan("test/model", "main", tree, raw, NoExternalProbe()));
+                Planner().BuildPlan("test/model", "main", tree, raw, NoExternalProbe()));
             ex.Message.ShouldContain("tokenizer-json");
             return;
         }
 
-        var plan = ModelDownloadPlanner.BuildPlan("test/model", "main", tree, raw, NoExternalProbe());
+        var plan = Planner().BuildPlan("test/model", "main", tree, raw, NoExternalProbe());
         plan.TokenizerFiles.Select(f => f.Path).ShouldBe([expectedFile]);
         plan.TokenizerFamily.ShouldBe(FamilyOf(expectedFamily));
     }
@@ -180,7 +182,7 @@ public class ModelDownloadPlannerTests
         var tree = new List<HfTreeEntry> { Onnx, Config, TokenizerConfig };
 
         var ex = Should.Throw<ModelDownloadPlanException>(() =>
-            ModelDownloadPlanner.BuildPlan("test/model", "main", tree, BgeM3Raw("gpt-neo-x"), NoExternalProbe()));
+            Planner().BuildPlan("test/model", "main", tree, BgeM3Raw("gpt-neo-x"), NoExternalProbe()));
 
         ex.Message.ShouldContain("gpt-neo-x");
         ex.Message.ShouldContain("bert");
@@ -192,7 +194,7 @@ public class ModelDownloadPlannerTests
         var tree = new List<HfTreeEntry> { Onnx, Config, TokenizerConfig }; // no sentencepiece.bpe.model
 
         var ex = Should.Throw<ModelDownloadPlanException>(() =>
-            ModelDownloadPlanner.BuildPlan("BAAI/bge-m3", "main", tree, BgeM3Raw(), NoExternalProbe()));
+            Planner().BuildPlan("BAAI/bge-m3", "main", tree, BgeM3Raw(), NoExternalProbe()));
 
         ex.Message.ShouldContain("sentencepiece.bpe.model");
     }
@@ -203,7 +205,7 @@ public class ModelDownloadPlannerTests
         var raw = new Dictionary<string, string> { ["onnx/tokenizer_config.json"] = XlmRobertaTokenizerConfig };
 
         var ex = Should.Throw<ModelDownloadPlanException>(() =>
-            ModelDownloadPlanner.BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), raw, BgeM3Probe()));
+            Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), raw, BgeM3Probe()));
 
         ex.Message.ShouldContain("config.json");
     }
@@ -214,7 +216,7 @@ public class ModelDownloadPlannerTests
         var raw = new Dictionary<string, string> { ["onnx/config.json"] = XlmRobertaConfig };
 
         var ex = Should.Throw<ModelDownloadPlanException>(() =>
-            ModelDownloadPlanner.BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), raw, BgeM3Probe()));
+            Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), raw, BgeM3Probe()));
 
         ex.Message.ShouldContain("tokenizer_config.json");
     }
@@ -222,7 +224,7 @@ public class ModelDownloadPlannerTests
     [Fact]
     public void DimsAndContext_FromConfigJson()
     {
-        var plan = ModelDownloadPlanner.BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), BgeM3Probe());
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), BgeM3Probe());
 
         plan.Dimensions.ShouldBe(1024);
         plan.ContextWindowTokens.ShouldBe(8192); // max_position_embeddings 8194 − 2
@@ -231,7 +233,7 @@ public class ModelDownloadPlannerTests
     [Fact]
     public void SpecialTokenIds_FromAddedTokensDecoder_NeverGuessed()
     {
-        var plan = ModelDownloadPlanner.BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), BgeM3Probe());
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), BgeM3Probe());
 
         plan.SpecialTokens.Count.ShouldBe(4);
         plan.SpecialTokens["<s>"].ShouldBe(0);
@@ -251,7 +253,7 @@ public class ModelDownloadPlannerTests
         var tokenizerConfig = XlmRobertaTokenizerConfig.Replace("\"content\": \"<s>\"", "\"content\": \"<renamed>\"");
 
         var ex = Should.Throw<ModelDownloadPlanException>(() =>
-            ModelDownloadPlanner.BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(),
+            Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(),
                 new Dictionary<string, string>
                 {
                     ["onnx/config.json"] = XlmRobertaConfig,
@@ -270,7 +272,7 @@ public class ModelDownloadPlannerTests
         raw["1_Pooling/config.json"] = """{"word_embedding_dimension": 1024, "pooling_mode_cls_token": true, "pooling_mode_mean_tokens": false}""";
         raw["modules.json"] = """[{"idx": 0, "name": "1_Pooling", "path": "", "type": "sentence_transformers.models.Pooling"}, {"idx": 1, "name": "2_Normalize", "path": "", "type": "sentence_transformers.models.Normalize"}]""";
 
-        var plan = ModelDownloadPlanner.BuildPlan("BAAI/bge-m3", "main", tree, raw, BgeM3Probe());
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", tree, raw, BgeM3Probe());
 
         plan.PoolingMode.ShouldBe(PoolingMode.Cls);
         plan.Normalization.ShouldBe(NormalizationMode.L2);
@@ -280,7 +282,7 @@ public class ModelDownloadPlannerTests
     [Fact]
     public void Pooling_Placeholder_WhenSentenceTransformersLayoutAbsent()
     {
-        var plan = ModelDownloadPlanner.BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), BgeM3Probe());
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), BgeM3Probe());
 
         plan.PoolingMode.ShouldBe(PoolingMode.ModelOutput);
         plan.PoolingProvenance.ShouldContain("placeholder");
@@ -291,7 +293,7 @@ public class ModelDownloadPlannerTests
     {
         var probe = BgeM3Probe() with { OutputNames = ["token_embeddings"] };
 
-        var plan = ModelDownloadPlanner.BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), probe);
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), probe);
 
         plan.PoolingMode.ShouldBe(PoolingMode.Cls);
         plan.EmbeddingOutput.ShouldBeNull();
@@ -307,7 +309,7 @@ public class ModelDownloadPlannerTests
         raw["modules.json"] = "[]";
 
         var ex = Should.Throw<ModelDownloadPlanException>(() =>
-            ModelDownloadPlanner.BuildPlan("BAAI/bge-m3", "main", tree, raw, BgeM3Probe()));
+            Planner().BuildPlan("BAAI/bge-m3", "main", tree, raw, BgeM3Probe()));
 
         ex.Message.ShouldContain("weightedmean");
     }
@@ -317,7 +319,7 @@ public class ModelDownloadPlannerTests
     {
         var probe = BgeM3Probe() with { InputNames = ["input_ids", "attention_mask", "token_type_ids"] };
 
-        var plan = ModelDownloadPlanner.BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), probe);
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), probe);
 
         plan.RequiresTokenTypeIds.ShouldBeTrue();
         plan.Inputs.ShouldBe(["input_ids", "attention_mask", "token_type_ids"]);
@@ -326,7 +328,7 @@ public class ModelDownloadPlannerTests
     [Fact]
     public void NonLfsFiles_AreTofuPinned_WithNullSha()
     {
-        var plan = ModelDownloadPlanner.BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), BgeM3Probe());
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), BgeM3Probe());
 
         plan.Files.Single(f => f.Path == "onnx/config.json").LfsSha256.ShouldBeNull();
         plan.Files.Single(f => f.Path == "onnx/model.onnx").LfsSha256.ShouldBe(OnnxOid);
