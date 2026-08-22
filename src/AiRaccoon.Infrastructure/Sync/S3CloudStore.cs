@@ -145,9 +145,19 @@ public sealed partial class S3CloudStore : ICloudStore
             ForcePathStyle = true
         };
 
+        // RegionEndpoint and ServiceURL are mutually exclusive in the SDK: the RegionEndpoint
+        // setter nulls ServiceURL. Keep ServiceURL for a custom endpoint and carry the region
+        // as the SigV4 signing region instead.
         if (!string.IsNullOrWhiteSpace(options.Region))
         {
-            config.RegionEndpoint = RegionEndpoint.GetBySystemName(options.Region);
+            if (string.IsNullOrWhiteSpace(options.Endpoint))
+            {
+                config.RegionEndpoint = RegionEndpoint.GetBySystemName(options.Region);
+            }
+            else
+            {
+                config.AuthenticationRegion = options.Region;
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(options.AccessKey) && !string.IsNullOrWhiteSpace(options.SecretKey))
