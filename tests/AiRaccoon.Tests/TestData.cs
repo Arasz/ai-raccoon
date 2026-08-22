@@ -2,6 +2,7 @@ using AiRaccoon.Infrastructure.Embedding.Manifest;
 using System.Security.Cryptography;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.EventPump;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.Filtering;
@@ -17,6 +18,7 @@ using AiRaccoon.Infrastructure.Embedding.Download;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
@@ -69,7 +71,8 @@ public static class TestData
         IEnumerable<INoiseFilterPolicy>? noisePolicies = null,
         ISettingsStore? settings = null,
         ICodeChunker? codeChunker = null,
-        IIgnoreRulesProvider? ignoreRulesProvider = null)
+        IIgnoreRulesProvider? ignoreRulesProvider = null,
+        IEventPump<EmbedDrainRequest>? embedDrainPump = null)
     {
         jsonChunker ??= RealJsonChunker(markdownChunker);
         var embedder = new EntryEmbedder(embeddings, modelMigrationLease ?? ModelMigrationLease, timeProvider);
@@ -77,12 +80,55 @@ public static class TestData
             [new MarkdownFileTypeHandler(markdownChunker), new JsonFileTypeHandler(jsonChunker)]);
         var codeFileTypeMatcher = codeChunker is null ? null : new CodeFileTypeMatcher();
         var codeIngestor = codeChunker is null ? null : new CodeIngestor(new CodeFileTypeMatcher(), codeChunker, timeProvider);
-        var fileIngestor = new FileIngestor(matcher, embedder, sourceStore, timeProvider, embeddings,
+        var pump = embedDrainPump ?? NullEmbedDrainPump.Instance;
+        var fileIngestor = NewFileIngestor(matcher, sourceStore, timeProvider, embeddings,
             ignoreRulesProvider: ignoreRulesProvider,
-            codeFileTypeMatcher: codeFileTypeMatcher, codeIngestor: codeIngestor);
+            codeFileTypeMatcher: codeFileTypeMatcher, codeIngestor: codeIngestor, embedDrainPump: pump);
         var noiseFilteringService = new NoiseFilteringService(noisePolicies ?? []);
         return new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService,
-            settings ?? new SqliteSettingsStore(factory));
+            settings ?? new SqliteSettingsStore(factory), pump);
+    }
+
+    /// <summary>
+    ///     <see cref="FileIngestor" /> with production's own required-dependency shape: every
+    ///     optional collaborator a test doesn't care about gets the matching Null object explicitly,
+    ///     rather than every call site hand-wiring five extra constructor arguments (WP11-B2's
+    ///     embedInline removal made these required; see docs/work/2026-08-22-post-delta-3-plan.md).
+    /// </summary>
+    public static FileIngestor NewFileIngestor(
+        IFileTypeMatcher fileTypeMatcher,
+        IMemorySourceStore sourceStore,
+        TimeProvider timeProvider,
+        IEmbeddingService embeddingService,
+        IIgnoreRulesProvider? ignoreRulesProvider = null,
+        ICodeFileTypeMatcher? codeFileTypeMatcher = null,
+        ICodeIngestor? codeIngestor = null,
+        IWatchStore? watchStore = null,
+        IEventPump<EmbedDrainRequest>? embedDrainPump = null) =>
+        new(fileTypeMatcher, sourceStore, timeProvider, embeddingService,
+            ignoreRulesProvider ?? NullIgnoreRulesProvider.Instance,
+            codeFileTypeMatcher ?? NullCodeFileTypeMatcher.Instance,
+            codeIngestor ?? NullCodeIngestor.Instance,
+            watchStore ?? NullWatchStore.Instance,
+            embedDrainPump ?? NullEmbedDrainPump.Instance);
+
+    /// <summary>
+    ///     Drains every embed-topic request currently queued the same way
+    ///     <see cref="EmbedDrainService" />'s own consumer would — one <c>DrainOnceAsync</c> pass per
+    ///     queued item — without starting the hosted service. The one place tests share this instead
+    ///     of hand-rolling a drain loop per file (a write leaves rows <c>pending</c> and enqueues;
+    ///     nothing embeds until this runs).
+    /// </summary>
+    public static async Task DrainEmbedTopicAsync(ISqliteConnectionFactory factory,
+        IEventPump<EmbedDrainRequest> pump, IEntryEmbedder entryEmbedder, ICodeEmbedder? codeEmbedder = null,
+        CancellationToken cancellationToken = default)
+    {
+        var service = new EmbedDrainService(pump, factory, entryEmbedder, codeEmbedder ?? new FakeCodeEmbedder(),
+            TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
+        foreach (var request in pump.DrainUpTo(int.MaxValue))
+        {
+            await service.DrainOnceAsync(request, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
