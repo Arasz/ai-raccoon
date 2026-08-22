@@ -144,7 +144,7 @@ def safe_id(name: str) -> str:
 # own ADRs (0047/0049/0050/0090) legitimately discuss the removed private corpus by name as
 # historical fact; their excerpts are excluded from THIS corpus rather than from the
 # corpus_config selection itself, which still ingests them into docs-memory.db — a different
-# fixture with a different guard (ADR-0090's PrivateJsaaBank_IsAbsentFromTheTree).
+# fixture with its own separate private-bank-absence guard (ADR-0090).
 _FORBIDDEN_TOKENS = (
     "js" + "aa",
     "job-search-ai-" + "assistant",
