@@ -1,7 +1,7 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
-using AiRaccoon.Infrastructure.Watch;
+using AiRaccoon.Core.Watch;
 using AiRaccoon.Settings;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;

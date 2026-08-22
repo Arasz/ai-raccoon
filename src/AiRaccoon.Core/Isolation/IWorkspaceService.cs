@@ -1,10 +1,8 @@
-using AiRaccoon.Core.Isolation;
-
-namespace AiRaccoon.Infrastructure.Workspace;
+namespace AiRaccoon.Core.Isolation;
 
 public interface IWorkspaceService
 {
-    Task<Core.Isolation.Workspace> BeginAsync(string projectId, string? agentId = null, string? name = null,
+    Task<Workspace> BeginAsync(string projectId, string? agentId = null, string? name = null,
         CancellationToken cancellationToken = default);
 
     Task<WorkspaceOutbox> GetStatusAsync(string projectId, string workspaceId,
