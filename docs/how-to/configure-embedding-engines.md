@@ -103,6 +103,22 @@ ai-raccoon model download faxenoff/code-daemon-embed-v1
 ai-raccoon model set code local <data-root>/models/faxenoff__code-daemon-embed-v1
 ```
 
+`faxenoff/code-daemon-embed-v1`'s HF repo ships no `added_tokens_decoder` in its
+`tokenizer_config.json`; `model download` derives the special-token ids from the
+sentencepiece model file's own piece table instead (issue #417, verified against a real
+download) — still refusing, naming the missing piece, if a declared token isn't in that
+table (D1: never guessed).
+
+> **Separate, pre-existing gap:** the repo's `config.json` gives it a 512-token context
+> window, but the code corpus's chunker is hard-pinned to a 126-token budget (no
+> manifest-aware chunking yet, v2 — `SqliteCodeEngineStore.ActivateCodeEngineAsync`
+> refuses on purpose rather than silently over/under-filling every chunk). A plain
+> `model download` therefore writes a manifest that `model set code local` still
+> refuses, naming the mismatch. Until v2 lands, edit the downloaded
+> `ai-raccoon.manifest.json`'s `contextWindowTokens` down to `128` (as
+> `tests/AiRaccoon.Tests/Resources/ManifestFixtures/code-daemon-embed-v1.json` does) before
+> running `model set code local` — the rest of the recipe then works as documented.
+
 `vec_code` is a fixed `float[768]` index — unlike the memory engine, there is **no**
 dimension-reconcile phase, so `model set code local` refuses a manifest whose
 `dimensions` is not `768` before anything commits, naming the declared value and the

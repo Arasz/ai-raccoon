@@ -97,9 +97,10 @@ public static class ModelSlug
 ///     config provenance, plan (glob external data for the pre-download size guard), guard the
 ///     size (&gt;500 MB needs --yes or an interactive confirm) and disk space, download the ONNX
 ///     stub, re-plan from the protobuf (external-data enumeration), download everything
-///     verify-or-delete via the <c>BundledResource.IsVerified</c> pattern, run the ORT opset
-///     smoke test, and only then write manifest.json. Any failure removes this run's files and
-///     .part residue — a pre-existing verified model in the same directory is left intact.
+///     verify-or-delete via the <c>BundledResource.IsVerified</c> pattern, derive any pending
+///     sentencepiece special-token ids from the now-downloaded sp model file (issue #417), run the
+///     ORT opset smoke test, and only then write manifest.json. Any failure removes this run's
+///     files and .part residue — a pre-existing verified model in the same directory is left intact.
 /// </summary>
 public sealed class ModelDownloadService(
     HfTreeClient treeClient,
@@ -109,7 +110,8 @@ public sealed class ModelDownloadService(
     IOnnxSmokeTester smokeTester,
     IDiskSpaceProvider diskSpace,
     IEmbeddingManifestSerializer manifestSerializer,
-    IEmbeddingManifestValidator manifestValidator)
+    IEmbeddingManifestValidator manifestValidator,
+    ISentencePieceVocabularyReader vocabularyReader)
 {
     /// <summary>Downloads above this total size require --yes (plan §8.3 multi-GB guard).</summary>
     public const long LargeDownloadThresholdBytes = 500L * 1024 * 1024;
@@ -155,6 +157,11 @@ public sealed class ModelDownloadService(
                 await DownloadVerifiedAsync(request, file, plan.ModelFilePath, targetDir, downloaded, cleanup, cancellationToken).ConfigureAwait(false);
             }
 
+            if (plan.SpecialTokensPending)
+            {
+                plan = ResolveDeferredSpecialTokens(plan, request, tree, rawFiles, probe, targetDir);
+            }
+
             // ORT opset smoke test at download-verify time (D4 m10) — before the manifest exists,
             // so a model that cannot load is never recorded as installed.
             try
@@ -173,6 +180,29 @@ public sealed class ModelDownloadService(
         {
             Cleanup(targetDir, cleanup, createdTargetDir);
             throw;
+        }
+    }
+
+    /// <summary>
+    ///     Issue #417 (D1-compatible option 2): a sentencepiece repo whose tokenizer_config.json
+    ///     ships no added_tokens_decoder derives special-token ids from the downloaded sp model's
+    ///     own piece table — now that the tokenizer file is on disk — instead of refusing outright.
+    ///     Still refuses (D1: never guessed) when a required piece is absent from that table.
+    /// </summary>
+    private ModelDownloadPlan ResolveDeferredSpecialTokens(
+        ModelDownloadPlan plan, ModelDownloadRequest request, IReadOnlyList<HfTreeEntry> tree,
+        IReadOnlyDictionary<string, string> rawFiles, OnnxGraphProbe? probe, string targetDir)
+    {
+        var tokenizerFile = plan.TokenizerFiles.Single();
+        var tokenizerPath = Path.Combine(targetDir, TargetPath(tokenizerFile.Path, plan.ModelFilePath));
+        var vocabulary = vocabularyReader.Read(tokenizerPath);
+        try
+        {
+            return planner.BuildPlan(request.RepoId, request.Revision, tree, rawFiles, probe, request.ExplicitFiles, vocabulary);
+        }
+        catch (ModelDownloadPlanException ex)
+        {
+            throw new ModelDownloadException(ex.Message, ex);
         }
     }
 
