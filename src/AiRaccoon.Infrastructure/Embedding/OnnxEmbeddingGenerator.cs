@@ -41,7 +41,11 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     /// </summary>
     public int Dimension { get; }
 
-    internal OnnxEmbeddingGenerator(string modelPath, IEmbeddingTokenizer tokenizer, EngineDescriptor descriptor, ILogger logger)
+    /// <summary>ORT intra-op threads this session was built with (WP11-A/G16); 0 means ORT's own default.</summary>
+    public int IntraOpThreads { get; }
+
+    internal OnnxEmbeddingGenerator(string modelPath, IEmbeddingTokenizer tokenizer, EngineDescriptor descriptor, ILogger logger,
+        int intraOpThreads = 0)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
         _logger = logger;
@@ -50,7 +54,16 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
         _pooling = descriptor.Pooling;
         _normalization = descriptor.Normalization;
         _inputNames = descriptor.InputNames;
-        _session = new InferenceSession(modelPath);
+        IntraOpThreads = intraOpThreads;
+        if (intraOpThreads > 0)
+        {
+            using var sessionOptions = new SessionOptions { IntraOpNumThreads = intraOpThreads };
+            _session = new InferenceSession(modelPath, sessionOptions);
+        }
+        else
+        {
+            _session = new InferenceSession(modelPath);
+        }
 
         ValidateInputNames(descriptor);
         if (_pooling == "model-output" && string.IsNullOrWhiteSpace(descriptor.EmbeddingOutput))
