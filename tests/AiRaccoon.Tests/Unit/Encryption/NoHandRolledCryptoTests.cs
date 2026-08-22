@@ -17,9 +17,10 @@ public sealed class NoHandRolledCryptoTests
     {
         "AiRaccoon.Core/Memory/ContentHash.cs",
         "AiRaccoon.Infrastructure/Embedding/BundledModel.cs",
-        // WP2 model download: SHA-256 file-integrity pins (LFS oid verification, BundledResource
-        // IsVerified pattern) — content addressing, never key material.
-        "AiRaccoon.Infrastructure/Embedding/Download/ModelDownloadService.cs",
+        // D1/D2: the one file-hash helper the manifest pin check and the download writer both use
+        // (WP2 model download's LFS-oid verification, BundledResource IsVerified pattern; D1's
+        // activation pin check) — content addressing, never key material.
+        "AiRaccoon.Infrastructure/Embedding/FileHasher.cs",
         // D7 engine fingerprint: SHA-256 over the manifest file's bytes so a re-download with new
         // weights changes the fingerprint and re-embeds — content addressing, never key material.
         "AiRaccoon.Infrastructure/Embedding/EmbeddingService.cs",
