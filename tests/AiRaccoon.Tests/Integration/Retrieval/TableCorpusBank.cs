@@ -77,8 +77,9 @@ internal sealed class TableCorpusBank : IAsyncDisposable
 
         var options = TestData.CreateInfrastructureOptions(dataRoot);
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+        var clock = new FakeTimeProvider(FixedNow);
         var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance,
-            new SqliteMemorySourceStore(factory), chunker, new FakeTimeProvider(FixedNow),
+            new SqliteMemorySourceStore(factory), chunker, clock,
             TestData.CreateEmbeddingService());
 
         var ensured = await TestData.CreateBundledModel().EnsureAsync(cancellationToken);
@@ -89,7 +90,7 @@ internal sealed class TableCorpusBank : IAsyncDisposable
         }
 
         await TestData.ConfigureAndDrainEmbeddingAsync(store, factory, TestData.CreateEmbeddingService(),
-            "local", null, null, cancellationToken);
+            "local", null, null, cancellationToken, clock);
 
         var corpusRoot = TableCorpusCatalog.CorpusRoot();
         await store.SetSettingAsync(IngestScopeKeys.ScopeProject(ProjectId),

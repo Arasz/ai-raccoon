@@ -31,6 +31,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
     private readonly string _dataRoot = CreateTempRoot();
+    private readonly FakeTimeProvider _clock = new(FixedNow);
     private readonly SqliteConnectionFactory _factory;
     private readonly SqliteMemoryStore _store;
 
@@ -39,7 +40,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         _factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
-        _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
+        _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock,
             TestData.CreateEmbeddingService());
     }
 
@@ -606,7 +607,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     public async Task ConfigureEmbedding_StoresProviderAndModel_InSettings()
     {
         var config = await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
-            "openai", "nomic-embed-text", null, TestContext.Current.CancellationToken);
+            "openai", "nomic-embed-text", null, TestContext.Current.CancellationToken, _clock);
 
         config.Provider.ShouldBe("openai");
         config.Model.ShouldBe("nomic-embed-text");

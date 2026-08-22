@@ -125,8 +125,8 @@ public sealed class SearchFixtureBank : IAsyncDisposable
         // needs the engine usable before EmbedPendingAsync runs below.
         await store.StartModelMigrationAsync("openai", "bench-embed-model", embeddings.BaseUrl, cancellationToken)
             .ConfigureAwait(false);
-        var drainEmbedder = new EntryEmbedder(embeddingService, new SqliteModelMigrationLease(TimeProvider.System),
-            TimeProvider.System);
+        var drainEmbedder = new EntryEmbedder(embeddingService, new SqliteModelMigrationLease(TimeProvider),
+            TimeProvider);
         await using (var migrationConnection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false))
         {
             await drainEmbedder.DrainMigrationAsync(migrationConnection, cancellationToken).ConfigureAwait(false);

@@ -44,11 +44,12 @@ public sealed class WriteEmbedsContentExactlyOnceTests : IAsyncLifetime
     public async Task Write_WithAnEngineConfigured_EmbedsTheContentExactlyOnce()
     {
         var embeddings = new CountingEmbeddingService();
+        var clock = new FakeTimeProvider(FixedNow);
         var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
-            new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
+            new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), clock,
             embeddings);
         await TestData.ConfigureAndDrainEmbeddingAsync(store, _factory, embeddings,
-            "local", null, null, TestContext.Current.CancellationToken);
+            "local", null, null, TestContext.Current.CancellationToken, clock);
 
         await store.WriteAsync(new MemoryWriteRequest("acme", "single embed guarantee fact"),
             TestContext.Current.CancellationToken);

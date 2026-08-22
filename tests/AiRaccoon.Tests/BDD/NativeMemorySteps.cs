@@ -306,19 +306,23 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
 
     [When(@"^I call memory_configure with provider ""([^""]*)""$")]
     public async Task WhenIConfigureProvider(string provider) => await TestData.ConfigureAndDrainEmbeddingAsync(
-        _store, _ctx.Factory, TestData.CreateEmbeddingService(), provider, null, null, CancellationToken.None);
+        _store, _ctx.Factory, TestData.CreateEmbeddingService(), provider, null, null, CancellationToken.None,
+        _ctx.TimeProvider);
 
     [When(@"^I call memory_configure with provider ""([^""]*)"" and a model path$")]
     public async Task WhenIConfigureProviderWithModelPath(string provider) => await TestData.ConfigureAndDrainEmbeddingAsync(
-        _store, _ctx.Factory, TestData.CreateEmbeddingService(), provider, EnsureCustomModelCopy(), null, CancellationToken.None);
+        _store, _ctx.Factory, TestData.CreateEmbeddingService(), provider, EnsureCustomModelCopy(), null,
+        CancellationToken.None, _ctx.TimeProvider);
 
     [When("I call memory_configure with a different engine")]
     public async Task WhenIConfigureDifferentEngine() => await TestData.ConfigureAndDrainEmbeddingAsync(
-        _store, _ctx.Factory, TestData.CreateEmbeddingService(), "local", EnsureCustomModelCopy(), null, CancellationToken.None);
+        _store, _ctx.Factory, TestData.CreateEmbeddingService(), "local", EnsureCustomModelCopy(), null,
+        CancellationToken.None, _ctx.TimeProvider);
 
     [When(@"^I call memory_configure with provider ""([^""]*)"", baseUrl ""([^""]*)"" and model ""([^""]*)""$")]
     public async Task WhenIConfigureOpenAi(string provider, string baseUrl, string model) => await TestData.ConfigureAndDrainEmbeddingAsync(
-        _store, _ctx.Factory, TestData.CreateEmbeddingService(), provider, model, baseUrl, CancellationToken.None);
+        _store, _ctx.Factory, TestData.CreateEmbeddingService(), provider, model, baseUrl, CancellationToken.None,
+        _ctx.TimeProvider);
 
     [Given(@"project ""(.*)"" has no embedding model configured")]
     public void GivenNoEmbeddingModelConfigured(string projectId)
@@ -336,7 +340,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task GivenProjectHasEmbeddedEntries(string projectId)
     {
         await TestData.ConfigureAndDrainEmbeddingAsync(_store, _ctx.Factory, TestData.CreateEmbeddingService(),
-            "local", null, null, CancellationToken.None);
+            "local", null, null, CancellationToken.None, _ctx.TimeProvider);
         _lastWrite = await _store.WriteAsync(new MemoryWriteRequest(projectId, "re-embed me"),
             CancellationToken.None);
     }
@@ -783,7 +787,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         scenarioContext[CloudStoreKey] = fake;
         // Local engine configured so the pipeline seam can embed merged rows.
         await TestData.ConfigureAndDrainEmbeddingAsync(_store, _ctx.Factory, TestData.CreateEmbeddingService(),
-            "local", null, null, CancellationToken.None);
+            "local", null, null, CancellationToken.None, _ctx.TimeProvider);
         fake.Set(ObjectKeyFor(projectId),
             await BuildRemoteSnapshotAsync(projectId, [("merged fresh fact", "fresh.md")]));
     }
@@ -1429,7 +1433,8 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     [When(@"I call memory_configure with provider ""openai"" and baseUrl ""http:\/\/localhost:1234\/v1""")]
     public async Task WhenIConfigureOpenAiBaseUrl() =>
         await TestData.ConfigureAndDrainEmbeddingAsync(_store, _ctx.Factory, TestData.CreateEmbeddingService(),
-            "openai", "text-embedding-3-small", "http://localhost:1234/v1", CancellationToken.None);
+            "openai", "text-embedding-3-small", "http://localhost:1234/v1", CancellationToken.None,
+            _ctx.TimeProvider);
 
     [When("I call memory_delete with a known hash")]
     public async Task WhenICallMemoryDelete()

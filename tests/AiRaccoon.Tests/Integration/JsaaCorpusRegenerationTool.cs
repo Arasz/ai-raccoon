@@ -65,13 +65,13 @@ public sealed class JsaaCorpusRegenerationTool(ITestOutputHelper output)
                 new InfrastructureOptions { DataRoot = dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
                 NullKeyProvider.Resolver(
                     new InfrastructureOptions { DataRoot = dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
+            var clock = new FakeTimeProvider(new DateTimeOffset(2026, 8, 14, 0, 0, 0, TimeSpan.Zero));
             var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance,
                 new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(),
-                new FakeTimeProvider(new DateTimeOffset(2026, 8, 14, 0, 0, 0, TimeSpan.Zero)),
-                TestData.CreateEmbeddingService());
+                clock, TestData.CreateEmbeddingService());
 
             await TestData.ConfigureAndDrainEmbeddingAsync(store, factory, TestData.CreateEmbeddingService(),
-                "local", null, null, cancellationToken);
+                "local", null, null, cancellationToken, clock);
             await store.SetSettingAsync(IngestScopeKeys.ScopeProject(projectId),
                 IngestScopeKeys.Serialize([extractRoot]), cancellationToken);
 

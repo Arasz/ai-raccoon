@@ -88,17 +88,20 @@ public static class TestData
     ///     changed — then immediately drains it with a fresh <see cref="IEntryEmbedder"/>.
     ///     <see cref="IEntryEmbedder.DrainMigrationAsync"/> is a safe no-op when nothing is open, so
     ///     calling it unconditionally reproduces the old synchronous "configure and re-embed inline"
-    ///     contract without a second, test-only config path.
+    ///     contract without a second, test-only config path. Pass <paramref name="clock"/> (the
+    ///     fixture's own <c>FakeTimeProvider</c>) so the drain's lease and its <c>finished_at</c>
+    ///     stamp share the fixture's simulated clock instead of real wall-clock time — omitting it
+    ///     falls back to <see cref="TimeProvider.System"/>.
     /// </summary>
     public static async Task<EmbeddingConfig> ConfigureAndDrainEmbeddingAsync(IMemoryStore store,
         ISqliteConnectionFactory factory, IEmbeddingService embeddings, string provider, string? model,
-        string? baseUrl, CancellationToken cancellationToken)
+        string? baseUrl, CancellationToken cancellationToken, TimeProvider? clock = null)
     {
         var config = await store.StartModelMigrationAsync(provider, model, baseUrl, cancellationToken)
             .ConfigureAwait(false);
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        var embedder = new EntryEmbedder(embeddings, new SqliteModelMigrationLease(TimeProvider.System),
-            TimeProvider.System);
+        var resolvedClock = clock ?? TimeProvider.System;
+        var embedder = new EntryEmbedder(embeddings, new SqliteModelMigrationLease(resolvedClock), resolvedClock);
         await embedder.DrainMigrationAsync(connection, cancellationToken).ConfigureAwait(false);
         return config;
     }

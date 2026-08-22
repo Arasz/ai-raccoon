@@ -41,11 +41,12 @@ public sealed class WriteChunksToBudgetTests : IAsyncLifetime
         var embeddings = new EmbeddingService(new FakeLogger<EmbeddingService>(), new LocalTokenizer(),
             new EmbeddingTokenizerFactory(),
             new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
+        var clock = new FakeTimeProvider(FixedNow);
         _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance,
-            new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
+            new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), clock,
             embeddings);
         await TestData.ConfigureAndDrainEmbeddingAsync(_store, factory, embeddings,
-            "local", null, null, TestContext.Current.CancellationToken);
+            "local", null, null, TestContext.Current.CancellationToken, clock);
     }
 
     public ValueTask DisposeAsync()

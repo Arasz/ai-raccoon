@@ -47,9 +47,11 @@ public sealed class SqliteMemoryStoreFusionFlagTests : IAsyncLifetime
     }
 
     /// <summary>
-    ///     Issue #367's mechanism, reproduced: the target is written before an engine is configured,
-    ///     so it has no vec_entries row and never appears in the vector leg — it is rank 1 on FTS and
-    ///     unseen by the other leg, while three consensus rows are retrieved by both.
+    ///     Issue #367's mechanism, reproduced: the target is written before the bank's first-ever
+    ///     configure, whose drain is a no-op (no prior engine to migrate from) — so it gets no
+    ///     vec_entries row and never appears in the vector leg; a later engine CHANGE would instead
+    ///     drain it bank-wide. It is rank 1 on FTS and unseen by the other leg, while three consensus
+    ///     rows are retrieved by both.
     /// </summary>
     private async Task<string> SeedRegressionShapeAsync()
     {

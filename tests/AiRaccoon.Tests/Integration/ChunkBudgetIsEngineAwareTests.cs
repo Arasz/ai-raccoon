@@ -40,10 +40,11 @@ public sealed class ChunkBudgetIsEngineAwareTests : IAsyncLifetime
         _logger = new FakeLogger<EmbeddingService>();
         var embeddings = new EmbeddingService(_logger, new LocalTokenizer(), new EmbeddingTokenizerFactory(),
             new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
-        _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
+        var clock = new FakeTimeProvider(FixedNow);
+        _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), clock,
             embeddings);
         await TestData.ConfigureAndDrainEmbeddingAsync(_store, factory, embeddings,
-            "local", null, null, TestContext.Current.CancellationToken);
+            "local", null, null, TestContext.Current.CancellationToken, clock);
     }
 
     public ValueTask DisposeAsync()
