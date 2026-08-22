@@ -1,148 +1,280 @@
 {
-  "_note": "Copy to docs/work/checklist/<yyyy-mm-dd>-<subject>.json. Never fill this file in place. status is pass|fail|skipped|substituted; substituted means checked by a different instrument than the item names, and its reason must say which. accepted stays null until a human answers it, so an unfinished run is visibly unfinished. Delete any item whose feature no longer exists rather than skipping it.",
-  "run": {
-    "date": "",
-    "branch": "",
-    "commit": "",
-    "data-root": "",
-    "note": "A scratch --data-root, never ~/.ai-raccoon."
-  },
-  "derived": {
-    "version": "",
-    "mcp-tool-count": "",
-    "mcp-prompt-count": "",
-    "note": "Produced by scripts/derive-facts.py at run time, never typed from memory or a previous run."
-  },
-  "findings-against-prior-runs": [
-    {
-      "_example": "Delete this example. One entry per thing an earlier run got wrong — a verdict, a reason, or a step that could not have failed. A checklist that can only describe the current build cannot report that the last checklist lied.",
-      "prior-run": "",
-      "prior-claim": "",
-      "what-is-actually-true": "",
-      "evidence": "",
-      "so-what": ""
-    }
-  ],
-  "items": [
-    {
-      "item": "build-and-install-global-package",
-      "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+    "_note": "Copy to docs/work/checklist/<yyyy-mm-dd>-<subject>.json. Never fill this file in place. status is pass|fail|skipped|substituted; substituted means checked by a different instrument than the item names, and its reason must say which. accepted stays null until a human answers it, so an unfinished run is visibly unfinished. Delete any item whose feature no longer exists rather than skipping it.",
+    "run": {
+        "date": "",
+        "branch": "",
+        "commit": "",
+        "data-root": "",
+        "note": "A scratch --data-root, never ~/.ai-raccoon."
     },
-    {
-      "item": "server-lifecycle",
-      "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+    "derived": {
+        "version": "",
+        "mcp-tool-count": "",
+        "mcp-prompt-count": "",
+        "note": "Produced by scripts/derive-facts.py at run time, never typed from memory or a previous run."
     },
-    {
-      "item": "memory-write-stores-and-reports-truthfully",
-      "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
-    },
-    {
-      "item": "memory-search-hybrid-retrieval",
-      "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
-    },
-    {
-      "item": "memory-get-returns-content-by-hash",
-      "expected-result": "memory_get returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
-    },
-    {
-      "item": "source-path-anchor-resolves-its-chunk",
-      "expected-result": "a `file#section` query returns that exact chunk within the production result window",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
-    },
-    {
-      "item": "write-path-noise-filtering",
-      "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
-    },
-    {
-      "item": "read-path-query-guard",
-      "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
-    },
-    {
-      "item": "file-watch-status",
-      "expected-result": "memory_watch_status lists live registrations and their sync state",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
-    },
-    {
-      "item": "promotion-queue-state",
-      "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
-    },
-    {
-      "item": "full-mcp-surface",
-      "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
-    },
-    {
-      "item": "observability-event-ids",
-      "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
-    }
-  ]
+    "findings-against-prior-runs": [
+        {
+            "_example": "Delete this example. One entry per thing an earlier run got wrong \u2014 a verdict, a reason, or a step that could not have failed. A checklist that can only describe the current build cannot report that the last checklist lied.",
+            "prior-run": "",
+            "prior-claim": "",
+            "what-is-actually-true": "",
+            "evidence": "",
+            "so-what": ""
+        }
+    ],
+    "items": [
+        {
+            "item": "build-and-install-global-package",
+            "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "server-lifecycle",
+            "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "memory-write-stores-and-reports-truthfully",
+            "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "memory-search-hybrid-retrieval",
+            "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "memory-get-returns-content-by-hash",
+            "expected-result": "memory_get returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "source-path-anchor-resolves-its-chunk",
+            "expected-result": "a `file#section` query returns that exact chunk within the production result window",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "write-path-noise-filtering",
+            "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "read-path-query-guard",
+            "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "file-watch-status",
+            "expected-result": "memory_watch_status lists live registrations and their sync state",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "promotion-queue-state",
+            "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "full-mcp-surface",
+            "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "code-corpus-kind-search-and-envelope",
+            "expected-result": "A watched/ingested code file is searchable via memory_search kind=code (FTS hits carry lineStart/lineEnd and the engine-not-configured warning when no code model is active); kind=memory returns NO code key in the envelope and does not surface the code hit; kind=both returns both sections; the code/both response omits correlationId. Negative control: a memory entry is NOT returned by kind=code.",
+            "anchor": "ADR-0088",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "code-get-returns-chunk-by-hash",
+            "expected-result": "code_get returns the exact chunk content for a hash from a kind=code hit; an unknown hash is refused with an error, not an empty fabrication.",
+            "anchor": "ADR-0088",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "code-model-activation-and-refusal",
+            "expected-result": "model set code local against a directory holding a non-768 manifest refuses with an actionable error naming 768 (server-side, not just CLI); a missing manifest surfaces the loader's own error; activating the real downloaded code-daemon-embed-v1 (ai-raccoon model download) succeeds and writes embedding.codeModel/codeEngine. The refusal legs must be run live; if the 187 MB download is infeasible in this run, the activation leg is 'substituted' naming the BDD/integration instrument.",
+            "anchor": "ADR-0087/0088; plan \u00a73.3",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "code-reindex-drain-and-semantic-code-search",
+            "expected-result": "After code-model activation, pending code rows drain via the code-reindex job (no memory tool is blocked while it runs), and a kind=code query that shares NO literal token with the stored code (e.g. describe an algorithm by its behavior, not its identifiers) returns the chunk \u2014 proving the vector leg. Skipped-with-reason if activation was substituted.",
+            "anchor": "ADR-0087",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "ai-raccoon-ignore-live",
+            "expected-result": "An ai-raccoon.ignore in the ingest root excludes matching files from BOTH corpora on directory ingest (0 chunks; verify a .cs and a .md are both excluded); a bare directory name excludes its subtree; explicit memory_ingest_file of an ignored path returns 0 chunks. Negative control: a non-ignored sibling ingests normally.",
+            "anchor": "ADR-0086; plan \u00a72.1",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "watch-overlap-prune-and-reject",
+            "expected-result": "memory_watch_add of a path nested inside an existing watch is REJECTED naming the covering watch; adding a broader watch over an existing narrower one prunes the narrower (result lists it); equal-path re-add is an idempotent no-op reporting absorbedBy.",
+            "anchor": "ADR-0086; plan \u00a72.2",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "code-ingestion-with-default-model",
+            "expected-result": "Out-of-box experience: on a FRESH scratch bank with NO code engine configured and the default bundled memory model, memory_ingest_directory over a small mixed tree (.md + .cs) embeds the memory docs (bundled model), chunks the code files to embed_state='pending' via the bundled counting tokenizer, kind=code returns FTS-only hits carrying the engine-not-configured warning, and kind=both returns both sections. Negative control: a deny-set path (e.g. bin/) and an ai-raccoon.ignore'd file appear in NEITHER corpus.",
+            "anchor": "ADR-0085/0087; plan \u00a73.3 always-ingest",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "watch-per-repo-root",
+            "expected-result": "Registering a watch on a scratch REPO ROOT (containing .git/, node_modules/, src/ with code+md): enumeration skips .git and node_modules entirely (zero rows from them, both corpora); src/ feeds both corpora; adding a nested watch inside the repo is rejected naming the covering watch; a live edit to a src file digests into BOTH corpora and the replace prunes the file's superseded chunks.",
+            "anchor": "ADR-0086; plan \u00a72.3 repo-watch-by-default",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "direct-reingest-prunes-stale-chunks",
+            "expected-result": "memory_ingest_file of a file (N chunks), then modifying it so it chunks to a different count and re-ingesting: the superseded chunks are GONE (search no longer returns removed content; chunk set matches the new content exactly). Negative control: a sibling ingested file's chunks are untouched.",
+            "anchor": "PR #420 (ingest-then-prune)",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "activation-sha256-pin-verification",
+            "expected-result": "Tampering a model file AFTER its manifest was generated (flip one byte) makes model set refuse at activation, naming the sha256 pin mismatch; restoring the byte activates cleanly.",
+            "anchor": "PR #429",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "cli-exit-codes-nobank-and-settings-error",
+            "expected-result": "CLI command against a nonexistent bank exits 22 (NoBank); a settings-channel server error exits 23 (SettingsServerError), distinct from usage-error exits. Drive 23 live if a failing server can be arranged cheaply (e.g. point at a dead port); otherwise substituted naming the exit-code test class.",
+            "anchor": "PR #433, #426",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "sync-blob-hmac-authenticity",
+            "expected-result": "A pushed snapshot blob is framed header+tag and a tampered blob is REFUSED before attach (HMAC verification). Live only if cloud/scratch-backend credentials are available in this run; otherwise substituted naming the SyncService HMAC integration tests.",
+            "anchor": "PR #431",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "observability-event-ids",
+            "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        }
+    ]
 }
