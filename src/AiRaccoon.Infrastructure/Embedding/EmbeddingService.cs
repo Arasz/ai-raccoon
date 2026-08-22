@@ -51,6 +51,13 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
     private readonly ConcurrentDictionary<string, IEmbeddingTokenizer> _tokenizers =
         new(StringComparer.Ordinal);
 
+    // D1 cost note: Load() now hashes every pinned file's bytes (the ~90 MB ONNX weights
+    // included). ManifestDescriptorFor/ManifestContentBudget sit on the write hot path
+    // (FileIngestor, SqliteMemoryStore's ChunkToBudgetAsync) — caching the descriptor per engine
+    // fingerprint keeps that hash to once per process per engine, never per call (plan D1).
+    private readonly ConcurrentDictionary<string, EngineDescriptor> _descriptors =
+        new(StringComparer.Ordinal);
+
     /// <summary>
     ///     The compiled-in descriptor for the bundled engine — the D1 manifest equivalent of today's
     ///     constants (mean, 384, 256, wordpiece, 5 BertOptions), so the bundled path and the
@@ -205,8 +212,14 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
         }
 
         var full = Path.GetFullPath(model);
-        return Directory.Exists(full) ? manifestDescriptor.Load(full) : null;
+        return Directory.Exists(full) ? LoadManifestDescriptorCached(model, full) : null;
     }
+
+    /// <summary>Loads (and caches per engine fingerprint) the manifest descriptor for a directory
+    /// already confirmed to exist. Not cached on throw — a missing/invalid manifest keeps
+    /// re-throwing its own actionable message on every call, same as before this cache existed.</summary>
+    private EngineDescriptor LoadManifestDescriptorCached(string model, string full) =>
+        _descriptors.GetOrAdd(EngineFingerprint("local", model, null), _ => manifestDescriptor.Load(full));
 
     /// <summary>
     ///     The tokenizer the configured LOCAL engine will embed with (D9): the manifest tokenizer
@@ -310,13 +323,18 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
     /// <summary>The D6 content budget for a manifest model, or null when the model is not manifest-based.</summary>
     private int? ManifestContentBudget(string? model)
     {
-        if (string.IsNullOrWhiteSpace(model) || !Directory.Exists(model)
-            || !File.Exists(Path.Combine(Path.GetFullPath(model), EmbeddingManifest.FileName)))
+        if (string.IsNullOrWhiteSpace(model))
         {
             return null;
         }
 
-        var descriptor = manifestDescriptor.Load(Path.GetFullPath(model));
+        var full = Path.GetFullPath(model);
+        if (!Directory.Exists(full) || !File.Exists(Path.Combine(full, EmbeddingManifest.FileName)))
+        {
+            return null;
+        }
+
+        var descriptor = LoadManifestDescriptorCached(model, full);
         return Math.Min(MaxManifestChunkTokens,
             descriptor.ContextWindowTokens - descriptor.SpecialTokenReservation);
     }

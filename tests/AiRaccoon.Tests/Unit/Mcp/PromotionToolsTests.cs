@@ -2,6 +2,7 @@ using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Tools;
+using ModelContextProtocol;
 using Shouldly;
 using Xunit;
 
@@ -56,6 +57,44 @@ public sealed class PromotionToolsTests
         var envelope = await tools.List("acme", cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Rows.ShouldHaveSingleItem().Value.ShouldBe("a short queued fact");
+    }
+
+    [Fact]
+    public async Task List_WithoutProjectId_RefusesWithoutAllProjects()
+    {
+        var (queue, tools) = NewStack();
+        queue.Rows = [Row("h1", "cross-project row")];
+
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            tools.List(cancellationToken: TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldStartWith("invalid-params: ");
+        ex.Message.ShouldContain("allProjects");
+        ex.Message.ShouldContain("projectId");
+    }
+
+    [Fact]
+    public async Task List_WithoutProjectId_ListsAcrossProjects_WhenAllProjectsIsTrue()
+    {
+        var (queue, tools) = NewStack();
+        queue.Rows = [Row("h1", "cross-project row")];
+
+        var envelope = await tools.List(allProjects: true, cancellationToken: TestContext.Current.CancellationToken);
+
+        envelope.Data!.Rows.ShouldHaveSingleItem();
+        queue.LastListProject.ShouldBeNull("allProjects=true still asks the queue for every project");
+    }
+
+    [Fact]
+    public async Task List_WithProjectId_IsUnaffectedByAllProjects()
+    {
+        var (queue, tools) = NewStack();
+        queue.Rows = [Row("h1", "a short queued fact")];
+
+        var envelope = await tools.List("acme", cancellationToken: TestContext.Current.CancellationToken);
+
+        envelope.Data!.Rows.ShouldHaveSingleItem();
+        queue.LastListProject.ShouldBe("acme");
     }
 
     private sealed class AllowingGuard : IMemoryAccessGuard

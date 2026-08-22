@@ -7,5 +7,6 @@ public interface IBackendLauncher
         CancellationToken ctx);
 }
 
-/// <summary>The live backend URL, or null with the `serve` exit code when it never answered.</summary>
-public readonly record struct BackendResult(string? Url, int? ServeExitCode);
+/// <summary>The live backend URL, or null with the `serve` exit code and its captured stderr (bounded,
+/// tail-only; null on the happy path) when it never answered.</summary>
+public readonly record struct BackendResult(string? Url, int? ServeExitCode, string? ServeStderr = null);

@@ -9,7 +9,7 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **145** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **146** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
@@ -46,14 +46,14 @@ One block per source file that owns a `Log` class or equivalent:
 | 416 | `src/AiRaccoon.Infrastructure/Embedding/EmbeddingService.cs` (added 2026-08-15: a search query trimmed to the model window, ADR-0071 — split out of 414 so each is countable) |
 | 420 | `src/AiRaccoon.Infrastructure/Chunking/NoOpCodeChunker.cs` (added 2026-08-21: the interim `ICodeChunker` — one Information line marking the code-engine-wave gap, logged once per process, docs/work/2026-08-21-code-search-implementation-plan.md §12.5) |
 | 500-506, 508 | `src/AiRaccoon.Infrastructure/Extraction/ExtractionHostedService.cs` (507/509 removed 2026-08-11: per-element candidate/failure logs de-noised) |
-| 525-526 | `src/AiRaccoon.Infrastructure/Maintenance/MaintenanceJobRunner.cs` (added 2026-08-15: one line per maintenance job that ran or failed, ADR-0070 — 530+ was taken by SweepHostedService and the uniqueness gate caught it) |
+| 525-527 | `src/AiRaccoon.Infrastructure/Maintenance/MaintenanceJobRunner.cs` (added 2026-08-15: one line per maintenance job that ran or failed, ADR-0070 — 530+ was taken by SweepHostedService and the uniqueness gate caught it; 527 added 2026-08-22, delta-review D6: the lastRun-ledger SELECT and `HasWorkAsync` used to run before the per-job try/catch, so either throwing escaped `RunDueAsync` and stopped every job registered after it — moved inside the same guard, logged distinctly from a run failure) |
 | 510-524 | `src/AiRaccoon.Infrastructure/Maintenance/BankMaintenanceHostedService.cs` (517-519 added 2026-08-14: the pending-embed retry sweep, .NET-F1 — a watch-driven embedding failure used to leave a row permanently pending; 520-521 added 2026-08-14: the noise-entry retention purge, ADR-0039; 522-524 added 2026-08-15: the promotion-discard and search-quality retention purges, ADR-0055. **512 and 516 are retired**: both are still declared here but have had no call site since ADR-0070 moved vacuuming into `MaintenanceJobRunner`, which logs 525 instead — they cannot fire. Retired rather than deleted so the numbers are not reused; found by the 2026-08-16 checklist run. ADR-0076's on-demand poll loop deliberately reuses `RunFailed` (513) instead of minting a new id — a second near-duplicate would have interleaved with `MaintenanceJobRunner`'s adjacent 525-526 block) |
 | 530-537 | `src/AiRaccoon.Infrastructure/Degradation/SweepHostedService.cs` (537 is H6: skipped for access mode; moved from 520-527 on 2026-08-14 so the maintenance owner could stay contiguous when the noise purge extended it) |
 | 601-609 | `src/AiRaccoon/Hosting/Node/NodeRunner.cs` (606-607 are the loopback token, ADR-0020; 608 is the lost-the-port restart, ADR-0022; 604 and 609 are the unanswered probe, ADR-0043) |
 | 610-612 | `src/AiRaccoon/Setup/Serve/IdleWatchdog.cs` |
 | 620-623 | `src/AiRaccoon/Observability/ObservabilityRunner.cs` (landed in `4c4be1c`, #109) |
 | 630 | `src/AiRaccoon/Setup/Serve/ProxyRunner.cs` (ADR-0020) |
-| 633-635 | `src/AiRaccoon/Setup/Serve/BackendLauncher.cs` (ADR-0020) |
+| 633-635 | `src/AiRaccoon/Hosting/Proxy/BackendLauncher.cs` (ADR-0020; path corrected 2026-08-22 — moved from `Setup/Serve/`. 635's message extended with the captured stderr, delta-review plan C1) |
 | 636-639 | `src/AiRaccoon/Setup/Serve/ProxyForwarder.cs` (ADR-0020) |
 | 640 | `src/AiRaccoon/Observability/OtlpExport.cs` (ADR-0009; OTLP export disabled warning) |
 | 650-656 | `src/AiRaccoon/Hosting/Node/ServerRestart.cs` (ADR-0022; 656 is the unanswered probe, ADR-0043) |
@@ -70,7 +70,6 @@ One block per source file that owns a `Log` class or equivalent:
 | 901, 902, 903 | `src/AiRaccoon.Infrastructure/Sqlite/SqliteConnectionFactory.cs` (added 2026-08-21: the overlap-prune report (formerly the v11 ladder step, now an unconditional open-time step)'s overlap-prune report — one line per pruned watch + a count, docs/work/2026-08-21-code-search-implementation-plan.md §4; the migration itself is silent and only returns the pruned list, since `SqliteConnectionFactory.InitializeAsync` is the one caller in the chain that owns a logger) |
 | 910-912 | `src/AiRaccoon/Tools/ToolRefusals.cs` |
 | 920-921 | `src/AiRaccoon/Tools/MemoryTools.cs` (docs/adr/0040: read-path query guard shadow-mode verdict; 921 added — WP10, docs/plans/2026-08-15-performance-metrics-implementation.md: best-effort phase-measurement recording failure) |
-| 950 | `src/AiRaccoon.Infrastructure/Sqlite/SqliteNoiseClusterStore.cs` (ADR-0039: noise-learning substrate) |
 | 951 | `src/AiRaccoon.Infrastructure/Sqlite/NoiseShadowObserver.cs` (ADR-0039: shadow mode records what a detector would have rejected, without rejecting) |
 | 960 | `src/AiRaccoon.Infrastructure/Metrics/MetricsRecorder.cs` (docs/plans/2026-08-15-performance-metrics-implementation.md, WP3) |
 | 961 | `src/AiRaccoon.Infrastructure/Metrics/SqliteMetricsStore.cs` (WP3: the save-time query-identity allowlist) |

@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text;
 using AiRaccoon.Infrastructure.Assets;
 using AiRaccoon.Infrastructure.Embedding.Manifest;
@@ -111,8 +110,11 @@ public sealed class ModelDownloadService(
     IDiskSpaceProvider diskSpace,
     IEmbeddingManifestSerializer manifestSerializer,
     IEmbeddingManifestValidator manifestValidator,
-    ISentencePieceVocabularyReader vocabularyReader)
+    ISentencePieceVocabularyReader vocabularyReader,
+    IFileHasher? fileHasher = null)
 {
+    private readonly IFileHasher hasher = fileHasher ?? new FileHasher();
+
     /// <summary>Downloads above this total size require --yes (plan §8.3 multi-GB guard).</summary>
     public const long LargeDownloadThresholdBytes = 500L * 1024 * 1024;
 
@@ -277,7 +279,7 @@ public sealed class ModelDownloadService(
         var targetRel = TargetPath(file.Path, modelFilePath);
         var targetPath = Path.Combine(targetDir, targetRel);
         var expected = file.LfsSha256;
-        if (expected is not null && File.Exists(targetPath) && Sha256Of(targetPath).Equals(expected, StringComparison.OrdinalIgnoreCase))
+        if (expected is not null && File.Exists(targetPath) && hasher.Sha256OfFile(targetPath).Equals(expected, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
@@ -286,7 +288,7 @@ public sealed class ModelDownloadService(
         try
         {
             await DownloadToFileAsync(ResolveUrl(request, file.Path), partPath, cancellationToken).ConfigureAwait(false);
-            var actual = Sha256Of(partPath);
+            var actual = hasher.Sha256OfFile(partPath);
             if (expected is not null && !actual.Equals(expected, StringComparison.OrdinalIgnoreCase))
             {
                 throw new ModelDownloadException(
@@ -379,6 +381,9 @@ public sealed class ModelDownloadService(
 
     private async Task<string> WriteManifestAsync(ModelDownloadPlan plan, string targetDir, CancellationToken cancellationToken)
     {
+        ManifestFile Pinned(PinnedFile f) => new(TargetPath(f.Path, plan.ModelFilePath),
+            hasher.Sha256OfFile(Path.Combine(targetDir, TargetPath(f.Path, plan.ModelFilePath))));
+
         var manifest = new EmbeddingManifest(
             ManifestVersion: 1,
             Model: plan.RepoId,
@@ -390,14 +395,17 @@ public sealed class ModelDownloadService(
             QueryInstruction: null,
             RequiresTokenTypeIds: plan.RequiresTokenTypeIds,
             MRL: new MRLInfo(false, null),
+            // D2: trust-on-first-download, same as the tokenizer/onnx pins below — not an
+            // upstream-verified signature, only "these are the bytes we fetched".
+            ProvenanceFiles: [.. plan.ProvenanceFiles.Select(Pinned)],
             Pooling: new PoolingManifest(plan.PoolingMode,
                 new PoolingOutputNames(plan.EmbeddingOutput ?? string.Empty, plan.TokenEmbeddingsOutput ?? string.Empty)),
             Tokenizer: new TokenizerManifest(plan.TokenizerFamily,
-                [.. plan.TokenizerFiles.Select(f => new ManifestFile(TargetPath(f.Path, plan.ModelFilePath), Sha256Of(Path.Combine(targetDir, TargetPath(f.Path, plan.ModelFilePath)))))],
+                [.. plan.TokenizerFiles.Select(Pinned)],
                 new TokenizerOptionsManifest(plan.AddBeginOfSentence, plan.AddEndOfSentence, plan.SpecialTokens,
                     plan.VocabOffset)),
             Onnx: new OnnxManifest(plan.Inputs, plan.EmbeddingOutput, plan.TokenEmbeddingsOutput,
-                [.. plan.ModelFiles.Select(f => new ManifestFile(TargetPath(f.Path, plan.ModelFilePath), Sha256Of(Path.Combine(targetDir, TargetPath(f.Path, plan.ModelFilePath)))))]));
+                [.. plan.ModelFiles.Select(Pinned)]));
 
         var errors = manifestValidator.Validate(manifest);
         if (errors.Count > 0)
@@ -453,12 +461,6 @@ public sealed class ModelDownloadService(
                 // best-effort
             }
         }
-    }
-
-    private static string Sha256Of(string path)
-    {
-        using var stream = File.OpenRead(path);
-        return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
     }
 }
 

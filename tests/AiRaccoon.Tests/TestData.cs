@@ -66,7 +66,8 @@ public static class TestData
         IJsonChunker? jsonChunker = null,
         IEnumerable<INoiseFilterPolicy>? noisePolicies = null,
         ISettingsStore? settings = null,
-        ICodeChunker? codeChunker = null)
+        ICodeChunker? codeChunker = null,
+        IIgnoreRulesProvider? ignoreRulesProvider = null)
     {
         jsonChunker ??= RealJsonChunker(markdownChunker);
         var embedder = new EntryEmbedder(embeddings, modelMigrationLease ?? ModelMigrationLease, timeProvider);
@@ -75,6 +76,7 @@ public static class TestData
         var codeFileTypeMatcher = codeChunker is null ? null : new CodeFileTypeMatcher();
         var codeIngestor = codeChunker is null ? null : new CodeIngestor(new CodeFileTypeMatcher(), codeChunker, timeProvider);
         var fileIngestor = new FileIngestor(matcher, embedder, sourceStore, timeProvider, embeddings,
+            ignoreRulesProvider: ignoreRulesProvider,
             codeFileTypeMatcher: codeFileTypeMatcher, codeIngestor: codeIngestor);
         var noiseFilteringService = new NoiseFilteringService(noisePolicies ?? []);
         return new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService,

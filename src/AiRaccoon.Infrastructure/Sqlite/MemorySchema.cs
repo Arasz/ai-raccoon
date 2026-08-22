@@ -509,6 +509,24 @@ internal static class MemorySchema
     /// </summary>
     internal static readonly int SchemaDigest = ComputeSchemaDigest();
 
+    /// <summary>
+    ///     Test seam only: invoked once, immediately after the Ddl block (and S2's column ensure)
+    ///     durably completes, before anything else in this open proceeds — lets a test simulate a
+    ///     process crash in that exact window. <see cref="AsyncLocal{T}" />, not a plain static
+    ///     field: xUnit runs test classes in parallel, and a plain static would leak a thrown hook
+    ///     into every other concurrently-running test that also calls <see cref="EnsureAsync" />.
+    ///     Null (no-op) in production.
+    /// </summary>
+    internal static readonly AsyncLocal<Func<CancellationToken, Task>?> TestOnlyAfterDdlHookAsync = new();
+
+    /// <summary>
+    ///     Test seam only: when true for the calling async flow, forces this open's ladder to report
+    ///     unhealthy without engineering a genuine dedupe failure — lets a test pin "the digest and
+    ///     version stamps only land when the ladder actually finished". Same <see cref="AsyncLocal{T}" />
+    ///     rationale as <see cref="TestOnlyAfterDdlHookAsync" />. False (no-op) in production.
+    /// </summary>
+    internal static readonly AsyncLocal<bool> TestOnlyForceUnhealthyLadder = new();
+
     private static readonly Regex VecDimensionPattern = new(@"float\[(\d+)\]", RegexOptions.Compiled);
 
     private static int ComputeSchemaDigest()
@@ -552,7 +570,12 @@ internal static class MemorySchema
         // but it is still ~30 statements to reach that no-op, so it is gated on a digest of
         // itself rather than run unconditionally on every open.
         var storedDigest = await ReadApplicationIdAsync(connection, cancellationToken).ConfigureAwait(false);
-        if (storedDigest != SchemaDigest)
+        // Data F1 / D5: the digest is stamped only once this whole open's schema work is durable
+        // (every return point below), never here — a crash between the Ddl block and the version
+        // ladder's own stamp must leave the digest stale, or EnsureCheapAsync's digest-only check
+        // (the per-tool-call hot path) would trust a half-migrated bank forever.
+        var needsDigestStamp = storedDigest != SchemaDigest;
+        if (needsDigestStamp)
         {
             await using var command = connection.CreateCommand();
             command.CommandText = Ddl;
@@ -568,7 +591,11 @@ internal static class MemorySchema
             // that race (see EnsureCodeEmbedAttemptsColumnAsync).
             await EnsureCodeEmbedAttemptsColumnAsync(connection, cancellationToken).ConfigureAwait(false);
 
-            await StampSchemaDigestAsync(connection, cancellationToken).ConfigureAwait(false);
+            var testHook = TestOnlyAfterDdlHookAsync.Value;
+            if (testHook is not null)
+            {
+                await testHook(cancellationToken).ConfigureAwait(false);
+            }
         }
 
         // Runs on every open, version or not: it is a data move guarding a deny-by-default gate,
@@ -597,11 +624,24 @@ internal static class MemorySchema
                     "CREATE INDEX IF NOT EXISTS idx_entries_source_id ON entries(source_id)",
                     cancellationToken: cancellationToken)).ConfigureAwait(false);
             await StampAsync(connection, CurrentVersion, cancellationToken).ConfigureAwait(false);
+            if (needsDigestStamp)
+            {
+                await StampSchemaDigestAsync(connection, cancellationToken).ConfigureAwait(false);
+            }
+
             return overlapResult;
         }
 
         if (storedVersion >= CurrentVersion)
         {
+            // No ladder step is needed, but the Ddl block above may just have run (a digest-gated,
+            // no-version-bump addition, e.g. the metrics/code-corpus tables) — this is the only
+            // remaining exit for that case, so the digest must be stamped here too.
+            if (needsDigestStamp)
+            {
+                await StampSchemaDigestAsync(connection, cancellationToken).ConfigureAwait(false);
+            }
+
             return overlapResult;
         }
 
@@ -610,8 +650,8 @@ internal static class MemorySchema
         // that silently failed would never retry it. The v1 step must run — and its dedupe
         // complete — before the v2 step, or chunk-column numbering bakes in rows the dedupe
         // would have deleted (docs/plans/2026-08-08-search-knn-perf.md).
-        var healthy = true;
-        if (storedVersion < 1)
+        var healthy = !TestOnlyForceUnhealthyLadder.Value;
+        if (healthy && storedVersion < 1)
         {
             healthy = await MigrateToV1Async(connection, cancellationToken).ConfigureAwait(false);
         }
@@ -671,9 +711,16 @@ internal static class MemorySchema
             await MigrateToV10Async(connection, cancellationToken).ConfigureAwait(false);
         }
 
+        // Both stamps land together, only once the ladder actually finished (healthy): stamping the
+        // digest on a degraded (unhealthy) run would let EnsureCheapAsync trust a bank whose ladder
+        // never completed, the same bug this reordering exists to close (Data F1 / D5).
         if (healthy)
         {
             await StampAsync(connection, CurrentVersion, cancellationToken).ConfigureAwait(false);
+            if (needsDigestStamp)
+            {
+                await StampSchemaDigestAsync(connection, cancellationToken).ConfigureAwait(false);
+            }
         }
 
         return overlapResult;

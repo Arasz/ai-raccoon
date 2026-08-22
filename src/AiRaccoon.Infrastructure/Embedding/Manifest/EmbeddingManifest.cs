@@ -61,7 +61,10 @@ public sealed record EmbeddingManifest(
     // silent about MRL does not support it. Requiring either on a bert-wordpiece manifest is
     // ceremony — the validator still enforces the conditional rules that matter (D1/D5).
     bool RequiresTokenTypeIds = true,
-    MRLInfo? MRL = null)
+    MRLInfo? MRL = null,
+    // D2: config.json + tokenizer_config.json, trust-on-first-download pinned like the tokenizer
+    // and onnx files. Optional so manifests written before D2 still parse.
+    IReadOnlyList<ManifestFile>? ProvenanceFiles = null)
 {
     /// <summary>
     ///     The sidecar file name, pinned by amended D1: <c>ai-raccoon.manifest.json</c> — NOT

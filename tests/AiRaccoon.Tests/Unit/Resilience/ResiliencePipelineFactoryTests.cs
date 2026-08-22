@@ -65,4 +65,52 @@ public class ResiliencePipelineFactoryTests
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         attempts.ShouldBe(3);
     }
+
+    /// <summary>H18: the pipeline retries the real <see cref="EmptyDownloadException" />.</summary>
+    [Fact]
+    public async Task CreateAssetDownloaderPipeline_RetriesOnEmptyDownloadException()
+    {
+        var attempts = 0;
+        var pipeline = ResiliencePipelineFactory.CreateAssetDownloaderPipeline(maxAttempts: 3, initialDelay: TimeSpan.FromMilliseconds(5));
+
+        var response = await pipeline.ExecuteAsync(async _ =>
+        {
+            attempts++;
+            await Task.CompletedTask;
+            if (attempts < 2)
+            {
+                throw new AiRaccoon.Infrastructure.Assets.EmptyDownloadException("0 bytes");
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        }, TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        attempts.ShouldBe(2);
+    }
+
+    /// <summary>
+    ///     H18 regression: a string-match on <c>ex.GetType().Name</c> would also retry any
+    ///     unrelated exception that merely shares the name "EmptyDownloadException" — the pipeline
+    ///     must handle the real type, not a name.
+    /// </summary>
+    [Fact]
+    public async Task CreateAssetDownloaderPipeline_ALookAlikeExceptionWithTheSameTypeName_IsNotRetried()
+    {
+        var attempts = 0;
+        var pipeline = ResiliencePipelineFactory.CreateAssetDownloaderPipeline(maxAttempts: 3, initialDelay: TimeSpan.FromMilliseconds(5));
+
+        await Should.ThrowAsync<EmptyDownloadException>(() => pipeline.ExecuteAsync<HttpResponseMessage>(async _ =>
+        {
+            attempts++;
+            await Task.CompletedTask;
+            throw new EmptyDownloadException("not the real one");
+        }, TestContext.Current.CancellationToken).AsTask());
+
+        attempts.ShouldBe(1, "a same-named-but-different-type exception must not be retried");
+    }
+
+    /// <summary>Look-alike for the regression test above: same simple type name as
+    /// <c>AiRaccoon.Infrastructure.Assets.EmptyDownloadException</c>, different namespace/type.</summary>
+    private sealed class EmptyDownloadException(string message) : Exception(message);
 }

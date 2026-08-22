@@ -34,7 +34,13 @@ public sealed class EmbeddingServiceManifestBudgetTests
         Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
             System.Text.Encoding.UTF8.GetBytes(content))).ToLowerInvariant();
 
-    private static JsonObject Manifest(int contextWindowTokens = 8192, string family = "bert-wordpiece") => new()
+    private static string ShaOfFile(string path) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant();
+
+    // D1: pins must match whatever bytes the test actually writes at "vocab.txt"/"model.onnx" —
+    // callers that write real fixture content pass its sha256 instead of the "vocab"/"model" default.
+    private static JsonObject Manifest(int contextWindowTokens = 8192, string family = "bert-wordpiece",
+        string? vocabSha = null, string? onnxSha = null) => new()
     {
         ["manifestVersion"] = 1,
         ["model"] = "budget-test-model",
@@ -46,11 +52,11 @@ public sealed class EmbeddingServiceManifestBudgetTests
         ["tokenizer"] = new JsonObject
         {
             ["family"] = family,
-            ["files"] = new JsonArray(new JsonObject { ["path"] = "vocab.txt", ["sha256"] = ShaOf("vocab") })
+            ["files"] = new JsonArray(new JsonObject { ["path"] = "vocab.txt", ["sha256"] = vocabSha ?? ShaOf("vocab") })
         },
         ["onnx"] = new JsonObject
         {
-            ["files"] = new JsonArray(new JsonObject { ["path"] = "model.onnx", ["sha256"] = ShaOf("model") }),
+            ["files"] = new JsonArray(new JsonObject { ["path"] = "model.onnx", ["sha256"] = onnxSha ?? ShaOf("model") }),
             ["inputs"] = new JsonArray("input_ids", "attention_mask", "token_type_ids"),
             ["tokenEmbeddingsOutput"] = "last_hidden_state"
         },
@@ -87,6 +93,43 @@ public sealed class EmbeddingServiceManifestBudgetTests
             .ShouldBe(EmbeddingService.MaxManifestChunkTokens, "ctx − 2 = 8190, capped at the D6 constant 510");
     }
 
+    /// <summary>
+    ///     D1 cost regression: Load() now hashes every pinned file (including the ~90 MB ONNX
+    ///     weights on a real model). ResolveChunkBudgetFor sits on the write hot path (FileIngestor,
+    ///     SqliteMemoryStore's ChunkToBudgetAsync) — hashing on every call, not once per engine,
+    ///     is the plan's explicitly forbidden shape (plan D1, "not per tool call").
+    /// </summary>
+    [Fact]
+    public void ResolveChunkBudgetFor_CalledRepeatedly_HashesTheManifestFilesOnlyOncePerEngine()
+    {
+        var vocab = BundledModel.ResolveVocabPath();
+        var dir = WriteManifestDir(Manifest(vocabSha: ShaOfFile(vocab)), ("vocab.txt", File.ReadAllText(vocab)), ("model.onnx", "model"));
+        var hasher = new CountingFileHasher();
+        var service = new EmbeddingService(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(),
+            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator(), hasher));
+        var settings = new EmbeddingSettings("local", dir, null, null);
+
+        for (var i = 0; i < 5; i++)
+        {
+            service.ResolveChunkBudgetFor(settings);
+        }
+
+        hasher.CallCount.ShouldBeLessThanOrEqualTo(2,
+            "the manifest's 2 pinned files must be hashed once per engine fingerprint, not once per call");
+    }
+
+    private sealed class CountingFileHasher : IFileHasher
+    {
+        private readonly IFileHasher _real = new FileHasher();
+        public int CallCount { get; private set; }
+
+        public string Sha256OfFile(string path)
+        {
+            CallCount++;
+            return _real.Sha256OfFile(path);
+        }
+    }
+
     [Fact]
     public void ResolveChunkBudgetFor_ManifestWith300Window_IsCtxMinusTwo()
     {
@@ -107,7 +150,7 @@ public sealed class EmbeddingServiceManifestBudgetTests
     public void TrimQueryToWindow_ManifestModel_TrimsToTheSameCap()
     {
         var vocab = BundledModel.ResolveVocabPath();
-        var dir = WriteManifestDir(Manifest(8192), ("vocab.txt", File.ReadAllText(vocab)), ("model.onnx", "model"));
+        var dir = WriteManifestDir(Manifest(8192, vocabSha: ShaOfFile(vocab)), ("vocab.txt", File.ReadAllText(vocab)), ("model.onnx", "model"));
         var service = Service();
         var settings = new EmbeddingSettings("local", dir, null, null);
         var longQuery = string.Join(' ', Enumerable.Repeat(
@@ -125,7 +168,7 @@ public sealed class EmbeddingServiceManifestBudgetTests
     public void TrimQueryToWindow_ManifestModel_AtTheCap_IsNotTrimmed()
     {
         var vocab = BundledModel.ResolveVocabPath();
-        var dir = WriteManifestDir(Manifest(8192), ("vocab.txt", File.ReadAllText(vocab)), ("model.onnx", "model"));
+        var dir = WriteManifestDir(Manifest(8192, vocabSha: ShaOfFile(vocab)), ("vocab.txt", File.ReadAllText(vocab)), ("model.onnx", "model"));
         var service = Service();
         var settings = new EmbeddingSettings("local", dir, null, null);
         var tokenizer = service.ResolveTokenizer(settings)!;
@@ -177,7 +220,7 @@ public sealed class EmbeddingServiceManifestBudgetTests
     {
         var spmPath = await TestData.EnsureSentencePieceFixtureAsync(TestContext.Current.CancellationToken);
         var manifest = Manifest(family: "sentencepiece");
-        manifest["tokenizer"]!["files"] = new JsonArray(new JsonObject { ["path"] = "sp.model", ["sha256"] = ShaOf("sp") });
+        manifest["tokenizer"]!["files"] = new JsonArray(new JsonObject { ["path"] = "sp.model", ["sha256"] = ShaOfFile(spmPath) });
         manifest["tokenizer"]!["options"] = new JsonObject
         {
             ["addBeginOfSentence"] = true,
@@ -213,7 +256,7 @@ public sealed class EmbeddingServiceManifestBudgetTests
     public void ResolveTokenizer_IsCachedPerFingerprint_SharedWithTheGenerator()
     {
         var vocab = BundledModel.ResolveVocabPath();
-        var dir = WriteManifestDir(Manifest(), ("vocab.txt", File.ReadAllText(vocab)), ("model.onnx", "model"));
+        var dir = WriteManifestDir(Manifest(vocabSha: ShaOfFile(vocab)), ("vocab.txt", File.ReadAllText(vocab)), ("model.onnx", "model"));
         var service = Service();
         var settings = new EmbeddingSettings("local", dir, null, null);
 
