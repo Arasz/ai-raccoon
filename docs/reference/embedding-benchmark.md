@@ -22,11 +22,12 @@ every corpus document's embedding by cosine similarity, and the top-10 most
 similar documents are returned. Only the embedding model differs — that is
 what the numbers isolate.
 
-## Quality results — real-world corpus (2026-08-03)
+## Quality results — real-world corpus (2026-08-03, historical)
 
-174 documents from real repositories (job-search-ai-assistant, ai-badger,
-arasz-home-page ADRs, invariants, skills, `.remember` notes), 68 queries with
-verified relevance judgments.
+**Historical**: measured on the 174-document/68-query corpus later re-derived from private
+sources onto this repository's own public docs (ai-raccoon#455) — the current corpus is 195
+documents / 77 queries (see `benchmarks/README.md`); these figures were not re-measured against
+it (`measure-when-it-pays` — a full re-run needs a live LM Studio server).
 
 | embedder | dim | R@5 | R@10 | MRR | nDCG@10 |
 |---|---:|---:|---:|---:|---:|
@@ -114,6 +115,8 @@ dotnet run -c Release --project benchmarks/AiRaccoon.Benchmarks \
   -- --bench --filter '*EmbeddingLatencyBenchmark*' --job short       # latency
 ```
 
-Corpus provenance: `scripts/generate-benchmark-corpus.py` extracts the
-real-world documents verbatim from the three repositories (read-only) and
-emits the C# corpus files with per-query `// judgment:` relevance comments.
+Corpus provenance: `scripts/generate-benchmark-corpus.py` extracts documents
+verbatim from this repository's own public docs (`docs/`, `.ai-badger/`,
+ai-raccoon#455, ADR-0090 precedent) and emits the C# corpus files with
+per-query `// judgment:` relevance comments. Reproducible from a fresh
+clone; override the source root with `AIRACCOON_BENCHMARK_CORPUS_ROOT`.
