@@ -251,6 +251,18 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal);
     }
 
+    [Fact]
+    public async Task MaintenanceEmbedRowsPerRunEmpty_Returns1_AndWritesNothing()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, _, err) = await Run(["settings", "maintenance", "embed-rows-per-run", ""], store);
+
+        exit.ShouldBe(ExitCode.InvalidArgument);
+        err.ShouldContain("positive");
+        store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal);
+    }
+
     /// <summary>
     ///     Review finding 1 (#517), BLOCKING: an unbounded rows-per-run lets `EntryEmbedder`/
     ///     `CodeEmbedder` materialise the whole `SELECT ... LIMIT` result as one List — exactly the
