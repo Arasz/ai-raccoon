@@ -9,8 +9,9 @@ namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
 ///     Parity gate: the managed store is measured against the vendored reference golden output on
-///     the shared corpus; PASS requires no nDCG regression beyond NdcgParityDelta at any sweep
-///     point and p95 latency within budget (docs/work/features-native-memory/native-memory.feature).
+///     the shared corpus; PASS requires no nDCG regression beyond NdcgParityDelta at any sweep point
+///     (docs/work/features-native-memory/native-memory.feature). p95 latency is a separate
+///     Performance=Benchmark fact so host speed cannot fail the correctness gate.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Nightly)]
@@ -26,7 +27,7 @@ public sealed class ParityGateTests(ManagedHarnessFixture fixture, ITestOutputHe
     public const string WriteReportEnvVar = "AIRACCOON_HARNESS_WRITE_REPORT";
 
     [Fact]
-    public async Task FusedSearch_NdcgParityWithinDelta_AtEverySweepPoint_AndP95WithinBudget()
+    public async Task FusedSearch_NdcgParityWithinDelta_AtEverySweepPoint()
     {
         fixture.Harness.DocumentCount.ShouldBe(RealWorldCorpus.Documents.Count,
             "the managed harness must hold the full shared corpus");
@@ -59,15 +60,33 @@ public sealed class ParityGateTests(ManagedHarnessFixture fixture, ITestOutputHe
         output.WriteLine(
             $"observed nDCG@10 delta range across all sweep points: {bestDelta:+0.0000;-0.0000} .. {worstDelta:+0.0000;-0.0000} (positive = new side above the reference)");
 
+        // p95 latency is reported here, not asserted: the wall-clock budget is a separate
+        // Performance=Benchmark fact (FusedSearch_P95LatencyWithinBudget) so a slow host cannot
+        // fail this correctness gate (owner gate G7; ruling #464).
         var p95 = TestData.Percentile(fixture.Harness.QueryLatenciesMs, 0.95);
-        p95.ShouldBeLessThanOrEqualTo(P95LatencyBudgetMs,
-            $"p95 managed query latency {p95:F1} ms exceeds the {P95LatencyBudgetMs:F0} ms budget");
 
         output.WriteLine($"reference (golden k={golden.K}): nDCG@10 {reference.NdcgAt10:F4}, MRR {reference.Mrr:F4}, Recall@10 {reference.RecallAt10:F4}");
         output.WriteLine($"new-side p95 {p95:F1} ms / p50 {TestData.Percentile(fixture.Harness.QueryLatenciesMs, 0.50):F1} ms over {fixture.Harness.QueryLatenciesMs.Count} queries");
         output.WriteLine(rows.ToString());
 
         WriteReportIfRequested(golden, reference, outcomes, p95);
+    }
+
+    /// <summary>
+    ///     Wall-clock companion to <see cref="FusedSearch_NdcgParityWithinDelta_AtEverySweepPoint"/>: asserts
+    ///     that run's p95 query latency against <see cref="P95LatencyBudgetMs"/>. Split out (owner gate G7,
+    ///     ruling #464) so a slow host cannot turn the nDCG correctness gate red. Reads the
+    ///     <see cref="ManagedHarness.QueryLatenciesMs"/> already populated by that fact's sweep — no second
+    ///     corpus pass.
+    /// </summary>
+    [Fact]
+    [Trait(TestCategories.Performance, TestCategories.Benchmark)]
+    public void FusedSearch_P95LatencyWithinBudget()
+    {
+        var p95 = TestData.Percentile(fixture.Harness.QueryLatenciesMs, 0.95);
+        p95.ShouldBeLessThanOrEqualTo(P95LatencyBudgetMs,
+            $"p95 managed query latency {p95:F1} ms exceeds the {P95LatencyBudgetMs:F0} ms budget over " +
+            $"{fixture.Harness.QueryLatenciesMs.Count} queries");
     }
 
     [Fact]
