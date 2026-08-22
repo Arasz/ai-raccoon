@@ -69,7 +69,6 @@ internal sealed class FakeRaccoon : IAsyncDisposable
     private static async Task WaitUntilAnsweringAsync(int port, CancellationToken cancellationToken)
     {
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-        var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(30);
         while (true)
         {
             try
@@ -84,12 +83,6 @@ internal sealed class FakeRaccoon : IAsyncDisposable
                                            && !cancellationToken.IsCancellationRequested)
             {
                 // Not serving yet.
-            }
-
-            if (DateTimeOffset.UtcNow > deadline)
-            {
-                throw new InvalidOperationException(
-                    $"FakeRaccoon on port {port} never answered /observability within 30s");
             }
 
             await Task.Delay(TimeSpan.FromMilliseconds(25), cancellationToken);

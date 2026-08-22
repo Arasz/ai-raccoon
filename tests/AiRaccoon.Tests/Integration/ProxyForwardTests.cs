@@ -221,9 +221,8 @@ public sealed class ProxyForwardTests : IAsyncLifetime
 
     private static CancellationTokenSource Deadline()
     {
-        var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
-        cts.CancelAfter(TimeSpan.FromSeconds(30));
-        return cts;
+        // The test's own token is the only hang guard; no wall-clock verdict (PR #464).
+        return CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition, CancellationToken cancellationToken)

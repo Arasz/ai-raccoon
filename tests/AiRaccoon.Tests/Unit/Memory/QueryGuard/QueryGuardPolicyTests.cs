@@ -147,6 +147,7 @@ public class QueryGuardPolicyTests
     ///     measured real embedding at 14.6-26.5 ms; this must land far below 1 ms per call.
     /// </summary>
     [Fact]
+    [Trait(TestCategories.Performance, TestCategories.Benchmark)]
     public void Evaluate_RunsInSubMillisecondTime()
     {
         const int iterations = 10_000;

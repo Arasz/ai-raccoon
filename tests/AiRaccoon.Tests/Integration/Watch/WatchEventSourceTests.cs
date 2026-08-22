@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using AiRaccoon.Infrastructure.Watch;
 using Microsoft.Extensions.Logging.Abstractions;
 using AiRaccoon.Tests.Unit.Watch;
@@ -295,19 +294,18 @@ public sealed class WatchEventSourceTests
             "renamed event for target");
     }
 
-    private static void WaitFor(Func<bool> condition, string what, int timeoutMs = 3000)
+    /// <summary>Waits on the OS event itself; the test's token is the only hang guard (PR #464).</summary>
+    private static void WaitFor(Func<bool> condition, string what)
     {
-        var sw = Stopwatch.StartNew();
-        while (sw.ElapsedMilliseconds < timeoutMs)
+        var token = TestContext.Current.CancellationToken;
+        while (!condition())
         {
-            if (condition())
+            if (token.IsCancellationRequested)
             {
-                return;
+                throw new XunitException($"Cancelled while waiting for {what}.");
             }
 
             Thread.Sleep(25);
         }
-
-        throw new XunitException($"Timed out after {timeoutMs} ms waiting for {what}.");
     }
 }

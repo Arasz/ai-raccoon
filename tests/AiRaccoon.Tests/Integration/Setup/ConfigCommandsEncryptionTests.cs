@@ -116,7 +116,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
         // Entering the body means winning the process-global gate, which the rest of the suite also
         // wants; a short bound here measures contention, not the behaviour under test.
-        await bodyStarted.Task.WaitAsync(TimeSpan.FromSeconds(120), TestContext.Current.CancellationToken);
+        await bodyStarted.Task.WaitAsync(TestContext.Current.CancellationToken);
 
         // Bounded on purpose: the body is still running, so this acquire must lose.
         var stolen = await TestData.EnvVarGate.WaitAsync(TimeSpan.FromMilliseconds(500),
@@ -133,7 +133,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
             }
 
             letBodyFinish.SetResult();
-            await outer.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            await outer.WaitAsync(TestContext.Current.CancellationToken);
         }
     }
 
