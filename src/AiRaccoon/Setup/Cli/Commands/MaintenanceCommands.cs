@@ -59,17 +59,15 @@ public sealed class MaintenanceCommands(IMaintenanceStatsStore maintenanceStats,
     }
 
     /// <summary>
-    ///     WP11-C (owner gate G18): the "cheaper first move" — takes effect on the drain's next
-    ///     pass, no restart. Review finding 4 (#517): validity is Core's one rule
-    ///     (<see cref="BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun" />) — the CLI calls it
-    ///     rather than restating "positive" or the ceiling itself; a present-but-invalid value is
-    ///     rejected here rather than silently clamped, unlike a stored setting read at drain time.
+    ///     Sets the embed rows-per-run cap; takes effect on the drain's next pass, no restart.
+    ///     Validity is Core's one rule (<see cref="BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun" />);
+    ///     an empty or invalid value is rejected here, never clamped or defaulted (ADR-0010).
     /// </summary>
     public async Task<int> SetEmbedRowsPerRunAsync(ParseResult parseResult, IMemoryStore store,
         StandardStreams streams, CancellationToken cancellationToken)
     {
         var raw = parseResult.GetValue<string>("rows");
-        if (!BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun(raw, out var parsed))
+        if (string.IsNullOrWhiteSpace(raw) || !BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun(raw, out var parsed))
         {
             await streams.WriteErrorLineAsync(
                 $"ai-raccoon: embed rows per run must be a positive integer, at most {BankMaintenanceConfigKeys.MaxEmbedRowsPerRun}");
