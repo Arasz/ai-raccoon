@@ -43,11 +43,13 @@ public sealed record SearchTimings(
     ///     by reflecting over "every TimeSpan property" (F11): that would have silently minted a
     ///     series for <see cref="Total" /> too. Adding a phase means adding it here <em>and</em> to
     ///     the test that pins these names (SearchResultsTests) — deliberate, not an oversight.
+    ///     <c>search.affinity</c> stays bound to <see cref="Merge" /> rather than being renamed
+    ///     (#465): renaming an exported series would orphan its stored metric rows.
     /// </summary>
     public static IReadOnlyList<string> PhaseNames { get; } =
     [
         "search.open", "search.embed", "search.fts", "search.vector",
-        "search.fusion", "search.affinity", "search.snippets", "search.bump"
+        "search.fusion", "search.affinity", "search.adjustment", "search.snippets", "search.bump"
     ];
 
     /// <summary>Every series a search records — <see cref="PhaseNames" /> plus <see cref="TotalName" /> — derived once, so downstream readers never keep a second hand-written copy (derive-or-delete-the-list).</summary>
@@ -62,8 +64,9 @@ public sealed record SearchTimings(
         (PhaseNames[3], Vector),
         (PhaseNames[4], Fusion),
         (PhaseNames[5], Merge),
-        (PhaseNames[6], Snippets),
-        (PhaseNames[7], Bump)
+        (PhaseNames[6], Adjustment),
+        (PhaseNames[7], Snippets),
+        (PhaseNames[8], Bump)
     ];
 
     /// <summary>This instance's series as name/value pairs — <see cref="Phases" /> plus <see cref="Total" /> under <see cref="TotalName" /> — mirroring <see cref="FusionDiff.Measurements" />.</summary>

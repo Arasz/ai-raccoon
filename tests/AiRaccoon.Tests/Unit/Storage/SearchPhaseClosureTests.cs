@@ -33,13 +33,11 @@ namespace AiRaccoon.Tests.Unit.Storage;
 ///     Real SQLite still runs underneath; it simply no longer contributes noise to the assertion.
 ///     </para>
 ///     <para>
-///     <b><see cref="SearchTimings.Adjustment" /> is subtracted explicitly.</b>
-///     <see cref="SearchTimings.Phases" /> exports eight spans and the record measures nine —
-///     <c>search.affinity</c> is bound to <c>Merge</c>, and <c>Adjustment</c> has no exported name
-///     at all — so Σ(phases) has never included it and the old residual silently carried the whole
-///     adjustment phase inside its 28 ms. Naming it here makes the closure statement true rather
-///     than approximately true. Reported to the owner as a separate finding; not changed here,
-///     because renaming an exported metric series is not this task's scope.
+///     <b><see cref="SearchTimings.Adjustment" /> is a phase, not a special case (#465).</b>
+///     <see cref="SearchTimings.PhaseNames" /> now carries <c>search.adjustment</c>, so
+///     <see cref="SearchTimings.Phases" /> already sums it — <see cref="Unaccounted" /> derives
+///     entirely from <see cref="SearchTimings.Phases" /> and no longer subtracts
+///     <see cref="SearchTimings.Adjustment" /> by name.
 ///     </para>
 /// </remarks>
 [Trait(TestCategories.Category, TestCategories.Integration)]
@@ -75,6 +73,9 @@ public sealed class SearchPhaseClosureTests : IDisposable
         Unaccounted(timings).ShouldBe(TimeSpan.Zero,
             "every tick of Total must fall inside a phase bracket — a non-zero remainder means a " +
             "phase under-reported its own work, or a new untimed step was added ahead of the phases");
+        timings.Phases().ShouldContain(phase => phase.Name == "search.adjustment",
+            "search.adjustment (#465) must be its own exported phase — Unaccounted no longer carries " +
+            "Adjustment as an unnamed special case");
         timings.Embed.ShouldBe(EmbedCost,
             "the embedder's cost must land inside search.embed, not outside it");
         timings.Total.ShouldBe(EmbedCost,
@@ -102,15 +103,12 @@ public sealed class SearchPhaseClosureTests : IDisposable
     }
 
     /// <summary>
-    ///     <c>Total - Σ(phases) - Adjustment</c>: the part of the measured total that no bracket
-    ///     claims. <see cref="SearchTimings.Adjustment" /> is measured but absent from
-    ///     <see cref="SearchTimings.Phases" /> (see the class remarks), so it is named here instead
-    ///     of being left to hide in the remainder.
+    ///     <c>Total - Σ(phases)</c>: the part of the measured total that no phase bracket claims,
+    ///     derived from <see cref="SearchTimings.Phases" /> alone (derive-or-delete-the-list) —
+    ///     no separately hand-kept set of "phases not yet in Phases()".
     /// </summary>
     private static TimeSpan Unaccounted(SearchTimings timings) =>
-        timings.Total
-        - timings.Phases().Aggregate(TimeSpan.Zero, (acc, phase) => acc + phase.Value)
-        - timings.Adjustment;
+        timings.Total - timings.Phases().Aggregate(TimeSpan.Zero, (acc, phase) => acc + phase.Value);
 
     private async Task<SearchTimings> SearchAsync(FakeTimeProvider clock)
     {

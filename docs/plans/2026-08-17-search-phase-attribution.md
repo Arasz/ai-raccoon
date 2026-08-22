@@ -681,3 +681,12 @@ carried all of it — on the real clock `AdjustMergedResults` always measures so
 early-return path. The replacement subtracts `Adjustment` by name rather than letting it hide in the
 remainder. Whether `search.adjustment` should be an exported series is left to the owner; renaming a
 metric series was not in scope for the test fix.
+
+### 2026-08-22 — `search.adjustment` exported as its own series (#465)
+
+Owner ruling (G8/G11): export `search.adjustment` as the ninth phase; do not rename
+`search.affinity` — it stays bound to `Merge`, so stored metric rows under that name are not
+orphaned. `PhaseNames`/`Phases()` now carry all nine measured `SearchTimings` phases;
+`SeriesNames.Count` is 10 (nine phases plus `search.total`). The closure gate's `Unaccounted`
+helper (§ above) no longer subtracts `Adjustment` by name — it is summed by `Phases()` like any
+other phase.
