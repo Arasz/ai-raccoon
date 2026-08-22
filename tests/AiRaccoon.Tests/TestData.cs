@@ -81,6 +81,28 @@ public static class TestData
             settings ?? new SqliteSettingsStore(factory));
     }
 
+    /// <summary>
+    ///     D4 fixture replacement for the deleted <c>ConfigureEmbeddingAsync</c> direct path: drives
+    ///     the same seam `model set` uses in production — <see cref="IModelMigrationStore.StartModelMigrationAsync"/>
+    ///     writes the engine settings and opens a migration row only when the engine actually
+    ///     changed — then immediately drains it with a fresh <see cref="IEntryEmbedder"/>.
+    ///     <see cref="IEntryEmbedder.DrainMigrationAsync"/> is a safe no-op when nothing is open, so
+    ///     calling it unconditionally reproduces the old synchronous "configure and re-embed inline"
+    ///     contract without a second, test-only config path.
+    /// </summary>
+    public static async Task<EmbeddingConfig> ConfigureAndDrainEmbeddingAsync(IMemoryStore store,
+        ISqliteConnectionFactory factory, IEmbeddingService embeddings, string provider, string? model,
+        string? baseUrl, CancellationToken cancellationToken)
+    {
+        var config = await store.StartModelMigrationAsync(provider, model, baseUrl, cancellationToken)
+            .ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        var embedder = new EntryEmbedder(embeddings, new SqliteModelMigrationLease(TimeProvider.System),
+            TimeProvider.System);
+        await embedder.DrainMigrationAsync(connection, cancellationToken).ConfigureAwait(false);
+        return config;
+    }
+
     /// <summary>Real o200k-backed markdown chunker for tests that exercise token bounds, not just structure.</summary>
     public static IMarkdownChunker RealMarkdownChunker()
     {
