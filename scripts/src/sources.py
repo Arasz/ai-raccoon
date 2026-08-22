@@ -1,16 +1,22 @@
-"""File enumeration for the JSAA docs ingestion pipeline (moved verbatim from scripts/ingest-jsaa-docs.py)."""
+"""File enumeration shared by the two corpora built from an ai-badger-shaped doc tree.
+
+The include/exclude rules are supplied by the caller — `corpus_config` for the committed
+retrieval fixture (ADR-0090), `jsaa_config` for the owner's local private-project ingest.
+One matcher, two configurations: a second copy of these rules would drift the day one side
+gained a glob and the other did not.
+"""
 
 from __future__ import annotations
 
 import fnmatch
 from pathlib import Path
 
-from jsaa_config import EXCLUDE_GLOBS, INCLUDE_GLOBS, JSAA_ROOT
+from jsaa_config import EXCLUDE_GLOBS, INCLUDE_GLOBS
 
 
-def _matches_exclude(rel: str) -> bool:
+def _matches_exclude(rel: str, exclude_globs: list[str] | None = None) -> bool:
     """Check if a relative path matches any exclusion rule."""
-    for pattern in EXCLUDE_GLOBS:
+    for pattern in EXCLUDE_GLOBS if exclude_globs is None else exclude_globs:
         if pattern.endswith("/"):
             # Directory prefix exclusion
             if rel.startswith(pattern) or rel + "/" == pattern:
@@ -133,21 +139,27 @@ def classify_file(rel: str) -> tuple[str, str]:
     return ("unknown", "docs:architecture")
 
 
-def enumerate_files(root: Path = JSAA_ROOT) -> list[tuple[Path, str, str]]:
+def enumerate_files(
+    root: Path,
+    include_globs: list[str] | None = None,
+    exclude_globs: list[str] | None = None,
+    include_skill_references: bool = True,
+) -> list[tuple[Path, str, str]]:
     """Walk root and return [(absolute_path, relative_path, type_key), ...].
 
-    Sorted for determinism.
+    Sorted for determinism. Glob lists default to jsaa_config's for the legacy ingest CLI.
     """
+    include_globs = INCLUDE_GLOBS if include_globs is None else include_globs
     # Collect all include matches
     included: dict[str, Path] = {}  # rel_path → abs_path
 
-    for pattern in INCLUDE_GLOBS:
+    for pattern in include_globs:
         if "*" in pattern:
             # Glob expansion
             for p in root.glob(pattern):
                 if p.is_file():
                     rel = str(p.relative_to(root))
-                    if not _matches_exclude(rel):
+                    if not _matches_exclude(rel, exclude_globs):
                         included[rel] = p
         elif pattern.endswith("/*"):
             # Directory/* : all files in dir (non-recursive)
@@ -155,27 +167,30 @@ def enumerate_files(root: Path = JSAA_ROOT) -> list[tuple[Path, str, str]]:
             for p in dir_glob.parent.glob(dir_glob.name):
                 if p.is_file():
                     rel = str(p.relative_to(root))
-                    if not _matches_exclude(rel):
+                    if not _matches_exclude(rel, exclude_globs):
                         included[rel] = p
         else:
             # Exact file path
             p = root / pattern
             if p.is_file():
                 rel = str(p.relative_to(root))
-                if not _matches_exclude(rel):
+                if not _matches_exclude(rel, exclude_globs):
                     included[rel] = p
 
-    # Also include skill reference files
-    for skill_dir in (root / ".ai-badger/skills").iterdir():
-        if not skill_dir.is_dir():
-            continue
-        refs_dir = skill_dir / "references"
-        if refs_dir.is_dir():
-            for ref_file in refs_dir.rglob("*"):
-                if ref_file.is_file():
-                    rel = str(ref_file.relative_to(root))
-                    if not _matches_exclude(rel):
-                        included[rel] = ref_file
+    # The legacy jsaa selection pulls in every skill reference file regardless of extension.
+    # The fixture corpus states that as an explicit glob in its own include list instead, and
+    # opts out here, so the two selections cannot drift into each other.
+    if include_skill_references:
+        skills_root = root / ".ai-badger/skills"
+        if skills_root.is_dir():
+            for skill_dir in skills_root.iterdir():
+                refs_dir = skill_dir / "references"
+                if skill_dir.is_dir() and refs_dir.is_dir():
+                    for ref_file in refs_dir.rglob("*"):
+                        if ref_file.is_file():
+                            rel = str(ref_file.relative_to(root))
+                            if not _matches_exclude(rel, exclude_globs):
+                                included[rel] = ref_file
 
     results: list[tuple[Path, str, str]] = []
     for rel in sorted(included):
