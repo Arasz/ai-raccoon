@@ -17,7 +17,7 @@ namespace AiRaccoon.Tests.Integration.Ingestion;
 
 /// <summary>
 ///     `memory_ingest_file`'s direct-ingest path (<c>SqliteMemoryStore.ReplaceForDirectIngestAsync</c>)
-///     used to embed its chunk inline before returning — the last surviving <c>embedInline</c> path
+///     used to embed its chunk inline before returning — the last surviving inline-embed path
 ///     after WP11-B2 already deferred the watch digest and the directory walk. It now leaves the row
 ///     `pending` and enqueues the embed topic, like every other write path
 ///     (docs/work/2026-08-22-post-delta-3-plan.md).

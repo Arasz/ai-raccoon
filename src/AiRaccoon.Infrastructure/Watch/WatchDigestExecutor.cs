@@ -88,9 +88,8 @@ public sealed class WatchDigestExecutor(
             .ConfigureAwait(false);
         if (replaced)
         {
-            // WP11-B2: signal the embed topic instead of draining inline and unbounded — the rows
-            // stay embed_state='pending' (the durable outbox, ADR-0076) until EmbedDrainService's
-            // single reader gets to them.
+            // Signals the embed topic; rows stay embed_state='pending' (the durable outbox,
+            // ADR-0076) until EmbedDrainService's single reader drains them.
             embedDrainPump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Memory));
         }
 

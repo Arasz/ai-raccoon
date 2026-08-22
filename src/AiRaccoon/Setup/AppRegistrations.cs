@@ -76,14 +76,14 @@ public static partial class AppRegistrations
         {
             services.AddRequiredSingleton<ISharedExtractionService, SharedExtractionService>();
             services.AddRequiredSingleton<ISharedExtractionRunner, SharedExtractionRunner>();
-            // WP8 (docs/adr/0065): the share-extract pipeline and the read-path query guard are
-            // services now, so the CLI and the background loop can reach what only MCP could.
+            // docs/adr/0065: share-extract and the read-path query guard are services, not
+            // MCP-only, so the CLI and the background loop can reach them too.
             services.AddRequiredSingleton<IShareExtractService, ShareExtractService>();
             services.AddRequiredSingleton<IQueryGuardService, QueryGuardService>();
-            // WP2 (docs/adr/0067): composes the store and the queue, which the store itself cannot —
-            // PromotionQueueService already takes IMemoryStore, so store -> queue -> store is a cycle.
+            // docs/adr/0067: composes the store and the queue here — PromotionQueueService
+            // already takes IMemoryStore, so the store itself cannot own this without a cycle.
             services.AddRequiredSingleton<IMemoryWriteService, MemoryWriteService>();
-            // WP6: memory_search's kind dispatch (which legs run, the code-scope rule, the
+            // memory_search's kind dispatch (which legs run, the code-scope rule, the
             // search_quality exclusion) lives here, off the tool layer (mcp.instructions.md).
             services.AddRequiredSingleton<ISearchDispatcher, SearchDispatcher>();
         }
@@ -186,27 +186,24 @@ public static partial class AppRegistrations
                 new PromotionQueuePruneJob(sp.GetRequiredService<TimeProvider>()),
                 // .NET-F1: on-demand — HasWorkAsync reads entries.embed_state itself, not a cadence.
                 new PendingEmbedJob(sp.GetRequiredService<IEntryEmbedder>(), sp.GetRequiredService<IEventPump<EmbedDrainRequest>>()),
-                // WP5/WP7-remainder (§3.3 D-E9/§3.8): on-demand, same shape as PendingEmbedJob —
-                // signals a drain of code_entries rows a code-engine activation or fingerprint
-                // change left pending. No outbox, no ToolGate interaction.
+                // On-demand, same shape as PendingEmbedJob (docs/work/2026-08-21-code-search-implementation-plan.md
+                // §3.8): signals a drain of code_entries rows a code-engine activation or
+                // fingerprint change left pending. No outbox, no ToolGate interaction.
                 new CodeReindexJob(sp.GetRequiredService<ICodeEmbedder>(), sp.GetRequiredService<IEventPump<EmbedDrainRequest>>())
             ]);
             services.AddHostedService<BankMaintenanceHostedService>();
         }
 
         /// <summary>
-        ///     The embed topic (docs/work/2026-08-22-post-delta-3-plan.md WP11-B2, owner ruling
-        ///     G17): one <see cref="EventPump{T}" /> instance shared by every producer
-        ///     (<see cref="PendingEmbedJob" />, <see cref="CodeReindexJob" />,
-        ///     <see cref="WatchDigestExecutor" />, <see cref="FileIngestor" />) and
-        ///     <see cref="EmbedDrainService" />'s single reader — registered as a singleton so DI
-        ///     hands every one of them the same instance.
+        ///     The embed topic's single background consumer. The <see cref="IEventPump{T}" />
+        ///     singleton itself is registered by <see cref="RegisterFileIngestionServices" /> —
+        ///     every producer (<see cref="PendingEmbedJob" />, <see cref="CodeReindexJob" />,
+        ///     <see cref="WatchDigestExecutor" />, <see cref="FileIngestor" />,
+        ///     <see cref="SqliteMemoryStore" />) needs it wherever <see cref="RegisterCoreMemoryServices" />
+        ///     runs, including the narrower CLI graph that never registers this hosted service.
         /// </summary>
         private void RegisterEmbedDrainServices()
         {
-            services.AddSingleton<IEventPump<EmbedDrainRequest>>(_ =>
-                new EventPump<EmbedDrainRequest>(
-                    new PumpTopic(EmbedDrainService.PumpCeiling, EmbedDrainService.PumpCapacity, Coalesce: true)));
             services.AddHostedService<EmbedDrainService>();
         }
 
@@ -225,8 +222,18 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<IMetricsReportService, MetricsReportService>();
         }
 
+        /// <summary>
+        ///     Also registers the embed topic's <see cref="IEventPump{T}" /> singleton (see
+        ///     <see cref="RegisterEmbedDrainServices" />) — every caller of
+        ///     <see cref="RegisterCoreMemoryServices" /> constructs <see cref="FileIngestor" /> and
+        ///     <see cref="SqliteMemoryStore" />, both of which require it whether or not this
+        ///     process also runs the hosted drain consumer.
+        /// </summary>
         private void RegisterFileIngestionServices()
         {
+            services.AddSingleton<IEventPump<EmbedDrainRequest>>(_ =>
+                new EventPump<EmbedDrainRequest>(
+                    new PumpTopic(EmbedDrainService.PumpCeiling, EmbedDrainService.PumpCapacity, Coalesce: true)));
             services.AddSingleton<O200kTokenizer>();
             services.AddSingleton<TokenCount>(sp => new TokenCount(sp.GetRequiredService<O200kTokenizer>().CountTokens));
             services.AddRequiredSingleton<IMarkdownChunker, MarkdownChunker>();
@@ -289,8 +296,8 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<INoiseShadowObserver, NoiseShadowObserver>();
 
             services.AddRequiredSingleton<IMemoryStore, SqliteMemoryStore>();
-            // WP6 (docs/work/2026-08-21-code-search-implementation-plan.md §3.6): FTS5-only v1 leg —
-            // the seam where WP5 adds the vec0 leg + RRF fusion.
+            // FTS5-only v1 leg (docs/work/2026-08-21-code-search-implementation-plan.md §3.6) —
+            // the seam where a vec0 leg + RRF fusion would attach.
             services.AddRequiredSingleton<ICodeSearchService, SqliteCodeSearchService>();
             // ADR-0076: same instance as IMemoryStore — split out for the same reason ISettingsStore
             // was (ADR-0075), so the CLI can route model-set through the server independently.
@@ -334,8 +341,9 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<IVecDimensionReconciler, VecDimensionReconciler>();
             services.AddRequiredSingleton<IEntryEmbedder, EntryEmbedder>();
             services.AddRequiredSingleton<IEmbeddingAvailability, EmbeddingAvailability>();
-            // WP5 (§12.2 H5): the code corpus's own embedder — a second engine in the same keyed
-            // CreateGenerator cache, no IModelMigrationLease (the code corpus has no outbox).
+            // The code corpus's own embedder (docs/work/2026-08-21-code-search-implementation-plan.md
+            // §12.2 H5) — a second engine in the same keyed CreateGenerator cache, no
+            // IModelMigrationLease (the code corpus has no outbox).
             services.AddRequiredSingleton<ICodeEmbedder, CodeEmbedder>();
         }
 
