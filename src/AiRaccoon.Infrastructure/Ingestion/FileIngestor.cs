@@ -416,7 +416,7 @@ public sealed class FileIngestor(
     ///     pre-commit`), or matches the built-in deny set (<see cref="WatchDenySet" /> —
     ///     node_modules/bin/obj/.git/.venv/__pycache__/dist/build/target).
     /// </summary>
-    private static bool IsHidden(string root, string path) => IngestPath.HasHiddenOrDeniedSegment(root, path, WatchDenySet.Names);
+    private static bool IsHidden(string root, string path) => WatchDenySet.Excludes(root, path);
 
     /// <summary>`ai-raccoon.ignore` check against the walk root's rules (§2.1): never true for the
     /// ignore file's own path — it is unindexable by extension anyway, but a `*` pattern must not

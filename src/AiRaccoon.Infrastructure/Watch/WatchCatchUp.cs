@@ -9,9 +9,10 @@ namespace AiRaccoon.Infrastructure.Watch;
 ///     Catch-up scan (docs/plans/file-watcher-implementation.md D1): a never-synced watch gets a
 ///     full initial scan; otherwise it re-queues files changed since the watermark or never
 ///     fingerprinted, reconciles deletions from downtime, and is single-flighted per (projectId, path).
-///     Enumeration also skips hidden directory segments, the built-in deny set, and
+///     Enumeration also skips hidden directory segments, the built-in deny set
+///     (<see cref="WatchDenySet.Excludes" />, the same predicate the digest applies to events), and
 ///     `ai-raccoon.ignore` matches (docs/work/2026-08-21-code-search-implementation-plan.md §2.1/
-///     §2.3); <see cref="ReconcileIgnoredAsync" /> cleans fingerprinted-but-now-ignored paths, and a
+///     §2.3); <see cref="ReconcileAsync" /> cleans fingerprinted-but-now-excluded paths, and a
 ///     mid-scan edit to the ignore file is caught by re-comparing the loaded <see cref="IgnoreRules" />
 ///     for value equality (its source text, not a filesystem mtime check) at the end of each pass —
 ///     no new queue state on <see cref="WatchScanGuard" /> (pinned H10, which named mtime-recheck;
@@ -71,7 +72,7 @@ public sealed partial class WatchCatchUp(
         var rules = ignoreRules ?? IgnoreRules.Empty;
         foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
         {
-            if (IngestPath.HasHiddenOrDeniedSegment(path, file, WatchDenySet.Names))
+            if (WatchDenySet.Excludes(path, file))
             {
                 continue;
             }
@@ -176,38 +177,19 @@ public sealed partial class WatchCatchUp(
             pipeline.Enqueue(new WatchEvent(projectId, file, WatchEventKind.Created));
         }
 
-        await ReconcileMissingAsync(projectId, path, cancellationToken).ConfigureAwait(false);
-        await ReconcileIgnoredAsync(projectId, path, ignoreRules, cancellationToken).ConfigureAwait(false);
+        await ReconcileAsync(projectId, path, ignoreRules, cancellationToken).ConfigureAwait(false);
         return true;
     }
 
     /// <summary>
-    ///     Restart reconciliation: a fingerprinted file missing on disk is a delete that
-    ///     happened while the server was down — enqueue Deleted so its chunks are removed.
+    ///     One walk of the fingerprinted files under the watch: a file missing on disk was deleted
+    ///     while the server was down, and one the exclusion rule (#494) or an ignore rule now covers
+    ///     was indexed before that rule applied. Either way, enqueue Deleted so the digest's own gate
+    ///     removes the stale chunks and the fingerprint.
     /// </summary>
-    private async Task ReconcileMissingAsync(string projectId, string watchPath, CancellationToken cancellationToken)
-    {
-        foreach (var file in await watchStore.ListFilesAsync(projectId, cancellationToken).ConfigureAwait(false))
-        {
-            if (IngestPath.IsWithinScope(file, watchPath) && !File.Exists(file))
-            {
-                pipeline.Enqueue(new WatchEvent(projectId, file, WatchEventKind.Deleted));
-            }
-        }
-    }
-
-    /// <summary>
-    ///     A file fingerprinted before an ignore rule started matching it must be cleaned up too —
-    ///     enqueue Deleted so the digest's ignore gate removes its stale chunks and fingerprint.
-    /// </summary>
-    private async Task ReconcileIgnoredAsync(string projectId, string watchPath, IgnoreRules ignoreRules,
+    private async Task ReconcileAsync(string projectId, string watchPath, IgnoreRules ignoreRules,
         CancellationToken cancellationToken)
     {
-        if (!ignoreRules.HasRules)
-        {
-            return;
-        }
-
         foreach (var file in await watchStore.ListFilesAsync(projectId, cancellationToken).ConfigureAwait(false))
         {
             if (!IngestPath.IsWithinScope(file, watchPath))
@@ -215,7 +197,8 @@ public sealed partial class WatchCatchUp(
                 continue;
             }
 
-            if (IsIgnoredFile(ignoreRules, watchPath, file))
+            if (!File.Exists(file) || WatchDenySet.Excludes(watchPath, file) ||
+                (ignoreRules.HasRules && IsIgnoredFile(ignoreRules, watchPath, file)))
             {
                 pipeline.Enqueue(new WatchEvent(projectId, file, WatchEventKind.Deleted));
             }

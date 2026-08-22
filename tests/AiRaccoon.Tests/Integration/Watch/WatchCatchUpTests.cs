@@ -542,6 +542,37 @@ public sealed class WatchCatchUpTests
     }
 
     /// <summary>
+    ///     #494: a bank polluted while the digest still indexed agent worktrees must clean itself.
+    ///     The reconcile runs on every ordinary catch-up pass — no `ai-raccoon.ignore` involved.
+    /// </summary>
+    [Fact]
+    public async Task EnqueueChangedSince_FingerprintedFileUnderAWorktreeDirectory_ReconcileDeletesIt()
+    {
+        using var dir = TempDir.New("catchup-reconcile-excluded");
+        var leaked = Path.Combine(dir.Path, ".claude", "worktrees", "z", "doc.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(leaked)!);
+        await WriteAllTextAsync(leaked, "worktree copy", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        stack.Enable();
+        stack.AllowScope(dir.Path);
+        stack.Memory.Settings[WatchConfigKeys.ConcurrencyProject(Project)] = "1";
+        stack.Memory.OnDeletePath = stack.Store.RemoveFingerprint;
+        await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        await stack.Store.UpsertFileHashAsync(Project, IngestPath.Normalize(leaked), "stale-hash",
+            0, TestContext.Current.CancellationToken);
+        var catchUp = NewCatchUp(stack);
+
+        catchUp.EnqueueChangedSince(Project, dir.Path, 0, TestContext.Current.CancellationToken);
+        await catchUp.LastScan!;
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+
+        stack.Memory.DeletedPaths.ShouldContain((Project, IngestPath.Normalize(leaked)));
+        (await stack.Store.GetFileHashAsync(Project, IngestPath.Normalize(leaked),
+            TestContext.Current.CancellationToken)).ShouldBeNull();
+        stack.Memory.Ingested.ShouldBeEmpty();
+    }
+
+    /// <summary>
     ///     S5: the original version of this test asserted <c>LoadCalls.Count &gt; 1</c>, which can
     ///     never fail — one settling attempt (no re-walk at all) already costs 2 LoadAsync calls
     ///     (top-of-loop + end-of-loop reread), so the assertion passed whether the loop's re-walk

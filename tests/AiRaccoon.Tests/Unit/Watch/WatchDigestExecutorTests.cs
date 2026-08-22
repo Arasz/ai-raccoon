@@ -327,6 +327,96 @@ public sealed class WatchDigestExecutorTests
         stack.ScanInitiator.Calls.ShouldBeEmpty();
     }
 
+    /// <summary>
+    ///     #494: the enumeration skipped hidden/deny-set segments but the digest did not, so any
+    ///     file written under `.claude/worktrees/` or `node_modules/` after registration was indexed
+    ///     anyway. An excluded event is now handled exactly like an `ai-raccoon.ignore` match.
+    /// </summary>
+    [Theory]
+    [InlineData(".hidden/x.md")]
+    [InlineData("node_modules/y.js")]
+    [InlineData(".claude/worktrees/z/doc.md")]
+    public async Task Digest_PathUnderAHiddenOrDeniedDirectory_IsNeverIngestedOrFingerprinted(string relative)
+    {
+        using var dir = TempDir.New("digest-excluded");
+        var file = Nested(dir, relative, "worktree copy");
+        var stack = new WatchTestStack();
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+
+        await Executor(stack).DigestAsync(Project, dir.Path, file, WatchEventKind.Created, null,
+            TestContext.Current.CancellationToken);
+
+        stack.Memory.Ingested.ShouldBeEmpty();
+        stack.Memory.DeletedPaths.ShouldContain((Project, file));
+        (await stack.Store.GetFileHashAsync(Project, file, TestContext.Current.CancellationToken)).ShouldBeNull();
+        stack.Store.Watches[(Project, dir.Path)].LastChangeTs.ShouldBe(WatchTestStack.FixedNow.ToUnixTimeSeconds());
+    }
+
+    /// <summary>Negative control for the exclusion gate: an ordinary sibling still ingests.</summary>
+    [Fact]
+    public async Task Digest_SiblingOfAnExcludedDirectory_StillIngests()
+    {
+        using var dir = TempDir.New("digest-excluded-control");
+        Nested(dir, "node_modules/y.js", "vendored");
+        var visible = Nested(dir, "docs/keep.md", "zephyrkeep");
+        var stack = new WatchTestStack();
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+
+        await Executor(stack).DigestAsync(Project, dir.Path, visible, WatchEventKind.Created, null,
+            TestContext.Current.CancellationToken);
+
+        stack.Memory.Ingested.ShouldHaveSingleItem();
+        stack.Memory.Ingested[0].Path.ShouldBe(visible);
+        (await stack.Store.GetFileHashAsync(Project, visible, TestContext.Current.CancellationToken))
+            .ShouldNotBeNull();
+    }
+
+    [Fact]
+    public async Task Digest_FileIndexedBeforeTheExclusionGateExisted_DeletesStaleChunksAndFingerprint()
+    {
+        using var dir = TempDir.New("digest-excluded-cleanup");
+        var file = Nested(dir, ".claude/worktrees/z/doc.md", "leaked copy");
+        var stack = new WatchTestStack();
+        stack.Memory.OnDeletePath = stack.Store.RemoveFingerprint;
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+        await stack.Store.UpsertFileHashAsync(Project, file, "stale-hash", 0,
+            TestContext.Current.CancellationToken);
+
+        await Executor(stack).DigestAsync(Project, dir.Path, file, WatchEventKind.Deleted, null,
+            TestContext.Current.CancellationToken);
+
+        stack.Memory.DeletedPaths.ShouldContain((Project, file));
+        (await stack.Store.GetFileHashAsync(Project, file, TestContext.Current.CancellationToken)).ShouldBeNull();
+    }
+
+    /// <summary>
+    ///     The rule is the directory walk's, so a watch registered ON a hidden file is still
+    ///     digested — the same target distinction <c>WatchCatchUp.EnumerateFiles</c> already makes.
+    /// </summary>
+    [Fact]
+    public async Task Digest_SingleFileWatchOnAHiddenFile_StillIngests()
+    {
+        using var dir = TempDir.New("digest-hidden-file-target");
+        var file = dir.File(".notes.md");
+        await File.WriteAllTextAsync(file, "hello", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        await stack.Store.AddWatchAsync(Project, file, 0, 0, TestContext.Current.CancellationToken);
+
+        await Executor(stack).DigestAsync(Project, file, file, WatchEventKind.Created, null,
+            TestContext.Current.CancellationToken);
+
+        stack.Memory.Ingested.ShouldHaveSingleItem();
+        (await stack.Store.GetFileHashAsync(Project, file, TestContext.Current.CancellationToken)).ShouldNotBeNull();
+    }
+
+    private static string Nested(TempDir dir, string relative, string content)
+    {
+        var path = Path.Combine(dir.Path, relative.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, content);
+        return path;
+    }
+
     [Fact]
     public void ComputeHash_IsSha256OfPathPlusContent()
     {
