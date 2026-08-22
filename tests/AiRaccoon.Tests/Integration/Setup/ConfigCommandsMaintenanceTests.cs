@@ -213,4 +213,56 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         outp.ShouldContain("checkpoint interval: 30 min");
         outp.ShouldContain("vacuum interval: 3 days");
     }
+
+    /// <summary>WP11-C (G18): the "cheaper first move" the owner can turn without a release.</summary>
+    [Fact]
+    public async Task MaintenanceEmbedRowsPerRunSet_WritesGlobalRow()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, outp, _) = await Run(["settings", "maintenance", "embed-rows-per-run", "512"], store);
+
+        exit.ShouldBe(0);
+        store.Settings[BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal].ShouldBe("512");
+        outp.ShouldContain("embed rows per run: 512");
+    }
+
+    [Fact]
+    public async Task MaintenanceEmbedRowsPerRunInvalid_Returns1_AndWritesError()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, _, err) = await Run(["settings", "maintenance", "embed-rows-per-run", "0"], store);
+
+        exit.ShouldBe(ExitCode.InvalidArgument);
+        err.ShouldContain("positive");
+        store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal);
+    }
+
+    [Fact]
+    public async Task MaintenanceEmbedRowsPerRunNonNumeric_Returns1_AndWritesError()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, _, err) = await Run(["settings", "maintenance", "embed-rows-per-run", "many"], store);
+
+        exit.ShouldBe(ExitCode.InvalidArgument);
+        err.ShouldContain("positive");
+        store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal);
+    }
+
+    [Fact]
+    public async Task MaintenanceList_ShowsEmbedRowsPerRun_DefaultAndConfigured()
+    {
+        var store = new FakeConfigStore();
+
+        var (exitDefault, outpDefault, _) = await Run(["settings", "maintenance", "list"], store);
+        exitDefault.ShouldBe(0);
+        outpDefault.ShouldContain($"embed rows per run: {BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun}");
+
+        store.Settings[BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal] = "512";
+        var (exit, outp, _) = await Run(["settings", "maintenance", "list"], store);
+        exit.ShouldBe(0);
+        outp.ShouldContain("embed rows per run: 512");
+    }
 }

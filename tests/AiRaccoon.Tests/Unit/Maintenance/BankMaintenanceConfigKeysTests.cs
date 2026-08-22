@@ -78,4 +78,47 @@ public sealed class BankMaintenanceConfigKeysTests
             BankMaintenanceConfigKeys.MaxVacuumIntervalDays.ToString()).ShouldBe(
             BankMaintenanceConfigKeys.MaxVacuumIntervalDays);
     }
+
+    /// <summary>WP11-C (G18): today's 4 * EntryEmbedder.BatchSize, unchanged behaviour on day one.</summary>
+    [Fact]
+    public void EmbedRowsPerRun_KeyAndDefault_AreTheContract()
+    {
+        BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal.ShouldBe("maintenance.embed-rows-per-run.global");
+        BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun.ShouldBe(128);
+    }
+
+    [Fact]
+    public void TryParseEmbedRowsPerRun_Unset_IsValid_AndDefaults()
+    {
+        BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun(null, out var rows).ShouldBeTrue();
+        rows.ShouldBe(BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun);
+
+        BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun("", out var rowsEmpty).ShouldBeTrue();
+        rowsEmpty.ShouldBe(BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun);
+    }
+
+    [Fact]
+    public void TryParseEmbedRowsPerRun_Positive_Parses()
+    {
+        BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun("7", out var rows).ShouldBeTrue();
+        rows.ShouldBe(7);
+    }
+
+    [Theory]
+    [InlineData("abc")]
+    [InlineData("0")]
+    [InlineData("-5")]
+    public void TryParseEmbedRowsPerRun_Garbage_IsInvalid_ButStillReturnsTheDefault(string value)
+    {
+        BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun(value, out var rows).ShouldBeFalse();
+        rows.ShouldBe(BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun);
+    }
+
+    [Fact]
+    public void ParseEmbedRowsPerRun_MirrorsTryParse_WithoutTheValidityFlag()
+    {
+        BankMaintenanceConfigKeys.ParseEmbedRowsPerRun("7").ShouldBe(7);
+        BankMaintenanceConfigKeys.ParseEmbedRowsPerRun("garbage").ShouldBe(BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun);
+        BankMaintenanceConfigKeys.ParseEmbedRowsPerRun(null).ShouldBe(BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun);
+    }
 }
