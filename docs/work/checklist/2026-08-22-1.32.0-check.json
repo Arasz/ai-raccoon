@@ -15,7 +15,18 @@
     "note": "python3 .claude/skills/ai-raccoon-manual-checklist/scripts/derive-facts.py . on 021d6c17 \u2192 version=1.32.0 mcp-tool-count=28 mcp-prompt-count=2"
   },
   "findings-against-prior-runs": [
-    "None. All seven items re-derived independently against 1.32.0 (fresh fixtures, fresh data roots, live sqlite3 evidence) and reproduce the same pass/substituted verdicts and mechanisms the 2026-08-22-1.32.0-post-delta-wave.json run recorded. No wrong reasoning, no stale pin, and no drifted docs/source constant found this run."
+    {
+      "prior-run": "docs/work/checklist/2026-08-22-1.32.0-post-delta-wave.json, item 'server-lifecycle'",
+      "prior-claim": "(lane A, as filed) see what-is-actually-true",
+      "what-is-actually-true": "None. All seven items re-derived independently against 1.32.0 (fresh fixtures, fresh data roots, live sqlite3 evidence) and reproduce the same pass/substituted verdicts and mechanisms the 2026-08-22-1.32.0-post-delta-wave.json run recorded. No wrong reasoning, no stale pin, and no drifted docs/source constant found this run.",
+      "evidence": "lane A serve.log: NodeRunner[609] exit 16 on the first --restart, clean cycle on the immediate retry",
+      "so-what": "A first --restart that exits 16 under load is ADR-0043's documented unanswered-probe refusal, retryable; do not file it as a regression."
+    },
+    {
+      "against": "2026-08-22-1.32.0-post-delta-wave.json",
+      "item": "server-lifecycle",
+      "finding": "The prior run's server-lifecycle evidence shows a clean single-attempt --restart with no probe failure. This run's first --restart attempt hit ADR-0043's 'unanswered probe' path (exit 16, NodeRunner[609]) before succeeding on an immediate retry. This is not a defect in the prior run's verdict (server-lifecycle still correctly passes both runs) -- it is a note that --restart's success is probe-timing-dependent under load, exactly as ADR-0043 documents and explicitly designed for ('retryable in the sense 10 is'), and a future run seeing the same transient refusal should not treat it as a new regression without first checking ADR-0043."
+    }
   ],
   "items": [
     {
@@ -31,102 +42,102 @@
     {
       "item": "server-lifecycle",
       "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "ai-raccoon --data-root <lane>/root1 --port 0 serve --idle-timeout 0 (bound 62495, pid 53986) ; ai-raccoon --data-root <lane>/root2 --port 48765 serve --idle-timeout 0 (pid 54909) ; ai-raccoon --data-root <lane>/root2 --port 48765 serve --restart --idle-timeout 0 (1st attempt) ; curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:48765/mcp ; ai-raccoon --data-root <lane>/root2 --port 48765 serve --restart --idle-timeout 0 (2nd attempt) ; lsof -iTCP:7721 -sTCP:LISTEN checked before/throughout/after",
+      "evidence": "--port 0 -> 'Now listening on: http://127.0.0.1:62495'.\n1st --restart attempt -> 'fail: AiRaccoon.Hosting.Node.NodeRunner[609] port 48765 is in use but gave the probe no answer; nothing was asked to stop' then 'ai-raccoon: cannot restart the server on port 48765: it is in use but gave the probe no answer, so nothing was asked to stop -- try again, stop the listener yourself, or serve on another port'. Direct curl to the same port immediately after returned 401 (server was in fact answering).\n2nd --restart attempt (immediate retry, no changes) -> 'AiRaccoon.Hosting.Node.ServerRestart[650] asking the server on port 48765 to stop (pid 54909, 1.32.0+021d6c178745e0d59d74102168fb27888d5e68d7)' then '[651] the server on port 48765 (pid 54909) stopped and the port is free', then fresh bind as pid 59094 (lsof -iTCP:48765 confirms new pid). Old pid 54909 absent from ps afterward.\nlsof -iTCP:7721 -sTCP:LISTEN showed pid 37299 unchanged before, during and after both attempts.",
+      "observed-result": "--port 0 binds and reports an ephemeral port correctly. The first --restart attempt hit the documented ADR-0043 'unanswered probe' path (exit path NodeRunner[609]/ServerRestart[656] family, exit code 16, 'try again') rather than attaching or corrupting state -- ADR-0043 explicitly describes this as the correct, retryable outcome on a loaded probe ('measured... on a loaded machine', 'retryable in the sense 10 is -- the probe may answer on the next run'), and this run was on a machine under load per the task's own instructions. The immediate retry succeeded, correctly identified the incumbent by exact pid and version, stopped it, and rebound cleanly in its place. Port 7721 was never touched by either attempt.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Core contract met: --port 0 binds/reports; --restart correctly identifies and cycles the incumbent server (proven by exact pid+version match) rather than attaching, and 7721 is provably untouched throughout. The first attempt's ADR-0043 refusal is documented, intended behaviour for a probe that times out under load (exit 16, explicitly retryable), not a defect -- confirmed by reading ADR-0043 itself, not assumed from the error text alone."
     },
     {
       "item": "memory-write-stores-and-reports-truthfully",
       "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "tools/call memory_write (clean prose, project laneA) via POST /mcp with X-AiRaccoon-Token ; tools/call memory_write x3 (the three HermesProcessNoisePolicy shapes read from src/AiRaccoon.Core/Memory/Filtering/Policies/HermesProcessNoisePolicy.cs)",
+      "evidence": "clean -> {\"hash\":\"819b6ba173f0e1346e4ede2a644640a182fce6bd1e4a715fc62080052944077e\",...,\"stored\":true}\n'[IMPORTANT: Background process completed normally. Command: dotnet build]' -> {\"hash\":\"\",\"path\":\"\",\"stored\":false,\"reason\":\"rejected by noise policy 'HermesBackgroundProcessLog'\"}\n'[ASYNC DELEGATION BATCH complete: 3 tasks finished]' -> same shape, stored=false, same reason\n'received signal 15' -> same shape, stored=false, same reason",
+      "observed-result": "A stored write returns a real content hash with stored=true; each of the three rejected shapes returns stored=false, empty hash and path, and the exact policy name that rejected it. No fabricated identity in either direction.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both directions exercised live against the running 1.32.0 server; the three rejected shapes were read from the actual policy source, not guessed."
     },
     {
       "item": "memory-search-hybrid-retrieval",
       "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "ai-raccoon model set local (bundled ONNX all-MiniLM-L6-v2) ; wrote 5 entries (sextant target + JWT/password-reset/decision distractors, plus a laneA commit note) ; confirmed embed_state=embedded (1536-byte blobs) via ?mode=ro ; memory_search default weights, query='An old copper device that ocean travelers relied upon for gauging elevation of celestial bodies above the sea edge during dusk.' (checked for zero literal-token overlap with the sextant text's content words: sextant/brass/instrument/navigators/once/used/measure/angle/star/horizon/twilight/aboard/ship) ; same query with ftsWeight=0/vectorWeight=1 and with ftsWeight=1/vectorWeight=0 to isolate each leg. NOTE: a first-draft query ('...watching the stars from the deck at night') accidentally shared 'brass'/'star'/'once'/'used' with the stored text and was discarded before drawing any conclusion, since it could not have exercised a dead vector leg.",
+      "evidence": "Default hybrid (1:1) -> sextant ranked #1 (1.0), decision #2 (0.984), password-reset #3 (0.968), commit-note #4 (0.953), JWT #5 (0.938).\nVector-only (ftsWeight=0) -> sextant #1 (1.0), decision #2 (0.984), commit-note #3 (0.968), password-reset #4 (0.953), JWT #5 (0.938) -- the semantic leg alone puts the zero-overlap target first.\nFTS-only (vectorWeight=0) -> commit-note ranked #1 (1.0), sextant demoted to #2 (0.984), password-reset #3, decision #4, JWT #5 -- a DIFFERENT top result than both hybrid and vector-only, proving the FTS leg is genuinely isolated (it cannot understand the semantic match and produces FTS5's OR-fallback order instead).",
+      "observed-result": "The entry IS returned through hybrid search at rank 1; isolating the two legs proves both are functioning and genuinely distinct: the vector leg alone (correctly) ranks the zero-overlap target first, and the FTS-only leg (correctly) produces a DIFFERENT ranking that does not privilege the semantic target -- a dead/no-op vector leg would have made vector-only and FTS-only identical, and they are not.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Verified live with a genuinely zero-literal-overlap query (a first draft that accidentally overlapped was caught and discarded before use); the FTS-only leg producing a materially different top result than the vector-only leg is the discriminating evidence that both legs are real and separately wired, not that one silently mirrors the other."
     },
     {
       "item": "memory-get-returns-content-by-hash",
       "expected-result": "memory_get returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "tools/call memory_get hash=819b6ba173f0e1346e4ede2a644640a182fce6bd1e4a715fc62080052944077e ; tools/call memory_get hash=000...0 (65-char unknown hash)",
+      "evidence": "known -> {\"hash\":\"819b6ba1...\",\"value\":\"Decision: the release-1-32-0 commit under lane-A verification is 021d6c178745e0d59d74102168fb27888d5e68d7, a clean prose note for the manual checklist run.\",...}\nunknown -> isError:true, \"unknown-hash: No entry with hash '000...' in project 'laneA'.\"",
+      "observed-result": "Round-trips the exact content written earlier in this run for a known hash; an unknown hash is refused with the structured unknown-hash error, never an empty or fabricated result. Secondary observable: the ToolRefusals[911] log line ('\"memory_get\" refused: unknown-hash') fired for the negative control, confirming the refusal is logged, not silently swallowed.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Round-tripped the value written by this run's own memory_write; negative control (unknown hash) exercised live and cross-checked against the server's own refusal log line."
     },
     {
       "item": "source-path-anchor-resolves-its-chunk",
       "expected-result": "a `file#section` query returns that exact chunk within the production result window",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "settings ingest scope add laneA <lane>/fixtures ; memory_ingest_file <lane>/fixtures/quadrant.md (2 headings, chunked into 2 real chunks -- chunkIndex 0/1 of totalChunks 2, confirmed embedded via ?mode=ro) ; memory_search query='quadrant.md#residual-offset' (literal anchor-style) ; memory_search with a semantic paraphrase checked for zero literal-token overlap with chunk1's wording (offset/residual/measured/subtracted/constant/star/altitude/almanac/pivot/screw)",
+      "evidence": "Literal 'quadrant.md#residual-offset' query -> ordinary keyword hit: chunk 1/2 (the Residual-offset content, hash c3a1e7b5...) ranks #1 purely because 'residual'/'offset' tokens are present -- 'file#section' is not a query syntax, just literal text that happens to keyword-match, consistent with all prior runs (2026-08-21, 1.30.0, 1.31.0, 1.32.0-post-delta-wave).\nSemantic paraphrase 'A device that consistently reports a value a fixed amount too big or too small, once that steady error is discovered and written down, has it deducted automatically from every later reading so the same defect is never diagnosed twice.' -> chunk 1/2 (Residual-offset, hash c3a1e7b5...) ranks #1 (1.0), chunk 0/2 (Leveled-bench) second (0.985) -- real chunk-level semantic retrieval, chunkIndex/totalChunks correctly reported, no literal overlap between query and chunk wording.",
+      "observed-result": "Chunk-level retrieval works correctly on 1.32.0 (chunkIndex/totalChunks correct, the right chunk ranked top on a genuinely non-overlapping semantic paraphrase, sourceFile pointing exactly at the ingested fixture). 'file#section' remains not a supported query syntax, consistent with all prior runs.",
+      "status": "substituted",
+      "accepted": true,
+      "acceptance-reason": "Substituted: chunk resolution verified via chunkIndex/totalChunks + a semantic paraphrase confirmed to share zero literal content words with the target chunk, since the '#section' query form does not exist as syntax -- correctly and consistently reconfirmed across five consecutive runs now."
     },
     {
       "item": "write-path-noise-filtering",
       "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "grep INoiseFilterPolicy registrations in src/AiRaccoon/Setup/AppRegistrations.cs ; memory_write x1 clean (negative control, reused from item 2) + x3 notification shapes (reused from item 2) ; ai-raccoon noise entries ; sqlite3 ?mode=ro SELECT detected_by_policy, request_content, project_id FROM noise_entries",
+      "evidence": "Registered policies in AppRegistrations.cs:258: HermesProcessNoisePolicy only (unchanged from 1.29.0-1.32.0-post-delta-wave).\nclean -> stored=true. Three shapes -> stored=false, 'rejected by noise policy HermesBackgroundProcessLog', each.\n'noise entries' CLI -> 'total: 3  HermesBackgroundProcessLog: 3'.\nnoise_entries table (read-only) -> all 3 full original bodies present verbatim: '[IMPORTANT: Background process completed normally. Command: dotnet build]', '[ASYNC DELEGATION BATCH complete: 3 tasks finished]', 'received signal 15', all under detected_by_policy='HermesBackgroundProcessLog', project_id='laneA'.",
+      "observed-result": "The one registered write-path policy rejects all three shapes it claims and accepts clean prose (negative control passes, so a policy rejecting everything would have failed this item); the rejection reason is reported on every rejected write, and the rejected content is fully retrievable, verbatim, from the noise_entries table.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Negative control included; verified against the policy actually registered in this build's source; rejected content confirmed retrievable by content, not just by the CLI's count summary."
     },
     {
       "item": "read-path-query-guard",
       "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "memory_search with the full Hermes notification shape (refuse tier) ; memory_search with a .NET stack-frame line (warn/annotate tier) ; ai-raccoon settings queryguard show ; grep QueryGuardConfigKeys.DefaultStructuralEnabled ; settings queryguard structural --help",
+      "evidence": "refuse -> isError:true 'invalid-params: This looks like tool output rather than a question... Refused query: [IMPORTANT: Background process completed normally. Command: dotnet build]' -- logged as ToolRefusals[910].\nwarn -> 7 results still returned, data.warning='This query contains what looks like log or stack-trace output. Memory search matches meaning, not literal text...'\n'settings queryguard show' -> 'enabled: True  shadow: False  structural: False  threshold: 0.98939822280316'\nsource: QueryGuardConfigKeys.DefaultStructuralEnabled = false; 'structural --help': 'Off by default -- it only ever adds an annotation, never a refusal.'",
+      "observed-result": "Refuse tier throws with actionable guidance and returns no results (and is logged as a refusal, not silently dropped); annotate tier returns full results WITH a warning; the structural detector is confirmed disabled live on this fresh bank (matching the compiled default), and its own CLI help text states it can only ever annotate.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "All three tiers behave as ADR-0040/0041 specify, checked live against a fresh 1.32.0 bank's actual settings state, not assumed from source alone."
     },
     {
       "item": "file-watch-status",
       "expected-result": "memory_watch_status lists live registrations and their sync state",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "memory_watch_status (before, empty project) ; ai-raccoon settings watch enable laneA true ; settings ingest scope add laneA <lane>/root1/watchdir ; seeded a real file (seed.md) in that dir ; memory_watch_add(root1/watchdir) ; memory_watch_status (after) ; sqlite3 ?mode=ro to confirm the seeded file's content actually landed in entries",
+      "evidence": "before -> {\"watches\":[]}\nadd -> {\"path\":\".../root1/watchdir\",\"pruned\":[]}\nafter (3s later) -> {\"watches\":[{\"projectId\":\"laneA\",\"path\":\".../root1/watchdir\",\"state\":\"Healthy\",\"lastSync\":\"2026-08-22T14:27:24.943565+00:00\"}]}\nentries table -> hash 0434a17f..., source_file=.../watchdir/seed.md, value='seed file for lane-A watch test' present verbatim -- the watch didn't just report a status, it actually ingested the file.",
+      "observed-result": "Status truthfully reflects an empty list before any registration, then the live registration with a real Healthy state and sync timestamp after one exists; the secondary observable (the file's actual content landing in entries) confirms the watch did real work, not just flipped a status flag.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both states observed (empty and registered) so an always-empty response would fail this item, plus a secondary observable (actual ingested content) beyond the status field alone."
     },
     {
       "item": "promotion-queue-state",
       "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "memory_share_extract projectIds=[laneA] mode=propose (over the 8 real, embedded entries accumulated from items 2/3/5/8) ; memory_promotion_list projectId=laneA",
+      "evidence": "propose -> 8 candidates queued, e.g. quadrant.md chunk1 (residual-offset) score=2.4726 reasons=[work-note,rule-language,heading-start,verified-contract,superseded]; chunk0 (leveled-bench) score=2.3322 reasons=[work-note,rule-language,durable-rule-language,heading-start]; JWT 2.12 [organic-note,durable-fact-language,short-definitional-floor]; sextant 1.394 [organic-note]; decision 1.37 [organic-note]; commit-note 1.37 [organic-note]; password-reset 0.57 [organic-note,second-person,very-short-penalty]; seed.md 0.5 [work-note,too-short]. meta.waitingPromotionsCount=8, capacity.used=8, capacity.reserved=1000.\npromotion_list -> identical 8 hashes, identical scores, identical reasons, identical order; meta.waitingPromotionsCount=8 matches.",
+      "observed-result": "memory_promotion_list accurately mirrors what memory_share_extract(propose) queued: identical hashes, scores, reasons and order, on a real 8-row queue with varied content (not an empty-list weak check).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "An empty queue was deliberately avoided as evidence; real, varied candidates were seeded and cross-checked field-by-field against the propose call's own output."
     },
     {
       "item": "full-mcp-surface",
       "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "initialize + tools/list + prompts/list (JSON-RPC over HTTP, X-AiRaccoon-Token) against the scratch 1.32.0 server ; direct tools/call invocations across this run: memory_write, memory_search, memory_get, memory_ingest_file, memory_watch_add, memory_watch_status, memory_share_extract, memory_promotion_list",
+      "evidence": "tools/list -> 28 names exactly (code_get, memory_delete, memory_delete_context, memory_embed_pending, memory_get, memory_ingest_directory, memory_ingest_file, memory_list, memory_performance, memory_promotion_discard, memory_promotion_list, memory_record_followthrough, memory_record_grade, memory_search, memory_set_ttl, memory_share, memory_share_extract, memory_stats, memory_sweep, memory_sync, memory_watch_add, memory_watch_remove, memory_watch_status, memory_workspace_begin, memory_workspace_consolidate, memory_workspace_discard, memory_workspace_status, memory_write), matching derived.mcp-tool-count=28.\nprompts/list -> 2 exactly (workspace-consolidation-guide, memory-usage-guide), matching derived.mcp-prompt-count=2.",
+      "observed-result": "Every derived tool and prompt is listed, and the count matches exactly on both axes; 8/28 tools were directly exercised with real calls elsewhere in this run.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Counts compared against the supplied derived facts (mcp-tool-count=28, mcp-prompt-count=2), not a remembered number; reachability backed by direct live calls for a meaningful subset of tools used across this run's other items."
     },
     {
       "item": "code-corpus-kind-search-and-envelope",
@@ -286,12 +297,12 @@
       "item": "cli-exit-codes-nobank-and-settings-error",
       "expected-result": "CLI command against a nonexistent bank exits 22 (NoBank); a settings-channel server error exits 23 (SettingsServerError), distinct from usage-error exits. Drive 23 live if a failing server can be arranged cheaply (e.g. point at a dead port); otherwise substituted naming the exit-code test class.",
       "anchor": "PR #433, #426",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "ai-raccoon --data-root <lane>/definitely-does-not-exist-<pid> doctor ; echo $? ; ai-raccoon --data-root <lane>/settingscheck --port 59321 --transport http settings watch list [re-derivation of 'dead port']",
+      "evidence": "doctor against nonexistent bank -> 'ai-raccoon: doctor: no bank at .../definitely-does-not-exist-.../memory.db', exit 22.\nAn explicit unbound dead port (59321, confirmed via lsof beforehand it was not listening) auto-started a fresh backend (BackendLauncher[633] 'starting the backend on port 59321') and returned exit 0 -- a genuinely dead, unbound explicit port never produces an error on this build; CliSettingsBackend.AcquireAsync reuses-or-spawns a backend rather than surfacing a dead-port error.",
+      "observed-result": "NoBank(22) verified live. SettingsServerError(23) requires an actual running server answering 5xx, which is not cheaply arrangeable live on this build -- an explicit dead port silently spawns a backend instead of erroring, confirming the same mechanism the prior (2026-08-22-1.32.0-post-delta-wave) run found.",
+      "status": "substituted",
+      "accepted": true,
+      "acceptance-reason": "22 accepted as a live pass. 23 substituted by lane C's `dotnet test --filter FullyQualifiedName~SettingsChannelExitCodeTests`. The item's suggested live method ('point at a dead port') was re-verified live in this run and confirmed, again, not to reach exit 23 on 1.32.0."
     },
     {
       "item": "sync-blob-hmac-authenticity",
@@ -307,12 +318,12 @@
     {
       "item": "observability-event-ids",
       "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "grep -rhoE '\\[[0-9]{2,4}\\]' across every serve.log/restart-stdout*.log this lane produced (root1/serve.log, root2/serve.log, root2/restart-stdout.log, root2/restart-stdout2.log), sort -u, then grep -B1 for category context ; resolved each id against docs/reference/logging-event-ids.md's Ids table ; cross-checked the framework ids by category name",
+      "evidence": "AiRaccoon-authored ids emitted, all resolving cleanly: 510 (BankMaintenanceHostedService.cs, 510-524 block); 525 (MaintenanceJobRunner.cs, 525-527 block); 609 (NodeRunner.cs, 601-609 block -- table explicitly names '604 and 609 are the unanswered probe, ADR-0043', matching the first restart attempt's own failure text verbatim); 650/651 (ServerRestart.cs, 650-656 block); 660 (ShutdownEndpoint.cs, 660 -- 'shutdown requested over /shutdown; stopping pid 54909'); 672/673 (SettingsEndpoint.cs, 670-675 block -- 672 key-only writes e.g. 'settings wrote ingest.scope.laneA', 673 key-only deletes e.g. 'settings deleted embedding.apiKey' during model set local, value never logged, confirmed); 674 (SettingsEndpoint.cs -- 'model migration to local:bundled committed', the model-migration outbox commit per ADR-0076); 910/911 (ToolRefusals.cs, 910-912 block -- 910 fired for the query-guard refuse-tier test's own refused memory_search, 911 fired for the memory_get unknown-hash negative control). Framework ids correctly excluded from the AiRaccoon table and absent from it: Microsoft.Hosting.Lifetime[14], Microsoft.Extensions.Hosting.Internal.Host[10]/[11] (the failed-start exception path from the first restart attempt -- category is Microsoft's own Host class, not any AiRaccoon namespace).\nSupplementary, from direct terminal output (not a saved serve.log, so noted separately): AiRaccoon.Hosting.Proxy.BackendLauncher[633] ('starting the backend on port 59321'), observed while re-deriving the cli-exit-codes item.",
+      "observed-result": "Every AiRaccoon-authored id this lane's own commands emitted resolves cleanly against the reference table, with log-line content matching each row's stated purpose -- including id 609, whose exact log text ('port 48765 is in use but gave the probe no answer; nothing was asked to stop') matches ADR-0043's own worked example almost verbatim. Ids from Microsoft's own framework categories (14, 10, 11) were correctly identified as out of scope for the AiRaccoon table rather than reported as unresolved.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Only ids actually emitted by this lane's own commands were checked, all resolve, and none were left unresolved; the framework-vs-AiRaccoon distinction was verified by category name, not assumed."
     }
   ],
   "event-ids-seen": {
@@ -323,6 +334,100 @@
       525,
       672,
       910
+    ],
+    "A": [
+      {
+        "id": 510,
+        "category": "AiRaccoon.Infrastructure.Maintenance.BankMaintenanceHostedService",
+        "resolves": true,
+        "file": "src/AiRaccoon.Infrastructure/Maintenance/BankMaintenanceHostedService.cs"
+      },
+      {
+        "id": 525,
+        "category": "AiRaccoon.Infrastructure.Maintenance.MaintenanceJobRunner",
+        "resolves": true,
+        "file": "src/AiRaccoon.Infrastructure/Maintenance/MaintenanceJobRunner.cs"
+      },
+      {
+        "id": 609,
+        "category": "AiRaccoon.Hosting.Node.NodeRunner",
+        "resolves": true,
+        "file": "src/AiRaccoon/Hosting/Node/NodeRunner.cs",
+        "note": "ADR-0043 unanswered probe"
+      },
+      {
+        "id": 650,
+        "category": "AiRaccoon.Hosting.Node.ServerRestart",
+        "resolves": true,
+        "file": "src/AiRaccoon/Hosting/Node/ServerRestart.cs"
+      },
+      {
+        "id": 651,
+        "category": "AiRaccoon.Hosting.Node.ServerRestart",
+        "resolves": true,
+        "file": "src/AiRaccoon/Hosting/Node/ServerRestart.cs"
+      },
+      {
+        "id": 660,
+        "category": "AiRaccoon",
+        "resolves": true,
+        "file": "src/AiRaccoon/Hosting/Node/ShutdownEndpoint.cs"
+      },
+      {
+        "id": 672,
+        "category": "AiRaccoon",
+        "resolves": true,
+        "file": "src/AiRaccoon/Settings/SettingsEndpoint.cs"
+      },
+      {
+        "id": 673,
+        "category": "AiRaccoon",
+        "resolves": true,
+        "file": "src/AiRaccoon/Settings/SettingsEndpoint.cs"
+      },
+      {
+        "id": 674,
+        "category": "AiRaccoon",
+        "resolves": true,
+        "file": "src/AiRaccoon/Settings/SettingsEndpoint.cs"
+      },
+      {
+        "id": 910,
+        "category": "AiRaccoon.Tools.ToolRefusals",
+        "resolves": true,
+        "file": "src/AiRaccoon/Tools/ToolRefusals.cs"
+      },
+      {
+        "id": 911,
+        "category": "AiRaccoon.Tools.ToolRefusals",
+        "resolves": true,
+        "file": "src/AiRaccoon/Tools/ToolRefusals.cs"
+      },
+      {
+        "id": 633,
+        "category": "AiRaccoon.Hosting.Proxy.BackendLauncher",
+        "resolves": true,
+        "file": "src/AiRaccoon/Hosting/Proxy/BackendLauncher.cs",
+        "note": "observed via direct terminal output, not a saved serve.log"
+      },
+      {
+        "id": 14,
+        "category": "Microsoft.Hosting.Lifetime",
+        "resolves": "n/a",
+        "note": "framework id, correctly not in the AiRaccoon table"
+      },
+      {
+        "id": 10,
+        "category": "Microsoft.Extensions.Hosting.Internal.Host",
+        "resolves": "n/a",
+        "note": "framework id, correctly not in the AiRaccoon table"
+      },
+      {
+        "id": 11,
+        "category": "Microsoft.Extensions.Hosting.Internal.Host",
+        "resolves": "n/a",
+        "note": "framework id, correctly not in the AiRaccoon table"
+      }
     ]
   },
   "settings-channel-exit-code-tests": "cd /Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/1.32.0-check && dotnet test tests/AiRaccoon.Tests --filter FullyQualifiedName~SettingsChannelExitCodeTests 2>&1 | tail -20 -> 'Passed! - Failed: 0, Passed: 2, Skipped: 0, Total: 2, Duration: 69 ms - AiRaccoon.Tests.dll (net10.0)'"
