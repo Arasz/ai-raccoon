@@ -21,10 +21,9 @@ namespace AiRaccoon.Infrastructure.Ingestion;
 ///     <para>
 ///         Discards per-row metadata (rating/access_count/last_accessed_at) for every row it
 ///         replaces — a re-chunk moves boundaries, so hashes change and there is no 1:1 row to carry
-///         them onto. Leaves embedding pending, unlike the watch digest
-///         (<see cref="AiRaccoon.Infrastructure.Watch.WatchDigestExecutor.TryEmbedPendingAsync" />),
-///         which embeds inline after committing — this repair does not. A running server drains it
-///         on-demand within its next ~15s poll
+///         them onto. Leaves embedding pending; it never embeds inline — it signals the embed
+///         topic's single consumer (<see cref="AiRaccoon.Infrastructure.Embedding.EmbedDrainService" />),
+///         which a running server drains on-demand within its next ~15s poll
 ///         (<see cref="AiRaccoon.Infrastructure.Maintenance.PendingEmbedJob" />). ADR-0075's amendment
 ///         means <c>apply: true</c> is now only ever reached inside the server process
 ///         (<see cref="AiRaccoon.Infrastructure.Maintenance.ReingestRepairJob" />, itself gated on a

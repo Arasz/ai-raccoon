@@ -43,7 +43,7 @@ public sealed class VacuumJob(Func<SqliteConnection, CancellationToken, Task<Tim
 
     private TimeSpan? _resolved;
 
-    public async Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    public async ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
         // The trailing semicolons are load-bearing: Dapper infers CommandType.StoredProcedure for a
@@ -92,7 +92,7 @@ public sealed class Vec0ReclaimJob : IMaintenanceJob
     /// <summary>Once ever. The shape it reclaims is created exactly once, by the v9 migration.</summary>
     public TimeSpan? Interval => null;
 
-    public async Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    public async ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
         await connection.ExecuteAsync(new CommandDefinition("VACUUM;", cancellationToken: cancellationToken))
@@ -116,7 +116,7 @@ public sealed class ChunkBackfillJob(IMarkdownChunker chunker, TimeProvider time
 
     public TimeSpan? Interval => null;
 
-    public async Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    public async ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
         var report = await new ChunkBackfill(chunker, timeProvider, embeddingService)
@@ -143,7 +143,7 @@ public sealed class MetricsRetentionJob(TimeProvider timeProvider) : IMaintenanc
 
     public TimeSpan? Interval => MaintenanceJobDefaults.MetricsRetentionInterval;
 
-    public async Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    public async ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
         var days = await ReadRetentionDaysAsync(connection, cancellationToken).ConfigureAwait(false);

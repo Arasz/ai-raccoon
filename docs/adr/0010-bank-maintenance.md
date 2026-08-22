@@ -42,9 +42,12 @@ registered in every mode (stdio and HTTP/S):
   (default 60) and `maintenance.vacuum-interval-days.global` (default 7). Bad values
   (unparseable, zero, negative) fall back to the default, never throw; values above the
   ceiling (36500 days) clamp rather than reject at the parse layer (the CLI rejects them
-  outright before they reach the settings table).
+  outright before they reach the settings table). WP11-C (2026-08-22) added a third key
+  on the same channel, `maintenance.embed-rows-per-run.global` (default 128, ceiling
+  4096) — same clamp-at-parse/reject-at-CLI shape.
 - **CLI:** `ai-raccoon maintenance interval <minutes>` / `maintenance vacuum-interval
-  <days>` / `maintenance list`, same settings-table channel every other config family uses.
+  <days>` / `maintenance embed-rows-per-run <rows>` / `maintenance list`, same
+  settings-table channel every other config family uses.
 
 ## Consequences
 

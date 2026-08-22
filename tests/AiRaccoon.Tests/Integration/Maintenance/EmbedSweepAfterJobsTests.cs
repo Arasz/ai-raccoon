@@ -113,7 +113,7 @@ public sealed class EmbedSweepAfterJobsTests : IDisposable
 
         public TimeSpan? Interval => null;
 
-        public async Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
+        public async ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
         {
             await connection.ExecuteAsync(new CommandDefinition(
                 """
