@@ -560,7 +560,10 @@ internal static class CliCommandTree
             new Command("interval", "Sets the WAL checkpoint interval in minutes (positive integer; default 60)")
                 { new Argument<string>("minutes") { HelpName = "minutes" } },
             new Command("vacuum-interval", "Sets the VACUUM + ANALYZE interval in days (positive integer; default 7)")
-                { new Argument<string>("days") { HelpName = "days" } }
+                { new Argument<string>("days") { HelpName = "days" } },
+            new Command("embed-rows-per-run",
+                    $"Sets the embed drain's rows-per-signal, for both corpora (positive integer; default {BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun}) — takes effect on the drain's next pass, no restart")
+                { new Argument<string>("rows") { HelpName = "rows" } }
         };
         var list = new Command("list", "Shows the bank maintenance configuration (checkpoint interval, vacuum interval)");
         list.Aliases.Add("show");

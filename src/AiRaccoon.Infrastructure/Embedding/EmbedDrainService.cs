@@ -1,4 +1,5 @@
 using AiRaccoon.Core.EventPump;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Observability;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -16,11 +17,11 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     by construction.
 ///     <para>
 ///         Loop: wait for a signal, take exactly one queued request (releasing its coalesce key so a
-///         signal arriving mid-drain queues its own fresh pass), open a connection, drain up to
-///         <see cref="RowsPerRun" /> rows for that corpus, loop. It never re-enqueues itself when
-///         rows remain — the pace is exactly today's 128-rows-per-signal; a large backlog drains
-///         over several signals (the 15s on-demand poll plus one per digest/ingest), not in one
-///         inference-pool-saturating burst.
+///         signal arriving mid-drain queues its own fresh pass), open a connection, drain up to the
+///         bank's <see cref="BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal" /> rows for that
+///         corpus, loop (WP11-C; default 128, re-read on every pass). It never re-enqueues itself
+///         when rows remain — a large backlog drains over several signals (the 15s on-demand poll
+///         plus one per digest/ingest), not in one inference-pool-saturating burst.
 ///     </para>
 ///     <para>
 ///         The channel is a wake-up, not the record: <c>embed_state = 'pending'</c> (ADR-0076) is
@@ -33,6 +34,7 @@ public sealed partial class EmbedDrainService(
     ISqliteConnectionFactory factory,
     IEntryEmbedder entryEmbedder,
     ICodeEmbedder codeEmbedder,
+    ISettingsStore settings,
     IOperationTelemetry telemetry,
     ILogger<EmbedDrainService> logger)
     : BackgroundService
@@ -42,14 +44,6 @@ public sealed partial class EmbedDrainService(
 
     /// <summary>The topic's starting effective cap — see <see cref="PumpTopic.Capacity" />. No setting adjusts this; it is not the pacing lever (rows-per-run is).</summary>
     internal const int PumpCapacity = 8;
-
-    /// <summary>
-    ///     Rows drained per signal, for both corpora — today's 4 generator batches
-    ///     (<see cref="EntryEmbedder.BatchSize" /> == <see cref="CodeEmbedder.BatchSize" /> == 32),
-    ///     unchanged from the two jobs this consumer replaced. WP11-C makes this a bank setting
-    ///     (`maintenance.embed-rows-per-run.global`); B2 keeps it a constant.
-    /// </summary>
-    internal const int RowsPerRun = 4 * EntryEmbedder.BatchSize;
 
     internal const string OperationName = "embed.drain";
 
@@ -103,17 +97,20 @@ public sealed partial class EmbedDrainService(
         }
     }
 
-    /// <summary>One drain pass for one request: open a connection, drain up to <see cref="RowsPerRun" /> rows for its corpus. Test seam.</summary>
+    /// <summary>One drain pass for one request: open a connection, drain up to the configured rows-per-run for its corpus. Test seam.</summary>
     internal async Task DrainOnceAsync(EmbedDrainRequest request, CancellationToken cancellationToken)
     {
         Log.DrainStarted(logger, request.Corpus);
         using var pass = telemetry.Begin(OperationName);
         try
         {
+            var raw = await settings.GetSettingAsync(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal, cancellationToken)
+                .ConfigureAwait(false);
+            var rowsPerRun = ResolveRowsPerRun(raw);
             await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
             var drained = request.Corpus == EmbedCorpus.Code
-                ? await codeEmbedder.EmbedPendingBatchAsync(connection, RowsPerRun, cancellationToken).ConfigureAwait(false)
-                : await entryEmbedder.EmbedPendingBatchAsync(connection, RowsPerRun, cancellationToken).ConfigureAwait(false);
+                ? await codeEmbedder.EmbedPendingBatchAsync(connection, rowsPerRun, cancellationToken).ConfigureAwait(false)
+                : await entryEmbedder.EmbedPendingBatchAsync(connection, rowsPerRun, cancellationToken).ConfigureAwait(false);
 
             if (drained > 0)
             {
@@ -134,6 +131,17 @@ public sealed partial class EmbedDrainService(
         }
     }
 
+    /// <summary>Unset defaults to 128; a present-but-unparseable value also defaults, but warns once. Test seam.</summary>
+    internal int ResolveRowsPerRun(string? raw)
+    {
+        if (!BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun(raw, out var rows))
+        {
+            Log.InvalidRowsPerRunSetting(logger, raw!);
+        }
+
+        return rows;
+    }
+
     private static partial class Log
     {
         [LoggerMessage(EventId = 1002, Level = LogLevel.Debug, Message = "Embed drain pass started for {Corpus}")]
@@ -149,5 +157,9 @@ public sealed partial class EmbedDrainService(
 
         [LoggerMessage(EventId = 1005, Level = LogLevel.Warning, Message = "Embed drain pass failed for {Corpus}")]
         public static partial void DrainFailed(ILogger logger, EmbedCorpus corpus, Exception exception);
+
+        [LoggerMessage(EventId = 1006, Level = LogLevel.Warning,
+            Message = "Invalid maintenance.embed-rows-per-run.global setting '{Value}': expected a positive integer. Using the default instead.")]
+        public static partial void InvalidRowsPerRunSetting(ILogger logger, string value);
     }
 }

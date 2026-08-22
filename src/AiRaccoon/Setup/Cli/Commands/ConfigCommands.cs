@@ -126,6 +126,7 @@ internal sealed class ConfigCommands(
                 ["encryption", "migrate"] => await encryptionCommands.MigrateAsync(streams, ctx),
                 ["settings", "maintenance", "interval"] => await maintenance.SetCheckpointIntervalAsync(parsedCliArgs, store, streams, ctx),
                 ["settings", "maintenance", "vacuum-interval"] => await maintenance.SetVacuumIntervalAsync(parsedCliArgs, store, streams, ctx),
+                ["settings", "maintenance", "embed-rows-per-run"] => await maintenance.SetEmbedRowsPerRunAsync(parsedCliArgs, store, streams, ctx),
                 ["settings", "maintenance", "list"] => await maintenance.ListAsync(store, streams, ctx),
                 ["settings", "performance", "buffer-capacity"] => await performance.SetBufferCapacityAsync(parsedCliArgs, store, streams, ctx),
                 ["settings", "performance", "flush-interval"] => await performance.SetFlushIntervalAsync(parsedCliArgs, store, streams, ctx),

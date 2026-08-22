@@ -58,12 +58,31 @@ public sealed class MaintenanceCommands(IMaintenanceStatsStore maintenanceStats,
         return 0;
     }
 
+    /// <summary>WP11-C (owner gate G18): the "cheaper first move" — takes effect on the drain's next pass, no restart.</summary>
+    public async Task<int> SetEmbedRowsPerRunAsync(ParseResult parseResult, IMemoryStore store,
+        StandardStreams streams, CancellationToken cancellationToken)
+    {
+        var raw = parseResult.GetValue<string>("rows");
+        if (!int.TryParse(raw, out var parsed) || parsed <= 0)
+        {
+            await streams.WriteErrorLineAsync("ai-raccoon: embed rows per run must be a positive integer");
+            return ExitCode.InvalidArgument;
+        }
+
+        await store.SetSettingAsync(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal, parsed.ToString(),
+            cancellationToken);
+        await streams.WriteOutputLineAsync($"embed rows per run: {parsed}");
+        return 0;
+    }
+
     public async Task<int> ListAsync(IMemoryStore store, StandardStreams streams, CancellationToken cancellationToken)
     {
         var checkpoint = BankMaintenanceConfigKeys.ParseCheckpointIntervalMinutes(
             await store.GetSettingAsync(BankMaintenanceConfigKeys.CheckpointIntervalMinutesGlobal, cancellationToken));
         var vacuum = BankMaintenanceConfigKeys.ParseVacuumIntervalDays(
             await store.GetSettingAsync(BankMaintenanceConfigKeys.VacuumIntervalDaysGlobal, cancellationToken));
+        var embedRowsPerRun = BankMaintenanceConfigKeys.ParseEmbedRowsPerRun(
+            await store.GetSettingAsync(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal, cancellationToken));
 
         var current = await maintenanceStats.GetStatsAsync(cancellationToken);
         var previous = ReadPreviousStats();
@@ -73,6 +92,7 @@ public sealed class MaintenanceCommands(IMaintenanceStatsStore maintenanceStats,
 
         await streams.WriteOutputLineAsync($"checkpoint interval: {checkpoint} min");
         await streams.WriteOutputLineAsync($"vacuum interval: {vacuum} days");
+        await streams.WriteOutputLineAsync($"embed rows per run: {embedRowsPerRun}");
         await streams.WriteOutputLineAsync($"db file: {FormatBytes(current.DbBytes)}");
         await streams.WriteOutputLineAsync($"wal: {FormatBytes(current.WalBytes)}");
         await streams.WriteOutputLineAsync($"shm: {FormatBytes(current.ShmBytes)}");

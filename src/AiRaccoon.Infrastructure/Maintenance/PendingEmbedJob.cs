@@ -25,7 +25,7 @@ public sealed class PendingEmbedJob(IEntryEmbedder embedder, IEventPump<EmbedDra
     /// <summary>Never due by the clock; <see cref="HasWorkAsync" /> is the only gate.</summary>
     public TimeSpan? Interval => null;
 
-    public async Task<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    public async ValueTask<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var settings = await embedder.ReadSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(settings.Provider))
@@ -44,9 +44,9 @@ public sealed class PendingEmbedJob(IEntryEmbedder embedder, IEventPump<EmbedDra
     ///     — used to both select and embed the same rows; now the second signal coalesces away and
     ///     <see cref="EmbedDrainService" />'s single reader drains once.
     /// </summary>
-    public Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    public ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         embedDrainPump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Memory));
-        return Task.FromResult(false);
+        return ValueTask.FromResult(false);
     }
 }

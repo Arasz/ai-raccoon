@@ -22,7 +22,7 @@ public sealed class ModelMigrationJob(IEntryEmbedder embedder) : IMaintenanceJob
     /// <summary>Never due by the clock; <see cref="HasWorkAsync" /> is the only gate.</summary>
     public TimeSpan? Interval => null;
 
-    public async Task<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+    public async ValueTask<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
         await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                 "SELECT count(*) FROM model_migration WHERE id = 1 AND finished_at IS NULL",
                 cancellationToken: cancellationToken))
@@ -33,7 +33,7 @@ public sealed class ModelMigrationJob(IEntryEmbedder embedder) : IMaintenanceJob
     ///     left for this pass to do — no open migration, or another relay already holds the lease —
     ///     never a reason to fail the pass: an unfinished migration is retried on the next poll.
     /// </summary>
-    public async Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    public async ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         await embedder.DrainMigrationAsync(connection, cancellationToken).ConfigureAwait(false);
 
