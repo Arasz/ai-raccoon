@@ -1,0 +1,654 @@
+<meta charset="utf-8">
+<title>Post-delta session 3 — fifteen decisions — review</title>
+
+<!--
+  Refinement review form. Fill in CONFIG and DECISIONS below; nothing else needs editing.
+
+  Works unchanged as (a) a local file:// page and (b) a published Artifact. It deliberately has
+  no <!doctype>/<html>/<head>/<body>: the Artifact publisher supplies those, and a browser
+  synthesises them for a local file. The <meta charset> is first in the byte stream so the local
+  file decodes as UTF-8 (the sniffer scans the first 1024 bytes wherever the tag sits).
+
+  Dependency-free on purpose: the Artifact CSP blocks every external host and a file:// page has
+  no server. No CDN, no fonts, no fetch.
+-->
+
+<script>
+  var CONFIG = {
+      "title": "Post-delta session 3 — fifteen decisions",
+      "subtitle": "Owner gate · 2026-08-22 · post-delta-3 (PR #471)",
+      "source": "docs/work/2026-08-22-post-delta-3-plan.md § Owner gate",
+      "outName": "2026-08-22-post-delta-3-feedback.md",
+      "expectedDir": "/Users/arasz/RiderProjects/ai-raccoon/docs/work",
+      "storageKey": "refinement:2026-08-22-post-delta-3:v1"
+  };
+
+  // One object per decision. `detail` and `why` accept inline HTML (<code>, <strong>, <em>).
+  // group starts a new section heading; omit it to stay in the current section.
+  var DECISIONS = [
+      {
+          "group": "Owner actions",
+          "id": "G1",
+          "claim": "The S6b history rewrite waits for #455 (WP6) and then scrubs all three private-prose paths in one pass",
+          "detail": [
+              "Three committed artefacts carry private prose: <code>jsaa-memory.db</code> (7 reachable blobs, already off HEAD), <code>benchmarks/…/RealWorldCorpus.cs</code> (1 blob, commit <code>e303b4bb</code>, 107 <code>jsaa</code> mentions) and — found today, in no issue — <code>tests/…/Unit/Retrieval/assets/reference-topk.json</code> (506 KB; 434 of 680 golden hits and 35 of 68 query ids are <code>jsaa-*</code> with verbatim ADR prose). One <code>git filter-repo --invert-paths</code> call with three <code>--path</code> arguments takes all of them.",
+              "Rewriting now scrubs one path and commits you to a second rewrite later; waiting costs the days WP6 needs, during which today's perfect quiet window (zero open PRs, no stale worktrees) may close. WP5 delivers the runbook + verification script either way. <strong>Recommendation: wait for WP6, then one rewrite.</strong>"
+          ],
+          "why": "<b>If we rewrite twice:</b> every clone is invalidated twice and the chance of losing a branch doubles.",
+          "placeholder": "Notes — e.g. rewrite now anyway, or a date for the quiet window"
+      },
+      {
+          "id": "G2",
+          "claim": "ADR-0089 is ratified: Status: Proposed becomes Accepted",
+          "detail": [
+              "<code>docs/adr/0089-the-project-id-is-a-guidv7-and-that-is-not-access-control.md</code> records your G2 design input verbatim (sortable guidv7 as the token, <code>project_id_token_get</code>, CLI generate + one-way convert, accident-prevention threat model with same-machine projects trusted, legacy raw ids warn-but-work, <code>ai-raccoon.ignore</code> not <code>.gitignore</code>) and answers your open question under its own heading: yes, any holder of the bank's <code>mcp-token</code> can still enumerate every project; encrypting the bank does not change that.",
+              "One place extends your words: <strong>a non-guid id the bank does <em>not</em> know is refused</strong> — that is the sentence to check before ratifying. Zero source files exist for it yet (see G15). <strong>Recommendation: ratify.</strong>"
+          ],
+          "why": "<b>While it reads Proposed:</b> nothing can be built against it and the ledger row stays open.",
+          "placeholder": "Notes — e.g. change the refused-if-unknown rule"
+      },
+      {
+          "id": "G3",
+          "claim": "ai-badger #424 gets its VERSION bump from you, is marked ready and merged",
+          "detail": [
+              "<code>Arasz/ai-badger#424</code> is OPEN, draft, MERGEABLE, four files, all skill documentation: it teaches the <code>ai-raccoon-memory</code> skill to relay the <code>code engine not configured</code> warning as \"code results are keyword-only\" and to name <code>ai-raccoon model set code default</code> once per session. It does not touch <code>VERSION</code>; ai-badger main is at 0.131.0. The bump is owner-only by standing rule, so this is blocked on you and nothing else.",
+              "<strong>Recommendation: bump and merge</strong> — the gap it closes is silent."
+          ],
+          "why": "<b>Until it ships:</b> an agent whose code search degraded to keyword-only has no way to tell the user.",
+          "placeholder": "Notes — e.g. which version, or let the agent bump it this once"
+      },
+      {
+          "id": "G4",
+          "claim": "1.32.0 on nuget.org was intended, and the standing rule is: a VERSION bump on main auto-cuts AND auto-publishes",
+          "detail": [
+              "This is not the approve/decline the brief expected. Publish run <code>32577511356</code> is <code>completed/success</code>; its <code>production</code>-environment job ran 14:08–14:09Z; nuget.org now lists <code>ai-raccoon</code> 1.27.0 … 1.29.0, <strong>1.32.0</strong> (1.30.x and 1.31.x were never published). Your note this morning said \"I will not publish a new version for now\" — so either the approval was deliberate and that note is superseded, or the environment approved without a fresh decision.",
+              "<strong>Recommendation: confirm 1.32.0 was intended and state the rule.</strong> If it was not intended, the fix is a workflow change (dispatch-only publish), not a delist."
+          ],
+          "why": "<b>As it stands:</b> every VERSION bump merged to main reaches the public feed; a version cannot be unpublished, only delisted.",
+          "placeholder": "Notes — was it you? keep auto-publish, or require a manual dispatch?"
+      },
+      {
+          "id": "G5",
+          "claim": "The ref-rewriting mitigations are applied: pull.rebase=false globally, a widened push denylist, and a refs/heads/task/** ruleset blocking non-fast-forward pushes",
+          "detail": [
+              "All 100 force-push events the GitHub activity API returns (2026-08-06 → today) are under login <code>Arasz</code> — one account runs every lane, so the login identifies nobody. Six today: pd-s2 08:54:05Z, pd-s6a 08:54:30Z, pd-s9 09:16:41Z, fix-host-e2e 11:51:52Z, release-1-32-0 12:54:10Z, fix-code-engine 12:54:39Z. Five are rebase-shaped rewrites (same subject, same author date); one reset pd-s9 to main's ADR-0089 commit. <code>pull.rebase=true</code> is set globally, which turns any <code>git pull</code> into exactly that. <code>soft_deny</code> carries only <code>Bash(git push:* --force)</code>, which matches neither <code>--force-with-lease</code> nor <code>-f</code>.",
+              "Exactly one agent transcript today used <code>--force-with-lease</code> (the pd-s6a event). <strong>The other five appear in no transcript</strong>; an interactive shell or Rider's push dialog would fit the two ~25 s pairs, but that is a hypothesis — <strong>please confirm or deny they were yours.</strong> Recommendation: apply all three."
+          ],
+          "why": "<b>Today:</b> two branches lost work mid-run; the guardrail meant to prevent it does not match the flags actually used.",
+          "placeholder": "Notes — were the five pushes yours (Rider / shell)? which mitigations to apply?"
+      },
+      {
+          "group": "Design",
+          "id": "G6",
+          "claim": "QueryTrimmedToWindow keeps EventId 418; 416 is retired and never reused",
+          "detail": [
+              "<code>EmbeddingService.cs:365-368</code> moved 416→418 in #467 because <code>OnnxEmbeddingGenerator</code>'s block runs 414-415, needed 417, and 416 was wedged against it. Keeping 418 meant amending ADR-0071, ADR-0072 and the ADR README — already done. Inverting (move 414-415 so 416 comes back) means five documents, because 414 is named in three ADRs plus a test. The reviewer sided with keeping 418.",
+              "<strong>Recommendation: keep 418</strong>, register 416 as retired."
+          ],
+          "why": "<b>Event ids are the stable handle</b> in logs and ADRs; a second move later costs the same again.",
+          "placeholder": "Notes"
+      },
+      {
+          "id": "G7",
+          "claim": "The parity gate's p95 assertion becomes its own Performance=Benchmark fact",
+          "detail": [
+              "<code>ParityGateTests.cs:29-73</code> asserts nDCG parity and a 1000 ms p95 budget in one <code>[Fact]</code>; it already went red environmentally at 1672 ms. Your #464 ruling: wall-clock budgets live only in a benchmark lane. Splitting gives <code>FusedSearch_P95LatencyWithinBudget</code> the <code>Performance=Benchmark</code> trait — excluded from the PR lanes, still run by nightly's unfiltered job — so no coverage is lost and a slow host can no longer take the correctness gate down.",
+              "Alternative (b): make p95 report-only, which loses the budget as a gate. Both read the same harness run. <strong>Recommendation: split (a).</strong>"
+          ],
+          "why": "<b>Today:</b> a busy laptop turns a correctness gate red for a reason unrelated to correctness.",
+          "placeholder": "Notes — (a) split, (b) informational, or a different budget"
+      },
+      {
+          "id": "G8",
+          "claim": "search.adjustment is added as a ninth exported phase; search.affinity keeps its current binding",
+          "detail": [
+              "<code>SearchTimings</code> measures nine phases; <code>SearchResults.PhaseNames</code> lists eight, and <code>PhaseNames[5]</code> (<code>search.affinity</code>) is bound to the <code>Merge</code> field — so <code>Adjustment</code> is measured and never exported, and one exported name does not match its field. The clean fix adds <code>search.adjustment</code>; the tidy fix would also rename <code>search.affinity</code> → <code>search.merge</code>, which breaks a metric series <code>memory_performance</code> already reports and stored rows carry.",
+              "<strong>Recommendation: add, do not rename</strong>; record the mismatch in the attribution plan."
+          ],
+          "why": "<b>A renamed series</b> silently orphans historical metric data; an added one does not.",
+          "placeholder": "Notes — e.g. rename anyway with a migration"
+      },
+      {
+          "id": "G9",
+          "claim": "#455 is scoped as a full re-derivation of the benchmark corpus, its queries and the parity golden from this repo's public docs",
+          "detail": [
+              "#455 names <code>RealWorldCorpus.cs</code> and two hardcoded private paths. It does not name <code>reference-topk.json</code> (see G1), which is derived from <code>RealWorldCorpus</code> and so cannot be left behind — regenerating it means re-running the vendored <code>ReferenceRunner</code> (sqlite-memory 1.3.5 + the pinned MiniLM gguf) and re-confirming the ground-truth judgments. Also: <code>scripts/tests/test_benchmark_corpus.py</code>'s <code>test_hardcoded_paths_preserved_verbatim</code> currently <em>asserts</em> the private path and must be rewritten.",
+              "Narrow alternative: strip only the <code>jsaa-*</code> documents, keep badger/home — faster, but halves the corpus. <strong>Recommendation: full re-derivation</strong>, per ADR-0090's precedent."
+          ],
+          "why": "<b>A half-fix</b> leaves the parity reference itself carrying the private prose under a different filename.",
+          "placeholder": "Notes — full vs narrow; any public corpus you prefer"
+      },
+      {
+          "group": "Scheduling — session 3 or park",
+          "id": "G10",
+          "claim": "#459 (planner ignores a graph-baked pooled output) is scheduled in session 3",
+          "detail": [
+              "WP2. <code>ModelDownloadPlanner.PoolingDecision</code> (<code>:345-366</code>) returns from the <code>1_Pooling/config.json</code> branch before consulting the ONNX probe, so bge-m3 gets <code>pooling.mode: cls</code> while the fixture asserts <code>model-output</code> — right today only because BGE-M3's dense recipe is CLS (cosine 1.0). A model whose baked output is not CLS-pooled gets a silently wrong manifest. One method, one new test, the fixture is the oracle; same file as the merged #467, no open work there.",
+              "<strong>Recommendation: schedule</strong> — small, RED test is cheap."
+          ],
+          "why": "<b>It is the defect class</b> the nightly parity gate exists to catch, in the code that writes what that gate reads.",
+          "placeholder": "Notes"
+      },
+      {
+          "id": "G11",
+          "claim": "#465 (search.adjustment never exported) is scheduled in session 3",
+          "detail": [
+              "WP1, shaped by G8. Nine phases measured, eight exported; the old residual budget silently absorbed the ninth and <code>memory_performance</code> cannot report it. One file, two tests, one plan amendment — hours. No dependency on anything else.",
+              "<strong>Recommendation: schedule</strong> — the smallest real item in the queue."
+          ],
+          "why": "<b>Phase attribution</b> is the tool for explaining slow searches, and it is missing a phase without saying so.",
+          "placeholder": "Notes"
+      },
+      {
+          "id": "G12",
+          "claim": "#436 (code-corpus prune gap) is scheduled in session 3, in its own lane",
+          "detail": [
+              "WP3. You already ruled this NEAR-TERM at the code-mem gate (P2 APPROVE); ai-raccoon-cc accepted it and never started. A shrinking code file strands <code>code_entries</code> rows, so search can return code the file no longer contains — the defect #420 fixed for the memory corpus, still open in the corpus shipped in 1.30.0. Medium: <code>ICodeIngestor</code> contract change, <code>FileIngestor</code>, <code>SqliteMemoryStore.PruneChunksNotIn</code>, a three-case RED set including the trap where zero chunks must not mean \"delete everything\". Widest blast radius in the plan.",
+              "<strong>Recommendation: schedule</strong>, own lane, not sharing a session slot with WP6."
+          ],
+          "why": "<b>A correctness bug in shipped behaviour</b>, already approved, and it blocks the parked H21 store decomposition.",
+          "placeholder": "Notes"
+      },
+      {
+          "id": "G13",
+          "claim": "#454 (AND-under-match anchor) is scheduled in session 3, time-boxed",
+          "detail": [
+              "WP8. The assertion is skipped, not deleted — its measurement was jsaa-specific. The sibling zero-match test still gates the OR-fallback trigger; ungated is a non-zero AND primary that still excludes a relevant file. Closing it means finding a query on the ADR-0090 public-docs fixture that under-matches, measuring the rank, and proving the assertion can fail by disabling the fallback. Runs on the ADR-0090 fixture, not <code>RealWorldCorpus</code>, so no collision with WP6. It may legitimately find no such pair.",
+              "<strong>Recommendation: schedule, time-boxed</strong>, with \"no pair exists, here is the searched set\" as an acceptable outcome."
+          ],
+          "why": "<b>A hole in retrieval coverage</b> that is invisible today — the test file looks green.",
+          "placeholder": "Notes — time box?"
+      },
+      {
+          "id": "G14",
+          "claim": "#455 (benchmark corpus re-derivation) is scheduled in session 3 as the anchor item",
+          "detail": [
+              "WP6, scoped by G9, and the gating dependency for G1's single rewrite. The largest item: re-derive corpus and queries from public sources, regenerate the parity golden with the vendored engine, de-hardcode <code>scripts/src/benchmark_corpus.py:19-25</code>, rewrite the Python test that asserts the private path. Roughly a full session on its own; WP1/WP2/WP7/WP8 run beside it.",
+              "Parking it means S6b either waits indefinitely or runs twice. <strong>Recommendation: schedule.</strong>"
+          ],
+          "why": "<b>It is the only thing</b> between now and a single, final history rewrite.",
+          "placeholder": "Notes"
+      },
+      {
+          "id": "G15",
+          "claim": "ADR-0089's implementation is PARKED for session 4; only the ratification (G2) happens now",
+          "detail": [
+              "WP10, sized: five PRs — <code>projects</code> table + migration, <code>project_id_token_get</code>, the <code>ToolGate</code> refusal path with legacy warn-but-work, CLI <code>project id generate|convert</code>, storage instructions + <code>ai-raccoon.ignore</code>. None of it exists yet (no <code>projects</code> table, no <code>project_id_token_get</code> in <code>src</code> or <code>tests</code>). The refusal path is the risk: every caller passes a raw id today. Alongside WP6 (a full session) and WP3 (widest blast radius) it does not fit.",
+              "<strong>Recommendation: ratify now, park the implementation</strong> with this sizing carried into the ledger. APPROVE = park; CHANGE = schedule it in session 3 and say what to drop."
+          ],
+          "why": "<b>Half-landing</b> a project-identity change leaves the bank refusing writes it used to accept.",
+          "placeholder": "Notes — park, or schedule and name what gives way"
+      }
+  ];
+</script>
+
+<style>
+  :root {
+    --ink: #141a21; --paper: #eef2f5; --surface: #f8fafb; --sunk: #e4eaef;
+    --line: #cbd5dd; --grey: #56626e; --dim: #7d8894;
+    --warn: #a8503a; --live: #12707c; --flag: #8a6a1f; --ok: #2f6d4f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #e6ecf2; --paper: #0f141a; --surface: #161d25; --sunk: #10161c;
+      --line: #2b3742; --grey: #9aa7b4; --dim: #6f7c89;
+      --warn: #d98467; --live: #4fc3cf; --flag: #d7b45a; --ok: #6fbf95;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #e6ecf2; --paper: #0f141a; --surface: #161d25; --sunk: #10161c;
+    --line: #2b3742; --grey: #9aa7b4; --dim: #6f7c89;
+    --warn: #d98467; --live: #4fc3cf; --flag: #d7b45a; --ok: #6fbf95;
+  }
+  :root[data-theme="light"] {
+    --ink: #141a21; --paper: #eef2f5; --surface: #f8fafb; --sunk: #e4eaef;
+    --line: #cbd5dd; --grey: #56626e; --dim: #7d8894;
+    --warn: #a8503a; --live: #12707c; --flag: #8a6a1f; --ok: #2f6d4f;
+  }
+
+  body {
+    margin: 0; padding: clamp(1.5rem,4vw,3rem) 1.1rem 11rem;
+    background: var(--paper); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 54rem; margin: 0 auto; display: flex; flex-direction: column; gap: 2.5rem; }
+  .mono, h1, h2, .tag, .verdict-opt, .btn, .did { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; }
+
+  header { display: flex; flex-direction: column; gap: .8rem; }
+  .tag { font-size: .72rem; letter-spacing: .15em; text-transform: uppercase; color: var(--dim); }
+  h1 { margin: 0; font-size: clamp(1.5rem,4vw,2.2rem); line-height: 1.15; letter-spacing: -.03em; font-weight: 600; text-wrap: balance; }
+  .lede { margin: 0; max-width: 62ch; color: var(--grey); }
+  h2 {
+    margin: 0 0 -.6rem; font-size: .76rem; letter-spacing: .15em; text-transform: uppercase;
+    color: var(--dim); font-weight: 600; padding-bottom: .5rem; border-bottom: 1px solid var(--line);
+  }
+
+  .d { background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: .85rem; }
+  .d.answered { border-left: 3px solid var(--ok); }
+  .d-head { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: baseline; }
+  .did { font-size: .74rem; letter-spacing: .1em; font-weight: 600; color: var(--live); white-space: nowrap; }
+  .d-claim { font-weight: 600; font-size: 1.02rem; flex: 1 1 18rem; }
+  .d-body { margin: 0; color: var(--grey); font-size: .94rem; }
+  .d-body + .d-body { margin-top: -.35rem; }
+  .d-body strong { color: var(--ink); font-weight: 600; }
+  code { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; font-size: .87em; background: var(--sunk); border: 1px solid var(--line); border-radius: 3px; padding: .06em .32em; }
+  .why { border-left: 3px solid var(--flag); background: var(--sunk); padding: .6rem .85rem; border-radius: 0 4px 4px 0; font-size: .9rem; color: var(--grey); }
+  .why b { color: var(--ink); }
+
+  fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .55rem; }
+  legend { padding: 0; font-size: .74rem; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); font-family: ui-monospace, Menlo, monospace; }
+  .verdicts { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .verdict-opt { position: relative; }
+  .verdict-opt input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .verdict-opt span {
+    display: inline-block; cursor: pointer; user-select: none;
+    border: 1px solid var(--line); background: var(--paper); border-radius: 3px;
+    padding: .32rem .7rem; font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; color: var(--grey);
+  }
+  .verdict-opt input:focus-visible + span { outline: 2px solid var(--live); outline-offset: 2px; }
+  .verdict-opt input:checked + span[data-v="approve"] { background: var(--ok);   border-color: var(--ok);   color: var(--paper); }
+  .verdict-opt input:checked + span[data-v="change"]  { background: var(--flag); border-color: var(--flag); color: var(--paper); }
+  .verdict-opt input:checked + span[data-v="reject"]  { background: var(--warn); border-color: var(--warn); color: var(--paper); }
+  .verdict-opt input:checked + span[data-v="defer"]   { background: var(--grey); border-color: var(--grey); color: var(--paper); }
+
+  textarea {
+    width: 100%; box-sizing: border-box; resize: vertical; min-height: 3.2rem;
+    background: var(--paper); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 4px; padding: .55rem .7rem; font: inherit; font-size: .93rem; line-height: 1.5;
+  }
+  textarea:focus-visible { outline: 2px solid var(--live); outline-offset: 1px; border-color: var(--live); }
+  textarea::placeholder { color: var(--dim); }
+
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--surface); border-top: 1px solid var(--line); padding: .7rem 1.1rem; display: flex; flex-wrap: wrap; gap: .5rem .9rem; align-items: center; justify-content: center; }
+  .count { font-size: .85rem; color: var(--grey); font-variant-numeric: tabular-nums; }
+  .btn { cursor: pointer; border: 1px solid var(--live); background: var(--live); color: var(--paper); border-radius: 3px; padding: .45rem 1rem; font-size: .76rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; }
+  .btn.secondary { background: transparent; color: var(--live); }
+  .btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* The status line is the whole point of the fallback chain: it names the mechanism used and
+     where the bytes went. Never let a save be silent. */
+  #status { flex-basis: 100%; text-align: center; font-size: .86rem; color: var(--grey); margin: 0; }
+  #status.ok   { color: var(--ok); }
+  #status.warn { color: var(--flag); }
+  #status.bad  { color: var(--warn); }
+  #status code { font-size: .85em; }
+
+  .out { display: flex; flex-direction: column; gap: .6rem; }
+  .out textarea { min-height: 14rem; font-family: ui-monospace, Menlo, monospace; font-size: .84rem; }
+  .hint { font-size: .85rem; color: var(--dim); margin: 0; }
+  .path { word-break: break-all; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="tag" id="hdr-sub"></div>
+    <h1 id="hdr-title"></h1>
+    <p class="lede">
+      Rule on each item and add a note where it matters. Answers save in this browser as you type,
+      so you can leave and come back.
+    </p>
+    <p class="lede" id="hdr-stale"><strong>Reviewed something else in this browser before?</strong>
+      Press <b>Clear all</b> first — local pages share one storage area, and a stale answer that
+      looks like a fresh one is the failure mode this form exists to prevent.</p>
+    <p class="lede" id="hdr-src"></p>
+  </header>
+
+  <div id="cards"></div>
+
+  <div class="out" id="out" hidden>
+    <p class="hint" id="outHint">Select all and copy, then paste this back into the conversation.</p>
+    <textarea id="outText" readonly aria-label="Generated feedback"></textarea>
+  </div>
+</div>
+
+<div class="bar">
+  <span class="count" id="count"></span>
+  <button class="btn" id="save" type="button">Save feedback</button>
+  <button class="btn secondary" id="copy" type="button">Copy feedback</button>
+  <button class="btn secondary" id="show" type="button">Show as text</button>
+  <button class="btn secondary" id="clear" type="button">Clear all</button>
+  <p id="status" role="status" aria-live="polite"></p>
+</div>
+
+<script>
+  var VERDICTS = ["approve", "change", "reject", "defer"];
+
+  document.getElementById("hdr-title").textContent = CONFIG.title;
+  document.getElementById("hdr-sub").textContent = CONFIG.subtitle;
+  document.title = CONFIG.title;
+  if (CONFIG.source) {
+    document.getElementById("hdr-src").innerHTML = "Full document: <code>" + esc(CONFIG.source) + "</code>";
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  /* ---- render ---- */
+  var host = document.getElementById("cards");
+  var currentGroup = null;
+  DECISIONS.forEach(function (d) {
+    if (d.group && d.group !== currentGroup) {
+      currentGroup = d.group;
+      var h = document.createElement("h2");
+      h.textContent = d.group;
+      host.appendChild(h);
+    }
+    var card = document.createElement("div");
+    card.className = "d";
+    card.dataset.id = d.id;
+
+    var head = document.createElement("div");
+    head.className = "d-head";
+    var idSpan = document.createElement("span");
+    idSpan.className = "did";
+    idSpan.textContent = d.id;
+    var claimSpan = document.createElement("span");
+    claimSpan.className = "d-claim";
+    claimSpan.textContent = d.claim || "";
+    head.appendChild(idSpan);
+    head.appendChild(claimSpan);
+    card.appendChild(head);
+
+    (d.detail || []).forEach(function (p) {
+      var el = document.createElement("p");
+      el.className = "d-body";
+      el.innerHTML = p;
+      card.appendChild(el);
+    });
+
+    if (d.why) {
+      var why = document.createElement("div");
+      why.className = "why";
+      why.innerHTML = d.why;
+      card.appendChild(why);
+    }
+
+    var fs = document.createElement("fieldset");
+    var lg = document.createElement("legend");
+    lg.textContent = "Verdict";
+    fs.appendChild(lg);
+    var holder = document.createElement("div");
+    holder.className = "verdicts";
+    VERDICTS.forEach(function (v) {
+      var label = document.createElement("label");
+      label.className = "verdict-opt";
+      var input = document.createElement("input");
+      input.type = "radio";
+      input.name = "v-" + d.id;
+      input.value = v;
+      var span = document.createElement("span");
+      span.dataset.v = v;
+      span.textContent = v;
+      label.appendChild(input);
+      label.appendChild(span);
+      holder.appendChild(label);
+    });
+    fs.appendChild(holder);
+    card.appendChild(fs);
+
+    var ta = document.createElement("textarea");
+    ta.placeholder = d.placeholder || "Notes";
+    ta.setAttribute("aria-label", d.id + " notes");
+    card.appendChild(ta);
+
+    host.appendChild(card);
+  });
+
+  var cards = Array.prototype.slice.call(document.querySelectorAll(".d"));
+
+  /* ---- state ---- */
+  function state() {
+    var out = {};
+    cards.forEach(function (card) {
+      var id = card.dataset.id;
+      var picked = card.querySelector('input[name="v-' + id + '"]:checked');
+      var note = card.querySelector("textarea").value.trim();
+      if (picked || note) { out[id] = { verdict: picked ? picked.value : "", note: note }; }
+    });
+    return out;
+  }
+
+  function paint() {
+    var s = state();
+    cards.forEach(function (c) { c.classList.toggle("answered", !!(s[c.dataset.id] && s[c.dataset.id].verdict)); });
+    var n = Object.keys(s).filter(function (k) { return s[k].verdict; }).length;
+    document.getElementById("count").textContent = n + " of " + cards.length + " answered";
+  }
+
+  function save() {
+    try { localStorage.setItem(CONFIG.storageKey, JSON.stringify(state())); } catch (e) { /* private mode */ }
+    paint();
+  }
+
+  function load() {
+    var raw;
+    try { raw = localStorage.getItem(CONFIG.storageKey); } catch (e) { return; }
+    if (!raw) { return; }
+    var s;
+    try { s = JSON.parse(raw); } catch (e) { return; }
+    cards.forEach(function (card) {
+      var e = s[card.dataset.id];
+      if (!e) { return; }
+      if (e.verdict) {
+        var input = card.querySelector('input[name="v-' + card.dataset.id + '"][value="' + e.verdict + '"]');
+        if (input) { input.checked = true; }
+      }
+      if (e.note) { card.querySelector("textarea").value = e.note; }
+    });
+  }
+
+  /* ---- markdown (see references/result-template.md) ---- */
+  function markdownNote(note) {
+    return note.split("\n").map(function (line) { return "> " + line; }).join("\n");
+  }
+
+  function markdown() {
+    var s = state();
+    var lines = [];
+    var answered = cards.filter(function (c) { return s[c.dataset.id] && s[c.dataset.id].verdict; });
+    lines.push("# Refinement feedback — " + CONFIG.title);
+    lines.push("");
+    lines.push("<!-- refinement-form: " + CONFIG.storageKey +
+               " · saved " + new Date().toISOString() +
+               " · answered " + answered.length + "/" + cards.length + " -->");
+    if (CONFIG.source) { lines.push(""); lines.push("Source document: `" + CONFIG.source + "`"); }
+    lines.push("");
+
+    cards.forEach(function (card) {
+      var id = card.dataset.id;
+      var e = s[id];
+      if (!e || !e.verdict) { return; }
+      lines.push("## " + id + " — " + card.querySelector(".d-claim").textContent.trim());
+      lines.push("");
+      lines.push("**Verdict:** " + e.verdict.toUpperCase());
+      lines.push("");
+      lines.push("**Notes:**");
+      lines.push("");
+      lines.push(e.note ? markdownNote(e.note) : "_(none)_");
+      lines.push("");
+      lines.push("---");
+      lines.push("");
+    });
+
+    var missing = cards.filter(function (c) { return !(s[c.dataset.id] && s[c.dataset.id].verdict); });
+    lines.push("## Not answered");
+    lines.push("");
+    if (missing.length) {
+      missing.forEach(function (c) {
+        var e = s[c.dataset.id];
+        lines.push("- " + c.dataset.id + " — " + c.querySelector(".d-claim").textContent.trim() +
+                   (e && e.note ? " (note only, no verdict)" : ""));
+        if (e && e.note) { lines.push(""); lines.push(e.note.split("\n").map(function (line) {
+          return "  > " + line;
+        }).join("\n")); lines.push(""); }
+      });
+    } else {
+      lines.push("_(none — every item has a verdict)_");
+    }
+    lines.push("");
+    lines.push("<!-- end refinement feedback -->");
+    return lines.join("\n");
+  }
+
+  /* ---- status ---- */
+  var statusEl = document.getElementById("status");
+  function report(kind, html) {
+    statusEl.className = kind;
+    statusEl.innerHTML = html;
+  }
+
+  function revealText(hint) {
+    var out = document.getElementById("out");
+    document.getElementById("outText").value = markdown();
+    document.getElementById("outHint").textContent = hint || "Select all and copy, then paste this back into the conversation.";
+    out.hidden = false;
+    out.scrollIntoView({ block: "nearest" });
+  }
+
+  /* ---- remembered output directory -------------------------------------------------
+     A file:// page cannot discover its own folder, and startIn takes only the
+     WellKnownDirectory enum (a path throws TypeError) — so the folder cannot be preset.
+     What CAN be done: grant the directory ONCE, persist the FileSystemDirectoryHandle in
+     IndexedDB (which works on file://), and write silently on every later save. Handles
+     survive reload; the permission does not, so it is re-requested inside the click
+     handler, where a user gesture is available. Net effect: one dialog ever, not one per
+     save. Choose the folder holding this HTML file and the picker never returns. */
+  var DB = "refinement-fs", STORE = "handles", KEY = CONFIG.storageKey + ":dir";
+
+  function idb(mode, fn) {
+    return new Promise(function (resolve, reject) {
+      var open = indexedDB.open(DB, 1);
+      open.onupgradeneeded = function () { open.result.createObjectStore(STORE); };
+      open.onerror = function () { reject(open.error); };
+      open.onsuccess = function () {
+        var tx = open.result.transaction(STORE, mode);
+        var rq = fn(tx.objectStore(STORE));
+        rq.onsuccess = function () { resolve(rq.result); };
+        rq.onerror = function () { reject(rq.error); };
+      };
+    });
+  }
+
+  var loadDir = function () { return idb("readonly", function (s) { return s.get(KEY); }).catch(function () { return null; }); };
+  var saveDir = function (h) { return idb("readwrite", function (s) { return s.put(h, KEY); }).catch(function () { return null; }); };
+
+  /// Writes into a granted directory. Returns false if permission is refused or gone.
+  async function writeInto(dir, text) {
+    var opts = { mode: "readwrite" };
+    if ((await dir.queryPermission(opts)) !== "granted"
+        && (await dir.requestPermission(opts)) !== "granted") { return false; }
+    var fh = await dir.getFileHandle(CONFIG.outName, { create: true });
+    var w = await fh.createWritable();
+    await w.write(text);
+    await w.close();
+    return true;
+  }
+
+  /* ---- save chain: remembered dir -> directory grant -> download -> clipboard -> textarea ----
+     Verified on Chrome 150 (file://): the File System Access API is exposed and is a secure
+     context, but throws SecurityError unless called inside the click handler. Firefox and
+     WebKit do not expose it at all and fall straight through to the download. */
+  document.getElementById("save").addEventListener("click", async function () {
+    var text = markdown();
+
+    if (typeof window.showDirectoryPicker === "function") {
+      try {
+        // 1a) Already granted a folder in a previous session — write with no dialog at all.
+        var dir = await loadDir();
+        if (dir && await writeInto(dir, text)) {
+          report("ok", "Saved <code>" + esc(CONFIG.outName) + "</code> to the folder you granted earlier — no dialog needed.");
+          return;
+        }
+
+        // 1b) First save (or the grant was revoked): ask once, then remember it forever.
+        dir = await window.showDirectoryPicker({ id: "refinement-out", mode: "readwrite" });
+        if (await writeInto(dir, text)) {
+          await saveDir(dir);
+          report("ok", "Saved <code>" + esc(CONFIG.outName) + "</code> to <code>" + esc(dir.name) +
+            "</code>. That folder is remembered — later saves write straight there.");
+          return;
+        }
+        report("warn", "Write permission was refused — nothing was written.");
+        return;
+      } catch (err) {
+        if (err && err.name === "AbortError") {
+          // Cancelled on purpose. Do NOT fall through to a download the reviewer didn't ask for.
+          report("warn", "Save cancelled — nothing was written.");
+          return;
+        }
+        report("warn", "Direct save failed (" + esc(err && err.name) + "). Falling back to a download…");
+      }
+    }
+
+    // 2) a[download] — lands in the browser's download folder, NOT next to this file.
+    try {
+      var blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = CONFIG.outName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+      report("warn", "Download initiated for <code>" + esc(CONFIG.outName) + "</code> to your <b>browser's download folder</b> — " +
+        "this is <b>not</b> next to this page." +
+        (CONFIG.expectedDir ? " Move it to <code class=\"path\">" + esc(CONFIG.expectedDir) + "</code>, or tell the agent where it is." : ""));
+      revealText("The download was initiated. If it did not appear, copy this generated feedback manually.");
+      return;
+    } catch (err2) {
+      report("warn", "Download failed (" + esc(err2 && err2.name) + "). Trying the clipboard…");
+    }
+
+    // 3) clipboard
+    try {
+      await navigator.clipboard.writeText(text);
+      report("ok", "Copied to the clipboard — paste it back into the conversation.");
+      revealText("Also shown below, in case the paste goes wrong.");
+      return;
+    } catch (err3) {
+      // 4) always-visible textarea — the guaranteed way out
+      revealText("Could not save or copy automatically. Select all of this and copy it manually.");
+      report("bad", "Automatic save and copy both failed. The full feedback is in the box above — copy it by hand.");
+    }
+  });
+
+  document.getElementById("copy").addEventListener("click", async function (ev) {
+    var btn = ev.currentTarget;
+    try {
+      await navigator.clipboard.writeText(markdown());
+      btn.textContent = "Copied";
+      report("ok", "Copied to the clipboard — paste it back into the conversation.");
+    } catch (e) {
+      revealText("Clipboard access was refused. Select all of this and copy it manually.");
+      report("warn", "Clipboard refused — the text is in the box above.");
+    }
+    setTimeout(function () { btn.textContent = "Copy feedback"; }, 2200);
+  });
+
+  document.getElementById("show").addEventListener("click", function () {
+    revealText();
+    document.getElementById("outText").focus();
+    document.getElementById("outText").select();
+  });
+
+  document.getElementById("clear").addEventListener("click", function () {
+    cards.forEach(function (card) {
+      var picked = card.querySelector('input[name="v-' + card.dataset.id + '"]:checked');
+      if (picked) { picked.checked = false; }
+      card.querySelector("textarea").value = "";
+    });
+    document.getElementById("out").hidden = true;
+    report("", "Cleared. Nothing saved in this browser for this review.");
+    save();
+  });
+
+  document.addEventListener("input", save);
+  document.addEventListener("change", save);
+
+  load();
+  paint();
+</script>
