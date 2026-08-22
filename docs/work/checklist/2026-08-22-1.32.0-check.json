@@ -1,0 +1,316 @@
+{
+  "_note": "Copy to docs/work/checklist/<yyyy-mm-dd>-<subject>.json. Never fill this file in place. status is pass|fail|skipped|substituted; substituted means checked by a different instrument than the item names, and its reason must say which. accepted stays null until a human answers it, so an unfinished run is visibly unfinished. Delete any item whose feature no longer exists rather than skipping it.",
+  "run": {
+    "date": "2026-08-22",
+    "subject": "1.32.0 post-publish check: nuget.org package installed globally, code model on the main bank, repo-root watches",
+    "branch": "task/1.32.0-check",
+    "commit": "021d6c178745e0d59d74102168fb27888d5e68d7",
+    "data-root": "per-lane scratch roots under /private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/ae7fa78e-588a-473d-984f-f003ee0aaaaa/scratchpad/ only; the live bank ~/.ai-raccoon was touched only by the owner-requested steps (server restart on the nuget binary, model set code default, repo-root watches), never by a checklist item",
+    "note": "Binary under test is the nuget.org ai-raccoon 1.32.0 package (sha256 a0aec659\u202659f2), not a local pack."
+  },
+  "derived": {
+    "version": "1.32.0",
+    "mcp-tool-count": 28,
+    "mcp-prompt-count": 2,
+    "note": "python3 .claude/skills/ai-raccoon-manual-checklist/scripts/derive-facts.py . on 021d6c17 \u2192 version=1.32.0 mcp-tool-count=28 mcp-prompt-count=2"
+  },
+  "findings-against-prior-runs": [],
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "memory-write-stores-and-reports-truthfully",
+      "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "memory-search-hybrid-retrieval",
+      "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "memory-get-returns-content-by-hash",
+      "expected-result": "memory_get returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "source-path-anchor-resolves-its-chunk",
+      "expected-result": "a `file#section` query returns that exact chunk within the production result window",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "write-path-noise-filtering",
+      "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "read-path-query-guard",
+      "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "file-watch-status",
+      "expected-result": "memory_watch_status lists live registrations and their sync state",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "promotion-queue-state",
+      "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "full-mcp-surface",
+      "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "code-corpus-kind-search-and-envelope",
+      "expected-result": "A watched/ingested code file is searchable via memory_search kind=code (FTS hits carry lineStart/lineEnd and the engine-not-configured warning when no code model is active); kind=memory returns NO code key in the envelope and does not surface the code hit; kind=both returns both sections; the code/both response omits correlationId. Negative control: a memory entry is NOT returned by kind=code.",
+      "anchor": "ADR-0088",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "code-get-returns-chunk-by-hash",
+      "expected-result": "code_get returns the exact chunk content for a hash from a kind=code hit; an unknown hash is refused with an error, not an empty fabrication.",
+      "anchor": "ADR-0088",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "code-model-activation-and-refusal",
+      "expected-result": "model set code local against a directory holding a non-768 manifest refuses with an actionable error naming 768 (server-side, not just CLI); a missing manifest surfaces the loader's own error. Scoped to these two refusal legs only \u2014 the positive activation path (download + activate) is exercised by 'code-model-one-command-install' below via the #453 one-command install, so this item does not repeat a second live download in the same run.",
+      "anchor": "ADR-0087/0088; #453",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "doctor-reports-code-engine-state",
+      "expected-result": "On a scratch data root with NO code engine configured, `ai-raccoon doctor` prints `code engine: not configured \u2014 run 'ai-raccoon model set code default' to enable semantic code search` and `code rows pending: 0`. After ingesting a code file with still no engine configured (so the row lands `embed_state='pending'`), `doctor` reports `code rows pending: N` with N > 0.",
+      "anchor": "#422; #453; src/AiRaccoon/Setup/Cli/Commands/DoctorCommands.cs",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "code-model-one-command-install",
+      "expected-result": "`ai-raccoon model set code default` against a scratch data root with no prior download resolves and downloads `faxenoff/code-daemon-embed-v1` into `<data-root>/models/faxenoff__code-daemon-embed-v1`, then activates it \u2014 writing embedding.codeModel/codeEngine \u2014 with NO manifest hand-edit (#422's done-criterion). Re-running the same command against an already-downloaded directory only re-activates, with no re-fetch. After activation, the code-reindex job drains any pending code rows to 0. The ~187 MB download may be substituted against a pre-downloaded model directory if network egress is infeasible in this run; record as `substituted` naming the pre-downloaded path used.",
+      "anchor": "#422; #453; docs/how-to/configure-embedding-engines.md Recipe 5",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "code-search-discriminates-on-engine-activation",
+      "expected-result": "BEFORE 'code-model-one-command-install' activates the engine: `memory_search kind=code` for a query sharing NO literal token with the indexed code returns a `warning` whose text contains `code engine not configured` and the exact `ai-raccoon model set code default` command, and results come from FTS only. AFTER activation: the SAME query \u2014 still sharing no keyword with the stored code \u2014 returns the code hit (a dead vector leg must fail this) and the response carries NO `code engine not configured` warning.",
+      "anchor": "#422; #453; ADR-0088",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "doctor-reports-active-code-model",
+      "expected-result": "AFTER 'code-model-one-command-install' activates the engine, `ai-raccoon doctor` prints `code engine: faxenoff/code-daemon-embed-v1 (<dir>)` naming the activated model's directory, not the not-configured message.",
+      "anchor": "#422; #453; src/AiRaccoon/Setup/Cli/Commands/DoctorCommands.cs",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "code-model-docs-current",
+      "expected-result": "docs/reference/agent-memory-server.md's code-engine section and its compact CLI block document `ai-raccoon model set code default` (not only the two-step `model download` + `model set code local` path) and the 510-token code chunk budget, matching `CodeEngineSetup.DefaultModelCommand` and `EmbeddingService.MaxManifestChunkTokens`; docs/how-to/configure-embedding-engines.md Recipe 5 matches the live command's own output. Run this item only after PR #462 merges \u2014 before that merge, agent-memory-server.md still documents only the two-step path, and running this item earlier would report a drift that #462 already fixes rather than a live product defect.",
+      "anchor": "#462",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "ai-raccoon-ignore-live",
+      "expected-result": "An ai-raccoon.ignore in the ingest root excludes matching files from BOTH corpora on directory ingest (0 chunks; verify a .cs and a .md are both excluded); a bare directory name excludes its subtree; explicit memory_ingest_file of an ignored path returns 0 chunks. Negative control: a non-ignored sibling ingests normally.",
+      "anchor": "ADR-0086; plan \u00a72.1",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "watch-overlap-prune-and-reject",
+      "expected-result": "memory_watch_add of a path nested inside an existing watch is REJECTED naming the covering watch; adding a broader watch over an existing narrower one prunes the narrower (result lists it); equal-path re-add is an idempotent no-op reporting absorbedBy.",
+      "anchor": "ADR-0086; plan \u00a72.2",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "code-ingestion-with-default-model",
+      "expected-result": "Out-of-box experience: on a FRESH scratch bank with NO code engine configured and the default bundled memory model, memory_ingest_directory over a small mixed tree (.md + .cs) embeds the memory docs (bundled model), chunks the code files to embed_state='pending' via the bundled counting tokenizer, kind=code returns FTS-only hits carrying the engine-not-configured warning, and kind=both returns both sections. Negative control: a deny-set path (e.g. bin/) and an ai-raccoon.ignore'd file appear in NEITHER corpus.",
+      "anchor": "ADR-0085/0087; plan \u00a73.3 always-ingest",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "watch-per-repo-root",
+      "expected-result": "Registering a watch on a scratch REPO ROOT (containing .git/, node_modules/, src/ with code+md): enumeration skips .git and node_modules entirely (zero rows from them, both corpora); src/ feeds both corpora; adding a nested watch inside the repo is rejected naming the covering watch; a live edit to a src file digests into BOTH corpora and the replace prunes the file's superseded chunks.",
+      "anchor": "ADR-0086; plan \u00a72.3 repo-watch-by-default",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "direct-reingest-prunes-stale-chunks",
+      "expected-result": "memory_ingest_file of a file (N chunks), then modifying it so it chunks to a different count and re-ingesting: the superseded chunks are GONE (search no longer returns removed content; chunk set matches the new content exactly). Negative control: a sibling ingested file's chunks are untouched.",
+      "anchor": "PR #420 (ingest-then-prune)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "activation-sha256-pin-verification",
+      "expected-result": "Tampering a model file AFTER its manifest was generated (flip one byte) makes model set refuse at activation, naming the sha256 pin mismatch; restoring the byte activates cleanly.",
+      "anchor": "PR #429",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "cli-exit-codes-nobank-and-settings-error",
+      "expected-result": "CLI command against a nonexistent bank exits 22 (NoBank); a settings-channel server error exits 23 (SettingsServerError), distinct from usage-error exits. Drive 23 live if a failing server can be arranged cheaply (e.g. point at a dead port); otherwise substituted naming the exit-code test class.",
+      "anchor": "PR #433, #426",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "sync-blob-hmac-authenticity",
+      "expected-result": "A pushed snapshot blob is framed header+tag and a tampered blob is REFUSED before attach (HMAC verification). Live only if cloud/scratch-backend credentials are available in this run; otherwise substituted naming the SyncService HMAC integration tests.",
+      "anchor": "PR #431",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "observability-event-ids",
+      "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    }
+  ]
+}
