@@ -520,9 +520,10 @@ sequenceDiagram
 
     Note over S,R: 2. Pull
     S->>R: PullAsync(objectKey)
-    R-->>S: remote snapshot (or null)
+    R-->>S: remote blob (or null)
     alt remote exists
-        S->>L: PRAGMA quick_check on remote
+        Note right of S: unwrap embedded header+HMAC; verify BEFORE<br/>quick_check/ATTACH — refuse on mismatch or on a headerless<br/>blob this objectKey has verified a tag for before; warn<br/>and accept a genuinely first-contact headerless blob
+        S->>L: PRAGMA quick_check on the unwrapped remote
         S->>L: ATTACH DATABASE remote
         S->>L: INSERT OR IGNORE entries (merge)
         S->>L: INSERT OR IGNORE sync_tombstones (merge)
@@ -536,9 +537,11 @@ sequenceDiagram
     end
 
     Note over S,R: 3. Push (If-Match, max 3 retries)
-    S->>R: PushAsync(objectKey, snapshot, if-match=remoteETag)
+    Note right of S: wrap snapshot with header+HMAC (encrypted bank only)
+    S->>R: PushAsync(objectKey, wrapped snapshot, if-match=remoteETag)
     R-->>S: new ETag
     S->>L: UPSERT sync_meta.last_etag = new ETag
+    S->>L: UPSERT sync_meta.sync_auth_seen:objectKey
     alt 412 conflict
         Note right of S: re-pull, re-merge, re-push
     end
@@ -562,6 +565,27 @@ local code corpus untouched (ADR 0014 amendment).
 
 **Tombstone GC:** tombstones older than `last_pull_at` are deleted after each
 merge — they've done their job and the cloud copy has the deletion record.
+
+**Remote blob authenticity:** `PRAGMA quick_check` only detects corruption, not a
+valid-but-substituted blob, so on an encrypted bank a push wraps the snapshot bytes with a
+fixed magic header and an HMAC-SHA256 tag (`SyncBlobAuthenticator`), keyed by `HKDF.DeriveKey`
+(SHA-256, info `"ai-raccoon-sync-auth"`) over the bank's own passphrase — platform primitives
+composed, not a hand-rolled scheme. The tag is embedded **in** the pushed object rather than a
+separate sidecar: publication is then atomic under the existing If-Match CAS push, so there is
+no window in which a torn write (a failed second push, or a losing device's concurrent push)
+could leave a new blob paired with a stale or missing tag, and there is no second object an
+attacker with delete-only access could strip to defeat the check for free. A pull unwraps and
+verifies the tag (`CryptographicOperations.FixedTimeEquals`) **before** `quick_check` and
+**before** `ATTACH`: a mismatching tag refuses the merge outright and never touches the live
+bank. A headerless blob is accepted with a logged warning only the *first* time this objectKey
+is ever seen (a legacy blob predating this feature); once this bank has verified a tag for an
+objectKey (`sync_meta.sync_auth_seen:<objectKey>`), a later headerless blob for that same key is
+refused instead — it can only arise from an attacker rewriting the whole object without the key.
+An unencrypted bank has no passphrase to key from and skips the check entirely — a keyless
+checksum would only duplicate what `quick_check` already covers (integrity, not authenticity),
+so unencrypted sync is documented as depending on transport/storage trust alone. **Residual
+risk:** this is trust-on-first-use — a remote object tampered with before its first tagged push
+is indistinguishable from a genuinely untagged legacy blob.
 
 **If-Match push:** the push carries the `remoteETag` from the pull. If another
 client pushed in between, the store returns 412 Precondition Failed. The

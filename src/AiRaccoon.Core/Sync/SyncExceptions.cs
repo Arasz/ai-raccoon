@@ -9,6 +9,10 @@ public sealed class SyncNetworkException(string message, Exception? inner = null
 /// <summary>Integrity check failed on the remote snapshot; local DB is not replaced.</summary>
 public sealed class SyncCorruptFileException(string message) : InvalidOperationException(message);
 
+/// <summary>The remote snapshot's HMAC authenticity tag does not match its bytes; the snapshot
+/// is refused before ATTACH and the local bank is not touched.</summary>
+public sealed class SyncTamperedRemoteException(string message) : InvalidOperationException(message);
+
 /// <summary>Credentials are missing or invalid.</summary>
 public sealed class SyncAuthFailedException(string message, Exception? inner = null) : InvalidOperationException(message, inner);
 

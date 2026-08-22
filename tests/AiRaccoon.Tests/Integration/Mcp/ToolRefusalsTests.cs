@@ -126,6 +126,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
             { new SyncConflictException("remote changed"), "sync-conflict" },
             { new SyncNetworkException("timed out"), "sync-network" },
             { new SyncCorruptFileException("bad checksum"), "sync-corrupt-file" },
+            { new SyncTamperedRemoteException("HMAC tag mismatch"), "sync-tampered-remote" },
             { new AccessDeniedException("memory_delete requires mode full (current rw)"), "access-denied" },
             { new ValidationException("projectId is required"), "invalid-params" },
             { new JsonException("The JSON value could not be converted to System.String[]."), "invalid-argument" },
@@ -488,6 +489,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
     [Theory]
     [InlineData("sync-network", LogLevel.Warning)]
     [InlineData("sync-corrupt-file", LogLevel.Warning)]
+    [InlineData("sync-tampered-remote", LogLevel.Warning)]
     [InlineData("unknown-hash", LogLevel.Warning)]
     [InlineData("embedding-install-replaced", LogLevel.Warning)]
     [InlineData("path-outside-scope", LogLevel.Information)]
