@@ -136,11 +136,15 @@ namespace AiRaccoon.Tests.Unit.Embedding.Download;
         }
 
         /// <summary>
-        ///     The faxenoff/code-daemon-embed-v1 shape (issue #417): a sentencepiece repo whose
-        ///     tokenizer_config.json ships no added_tokens_decoder. Uses the REAL bundled
-        ///     code-sentencepiece.bpe.model bytes (not a fake placeholder) — the fix derives
-        ///     special-token ids from this file's own piece table, so the fixture must be a piece
-        ///     table an actual sentencepiece parse can read.
+        ///     The faxenoff/code-daemon-embed-v1 shape (issue #417, and #423's false-refusal
+        ///     regression it was refit for): a sentencepiece repo whose tokenizer_config.json ships
+        ///     no added_tokens_decoder. model_type "xlm-roberta" and tokenizer_class
+        ///     "XLMRobertaTokenizer" match the REAL repo (verified by curl) — #423 refused this repo
+        ///     on that class string alone even though its vocab_size (22739) equals the bundled
+        ///     tokenizer's own piece count (22739, verified against the real sp model file), i.e. it
+        ///     is NOT fairseq-offset. Uses the REAL bundled code-sentencepiece.bpe.model bytes (not a
+        ///     fake placeholder) — the fix derives special-token ids from this file's own piece
+        ///     table, so the fixture must be a piece table an actual sentencepiece parse can read.
         /// </summary>
         public static FakeRepo CodeDaemon(FakeHfServer server, bool declareUnresolvablePiece = false)
         {
@@ -158,10 +162,11 @@ namespace AiRaccoon.Tests.Unit.Embedding.Download;
                 OnnxSha = Sha(onnx),
                 DataSha = Sha(data),
                 SpmSha = Sha(spm),
-                ConfigJson = """{"model_type": "roberta", "hidden_size": 768, "max_position_embeddings": 130, "vocab_size": 22739}""",
+                ConfigJson = """{"model_type": "xlm-roberta", "hidden_size": 768, "max_position_embeddings": 130, "vocab_size": 22739}""",
                 TokenizerConfigJson =
                     $$"""
                     {
+                      "tokenizer_class": "XLMRobertaTokenizer",
                       "model_max_length": 128,
                       "bos_token": "<s>", "eos_token": "</s>", "unk_token": "<unk>", "pad_token": "{{padToken}}"
                     }
