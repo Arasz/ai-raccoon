@@ -51,6 +51,11 @@ Consequences that follow from making the model self-describing:
    and the DROP discards what the drain just wrote, with no pending rows left to re-drive
    it, so the migration finishes green over empty tables.
 
+   *Amended (#432):* the same reconcile also runs once at server open, before the endpoint
+   accepts a tool call — a `model set` performed with no server running has nothing to drain
+   it, and would otherwise leave vec0 at the old width. A matching dimension performs no DDL,
+   so a normal start after a drain is a read.
+
 4. **Remote engines declare their dimension before anything is written.**
    `model set openai --dims N` persists `embedding.dimensions`, and a pre-commit probe
    refuses a declared value the endpoint contradicts, refuses silence when the endpoint
