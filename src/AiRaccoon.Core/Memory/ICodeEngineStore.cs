@@ -21,9 +21,10 @@ public interface ICodeEngineStore
 
 /// <summary>
 ///     Thrown when <see cref="ICodeEngineStore.ActivateCodeEngineAsync" /> refuses a directory
-///     (#472: missing/invalid manifest, or the wrong dimension count) — an
-///     <see cref="InvalidOperationException" /> subtype so the settings endpoint can catch it and
-///     map it to a 4xx with the reason intact, instead of it escaping as a bare 500.
+///     (#472: missing/invalid manifest, the wrong dimension count, or a chunk budget narrower than
+///     the code chunker's) — an <see cref="InvalidOperationException" /> subtype so the settings
+///     endpoint can catch it and map it to a 4xx with the reason intact, instead of it escaping as
+///     a bare 500.
 /// </summary>
 public sealed class CodeEngineActivationRefusedException : InvalidOperationException
 {

@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
+using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Settings;
@@ -189,6 +190,29 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         body.ShouldContain("1024");
         body.ShouldContain(CodeCorpusSchema.EmbeddingDimensions.ToString());
+    }
+
+    /// <summary>#472: same mapping for the third refusal leg — a manifest whose context window
+    /// resolves to a chunk budget narrower than the code chunker's fixed budget (#422).</summary>
+    [Fact]
+    public async Task PostModelCode_ManifestWindowNarrowerThanTheChunkerBudget_IsABadRequest_WithTheReasonInTheBody()
+    {
+        var dir = Path.Combine(_dataRoot, "code-model-narrow-ctx");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "sentencepiece.bpe.model"), "tokenizer");
+        File.WriteAllText(Path.Combine(dir, "model.onnx"), "model");
+        var manifest = File.ReadAllText(
+                TestData.RepoFile("tests/AiRaccoon.Tests/Resources/ManifestFixtures/code-daemon-embed-v1.json"))
+            .Replace("\"contextWindowTokens\": 512", "\"contextWindowTokens\": 128");
+        File.WriteAllText(Path.Combine(dir, EmbeddingManifest.FileName), manifest);
+
+        var response = await _client.PostAsJsonAsync(SettingsProtocol.ModelCodePath,
+            new ModelCodeActivationRequest(dir), TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        body.ShouldContain("126");
+        body.ShouldContain(CodeChunker.DefaultBudget.ToString());
     }
 
     private Task<HttpResponseMessage> PutAsync(string key, string value) =>

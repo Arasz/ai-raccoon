@@ -27,9 +27,9 @@ public sealed class SqliteCodeEngineStore(ISqliteConnectionFactory factory, IEmb
         // method directly with no CLI in the path, so this is the only refusal that actually
         // protects vec_code's fixed 768-dimension index and the code chunker's budget. Nothing is
         // written when either check refuses.
-        // #472: both legs throw CodeEngineActivationRefusedException (an InvalidOperationException
-        // subtype) so the endpoint can catch just this refusal and answer 4xx with the reason,
-        // instead of it escaping as a bare 500.
+        // #472: every refusal leg below throws CodeEngineActivationRefusedException (an
+        // InvalidOperationException subtype) so the endpoint can catch just this refusal and
+        // answer 4xx with the reason, instead of it escaping as a bare 500.
         EngineDescriptor descriptor;
         try
         {
@@ -59,7 +59,7 @@ public sealed class SqliteCodeEngineStore(ISqliteConnectionFactory factory, IEmb
         var chunkBudget = embeddings.ResolveChunkBudgetFor(new EmbeddingSettings("local", fullPath, null, null));
         if (chunkBudget < CodeChunker.DefaultBudget)
         {
-            throw new InvalidOperationException(
+            throw new CodeEngineActivationRefusedException(
                 $"Manifest '{fullPath}' resolves to a {chunkBudget}-token chunk budget (min(510, context - " +
                 $"reservation)), narrower than the {CodeChunker.DefaultBudget}-token chunks the code corpus's " +
                 "chunker emits — that engine would silently truncate every chunk at embed time. Point " +
