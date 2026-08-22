@@ -237,9 +237,12 @@ history-rewriting push is the owner's, deliberately.
 (`git rev-list --objects --all | grep -c`), 7 commits in `git log --all`, left HEAD in #450.
 `benchmarks/AiRaccoon.Benchmarks/Corpus/RealWorldCorpus.cs` — **exactly one** commit touches it
 (`e303b4bb`, "bench: real-world corpus from user repos + generator script"), **one** reachable
-blob. `tests/AiRaccoon.Tests/Unit/Retrieval/assets/reference-topk.json` — two commits
-(`2499ca59`, `155f281e`). **The coupling in the brief is real:** one `git filter-repo` invocation
-takes all three `--path` arguments and scrubs them together; doing S6b first means a second rewrite
+blob. `tests/AiRaccoon.Tests/Unit/Retrieval/assets/reference-topk.json` — three commits
+(`6a52f976` create, `9a53d63e` move, `5005a05b` case-rename) under **three path spellings**
+(`tests/AiRaccoon.Tests/Retrieval/assets/…`, `…/unit/retrieval/assets/…`, `…/Unit/Retrieval/assets/…`),
+so the rewrite needs **five** `--path` arguments (WP5 lane correction, PR #473; rev 1 said two commits
+`2499ca59`/`155f281e` — neither touches the file). **The coupling in the brief is real:** one
+`git filter-repo` invocation takes all five `--path` arguments and scrubs them together; doing S6b first means a second rewrite
 later for the other two.
 
 **Deliverables.** `docs/work/2026-08-22-414-s6b-history-rewrite-runbook.md` containing: the exact
@@ -545,9 +548,10 @@ a recommendation. Nothing in *Scheduling* starts before you rule.
 **G1 — The S6b history rewrite waits for #455 (WP6) and then scrubs all three paths in one pass.**
 *Detail.* Three committed artefacts carry private prose: `jsaa-memory.db` (7 reachable blobs, 7
 commits, already off HEAD), `benchmarks/…/RealWorldCorpus.cs` (1 blob, one commit `e303b4bb`, 294
-lines, 107 `jsaa` mentions) and `tests/…/Unit/Retrieval/assets/reference-topk.json` (2 commits;
-434/680 golden hits are `jsaa-*` with prose in the snippets). One `git filter-repo --invert-paths`
-call takes all three `--path` arguments. Rewriting now scrubs one and commits you to a second
+lines, 107 `jsaa` mentions) and `tests/…/Unit/Retrieval/assets/reference-topk.json` (3 commits under 3 path
+spellings — it was moved twice; 434/680 golden hits are `jsaa-*` with prose in the snippets). One
+`git filter-repo --invert-paths` call takes all five `--path` arguments (three files + two historical
+spellings; PR #473 carries the exact invocation). Rewriting now scrubs one and commits you to a second
 rewrite later; waiting costs the days WP6 needs, during which the currently-perfect quiet window
 (zero open PRs, no stale worktrees) may close. WP5 delivers the runbook and a verification script
 with a recorded failing run either way.
