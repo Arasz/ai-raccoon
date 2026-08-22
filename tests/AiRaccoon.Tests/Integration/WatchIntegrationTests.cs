@@ -8,7 +8,9 @@ using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Tests.TestHelpers;
 using Dapper;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
@@ -344,12 +346,14 @@ public sealed class WatchIntegrationTests
             await seeded;
         }
 
-        (await stack.StepUntilAsync(async () =>
+        var seededSearchable = await stack.StepUntilAsync(async () =>
         {
             var nested = await stack.SearchAsync("zephyrnest", TestContext.Current.CancellationToken);
             var top = await stack.SearchAsync("zephyrtop", TestContext.Current.CancellationToken);
             return nested.Count >= 2 && top.Any();
-        }, TestContext.Current.CancellationToken)).ShouldBeTrue("seed files did not become searchable");
+        }, TestContext.Current.CancellationToken);
+        seededSearchable.ShouldBeTrue(
+            $"seed files did not become searchable — {await stack.DiagnosticsAsync(TestContext.Current.CancellationToken)}");
 
         // A directory delete event digests with the DIRECTORY path — the store must remove
         // every chunk under it, not just the exact path.
@@ -659,7 +663,7 @@ public sealed class WatchIntegrationTests
         await stack.StepUntilAsync(
             async () => await stack.CountFingerprintsUnderAsync(Path.GetDirectoryName(hidden)!,
                 TestContext.Current.CancellationToken) > 0, TestContext.Current.CancellationToken,
-            maxFakeSeconds: 10, maxRealSeconds: 10);
+            maxFakeSeconds: 10);
 
         (await stack.CountEntriesUnderAsync(Path.GetDirectoryName(hidden)!, TestContext.Current.CancellationToken))
             .ShouldBe(0, "a file under .claude/worktrees/ must never reach the memory corpus");
@@ -677,6 +681,7 @@ public sealed class WatchIntegrationTests
         private readonly bool _deleteDataRoot;
         private readonly SqliteConnectionFactory _factory;
         private readonly FakeClockPoller _poller;
+        private readonly FakeLogCollector _logs = new();
 
         public Stack(string? name = null, DateTimeOffset? now = null, bool deleteDataRoot = true,
             ICodeChunker? codeChunker = null)
@@ -692,23 +697,31 @@ public sealed class WatchIntegrationTests
             _factory = new SqliteConnectionFactory(
                 new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
                 NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
-            Memory = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), Time,
+            Memory = TestData.CreateMemoryStore(_factory, new FakeLogger<SqliteMemoryStore>(_logs), new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), Time,
                 TestData.CreateEmbeddingService(), codeChunker: codeChunker);
             WatchStore = new WatchStore(_factory);
             ScanGuard = new WatchScanGuard();
             WatchCatchUp? catchUp = null;
             Pipeline = new WatchPipeline(new WatchScheduler(),
-                new WatchDigestExecutor(Memory, WatchStore, Time, NullLogger<WatchDigestExecutor>.Instance,
+                new WatchDigestExecutor(Memory, WatchStore, Time, new FakeLogger<WatchDigestExecutor>(_logs),
                     new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => catchUp!)),
                 new WatchRetryPolicy(),
-                ScanGuard, Memory, Time, NullLogger<WatchPipeline>.Instance);
-            EventSource = new WatchEventSource(Pipeline.Enqueue, Errors.Add,
-                NullLogger<WatchEventSource>.Instance);
+                ScanGuard, Memory, Time, new FakeLogger<WatchPipeline>(_logs));
+            EventSource = new WatchEventSource(evt =>
+                {
+                    lock (FsEvents)
+                    {
+                        FsEvents.Add(evt);
+                    }
+
+                    Pipeline.Enqueue(evt);
+                }, Errors.Add,
+                new FakeLogger<WatchEventSource>(_logs));
             CatchUp = catchUp = new WatchCatchUp(Pipeline, WatchStore, ScanGuard,
-                new SqliteWatchScanLease(_factory, Time), Time, NullLogger<WatchCatchUp>.Instance,
+                new SqliteWatchScanLease(_factory, Time), Time, new FakeLogger<WatchCatchUp>(_logs),
                 new IgnoreRulesProvider());
             Hosted = new WatchHostedService(Memory, WatchStore, Pipeline, EventSource, CatchUp, Time,
-                TestTelemetry.None, NullLogger<WatchHostedService>.Instance);
+                TestTelemetry.None, new FakeLogger<WatchHostedService>(_logs));
             Service = new WatchService(WatchStore, Memory, Pipeline, Time, new WatchOverlapResolver());
         }
 
@@ -735,6 +748,9 @@ public sealed class WatchIntegrationTests
         public WatchService Service { get; }
 
         public List<WatchEventError> Errors { get; } = [];
+
+        /// <summary>Every event the real watcher delivered, in order — the scan's own enqueues are not in here.</summary>
+        public List<WatchEvent> FsEvents { get; } = [];
 
         public void Dispose()
         {
@@ -795,6 +811,24 @@ public sealed class WatchIntegrationTests
                 : new { p = Project, path, value = $"%{valueContains}%" };
             return await connection.ExecuteScalarAsync<int>(
                 new CommandDefinition(sql, parameters, cancellationToken: cancellationToken));
+        }
+
+        /// <summary>What the bank and pipeline hold right now — for a failure message, so a give-up names its cause.</summary>
+        public async Task<string> DiagnosticsAsync(CancellationToken cancellationToken)
+        {
+            await using var connection = await _factory.OpenBankAsync(cancellationToken);
+            var states = await connection.QueryAsync<(string SourceFile, string State, int Count)>(new CommandDefinition(
+                "SELECT source_file AS SourceFile, embed_state AS State, count(*) AS Count FROM entries WHERE project_id = @p GROUP BY source_file, embed_state",
+                new { p = Project }, cancellationToken: cancellationToken));
+            var fingerprints = await connection.QueryAsync<string>(new CommandDefinition(
+                "SELECT path FROM watch_files WHERE project_id = @p", new { p = Project }, cancellationToken: cancellationToken));
+            var statuses = Pipeline.GetStatuses(Project).Select(st => $"{st.Path}:{st.State}");
+            return $"entries=[{string.Join(", ", states.Select(x => $"{Path.GetFileName(x.SourceFile)}:{x.State}x{x.Count}"))}] " +
+                   $"fingerprints=[{string.Join(", ", fingerprints.Select(Path.GetFileName))}] " +
+                   $"watches=[{string.Join(", ", statuses)}] errors=[{string.Join(" | ", Errors.Select(e => e.ToString()))}] " +
+                   $"fsEvents=[{string.Join(", ", FsEvents.ToArray().Select(e => $"{e.Kind}:{Path.GetFileName(e.Path)}{(e.OldPath is null ? "" : "<-" + Path.GetFileName(e.OldPath))}"))}] " +
+                   $"scans started={ScanGuard.StartedScans} skipped={ScanGuard.SkippedScans} lastScanDone={CatchUp.LastScan?.IsCompleted} fakeNow={Time.GetUtcNow():O} " +
+                   $"log=[{string.Join(" | ", _logs.GetSnapshot().Select(r => $"[{r.Id.Id}] {r.Message}{(r.Exception is null ? "" : $" :: {r.Exception.GetType().Name}: {r.Exception.Message}")}"))}]";
         }
 
         public async Task<int> CountEntriesUnderAsync(string dirPrefix, CancellationToken cancellationToken)
