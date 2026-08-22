@@ -102,14 +102,16 @@ public class OnnxGraphProbeReaderTests
 /// <summary>
 ///     Minimal hand-rolled ONNX ModelProto writer for tests (protobuf wire format): ir_version 6,
 ///     one graph, one or more initializers (with optional external_data), graph inputs
-///     input_ids/attention_mask, outputs token_embeddings + sentence_embedding, opset 17.
+///     input_ids/attention_mask, outputs token_embeddings + sentence_embedding (or the named
+///     outputs a caller passes — a graph that pools itself declares only last_hidden_state),
+///     opset 17.
 /// </summary>
 internal static class TestOnnx
 {
-    public static byte[] MinimalModelWithExternalData(string externalLocation) =>
-        MinimalModel(initializers: [TensorWithExternalData("weights", externalLocation)]);
+    public static byte[] MinimalModelWithExternalData(string externalLocation, IReadOnlyList<string>? outputs = null) =>
+        MinimalModel(initializers: [TensorWithExternalData("weights", externalLocation)], outputs: outputs);
 
-    public static byte[] MinimalModel(IReadOnlyList<byte[]>? initializers = null)
+    public static byte[] MinimalModel(IReadOnlyList<byte[]>? initializers = null, IReadOnlyList<string>? outputs = null)
     {
         List<byte> graph = [.. StringField(1, "g")];
         foreach (var tensor in initializers ?? [])
@@ -122,7 +124,7 @@ internal static class TestOnnx
             graph.AddRange(MessageField(11, ValueInfo(input)));
         }
 
-        foreach (var output in new[] { "token_embeddings", "sentence_embedding" })
+        foreach (var output in outputs ?? ["token_embeddings", "sentence_embedding"])
         {
             graph.AddRange(MessageField(12, ValueInfo(output)));
         }

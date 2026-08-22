@@ -146,9 +146,14 @@ namespace AiRaccoon.Tests.Unit.Embedding.Download;
         ///     fake placeholder) — the fix derives special-token ids from this file's own piece
         ///     table, so the fixture must be a piece table an actual sentencepiece parse can read.
         /// </summary>
+        /// <summary>
+        ///     The real faxenoff/code-daemon-embed-v1 shape (#470): its graph declares ONE output,
+        ///     last_hidden_state, and pools inside itself, so there is no sentence_embedding for the
+        ///     planner to spot and no 1_Pooling layout to read the mode from.
+        /// </summary>
         public static FakeRepo CodeDaemon(FakeHfServer server, bool declareUnresolvablePiece = false)
         {
-            var onnx = TestOnnx.MinimalModelWithExternalData("model.onnx_data");
+            var onnx = TestOnnx.MinimalModelWithExternalData("model.onnx_data", outputs: ["last_hidden_state"]);
             var data = "external-weights-bytes"u8.ToArray();
             var spm = File.ReadAllBytes(CodeTokenizer.ResolveModelPath());
             var padToken = declareUnresolvablePiece ? "<not-a-real-piece>" : "<pad>";

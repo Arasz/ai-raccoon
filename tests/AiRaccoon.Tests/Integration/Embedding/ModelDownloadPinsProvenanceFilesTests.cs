@@ -92,9 +92,8 @@ public sealed class ModelDownloadPinsProvenanceFilesTests : IDisposable
 
     private sealed class PassingSmokeTester : IOnnxSmokeTester
     {
-        public void Verify(string onnxPath)
-        {
-        }
+        public IReadOnlyDictionary<string, int> Verify(string onnxPath) =>
+            new Dictionary<string, int>(StringComparer.Ordinal);
     }
 
     private sealed class UnlimitedDiskSpace : IDiskSpaceProvider

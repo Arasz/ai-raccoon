@@ -177,12 +177,14 @@ public class ModelDownloadCommandTests : IDisposable
 
     private sealed class FakeSmokeTester(bool ok) : IOnnxSmokeTester
     {
-        public void Verify(string onnxPath)
+        public IReadOnlyDictionary<string, int> Verify(string onnxPath)
         {
             if (!ok)
             {
                 throw new OnnxSmokeTestException("simulated ONNX Runtime load failure");
             }
+
+            return new Dictionary<string, int>(StringComparer.Ordinal);
         }
     }
 
