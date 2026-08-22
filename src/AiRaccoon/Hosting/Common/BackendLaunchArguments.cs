@@ -32,6 +32,17 @@ internal static class BackendLaunchArguments
         processPath is not null &&
         string.Equals(Path.GetFileNameWithoutExtension(processPath), DotnetMuxerFileName, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>The reason a caller reports when <see cref="Executable()" /> returns null (no leading
+    /// "ai-raccoon: " — callers own their own prefix): names the unpackaged shape and the manual
+    /// `serve` command when that is the reason, else stays generic.</summary>
+    public static string UnavailableExecutableMessage(ServerConfig config) => UnavailableExecutableMessage(Environment.ProcessPath, config);
+
+    internal static string UnavailableExecutableMessage(string? processPath, ServerConfig config) =>
+        IsUnpackagedInvocation(processPath)
+            ? "this process was started via `dotnet run`/`dotnet exec` (unpackaged) — it cannot auto-start a backend; " +
+              $"start the server manually first: ai-raccoon {string.Join(' ', ServeArguments(config))}, then retry"
+            : "the running executable path is unknown";
+
     public static string[] ServeArguments(ServerConfig config)
     {
         var arguments = new List<string>

@@ -1,4 +1,6 @@
 using AiRaccoon.Hosting.Common;
+using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Setup;
 using Shouldly;
 using Xunit;
 
@@ -43,4 +45,31 @@ public sealed class BackendLaunchArgumentsTests
     [Fact]
     public void Executable_WithNoArguments_DelegatesToTheLiveProcessPath() =>
         BackendLaunchArguments.Executable().ShouldBe(BackendLaunchArguments.Executable(Environment.ProcessPath));
+
+    [Fact]
+    public void UnavailableExecutableMessage_ForAnUnpackagedInvocation_NamesTheShapeAndTheManualServeCommand()
+    {
+        var config = Config(port: 58432, dataRoot: "/tmp/some-root");
+
+        var message = BackendLaunchArguments.UnavailableExecutableMessage("/usr/local/share/dotnet/dotnet", config);
+
+        message.ShouldContain("dotnet run");
+        message.ShouldContain("serve");
+        message.ShouldContain("58432");
+        message.ShouldContain("/tmp/some-root");
+    }
+
+    [Fact]
+    public void UnavailableExecutableMessage_ForAGenuinelyUnknownPath_StaysGeneric()
+    {
+        var config = Config(port: 1, dataRoot: "/tmp/some-root");
+
+        var message = BackendLaunchArguments.UnavailableExecutableMessage(null, config);
+
+        message.ShouldContain("unknown");
+        message.ShouldNotContain("dotnet run");
+    }
+
+    private static ServerConfig Config(int port, string dataRoot) =>
+        new(port, McpTransport.Http, new InfrastructureOptions { DataRoot = dataRoot, Scope = InstallScope.User });
 }

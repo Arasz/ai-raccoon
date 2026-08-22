@@ -39,7 +39,7 @@ internal static class CliSettingsBackend
         }
 
         var executable = BackendLaunchArguments.Executable() ??
-            throw new SettingsServerUnavailableException("ai-raccoon: the running executable path is unknown");
+            throw new SettingsServerUnavailableException($"ai-raccoon: {BackendLaunchArguments.UnavailableExecutableMessage(config)}");
 
         BackendResult acquired;
         try

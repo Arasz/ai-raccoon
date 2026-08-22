@@ -60,7 +60,7 @@ public sealed class BackendSessions(IBackendLauncher backendLauncher, IHttpClien
     private async Task<BackendResult> AcuireBackend(CancellationToken ctx)
     {
         var executable = BackendLaunchArguments.Executable() ?? throw new BackendUnavailableException(
-            Unavailable("the running executable path is unknown"));
+            Unavailable(BackendLaunchArguments.UnavailableExecutableMessage(config)));
 
         BackendResult acquired;
         try
