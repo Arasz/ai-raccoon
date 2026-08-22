@@ -32,8 +32,9 @@ flowchart LR
 ## What's new
 
 - **A re-ingested file no longer leaves stale chunks behind — direct ingest prunes what the file no longer contains.** (1.31.0) [#420](https://github.com/Arasz/ai-raccoon/pull/420)
-- **Cloud snapshots are authenticity-checked (HMAC) before attach, and model activation verifies sha256 pins.** (1.31.0) [#431](https://github.com/Arasz/ai-raccoon/pull/431) · [#429](https://github.com/Arasz/ai-raccoon/pull/429)
-- **Hardening wave: distinct exit codes for missing bank (22) and settings-channel errors (23), fail-fast unpackaged auto-start, fairseq-offset refusal, reconcile-at-open.** (1.31.0)
+- **Cloud snapshots are authenticity-checked (HMAC) before attach, and model activation verifies sha256 pins.** An encrypted bank synced by ≥1.31 cannot be pulled by <1.31; upgrade both ends of an encrypted sync pair together. (1.31.0) [#431](https://github.com/Arasz/ai-raccoon/pull/431) · [#429](https://github.com/Arasz/ai-raccoon/pull/429)
+- **A model with wrong-by-construction token ids is refused instead of silently mis-embedding.** (1.31.0) [#423](https://github.com/Arasz/ai-raccoon/pull/423)
+- **Hardening wave: exit codes 22/23 for missing-bank and settings errors ([#433](https://github.com/Arasz/ai-raccoon/pull/433), [#426](https://github.com/Arasz/ai-raccoon/pull/426)), fail-fast unpackaged auto-start ([#430](https://github.com/Arasz/ai-raccoon/pull/430)), reconcile-at-open ([#432](https://github.com/Arasz/ai-raccoon/pull/432)), scoped promotion_list ([#424](https://github.com/Arasz/ai-raccoon/pull/424)).** (1.31.0)
 - **`model download` now derives sentencepiece special-token ids from the model itself — repos without `added_tokens_decoder` work.** (1.30.1) [#417](https://github.com/Arasz/ai-raccoon/issues/417)
 - **A second corpus indexes your code, searchable via `memory_search kind=code` — never synced, never mixed with memory.** (1.30.0) [Feature](docs/features/code-corpus/) · [ADR-0085](docs/adr/0085-a-second-code-only-corpus-in-the-same-bank.md)
 - **The server probe's retry is real — a warming server now gets all three attempts, not one.** (1.29.1)
