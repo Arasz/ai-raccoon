@@ -17,15 +17,10 @@
   "findings-against-prior-runs": [
     {
       "prior-run": "docs/work/checklist/2026-08-22-1.32.0-post-delta-wave.json, item 'server-lifecycle'",
-      "prior-claim": "(lane A, as filed) see what-is-actually-true",
-      "what-is-actually-true": "None. All seven items re-derived independently against 1.32.0 (fresh fixtures, fresh data roots, live sqlite3 evidence) and reproduce the same pass/substituted verdicts and mechanisms the 2026-08-22-1.32.0-post-delta-wave.json run recorded. No wrong reasoning, no stale pin, and no drifted docs/source constant found this run.",
-      "evidence": "lane A serve.log: NodeRunner[609] exit 16 on the first --restart, clean cycle on the immediate retry",
-      "so-what": "A first --restart that exits 16 under load is ADR-0043's documented unanswered-probe refusal, retryable; do not file it as a regression."
-    },
-    {
-      "against": "2026-08-22-1.32.0-post-delta-wave.json",
-      "item": "server-lifecycle",
-      "finding": "The prior run's server-lifecycle evidence shows a clean single-attempt --restart with no probe failure. This run's first --restart attempt hit ADR-0043's 'unanswered probe' path (exit 16, NodeRunner[609]) before succeeding on an immediate retry. This is not a defect in the prior run's verdict (server-lifecycle still correctly passes both runs) -- it is a note that --restart's success is probe-timing-dependent under load, exactly as ADR-0043 documents and explicitly designed for ('retryable in the sense 10 is'), and a future run seeing the same transient refusal should not treat it as a new regression without first checking ADR-0043."
+      "prior-claim": "server-lifecycle: a single-attempt `serve --restart` cycles the server cleanly (the prior run's evidence shows no probe failure)",
+      "what-is-actually-true": "The prior run's server-lifecycle evidence shows a clean single-attempt --restart with no probe failure. This run's first --restart attempt hit ADR-0043's 'unanswered probe' path (exit 16, NodeRunner[609]) before succeeding on an immediate retry. This is not a defect in the prior run's verdict (server-lifecycle still correctly passes both runs) -- it is a note that --restart's success is probe-timing-dependent under load, exactly as ADR-0043 documents and explicitly designed for ('retryable in the sense 10 is'), and a future run seeing the same transient refusal should not treat it as a new regression without first checking ADR-0043.",
+      "evidence": "lane A serve.log: NodeRunner[609] + exit 16 on the first --restart, clean cycle on the immediate retry",
+      "so-what": "Under load the first --restart can exit 16 (ADR-0043 unanswered-probe refusal, retryable by design); a future run must not file it as a regression, and a single clean attempt is a property of the run, not of the feature."
     }
   ],
   "items": [
