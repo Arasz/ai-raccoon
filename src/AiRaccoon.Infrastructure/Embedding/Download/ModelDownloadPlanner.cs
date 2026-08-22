@@ -11,7 +11,8 @@ public sealed record PinnedFile(string Path, long Size, string? LfsSha256);
 /// <summary>
 ///     Everything the downloader needs: the file set with pins, the tokenizer pairing, dims/ctx,
 ///     special-token ids, and the pooling decision (D11: sentence-transformers provenance when
-///     <c>1_Pooling</c> is present, else a WP5 placeholder). <c>SpecialTokensPending</c> is true
+///     <c>1_Pooling</c> is present, else a WP5 placeholder — either way, a graph that bakes its
+///     own second pooled output outranks the repo's flags, issue #459). <c>SpecialTokensPending</c> is true
 ///     when a sentencepiece repo ships no <c>added_tokens_decoder</c> and ids still need deriving
 ///     from the sp model's own piece table once it is on disk (issue #417, D1-compatible).
 /// </summary>
@@ -345,6 +346,9 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
     private static (PoolingMode Mode, NormalizationMode Normalization, string Provenance) PoolingDecision(
         IReadOnlyDictionary<string, string> rawFiles, OnnxGraphProbe? probe)
     {
+        var hasPooledOutput = probe is not null
+            && SelectEmbeddingOutput(probe.OutputNames, SelectTokenEmbeddingsOutput(probe.OutputNames)) is not null;
+
         if (rawFiles.TryGetValue("1_Pooling/config.json", out var poolingJson))
         {
             var mode = PoolingFromFlags(poolingJson);
@@ -355,13 +359,22 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
             }
 
             var normalization = ModulesDeclareNormalize(modulesJson) ? NormalizationMode.L2 : NormalizationMode.None;
+
+            // #459: the graph's own second output — when it publishes one beside the token-level
+            // output — is what the engine actually reads without re-pooling, and outranks the
+            // repo's sentence-transformers flags (bge-m3: 1_Pooling says cls, the graph also bakes
+            // sentence_embedding; cls happening to reproduce it is luck, not something the planner
+            // can rely on for every model).
+            if (hasPooledOutput)
+            {
+                return (PoolingMode.ModelOutput, normalization, "onnx-graph");
+            }
+
             return (mode, normalization, "sentence-transformers");
         }
 
         // D11 placeholder: no machine-readable pooling provenance — WP5's parity measurement
         // rewrites pooling (and normalization) before the model is trusted.
-        var hasPooledOutput = probe is not null
-            && SelectEmbeddingOutput(probe.OutputNames, SelectTokenEmbeddingsOutput(probe.OutputNames)) is not null;
         var placeholder = hasPooledOutput ? PoolingMode.ModelOutput : PoolingMode.Cls;
         return (placeholder, NormalizationMode.L2, "placeholder(wp5)");
     }
