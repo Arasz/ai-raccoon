@@ -1,6 +1,6 @@
 # Plan — post-delta next steps (rev 2, MoE-reviewed)
 
-**Date:** 2026-08-22 · **Base:** main `771f7762` (delta fix PRs #424–#434, docs #438, rulings #439 merged; v1.30.1 released; PR #440 → 1.31.0 in flight) · **Status:** rev 2 — both MoE findings sets folded (structure REQUEST-CHANGES; facts F-1..F-10); see companion review record
+**Date:** 2026-08-22 · **Base:** main `771f7762` (delta fix PRs #424–#434, docs #438, rulings #439 merged; v1.30.1 released; PR #440 → 1.31.0 in flight) · **Status:** rev 3 — gate ANSWERED 6/6 APPROVE (`2026-08-22-delta-open-items-feedback.md`); G2/G4/G6 notes folded; #437 merged (S10 done); continuation ledger: `2026-08-22-post-delta-continuation-plan.md`
 **Sources:** `docs/work/2026-08-21-delta-review-fix-plan.md` (implemented, closed) · `docs/work/2026-08-22-delta-open-items-review.html` (owner gate G1–G6, feedback pending) · `docs/work/2026-08-22-code-mem-owner-gate-feedback.md` (8/8 APPROVE) · cross-session input from #405 and ai-raccoon-cc · MoE review 2026-08-22 (architect + code-reviewer, both opus)
 
 Items marked **[gated: Gn]** proceed only per the owner's verdict on that card. Everything else has
@@ -149,6 +149,9 @@ never exercised a fast rebind). **Acceptance added (rev 1 had none):**
 **REJECT branch:** close as not-reproducible-on-1.30.x citing both falsified hypotheses and the
 fast-rebind caveat. **DEFER:** stays open, unexplained, listed in S5.
 **Owner:** d6 (dotnet-engineer lane). **Trigger:** G6 verdict.
+**VERDICT (2026-08-22): APPROVE with an overriding note — PARK.** No diagnosis now; an issue
+tracks it with the fast-rebind lead; escalates to priority on a second observed occurrence. The
+acceptance grid above stays on record as the ready-to-run design for that day.
 
 ### S8 — #436 code-corpus prune gap (approved as code-mem P2; NOT started)
 Accepted by ai-raccoon-cc, deliberately not begun (session wrapped). Design brief on record from
@@ -170,12 +173,12 @@ activation gate + budget constants updated to follow it (or recorded as already 
 pinning the budget relationship RED-first if constants change. **Trigger:** after #440 merges
 (shares the embedding surface the checklist exercises).
 
-### S10 — PR #437 disposition (engine contract gates)
-cc's parting PR: engine output-shape contract, graph-pooled parity gate (skips without the
-2.27 GB weights), tokenizer reference pin — three mutation-proven gates that would have caught
-#416. **Recommendation: land it.** **Owner:** d6 reviews at the seam and merges under the P1
-standing policy, or flags substantive findings back to a follow-up.
-**Acceptance:** review record on the PR; merged or findings posted. **Trigger:** now.
+### S10 — PR #437 disposition (engine contract gates) — **DONE (owner-instructed merge, 9d1c90f7)**
+Merged by owner instruction (rebase, --admin per P1 policy) before a seam review was needed;
+test-only, no production changes. **Follow-up spawned:** `GraphPooledOutputParityTests` is
+Nightly-tagged but gated on `AIRACCOON_POOLING_PARITY_MODEL_DIR`, which nothing sets — it skips
+everywhere including nightly. Wiring it into the nightly leg + one recorded real execution is a
+scheduled row in the continuation ledger.
 
 ## Sequencing
 
