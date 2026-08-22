@@ -1,6 +1,8 @@
 using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
@@ -37,8 +39,17 @@ public sealed class StructurePopulationTests : IAsyncLifetime
         _factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
-        _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), _clock,
-            TestData.CreateEmbeddingService(), embedDrainPump: _pump);
+        var sourceStore = new SqliteMemorySourceStore(_factory);
+        var embeddings = TestData.CreateEmbeddingService();
+        var markdownChunker = TestData.RealMarkdownChunker();
+        var matcher = new FileTypeMatcher(
+            [new MarkdownFileTypeHandler(markdownChunker), new JsonFileTypeHandler(TestData.RealJsonChunker(markdownChunker))]);
+        var fileIngestor = new FileIngestor(matcher, sourceStore, _clock, embeddings,
+            NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
+            NullWatchStore.Instance, _pump);
+        var embedder = new EntryEmbedder(embeddings, Substitute.For<IModelMigrationLease>(), _clock);
+        _store = new SqliteMemoryStore(_factory, sourceStore, fileIngestor, embedder, _clock,
+            NullLogger<SqliteMemoryStore>.Instance, new NoiseFilteringService([]), new SqliteSettingsStore(_factory), _pump);
     }
 
     public ValueTask DisposeAsync()

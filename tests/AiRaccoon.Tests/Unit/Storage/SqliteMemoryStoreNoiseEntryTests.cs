@@ -46,13 +46,13 @@ public sealed class SqliteMemoryStoreNoiseEntryTests : IDisposable
     {
         var entryEmbedder = new EntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider);
         var noiseFilteringService = new NoiseFilteringService([new HermesProcessNoisePolicy()]);
-        var pump = TestData.NewEmbedDrainPump();
-        return new SqliteMemoryStore(_factory, new SqliteMemorySourceStore(_factory),
-            TestData.NewFileIngestor(new FileTypeMatcher([]), new SqliteMemorySourceStore(_factory), new FakeTimeProvider(FixedNow),
-                TestData.CreateEmbeddingService(), embedDrainPump: pump),
+        var fileIngestor = new FileIngestor(new FileTypeMatcher([]), new SqliteMemorySourceStore(_factory), new FakeTimeProvider(FixedNow),
+            TestData.CreateEmbeddingService(), NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance,
+            NullCodeIngestor.Instance, NullWatchStore.Instance, NullEmbedDrainPump.Instance);
+        return new SqliteMemoryStore(_factory, new SqliteMemorySourceStore(_factory), fileIngestor,
             entryEmbedder, new FakeTimeProvider(FixedNow), NullLogger<SqliteMemoryStore>.Instance,
-            noiseFilteringService, new SqliteSettingsStore(_factory), pump, NoOpNoiseShadowObserverForTests.Instance,
-            noiseEntryStore);
+            noiseFilteringService, new SqliteSettingsStore(_factory), NullEmbedDrainPump.Instance,
+            NoOpNoiseShadowObserverForTests.Instance, noiseEntryStore);
     }
 
     [Fact]

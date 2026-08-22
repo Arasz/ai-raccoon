@@ -12,11 +12,9 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration.Ingestion;
 
 /// <summary>
-///     A directory ingest used to embed one generator call per chunk, serially, on the shared
-///     inference session — a third uncoordinated consumer of the pool alongside the two
-///     maintenance jobs. It now embeds nothing itself — <see cref="FileIngestor" /> no longer even
-///     takes an <c>IEntryEmbedder</c> — and signals the embed topic once per corpus the walk wrote
-///     rows for — no ctor-level inline-embed flag exists anymore at all (docs/work/2026-08-22-post-delta-3-plan.md WP11-B2).
+///     A directory ingest embeds nothing itself — <see cref="FileIngestor" /> does not hold an
+///     <c>IEntryEmbedder</c> at all — and signals the embed topic once per corpus the walk wrote
+///     rows for (docs/work/2026-08-22-post-delta-3-plan.md).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -54,10 +52,13 @@ public sealed class FileIngestorEmbedDrainTests : IDisposable
             new InfrastructureOptions { DataRoot = _testDir, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _testDir, Rid = "osx-arm64", Scope = InstallScope.User })));
         return withCodeSupport
-            ? TestData.NewFileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
-                codeFileTypeMatcher: new CodeFileTypeMatcher(), codeIngestor: new CodeIngestor(new CodeFileTypeMatcher(), new StubCodeChunker(), TimeProvider.System),
-                embedDrainPump: pump)
-            : TestData.NewFileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(), embedDrainPump: pump);
+            ? new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
+                NullIgnoreRulesProvider.Instance, new CodeFileTypeMatcher(),
+                new CodeIngestor(new CodeFileTypeMatcher(), new StubCodeChunker(), TimeProvider.System),
+                NullWatchStore.Instance, pump)
+            : new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
+                NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
+                NullWatchStore.Instance, pump);
     }
 
     [Fact]

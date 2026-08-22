@@ -17,10 +17,8 @@ namespace AiRaccoon.Tests.Integration.Ingestion;
 
 /// <summary>
 ///     `memory_ingest_file`'s direct-ingest path (<c>SqliteMemoryStore.ReplaceForDirectIngestAsync</c>)
-///     used to embed its chunk inline before returning — the last surviving inline-embed path
-///     after WP11-B2 already deferred the watch digest and the directory walk. It now leaves the row
-///     `pending` and enqueues the embed topic, like every other write path
-///     (docs/work/2026-08-22-post-delta-3-plan.md).
+///     leaves the row `pending` and enqueues the embed topic, like every other write path
+///     (docs/work/2026-08-22-post-delta-3-plan.md) — it never embeds inline.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -40,8 +38,9 @@ public sealed class DirectIngestEmbedDeferralTests : IDisposable
         _entryEmbedder = new EntryEmbedder(_embeddings, Substitute.For<IModelMigrationLease>(), TimeProvider.System);
         var sourceStore = new SqliteMemorySourceStore(_factory);
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker())]);
-        var fileIngestor = TestData.NewFileIngestor(matcher, sourceStore, TimeProvider.System, _embeddings,
-            embedDrainPump: _pump);
+        var fileIngestor = new FileIngestor(matcher, sourceStore, TimeProvider.System, _embeddings,
+            NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
+            NullWatchStore.Instance, _pump);
         _store = new SqliteMemoryStore(_factory, sourceStore, fileIngestor, _entryEmbedder, TimeProvider.System,
             NullLogger<SqliteMemoryStore>.Instance, new NoiseFilteringService([]), new SqliteSettingsStore(_factory),
             _pump);

@@ -71,46 +71,27 @@ public static class TestData
         IEnumerable<INoiseFilterPolicy>? noisePolicies = null,
         ISettingsStore? settings = null,
         ICodeChunker? codeChunker = null,
-        IIgnoreRulesProvider? ignoreRulesProvider = null,
-        IEventPump<EmbedDrainRequest>? embedDrainPump = null)
+        IIgnoreRulesProvider? ignoreRulesProvider = null)
     {
         jsonChunker ??= RealJsonChunker(markdownChunker);
         var embedder = new EntryEmbedder(embeddings, modelMigrationLease ?? ModelMigrationLease, timeProvider);
         var matcher = new FileTypeMatcher(
             [new MarkdownFileTypeHandler(markdownChunker), new JsonFileTypeHandler(jsonChunker)]);
-        var codeFileTypeMatcher = codeChunker is null ? null : new CodeFileTypeMatcher();
-        var codeIngestor = codeChunker is null ? null : new CodeIngestor(new CodeFileTypeMatcher(), codeChunker, timeProvider);
-        var pump = embedDrainPump ?? NullEmbedDrainPump.Instance;
-        var fileIngestor = NewFileIngestor(matcher, sourceStore, timeProvider, embeddings,
-            ignoreRulesProvider: ignoreRulesProvider,
-            codeFileTypeMatcher: codeFileTypeMatcher, codeIngestor: codeIngestor, embedDrainPump: pump);
+        // This helper's own documented contract is "omitted, the store behaves as a memory-only
+        // bank" — a fixed no-op pump, never a caller override; a test that needs a real one
+        // constructs FileIngestor/SqliteMemoryStore directly instead of through this convenience.
+        IEventPump<EmbedDrainRequest> pump = NullEmbedDrainPump.Instance;
+        var fileIngestor = codeChunker is null
+            ? new FileIngestor(matcher, sourceStore, timeProvider, embeddings,
+                ignoreRulesProvider ?? NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance,
+                NullCodeIngestor.Instance, NullWatchStore.Instance, pump)
+            : new FileIngestor(matcher, sourceStore, timeProvider, embeddings,
+                ignoreRulesProvider ?? NullIgnoreRulesProvider.Instance, new CodeFileTypeMatcher(),
+                new CodeIngestor(new CodeFileTypeMatcher(), codeChunker, timeProvider), NullWatchStore.Instance, pump);
         var noiseFilteringService = new NoiseFilteringService(noisePolicies ?? []);
         return new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService,
             settings ?? new SqliteSettingsStore(factory), pump);
     }
-
-    /// <summary>
-    ///     <see cref="FileIngestor" /> with production's own required-dependency shape: every
-    ///     optional collaborator a test doesn't care about gets the matching Null object explicitly,
-    ///     rather than every call site hand-wiring five extra constructor arguments
-    ///     (docs/work/2026-08-22-post-delta-3-plan.md WP11-B2 made these required).
-    /// </summary>
-    public static FileIngestor NewFileIngestor(
-        IFileTypeMatcher fileTypeMatcher,
-        IMemorySourceStore sourceStore,
-        TimeProvider timeProvider,
-        IEmbeddingService embeddingService,
-        IIgnoreRulesProvider? ignoreRulesProvider = null,
-        ICodeFileTypeMatcher? codeFileTypeMatcher = null,
-        ICodeIngestor? codeIngestor = null,
-        IWatchStore? watchStore = null,
-        IEventPump<EmbedDrainRequest>? embedDrainPump = null) =>
-        new(fileTypeMatcher, sourceStore, timeProvider, embeddingService,
-            ignoreRulesProvider ?? NullIgnoreRulesProvider.Instance,
-            codeFileTypeMatcher ?? NullCodeFileTypeMatcher.Instance,
-            codeIngestor ?? NullCodeIngestor.Instance,
-            watchStore ?? NullWatchStore.Instance,
-            embedDrainPump ?? NullEmbedDrainPump.Instance);
 
     /// <summary>
     ///     Drains every embed-topic request currently queued the same way

@@ -26,12 +26,12 @@ internal static class SearchTimingsHarness
         IEntryEmbedder? embedder = null)
     {
         embedder ??= new EntryEmbedder(TestData.CreateEmbeddingService(), ModelMigrationLease, TimeProvider);
-        var pump = TestData.NewEmbedDrainPump();
-        return new SqliteMemoryStore(factory, new SqliteMemorySourceStore(factory),
-            TestData.NewFileIngestor(new FileTypeMatcher([]), new SqliteMemorySourceStore(factory), timeProvider,
-                TestData.CreateEmbeddingService(), embedDrainPump: pump),
+        var fileIngestor = new FileIngestor(new FileTypeMatcher([]), new SqliteMemorySourceStore(factory), timeProvider,
+            TestData.CreateEmbeddingService(), NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance,
+            NullCodeIngestor.Instance, NullWatchStore.Instance, NullEmbedDrainPump.Instance);
+        return new SqliteMemoryStore(factory, new SqliteMemorySourceStore(factory), fileIngestor,
             embedder, timeProvider, NullLogger<SqliteMemoryStore>.Instance,
-            new NoiseFilteringService([]), new SqliteSettingsStore(factory), pump);
+            new NoiseFilteringService([]), new SqliteSettingsStore(factory), NullEmbedDrainPump.Instance);
     }
 
     /// <summary>

@@ -29,12 +29,9 @@ public sealed class FileIngestor(
     IEventPump<EmbedDrainRequest> embedDrainPump) : IFileIngestor
 {
     /// <summary>
-    ///     Ignore rules apply here too, ahead of routing (B2/§2.1: ignore wins for both the memory
-    ///     and the code pipeline) — <see cref="ResolveIgnoreRootAsync" /> finds the right root even
-    ///     though (unlike <see cref="IngestDirectoryAsync" />) no walk root is given directly. Rows
-    ///     are left <c>pending</c>; the caller enqueues the corpus's <see cref="EmbedDrainRequest" />
-    ///     once it is safe to (after any wrapping transaction commits — see
-    ///     <c>SqliteMemoryStore.Replace.cs</c>).
+    ///     Ignore rules apply ahead of routing, for both the memory and code pipelines —
+    ///     <see cref="ResolveIgnoreRootAsync" /> finds the right root. Rows are left <c>pending</c>;
+    ///     the caller enqueues the corpus's <see cref="EmbedDrainRequest" /> once it is safe to.
     /// </summary>
     public async Task<FileIngestResult> IngestFileAsync(SqliteConnection connection, string projectId, string path,
         string? context, CancellationToken cancellationToken)
@@ -66,18 +63,10 @@ public sealed class FileIngestor(
     }
 
     /// <summary>
-    ///     OQ4 (docs/work/2026-08-21-code-search-implementation-plan.md §12.4): explicit single-file
-    ///     ingest routes code extensions to the code corpus too. Not a code file at all — fingerprint
-    ///     eligible as before, nothing will ever come of it regardless of chunker. A code file the
-    ///     chunker produced zero rows for is NOT fingerprint eligible (B1) UNLESS the content is
-    ///     empty/whitespace-only (S3): a stand-in chunker (e.g. `NoOpCodeChunker`) producing zero
-    ///     rows for real content must not let the watch digest settle into treating the file as
-    ///     done, but a genuinely empty/whitespace-only file chunks to zero rows FOREVER regardless
-    ///     of chunker quality — refusing to fingerprint it would re-ingest it on every poll forever.
-    ///     #436: <see cref="FileIngestResult.CodeChunkHashes" /> follows the chunker's actual chunk
-    ///     count, not whether any row was freshly inserted, so a fully rediscovered (deduped) file
-    ///     still reports its real, non-empty current chunk set. It stays null (no prune) exactly
-    ///     when the zero-chunk/non-whitespace S3 guard applies.
+    ///     Explicit single-file ingest also routes code extensions to the code corpus
+    ///     (docs/work/2026-08-21-code-search-implementation-plan.md §12.4). Fingerprint-eligible
+    ///     when chunking produced rows, or when zero rows is because the content is
+    ///     empty/whitespace-only — never for a stand-in chunker's zero rows on real content.
     /// </summary>
     private async Task<FileIngestResult> IngestAsCodeAsync(SqliteConnection connection, string projectId, string path,
         CancellationToken cancellationToken)
@@ -100,12 +89,10 @@ public sealed class FileIngestor(
     }
 
     /// <summary>
-    ///     B2: the `ai-raccoon.ignore` root for an explicit single-file ingest — the containing
-    ///     registered watch if one exists (longest/most specific match), else the ingest-scope
-    ///     allowlist entry that admits the path (same tie-break), else the file's own parent
-    ///     directory as the last resort. `IgnoreRulesProvider` reads exactly one file at whatever
-    ///     root it is given — no nested discovery — so picking the wrong root here silently misses
-    ///     the real ignore file instead of erroring.
+    ///     The `ai-raccoon.ignore` root for an explicit single-file ingest: the containing
+    ///     registered watch if one exists (longest match), else the ingest-scope allowlist entry
+    ///     that admits the path, else the file's own parent directory. `IgnoreRulesProvider` reads
+    ///     one file at whatever root it is given — no nested discovery.
     /// </summary>
     private async Task<string> ResolveIgnoreRootAsync(SqliteConnection connection, string projectId, string path,
         CancellationToken cancellationToken)
@@ -267,7 +254,10 @@ public sealed class FileIngestor(
             }
             else
             {
-                await connection.ExecuteAsync(
+                // InsertEntry is ON CONFLICT DO NOTHING: affected rows already says whether this
+                // call won the insert or a concurrent same-bucket insert got there first — no
+                // follow-up SELECT needed to find out.
+                var affected = await connection.ExecuteAsync(
                         Def(MemorySql.InsertEntry,
                             new
                             {
@@ -289,20 +279,7 @@ public sealed class FileIngestor(
                             },
                             cancellationToken))
                     .ConfigureAwait(false);
-
-                var newId = await connection.ExecuteScalarAsync<long?>(
-                        Def(MemorySql.SelectChunkIdByPathAndHashInBucket,
-                            new
-                            {
-                                hash,
-                                path,
-                                scope = bucket.Scope,
-                                projectId = bucket.ProjectId,
-                                contextLabel = bucket.ContextLabel,
-                                workspaceId = bucket.WorkspaceId
-                            }, cancellationToken))
-                    .ConfigureAwait(false);
-                if (newId is null)
+                if (affected == 0)
                 {
                     continue;
                 }
@@ -427,9 +404,9 @@ public sealed class FileIngestor(
     /// </summary>
     private static bool IsHidden(string root, string path) => WatchDenySet.Excludes(root, path);
 
-    /// <summary>`ai-raccoon.ignore` check against the walk root's rules (§2.1): never true for the
-    /// ignore file's own path — it is unindexable by extension anyway, but a `*` pattern must not
-    /// hide it from the caller's own re-scan/reconcile bookkeeping.</summary>
+    /// <summary>`ai-raccoon.ignore` check against the walk root's rules: never true for the ignore
+    /// file's own path — a `*` pattern must not hide it from the caller's own re-scan/reconcile
+    /// bookkeeping.</summary>
     private static bool IsIgnored(IgnoreRules rules, string root, string path)
     {
         if (!rules.HasRules)

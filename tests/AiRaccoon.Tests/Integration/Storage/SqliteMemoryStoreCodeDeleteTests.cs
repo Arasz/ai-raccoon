@@ -45,8 +45,9 @@ public sealed class SqliteMemoryStoreCodeDeleteTests : IDisposable
         var embedder = new EntryEmbedder(TestData.CreateEmbeddingService(), Substitute.For<IModelMigrationLease>(), timeProvider);
         var codeIngestor = new CodeIngestor(new CodeFileTypeMatcher(), new StubCodeChunker(), timeProvider);
         var pump = TestData.NewEmbedDrainPump();
-        var fileIngestor = TestData.NewFileIngestor(matcher, sourceStore, timeProvider, TestData.CreateEmbeddingService(),
-            codeFileTypeMatcher: new CodeFileTypeMatcher(), codeIngestor: codeIngestor, embedDrainPump: pump);
+        var fileIngestor = new FileIngestor(matcher, sourceStore, timeProvider, TestData.CreateEmbeddingService(),
+            NullIgnoreRulesProvider.Instance, new CodeFileTypeMatcher(), codeIngestor,
+            NullWatchStore.Instance, pump);
         _store = new SqliteMemoryStore(_factory, sourceStore, fileIngestor, embedder, timeProvider,
             NullLogger<SqliteMemoryStore>.Instance, new NoiseFilteringService([]), new SqliteSettingsStore(_factory), pump);
     }

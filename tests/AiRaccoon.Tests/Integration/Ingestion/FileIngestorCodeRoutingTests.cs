@@ -55,12 +55,15 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
 
         if (!withCodeSupport)
         {
-            return TestData.NewFileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService());
+            return new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
+                NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
+                NullWatchStore.Instance, NullEmbedDrainPump.Instance);
         }
 
         var codeIngestor = new CodeIngestor(new CodeFileTypeMatcher(), new StubCodeChunker(), TimeProvider.System);
-        return TestData.NewFileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
-            codeFileTypeMatcher: new CodeFileTypeMatcher(), codeIngestor: codeIngestor);
+        return new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
+            NullIgnoreRulesProvider.Instance, new CodeFileTypeMatcher(), codeIngestor,
+            NullWatchStore.Instance, NullEmbedDrainPump.Instance);
     }
 
     [Fact]
@@ -230,9 +233,9 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
                 NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _testDir, Rid = "osx-arm64", Scope = InstallScope.User })));
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker())]);
         var codeIngestor = new CodeIngestor(new CodeFileTypeMatcher(), new StubCodeChunker(), TimeProvider.System);
-        return TestData.NewFileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
-            ignoreRulesProvider: new IgnoreRulesProvider(), codeFileTypeMatcher: new CodeFileTypeMatcher(),
-            codeIngestor: codeIngestor, watchStore: watchStore);
+        return new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
+            new IgnoreRulesProvider(), new CodeFileTypeMatcher(), codeIngestor,
+            watchStore ?? NullWatchStore.Instance, NullEmbedDrainPump.Instance);
     }
 
     private async Task<IWatchStore> RegisterWatchAsync(string path)
