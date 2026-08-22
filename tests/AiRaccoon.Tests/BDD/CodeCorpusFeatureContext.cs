@@ -231,11 +231,11 @@ public sealed class CodeCorpusFeatureContext : IDisposable
         var embedder = new EntryEmbedder(embeddings, ModelMigrationLease, TimeProvider);
         var codeFileTypeMatcher = new CodeFileTypeMatcher();
         var codeIngestor = new CodeIngestor(codeFileTypeMatcher, new StubCodeChunker(), TimeProvider);
-        var fileIngestor = new FileIngestor(matcher, embedder, sourceStore, TimeProvider, embeddings,
-            new IgnoreRulesProvider(), codeFileTypeMatcher, codeIngestor, WatchStore);
+        var fileIngestor = new FileIngestor(matcher, sourceStore, TimeProvider, embeddings,
+            new IgnoreRulesProvider(), codeFileTypeMatcher, codeIngestor, WatchStore, EmbedDrainPump);
         var noiseFilteringService = new NoiseFilteringService([]);
         return new SqliteMemoryStore(Factory, sourceStore, fileIngestor, embedder, TimeProvider,
-            NullLogger<SqliteMemoryStore>.Instance, noiseFilteringService, Settings);
+            NullLogger<SqliteMemoryStore>.Instance, noiseFilteringService, Settings, EmbedDrainPump);
     }
 
     private void ComposeWatchStack()

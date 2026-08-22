@@ -92,8 +92,8 @@ public static class TestData
     /// <summary>
     ///     <see cref="FileIngestor" /> with production's own required-dependency shape: every
     ///     optional collaborator a test doesn't care about gets the matching Null object explicitly,
-    ///     rather than every call site hand-wiring five extra constructor arguments (WP11-B2's
-    ///     embedInline removal made these required; see docs/work/2026-08-22-post-delta-3-plan.md).
+    ///     rather than every call site hand-wiring five extra constructor arguments
+    ///     (docs/work/2026-08-22-post-delta-3-plan.md WP11-B2 made these required).
     /// </summary>
     public static FileIngestor NewFileIngestor(
         IFileTypeMatcher fileTypeMatcher,

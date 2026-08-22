@@ -19,31 +19,25 @@ namespace AiRaccoon.Infrastructure.Ingestion;
 /// </summary>
 public sealed class FileIngestor(
     IFileTypeMatcher fileTypeMatcher,
-    IEntryEmbedder embedder,
     IMemorySourceStore sourceStore,
     TimeProvider timeProvider,
     IEmbeddingService embeddingService,
-    IIgnoreRulesProvider? ignoreRulesProvider = null,
-    ICodeFileTypeMatcher? codeFileTypeMatcher = null,
-    ICodeIngestor? codeIngestor = null,
-    IWatchStore? watchStore = null,
-    IEventPump<EmbedDrainRequest>? embedDrainPump = null) : IFileIngestor
+    IIgnoreRulesProvider ignoreRulesProvider,
+    ICodeFileTypeMatcher codeFileTypeMatcher,
+    ICodeIngestor codeIngestor,
+    IWatchStore watchStore,
+    IEventPump<EmbedDrainRequest> embedDrainPump) : IFileIngestor
 {
-    private readonly ICodeFileTypeMatcher _codeFileTypeMatcher = codeFileTypeMatcher ?? NullCodeFileTypeMatcher.Instance;
-    private readonly ICodeIngestor _codeIngestor = codeIngestor ?? NullCodeIngestor.Instance;
-    private readonly IIgnoreRulesProvider _ignoreRulesProvider = ignoreRulesProvider ?? NullIgnoreRulesProvider.Instance;
-    private readonly IWatchStore _watchStore = watchStore ?? NullWatchStore.Instance;
-    private readonly IEventPump<EmbedDrainRequest> _embedDrainPump = embedDrainPump ?? NullEmbedDrainPump.Instance;
-
     /// <summary>
-    ///     Set <paramref name="embedInline" /> false when the caller holds a write transaction: embedding
-    ///     runs the engine per chunk, and a lock held that long stalls another process's first bank open.
     ///     Ignore rules apply here too, ahead of routing (B2/§2.1: ignore wins for both the memory
     ///     and the code pipeline) — <see cref="ResolveIgnoreRootAsync" /> finds the right root even
-    ///     though (unlike <see cref="IngestDirectoryAsync" />) no walk root is given directly.
+    ///     though (unlike <see cref="IngestDirectoryAsync" />) no walk root is given directly. Rows
+    ///     are left <c>pending</c>; the caller enqueues the corpus's <see cref="EmbedDrainRequest" />
+    ///     once it is safe to (after any wrapping transaction commits — see
+    ///     <c>SqliteMemoryStore.Replace.cs</c>).
     /// </summary>
     public async Task<FileIngestResult> IngestFileAsync(SqliteConnection connection, string projectId, string path,
-        string? context, CancellationToken cancellationToken, bool embedInline = true)
+        string? context, CancellationToken cancellationToken)
     {
         await RequireInScopeAsync(connection, projectId, path, cancellationToken).ConfigureAwait(false);
 
@@ -53,7 +47,7 @@ public sealed class FileIngestor(
         }
 
         var ignoreRoot = await ResolveIgnoreRootAsync(connection, projectId, path, cancellationToken).ConfigureAwait(false);
-        var ignoreRules = await _ignoreRulesProvider.LoadAsync(ignoreRoot, cancellationToken).ConfigureAwait(false);
+        var ignoreRules = await ignoreRulesProvider.LoadAsync(ignoreRoot, cancellationToken).ConfigureAwait(false);
         if (IsIgnored(ignoreRules, ignoreRoot, path))
         {
             return new FileIngestResult(0, true);
@@ -66,7 +60,7 @@ public sealed class FileIngestor(
 
         var content = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
         var (rows, hashes) = await InsertChunksAsync(connection, projectId, path, content, handler, context,
-                cancellationToken, embedInline)
+                cancellationToken)
             .ConfigureAwait(false);
         return new FileIngestResult(rows, true, hashes);
     }
@@ -88,12 +82,12 @@ public sealed class FileIngestor(
     private async Task<FileIngestResult> IngestAsCodeAsync(SqliteConnection connection, string projectId, string path,
         CancellationToken cancellationToken)
     {
-        if (!_codeFileTypeMatcher.IsCodeFile(path))
+        if (!codeFileTypeMatcher.IsCodeFile(path))
         {
             return new FileIngestResult(0, true);
         }
 
-        var result = await _codeIngestor.IngestFileAsync(connection, projectId, path, cancellationToken)
+        var result = await codeIngestor.IngestFileAsync(connection, projectId, path, cancellationToken)
             .ConfigureAwait(false);
         if (result.ChunkHashes is { Count: > 0 })
         {
@@ -118,7 +112,7 @@ public sealed class FileIngestor(
     {
         var normalized = IngestPath.Normalize(path);
 
-        var watches = await _watchStore.ListWatchesAsync(cancellationToken).ConfigureAwait(false);
+        var watches = await watchStore.ListWatchesAsync(cancellationToken).ConfigureAwait(false);
         var containingWatch = watches
             .Where(w => w.ProjectId == projectId && IngestPath.IsWithinScope(normalized, w.Path))
             .OrderByDescending(w => w.Path.Length)
@@ -147,41 +141,51 @@ public sealed class FileIngestor(
         var scope = await ReadScopeAsync(connection, projectId, cancellationToken).ConfigureAwait(false);
         RequireInScope(scope, path);
 
-        var ignoreRules = await _ignoreRulesProvider.LoadAsync(path, cancellationToken).ConfigureAwait(false);
+        var ignoreRules = await ignoreRulesProvider.LoadAsync(path, cancellationToken).ConfigureAwait(false);
         var files = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
             .Where(file => !IsHidden(path, file) && !IsIgnored(ignoreRules, path, file) && IsInScope(scope, file))
             .OrderBy(file => file, StringComparer.Ordinal);
 
         var indexed = 0;
+        var memoryRowsWritten = false;
+        var codeRowsWritten = false;
         var walked = new List<WalkedFile>();
         foreach (var file in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!fileTypeMatcher.TryGetHandler(file, out var handler))
             {
-                if (_codeFileTypeMatcher.IsCodeFile(file))
+                if (codeFileTypeMatcher.IsCodeFile(file))
                 {
-                    indexed += (await _codeIngestor.IngestFileAsync(connection, projectId, file, cancellationToken, scope)
-                        .ConfigureAwait(false)).Rows;
+                    var codeResult = await codeIngestor.IngestFileAsync(connection, projectId, file, cancellationToken, scope)
+                        .ConfigureAwait(false);
+                    indexed += codeResult.Rows;
+                    codeRowsWritten |= codeResult.Rows > 0;
                 }
 
                 continue;
             }
 
             var content = await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false);
-            // WP11-B2 (Finding (a)): embedInline false — a per-file generator call, serially, on
-            // the shared session was a third uncoordinated consumer of the inference pool. One
-            // enqueue below covers the whole walk instead.
             var (rows, hashes) = await InsertChunksAsync(connection, projectId, file, content, handler, context,
-                    cancellationToken, embedInline: false)
+                    cancellationToken)
                 .ConfigureAwait(false);
             indexed += rows;
+            memoryRowsWritten |= rows > 0;
             walked.Add(new WalkedFile(file, hashes));
         }
 
-        if (indexed > 0)
+        // One signal per corpus the walk actually wrote rows for — never per file (a per-file
+        // generator call, serially, on the shared inference session was a third uncoordinated
+        // consumer of the pool alongside the two maintenance jobs).
+        if (memoryRowsWritten)
         {
-            _embedDrainPump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Memory));
+            embedDrainPump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Memory));
+        }
+
+        if (codeRowsWritten)
+        {
+            embedDrainPump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Code));
         }
 
         return new DirectoryIngestResult(indexed, walked);
@@ -204,10 +208,11 @@ public sealed class FileIngestor(
             : [content];
     }
 
-    /// <summary>Embeds one freshly inserted row when an engine is configured; deferred otherwise (FR-NM-3 s4; see docs/work/features-native-memory/native-memory.feature).</summary>
+    /// <summary>Leaves every freshly inserted row `embed_state = 'pending'` — the caller enqueues
+    /// the corpus's drain once it is safe to (see <see cref="IngestDirectoryAsync" />).</summary>
     private async Task<(int Rows, List<string> Hashes)> InsertChunksAsync(SqliteConnection connection,
         string projectId, string path, string content, IFileTypeHandler handler, string? context,
-        CancellationToken cancellationToken, bool embedInline = true)
+        CancellationToken cancellationToken)
     {
         var resolvedContext = context ?? ContextNaming.ProjectContext(projectId);
         var bucket = EntryBucket.For(resolvedContext, projectId);
@@ -300,13 +305,6 @@ public sealed class FileIngestor(
                 if (newId is null)
                 {
                     continue;
-                }
-
-                chunkId = newId.Value;
-                if (embedInline)
-                {
-                    await embedder.EmbedIfConfiguredAsync(connection, chunkId, chunk, cancellationToken)
-                        .ConfigureAwait(false);
                 }
 
                 inserted++;

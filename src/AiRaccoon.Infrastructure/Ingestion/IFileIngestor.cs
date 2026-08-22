@@ -42,11 +42,12 @@ public readonly record struct DirectoryIngestResult(int Indexed, IReadOnlyList<W
 public interface IFileIngestor
 {
     /// <summary>
-    ///     Set <paramref name="embedInline" /> false when the caller holds a write transaction: embedding
-    ///     runs the engine per chunk, and a lock held that long stalls another process's first bank open.
+    ///     Chunks and inserts <paramref name="path" />, leaving every row `embed_state = 'pending'` —
+    ///     the caller enqueues the corpus's embed-drain signal once it is safe to (after any
+    ///     wrapping transaction commits).
     /// </summary>
     Task<FileIngestResult> IngestFileAsync(SqliteConnection connection, string projectId, string path,
-        string? context, CancellationToken cancellationToken, bool embedInline = true);
+        string? context, CancellationToken cancellationToken);
 
     Task<DirectoryIngestResult> IngestDirectoryAsync(SqliteConnection connection, string projectId, string path,
         string? context, CancellationToken cancellationToken);

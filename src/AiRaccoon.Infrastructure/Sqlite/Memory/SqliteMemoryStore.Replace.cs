@@ -1,3 +1,4 @@
+using AiRaccoon.Infrastructure.Embedding;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
@@ -63,12 +64,12 @@ public sealed partial class SqliteMemoryStore
     ///         until it drained.
     ///     </para>
     ///     <para>
-    ///         The ingest keeps embedding inline, as this path always has, so it deliberately does
-    ///         NOT run inside the prune's transaction — embedding runs the engine per chunk and a
-    ///         write lock held that long stalls another process's first bank open. Only the prune
-    ///         takes the lock, and only for one DELETE. A crash between the two leaves the stale
-    ///         rows exactly where today's code leaves them, so the window costs nothing that is not
-    ///         already the status quo.
+    ///         The ingest leaves its row(s) `embed_state = 'pending'` and deliberately does NOT run
+    ///         inside the prune's transaction — each insert autocommits, so by the time this method
+    ///         enqueues the embed-drain signal below, the rows it is signalling for already exist.
+    ///         Only the prune takes the write lock, and only for one DELETE. A crash between the two
+    ///         leaves the stale rows exactly where today's code leaves them, so the window costs
+    ///         nothing that is not already the status quo.
     ///     </para>
     ///     No watch fingerprint is written: a direct ingest of a file nobody watches must not claim
     ///     one.
@@ -85,6 +86,13 @@ public sealed partial class SqliteMemoryStore
         await PruneChunksNotIn(connection, projectId, path, ingestResult.ChunkHashes ?? [],
                 ingestResult.CodeChunkHashes, cancellationToken)
             .ConfigureAwait(false);
+
+        if (ingestResult.RowsInserted > 0)
+        {
+            embedDrainPump.TryEnqueue(new EmbedDrainRequest(
+                ingestResult.CodeChunkHashes is not null ? EmbedCorpus.Code : EmbedCorpus.Memory));
+        }
+
         return ingestResult.RowsInserted;
     }
 
@@ -166,9 +174,7 @@ public sealed partial class SqliteMemoryStore
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
 
-        // WP11 Finding (b): which writer holds the bank's write lock long enough for another one
-        // to time out at 5s was not established from the log alone — this is the instrumentation
-        // that answers it, a logged value, never a threshold assertion.
+        // Logs how long the write lock was held — a measurement, never a threshold assertion.
         var heldFrom = timeProvider.GetTimestamp();
         await connection.ExecuteAsync(
                 new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
@@ -204,7 +210,7 @@ public sealed partial class SqliteMemoryStore
             // to ICodeIngestor internally (FileIngestor.IngestFileAsync) — one re-ingest call
             // covers both corpora; each ingestor's own matcher decides whether it does anything.
             var ingestResult = await fileIngestor
-                .IngestFileAsync(connection, projectId, path, context, cancellationToken, false)
+                .IngestFileAsync(connection, projectId, path, context, cancellationToken)
                 .ConfigureAwait(false);
             await connection.ExecuteAsync(
                     Def(MemorySql.RestoreQueueRowsStillBacked, null, cancellationToken))

@@ -16,7 +16,7 @@ namespace AiRaccoon.Tests.Integration.Ingestion;
 ///     inference session — a third uncoordinated consumer of the pool alongside the two
 ///     maintenance jobs. It now embeds nothing itself — <see cref="FileIngestor" /> no longer even
 ///     takes an <c>IEntryEmbedder</c> — and signals the embed topic once per corpus the walk wrote
-///     rows for (docs/work/2026-08-22-post-delta-3-plan.md WP11-B2; embedInline removed entirely).
+///     rows for — no ctor-level inline-embed flag exists anymore at all (docs/work/2026-08-22-post-delta-3-plan.md WP11-B2).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]

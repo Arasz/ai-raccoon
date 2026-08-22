@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
@@ -25,7 +26,8 @@ public sealed partial class SqliteMemoryStore(
     TimeProvider timeProvider,
     ILogger<SqliteMemoryStore> logger,
     INoiseFilteringService noiseFilteringService,
-    ISettingsStore settings)
+    ISettingsStore settings,
+    IEventPump<EmbedDrainRequest> embedDrainPump)
     : IMemoryStore
 {
     private const string SharedScope = "shared";
@@ -41,9 +43,11 @@ public sealed partial class SqliteMemoryStore(
         ILogger<SqliteMemoryStore> logger,
         INoiseFilteringService noiseFilteringService,
         ISettingsStore settings,
+        IEventPump<EmbedDrainRequest> embedDrainPump,
         INoiseShadowObserver noiseShadowObserver,
         INoiseEntryStore noiseEntryStore)
-        : this(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService, settings)
+        : this(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService, settings,
+            embedDrainPump)
     {
         _noiseShadowObserver = noiseShadowObserver;
         _noiseEntryStore = noiseEntryStore;
