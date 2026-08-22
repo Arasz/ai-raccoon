@@ -362,7 +362,9 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
 
     private static partial class Log
     {
-        [LoggerMessage(EventId = 416, Level = LogLevel.Warning,
+        // Moved 416 -> 418 (#466): OnnxEmbeddingGenerator's block ran 414-415 and needed 417, which
+        // 416 wedged shut. 416 is retired, not reused — see docs/reference/logging-event-ids.md.
+        [LoggerMessage(EventId = 418, Level = LogLevel.Warning,
             Message = "Search query was shortened to fit the embedding model: {Tokens} tokens exceeded the "
                       + "{MaxTokens}-token window, so only the first {TrimmedChars} of {OriginalChars} characters "
                       + "were used to find matches. Results may miss what the rest of the query asked for — "
