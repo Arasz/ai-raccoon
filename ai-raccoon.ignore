@@ -15,3 +15,16 @@ src/AiRaccoon/Models/
 # Generated code and CI bookkeeping.
 *.g.cs
 known-flakes.json
+
+# Mitigation for #494 until the watch filters events itself: hidden directories and the
+# enumeration deny set, so a file written under them after registration is never digested
+# and the re-scan this edit triggers prunes what already leaked (agent worktrees under
+# .claude/worktrees and .ai-badger/worktrees included).
+.*/
+node_modules/
+bin/
+obj/
+dist/
+build/
+target/
+__pycache__/
