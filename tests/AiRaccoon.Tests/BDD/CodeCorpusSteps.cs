@@ -758,11 +758,21 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
             new { value = $"sealed class {_searchQuery} {{ }}", path = "src/Reindexed.cs" }));
     }
 
+    /// <summary>
+    ///     WP11-B2: RunAsync now only signals the embed topic — draining is EmbedDrainService's own
+    ///     job. This step still describes the user-observable outcome ("the maintenance job runs"
+    ///     and rows end up re-embedded), so it drains the signal it just queued the same way the
+    ///     real consumer would, rather than embedding inline itself.
+    /// </summary>
     [When("^the code-reindex maintenance job runs$")]
     public async Task WhenCodeReindexJobRuns()
     {
         await using var connection = await Ctx.OpenBankAsync();
         await Ctx.ReindexJob.RunAsync(connection, CancellationToken.None);
+        if (Ctx.EmbedDrainPump.DrainUpTo(1).Count > 0)
+        {
+            await Ctx.CodeEmbedder.EmbedPendingBatchAsync(connection, EmbedDrainService.RowsPerRun, CancellationToken.None);
+        }
     }
 
     [Then("^the pending rows are re-embedded under the new engine$")]

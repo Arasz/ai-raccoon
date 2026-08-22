@@ -1,6 +1,7 @@
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Chunking;
+using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
@@ -55,6 +56,7 @@ public static partial class AppRegistrations
 
         public void RegisterMemoryServices(InfrastructureOptions options, IReadOnlyCollection<McpTransport> mcpTransport)
         {
+            services.RegisterEmbedDrainServices();
             services.RegisterPromotionQueue();
             services.RegisterWatchServices();
             services.RegisterSyncServices();
@@ -183,13 +185,29 @@ public static partial class AppRegistrations
                 // PendingEmbedJob, so its position relative to it does not matter.
                 new PromotionQueuePruneJob(sp.GetRequiredService<TimeProvider>()),
                 // .NET-F1: on-demand — HasWorkAsync reads entries.embed_state itself, not a cadence.
-                new PendingEmbedJob(sp.GetRequiredService<IEntryEmbedder>()),
+                new PendingEmbedJob(sp.GetRequiredService<IEntryEmbedder>(), sp.GetRequiredService<IEventPump<EmbedDrainRequest>>()),
                 // WP5/WP7-remainder (§3.3 D-E9/§3.8): on-demand, same shape as PendingEmbedJob —
-                // drains code_entries rows a code-engine activation or fingerprint change left
-                // pending. No outbox, no ToolGate interaction.
-                new CodeReindexJob(sp.GetRequiredService<ICodeEmbedder>())
+                // signals a drain of code_entries rows a code-engine activation or fingerprint
+                // change left pending. No outbox, no ToolGate interaction.
+                new CodeReindexJob(sp.GetRequiredService<ICodeEmbedder>(), sp.GetRequiredService<IEventPump<EmbedDrainRequest>>())
             ]);
             services.AddHostedService<BankMaintenanceHostedService>();
+        }
+
+        /// <summary>
+        ///     The embed topic (docs/work/2026-08-22-post-delta-3-plan.md WP11-B2, owner ruling
+        ///     G17): one <see cref="EventPump{T}" /> instance shared by every producer
+        ///     (<see cref="PendingEmbedJob" />, <see cref="CodeReindexJob" />,
+        ///     <see cref="WatchDigestExecutor" />, <see cref="FileIngestor" />) and
+        ///     <see cref="EmbedDrainService" />'s single reader — registered as a singleton so DI
+        ///     hands every one of them the same instance.
+        /// </summary>
+        private void RegisterEmbedDrainServices()
+        {
+            services.AddSingleton<IEventPump<EmbedDrainRequest>>(_ =>
+                new EventPump<EmbedDrainRequest>(
+                    new PumpTopic(EmbedDrainService.PumpCeiling, EmbedDrainService.PumpCapacity, Coalesce: true)));
+            services.AddHostedService<EmbedDrainService>();
         }
 
         /// <summary>

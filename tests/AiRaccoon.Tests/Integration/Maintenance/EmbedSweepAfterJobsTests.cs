@@ -27,7 +27,13 @@ namespace AiRaccoon.Tests.Integration.Maintenance;
 ///         whatever an earlier job in the same MaintenanceJobRunner.RunDueAsync pass just committed,
 ///         on the same connection — no CreatedWork flag or second sweep required. This test proves
 ///         that property survives: a fake earlier job creates a real pending row, and PendingEmbedJob
-///         embeds it before RunOnceAsync returns.
+///         signals the embed topic for it before RunOnceAsync returns.
+///     </para>
+///     <para>
+///         WP11-B2: PendingEmbedJob no longer embeds inline, so "in the same pass" now means
+///         "enqueued in the same pass" — the actual pending-&gt;embedded transition is
+///         EmbedDrainService's own (EmbedDrainServiceTests), asynchronous by design (the whole point
+///         of B2 is that the drain no longer runs synchronously inside a maintenance pass).
 ///     </para>
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
@@ -55,20 +61,23 @@ public sealed class EmbedSweepAfterJobsTests : IDisposable
     }
 
     /// <summary>
-    ///     The pass must embed a row a job creates, in the SAME pass — asserted by a fake job that
-    ///     only then inserts a real pending row, ordered before PendingEmbedJob in the list.
+    ///     The pass must signal a drain for a row a job creates, in the SAME pass — asserted by a
+    ///     fake job that only then inserts a real pending row, ordered before PendingEmbedJob in the
+    ///     list.
     /// </summary>
     [Fact]
-    public async Task APassWhoseJobCreatesPendingRows_EmbedsThemInTheSamePass()
+    public async Task APassWhoseJobCreatesPendingRows_SignalsTheDrainInTheSamePass()
     {
         await ConfigureProviderAsync();
         var pendingCreatingJob = new PendingCreatingJob(ProjectId);
-        var pendingEmbedJob = new PendingEmbedJob(new EntryEmbedder(new CountingEmbeddingService(), _modelMigrationLease, _time));
+        var pump = TestData.NewEmbedDrainPump();
+        var pendingEmbedJob = new PendingEmbedJob(new EntryEmbedder(new CountingEmbeddingService(), _modelMigrationLease, _time), pump);
 
         await ServiceWith(pendingCreatingJob, pendingEmbedJob).RunOnceAsync(TestContext.Current.CancellationToken);
 
-        (await ReadEmbedStatesAsync()).ShouldAllBe(state => state == "embedded",
-            "the pending-creating job's own output must be embedded in the pass that created it, not the next one");
+        (await ReadEmbedStatesAsync()).ShouldAllBe(state => state == "pending",
+            "WP11-B2: the row stays pending — the pass only signals the drain, it no longer embeds inline");
+        pump.EnqueuedCount.ShouldBe(1, "the pending-creating job's own output must be signalled in the pass that created it, not the next one");
     }
 
     private async Task ConfigureProviderAsync()

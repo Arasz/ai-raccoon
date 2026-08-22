@@ -137,7 +137,9 @@ of it. A larger engine changes the order of magnitude: bge-m3 (1024-d, fp32, 2.2
 **~1.85 entries/s on 23,520 entries — about 3.4 hours**. Plan it as a maintenance window sized to the
 model, not to the row count.
 
-**When the dimension changes, the drain rebuilds the vector index first.** `vec_entries` and
+**When the dimension changes, the vector index is rebuilt first** — by the drain, and (since
+#432) also once at server open, so a `model set` run with no server up does not leave vec0 at
+the old width. A matching dimension performs no DDL. `vec_entries` and
 `vec_structure` are dropped and recreated at the new width in one `BEGIN IMMEDIATE` transaction
 before the first row is embedded, then refilled through the existing triggers as the drain runs —
 they are never repopulated from the stored blobs, which still hold old-dimension vectors at that

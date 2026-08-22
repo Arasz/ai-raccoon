@@ -4,6 +4,22 @@
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
     {
+      "id": "1.32.0-check",
+      "title": "1.32.0 post-publish check: nuget package proven, code model on the main bank, repo-root watches, full manual checklist; fixes shipped as 1.32.1/1.32.2/1.32.3",
+      "pr": 469,
+      "merged": true,
+      "date": "2026-08-22",
+      "summary": "Published 1.32.0 proven by SHA (the installed tool had been the release run's local pack). Main bank: live server moved off 1.29.0, faxenoff/code-daemon-embed-v1 activated, repo-root watches for all 8 repos, ai-raccoon.ignore. Checklist 28/28: 24 pass / 4 substituted / 0 fail; the 4 substituted items then driven live on merged main (exit 23 via a fake 500 settings server; sync HMAC tamper refusal against a local MinIO — both first-ever). Defects found and fixed: #470 manifest pooling.mode (#475), #472 bare 500 on code-engine refusals (#476, #482), #484 S3 --region redirected to AWS (#487), #494 watch events under hidden/deny-set dirs ingested agent worktrees — ~20k duplicate rows on the live bank (#495 mitigation, #502 fix), #489 chunk labelled with the next heading (#500), #509 a directory's own watch event cascade-deleted its files (#510). Main was red since #492 (class-level traits, #505). Releases: 1.32.1 (6171a36b), 1.32.2 (b56d7fb3), 1.32.3 (#509). Tests: no wall-clock verdicts (#506) — the flaky watch test was #509. Filed, not started: #477 job metrics, #479 unattributed force-pushes (post-delta-3). Live bank: manifest still says 'cls' until the owner runs 'model set code default' after the leak prune; two racing 'serve --restart's caused transient 'database is locked'."
+    },
+    {
+      "id": "1.32.0-check",
+      "title": "1.32.0 post-publish check: nuget package proven, code model on the main bank, repo-root watches, full manual checklist; fixes shipped as 1.32.1/1.32.2/1.32.3",
+      "pr": 469,
+      "merged": true,
+      "date": "2026-08-22",
+      "summary": "Published 1.32.0 proven by SHA (the installed tool had been the release run's local pack). Main bank: live server moved off 1.29.0, faxenoff/code-daemon-embed-v1 activated, repo-root watches for all 8 repos, ai-raccoon.ignore. Checklist 28/28: 24 pass / 4 substituted / 0 fail; the 4 substituted items then driven live on merged main (exit 23 via a fake 500 settings server; sync HMAC tamper refusal against a local MinIO — both first-ever). Defects found and fixed: #470 manifest pooling.mode (#475), #472 bare 500 on code-engine refusals (#476, #482), #484 S3 --region redirected to AWS (#487), #494 watch events under hidden/deny-set dirs ingested agent worktrees — ~20k duplicate rows on the live bank (#495 mitigation, #502 fix), #489 chunk labelled with the next heading (#500), #509 a directory's own watch event cascade-deleted its files (#510). Main was red since #492 (class-level traits, #505). Releases: 1.32.1 (6171a36b), 1.32.2 (b56d7fb3), 1.32.3 (#509). Tests: no wall-clock verdicts (#506) — the flaky watch test was #509. Filed, not started: #477 job metrics, #479 unattributed force-pushes (post-delta-3). Live bank: manifest still says 'cls' until the owner runs 'model set code default' after the leak prune; two racing 'serve --restart's caused transient 'database is locked'."
+    },
+    {
       "id": "release-1-32-0",
       "title": "Release 1.32.0: VERSION bump + checklist template adjusted for the post-delta wave + full manual checklist run (caught and fixed #466)",
       "pr": 463,
@@ -58,6 +74,14 @@
       "merged": true,
       "date": "2026-08-21",
       "summary": "Plan-only task, committed directly on main per owner instruction (6b7985a2). Architect lane drafted from the 14/14 APPROVE rulings + in-flight constraints (PR #405 167 files; restart PR 1 in flight, PR 2 held); code-review lane verified 22 anchors and every collision claim, falsified D2 (phantom provenance files, wrong RED reason) and S1 (read-all mode does not exist) -- both rewritten. Owner flags O1-O6 need rulings. Issue #414 filed (jsaa-memory.db history rewrite, S3). Nightly still-open answered: scheduled run green 2026-08-21. Plan: docs/work/2026-08-21-delta-review-fix-plan.md + companion review record. No code run (owner order)."
+    },
+    {
+      "id": "embedding-model-support",
+      "title": "arbitrary embedding models: manifest, download verb, tokenizers, vec0 dims reconcile (WP1-WP6) — shipped 1.29.0",
+      "pr": 404,
+      "merged": true,
+      "date": "2026-08-21",
+      "summary": "Implements the plan from support-for-other-embedding-models. A local model directory is described by ai-raccoon.manifest.json (dims, context window, tokenizer family/files, pooling, normalization, ONNX io names, per-file sha256 pins); a directory without one is refused. `model download <repo>` resolves, pins and verifies from HF; wordpiece and sentencepiece tokenizers resolve through EmbeddingService so ADR-0036's budget/counter agreement survives a model swap; the migration drain reconciles vec_entries/vec_structure to the engine's dimension in one BEGIN IMMEDIATE as its FIRST phase (reconciling after the batch loop discards what the drain just wrote); `model set openai --dims N` probes the endpoint pre-commit. ADR-0084. Shipped default UNCHANGED — the mechanism, not a model change. Two download defects surfaced only against real HF, both silently-wrong-not-crashing: modules.json names Normalize by index so matching on name wrote normalization:none for an L2 model, and xlm-roberta declares bos/eos in the tokenizer CLASS not the config. Follow-ups from running it for real: #416 (xlm-roberta vocab offset — raw sentencepiece ids fed to a model whose vocab sits +1 behind fairseq's specials, wrong embedding row for every token; 1.30.1), #423 (join guard: #416 and #417 each correct alone, unsafe together), #437 (output-shape contract + graph-pooled parity + tokenizer reference pin — the gates whose absence let #416 ship). Measured on a 23.4k-entry bank: the vocab fix improved same-doc vs cross-doc cosine separation 4.4x (+0.0217 -> +0.0948) but produced NO measurable retrieval change (paired sign tests p=0.10-0.16); bge-m3 still loses to MiniLM (-0.233 nDCG@5 on eval-set-100, p=0.001). Pooling hypothesis disproved (#435 closed not-a-defect: CLS-over-token_embeddings == sentence_embedding at cos 1.00000000). Likeliest cause untested: 256-token English chunks are MiniLM's sweet spot, not bge-m3's. M2 transferability remains unanswered."
     },
     {
       "id": "support-for-other-embedding-models",
@@ -276,8 +300,11 @@
       "summary": "Live test of the 7721 serve + hermes bridge against the real bank. 23/23 tools exercised on an isolated test project with zero residue verified; watch cycle proven end-to-end; metrics = memory_stats + queue meta + maintenance-stats (OTLP export off, /metrics 404). DB: 13,523 entries all embedded, 0 TTLs, 8 stale Active workspaces. Promotion queue: 998 bank-wide vs reserved ~200, borrowing, shared tier = 1 row, extraction propose-only. BUG (code+experiment): DeleteBySourcePath matches source_file not path, so the watch digest deletes manual memory_write rows citing a watched file (2/2 collateral victims in the test). Full report: docs/work/2026-08-09-ai-raccoon-mem-test.md."
     }
   ],
-  "next": "S6b — #414 history rewrite (owner-executed; no pre-rewrite branch open now that #460/#463 are merged — verify with gh pr list first); owner ratifies ADR-0089; owner bumps ai-badger VERSION for #424; #459 PoolingDecision (now adjacent to #467's rank-based pooling); #465 search.adjustment export; ParityGateTests p95 leg split; investigate the origin ref-rewriting actor; #436 prune gap",
-  "filedNotStarted": [],
+  "next": "#477 job-level metrics (MaintenanceJobRunner/WatchCatchUp series into memory_performance); owner runs 'ai-raccoon model set code default' on the live bank once the #494 leak prune has drained (repairs the manifest's pooling.mode, re-embeds all code rows); #459 (post-delta-3); ADR-0086 amendment for the #494 event filter; feed-badger: checklist template item 'source-path-anchor-resolves-its-chunk' → chunk identity wording (see PR #498 report); owner: run 'ai-raccoon model set code default' on the live bank once the #494 leak prune finishes (repairs the 'cls' manifest, clears [417]); #477 job-level metrics (not started); #459 (post-delta-3); SettingsCommands duplicate non-768 refusal text (one type); bank-side model set local does not run ManifestPoolingRepair; checklist template item 'source-path-anchor-resolves-its-chunk' wording → feed-badger (text in PR #498 report); S6b — #414 history rewrite (owner-executed; no pre-rewrite branch open now that #460/#463 are merged — verify with gh pr list first); owner ratifies ADR-0089; owner bumps ai-badger VERSION for #424; #459 PoolingDecision (now adjacent to #467's rank-based pooling); #465 search.adjustment export; ParityGateTests p95 leg split; investigate the origin ref-rewriting actor; #436 prune gap",
+  "filedNotStarted": [
+    "#477 no job-level metrics (feature gap)",
+    "#479 unattributed force-pushes on task branches (post-delta-3 investigation)"
+  ],
   "research": [],
   "stillTrue": [
     "dotnet_env=local must be set per-directory for the DeployToLocalSource build target to push to .nupkg-local",
