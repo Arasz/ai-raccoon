@@ -61,10 +61,10 @@ public sealed class ModelSetLocalDirectoryValidationTests
               "normalization": "l2",
               "tokenizer": {
                 "family": "bert-wordpiece",
-                "files": [ { "path": "vocab.txt", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } ]
+                "files": [ { "path": "vocab.txt", "sha256": "273e2549599ddf859b4c24385dfb4dcc23e8e66994c2c176b90c602f77a795c0" } ]
               },
               "onnx": {
-                "files": [ { "path": "model.onnx", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } ],
+                "files": [ { "path": "model.onnx", "sha256": "9372c470eeadd5ecd9c3c74c2b3cb633f8e2f2fad799250a0f70d652b6b825e4" } ],
                 "inputs": [ "input_ids", "attention_mask", "token_type_ids" ],
                 "tokenEmbeddingsOutput": "last_hidden_state"
               },
@@ -97,10 +97,10 @@ public sealed class ModelSetLocalDirectoryValidationTests
               "normalization": "l2",
               "tokenizer": {
                 "family": "bert-wordpiece",
-                "files": [ { "path": "vocab.txt", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } ]
+                "files": [ { "path": "vocab.txt", "sha256": "273e2549599ddf859b4c24385dfb4dcc23e8e66994c2c176b90c602f77a795c0" } ]
               },
               "onnx": {
-                "files": [ { "path": "model.onnx", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } ],
+                "files": [ { "path": "model.onnx", "sha256": "9372c470eeadd5ecd9c3c74c2b3cb633f8e2f2fad799250a0f70d652b6b825e4" } ],
                 "inputs": [ "input_ids", "attention_mask", "token_type_ids" ],
                 "tokenEmbeddingsOutput": "last_hidden_state"
               },

@@ -14,16 +14,18 @@ public interface IEmbeddingManifestLoader
 /// <summary>
 ///     The one manifest read path (plan D1/D5). Parsing and validation belong to the WP1 contract —
 ///     <see cref="IEmbeddingManifestSerializer" /> and <see cref="IEmbeddingManifestValidator" /> —
-///     so the schema is pinned in exactly one place; this type owns only the file I/O and the
-///     mapping onto <see cref="EngineDescriptor" />.
-///     Per-file sha256 verification is deliberately not repeated on every load: the download verb
-///     verifies before the manifest is written, and the D7 fingerprint hashes the manifest itself,
-///     so tampering changes the fingerprint and re-embeds.
+///     so the schema is pinned in exactly one place; this type owns the file I/O, the per-file
+///     sha256 pin check and the mapping onto <see cref="EngineDescriptor" />. The pin check answers
+///     "should we run at all"; the separate D7 engine fingerprint (manifest bytes only) answers
+///     "should we re-embed" — two questions, two mechanisms.
 /// </summary>
 public sealed class EmbeddingManifestLoader(
     IEmbeddingManifestSerializer serializer,
-    IEmbeddingManifestValidator validator) : IEmbeddingManifestLoader
+    IEmbeddingManifestValidator validator,
+    IFileHasher? fileHasher = null) : IEmbeddingManifestLoader
 {
+    private readonly IFileHasher hasher = fileHasher ?? new FileHasher();
+
     public EngineDescriptor Load(string modelDirectory)
     {
         ArgumentNullException.ThrowIfNull(modelDirectory);
@@ -55,14 +57,24 @@ public sealed class EmbeddingManifestLoader(
                 string.Join($"{Environment.NewLine}  - ", errors));
         }
 
-        var files = manifest.Tokenizer.Files.Concat(manifest.Onnx.Files).ToList();
+        var files = manifest.Tokenizer.Files.Concat(manifest.Onnx.Files).Concat(manifest.ProvenanceFiles ?? []).ToList();
         foreach (var file in files)
         {
-            if (!File.Exists(ResolveFile(modelDirectory, file.Path, manifestPath)))
+            var path = ResolveFile(modelDirectory, file.Path, manifestPath);
+            if (!File.Exists(path))
             {
                 throw new InvalidOperationException(
                     $"Manifest '{manifestPath}' declares file '{file.Path}' but it is missing from '{modelDirectory}'. " +
                     "Re-run 'ai-raccoon model download' to restore the model directory.");
+            }
+
+            var actual = hasher.Sha256OfFile(path);
+            if (!actual.Equals(file.Sha256, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Manifest '{manifestPath}' pins '{file.Path}' to sha256 {file.Sha256}, but the file on disk hashes " +
+                    $"to {actual}. The model directory may have been tampered with or partially replaced — re-run " +
+                    "'ai-raccoon model download' to restore a clean copy.");
             }
         }
 

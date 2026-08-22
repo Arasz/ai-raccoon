@@ -38,7 +38,11 @@ public sealed class RepairFamilyRoutesThroughTheEngineResolverTests
         return dir;
     }
 
-    private static JsonObject SentencePieceManifest() => new()
+    private static string ShaOfFile(string path) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant();
+
+    // D1: sp.model's pin must match the real fixture bytes copied over the placeholder below.
+    private static JsonObject SentencePieceManifest(string spSha) => new()
     {
         ["manifestVersion"] = 1,
         ["model"] = "repair-routing-model",
@@ -50,7 +54,7 @@ public sealed class RepairFamilyRoutesThroughTheEngineResolverTests
         ["tokenizer"] = new JsonObject
         {
             ["family"] = "sentencepiece",
-            ["files"] = new JsonArray(new JsonObject { ["path"] = "sp.model", ["sha256"] = ShaOf("sp") }),
+            ["files"] = new JsonArray(new JsonObject { ["path"] = "sp.model", ["sha256"] = spSha }),
             ["options"] = new JsonObject
             {
                 ["addBeginOfSentence"] = true,
@@ -93,7 +97,7 @@ public sealed class RepairFamilyRoutesThroughTheEngineResolverTests
     public async Task ChunkPositionScanner_BudgetAsync_ManifestModel_ResolvesBudgetAndCounterFromTheManifest()
     {
         var spmPath = await TestData.EnsureSentencePieceFixtureAsync(TestContext.Current.CancellationToken);
-        var dir = WriteManifestDir(SentencePieceManifest(), ("sp.model", ""), ("model.onnx", "model"));
+        var dir = WriteManifestDir(SentencePieceManifest(ShaOfFile(spmPath)), ("sp.model", ""), ("model.onnx", "model"));
         File.Copy(spmPath, Path.Combine(dir, "sp.model"), overwrite: true);
         await using var connection = await OpenBankWithSettingsAsync("local", dir, TestContext.Current.CancellationToken);
 
@@ -114,7 +118,7 @@ public sealed class RepairFamilyRoutesThroughTheEngineResolverTests
     public async Task ChunkBackfill_BudgetAsync_ManifestModel_ResolvesBudgetAndCounterFromTheManifest()
     {
         var spmPath = await TestData.EnsureSentencePieceFixtureAsync(TestContext.Current.CancellationToken);
-        var dir = WriteManifestDir(SentencePieceManifest(), ("sp.model", ""), ("model.onnx", "model"));
+        var dir = WriteManifestDir(SentencePieceManifest(ShaOfFile(spmPath)), ("sp.model", ""), ("model.onnx", "model"));
         File.Copy(spmPath, Path.Combine(dir, "sp.model"), overwrite: true);
         await using var connection = await OpenBankWithSettingsAsync("local", dir, TestContext.Current.CancellationToken);
 
