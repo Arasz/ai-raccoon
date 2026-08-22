@@ -33,6 +33,7 @@ public class SettingsCommandsTests
                 ["settings", "access", "list"] => commands.AccessListAsync(store, streams, ct),
                 ["model", "set", "local"] => commands.ModelSetLocalAsync(parsed.ParsedCliArgs, store, store, streams, ct),
                 ["settings", "model", "show"] => commands.ModelShowAsync(store, streams, ct),
+                ["settings", "model", "threads"] => commands.ModelThreadsSetAsync(parsed.ParsedCliArgs, store, streams, ct),
                 ["settings", "retrieval", "alpha", "set"] => commands.RetrievalAlphaSetAsync(parsed.ParsedCliArgs, store, streams, ct),
                 ["settings", "retrieval", "alpha", "show"] => commands.RetrievalAlphaShowAsync(store, streams, ct),
                 ["settings", "retrieval", "fusion", "enable"] => commands.RetrievalFusionSetAsync(true, store, streams, ct),
@@ -180,6 +181,60 @@ public class SettingsCommandsTests
 
         exit.ShouldBe(0);
         stdout.ShouldContain("provider: (none");
+    }
+
+    [Fact]
+    public async Task ModelThreadsSet_RoundTripsThroughCliShow()
+    {
+        var store = new FakeConfigStore();
+
+        var (setExit, setOut, _) = await Run(["settings", "model", "threads", "3"], store);
+        var (showExit, showOut, _) = await Run(["settings", "model", "show"], store);
+
+        setExit.ShouldBe(0);
+        setOut.Trim().ShouldBe("embedding threads set to 3; takes effect on the next server restart");
+        showExit.ShouldBe(0);
+        showOut.ShouldContain("threads: 3");
+        store.Settings["embedding.threads"].ShouldBe("3");
+    }
+
+    /// <summary>0 is a valid, explicit value meaning "ORT's own default" — not garbage.</summary>
+    [Fact]
+    public async Task ModelThreadsSet_Zero_RestoresOrtDefault()
+    {
+        var store = new FakeConfigStore();
+
+        var (setExit, setOut, _) = await Run(["settings", "model", "threads", "0"], store);
+        var (_, showOut, _) = await Run(["settings", "model", "show"], store);
+
+        setExit.ShouldBe(0);
+        setOut.ShouldContain("ORT default");
+        showOut.ShouldContain("threads: 0 (ORT default)");
+        store.Settings["embedding.threads"].ShouldBe("0");
+    }
+
+    [Theory]
+    [InlineData("-1")]
+    [InlineData("bogus")]
+    [InlineData("1.5")]
+    public async Task ModelThreadsSet_InvalidValue_ReturnsErrorAndWritesNothing(string value)
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, _, err) = await Run(["settings", "model", "threads", value], store);
+
+        exit.ShouldBe(ExitCode.InvalidArgument);
+        err.ShouldContain("invalid threads");
+        store.Settings.ShouldNotContainKey("embedding.threads");
+    }
+
+    [Fact]
+    public async Task ModelShow_NoThreadsRow_PrintsUnsetDefault()
+    {
+        var (exit, stdout, _) = await Run(["settings", "model", "show"], new FakeConfigStore());
+
+        exit.ShouldBe(0);
+        stdout.ShouldContain("threads: (unset — default max(1, cores/2))");
     }
 
     [Fact]

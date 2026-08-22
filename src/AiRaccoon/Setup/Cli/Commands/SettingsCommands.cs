@@ -282,6 +282,24 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         return 0;
     }
 
+    /// <summary>WP11-A/G16: 0 = ORT's own default; takes effect on the next server restart (sessions are cached per fingerprint).</summary>
+    public async Task<int> ModelThreadsSetAsync(ParseResult parseResult, IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken)
+    {
+        var raw = parseResult.GetValue<string>("n")!;
+        if (!int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var threads) || threads < 0)
+        {
+            await streams.WriteErrorLineAsync(
+                $"ai-raccoon: invalid threads '{raw}' (expected a non-negative integer; 0 = ORT default)");
+            return ExitCode.InvalidArgument;
+        }
+
+        await store.SetSettingAsync(EmbeddingSettingsKeys.Threads, threads.ToString(CultureInfo.InvariantCulture), cancellationToken);
+        var suffix = threads == 0 ? " (ORT default)" : "";
+        await streams.WriteOutputLineAsync($"embedding threads set to {threads}{suffix}; takes effect on the next server restart");
+        return 0;
+    }
+
     /// <summary>§3.3: `settings model code reset` deletes ONLY the code rows — the memory engine's rows are untouched.</summary>
     public async Task<int> ModelCodeResetAsync(IMemoryStore store, StandardStreams streams,
         CancellationToken cancellationToken)
@@ -310,6 +328,13 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
             var keyState = rows.ContainsKey(EmbeddingSettingsKeys.ApiKey) ? "set" : "unset";
             await streams.WriteOutputLineAsync($"apiKey: {keyState}");
         }
+
+        // Independent of provider (WP11-A/G16): the ORT thread cap applies to any local session,
+        // memory or code, so it is shown unconditionally like codeModel below.
+        var threadsRaw = rows.GetValueOrDefault(EmbeddingSettingsKeys.Threads);
+        await streams.WriteOutputLineAsync(threadsRaw is null
+            ? "threads: (unset — default max(1, cores/2))"
+            : $"threads: {threadsRaw}{(threadsRaw == "0" ? " (ORT default)" : "")}");
 
         // Independent of the memory engine (§3.3): shown even when no memory provider is
         // configured, since the code corpus can be activated on its own.
