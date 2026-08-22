@@ -25,6 +25,8 @@ nuget.org flat-container index for `ai-raccoon`; `docs/work/2026-08-22-post-delt
 8. WP6 — #455 re-derive corpus, queries and the parity golden (G14, scoped by G9).
 9. WP3 — #436 the re-ingest prune reaches `code_entries` (G12).
 10. WP8 — #454 AND-under-match anchor (G13); WP9 — EventId disposition (G6).
+11. WP11 — the embed/ingest load governor (scope extension, ruled in mid-session; design
+    gated by G16–G19). PR A waits for #475; PR B waits for WP3.
 
 ---
 
@@ -494,6 +496,241 @@ alongside WP6 in one session** — that is the substance of G15.
 
 ---
 
+### WP11 — embed/ingest load governor **[scope extension, ruled in by the owner mid-session; design gated: G16–G19]**
+
+**Trigger.** The owner's live server today: `pending-embed` ran **13,307 ms**; a watch digest's
+best-effort embed failed with `SQLite Error 5: 'database is locked'` at `EntryEmbedder.EmbedAsync`
+(`:302`) ← `EmbedPendingAsync` (`:218`) ← `SqliteMemoryStore.EmbedPendingAsync` (`:431`/`:435`) ←
+`WatchDigestExecutor.TryEmbedPendingAsync` (`:116`); `code-reindex` started in the same window.
+Owner's words: *"it seems the code ingestion is saturating the machine CPU — we need to tune how
+often and how much work at once we do with code ingestion to limit the impact."*
+
+*Not in scope:* the `[418]` "Search query was shortened … 1095 tokens exceeded the 254-token window"
+warning in the same log is a 1,095-token **agent query** being trimmed deliberately and said so
+(ADR-0071); it is informational, costs one inference, and has nothing to do with the load problem.
+
+#### Finding (a) — CPU: unbounded ORT threads × unserialised drains
+
+- **Nothing in this repository ever constructs a `SessionOptions`.** The one ONNX session in the
+  tree is `OnnxEmbeddingGenerator.cs:53` — `_session = new InferenceSession(modelPath);`, no options
+  argument. Verified: `grep -rn "SessionOptions\|IntraOpNumThreads\|InterOpNumThreads\|ExecutionMode"
+  src/ tests/ benchmarks/` returns **0 lines**, and `grep -rn "new InferenceSession" src/` returns
+  exactly that one line.
+- **ORT's documented default is one intra-op thread per physical core.** onnxruntime.ai's
+  threading page (re-fetched today, not recalled): *"Default: (not specified or 0)
+  `sess_options.intra_op_num_threads = 0`"* → *"INTRA Threads Total = Number of physical CPU Cores."*
+  The owner's host reports `hw.physicalcpu` = **10** (arm64). So each session runs a 10-thread
+  intra-op pool.
+- **There are two such sessions, not one.** `EmbeddingService.CreateGenerator`
+  (`EmbeddingService.cs:85-96`) caches one generator per engine fingerprint
+  (`_engines.GetOrAdd(EngineFingerprint(provider, model, baseUrl), …)`), and the code corpus has its
+  own engine (`EmbeddingSettingsKeys.CodeModel`/`CodeEngine`, `:25`/`:28`; `CodeEmbedder.cs:70-74`
+  builds its settings from `codeModel`). Memory drain + code drain = **2 sessions × 10 threads = 20
+  intra-op threads on 10 cores**, before counting the ingest and query paths that use the same
+  cached sessions concurrently.
+- **`ExecutionMode.ORT_SEQUENTIAL` is already the default** (same page: *"Default:
+  `sess_options.execution_mode = rt.ExecutionMode.ORT_SEQUENTIAL`"*). Setting it explicitly changes
+  nothing — dropped from the design below on `ask-if-simpler` grounds.
+- **Batch sizes are the same on both corpora and are not the lever.** `EntryEmbedder.BatchSize` = 32
+  (`EntryEmbedder.cs:21`), `CodeEmbedder.BatchSize` = 32 (`CodeEmbedder.cs:18`); each drain runs
+  4 × 32 = 128 rows per run (`PendingEmbedJob.cs:36`, `CodeReindexJob.cs:31`). A batch of 32 short
+  strings is a small amount of *work*; what makes it saturating is that each batch is handed to a
+  10-thread pool and several batches are in flight at once.
+
+#### Finding (b) — lock: three unserialised writers, and a holder that can exceed 5 s
+
+- **Nothing serialises the embed paths.** `grep -rn "SemaphoreSlim\|Mutex\|lock (" ` over
+  `Infrastructure/Embedding/`, `Infrastructure/Maintenance/` and `Infrastructure/Watch/` finds no
+  gate over any embedder. The only semaphore in the neighbourhood is `WatchScheduler`'s **per-project
+  digest gate**, whose default limit is **4** (`WatchScheduler.cs:10`, `:31-33`) — it permits
+  concurrency, it does not restrain embedding.
+- **The maintenance service itself runs two independent loops that both call the same runner.**
+  `BankMaintenanceHostedService.ExecuteAsync` does
+  `await Task.WhenAll(RunHeavyPassLoopAsync(...), RunOnDemandPollLoopAsync(...))` (`:112-114`); the
+  heavy pass calls `_jobRunner.RunDueAsync(connection, _jobs, …)` at `:249-251` on its own
+  connection, and the on-demand poll calls the same method at `:163-164` on a *different* connection
+  every `OnDemandPollInterval` = **15 s** (`:79`). `MaintenanceJobRunner.RunDueAsync`
+  (`MaintenanceJobRunner.cs:22-99`) holds no lock and takes no lease. **The same `PendingEmbedJob`
+  can therefore be running in both loops at once.**
+- **And when it is, both runs embed the same rows.** `MemorySql.SelectAllPendingForEmbed`
+  (`MemorySql.cs:354-355`) is `SELECT id, value FROM entries WHERE embed_state = 'pending' ORDER BY
+  id LIMIT @limit` — **no claim, no lease, no state transition to 'embedding'**. Two overlapping
+  drains select the identical first 128 ids and pay for every inference twice.
+- **The watch-digest leg is an *unbounded* drain, unlike the job.**
+  `WatchDigestExecutor.cs:88` calls `TryEmbedPendingAsync` after every successful replace, which
+  calls `store.EmbedPendingAsync(projectId, **null**, …)` (`:116`) — `limit: null`, i.e.
+  `EntryEmbedder.EmbedPendingAsync`'s `while (true)` loop (`EntryEmbedder.cs:202-219`) runs until the
+  project has no pending row left, *plus* an equally unbounded structure heal (`:223-227`). The watch
+  pipeline ticks every **1 s** (`WatchPipeline.cs:61`) and admits up to 4 digests per project, so up
+  to **four unbounded drains** can be in flight while `PendingEmbedJob` runs its own.
+- **Neither embedder embeds inside a write transaction — that part is already right.** `grep -rn
+  "BeginTransaction" src/` shows the only transactions near embedding are
+  `EntryEmbedder.cs:50` (the `model set` outbox, ADR-0076) and `CodeEmbedder.cs:189` (the fingerprint
+  reconcile, ADR-0087); `EntryEmbedder.EmbedAsync` (`:276-316`) and `CodeEmbedder.EmbedPendingBatchAsync`
+  (`:47-93`) run the generator first and then write per row. The watch replace path deliberately
+  passes `embedInline: false` (`SqliteMemoryStore.Replace.cs:185`; the contract is spelled out at
+  `IFileIngestor.cs:35-40` — *"Set embedInline false when the caller holds a write transaction"*).
+  `docs/work/2026-08-07-moe-b-persistence.md:218-220` recorded the same conclusion: *"Embedding is
+  **not** awaited under a write lock … The most likely hazard in this design is genuinely absent."*
+  **So "never embed inside a write transaction" is a rule to keep, not a fix to make** — with one
+  loose end below.
+- **The statement that threw is a write, and the timeout is 5 s.** `EntryEmbedder.cs:302` is the
+  `MarkEmbedded` UPDATE (`MemorySql.cs:328-330`), which fires the vec0 triggers. It waited on
+  another writer for the full `DefaultTimeout = 5` / `PRAGMA busy_timeout=5000`
+  (`SqliteConnectionFactory.cs:295-299`, `:346-348`) and gave up.
+- **Which writer held it that long — not established.** Two candidates, both consistent with the
+  log, and the log alone cannot separate them:
+  1. `ReplaceCoreAsync` (`SqliteMemoryStore.Replace.cs:146-210`) issues `BEGIN IMMEDIATE` at
+     `:152-154` and holds it across the queue capture, `DeleteBySourcePath`, `DeleteCodeBySourcePath`,
+     the **full re-ingest and re-chunking** of the file (`:184-186`) and the fingerprint upsert,
+     committing only at `:206-208`. Chunking a large code file inside that span, on a box whose
+     cores are all busy running inference, is the obvious way to exceed 5 s — and three more digests
+     may be queued behind it (concurrency 4).
+  2. Write **starvation** rather than a single long holder: SQLite's busy handler is not fair, so a
+     128-row `MarkEmbedded` loop of short autocommit writes from one connection can keep a waiter
+     spinning for its whole 5 s without any one transaction lasting that long.
+  **Settling it is one instrumentation change, not a guess:** a `[LoggerMessage]` around
+  `ReplaceCoreAsync`'s BEGIN…COMMIT recording the held span, or `sqlite3_profile`. WP11's first
+  commit should add that log line so the fix is aimed rather than assumed.
+- **One loose end worth closing while here.** `FileIngestor.IngestDirectoryAsync`
+  (`FileIngestor.cs:132-168`) opens **no** transaction and calls `InsertChunksAsync` with
+  `embedInline` at its default `true` (`:286-290` → `EntryEmbedder.EmbedIfConfiguredAsync`,
+  `EntryEmbedder.cs:164-195`), so a directory ingest embeds **one generator call per chunk**,
+  serially, on the same shared session. It is not a lock hazard (no transaction), but it is a third
+  uncoordinated consumer of the inference pool and it should pass through the same gate.
+
+#### Design (ask-if-simpler applied)
+
+Four candidates were considered; two are recommended, two are rejected.
+
+**Recommended 1 — cap the ORT intra-op pool once, at session construction.** One `SessionOptions`
+at `OnnxEmbeddingGenerator.cs:53` with `IntraOpNumThreads` resolved from a bank setting
+`embedding.threads` (0 = ORT default; unset = the computed default). This is the only change that
+attacks the saturation directly rather than rationing the work that causes it, and it costs one
+constructor argument. It applies to **both** sessions automatically because both go through the same
+constructor. `ExecutionMode` is left alone — `ORT_SEQUENTIAL` is already the documented default.
+*Risk to check first, not after:* ADR-0049 records that this bank's vectors depend on the host's
+arithmetic path, and `MiniLmGoldenVectorTests.BundledMiniLm_Embeddings_MatchCommittedGoldens`
+(`tests/AiRaccoon.Tests/Integration/Embedding/MiniLmGoldenVectorTests.cs:82-83`) asserts byte
+identity against a committed golden. If thread count perturbs float reduction order, the cap is not
+behaviour-preserving and G16 has to choose differently. This is a measurement that pays: it is one
+filtered run of an existing gate.
+
+**Recommended 2 — one embedder at a time, and one owner of the drain.** A single
+`SemaphoreSlim(1,1)` held by an injectable component (not a static — `static-classes` invariant)
+that every generator-calling path acquires: `EntryEmbedder`, `CodeEmbedder`, and the inline ingest
+embed. Plus the smaller structural half: **`WatchDigestExecutor` stops draining inline**. Its
+unbounded `EmbedPendingAsync(projectId, null, …)` (`:116`) is deleted; the digest leaves the rows
+`pending` and `PendingEmbedJob.HasWorkAsync` (`PendingEmbedJob.cs:38-49`) — which is already polled
+every 15 s — picks them up in bounded runs. That is exactly ADR-0076's shape applied to a second
+producer: *the transaction records the work it owes; a separate relay drains it*. It also removes
+the duplicated-inference problem for free, because one relay is the only drainer.
+*The runner's own double-run still has to be closed*: `RunDueAsync` is reachable from two loops
+(`BankMaintenanceHostedService.cs:112-114`), so the gate must be process-wide, not per-call-site.
+
+**Rejected — a per-batch sleep / pacing delay between generator calls.** It converts a throughput
+problem into a latency problem, adds a wall-clock knob nobody can tune from evidence, and would need
+a wall-clock assertion to test — which owner ruling #464 forbids. The row budget already paces the
+drain: 128 rows per 15 s poll is the pace, and it is a *count*.
+
+**Rejected — making the watch/code paths enqueue into an outbox table.** ADR-0076's outbox exists
+because `model set` must not lose the work it owes across a crash. Here the durable record already
+exists: `embed_state = 'pending'` **is** the outbox, and `HasWorkAsync` is the relay. Adding a
+second queue table would be a parallel record of the same fact — the exact drift `derive-or-delete-the-list`
+warns about.
+
+#### Owner-visible knobs (the exact proposal; these are the gate cards)
+
+| Key | Default | Surface | Effect |
+|---|---|---|---|
+| `embedding.threads` | `max(1, physicalCores / 2)` = **5** on the owner's 10-core host; `0` means "ORT default" | `settings model threads <n>` / shown by the existing `settings model show` (`CliCommandTree.cs:198-217`) | ORT `IntraOpNumThreads` for every local session; takes effect on the next server restart (the session is cached per fingerprint, `EmbeddingService.cs:91`) |
+| `maintenance.embed-rows-per-run.global` | **128** (today's `4 * BatchSize`, unchanged) | `settings maintenance embed-rows-per-run <n>`, listed by `settings maintenance list\|show` (`CliCommandTree.cs:548-562`) | Replaces **both** `PendingEmbedJob.RowsPerRun` (`:36`) and `CodeReindexJob.RowsPerRun` (`:31`); takes effect on the next poll |
+
+Two keys, not five. The serialisation gate is **not** a knob — a bank that can be configured to run
+three drains at once is a bank that can be configured back into today's log line. Key naming follows
+the two existing conventions verbatim: `embedding.<camelCase>` (`EmbeddingSettingsKeys.cs:9-28`) and
+`maintenance.<kebab-case>.global` (`BankMaintenanceConfigKeys.cs:6-17`). Neither key needs an
+endpoint change: `/settings?key=` is generic (`SettingsProtocol.cs:9`, `:17`), so the server stays
+the only writer (ADR-0075) with no new route.
+
+#### Acceptance criteria
+
+1. **No lock error under the load that produced one.** With ≥ 1,000 rows seeded `pending` in
+   `entries`, ≥ 1,000 in `code_entries`, and a watch active over a real directory, a **10-minute**
+   `ai-raccoon serve --idle-timeout 0` run logs **zero** `SQLITE_BUSY` / `database is locked`
+   occurrences and zero EventId `400` warnings. Owner-run; the check is
+   `grep -c "database is locked\|SQLITE_BUSY" <logfile>` = 0.
+2. **The configured thread count is what the session got.** The resolved value is asserted in a unit
+   test (below), and `settings model show` reports it.
+3. **Embeddings are unchanged, bit-for-bit.** `MiniLmGoldenVectorTests.BundledMiniLm_Embeddings_MatchCommittedGoldens`
+   passes on arm64 with the cap applied. If it does not, WP11 stops and G16 is re-asked.
+4. **CPU is bounded.** Owner-run, both numbers recorded on the same host and the same backlog:
+   sample with `top -l 3 -stats pid,cpu,command -pid $(pgrep -f 'ai-raccoon serve')` (or
+   `ps -o %cpu= -p <pid>` sampled 10×). Baseline first (uncapped), then capped. Target: peak
+   `%CPU` ≤ **550** (5 of 10 cores) with the default, against a baseline expected near 1000–2000.
+   This is the one measurement WP11 cannot get from a test, and it is the one the owner actually
+   asked about.
+5. **The backlog still drains.** Rows drained per poll ≥ the pre-change figure at the same row
+   budget — read from `maintenance_jobs.run_count` and the falling `pending` count, not from a
+   stopwatch. ADR-0076 measured ~72.6 rows/s uncapped; the drain only needs 128 rows / 15 s ≈ **8.5
+   rows/s** to keep up, so a halved thread pool has roughly 4× headroom. If it does not, criterion 4's
+   default is wrong, not the design.
+6. **Each pending row is embedded once.** Asserted by test, not by inspection.
+
+#### Gates — RED first, no wall-clock assertions (owner ruling #464)
+
+Filter for the whole set: `dotnet test --filter "FullyQualifiedName~EmbedLoadGovernor"`; put the new
+classes in one namespace so that single filter runs them.
+
+| # | Test | Must be seen failing on | Assertion shape |
+|---|---|---|---|
+| R1 | `EmbedLoadGovernor.ThreadResolutionTests.Resolve_UnsetSetting_HalvesTheCoreCount` | HEAD (no resolution exists) | `Resolve(setting: null, cores: 10)` == 5; `(null, 1)` == 1; `("0", 10)` == 0; garbage → default. Pure ints. **Resolution lives on the injectable `EmbeddingService`, not a new static helper** (`static-classes` invariant). |
+| R2 | `EmbedLoadGovernor.ThreadResolutionTests.Generator_ReportsTheIntraOpThreadsItWasBuiltWith` | HEAD (`OnnxEmbeddingGenerator.cs:53` takes no options) | the generator exposes the resolved count; assert the int. Never assert timing. |
+| R3 | `MiniLmGoldenVectorTests.BundledMiniLm_Embeddings_MatchCommittedGoldens` (existing, `Slow`+`Integration`) | run it capped **before** writing anything else — it is the falsification test for Recommended 1 | byte identity, already implemented |
+| R4 | `EmbedLoadGovernor.EmbedGateTests.ConcurrentDrains_NeverOverlapInTheGenerator` | HEAD — two drains overlap freely | a fake generator records max observed concurrent entrants; assert **== 1**. Counters, not clocks. |
+| R5 | `EmbedLoadGovernor.EmbedGateTests.TwoRunnerPasses_EmbedEachPendingRowOnce` | HEAD — `SelectAllPendingForEmbed` (`MemorySql.cs:354`) has no lease, so both passes take the same ids | drive `RunDueAsync` from two connections; assert each row id appears **once** in the fake generator's call log |
+| R6 | `EmbedLoadGovernor.WatchDigestTests.Digest_LeavesPendingRowsToTheRelay` | HEAD — `WatchDigestExecutor.cs:116` drains inline and unbounded | after a digest: fake generator call count **== 0**, rows still `pending`; then one `PendingEmbedJob` run embeds them |
+| R7 | `EmbedLoadGovernor.RowBudgetTests.RowsPerRun_ComesFromTheBankSetting` | HEAD — both budgets are `const` (`PendingEmbedJob.cs:36`, `CodeReindexJob.cs:31`) | set the key to 7, seed 20 pending, assert exactly 7 rows embedded in one run; unset → 128 |
+| R8 | `EmbedLoadGovernor.RowBudgetTests.CodeReindexJob_HonoursTheSameSetting` | HEAD | same, on `code_entries` |
+
+R3 is the stop-the-work gate: it runs **first**, before any production edit lands, on a throwaway
+build with the cap forced. R4–R6 are the ones whose RED text should be quoted in the PR description
+(`prove-the-check-fails`).
+
+#### Lane / model / PR split / collisions
+
+**Lane.** dotnet-engineer / **Sonnet** for both PRs; reviewer is a different agent (code-reviewer /
+Opus), per §*How work lands*.
+
+**PR A — "the thread cap and its setting."** `OnnxEmbeddingGenerator.cs`, `EmbeddingService.cs`,
+`EmbeddingSettingsKeys.cs`, `SettingsCommands.cs`, `CliCommandTree.cs`, R1–R3.
+**Sequenced after #475 merges.** `Arasz/ai-raccoon#475` (`fix/470-manifest-pooling-mode`, OPEN)
+edits `src/AiRaccoon.Infrastructure/Embedding/OnnxEmbeddingGenerator.cs` — verified with
+`gh pr view 475 --json files`. PR A edits the same constructor; starting before #475 lands buys a
+guaranteed conflict in the one file WP11 must be surgical in.
+
+**PR B — "one embedder at a time, bounded."** the gate component, `EntryEmbedder.cs`,
+`CodeEmbedder.cs`, `WatchDigestExecutor.cs`, `PendingEmbedJob.cs`, `CodeReindexJob.cs`,
+`BankMaintenanceConfigKeys.cs`, `FileIngestor.cs` (inline-ingest leg through the gate), R4–R8, plus
+the `ReplaceCoreAsync` held-span log line from Finding (b).
+
+**Collisions.**
+- **#475 → PR A**, above. Hard sequence.
+- **#476** (`fix/472-code-engine-guard-4xx`) touches `SettingsEndpoint.cs` / `SettingsProtocol` tests
+  — **no collision**: both WP11 keys ride the generic `/settings?key=` route (`SettingsProtocol.cs:9`,
+  `:17`) and add no endpoint.
+- **WP3 (#436)** touches `FileIngestor`, `ICodeIngestor` and `SqliteMemoryStore.PruneChunksNotIn`.
+  PR B touches `FileIngestor.cs` for the inline-ingest leg → **shared file**. Either drop that leg
+  from PR B (it is the least important third of it) or run PR B **after WP3 merges**. Recommended:
+  run PR B after WP3, since WP3 also changes what a re-ingest leaves `pending`, which is precisely
+  what PR B's relay drains.
+- **WP2 (#459)** touches `ModelDownloadPlanner.cs` only — no overlap with either PR.
+
+**Parallelism.** PR A and PR B are independent of each other (disjoint files) once #475 and WP3 are
+out of the way; PR A is the smaller and the one the owner feels first.
+
+---
+
 ## Sequencing
 
 **Parallel from the start** (no shared files): WP1, WP2, WP7, WP8, WP5.
@@ -503,7 +740,16 @@ the corpus under it.
 anything added later touching ingestion queues behind it.
 **Shared-file map:** `ParityGateTests.cs` (WP4, then WP6 re-runs it); `RealWorldCorpus.cs` /
 `reference-topk.json` (WP6 only); `SearchResults.cs` (WP1 only); `ModelDownloadPlanner.cs` (WP2
-only); `docs/adr/README.md` (WP9 only). No two parallel WPs touch the same file.
+only); `docs/adr/README.md` (WP9 only). `OnnxEmbeddingGenerator.cs`
+(WP11-A, **after open PR #475 merges**); `FileIngestor.cs` (WP3, then WP11-B). No two parallel WPs
+touch the same file.
+
+**WP11 (the scope extension) sits outside the chain above:** WP11-A (the ORT thread cap and
+`embedding.threads`) is blocked only by open PR **#475**, which edits the same constructor, and is
+otherwise parallel to everything. WP11-B (the single embed gate, the bounded relay and the row-budget
+setting) shares `FileIngestor.cs` with WP3, so it runs **after WP3 merges** — which is also the right
+order on substance, since WP3 changes what a re-ingest leaves `pending` and WP11-B's relay is what
+drains it.
 
 **The one sequencing insight to honour:** **#455 (WP6) lands before the S6b rewrite.** Verified: the
 three private-prose paths are `jsaa-memory.db` (7 reachable blobs), `RealWorldCorpus.cs` (1 blob,
@@ -746,3 +992,82 @@ session on its own) and WP3 (the widest blast radius), this does not fit.
 used to accept.
 *Recommendation.* **Ratify now (G2), park the implementation** for session 4 with the sizing above
 carried into the ledger.
+
+### The embed/ingest load governor (WP11 — scope extension you ruled in today)
+
+Four more cards. WP11's *scheduling* is not a card — you already ruled it into this session; these
+four are the design decisions inside it, each decidable on its own.
+
+**G16 — The ONNX intra-op thread pool is capped at half the physical cores by default, via a bank
+setting `embedding.threads`.**
+*Detail.* The tree constructs exactly one ONNX session — `OnnxEmbeddingGenerator.cs:53`,
+`new InferenceSession(modelPath)` with **no** `SessionOptions`; `grep -rn
+"SessionOptions\|IntraOpNumThreads\|InterOpNumThreads\|ExecutionMode" src/ tests/ benchmarks/`
+returns **0 lines**. ONNX Runtime's threading page (re-fetched today) states the default
+`intra_op_num_threads = 0` means *"INTRA Threads Total = Number of physical CPU Cores"*; your host
+reports `hw.physicalcpu` = **10**. Two engines are cached independently
+(`EmbeddingService.cs:85-96` — memory model and `embedding.codeModel` have different fingerprints),
+so a memory drain plus a code drain is **20 intra-op threads on 10 cores** before any query or
+ingest joins in. Proposed default `max(1, cores/2)` = 5, with `0` meaning "ORT default" for anyone
+who wants the old behaviour back. The alternatives are: leave it uncapped (today), pin to 1 (safest
+for the host, slowest drain), or `cores - 2`. Throughput headroom is large either way — ADR-0076
+measured ~72.6 rows/s and the drain needs ~8.5 rows/s to keep up with its own 15 s poll.
+*The one thing that could veto this:* ADR-0049 says this bank's vectors depend on the host's
+arithmetic path, and `MiniLmGoldenVectorTests` asserts byte identity against a committed golden. If
+thread count perturbs the float reduction order, the cap changes stored vectors and the answer has
+to be different. That test is run **first**, before any production edit.
+*Why it matters.* This is the only change that addresses the saturation itself rather than rationing
+the work that causes it, and it is roughly ten lines.
+*Recommendation.* **Cap at `max(1, cores/2)`, expose `embedding.threads`, gate on the golden
+vectors** — and if the goldens move, come back for a re-ruling rather than re-capturing them.
+
+**G17 — Only one embed drain runs at a time, and the watch digest stops draining inline.**
+*Detail.* Nothing serialises the three paths today: no semaphore or lock exists over any embedder
+(`grep -rn "SemaphoreSlim\|Mutex\|lock (" ` over `Embedding/`, `Maintenance/`, `Watch/`), and
+`BankMaintenanceHostedService.ExecuteAsync` runs the heavy-pass loop and the 15 s on-demand poll
+loop concurrently (`:112-114`), each calling the same `_jobRunner.RunDueAsync` on its own connection
+(`:249-251` and `:163-164`) — so `PendingEmbedJob` can be running **twice at once**, and because
+`MemorySql.SelectAllPendingForEmbed` (`:354-355`) has no claim or lease, both runs select the same
+128 ids and pay for every inference twice. Meanwhile `WatchDigestExecutor.cs:116` runs
+`EmbedPendingAsync(projectId, **null**, …)` — an **unbounded** drain — after every replace, and the
+watch pipeline ticks every second (`WatchPipeline.cs:61`) with up to 4 concurrent digests per
+project (`WatchScheduler.cs:10`). Proposal: one process-wide `SemaphoreSlim(1,1)` in an injectable
+component that every generator-calling path acquires, **and** delete the inline drain so the digest
+leaves rows `pending` for `PendingEmbedJob`'s bounded relay — ADR-0076's own shape (`embed_state =
+'pending'` already *is* the durable record; no second queue table). The alternative is to keep the
+paths parallel and rely on G16's cap alone, which halves the threads but leaves the duplicated work
+and the four unbounded drains in place.
+*Why it matters.* Duplicated inference is CPU spent for nothing, and it is invisible — nothing logs
+that two drains embedded the same row.
+*Recommendation.* **Serialise, and make the relay the only drainer.** Not configurable: a bank that
+can be set back to three concurrent drains is a bank that can be set back into today's log line.
+
+**G18 — Both drains take their rows-per-run from one bank setting,
+`maintenance.embed-rows-per-run.global`, defaulting to today's 128.**
+*Detail.* `PendingEmbedJob.RowsPerRun` = `4 * EntryEmbedder.BatchSize` = 128 (`:36`) and
+`CodeReindexJob.RowsPerRun` = `4 * CodeEmbedder.BatchSize` = 128 (`:31`) are both `const`. One key
+replaces both; the default changes nothing on day one, so this card is about *reachability*, not a
+new behaviour. The tempting alternative — a delay between batches, "how often" in the literal sense
+— is **not** recommended: it turns a throughput problem into a latency problem, adds a knob nobody
+can tune from evidence, and can only be tested with a wall-clock assertion, which your #464 ruling
+forbids. The row budget already sets the pace: 128 rows per 15 s poll, expressed as a **count**.
+A second alternative is two separate keys (memory and code tuned apart); it is one more key to
+document and drift, for a distinction nobody has yet needed.
+*Why it matters.* When the cap in G16 turns out to be one notch wrong on some host, this is the knob
+that fixes it without a release.
+*Recommendation.* **One key, default 128, no pacing delay.**
+
+**G19 — Both knobs are bank settings written by the server, not CLI flags or environment variables.**
+*Detail.* ADR-0075: the MCP server is the only writer to the bank. Both keys ride the **existing**
+generic `/settings?key=` route (`SettingsProtocol.cs:9`, `:17`), so no new endpoint and no new
+protocol record — the CLI surface is two commands under nodes that already exist
+(`settings model threads <n>` beside `settings model show`, `CliCommandTree.cs:198-217`;
+`settings maintenance embed-rows-per-run <n>` beside `settings maintenance list|show`, `:548-562`).
+Names follow the conventions already in the tree verbatim: `embedding.<camelCase>`
+(`EmbeddingSettingsKeys.cs:9-28`) and `maintenance.<kebab-case>.global`
+(`BankMaintenanceConfigKeys.cs:6-17`). The alternative — an env var like `AIRACCOON_EMBED_THREADS` —
+is faster to build and invisible to `doctor`, unversioned, unsynced, and unreadable by the server
+that has to honour it.
+*Why it matters.* A tuning knob that lives outside the bank is a knob that disagrees with the bank,
+and the process that has to obey it is not the process that was told.
+*Recommendation.* **Bank settings, both of them**, on the existing route.
