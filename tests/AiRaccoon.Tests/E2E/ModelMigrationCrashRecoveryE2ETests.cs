@@ -62,12 +62,12 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
     /// also proves the migration is real work and not a no-op that happened to finish before the kill.</summary>
     private const int RowCount = 50;
 
-    /// <summary>Large enough that real local-ONNX batches of 32 span several seconds — a window this
-    /// test can reliably observe and interrupt mid-way, not just before or after the whole drain.
-    /// Kept modest (not hundreds) because a shared, contended machine can make even this many
-    /// batches take minutes, and the drain remaining after the kill is what the completion wait
-    /// has to outlast.</summary>
-    private const int MidDrainRowCount = 128;
+    /// <summary>Large enough that the real local-ONNX drain (batches of 32) lasts seconds, so the
+    /// 50 ms kill poll reliably observes a partial state. Measured 2026-08-22 on an M-series Mac:
+    /// 128 rows drained in 169-249 ms end to end — a window the poll missed under load, burning
+    /// PartialDrainCap — so this is sized for a multi-second drain (~1.5 ms/row here) while staying
+    /// well inside PartialDrainCap and the 300 s completion wait on a slower, contended machine.</summary>
+    private const int MidDrainRowCount = 2048;
 
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-model-migration-crash");
     private ISqliteConnectionFactory _factory = null!;

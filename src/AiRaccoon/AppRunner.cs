@@ -26,6 +26,7 @@ public sealed partial class AppRunner
     private readonly CancellationTokenSource _cts = new();
     private readonly StandardStreams _streams = new(Console.In, Console.Out, Console.Error);
     private readonly Func<ServerConfig, ILoggerFactory, CancellationToken, Task<ISettingsStore>> _acquireServerSettingsStore;
+    private readonly string? _processPath;
 
     public AppRunner() : this(CliSettingsBackend.AcquireAsync)
     {
@@ -33,8 +34,18 @@ public sealed partial class AppRunner
 
     /// <summary>Test seam: substitutes the settings-server acquisition (ADR-0075 §5.1) with a fake, so a
     /// command routed through the server never needs a real backend to answer.</summary>
-    internal AppRunner(Func<ServerConfig, ILoggerFactory, CancellationToken, Task<ISettingsStore>> acquireServerSettingsStore) =>
+    internal AppRunner(Func<ServerConfig, ILoggerFactory, CancellationToken, Task<ISettingsStore>> acquireServerSettingsStore)
+        : this(acquireServerSettingsStore, Environment.ProcessPath)
+    {
+    }
+
+    /// <summary>Test seam: also fixes this process's path, so the proxy's auto-start verdict does not
+    /// depend on how the test host itself was launched (the dotnet muxer cannot be a backend).</summary>
+    internal AppRunner(Func<ServerConfig, ILoggerFactory, CancellationToken, Task<ISettingsStore>> acquireServerSettingsStore, string? processPath)
+    {
         _acquireServerSettingsStore = acquireServerSettingsStore;
+        _processPath = processPath;
+    }
 
     internal CancellationToken Token => _cts.Token;
 
@@ -247,7 +258,7 @@ public sealed partial class AppRunner
         services.RegisterProxyServices();
         await using var providder = services.BuildServiceProvider();
         var proxyRunner = providder.GetRequiredService<IProxyRunner>();
-        return await proxyRunner.RunAsync(cliInput.ServerConfig, _streams, Token);
+        return await proxyRunner.RunAsync(cliInput.ServerConfig, _streams, _processPath, Token);
     }
 
     /// <summary>One-shot graphs get no host logging pipeline; quiet mode must still reach them
