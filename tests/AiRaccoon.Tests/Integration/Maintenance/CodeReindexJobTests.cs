@@ -48,7 +48,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
     [Fact]
     public async Task HasWorkAsync_NoCodeEngineConfigured_False_EvenWithPendingRows()
     {
-        var job = new CodeReindexJob(new CodeEmbedder(new FakeCodeEmbeddingService()));
+        var job = new CodeReindexJob(new CodeEmbedder(new FakeCodeEmbeddingService(), NullLogger<CodeEmbedder>.Instance));
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         await SeedPendingCodeRowAsync(connection, id: 1);
 
@@ -59,7 +59,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
     [Fact]
     public async Task HasWorkAsync_Configured_TrueOnlyWithPendingRows()
     {
-        var job = new CodeReindexJob(new CodeEmbedder(new FakeCodeEmbeddingService()));
+        var job = new CodeReindexJob(new CodeEmbedder(new FakeCodeEmbeddingService(), NullLogger<CodeEmbedder>.Instance));
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         await ActivateCodeEngineAsync(connection, "/models/code-daemon-embed-v1");
 
@@ -72,7 +72,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
     [Fact]
     public async Task RunAsync_EmbedsPendingRows_EndToEnd_PendingToEmbedded()
     {
-        var job = new CodeReindexJob(new CodeEmbedder(new FakeCodeEmbeddingService()));
+        var job = new CodeReindexJob(new CodeEmbedder(new FakeCodeEmbeddingService(), NullLogger<CodeEmbedder>.Instance));
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         await ActivateCodeEngineAsync(connection, "/models/code-daemon-embed-v1");
         await SeedPendingCodeRowAsync(connection, id: 1);
@@ -90,7 +90,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
     [Fact]
     public async Task ActivateThenDrain_OrderingIsPinned_RowsStayPendingUntilTheNextPollRunsTheJob()
     {
-        var embedder = new CodeEmbedder(new FakeCodeEmbeddingService());
+        var embedder = new CodeEmbedder(new FakeCodeEmbeddingService(), NullLogger<CodeEmbedder>.Instance);
         var store = new SqliteCodeEngineStore(_factory, new FakeCodeEmbeddingService(), TestData.CreateManifestLoader());
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         await SeedEmbeddedCodeRowAsync(connection, id: 1);
@@ -141,7 +141,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
     {
         var embeddingService = TestData.CreateEmbeddingService();
         var store = new SqliteCodeEngineStore(_factory, embeddingService, TestData.CreateManifestLoader());
-        var job = new CodeReindexJob(new CodeEmbedder(embeddingService));
+        var job = new CodeReindexJob(new CodeEmbedder(embeddingService, NullLogger<CodeEmbedder>.Instance));
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
 
         var modelDir = Path.Combine(_dataRoot, "models", "code-daemon-embed-v1-drift");
@@ -170,7 +170,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
     {
         var embeddingService = TestData.CreateEmbeddingService();
         var store = new SqliteCodeEngineStore(_factory, embeddingService, TestData.CreateManifestLoader());
-        var job = new CodeReindexJob(new CodeEmbedder(embeddingService));
+        var job = new CodeReindexJob(new CodeEmbedder(embeddingService, NullLogger<CodeEmbedder>.Instance));
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
 
         var modelDir = Path.Combine(_dataRoot, "models", "code-daemon-embed-v1-stable");

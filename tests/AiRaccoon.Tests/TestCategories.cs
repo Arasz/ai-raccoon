@@ -22,6 +22,15 @@ public static class TestCategories
     public const string Fast = "Fast";
     public const string Slow = "Slow";
     public const string Nightly = "Nightly";
+
+    /// <summary>
+    ///     Marks a test whose verdict depends on host speed (a wall-clock budget or percentile). Excluded
+    ///     from every PR lane via <c>Performance!=Benchmark</c> (see .github/workflows/build.yml); still runs
+    ///     in nightly and on demand. A correctness test holding a Stopwatch belongs on a fake clock instead.
+    /// </summary>
+    public const string Performance = "Performance";
+
+    public const string Benchmark = "Benchmark";
 }
 
 /// <summary>Never resolves a passphrase — no encryption. Use for existing unencrypted-DB tests.</summary>

@@ -166,3 +166,11 @@ That warning is not in this record because it was not measured here.
 **Reproduction.** The experiment scripts are committed under `docs/work/2026-08-15-fts-term-budget/`.
 `BuildPlan` is reimplemented there in Python for the sweep; it is not the shipped code,
 and any follow-up should re-derive rather than trust it.
+
+## Amendment (2026-08-22) — "event 416" above is now event 418
+
+The query-trim event this record cites as ADR-0071's own (`event 416`) was renumbered to
+**418** on 2026-08-22 (#466) to free 417 for `OnnxEmbeddingGenerator`, whose block had no
+room to grow. Only the id changed; the comparison this record draws — trimming a query and
+saying so, rather than silently reweighting its terms — is untouched. See ADR-0071's
+amendment and `docs/reference/logging-event-ids.md`.

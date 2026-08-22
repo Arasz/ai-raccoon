@@ -656,3 +656,28 @@ pending S2's step-1 measurement — so no threshold moves; only its expression d
 Everything else in the review is adopted as directed. Its four blocking findings, and the owner's
 five S4 points, were each re-verified against the source before amendment — including the registry
 schema, fetched rather than recalled.
+
+## Amendments
+
+### 2026-08-22 — S2's closure gate no longer asserts a wall-clock budget
+
+**Reason.** The gate went red on the owner's machine under load while CI stayed green. Owner
+ruling: "they should not fail on any env" — a wall-clock budget belongs in a benchmark or a
+performance suite, not in a test that gates a merge.
+
+**What §S2 said, and what is now true.**
+
+| §S2 as written | As built (PR "timing gates assert work and closure, not wall clock") |
+| --- | --- |
+| "Real `TimeProvider.System`" | A frozen `FakeTimeProvider`. `SearchAsync` already takes every timestamp from the injected `TimeProvider`, so no production seam had to be added. |
+| `VectorEmbedderStub(TimeSpan.FromMilliseconds(250))` — a real `Task.Delay` | `VectorEmbedderStub(Action)` — the stub advances the fake clock by 250 ms instead of sleeping. The injected cost is now exact rather than approximate, and the test no longer takes 500 ms of real time. |
+| `residual <= ResidualBudgetMs` (28 ms, provisional) | `Total - Σ(phases) - Adjustment == TimeSpan.Zero`. No millisecond threshold is asserted at all. |
+| The measured-residual tables in the test's own doc comment (13-29 ms cold, 20-26 ms saturated, 0.18-0.68 ms warmed) | Deleted. They were evidence that the budget sat inside the host's noise band, which is the defect, not a justification for it. |
+
+**Defect the §S2 reasoning missed.** `SearchTimings.Phases()` exports eight spans while the record
+measures nine: `search.affinity` is bound to `Merge`, and `Adjustment` has no exported metric name
+at all. Σ(phases) therefore never included the adjustment phase, so the old 28 ms residual silently
+carried all of it — on the real clock `AdjustMergedResults` always measures something, even on its
+early-return path. The replacement subtracts `Adjustment` by name rather than letting it hide in the
+remainder. Whether `search.adjustment` should be an exported series is left to the owner; renaming a
+metric series was not in scope for the test fix.

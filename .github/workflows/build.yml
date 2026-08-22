@@ -113,7 +113,14 @@ jobs:
         # Speed=Fast only; Speed=Slow is gated by build-slow below and BDD by
         # build-bdd. The three filters together cover the suite — see
         # tests/AiRaccoon.Tests/TestCategories.cs for the trait split.
-        run: dotnet test --filter "Speed=Fast" --no-build --nologo -v m
+        #
+        # Performance!=Benchmark drops wall-clock budget gates from every PR lane
+        # (owner ruling 2026-08-22: a budget belongs in a benchmark, not in a test
+        # that gates a merge — it can go red with no defect present). A test with no
+        # Performance trait still matches, which is what keeps this an exclusion and
+        # not a second opt-in. Those tests still run in nightly.yml's unfiltered
+        # backstop, and on demand with --filter "Performance=Benchmark".
+        run: dotnet test --filter "Speed=Fast&Performance!=Benchmark" --no-build --nologo -v m
 
   build-bdd:
     # Separate job, not a second step: it runs beside build-fast rather than after
@@ -195,7 +202,8 @@ jobs:
         if: needs.changes.outputs.code == 'true'
         # GoldenFileTests skips itself off osx-arm64 — the golden reference is a
         # host-specific ONNX artifact, not a portable expectation.
-        run: dotnet test --filter "Speed=Slow" --no-build --nologo -v m
+        # Performance!=Benchmark: see the build-fast filter for why.
+        run: dotnet test --filter "Speed=Slow&Performance!=Benchmark" --no-build --nologo -v m
       - name: Triage crash dumps
         if: failure()
         # A test-host segfault reads as "Passed! 167" followed by a bare "exit code 1"; this
@@ -246,4 +254,5 @@ jobs:
         # Speed=Nightly only. Deliberately does not call scripts/nightly-triage.py: that script's
         # red-nightly issue is for the scheduled unattended backstop, not a PR the author is
         # already looking at — a red here fails this check, full stop.
-        run: dotnet test --filter "Speed=Nightly" --no-build --nologo -v m
+        # Performance!=Benchmark: see the build-fast filter for why.
+        run: dotnet test --filter "Speed=Nightly&Performance!=Benchmark" --no-build --nologo -v m
