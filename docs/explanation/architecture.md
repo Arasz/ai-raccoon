@@ -818,10 +818,13 @@ line/brace based:
    the same shape `MarkdownChunker`'s packing uses, minus overlay: code
    chunks are always overlay 0 (line ranges, not prose continuity).
 
-The budget is a fixed **126** tokens — `min(510, ctx − reservation)` for
-code-daemon-embed-v1's 128-token context and 2-token `<s>`/`</s>`
-reservation, never the flat 510 an earlier engine-plan draft described and
-never the memory chunker's 254/256. Counting uses `ICodeTokenizer`: the
+The budget is a fixed **510** tokens — `EmbeddingService.MaxManifestChunkTokens`
+(512 minus the 2-token `<s>`/`</s>` reservation), the same manifest cap
+`ResolveChunkBudgetFor` derives for manifest-local embedding models, never
+the memory chunker's 254/256. An earlier **126** figure (`min(510,
+128 − 2)`) rested on a 128-token context claim the ONNX graph does not have
+— measured on #422, retired by #453 so the flagship model's own manifest
+(ctx 512) can activate without hand-editing it down to 128. Counting uses `ICodeTokenizer`: the
 bundled code-daemon-embed-v1 sentencepiece tokenizer
 (`src/AiRaccoon/Models/code-sentencepiece.bpe.model`, 626 KB, sha256-pinned)
 whenever no code engine is configured (`embedding.codeModel` absent) — the
@@ -862,7 +865,7 @@ src/AiRaccoon.Core/         Pure domain layer — zero framework deps
                             ICodeFileTypeMatcher, CorpusKind, IngestDispatcher (code corpus routing)
   Rating/                   RatingPolicy
   Degradation/              DegradationPolicy
-  Workspace/                Workspace record, ConsolidationResult
+  Isolation/                Workspace record, IWorkspaceStore/IWorkspaceService ports, ConsolidationResult
   Encryption/               SshKeyDerivation, OpenSshPrivateKeyParser, EncryptionData
   Validation/               ValidatorConfiguration (FluentValidation wiring)
   Watch/                    IWatchService port, WatchConfig, WatchState, WatchPath
@@ -879,7 +882,7 @@ src/AiRaccoon.Infrastructure/   Adapters — Dapper over SQLite, sync, embedding
                             CodeIngestor, CodeFileTypeMatcher (code corpus, self-filtering)
   Sync/                     SyncService, SyncCloudStoreFactory, S3CloudStore, AzureBlobCloudStore, NullCloudStore, FakeCloudStore
   Chunking/                 O200kTokenizer (o200k_base), JsonFileTypeChunker, CodeChunker (line-range,
-                            budget 126, brace-balance boundary preference), NoOpCodeChunker (retained
+                            budget 510, brace-balance boundary preference), NoOpCodeChunker (retained
                             as a zero-chunk test stand-in, not the production ICodeChunker)
   Workspace/                WorkspaceService
   Watch/                    WatchService, WatchPipeline, WatchScheduler, WatchHostedService

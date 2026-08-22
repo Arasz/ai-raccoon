@@ -83,7 +83,7 @@ config channel (see [Command-line options](#command-line-options)).
   as memory (`retrieval.rrfK`/`ftsWeight`/`vectorWeight`, or the per-call args above —
   `retrieval.structureAlpha` is read but never applied, since code has no structure modality); a
   query over the engine's
-  126-token window is trimmed before embedding and carries a different `warning` naming that; a
+  510-token window is trimmed before embedding and carries a different `warning` naming that; a
   configured-but-**unloadable** engine (missing files, a dimension mismatch) refuses the search
   with `code-engine-unloadable` instead of degrading (see [Error shapes](#error-shapes)) — memory
   searches are unaffected, since the two engines are independent settings rows. A code hit's
@@ -188,9 +188,13 @@ config channel (see [Command-line options](#command-line-options)).
   local` surfaces. On success the write commits in one transaction with invalidating every
   already-embedded code row back to `pending` — `vec_code` empties at that same commit, no
   stale-vector window — and the `code-reindex` maintenance job re-embeds the pending rows on its
-  own cadence; there is no outbox, no relay wait, and memory tools are never blocked. Typical
-  flow: `ai-raccoon model download faxenoff/code-daemon-embed-v1` then `ai-raccoon model set
-  code local <data-root>/models/faxenoff__code-daemon-embed-v1`. `ai-raccoon settings model
+  own cadence; there is no outbox, no relay wait, and memory tools are never blocked.
+  `ai-raccoon model set code default` downloads `faxenoff/code-daemon-embed-v1` (187 MB, if not
+  already present) and activates it in one command — the recommended path
+  (`CodeEngineSetup.DefaultModelCommand`, the exact string the search warning, `doctor`, and the
+  `memory_search` tool description all quote). For a non-default model, the manual two-step still
+  applies: `ai-raccoon model download {repo-id}` then `ai-raccoon model set
+  code local <dir>`. `ai-raccoon settings model
   show` includes the `codeModel`/`codeEngine` rows when set; `ai-raccoon settings model reset`
   never touches them; `ai-raccoon settings model code reset` deletes only them, leaving the
   memory engine untouched (`docs/work/2026-08-21-code-search-implementation-plan.md` §3.3).
@@ -650,6 +654,7 @@ ai-raccoon settings model show
 
 # model set code: the code corpus's own engine — independent settings rows, refuses non-768
 # manifests before anything commits (§3.3 D-E9), no memory-bank re-embed
+ai-raccoon model set code default   # downloads the default model if needed, then activates it
 ai-raccoon model set code local <dir>
 ai-raccoon settings model code reset
 
