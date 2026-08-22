@@ -328,3 +328,22 @@ above is left unchanged so the diff between plan and outcome stays readable.
 - **ai-raccoon#455** — `benchmarks/.../RealWorldCorpus.cs` still carries prose extracted from the
   private jsaa tree (294 lines, 107 mentions, no PII). Same harm class as #414 at much smaller
   scale; fixing it means re-deriving benchmark ground truth, which needs its own gates.
+
+## Amendment — 2026-08-22: row 12 superseded
+
+Row 12 planned to "re-measure p95 and re-pin the budget" for
+`Integration/Embedding/VecDimensionReconcileTimingTests.cs`, and to keep the slow-stub test because
+"it is what makes the budget a gate". Both are superseded: owner ruling, same day, is that no test
+asserts wall clock ("they should not fail on any env"), so there is no budget left to re-pin.
+
+The file is replaced by `Integration/Embedding/VecDimensionReconcileWorkTests.cs`, which asserts the
+work the no-change path does rather than the time it takes — the exact `sqlite3_trace` statement
+sequence, `total_changes()` unchanged, `schema_version` unchanged, both vec table definitions
+byte-identical. The slow-stub discrimination proof is replaced by
+`ChangePath_RecreatesTheVecTables_AndEveryWorkObservationReportsIt`, which drives the REAL
+reconciler down its change path (engine at 512 against a 384 bank) instead of a stub that sleeps.
+
+Row 12's fixture caveat is also resolved rather than accepted: the plan wanted a ≥200 MB bank and
+settled for the 16.43 MiB `docs-memory.db`. Under a statement-count gate the size stops mattering,
+and `NoChangePath_CostsTheSameOnARealBankAsOnAnEmptyOne` now proves the O(1)-in-bank-size claim the
+old doc comment could only argue for in prose.
