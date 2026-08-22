@@ -14,13 +14,18 @@ namespace AiRaccoon.Infrastructure.Sqlite.Code;
 ///     it does not earn a third constructor parameter there.
 /// </summary>
 public sealed class SqliteCodeEngineStore(ISqliteConnectionFactory factory, IEmbeddingService embeddings,
-    IEmbeddingManifestLoader manifestLoader) : ICodeEngineStore
+    IEmbeddingManifestLoader manifestLoader, IManifestPoolingRepair poolingRepair) : ICodeEngineStore
 {
     public async Task<EmbeddingConfig> ActivateCodeEngineAsync(string directory,
         CancellationToken cancellationToken = default)
     {
         Guard.IsNotNullOrWhiteSpace(directory);
         var fullPath = Path.GetFullPath(directory);
+
+        // #470: correct a manifest the graph contradicts BEFORE anything reads it — this activation
+        // invalidates every code vector regardless, so the fingerprint the rewrite moves costs
+        // nothing here, and the next reconcile poll sees a stable engine instead of a second change.
+        poolingRepair.Repair(fullPath);
 
         // B1: the CLI's own pre-flight (SettingsCommands.ModelSetCodeLocalAsync) is only a fast
         // local check — the HTTP settings endpoint (SettingsEndpoint.MapSettings) calls THIS
