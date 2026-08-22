@@ -88,7 +88,8 @@ internal sealed class TableCorpusBank : IAsyncDisposable
                 $"bundled embedding model missing: {string.Join("; ", ensured.Errors)}");
         }
 
-        await store.ConfigureEmbeddingAsync("local", null, null, cancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(store, factory, TestData.CreateEmbeddingService(),
+            "local", null, null, cancellationToken);
 
         var corpusRoot = TableCorpusCatalog.CorpusRoot();
         await store.SetSettingAsync(IngestScopeKeys.ScopeProject(ProjectId),

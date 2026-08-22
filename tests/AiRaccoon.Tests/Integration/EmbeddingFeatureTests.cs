@@ -48,8 +48,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
     [Fact]
     public async Task Embedding_ConfigureLocal_EmbedsWritesSynchronouslyWithoutASidecar()
     {
-        var config = await _store.ConfigureEmbeddingAsync("local", null, null,
-            TestContext.Current.CancellationToken);
+        var config = await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "local", null, null, TestContext.Current.CancellationToken);
 
         config.Engine.ShouldBe("local:bundled");
 
@@ -74,8 +74,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         File.Copy(BundledModel.ResolveModelPath(), custom);
         try
         {
-            var config = await _store.ConfigureEmbeddingAsync("local", custom, null,
-                TestContext.Current.CancellationToken);
+            var config = await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+                "local", custom, null, TestContext.Current.CancellationToken);
 
             config.Engine.ShouldBe($"local:{custom}");
 
@@ -97,7 +97,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
     public async Task Embedding_ConfigureOpenAi_RoutesWritesThroughTheBaseUrl()
     {
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
-        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
         var entry = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "routed through an openai compatible endpoint"),
@@ -136,8 +137,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
             TestContext.Current.CancellationToken);
 
         // Configuring the engine does not vacuum the pending queue — embed_pending owns it.
-        await _store.ConfigureEmbeddingAsync("local", null, null,
-            TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "local", null, null, TestContext.Current.CancellationToken);
 
         var result = await _store.EmbedPendingAsync("acme", null, TestContext.Current.CancellationToken);
 
@@ -158,8 +159,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         var second = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "fact two for engine switch"),
             TestContext.Current.CancellationToken);
-        await _store.ConfigureEmbeddingAsync("local", null, null,
-            TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "local", null, null, TestContext.Current.CancellationToken);
         await _store.EmbedPendingAsync("acme", null, TestContext.Current.CancellationToken);
 
         var localVectors = (await ReadRowAsync(first.Hash), await ReadRowAsync(second.Hash));
@@ -167,7 +168,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
 
         // New engine: any OpenAI-compatible provider (the fake endpoint).
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
-        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
         var reembedded = (await ReadRowAsync(first.Hash), await ReadRowAsync(second.Hash));
         reembedded.Item1.EmbedState.ShouldBe("embedded");
@@ -182,14 +184,14 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
     [Fact]
     public async Task Embedding_Configure_SameEngineDoesNotReembed()
     {
-        await _store.ConfigureEmbeddingAsync("local", null, null,
-            TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "local", null, null, TestContext.Current.CancellationToken);
         await _store.WriteAsync(
             new MemoryWriteRequest("acme", "stable fact"),
             TestContext.Current.CancellationToken);
 
-        await _store.ConfigureEmbeddingAsync("local", null, null,
-            TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "local", null, null, TestContext.Current.CancellationToken);
 
         var row = await ReadRowAsync((await _store.ListContextAsync("acme", "project:acme",
             TestContext.Current.CancellationToken)).Single().Hash);
@@ -214,8 +216,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         await _store.WriteAsync(new MemoryWriteRequest("acme", heading + "Step three."),
             TestContext.Current.CancellationToken);
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
-        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl,
-            TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
         await _store.EmbedPendingAsync("acme", null, TestContext.Current.CancellationToken);
 
@@ -230,7 +232,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
     [Fact]
     public async Task Embedding_ChunkWithNoHeading_WritesTheEmptySentinelAndNoVecStructureRow()
     {
-        await _store.ConfigureEmbeddingAsync("local", null, null, TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "local", null, null, TestContext.Current.CancellationToken);
 
         var entry = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "Just a plain paragraph, no headings anywhere."),
@@ -249,8 +252,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
     public async Task Embedding_HealingPass_PopulatesStructureForABankEmbeddedWithoutIt()
     {
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
-        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl,
-            TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
         var entry = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "# Deployment guide\n\n## Rollback\n\nRestore the previous snapshot."),
             TestContext.Current.CancellationToken);
@@ -273,8 +276,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         // A per-chunk ingest loop (FileIngestor) calls this same synchronous-write path once per
         // chunk; two generator calls per row here means a 100-chunk document makes 200 inferences.
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
-        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl,
-            TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
         await _store.WriteAsync(
             new MemoryWriteRequest("acme", "# Deployment guide\n\n## Rollback\n\nRestore the previous snapshot."),
@@ -287,8 +290,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
     public async Task Embedding_HealingPass_HeadinglessRowsLeaveTheCandidateWindowSoLaterRowsHeal()
     {
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
-        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl,
-            TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
         // The heal batch size is 32 and the first 32 rows by id are headingless, so they would pin
         // the window if processing left heading_path NULL. The '' sentinel is what advances it.
@@ -318,8 +321,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
     public async Task Embedding_HealingPass_SecondCallIsANoOp()
     {
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
-        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl,
-            TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
         var entry = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "# Deployment guide\n\n## Rollback\n\nRestore the previous snapshot."),
             TestContext.Current.CancellationToken);
@@ -336,8 +339,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
     public async Task Embedding_HealingPass_OneCallHealsMoreThanOneBatchOfCandidates()
     {
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
-        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl,
-            TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
         // More than 2x the heal batch size (32), so a single EmbedPendingAsync call must loop
         // the heal pass across several internal batches to heal every row.
@@ -365,8 +368,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
     public async Task Embedding_EmbedPending_SmallLimitBoundsTheHealPassToTheRemainingBudget()
     {
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
-        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl,
-            TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
         const int rowCount = 70;
         for (var i = 0; i < rowCount; i++)
@@ -390,8 +393,8 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
     [Fact]
     public async Task Embedding_Delete_RemovesTheVectorRowToo()
     {
-        await _store.ConfigureEmbeddingAsync("local", null, null,
-            TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "local", null, null, TestContext.Current.CancellationToken);
         var entry = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "fact with a vector"),
             TestContext.Current.CancellationToken);

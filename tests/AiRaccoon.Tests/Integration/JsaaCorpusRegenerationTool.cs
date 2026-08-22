@@ -70,7 +70,8 @@ public sealed class JsaaCorpusRegenerationTool(ITestOutputHelper output)
                 new FakeTimeProvider(new DateTimeOffset(2026, 8, 14, 0, 0, 0, TimeSpan.Zero)),
                 TestData.CreateEmbeddingService());
 
-            await store.ConfigureEmbeddingAsync("local", null, null, cancellationToken);
+            await TestData.ConfigureAndDrainEmbeddingAsync(store, factory, TestData.CreateEmbeddingService(),
+                "local", null, null, cancellationToken);
             await store.SetSettingAsync(IngestScopeKeys.ScopeProject(projectId),
                 IngestScopeKeys.Serialize([extractRoot]), cancellationToken);
 

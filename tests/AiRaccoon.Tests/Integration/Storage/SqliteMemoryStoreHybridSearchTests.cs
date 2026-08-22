@@ -47,7 +47,8 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
     public async Task Search_WithConfiguredEngine_ReturnsVectorOnlyHit_WhenKeywordHasNoMatch()
     {
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
-        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
         var entry = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "the quick brown fox leaps over the lazy dog"),
@@ -71,7 +72,8 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         // A vector-only hit has no FTS5 snippet(); FR-NM-4 s1 (docs/work/features-native-memory/native-memory.feature)
         // still requires one, so the value is trimmed to ~200 chars, '…'-marked, keyed by hash.
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
-        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
         var longValue = string.Join(" ", Enumerable.Range(1, 40).Select(i =>
             $"sentence number {i} with enough prose to exceed the two hundred character window"));
@@ -97,7 +99,8 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
     public async Task Search_VectorOnlyHit_SnippetIsQueryRelevant_EvenWhenTheMatchIsLateInALongEntry()
     {
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
-        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
         var filler = string.Join(" ", Enumerable.Range(1, 60).Select(i =>
             $"sentence number {i} with enough prose to push the target term well past the two hundred character window"));
@@ -126,7 +129,8 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         // Laziness proof: N=8 vector-only candidates compete for a Limit=3 query; every returned
         // result must still carry the exact snippet SnippetFallback.From would produce eagerly.
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
-        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
         var entries = new List<MemoryEntry>();
         for (var i = 0; i < 8; i++)
@@ -182,7 +186,8 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         // the FTS list first, so a hash retrieved by both modalities keeps the FTS-native snippet()
         // text, not the vector modality's SnippetFallback trim.
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
-        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
         var longValue = "zebra opens the paragraph. " + string.Join(" ", Enumerable.Range(1, 40).Select(n =>
             $"sentence number {n} with enough prose to exceed the two hundred character window"));
@@ -208,7 +213,8 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         // vec_distance_cosine is a DISTANCE (0 = identical), so the vec list ranks ascending and
         // the fused Ranking stays an RRF score in 0..1 (top exactly 1.0), never the raw distance.
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
-        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
         var identical = await _store.AddContentAsync("acme", "a.md",
             "semantic memory retrieval system", ContextNaming.ProjectContext("acme"),
@@ -238,7 +244,8 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
             cancellationToken: TestContext.Current.CancellationToken);
 
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
-        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
         var c = await _store.AddContentAsync("acme", "c.md",
             "quantum entanglement teleportation protocols", ContextNaming.ProjectContext("acme"),
@@ -271,7 +278,8 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
             TestContext.Current.CancellationToken);
 
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
-        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
         var vectorFavoured = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "tax legislation for the 2026 fiscal year"),

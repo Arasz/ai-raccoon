@@ -62,7 +62,8 @@ public sealed class GoldenMemorySearchResponseTests : IAsyncLifetime
             TestData.CreateEmbeddingService(), settings: _settings);
         _openAi = await FakeEmbeddingEndpoint.StartAsync(TestContext.Current.CancellationToken);
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
-        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, factory, TestData.CreateEmbeddingService(),
+            "openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
     }
 
     public async ValueTask DisposeAsync()

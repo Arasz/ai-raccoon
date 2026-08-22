@@ -46,7 +46,8 @@ public sealed class StructurePopulationTests : IAsyncLifetime
     [Fact]
     public async Task Ingest_MarkdownWithHeadings_PopulatesTheStructureVectorTable()
     {
-        await _store.ConfigureEmbeddingAsync("local", null, null, TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "local", null, null, TestContext.Current.CancellationToken);
 
         var file = Path.Combine(_dataRoot, "guide.md");
         await File.WriteAllTextAsync(file,

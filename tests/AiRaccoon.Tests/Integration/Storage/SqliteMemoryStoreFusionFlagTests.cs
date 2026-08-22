@@ -57,8 +57,8 @@ public sealed class SqliteMemoryStoreFusionFlagTests : IAsyncLifetime
             new MemoryWriteRequest("acme", "quokka forage"), TestContext.Current.CancellationToken);
 
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
-        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl,
-            TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
 
         foreach (var text in new[]
                  {

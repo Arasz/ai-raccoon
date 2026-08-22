@@ -38,10 +38,14 @@ public sealed class WriteChunksToBudgetTests : IAsyncLifetime
         await TestData.CreateBundledModel().EnsureAsync(TestContext.Current.CancellationToken);
         var options = new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+        var embeddings = new EmbeddingService(new FakeLogger<EmbeddingService>(), new LocalTokenizer(),
+            new EmbeddingTokenizerFactory(),
+            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
         _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
-            new EmbeddingService(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator())));
-        await _store.ConfigureEmbeddingAsync("local", null, null, TestContext.Current.CancellationToken);
+            embeddings);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, factory, embeddings,
+            "local", null, null, TestContext.Current.CancellationToken);
     }
 
     public ValueTask DisposeAsync()
