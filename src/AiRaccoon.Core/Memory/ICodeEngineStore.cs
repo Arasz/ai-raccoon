@@ -18,3 +18,20 @@ public interface ICodeEngineStore
     /// </summary>
     Task<EmbeddingConfig> ActivateCodeEngineAsync(string directory, CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+///     Thrown when <see cref="ICodeEngineStore.ActivateCodeEngineAsync" /> refuses a directory
+///     (#472: missing/invalid manifest, or the wrong dimension count) — an
+///     <see cref="InvalidOperationException" /> subtype so the settings endpoint can catch it and
+///     map it to a 4xx with the reason intact, instead of it escaping as a bare 500.
+/// </summary>
+public sealed class CodeEngineActivationRefusedException : InvalidOperationException
+{
+    public CodeEngineActivationRefusedException(string message) : base(message)
+    {
+    }
+
+    public CodeEngineActivationRefusedException(string message, Exception innerException) : base(message, innerException)
+    {
+    }
+}

@@ -1,7 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
+using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Settings;
 using AiRaccoon.Setup;
@@ -148,6 +150,45 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
             .StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
         (await anonymous.DeleteAsync("/settings?key=a", TestContext.Current.CancellationToken))
             .StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    /// <summary>
+    ///     #472: a direct (non-CLI) caller must see the store's refusal reason in the response, not
+    ///     a bare 500 — the CLI never reaches this because SettingsCommands pre-checks the manifest
+    ///     itself before ever calling the endpoint.
+    /// </summary>
+    [Fact]
+    public async Task PostModelCode_MissingManifest_IsABadRequest_WithTheReasonInTheBody()
+    {
+        var dir = Path.Combine(_dataRoot, "code-model-missing-manifest");
+        Directory.CreateDirectory(dir);
+
+        var response = await _client.PostAsJsonAsync(SettingsProtocol.ModelCodePath,
+            new ModelCodeActivationRequest(dir), TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        body.ShouldContain(EmbeddingManifest.FileName);
+    }
+
+    /// <summary>#472: same mapping for the other refusal leg — a manifest that isn't 768-dimensional.</summary>
+    [Fact]
+    public async Task PostModelCode_Non768Manifest_IsABadRequest_WithTheReasonInTheBody()
+    {
+        var dir = Path.Combine(_dataRoot, "code-model-non768");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "sentencepiece.bpe.model"), "tokenizer");
+        File.WriteAllText(Path.Combine(dir, "model.onnx"), "model");
+        File.Copy(TestData.RepoFile("tests/AiRaccoon.Tests/Resources/ManifestFixtures/code-daemon-embed-v1-non768.json"),
+            Path.Combine(dir, EmbeddingManifest.FileName));
+
+        var response = await _client.PostAsJsonAsync(SettingsProtocol.ModelCodePath,
+            new ModelCodeActivationRequest(dir), TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        body.ShouldContain("1024");
+        body.ShouldContain(CodeCorpusSchema.EmbeddingDimensions.ToString());
     }
 
     private Task<HttpResponseMessage> PutAsync(string key, string value) =>

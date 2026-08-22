@@ -119,12 +119,17 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
             "the invalidate step itself must roll back too -- the row must be untouched");
     }
 
+    /// <summary>
+    ///     #472: this refusal must carry a type the settings endpoint can catch and map to a 4xx —
+    ///     a bare <see cref="InvalidOperationException" /> escapes as an unhandled 500. It stays an
+    ///     <see cref="InvalidOperationException" /> (the CLI's own pre-flight catch is unaffected).
+    /// </summary>
     [Fact]
     public async Task ActivateCodeEngineAsync_NonexistentDirectory_RefusesAndWritesNothing()
     {
         var dir = Path.Combine(_dataRoot, "does-not-exist");
 
-        await Should.ThrowAsync<InvalidOperationException>(
+        await Should.ThrowAsync<CodeEngineActivationRefusedException>(
             () => _store.ActivateCodeEngineAsync(dir, TestContext.Current.CancellationToken));
 
         (await ReadSettingAsync(EmbeddingSettingsKeys.CodeModel)).ShouldBeNull(
@@ -133,6 +138,7 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
             "a refused activation must never commit the code-engine setting row");
     }
 
+    /// <summary>#472: same refusal type as the missing-manifest case above.</summary>
     [Fact]
     public async Task ActivateCodeEngineAsync_Non768Manifest_RefusesAndWritesNothing()
     {
@@ -143,7 +149,7 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
         File.Copy(TestData.RepoFile("tests/AiRaccoon.Tests/Resources/ManifestFixtures/code-daemon-embed-v1-non768.json"),
             Path.Combine(dir, EmbeddingManifest.FileName));
 
-        var ex = await Should.ThrowAsync<InvalidOperationException>(
+        var ex = await Should.ThrowAsync<CodeEngineActivationRefusedException>(
             () => _store.ActivateCodeEngineAsync(dir, TestContext.Current.CancellationToken));
 
         ex.Message.ShouldContain("1024");
