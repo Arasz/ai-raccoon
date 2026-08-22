@@ -35,10 +35,11 @@ internal static class SearchTimingsHarness
 
     /// <summary>
     ///     A fixed 384-float vector, so the vector modality actually queries without a live embedding
-    ///     endpoint. <paramref name="delay" /> lets S2's closure gate put a known-size cost inside
-    ///     <c>search.embed</c> (a real await, on the real clock — not a scripted value).
+    ///     endpoint. <paramref name="onEmbedQuery" /> lets S2's closure gate put a known-size cost
+    ///     inside <c>search.embed</c> by advancing a controlled clock — the cost is exact and
+    ///     load-independent, where a real <c>Task.Delay</c> on the system clock was neither.
     /// </summary>
-    public sealed class VectorEmbedderStub(TimeSpan delay = default) : IEntryEmbedder
+    public sealed class VectorEmbedderStub(Action? onEmbedQuery = null) : IEntryEmbedder
     {
         public Task<EmbeddingConfig> ConfigureAsync(SqliteConnection connection, string provider, string? model,
             string? baseUrl, CancellationToken cancellationToken) =>
@@ -65,15 +66,11 @@ internal static class SearchTimingsHarness
             CancellationToken cancellationToken) =>
             throw new NotSupportedException("Not exercised by SearchAsync.");
 
-        public async Task<QueryVector> EmbedQueryAsync(SqliteConnection connection, string query,
+        public Task<QueryVector> EmbedQueryAsync(SqliteConnection connection, string query,
             CancellationToken cancellationToken)
         {
-            if (delay > TimeSpan.Zero)
-            {
-                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
-            }
-
-            return new QueryVector(EmbeddingBlob.ToBytes(new float[384]));
+            onEmbedQuery?.Invoke();
+            return Task.FromResult(new QueryVector(EmbeddingBlob.ToBytes(new float[384])));
         }
 
         public Task<EmbeddingSettings> ReadSettingsAsync(SqliteConnection connection,
