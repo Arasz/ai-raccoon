@@ -1,9 +1,11 @@
 using System.Globalization;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
+using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Tests.TestHelpers;
@@ -29,6 +31,8 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
 
     /// <summary>Canonical watched directory — the feature's "/repo" maps here.</summary>
     public string RepoDir { get; }
+
+    public IEventPump<EmbedDrainRequest> EmbedDrainPump { get; } = TestData.NewEmbedDrainPump();
 
     public WatchStore WatchStore { get; private set; } = null!;
 
@@ -195,8 +199,8 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
         var scanGuard = new WatchScanGuard();
         WatchCatchUp? catchUp = null;
         Pipeline = new WatchPipeline(new WatchScheduler(),
-            new WatchDigestExecutor(Store, WatchStore, TimeProvider, NullLogger<WatchDigestExecutor>.Instance,
-                new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => catchUp!)),
+            new WatchDigestExecutor(Store, WatchStore, TimeProvider,
+                new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => catchUp!), EmbedDrainPump),
             new WatchRetryPolicy(), scanGuard, Store, TimeProvider,
             NullLogger<WatchPipeline>.Instance);
         EventSource = new WatchEventSource(Pipeline.Enqueue, Errors.Add, NullLogger<WatchEventSource>.Instance);

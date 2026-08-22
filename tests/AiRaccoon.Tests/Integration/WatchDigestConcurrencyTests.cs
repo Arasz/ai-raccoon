@@ -1,6 +1,8 @@
 using AiRaccoon.Core.Chunking;
+using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -180,9 +182,8 @@ public sealed class WatchDigestConcurrencyTests
             Memory = TestData.CreateMemoryStore(Factory,
                 NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(Factory), Gate, time, TestData.CreateEmbeddingService());
             WatchStore = new WatchStore(Factory);
-            Executor = new WatchDigestExecutor(Memory, WatchStore, time,
-                NullLogger<WatchDigestExecutor>.Instance, new IgnoreRulesProvider(),
-                new Lazy<IWatchScanInitiator>(() => new NoOpWatchScanInitiator()));
+            Executor = new WatchDigestExecutor(Memory, WatchStore, time, new IgnoreRulesProvider(),
+                new Lazy<IWatchScanInitiator>(() => new NoOpWatchScanInitiator()), TestData.NewEmbedDrainPump());
         }
 
         public SqliteConnectionFactory Factory { get; }

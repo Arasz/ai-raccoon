@@ -1,6 +1,8 @@
+using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Tests.TestHelpers;
@@ -25,8 +27,7 @@ internal sealed class WatchTestStack
         Memory.WriteFingerprint = (projectId, path, hash) =>
             Store.SetFingerprint(projectId, path, hash, Time.GetUtcNow().ToUnixTimeSeconds());
         var scanInitiatorLazy = new Lazy<IWatchScanInitiator>(() => ScanInitiator);
-        Executor = new WatchDigestExecutor(Memory, Store, Time, NullLogger<WatchDigestExecutor>.Instance,
-            IgnoreRules, scanInitiatorLazy);
+        Executor = new WatchDigestExecutor(Memory, Store, Time, IgnoreRules, scanInitiatorLazy, EmbedDrainPump);
         Pipeline = new WatchPipeline(
             new WatchScheduler(), Executor, new WatchRetryPolicy(), ScanGuard,
             Memory, Time, NullLogger<WatchPipeline>.Instance);
@@ -48,6 +49,8 @@ internal sealed class WatchTestStack
     public FakeWatchScanInitiator ScanInitiator { get; } = new();
 
     public IWatchOverlapResolver OverlapResolver { get; } = new WatchOverlapResolver();
+
+    public IEventPump<EmbedDrainRequest> EmbedDrainPump { get; } = TestData.NewEmbedDrainPump();
 
     public WatchDigestExecutor Executor { get; }
 
@@ -319,12 +322,6 @@ internal sealed class FakeWatchMemoryStore : FakeMemoryStore
     /// <summary>When set, IngestFileAsync throws it (digest failure injection).</summary>
     public Exception? IngestError { get; set; }
 
-    /// <summary>When set, EmbedPendingAsync throws it (best-effort embed failure injection).</summary>
-    public Exception? EmbedError { get; set; }
-
-    /// <summary>Project ids passed to EmbedPendingAsync, in call order.</summary>
-    public List<string> EmbedCalls { get; } = [];
-
     /// <summary>Runs after a successful ingest records content — TCS gating for in-flight digests.</summary>
     public Func<string, Task>? OnIngest { get; set; }
 
@@ -421,20 +418,4 @@ internal sealed class FakeWatchMemoryStore : FakeMemoryStore
 
     public override Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<string>>(ProjectIds);
-
-    public override Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
-        CancellationToken cancellationToken = default)
-    {
-        lock (_sync)
-        {
-            EmbedCalls.Add(projectId);
-        }
-
-        if (EmbedError is not null)
-        {
-            throw EmbedError;
-        }
-
-        return Task.FromResult(new EmbedPendingResult(0, 0));
-    }
 }

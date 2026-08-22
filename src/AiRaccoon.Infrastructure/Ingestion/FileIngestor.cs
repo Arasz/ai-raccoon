@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using AiRaccoon.Core.Chunking;
+using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
@@ -25,12 +26,14 @@ public sealed class FileIngestor(
     IIgnoreRulesProvider? ignoreRulesProvider = null,
     ICodeFileTypeMatcher? codeFileTypeMatcher = null,
     ICodeIngestor? codeIngestor = null,
-    IWatchStore? watchStore = null) : IFileIngestor
+    IWatchStore? watchStore = null,
+    IEventPump<EmbedDrainRequest>? embedDrainPump = null) : IFileIngestor
 {
     private readonly ICodeFileTypeMatcher _codeFileTypeMatcher = codeFileTypeMatcher ?? NullCodeFileTypeMatcher.Instance;
     private readonly ICodeIngestor _codeIngestor = codeIngestor ?? NullCodeIngestor.Instance;
     private readonly IIgnoreRulesProvider _ignoreRulesProvider = ignoreRulesProvider ?? NullIgnoreRulesProvider.Instance;
     private readonly IWatchStore _watchStore = watchStore ?? NullWatchStore.Instance;
+    private readonly IEventPump<EmbedDrainRequest> _embedDrainPump = embedDrainPump ?? NullEmbedDrainPump.Instance;
 
     /// <summary>
     ///     Set <paramref name="embedInline" /> false when the caller holds a write transaction: embedding
@@ -166,11 +169,19 @@ public sealed class FileIngestor(
             }
 
             var content = await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false);
+            // WP11-B2 (Finding (a)): embedInline false — a per-file generator call, serially, on
+            // the shared session was a third uncoordinated consumer of the inference pool. One
+            // enqueue below covers the whole walk instead.
             var (rows, hashes) = await InsertChunksAsync(connection, projectId, file, content, handler, context,
-                    cancellationToken)
+                    cancellationToken, embedInline: false)
                 .ConfigureAwait(false);
             indexed += rows;
             walked.Add(new WalkedFile(file, hashes));
+        }
+
+        if (indexed > 0)
+        {
+            _embedDrainPump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Memory));
         }
 
         return new DirectoryIngestResult(indexed, walked);

@@ -1,3 +1,4 @@
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Watch;
 using Shouldly;
@@ -14,8 +15,10 @@ public sealed class WatchDigestExecutorTests
 
     private static WatchDigestExecutor Executor(WatchTestStack stack) => stack.Executor;
 
+    /// <summary>E6: the digest never embeds itself — it leaves the row pending and signals the
+    /// embed topic's single consumer (EmbedDrainService) exactly once.</summary>
     [Fact]
-    public async Task Digest_NewFile_IngestsFingerprintsAdvancesWatermark()
+    public async Task Digest_LeavesRowsPending_AndSignalsTheDrain()
     {
         using var dir = TempDir.New("digest-new");
         var file = dir.File("a.md");
@@ -29,8 +32,9 @@ public sealed class WatchDigestExecutorTests
         stack.Memory.Ingested.ShouldHaveSingleItem();
         stack.Memory.Ingested[0].Path.ShouldBe(file);
         stack.Memory.Ingested[0].Content.ShouldBe("hello");
-        // Best-effort embed retry net fires after a successful ingest.
-        stack.Memory.EmbedCalls.ShouldContain(Project);
+        stack.EmbedDrainPump.EnqueuedCount.ShouldBe(1);
+        var queued = stack.EmbedDrainPump.DrainUpTo(1).ShouldHaveSingleItem();
+        queued.Corpus.ShouldBe(EmbedCorpus.Memory);
         (await stack.Store.GetFileHashAsync(Project, file, TestContext.Current.CancellationToken)).ShouldBe(
             WatchDigestExecutor.ComputeHash(file, "hello"));
         stack.Store.Watches[(Project, dir.Path)].LastChangeTs.ShouldBe(
@@ -53,29 +57,30 @@ public sealed class WatchDigestExecutorTests
             TestContext.Current.CancellationToken);
 
         stack.Memory.Ingested.ShouldHaveSingleItem();
-        // The embed fired on the first (ingesting) digest; the hash-skip must not embed again.
-        stack.Memory.EmbedCalls.ShouldHaveSingleItem();
+        // The signal fired on the first (ingesting) digest; the hash-skip must not signal again.
+        stack.EmbedDrainPump.EnqueuedCount.ShouldBe(1);
         (await stack.Store.GetFileHashAsync(Project, file, TestContext.Current.CancellationToken)).ShouldBe(
             WatchDigestExecutor.ComputeHash(file, "same"));
     }
 
+    /// <summary>A Memory signal already queued (not yet taken) coalesces the digest's own enqueue
+    /// away — it must never fail the digest. TryEnqueue cannot throw, so this exercises the real
+    /// degenerate case (coalesced, counted) rather than an injected exception.</summary>
     [Fact]
-    public async Task Digest_EmbedFailure_IsTolerated_DigestStillCompletes()
+    public async Task Digest_SignalAlreadyQueued_CoalescesAndIsTolerated_DigestStillCompletes()
     {
-        using var dir = TempDir.New("digest-embed-fail");
+        using var dir = TempDir.New("digest-pump-coalesced");
         var file = dir.File("a.md");
         await File.WriteAllTextAsync(file, "hello", TestContext.Current.CancellationToken);
-        var stack = new WatchTestStack
-        {
-            Memory = { EmbedError = new InvalidOperationException("embed boom") }
-        };
+        var stack = new WatchTestStack();
         await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+        stack.EmbedDrainPump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Memory)).ShouldBeTrue();
 
         await Should.NotThrowAsync(() => Executor(stack).DigestAsync(Project, dir.Path, file,
             WatchEventKind.Created, null, TestContext.Current.CancellationToken));
 
         stack.Memory.Ingested.ShouldHaveSingleItem();
-        stack.Memory.EmbedCalls.ShouldContain(Project);
+        stack.EmbedDrainPump.CoalescedCount.ShouldBe(1);
         (await stack.Store.GetFileHashAsync(Project, file, TestContext.Current.CancellationToken)).ShouldBe(
             WatchDigestExecutor.ComputeHash(file, "hello"));
     }
@@ -120,8 +125,8 @@ public sealed class WatchDigestExecutorTests
         stack.Memory.DeletedPaths.ShouldContain((Project, file));
         (await stack.Store.GetFileHashAsync(Project, file, TestContext.Current.CancellationToken)).ShouldBeNull();
         stack.Memory.Ingested.ShouldHaveSingleItem();
-        // The embed fired on the create-digest only; the delete-digest must not embed.
-        stack.Memory.EmbedCalls.ShouldHaveSingleItem();
+        // The signal fired on the create-digest only; the delete-digest must not signal.
+        stack.EmbedDrainPump.EnqueuedCount.ShouldBe(1);
     }
 
     /// <summary>

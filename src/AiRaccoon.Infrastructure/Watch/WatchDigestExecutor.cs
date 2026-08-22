@@ -1,10 +1,11 @@
 using System.Security.Cryptography;
 using System.Text;
+using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
-using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Infrastructure.Watch;
 
@@ -18,13 +19,13 @@ namespace AiRaccoon.Infrastructure.Watch;
 ///     (docs/work/2026-08-21-code-search-implementation-plan.md §2.1/§5.3). The ignore file itself is
 ///     never matched, and an edit to it (including its deletion) triggers a full re-scan of the watch.
 /// </summary>
-public sealed partial class WatchDigestExecutor(
+public sealed class WatchDigestExecutor(
     IMemoryStore store,
     IWatchStore watchStore,
     TimeProvider timeProvider,
-    ILogger<WatchDigestExecutor> logger,
     IIgnoreRulesProvider ignoreRulesProvider,
-    Lazy<IWatchScanInitiator> scanInitiator) : IWatchDigestExecutor
+    Lazy<IWatchScanInitiator> scanInitiator,
+    IEventPump<EmbedDrainRequest> embedDrainPump) : IWatchDigestExecutor
 {
     public async Task DigestAsync(string projectId, string watchPath, string filePath, WatchEventKind kind,
         string? oldPath, CancellationToken cancellationToken = default)
@@ -87,7 +88,10 @@ public sealed partial class WatchDigestExecutor(
             .ConfigureAwait(false);
         if (replaced)
         {
-            await TryEmbedPendingAsync(projectId, cancellationToken).ConfigureAwait(false);
+            // WP11-B2: signal the embed topic instead of draining inline and unbounded — the rows
+            // stay embed_state='pending' (the durable outbox, ADR-0076) until EmbedDrainService's
+            // single reader gets to them.
+            embedDrainPump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Memory));
         }
 
         await watchStore.UpdateLastChangeAsync(projectId, normalizedWatch, Now(), cancellationToken)
@@ -120,23 +124,6 @@ public sealed partial class WatchDigestExecutor(
                ignoreRules.IsIgnored(Path.GetRelativePath(normalizedWatch, normalized), isDirectory: false);
     }
 
-    /// <summary>
-    ///     Embeds the rows the replace transaction left pending — it defers embedding rather than
-    ///     hold the bank's write lock through the engine, and nothing else retries a pending row.
-    ///     A failure here is logged and never breaks the digest.
-    /// </summary>
-    private async Task TryEmbedPendingAsync(string projectId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await store.EmbedPendingAsync(projectId, null, cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            Log.EmbedFailed(logger, projectId, ex);
-        }
-    }
-
     /// <summary>SHA-256 over the normalized path concatenated with the full file content (docs/plans/file-watcher-implementation.md R5).</summary>
     public static string ComputeHash(string normalizedPath, string content) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedPath + content)));
 
@@ -155,11 +142,4 @@ public sealed partial class WatchDigestExecutor(
     }
 
     private long Now() => timeProvider.GetUtcNow().ToUnixTimeSeconds();
-
-    private static partial class Log
-    {
-        [LoggerMessage(EventId = 400, Level = LogLevel.Warning,
-            Message = "Best-effort embed after watch ingest failed for {ProjectId}; rows stay pending")]
-        public static partial void EmbedFailed(ILogger logger, string projectId, Exception exception);
-    }
 }

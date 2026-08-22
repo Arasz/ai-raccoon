@@ -1,7 +1,9 @@
 using AiRaccoon.Core.Chunking;
+using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -701,10 +703,11 @@ public sealed class WatchIntegrationTests
                 TestData.CreateEmbeddingService(), codeChunker: codeChunker);
             WatchStore = new WatchStore(_factory);
             ScanGuard = new WatchScanGuard();
+            EmbedDrainPump = TestData.NewEmbedDrainPump();
             WatchCatchUp? catchUp = null;
             Pipeline = new WatchPipeline(new WatchScheduler(),
-                new WatchDigestExecutor(Memory, WatchStore, Time, new FakeLogger<WatchDigestExecutor>(_logs),
-                    new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => catchUp!)),
+                new WatchDigestExecutor(Memory, WatchStore, Time,
+                    new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => catchUp!), EmbedDrainPump),
                 new WatchRetryPolicy(),
                 ScanGuard, Memory, Time, new FakeLogger<WatchPipeline>(_logs));
             EventSource = new WatchEventSource(evt =>
@@ -734,6 +737,8 @@ public sealed class WatchIntegrationTests
         public SqliteMemoryStore Memory { get; }
 
         public WatchStore WatchStore { get; }
+
+        public IEventPump<EmbedDrainRequest> EmbedDrainPump { get; }
 
         public WatchScanGuard ScanGuard { get; }
 

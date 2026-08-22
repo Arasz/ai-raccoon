@@ -1,11 +1,15 @@
+using AiRaccoon.Core.EventPump;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
+using NSubstitute;
 using Shouldly;
 using Xunit;
 
@@ -34,6 +38,70 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
+
+    /// <summary>
+    ///     E8 (WP11-B2): two overlapping RunDueAsync passes — the heavy pass and the 15s on-demand
+    ///     poll both call this, on two different connections — used to both SELECT and embed the
+    ///     same rows (the duplicate-inference bug this WP closes structurally). Now both enqueue;
+    ///     the second enqueue coalesces away, so the single-reader EmbedDrainService consumer needs
+    ///     exactly one drain pass to embed every row.
+    /// </summary>
+    [Fact]
+    public async Task TwoOverlappingPasses_EnqueueOneDrain_AndEachRowIsEmbeddedOnce()
+    {
+        var pump = TestData.NewEmbedDrainPump();
+        await SeedProviderAndPendingRowsAsync(5);
+        var entryEmbedder = new EntryEmbedder(new CountingEmbeddingService(),
+            Substitute.For<IModelMigrationLease>(), _time);
+        var job = new PendingEmbedJob(entryEmbedder, pump);
+
+        await using (var connection1 = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await Runner().RunDueAsync(connection1, [job], TestContext.Current.CancellationToken);
+        }
+
+        await using (var connection2 = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await Runner().RunDueAsync(connection2, [job], TestContext.Current.CancellationToken);
+        }
+
+        pump.EnqueuedCount.ShouldBe(1, "the second pass's signal must coalesce, not queue a second drain");
+        pump.CoalescedCount.ShouldBe(1);
+
+        var request = pump.DrainUpTo(1).ShouldHaveSingleItem();
+        var drainService = new EmbedDrainService(pump, _factory, entryEmbedder, new FakeCodeEmbedder(),
+            TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
+        await drainService.DrainOnceAsync(request, TestContext.Current.CancellationToken);
+
+        (await PendingCountAsync()).ShouldBe(0, "one drain pass is enough — every row is embedded exactly once");
+    }
+
+    private async Task SeedProviderAndPendingRowsAsync(int count)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES (@key, @value)",
+            new { key = EmbeddingSettingsKeys.Provider, value = "local" },
+            cancellationToken: TestContext.Current.CancellationToken));
+        for (var i = 0; i < count; i++)
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                """
+                INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
+                VALUES (@hash, @path, @value, 'project', 'acme', 0, 0)
+                """,
+                new { hash = $"h{i}", path = $"p{i}.md", value = $"pending row {i}" },
+                cancellationToken: TestContext.Current.CancellationToken));
+        }
+    }
+
+    private async Task<long> PendingCountAsync()
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT count(*) FROM entries WHERE embed_state = 'pending'",
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
 
     [Fact]
     public async Task AJobThatHasNeverRun_RunsOnTheFirstPass()
