@@ -782,4 +782,19 @@ internal static class MemorySql
                                                  WHERE project_id = @projectId
                                                    AND (path = @path OR path LIKE @pathPrefix ESCAPE '\')
                                                  """;
+
+    // Defect B: after a direct ingest reports the chunk set it wrote or rediscovered, everything
+    // else stored under that exact path is a leftover of a previous chunking. Exact path only —
+    // no subtree leg — so re-ingesting one file can never reach a sibling.
+    public const string DeleteChunksForPathExcept = """
+                                                    DELETE FROM entries
+                                                    WHERE project_id = @projectId AND workspace_id IS NULL
+                                                      AND path = @path AND hash NOT IN @keep
+                                                    """;
+
+    public const string DeleteAllChunksForPath = """
+                                                 DELETE FROM entries
+                                                 WHERE project_id = @projectId AND workspace_id IS NULL
+                                                   AND path = @path
+                                                 """;
 }
