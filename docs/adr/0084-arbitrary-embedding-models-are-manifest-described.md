@@ -97,3 +97,16 @@ needs a per-architecture capture.
 capability check. MRL truncation is recorded in the manifest and unused. The bge-m3
 retrieval-quality comparison is measured separately; this ADR ships the mechanism, not a
 default change.
+
+## Amendment (2026-08-22) — activation re-verifies the pins, provenance files are pinned too
+
+The original `IEmbeddingManifestLoader.Load()` only checked `File.Exists` for each pinned
+file — a `model.onnx` swapped in place after download, with the manifest untouched, would
+activate and embed silently on the wrong bytes. `Load()` now hashes every pinned file
+(tokenizer, ONNX) and refuses, naming the file and both digests, on a mismatch (D1).
+
+`ModelDownloadPlanner` already fetched and hashed the non-LFS provenance files
+(`config.json`, `tokenizer_config.json`), but `WriteManifestAsync` never wrote them into
+the manifest, so they were never covered by the activation check above. `EmbeddingManifest`
+now carries an optional `ProvenanceFiles` list (absent on pre-D2 manifests), pinned with
+the same trust-on-first-download SHA-256 mechanism as the tokenizer/ONNX files (D2).
