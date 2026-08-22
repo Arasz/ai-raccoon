@@ -20,13 +20,20 @@ public sealed class SourceIdentityTests : IDisposable
 {
     private const string ProjectId = "ai-raccoon"; // matches PROJECT_ID in scripts/src/corpus_config.py
 
-    private const string Adr0011Decision = "docs:adr:0011-frontend-chassis-stack.md#decision";
-    private const string Adr0011Source = "docs/adr/0011-frontend-chassis-stack.md";
-    private const string Adr0070Decision = "docs:adr:0070-documentation-structure-and-trust-model.md#decision";
-    private const string Adr0070Source = "docs/adr/0070-documentation-structure-and-trust-model.md";
+    private const string AdrDecision = "docs:adr:0006-rrf-parameter-optimization.md#decision";
+    private const string AdrSource = "docs/adr/0006-rrf-parameter-optimization.md";
+
+    // The identity assertions below need a hit whose retrieval is not itself in question: this
+    // test proves results CARRY source identity, so a target that ranks poorly would fail it for
+    // the wrong reason. ADR-0031's Consequences chunk answers its query at rank 1 (catalog S3).
+    private const string IdentityChunk = "docs:adr:0031-polly-resilience-pipelines.md#consequences";
+    private const string IdentitySource = "docs/adr/0031-polly-resilience-pipelines.md";
+    private const string IdentityQuery = "What retry pipeline does the asset downloader use?";
+    private const string IdentifierAdrDecision = "docs:adr:0070-maintenance-is-a-list-of-jobs-with-a-ledger.md#decision";
+    private const string IdentifierAdrSource = "docs/adr/0070-maintenance-is-a-list-of-jobs-with-a-ledger.md";
     private const string InvariantTdd = "ai-badger:invariants/tdd-mandatory.md";
     private const string InvariantScreaming = "ai-badger:invariants/screaming-architecture.md";
-    private const string InvariantSecrets = "ai-badger:invariants/no-hardcoded-secrets.md";
+    private const string InvariantProveCheck = "ai-badger:invariants/prove-the-check-fails.md";
 
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
 
@@ -63,7 +70,7 @@ public sealed class SourceIdentityTests : IDisposable
         // scripts/chunk-hash-map.json. See CorpusHashMap.
         (_hashMap, _) = CorpusHashMap.Build(dbPath,
         [
-            Adr0011Decision, Adr0070Decision, InvariantTdd, InvariantScreaming, InvariantSecrets
+            AdrDecision, IdentifierAdrDecision, IdentityChunk, InvariantTdd, InvariantScreaming, InvariantProveCheck
         ]);
     }
 
@@ -72,17 +79,17 @@ public sealed class SourceIdentityTests : IDisposable
     [Fact]
     public async Task SearchResults_CarrySourceIdentity_ForIngestedChunks()
     {
-        var expectedHash = _hashMap[Adr0011Decision];
+        var expectedHash = _hashMap[IdentityChunk];
 
         var results = (await _store.SearchAsync(new SearchQuery(ProjectId,
-            "Why was shadcn/ui chosen over gluestack.io?",
+            IdentityQuery,
             SearchScope.Project, Limit: 10, MinRelativeScore: 0.0), TestContext.Current.CancellationToken)).Results;
 
         var hit = results.FirstOrDefault(r => r.Hash == expectedHash);
-        hit.ShouldNotBeNull("the ADR-0011 decision chunk must appear in the top 10");
-        hit.SourceFile.ShouldBe(Adr0011Source,
+        hit.ShouldNotBeNull("the expected decision chunk must appear in the top 10");
+        hit.SourceFile.ShouldBe(IdentitySource,
             "the result must carry the original relative path of its source file");
-        hit.TotalChunks.ShouldBeGreaterThanOrEqualTo(2, "ADR-0011 is chunked into several sections");
+        hit.TotalChunks.ShouldBeGreaterThanOrEqualTo(2, "the expected ADR is chunked into several sections");
         hit.ChunkIndex.ShouldBeInRange(0, hit.TotalChunks - 1, "ChunkIndex is 0-based within the source");
 
         foreach (var result in results.Where(r => r.SourceFile is not null))
@@ -94,24 +101,24 @@ public sealed class SourceIdentityTests : IDisposable
 
     /// <summary>S2 (docs/plans/retrieval-improvement-c.md §3 Wave 2): the Decision-chunk's own rank is logged, not asserted — Wave 6's dual-vector structure signal is the target for that.</summary>
     [Fact]
-    public async Task S2_WhatDoesAdr0011Decide_FindsAdr0011WithinTop3_AndLogsDecisionChunkRank()
+    public async Task S2_SectionQuery_FindsItsFileWithinTop3_AndLogsDecisionChunkRank()
     {
         var hashMap = _hashMap;
 
-        var results = (await _store.SearchAsync(new SearchQuery(ProjectId, "What does ADR-0011 decide?",
+        var results = (await _store.SearchAsync(new SearchQuery(ProjectId, "What does ADR-0006 decide?",
             SearchScope.Project, Limit: 20, MinRelativeScore: 0.0), TestContext.Current.CancellationToken)).Results;
 
-        var (fileHit, fileRank) = FindRank(results, r => string.Equals(r.SourceFile, Adr0011Source, StringComparison.Ordinal));
-        fileHit.ShouldNotBeNull("S2: a chunk of ADR-0011 must appear in the top 20");
-        fileRank.ShouldBeInRange(1, 3, "S2 gate: ADR-0011 at rank <= 3 (source-column fix)");
+        var (fileHit, fileRank) = FindRank(results, r => string.Equals(r.SourceFile, AdrSource, StringComparison.Ordinal));
+        fileHit.ShouldNotBeNull("S2: a chunk of the expected ADR must appear in the top 20");
+        fileRank.ShouldBeInRange(1, 3, "S2 gate: the expected ADR at rank <= 3 (source-column fix)");
 
-        var (decisionHit, decisionRank) = FindRank(results, r => r.Hash == hashMap[Adr0011Decision]);
+        var (decisionHit, decisionRank) = FindRank(results, r => r.Hash == hashMap[AdrDecision]);
         _output.WriteLine($"S2: Decision-section chunk at hybrid rank {(decisionHit is null ? "not found" : decisionRank.ToString())} (Wave 6 target: <= 3)");
     }
 
     /// <summary>Q2 (docs/plans/retrieval-improvement-c.md §3 Wave 2): the decision chunk's rank is logged, not asserted — the header chunk legitimately outranks it for a bare identifier.</summary>
     [Fact]
-    public async Task Q2_IdentifierOnly_Adr0070_FtsOnlyFileRankWithinTop3()
+    public async Task Q2_IdentifierOnly_FtsOnlyFileRankWithinTop3()
     {
         var hashMap = _hashMap;
 
@@ -119,11 +126,11 @@ public sealed class SourceIdentityTests : IDisposable
                 SearchScope.Project, Limit: 10, MinRelativeScore: 0.0, FtsWeight: 1, VectorWeight: 0),
             TestContext.Current.CancellationToken)).Results;
 
-        var (fileHit, fileRank) = FindRank(results, r => string.Equals(r.SourceFile, Adr0070Source, StringComparison.Ordinal));
+        var (fileHit, fileRank) = FindRank(results, r => string.Equals(r.SourceFile, IdentifierAdrSource, StringComparison.Ordinal));
         fileHit.ShouldNotBeNull("Q2: a chunk of ADR-0070 must appear in the FTS-only top 10");
         fileRank.ShouldBeInRange(1, 3, "Q2 gate: ADR-0070 at FTS-only rank <= 3 (source-column fix)");
 
-        var (decisionHit, decisionRank) = FindRank(results, r => r.Hash == hashMap[Adr0070Decision]);
+        var (decisionHit, decisionRank) = FindRank(results, r => r.Hash == hashMap[IdentifierAdrDecision]);
         _output.WriteLine($"Q2: Decision-section chunk at FTS-only rank {(decisionHit is null ? "not found" : decisionRank.ToString())}");
     }
 
@@ -138,23 +145,26 @@ public sealed class SourceIdentityTests : IDisposable
         var hashMap = _hashMap;
 
         var results = (await _store.SearchAsync(new SearchQuery(ProjectId,
-            "docs/adr/0011-frontend-chassis-stack.md#decision",
+            "docs/adr/0006-rrf-parameter-optimization.md#decision",
             SearchScope.Project, Limit: 5, MinRelativeScore: 0.0), TestContext.Current.CancellationToken)).Results;
 
-        var (hit, rank) = FindRank(results, r => r.Hash == hashMap[Adr0011Decision]);
+        var (hit, rank) = FindRank(results, r => r.Hash == hashMap[AdrDecision]);
         hit.ShouldNotBeNull("the anchored chunk must be found within the production Limit=5 window");
         rank.ShouldBe(1, "a source-path anchor names one chunk exactly; anything else means the " +
                          "anchor is not reaching the section column");
     }
 
     /// <summary>
-    ///     Gates re-pinned to the jsaa corpus (docs/work/archive/2026-08-06-baseline-repin-new-corpus.md):
-    ///     C1 holds hybrid rank 1; C5's floor is 5 (ADR content on secrets/config now outranks
-    ///     it). The pins are the measured no-regression floor, not an aspiration.
+    ///     Re-measured on the public docs corpus (ADR-0090). C1's floor moves 1 -> 3 and C5's
+    ///     stays 5. C1 is NOT a widened bound: on the jsaa corpus the TDD invariant was the only
+    ///     document that discussed testing policy, while this repo carries tdd-mandatory.md
+    ///     alongside minimal-test-runs.md, prove-the-check-fails.md and a testing-heavy CLAUDE.md,
+    ///     which legitimately share the top of that query. The pins are the measured
+    ///     no-regression floor, not an aspiration.
     /// </summary>
     [Theory]
-    [InlineData("Is TDD required?", InvariantTdd, 1)]
-    [InlineData("Are hardcoded secrets allowed?", InvariantSecrets, 5)]
+    [InlineData("Is TDD required?", InvariantTdd, 3)]
+    [InlineData("Must a check be seen failing before it counts?", InvariantProveCheck, 5)]
     public async Task InvariantQueries_C1C5_HoldMeasuredHybridRanks(string query, string expectedSource,
         int expectedRank)
     {
