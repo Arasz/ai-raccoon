@@ -19,10 +19,19 @@ namespace AiRaccoon.Infrastructure.Ingestion;
 ///     for the path that this ingest did not account for is a leftover of a previous chunking.
 ///     Empty when the path produced no memory chunks at all (ignored, hidden, or not a memory file).
 /// </param>
+/// <param name="CodeChunkHashes">
+///     Every code-corpus chunk hash this ingest wrote OR rediscovered unchanged (#436), same
+///     contract as <see cref="ChunkHashes" /> but for `code_entries`. <b>Null</b> — not an empty
+///     list — when the code chunker produced zero chunks for content that is NOT empty/whitespace-only:
+///     a stand-in chunker (e.g. `NoOpCodeChunker`) reporting zero chunks is not trustworthy
+///     information about the file's real chunk set, so a caller pruning by this must treat null as
+///     "leave code_entries alone" rather than "the current set is empty, delete everything".
+/// </param>
 public readonly record struct FileIngestResult(
     int RowsInserted,
     bool FingerprintEligible,
-    IReadOnlyList<string>? ChunkHashes = null);
+    IReadOnlyList<string>? ChunkHashes = null,
+    IReadOnlyList<string>? CodeChunkHashes = null);
 
 /// <summary>One walked file's current memory-corpus chunk set, so the caller can prune the rest.</summary>
 public readonly record struct WalkedFile(string Path, IReadOnlyList<string> ChunkHashes);
