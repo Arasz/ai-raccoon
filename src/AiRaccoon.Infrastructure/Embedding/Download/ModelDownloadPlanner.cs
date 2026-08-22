@@ -525,11 +525,19 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
         return outputs.FirstOrDefault() ?? string.Empty;
     }
 
+    /// <summary>The graph's pooled-embedding output name, distinct from
+    /// <paramref name="tokenEmbeddingsOutput" /> — a sole output serving both roles (the #470/#475
+    /// shape) is never returned here, even when it is literally named "sentence_embedding".</summary>
     private static string? SelectEmbeddingOutput(IReadOnlyList<string> outputs, string? tokenEmbeddingsOutput)
     {
         foreach (var name in outputs)
         {
-            if (name == "sentence_embedding" || (name.Contains("embedding", StringComparison.OrdinalIgnoreCase) && name != tokenEmbeddingsOutput))
+            if (name == tokenEmbeddingsOutput)
+            {
+                continue;
+            }
+
+            if (name == "sentence_embedding" || name.Contains("embedding", StringComparison.OrdinalIgnoreCase))
             {
                 return name;
             }
