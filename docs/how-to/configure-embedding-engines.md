@@ -121,6 +121,27 @@ configured independently of everything above — activating it never touches
 `embedding.provider`/`embedding.model`/`embedding.engine`, and vice versa.
 
 ```bash
+ai-raccoon model set code default
+```
+
+That is the whole recipe. It downloads `faxenoff/code-daemon-embed-v1` (187 MB) into
+`<data-root>/models/faxenoff__code-daemon-embed-v1` if it is not already there, and then
+activates it. Run it again later and it only re-activates — nothing is re-fetched.
+
+It is the one command every surface that can notice a missing code engine quotes: the
+`code engine not configured` search warning, `ai-raccoon doctor`, the MCP server
+instructions and the `memory_search` tool description all name this exact string
+(`CodeEngineSetup.DefaultModelCommand` — one constant, not six copies).
+
+**Why this one activates when `model download` never does.** `model download` is a fetch
+verb and stays one. `model set code default` lives in the `model set` family, which is the
+activating family, and it deliberately does both halves: the surfaces above have to hand a
+user something they can paste, and "download, then run a second command with a path you
+work out yourself" is a hint people do not complete (#422).
+
+The long way round still works, and is what you want for a non-default model:
+
+```bash
 ai-raccoon model download faxenoff/code-daemon-embed-v1
 ai-raccoon model set code local <data-root>/models/faxenoff__code-daemon-embed-v1
 ```
@@ -131,15 +152,13 @@ sentencepiece model file's own piece table instead (issue #417, verified against
 download) — still refusing, naming the missing piece, if a declared token isn't in that
 table (D1: never guessed).
 
-> **Separate, pre-existing gap:** the repo's `config.json` gives it a 512-token context
-> window, but the code corpus's chunker is hard-pinned to a 126-token budget (no
-> manifest-aware chunking yet, v2 — `SqliteCodeEngineStore.ActivateCodeEngineAsync`
-> refuses on purpose rather than silently over/under-filling every chunk). A plain
-> `model download` therefore writes a manifest that `model set code local` still
-> refuses, naming the mismatch. Until v2 lands, edit the downloaded
-> `ai-raccoon.manifest.json`'s `contextWindowTokens` down to `128` (as
-> `tests/AiRaccoon.Tests/Resources/ManifestFixtures/code-daemon-embed-v1.json` does) before
-> running `model set code local` — the rest of the recipe then works as documented.
+The code chunker's budget is 510 content tokens — the model's **measured** window (512)
+minus its two special tokens. Activation refuses a manifest whose window is *narrower* than
+that, because that engine would silently truncate every chunk at embed time; a *wider*
+window is accepted, since under-filled chunks cost recall, not correctness. (Until #422
+this gate demanded exactly 126 tokens, derived from an exploration note claiming a
+128-token cap the ONNX graph does not have, and the flagship model could not be activated
+without hand-editing its manifest. The measurement is on issue #422.)
 
 `vec_code` is a fixed `float[768]` index — unlike the memory engine, there is **no**
 dimension-reconcile phase, so `model set code local` refuses a manifest whose

@@ -9,6 +9,8 @@ using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Embedding.Download;
+using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Setup.Cli.Commands;
 
@@ -206,11 +208,46 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
     ///     fix up a wrong-dimension activation afterward — this is the only gate protecting it. A
     ///     missing/invalid manifest surfaces the loader's own actionable error unchanged.
     /// </summary>
-    public async Task<int> ModelSetCodeLocalAsync(ParseResult parseResult, ICodeEngineStore codeEngine,
+    public Task<int> ModelSetCodeLocalAsync(ParseResult parseResult, ICodeEngineStore codeEngine,
+        StandardStreams streams, CancellationToken cancellationToken) =>
+        ActivateCodeDirectoryAsync(Path.GetFullPath(ExpandTilde(parseResult.GetValue<string>("dir"))!),
+            codeEngine, streams, cancellationToken);
+
+    /// <summary>
+    ///     #422: `model set code default` is the one command every "no code engine" surface quotes.
+    ///     It downloads <see cref="CodeEngineSetup.DefaultModelRepoId" /> into the usual
+    ///     <c>&lt;data-root&gt;/models/&lt;slug&gt;</c> when it is not already there, then activates
+    ///     it — deliberately both halves, because a hint that leaves the reader to construct a path
+    ///     for a second command is one nobody completes. An already-downloaded directory is
+    ///     re-activated without re-fetching 187 MB.
+    /// </summary>
+    internal async Task<int> ModelSetCodeDefaultAsync(ModelDownloadCommands modelDownload,
+        ICodeEngineStore codeEngine, string dataRoot, StandardStreams streams, CancellationToken cancellationToken)
+    {
+        Guard.IsNotNullOrWhiteSpace(dataRoot);
+        var targetDir = Path.GetFullPath(Path.Combine(dataRoot, "models",
+            ModelSlug.Sanitize(CodeEngineSetup.DefaultModelRepoId)));
+
+        if (File.Exists(Path.Combine(targetDir, EmbeddingManifest.FileName)))
+        {
+            await streams.WriteOutputLineAsync(
+                $"{CodeEngineSetup.DefaultModelRepoId} is already downloaded at {targetDir}; activating it");
+        }
+        else
+        {
+            var exit = await modelDownload.DownloadDefaultCodeModelAsync(targetDir, streams, cancellationToken);
+            if (exit != ExitCode.Success)
+            {
+                return exit;
+            }
+        }
+
+        return await ActivateCodeDirectoryAsync(targetDir, codeEngine, streams, cancellationToken);
+    }
+
+    private async Task<int> ActivateCodeDirectoryAsync(string fullPath, ICodeEngineStore codeEngine,
         StandardStreams streams, CancellationToken cancellationToken)
     {
-        var fullPath = Path.GetFullPath(ExpandTilde(parseResult.GetValue<string>("dir"))!);
-
         var descriptor = new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator())
             .Load(fullPath);
         if (descriptor.Dimensions != CodeCorpusSchema.EmbeddingDimensions)

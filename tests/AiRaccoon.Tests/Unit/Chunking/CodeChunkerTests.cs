@@ -55,7 +55,7 @@ public sealed class CodeChunkerTests
     private static int BraceBalance(string text) => text.Count(c => c == '{') - text.Count(c => c == '}');
 
     [Fact]
-    public void Chunk_NoChunkExceedsThe126TokenBudget()
+    public void Chunk_NoChunkExceedsTheBudget()
     {
         var lines = new List<string>
         {
@@ -82,18 +82,22 @@ public sealed class CodeChunkerTests
         chunks.ShouldAllBe(c => CharCount(c.Text) <= CodeChunker.DefaultBudget);
     }
 
+    /// <summary>#422: the budget is the model's MEASURED window minus the reservation — 510, not
+    /// the 126 the exploration spike's 128-token claim produced, and not the memory chunker's 254.</summary>
     [Fact]
     public void Budget_IsCtxMinusTwo_NotTheMemory254()
     {
-        CodeChunker.DefaultBudget.ShouldBe(126,
-            "code-daemon-embed-v1: ctx 128 - reservation 2 (plan §12.1 H3)");
+        CodeChunker.DefaultBudget.ShouldBe(510,
+            "code-daemon-embed-v1: measured ctx 512 - reservation 2 (#422)");
         CodeChunker.DefaultBudget.ShouldNotBe(254, "254 is the memory bundled-model budget, not code's");
+        CodeChunker.DefaultBudget.ShouldNotBe(126,
+            "126 came from the spike's '128-token hard cap', which the graph contradicts");
 
-        var overBudget = Chunker(CodeChunker.DefaultBudget).Chunk(new string('x', 200) + "\n");
-        overBudget.Count.ShouldBeGreaterThanOrEqualTo(2, "a 200-char line exceeds the 126 budget and must split");
+        var overBudget = Chunker(CodeChunker.DefaultBudget).Chunk(new string('x', 800) + "\n");
+        overBudget.Count.ShouldBeGreaterThanOrEqualTo(2, "an 800-char line exceeds the 510 budget and must split");
 
-        var underBudget = Chunker(CodeChunker.DefaultBudget).Chunk(new string('y', 120) + "\n");
-        underBudget.Count.ShouldBe(1, "a 120-char line fits the 126 budget in one chunk");
+        var underBudget = Chunker(CodeChunker.DefaultBudget).Chunk(new string('y', 500) + "\n");
+        underBudget.Count.ShouldBe(1, "a 500-char line fits the 510 budget in one chunk");
     }
 
     [Fact]
@@ -121,7 +125,9 @@ public sealed class CodeChunkerTests
         var lines = new List<string> { "a();", "b();", new string('z', 300), "c();" };
         var text = string.Join('\n', lines) + "\n";
 
-        var chunks = Chunker(CodeChunker.DefaultBudget).Chunk(text);
+        // Its own budget, not DefaultBudget: this pins hard-split line accounting, and a budget wide
+        // enough to swallow the long line would leave the split path untested while still passing.
+        var chunks = Chunker(126).Chunk(text);
 
         var allLineNumbers = chunks
             .SelectMany(c => Enumerable.Range(c.LineStart, c.LineEnd - c.LineStart + 1))
@@ -173,10 +179,12 @@ public sealed class CodeChunkerTests
     {
         var text = new string('x', 300) + "\n";
 
-        var chunks = Chunker(CodeChunker.DefaultBudget).Chunk(text);
+        // See the note in Chunk_LineRanges_WithAHardSplitLine: the split path needs a budget the
+        // fixture actually overflows, independent of what DefaultBudget happens to be.
+        var chunks = Chunker(126).Chunk(text);
 
         chunks.Count.ShouldBeGreaterThanOrEqualTo(3);
-        chunks.ShouldAllBe(c => CharCount(c.Text) <= CodeChunker.DefaultBudget);
+        chunks.ShouldAllBe(c => CharCount(c.Text) <= 126);
         string.Concat(chunks.Select(c => c.Text)).ShouldBe(text,
             "concatenating chunk values must reproduce the original line");
         chunks.ShouldAllBe(c => c.LineStart == 1 && c.LineEnd == 1,

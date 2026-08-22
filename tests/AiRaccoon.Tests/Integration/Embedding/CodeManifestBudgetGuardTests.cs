@@ -9,20 +9,22 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration.Embedding;
 
 /// <summary>
-///     H3 guard (docs/work/2026-08-21-code-search-implementation-plan.md §12.1; contracts
-///     `.ai-badger/task-tracking/code-mem-implementation-wave3-contracts.md` "Budget rule"): the
-///     engine plan's narrative text pins a flat 510-token cap, but the implemented rule is
-///     min(510, ctx − reservation). A 128-ctx manifest — code-daemon-embed-v1's own context
-///     window — MUST resolve to budget 126, never 510: this pin guards
-///     <see cref="AiRaccoon.Infrastructure.Chunking.CodeChunker" />'s budget source against a
-///     future re-derivation from the stale plan text.
+///     The code chunk budget's source of truth (#422, re-measured 2026-08-22). The budget rule is
+///     min(510, ctx − reservation); what was wrong before was the ctx it was fed. The exploration
+///     spike recorded a "hard 128-token cap" for code-daemon-embed-v1 and the fixture manifest was
+///     hand-written to agree with it, so constant and fixture drifted together and nothing noticed.
+///     The graph says otherwise: a 514-row position table, positions starting at padding_idx + 1,
+///     512 tokens accepted and 513 a hard Gather failure — pinned by
+///     <see cref="CodeModelGraphWindowTests" /> against the real weights.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class CodeManifestBudgetGuardTests
 {
+    /// <summary>The rule is ctx-aware, not a flat cap: a genuinely narrow model still resolves
+    /// below 510. Kept as the formula's pin now that code-daemon is no longer the narrow case.</summary>
     [Fact]
-    public void ResolveChunkBudgetFor_128CtxManifest_Resolves126_NotTheFlat510()
+    public void ResolveChunkBudgetFor_ANarrow128CtxManifest_Resolves126_NotTheFlat510()
     {
         var dir = WriteManifestDir(128);
         var service = new EmbeddingService(new FakeLogger<EmbeddingService>(), new LocalTokenizer(),
@@ -54,6 +56,9 @@ public sealed class CodeManifestBudgetGuardTests
 
         derived.ShouldBe(CodeChunker.DefaultBudget,
             "CodeChunker.DefaultBudget must never drift from the manifest-driven formula it hard-codes");
+        derived.ShouldBe(EmbeddingService.MaxManifestChunkTokens,
+            "code-daemon-embed-v1's measured 512-token window minus the 2-token reservation is 510 — the "
+            + "cap and the ctx-derived budget coincide for this model, so neither can hide a change in the other");
     }
 
     private static string SeedFixtureManifestDir()

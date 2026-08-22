@@ -531,3 +531,19 @@ recorded dispositions:
   scan's final re-read and slot release is dropped, not queued — Wave-3 WP4-polish item.
 - **`kind=both` metrics row** records a query hash while `kind=code` records nothing —
   asymmetry resolved in the S6 fix (see code); correlationId omitted for code/both envelopes.
+
+## Amendments
+
+### 2026-08-22 — chunk budget 126 → 510 (issue #422, PR #453)
+
+**What was wrong:** §3.4/§12.1 H3 and the WP2/WP5 rows derive the code chunk budget from
+code-daemon-embed-v1's "128-token hard cap", taken from
+`docs/work/2026-08-21-code-search-exploration.md` §1. That cap is not real — the ONNX graph accepts
+512 tokens and fails at 513, and it attends to content past token 128. Measurement and method are
+on issue #422; the source document carries its own amendment.
+
+**What it changed:** `CodeChunker.DefaultBudget` is 510 (`min(510, 512 − 2)`, derived from
+`EmbeddingService.MaxManifestChunkTokens` rather than restated), the code-section query trim is 510,
+and `SqliteCodeEngineStore.ActivateCodeEngineAsync` refuses a manifest *narrower* than the chunker's
+budget instead of requiring exact equality with it. Every `126` and `128` in the body text above is
+historical.
