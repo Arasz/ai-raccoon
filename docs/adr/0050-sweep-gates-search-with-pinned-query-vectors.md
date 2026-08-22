@@ -2,7 +2,10 @@
 
 Date: 2026-08-14
 
-Status: Accepted
+Status: Accepted — the decision stands; the pinned values were regenerated at ADR-0090.
+`gate-query-vectors.json` carries query text and embeddings only, never document text, so the
+mechanism ported unchanged when the corpus was replaced; its 44 vectors were re-derived on
+arm64 for the new query catalog.
 
 ## Context
 

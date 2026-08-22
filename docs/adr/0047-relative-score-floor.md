@@ -2,7 +2,10 @@
 
 Date: 2026-08-14
 
-Status: Accepted
+Status: Accepted — the decision stands; the measurement behind it is historical.
+The "10 of 44 baseline queries truncated at limit 20" figure was measured on the private
+jsaa corpus, which left the repository at ADR-0090. The floor's behaviour is still gated on
+the public corpus (`RelativeScoreFloorTests`); the specific counts are not reproducible here.
 
 Supersedes the "minScore semantics — unchanged" section of
 [0006 — RRF parameter optimization](0006-rrf-parameter-optimization.md).
