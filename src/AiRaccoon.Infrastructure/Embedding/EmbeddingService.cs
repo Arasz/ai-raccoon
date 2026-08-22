@@ -283,17 +283,28 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
     {
         if (string.IsNullOrWhiteSpace(rawSetting))
         {
-            return Math.Max(1, coreCount / 2);
+            return HalvedCoreThreadDefault(coreCount);
         }
 
-        if (int.TryParse(rawSetting, NumberStyles.Integer, CultureInfo.InvariantCulture, out var threads) && threads >= 0)
+        if (TryParseThreadsSetting(rawSetting, out var threads))
         {
             return threads;
         }
 
         Log.InvalidThreadsSetting(_logger, rawSetting);
-        return Math.Max(1, coreCount / 2);
+        return HalvedCoreThreadDefault(coreCount);
     }
+
+    /// <summary>The halving rule alone (#522): shared by <see cref="ResolveThreadCount" /> and doctor's threads line, so the default is computed in exactly one place.</summary>
+    internal static int HalvedCoreThreadDefault(int coreCount) => Math.Max(1, coreCount / 2);
+
+    /// <summary>True when <paramref name="rawSetting" /> is a usable explicit thread count (0 = ORT default); shared with doctor (#522).</summary>
+    internal static bool TryParseThreadsSetting(string? rawSetting, out int threads) =>
+        int.TryParse(rawSetting, NumberStyles.Integer, CultureInfo.InvariantCulture, out threads) && threads >= 0;
+
+    /// <summary>#522: "setting" when <paramref name="rawSetting" /> resolved to an explicit value, else the halved-core default was used.</summary>
+    internal static string ThreadCountSource(string? rawSetting) =>
+        TryParseThreadsSetting(rawSetting, out _) ? "setting" : "halved-core default";
 
     private IEmbeddingGenerator<string, Embedding<float>> CreateLocal(EmbeddingSettings settings)
     {
@@ -307,6 +318,7 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
             ? BundledModel.ResolveModelPath()
             : Path.GetFullPath(settings.Model);
 
+        OnnxEmbeddingGenerator generator;
         if (Directory.Exists(modelPath))
         {
             // Directory activation (M3): a directory REQUIRES a manifest — only the legacy
@@ -314,20 +326,27 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
             // drain reconciles vec0 to the engine's dimension before writing (WP4/D3).
             var descriptor = manifestDescriptor.Load(modelPath);
             var tokenizer = ResolveManifestTokenizer(modelPath)!;
-            return new OnnxEmbeddingGenerator(Path.Combine(modelPath, descriptor.OnnxModelFile), tokenizer, descriptor, _logger, threads);
+            generator = new OnnxEmbeddingGenerator(Path.Combine(modelPath, descriptor.OnnxModelFile), tokenizer, descriptor, _logger, threads);
         }
-
-        // Fail fast on a missing/name-shaped path instead of a cryptic ONNX NoSuchFile error.
-        if (!File.Exists(modelPath))
+        else
         {
-            throw new InvalidOperationException(
-                $"Configured embedding model '{modelPath}' does not exist (it may be a model name, not a path; ~ is not expanded). " +
-                "Run 'ai-raccoon model set local' for the bundled model, or 'ai-raccoon model set local <path-to-onnx>' for a custom path.");
+            // Fail fast on a missing/name-shaped path instead of a cryptic ONNX NoSuchFile error.
+            if (!File.Exists(modelPath))
+            {
+                throw new InvalidOperationException(
+                    $"Configured embedding model '{modelPath}' does not exist (it may be a model name, not a path; ~ is not expanded). " +
+                    "Run 'ai-raccoon model set local' for the bundled model, or 'ai-raccoon model set local <path-to-onnx>' for a custom path.");
+            }
+
+            var bundledTokenizer = _tokenizers.GetOrAdd("bundled",
+                _ => WordPieceEmbeddingTokenizer.Create(BundledModel.ResolveVocabPath()));
+            generator = new OnnxEmbeddingGenerator(modelPath, bundledTokenizer, BundledDescriptor, _logger, threads);
         }
 
-        var bundledTokenizer = _tokenizers.GetOrAdd("bundled",
-            _ => WordPieceEmbeddingTokenizer.Create(BundledModel.ResolveVocabPath()));
-        return new OnnxEmbeddingGenerator(modelPath, bundledTokenizer, BundledDescriptor, _logger, threads);
+        // #522: the only observable confirmation that the resolved thread count took effect —
+        // doctor shows what a setting resolves to, this shows what a real session was built with.
+        EmbeddingSessionLog.EmbeddingSessionCreated(_logger, generator.IntraOpThreads, ThreadCountSource(rawThreads));
+        return generator;
     }
 
     private IEmbeddingTokenizer? ResolveManifestTokenizer(string? model)
@@ -409,5 +428,20 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
                       + "Using max(1, logicalCores/2) instead.")]
         public static partial void InvalidThreadsSetting(ILogger logger, string value);
     }
+}
 
+/// <summary>
+///     #522: EventId 426, its own owner block. `OnnxEmbeddingGenerator` (414-415, 417) and
+///     `EmbeddingService` (418-419) are both wedged against their neighbours (416 retired,
+///     420-425 taken by `NoOpCodeChunker`/`CodeEmbedder`/`ManifestPoolingRepair`) — neither block
+///     could grow without its range engulfing another owner's, which
+///     <c>LoggerMessageEventIdTests.EventIdBlocks_DoNotInterleaveBetweenOwners</c> forbids. A
+///     dedicated single-id owner, immediately after that cluster, avoids renumbering any of them.
+///     See docs/reference/logging-event-ids.md.
+/// </summary>
+internal static partial class EmbeddingSessionLog
+{
+    [LoggerMessage(EventId = 426, Level = LogLevel.Information,
+        Message = "Embedding session created: intra-op threads {Threads} ({Source})")]
+    public static partial void EmbeddingSessionCreated(ILogger logger, int threads, string source);
 }
