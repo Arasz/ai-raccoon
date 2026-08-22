@@ -13,10 +13,10 @@
         <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="2.2.0"/>
         <PackageVersion Include="JetBrains.Annotations" Version="2026.2.0"/>
         <!-- encryption-at-rest: SQLitePCLRaw's own encryption bundles (e_sqlite3mc) are deprecated since 3.0;
-                         SQLite3MC.PCLRaw.bundle (utelle) is the maintained train and needs core >= 3.0.2. The provider is
-                         set explicitly in SqliteEncryptionInit; Microsoft.Data.Sqlite.Core (not the full package, which
-                         drags the deprecated bundle_e_sqlite3) is used so this bundle is the only native SQLite in the graph. -->
-        <PackageVersion Include="NSubstitute" Version="6.0.0"/>
+                             SQLite3MC.PCLRaw.bundle (utelle) is the maintained train and needs core >= 3.0.2. The provider is
+                             set explicitly in SqliteEncryptionInit; Microsoft.Data.Sqlite.Core (not the full package, which
+                             drags the deprecated bundle_e_sqlite3) is used so this bundle is the only native SQLite in the graph. -->
+        <PackageVersion Include="NSubstitute" Version="6.2.0"/>
         <PackageVersion Include="SQLite3MC.PCLRaw.bundle" Version="2.4.0"/>
         <PackageVersion Include="SQLitePCLRaw.core" Version="3.0.5"/>
         <PackageVersion Include="Dapper" Version="2.1.79"/>
@@ -39,12 +39,12 @@
         <PackageVersion Include="Polly.Core" Version="8.7.0"/>
         <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.9.0"/>
         <PackageVersion Include="OpenAI" Version="2.12.0"/>
-        <PackageVersion Include="AWSSDK.S3" Version="4.0.102.2"/>
+        <PackageVersion Include="AWSSDK.S3" Version="4.0.102.3"/>
         <PackageVersion Include="Azure.Identity" Version="1.21.0"/>
         <PackageVersion Include="Azure.Storage.Blobs" Version="12.29.1"/>
-        <PackageVersion Include="OpenTelemetry" Version="1.17.0"/>
-        <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0"/>
-        <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0"/>
+        <PackageVersion Include="OpenTelemetry" Version="1.18.0"/>
+        <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.18.0"/>
+        <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.18.0"/>
         <PackageVersion Include="System.CommandLine" Version="2.0.11"/>
         <PackageVersion Include="System.Numerics.Tensors" Version="10.0.11"/>
     </ItemGroup>

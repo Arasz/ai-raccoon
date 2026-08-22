@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
 using AiRaccoon.Infrastructure.Options;

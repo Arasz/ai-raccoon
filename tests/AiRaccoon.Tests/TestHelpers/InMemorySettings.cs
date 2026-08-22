@@ -1,8 +1,7 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
-using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Infrastructure.Watch;
+using AiRaccoon.Core.Watch;
 
 namespace AiRaccoon.Tests.TestHelpers;
 

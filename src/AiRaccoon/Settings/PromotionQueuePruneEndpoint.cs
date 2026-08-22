@@ -1,5 +1,5 @@
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Hosting.Node;
-using AiRaccoon.Infrastructure.Sqlite;
 
 namespace AiRaccoon.Settings;
 
