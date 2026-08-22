@@ -519,6 +519,14 @@ internal static class MemorySchema
     /// </summary>
     internal static readonly AsyncLocal<Func<CancellationToken, Task>?> TestOnlyAfterDdlHookAsync = new();
 
+    /// <summary>
+    ///     Test seam only: when true for the calling async flow, forces this open's ladder to report
+    ///     unhealthy without engineering a genuine dedupe failure — lets a test pin "the digest and
+    ///     version stamps only land when the ladder actually finished". Same <see cref="AsyncLocal{T}" />
+    ///     rationale as <see cref="TestOnlyAfterDdlHookAsync" />. False (no-op) in production.
+    /// </summary>
+    internal static readonly AsyncLocal<bool> TestOnlyForceUnhealthyLadder = new();
+
     private static readonly Regex VecDimensionPattern = new(@"float\[(\d+)\]", RegexOptions.Compiled);
 
     private static int ComputeSchemaDigest()
@@ -642,8 +650,8 @@ internal static class MemorySchema
         // that silently failed would never retry it. The v1 step must run — and its dedupe
         // complete — before the v2 step, or chunk-column numbering bakes in rows the dedupe
         // would have deleted (docs/plans/2026-08-08-search-knn-perf.md).
-        var healthy = true;
-        if (storedVersion < 1)
+        var healthy = !TestOnlyForceUnhealthyLadder.Value;
+        if (healthy && storedVersion < 1)
         {
             healthy = await MigrateToV1Async(connection, cancellationToken).ConfigureAwait(false);
         }
