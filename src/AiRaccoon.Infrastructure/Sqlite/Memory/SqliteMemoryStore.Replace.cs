@@ -1,5 +1,6 @@
 using Dapper;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Infrastructure.Sqlite.Memory;
 
@@ -165,6 +166,10 @@ public sealed partial class SqliteMemoryStore
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
 
+        // WP11 Finding (b): which writer holds the bank's write lock long enough for another one
+        // to time out at 5s was not established from the log alone — this is the instrumentation
+        // that answers it, a logged value, never a threshold assertion.
+        var heldFrom = timeProvider.GetTimestamp();
         await connection.ExecuteAsync(
                 new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
             .ConfigureAwait(false);
@@ -175,6 +180,7 @@ public sealed partial class SqliteMemoryStore
                 await connection.ExecuteAsync(
                         new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
                     .ConfigureAwait(false);
+                Log.TransactionHeld(logger, timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds, 0);
                 return (false, 0);
             }
 
@@ -222,6 +228,7 @@ public sealed partial class SqliteMemoryStore
             await connection.ExecuteAsync(
                     new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
+            Log.TransactionHeld(logger, timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds, ingestResult.RowsInserted);
             return (true, ingestResult.RowsInserted);
         }
         catch
@@ -231,5 +238,12 @@ public sealed partial class SqliteMemoryStore
                 .ConfigureAwait(false);
             throw;
         }
+    }
+
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 1002, Level = LogLevel.Information,
+            Message = "Replace-by-path transaction held the write lock for {ElapsedMs:F1} ms ({Rows} row(s) written)")]
+        public static partial void TransactionHeld(ILogger logger, double elapsedMs, int rows);
     }
 }
