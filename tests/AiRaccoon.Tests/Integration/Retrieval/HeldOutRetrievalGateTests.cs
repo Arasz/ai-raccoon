@@ -35,7 +35,7 @@ public sealed class HeldOutRetrievalGateTests : IDisposable
     private static readonly Dictionary<string, double> HeldOutNdcg5Floor = new(StringComparer.Ordinal)
     {
         ["A8"] = 0.131205,
-        ["A9"] = 0.999999, // TEMPORARY: deliberately broken to prove build-nightly-gates goes RED (Q2 gate proof) — revert before merge
+        ["A9"] = 0.553146,
         ["A10"] = 0.169580
     };
 
