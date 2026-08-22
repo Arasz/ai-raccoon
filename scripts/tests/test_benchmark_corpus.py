@@ -1,15 +1,18 @@
-"""Pin CURRENT benchmark-corpus behavior (scripts/generate-benchmark-corpus.py) — byte-identical move.
+"""Pin benchmark-corpus generator behavior (scripts/src/benchmark_corpus.py, ai-raccoon#455).
 
-Expected values derived by executing the legacy script on these fixtures
-(see docs/plans/scripts-refactor.md §5 P6, behavior-pinning derivation).
+The corpus source moved from three private/mixed-visibility repositories to this repository's own
+public docs, following the ADR-0090 precedent. These tests pin the pure extraction/formatting
+helpers (unchanged since the private-source version) and the new single-root collection +
+query-derivation behavior.
 """
 
 import os
 
 from benchmark_corpus import (
+    CLUSTER_QUESTIONS,
     MAX_BODY_CHARS,
-    OUT,
-    REPOS,
+    ROOT_ENV,
+    TOPICS,
     body_excerpt,
     build_queries,
     collect_docs,
@@ -17,20 +20,39 @@ from benchmark_corpus import (
     csharp_string,
     emit_cs,
     first_heading,
+    repo_root,
     safe_id,
     strip_md,
 )
 
 
 class TestConstants:
-    def test_hardcoded_paths_preserved_verbatim(self):
-        assert REPOS == {
-            "jsaa": "/Users/arasz/RiderProjects/job-search-ai-assistant",
-            "badger": "/Users/arasz/RiderProjects/ai-badger",
-            "home": "/Users/arasz/RiderProjects/arasz-home-page",
-        }
-        assert OUT == "/Users/arasz/RiderProjects/ai-raccoon/benchmarks/AiRaccoon.Benchmarks/Corpus"
+    def test_no_hardcoded_private_path(self):
+        # ai-raccoon#455: benchmark_corpus.py used to hardcode a REPOS dict mapping short keys
+        # to three absolute private-checkout paths, plus an absolute OUT path. Neither
+        # module-level constant exists any more — the source root resolves at call time via
+        # repo_root() (env var or auto-detection).
+        import benchmark_corpus
+
+        assert not hasattr(benchmark_corpus, "REPOS")
+        assert not hasattr(benchmark_corpus, "OUT")
+
+    def test_max_body_chars_unchanged(self):
         assert MAX_BODY_CHARS == 420
+
+    def test_root_env_var_name(self):
+        assert ROOT_ENV == "AIRACCOON_BENCHMARK_CORPUS_ROOT"
+
+
+class TestRepoRoot:
+    def test_env_var_overrides(self, monkeypatch):
+        monkeypatch.setenv(ROOT_ENV, "/some/explicit/root")
+        assert repo_root() == "/some/explicit/root"
+
+    def test_auto_detects_this_checkout(self, monkeypatch):
+        monkeypatch.delenv(ROOT_ENV, raising=False)
+        root = repo_root()
+        assert os.path.isfile(os.path.join(root, "AiRaccoon.slnx"))
 
 
 class TestStripMd:
@@ -121,6 +143,9 @@ class TestSafeId:
     def test_truncated_at_70(self):
         assert safe_id("a" * 100) == "a" * 70
 
+    def test_path_like_stem(self):
+        assert safe_id("docs/adr/0090-public-docs-corpus") == "docs-adr-0090-public-docs-corpus"
+
 
 class TestCSharpLiteral:
     def test_quotes_use_three_delim(self):
@@ -145,208 +170,187 @@ class TestCSharpString:
         assert csharp_string('both "q" and \\') == '"both \\"q\\" and \\\\"'
 
 
-FAKE_REPO_FILES = {
-    "jsaa": {
-        "docs/adr/0083.md": "# Signal Sources Naming\n\nA decision to rename signal sources consistently across frontend and backend. This ADR records the rename and its rationale for future reference.\n",
-        "README.md": "# job-search-ai-assistant\n\nUses GitHub OAuth tokens and PATs for authentication; validates with FluentValidation. Tests follow TDD with a failing test first.\n",
-        ".remember/recent.md": "# Recent\n\nNotes about the signal sources rename and CI cost work today. Lots of small details and follow-ups.\n",
-    },
-    "badger": {
-        "docs/adr/0001-skills.md": "# Skill Adoption\n\nRepositories adopt ai-badger skills and execute them via the badger framework rather than storing them idle. Failing tests drive the work.\n",
-        "README.md": "# ai-badger\n\nExposes skills to assistants over the Model Context Protocol (MCP); secrets stay out of tracked files via Key Vault.\n",
-        ".remember/today-2026-08-01.done.md": "# Today\n\nDrove skill adoption work; fixed a validation bug; noted the event grid cost question for later.\n",
-    },
-    "home": {
-        "docs/adr/0002-identity.md": "# GitHub Identity\n\nProves a GitHub identity belongs to a person during sign-in using OAuth and PAT verification flows.\n",
-        "README.md": "# arasz-home-page\n\nPersonal site; chose Event Grid over Service Bus topics and Storage Queue for cost; uses UUID version 7 identifiers.\n",
-        ".remember/archive.md": "# Archive\n\nOld notes about durable functions and long-running workflow experiments.\n",
-    },
+# A small fixed doc set standing in for the corpus_config selection — collect_docs's
+# relative_paths override skips the real (git-backed) select() call so these tests stay hermetic.
+FAKE_ROOT_FILES = {
+    "docs/adr/0001-mcp-tools.md":
+        "# MCP Tool Surface\n\nThis server exposes its tools to AI assistants over the Model "
+        "Context Protocol; every tool maps 1:1 onto the backend API and holds no business logic.\n",
+    "docs/adr/0002-tdd.md":
+        "# TDD Is Mandatory\n\nA failing, behavior-focused test is written before any production "
+        "code change; TDD is not optional here and every PR is checked for it.\n",
+    ".ai-badger/invariants/guard-clauses.md":
+        "# Guard Clauses Over Hand-Rolled Null Checks\n\nA dedicated guard clause replaces ad hoc "
+        "null checks for argument validation, keeping the exception type and message consistent.\n",
+    "README.md":
+        "# ai-raccoon\n\nAn MCP server exposing agent memory over the Model Context Protocol; "
+        "built test-driven with a failing test first, always.\n",
 }
 
 
-def _make_fake_repos(tmp_path):
-    repos = {}
-    for name, files in FAKE_REPO_FILES.items():
-        root = str(tmp_path / name)
-        repos[name] = root
-        for rel, content in files.items():
-            p = os.path.join(root, rel)
-            os.makedirs(os.path.dirname(p), exist_ok=True)
-            with open(p, "w") as f:
-                f.write(content)
-    return repos
-
-
-# id, title, body, source, topics — derived from the legacy script.
-EXPECTED_DOCS = [
-    ("jsaa-adr-0083", "Signal Sources Naming",
-     "Signal Sources Naming A decision to rename signal sources consistently across frontend and backend. This ADR records the rename and its rationale for future reference.",
-     "jsaa:docs/adr/0083.md", ["ci-cost"]),  # quirk: "consistently" contains "ci" -> ci-cost keyword
-    ("jsaa-readme", "job-search-ai-assistant",
-     "job-search-ai-assistant Uses GitHub OAuth tokens and PATs for authentication; validates with FluentValidation. Tests follow TDD with a failing test first.",
-     "jsaa:README.md", ["github-auth", "tdd", "validation"]),
-    ("badger-adr-0001-skills", "Skill Adoption",
-     "Skill Adoption Repositories adopt ai-badger skills and execute them via the badger framework rather than storing them idle. Failing tests drive the work.",
-     "badger:docs/adr/0001-skills.md", ["ai-badger", "tdd"]),
-    ("badger-doc-readme", "ai-badger",
-     "ai-badger Exposes skills to assistants over the Model Context Protocol (MCP); secrets stay out of tracked files via Key Vault.",
-     "badger:README.md", ["ai-badger", "mcp", "security"]),
-    ("home-adr-0002-identity", "GitHub Identity",
-     "GitHub Identity Proves a GitHub identity belongs to a person during sign-in using OAuth and PAT verification flows.",
-     "home:docs/adr/0002-identity.md", ["github-auth"]),
-    ("home-doc-readme", "arasz-home-page",
-     "arasz-home-page Personal site; chose Event Grid over Service Bus topics and Storage Queue for cost; uses UUID version 7 identifiers.",
-     "home:README.md", ["ci-cost", "event-grid", "identity"]),
-    ("jsaa-remember-recent", "Recent",
-     "Recent Notes about the signal sources rename and CI cost work today. Lots of small details and follow-ups.",
-     "jsaa:.remember/recent.md", ["ci-cost"]),
-    ("badger-remember-today-2026-08-01-done", "Today",
-     "Today Drove skill adoption work; fixed a validation bug; noted the event grid cost question for later.",
-     "badger:.remember/today-2026-08-01.done.md", ["ci-cost", "event-grid", "validation"]),
-    ("home-remember-archive", "Archive",
-     "Archive Old notes about durable functions and long-running workflow experiments.",
-     "home:.remember/archive.md", ["ci-cost", "durable"]),
-]
+def _write_fake_root(tmp_path):
+    for rel, content in FAKE_ROOT_FILES.items():
+        p = tmp_path / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content)
+    return str(tmp_path), sorted(FAKE_ROOT_FILES)
 
 
 class TestCollectDocs:
-    def test_fake_repos_full_list(self, tmp_path):
-        docs = collect_docs(repos=_make_fake_repos(tmp_path))
-        got = [(d["id"], d["title"], d["body"], d["source"], d["topics"]) for d in docs]
-        assert got == EXPECTED_DOCS
+    def test_relative_paths_override_skips_selection(self, tmp_path):
+        root, paths = _write_fake_root(tmp_path)
+        docs = collect_docs(root=root, relative_paths=paths)
+        ids = [d["id"] for d in docs]
+        assert ids == sorted(ids)  # sorted by id
+        assert set(ids) == {
+            "ai-badger-invariants-guard-clauses",
+            "docs-adr-0001-mcp-tools",
+            "docs-adr-0002-tdd",
+            "readme",
+        }
+
+    def test_extracts_title_and_body(self, tmp_path):
+        root, paths = _write_fake_root(tmp_path)
+        docs = collect_docs(root=root, relative_paths=paths)
+        by_id = {d["id"]: d for d in docs}
+        mcp = by_id["docs-adr-0001-mcp-tools"]
+        assert mcp["title"] == "MCP Tool Surface"
+        assert mcp["source"] == "docs/adr/0001-mcp-tools.md"
+        assert mcp["body"].startswith("MCP Tool Surface This server exposes its tools")
+
+    def test_topics_are_keyword_verified(self, tmp_path):
+        root, paths = _write_fake_root(tmp_path)
+        docs = collect_docs(root=root, relative_paths=paths)
+        by_id = {d["id"]: d for d in docs}
+        assert "mcp" in by_id["docs-adr-0001-mcp-tools"]["topics"]
+        assert "tdd" in by_id["docs-adr-0002-tdd"]["topics"]
+        assert "guard-clauses" in by_id["ai-badger-invariants-guard-clauses"]["topics"]
 
     def test_short_docs_skipped(self, tmp_path):
-        # collect_docs requires all three repo keys and lists docs/adr
-        # unconditionally (current behavior); short files are skipped.
-        repos = {}
-        for name in ["jsaa", "badger", "home"]:
-            root = str(tmp_path / name)
-            repos[name] = root
-            os.makedirs(os.path.join(root, "docs/adr"), exist_ok=True)
-            p = os.path.join(root, "README.md")
-            with open(p, "w") as f:
-                f.write("# Tiny\n\nshort")  # < 60 chars -> skipped
-        assert collect_docs(repos=repos) == []
+        root = str(tmp_path)
+        p = tmp_path / "docs" / "adr" / "tiny.md"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("# Tiny\n\nshort")  # < 60 chars
+        assert collect_docs(root=root, relative_paths=["docs/adr/tiny.md"]) == []
 
-    def test_remember_notes_collected(self, tmp_path):
-        docs = collect_docs(repos=_make_fake_repos(tmp_path))
-        remember = [d["id"] for d in docs if "-remember-" in d["id"]]
-        assert remember == [
-            "jsaa-remember-recent",
-            "badger-remember-today-2026-08-01-done",
-            "home-remember-archive",
-        ]
+    def test_duplicate_ids_deduplicated(self, tmp_path):
+        root = str(tmp_path)
+        for rel in ("docs/a/x.md", "docs/b/x.md"):
+            p = tmp_path / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("# X\n\nBody text long enough to survive the sixty character filter easily.\n")
+        # both stems resolve to a distinct safe_id (a-x vs b-x) — no collision here, but the
+        # mechanism (seen dict, first write wins) is what test_relative_paths_override_skips_selection
+        # exercises indirectly; this pins that a genuine collision keeps only the first.
+        docs = collect_docs(root=root, relative_paths=["docs/a/x.md", "docs/a/x.md"])
+        assert len(docs) == 1
 
+    def test_excludes_docs_that_mention_the_private_repo_by_name(self, tmp_path):
+        # Some of this repository's own ADRs (0047/0049/0050/0090) legitimately discuss the
+        # removed private corpus by name as historical fact. They must not leak that name into
+        # the benchmark corpus (ai-raccoon#455) even though they are otherwise selected.
+        root = str(tmp_path)
+        p = tmp_path / "docs" / "adr" / "0090-history.md"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(
+            "# The Fixture Corpus Is This Repository's Own Public Docs\n\n"
+            "The bank was built from the private " + "job-search-ai-" + "assistant repository, "
+            "and it held a great deal of that project's prose before it was removed for good.\n"
+        )
+        assert collect_docs(root=root, relative_paths=["docs/adr/0090-history.md"]) == []
 
-EXPECTED_QUERIES = [
-    ("doc-badger-adr-0001-skills",
-     "What does the project decide or document about: Skill Adoption?",
-     ["badger-adr-0001-skills", "badger-doc-readme"],
-     "// judgment: query restates the decision/heading of badger-adr-0001-skills; same-topic docs keyword-verified"),
-    ("doc-home-adr-0002-identity",
-     "What does the project decide or document about: GitHub Identity?",
-     ["home-adr-0002-identity", "jsaa-readme"],
-     "// judgment: query restates the decision/heading of home-adr-0002-identity; same-topic docs keyword-verified"),
-    ("doc-jsaa-adr-0083",
-     "What does the project decide or document about: Signal Sources Naming?",
-     ["jsaa-adr-0083", "home-doc-readme"],
-     "// judgment: query restates the decision/heading of jsaa-adr-0083; same-topic docs keyword-verified"),
-    ("cluster-ai-badger",
-     "How does a repository adopt and execute ai-badger skills rather than just store them?",
-     ["badger-adr-0001-skills", "badger-doc-readme"],
-     "// judgment: all docs whose title/body covers 'ai-badger' were keyword-verified"),
-    ("cluster-github-auth",
-     "How is a GitHub identity proven to belong to a person during sign-in?",
-     ["jsaa-readme", "home-adr-0002-identity"],
-     "// judgment: all docs whose title/body covers 'github-auth' were keyword-verified"),
-    ("cluster-event-grid",
-     "Why was Event Grid chosen over Service Bus topics and Storage Queue?",
-     ["home-doc-readme"],
-     "// judgment: all docs whose title/body covers 'event-grid' were keyword-verified"),
-    ("cluster-ci-cost",
-     "How is CI spend kept under control in these repositories?",
-     ["jsaa-adr-0083", "home-doc-readme"],
-     "// judgment: all docs whose title/body covers 'ci-cost' were keyword-verified"),
-    ("cluster-validation",
-     "Which library is used to keep domain validation rules colocated with the models?",
-     ["jsaa-readme"],
-     "// judgment: all docs whose title/body covers 'validation' were keyword-verified"),
-    ("cluster-identity",
-     "What API generates time-ordered unique identifiers?",
-     ["home-doc-readme"],
-     "// judgment: all docs whose title/body covers 'identity' were keyword-verified"),
-    ("cluster-mcp",
-     "How does a server expose tools to AI assistants over the Model Context Protocol?",
-     ["badger-doc-readme"],
-     "// judgment: all docs whose title/body covers 'mcp' were keyword-verified"),
-    ("cluster-tdd",
-     "What rule governs when production code may be written relative to tests?",
-     ["jsaa-readme", "badger-adr-0001-skills"],
-     "// judgment: all docs whose title/body covers 'tdd' were keyword-verified"),
-    ("cluster-security",
-     "How are secrets kept out of tracked files and source control?",
-     ["badger-doc-readme"],
-     "// judgment: all docs whose title/body covers 'security' were keyword-verified"),
-    ("remember-signal-sources",
-     "What did the rename that made signal sources consistent across frontend and backend change?",
-     ["jsaa-adr-0083"],
-     "// judgment: derived from .remember note citing ADR-0083; verified by reading it"),
-]
+    def test_defaults_to_real_selection_and_root(self):
+        # No relative_paths override: collect_docs must call the real corpus_config selection
+        # against the real repo (repo_root() auto-detected). This is the path production uses.
+        docs = collect_docs()
+        assert len(docs) > 100  # ADR-0090 measured ~199-201 tracked docs in this tree
+        ids = {d["id"] for d in docs}
+        assert len(ids) == len(docs)  # every id unique
 
 
 class TestBuildQueries:
     def _docs(self, tmp_path):
-        return collect_docs(repos=_make_fake_repos(tmp_path))
+        root, paths = _write_fake_root(tmp_path)
+        return collect_docs(root=root, relative_paths=paths)
 
-    def test_deterministic_count_and_ids(self, tmp_path):
-        queries = build_queries(self._docs(tmp_path))
-        assert [q[0] for q in queries] == [q[0] for q in EXPECTED_QUERIES]
-        assert len(queries) == 13
+    def test_doc_derived_queries_sample_every_third(self, tmp_path):
+        docs = self._docs(tmp_path)
+        queries = build_queries(docs)
+        doc_queries = [q for q in queries if q[0].startswith("doc-")]
+        expected_ids = [f"doc-{d['id']}" for d in docs[::3]]
+        assert [q[0] for q in doc_queries] == expected_ids
 
-    def test_full_shape_matches_derived(self, tmp_path):
-        assert build_queries(self._docs(tmp_path)) == EXPECTED_QUERIES
+    def test_doc_query_relevance_includes_self(self, tmp_path):
+        docs = self._docs(tmp_path)
+        queries = build_queries(docs)
+        by_id = {q[0]: q for q in queries}
+        # Every 3rd doc (by sorted id) is sampled; with this 4-doc fixture that is index 0
+        # (ai-badger-invariants-guard-clauses) and index 3 (readme).
+        sampled_id = docs[0]["id"]
+        guard_query = by_id[f"doc-{sampled_id}"]
+        assert sampled_id in guard_query[2]
 
-    def test_durable_cluster_skipped_when_only_remember_docs(self, tmp_path):
-        # home-remember-archive is the only "durable" doc; remember docs are
-        # excluded from cluster relevance -> no durable query.
-        qids = [q[0] for q in build_queries(self._docs(tmp_path))]
-        assert "cluster-durable" not in qids
+    def test_cluster_query_present_when_topic_matched(self, tmp_path):
+        docs = self._docs(tmp_path)
+        queries = build_queries(docs)
+        qids = {q[0] for q in queries}
+        assert "cluster-mcp" in qids
+        assert "cluster-tdd" in qids
+        assert "cluster-guard-clauses" in qids
+
+    def test_cluster_query_absent_when_topic_unmatched(self, tmp_path):
+        # The fake fixture never mentions Key Vault / secrets, so "security" has no relevant doc.
+        docs = self._docs(tmp_path)
+        queries = build_queries(docs)
+        qids = {q[0] for q in queries}
+        assert "cluster-security" not in qids
+
+    def test_every_relevant_id_exists_in_docs(self, tmp_path):
+        docs = self._docs(tmp_path)
+        ids = {d["id"] for d in docs}
+        queries = build_queries(docs)
+        for _, _, relevant, _ in queries:
+            for r in relevant:
+                assert r in ids
+
+    def test_cluster_topics_all_have_a_question(self):
+        assert set(TOPICS) == set(CLUSTER_QUESTIONS)
 
 
 SMALL_DOCS = [
-    {"id": "jsaa-adr-0083", "title": "Signal Sources Naming",
-     "body": 'A decision to rename signal sources consistently across frontend and backend. Quotes "and" backslashes \\ live here.',
-     "source": "jsaa:docs/adr/0083.md", "topics": []},
-    {"id": "jsaa-readme", "title": "job-search-ai-assistant",
-     "body": "Uses GitHub OAuth tokens and PATs for authentication; validates with FluentValidation. Tests follow TDD with a failing test first.",
-     "source": "jsaa:README.md", "topics": ["github-auth", "tdd", "validation"]},
+    {"id": "docs-adr-0001-mcp-tools", "title": "MCP Tool Surface",
+     'body': 'Quotes "and" backslashes \\ live here, describing the MCP tool surface.',
+     "source": "docs/adr/0001-mcp-tools.md", "topics": ["mcp"]},
+    {"id": "readme", "title": "ai-raccoon",
+     "body": "An MCP server exposing agent memory over the Model Context Protocol.",
+     "source": "README.md", "topics": ["mcp"]},
 ]
 
 SMALL_QUERIES = [
-    ("doc-jsaa-adr-0083", "What does the project decide or document about: Signal Sources Naming?",
-     ["jsaa-adr-0083"],
-     "// judgment: query restates the decision/heading of jsaa-adr-0083; same-topic docs keyword-verified"),
-    ("cluster-github-auth", "How is a GitHub identity proven to belong to a person during sign-in?",
-     ["jsaa-readme"],
-     "// judgment: all docs whose title/body covers 'github-auth' were keyword-verified"),
+    ("doc-docs-adr-0001-mcp-tools", "What does the project decide or document about: MCP Tool Surface?",
+     ["docs-adr-0001-mcp-tools"],
+     "// judgment: query restates the decision/heading of docs-adr-0001-mcp-tools; same-topic docs keyword-verified"),
+    ("cluster-mcp", "How does this project expose tools to AI assistants over the Model Context Protocol?",
+     ["docs-adr-0001-mcp-tools", "readme"],
+     "// judgment: all docs whose title/body covers 'mcp' were keyword-verified"),
 ]
 
 EXPECTED_CORPUS = "\n".join([
-    "// AUTO-GENERATED from the real repositories (job-search-ai-assistant, ai-badger,",
-    "// arasz-home-page) + their .remember notes. Regenerate with scripts/generate-benchmark-corpus.py.",
+    "// AUTO-GENERATED from this repository's own public docs (ai-raccoon#455, ADR-0090).",
+    "// Regenerate with scripts/generate-benchmark-corpus.py.",
     "// Bodies are verbatim excerpts (2-4 sentences) from the source files.",
     "namespace AiRaccoon.Benchmarks.Corpus;",
     "",
-    "/// <summary>Real-world retrieval corpus: docs from the user's actual repositories.</summary>",
+    "/// <summary>Real-world retrieval corpus: this repository's own public documentation.</summary>",
     "public static class RealWorldCorpus",
     "{",
     "    public static IReadOnlyList<CorpusDocument> Documents { get; } =",
     "    [",
-    '        new("jsaa-adr-0083", "Signal Sources Naming", """',
-    'A decision to rename signal sources consistently across frontend and backend. Quotes "and" backslashes \\ live here.',
+    '        new("docs-adr-0001-mcp-tools", "MCP Tool Surface", """',
+    'Quotes "and" backslashes \\ live here, describing the MCP tool surface.',
     '"""),',
-    '        new("jsaa-readme", "job-search-ai-assistant", """',
-    "Uses GitHub OAuth tokens and PATs for authentication; validates with FluentValidation. Tests follow TDD with a failing test first.",
+    '        new("readme", "ai-raccoon", """',
+    "An MCP server exposing agent memory over the Model Context Protocol.",
     '"""),',
     "    ];",
     "}",
@@ -354,8 +358,8 @@ EXPECTED_CORPUS = "\n".join([
 ])
 
 EXPECTED_QUERIES_FILE = "\n".join([
-    "// AUTO-GENERATED from the real repositories; each query carries a // judgment comment",
-    "// documenting how its relevance set was verified.",
+    "// AUTO-GENERATED from this repository's own public docs; each query carries a",
+    "// // judgment comment documenting how its relevance set was verified.",
     "using AiRaccoon.Benchmarks.Corpus;",
     "",
     "namespace AiRaccoon.Benchmarks.Corpus;",
@@ -365,14 +369,14 @@ EXPECTED_QUERIES_FILE = "\n".join([
     "{",
     "    public static IReadOnlyList<CorpusQuery> Queries { get; } =",
     "    [",
-    "        // judgment: query restates the decision/heading of jsaa-adr-0083; same-topic docs keyword-verified",
-    '        new("doc-jsaa-adr-0083", """',
-    "What does the project decide or document about: Signal Sources Naming?",
-    '""", ["jsaa-adr-0083"]),',
-    "        // judgment: all docs whose title/body covers 'github-auth' were keyword-verified",
-    '        new("cluster-github-auth", """',
-    "How is a GitHub identity proven to belong to a person during sign-in?",
-    '""", ["jsaa-readme"]),',
+    "        // judgment: query restates the decision/heading of docs-adr-0001-mcp-tools; same-topic docs keyword-verified",
+    '        new("doc-docs-adr-0001-mcp-tools", """',
+    "What does the project decide or document about: MCP Tool Surface?",
+    '""", ["docs-adr-0001-mcp-tools"]),',
+    "        // judgment: all docs whose title/body covers 'mcp' were keyword-verified",
+    '        new("cluster-mcp", """',
+    "How does this project expose tools to AI assistants over the Model Context Protocol?",
+    '""", ["docs-adr-0001-mcp-tools", "readme"]),',
     "    ];",
     "}",
     "",
@@ -397,3 +401,9 @@ class TestEmitCs:
         nested = str(tmp_path / "a" / "b")
         emit_cs(SMALL_DOCS, SMALL_QUERIES, out=nested)
         assert os.path.isfile(os.path.join(nested, "RealWorldCorpus.cs"))
+
+    def test_out_defaults_to_repo_root_benchmarks_corpus(self, monkeypatch, tmp_path):
+        monkeypatch.setenv(ROOT_ENV, str(tmp_path))
+        emit_cs(SMALL_DOCS, SMALL_QUERIES)
+        expected = tmp_path / "benchmarks" / "AiRaccoon.Benchmarks" / "Corpus" / "RealWorldCorpus.cs"
+        assert expected.is_file()

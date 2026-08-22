@@ -3,10 +3,13 @@
 
 Thin CLI wrapper over scripts/src/benchmark_corpus.py (see docs/plans/scripts-refactor.md §5 P6).
 
-Reads real markdown docs from the user's three repos (read-only), extracts
+Reads this repository's own public docs (ai-raccoon#455, ADR-0090 precedent), extracts
 title + a short verbatim body per doc, and emits two C# files:
   - Corpus/RealWorldCorpus.cs  (documents)
   - Corpus/RealWorldQueries.cs (queries with honest ground-truth judgments)
+
+Reproducible from a fresh clone with no configuration; set AIRACCOON_BENCHMARK_CORPUS_ROOT to
+point at a different checkout.
 """
 
 import sys
