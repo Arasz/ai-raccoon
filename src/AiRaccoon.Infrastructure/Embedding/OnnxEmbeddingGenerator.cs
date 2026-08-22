@@ -32,8 +32,7 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     private readonly string _pooling;
     private readonly string _normalization;
     private readonly IReadOnlyList<string> _inputNames;
-    private readonly string _tokenEmbeddingsOutput;
-    private readonly string? _embeddingOutput;
+    private readonly string _outputName;
 
     /// <summary>
     ///     Output dimension reported by the ONNX session itself (engineer doc §4.2.1) — the
@@ -51,23 +50,29 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
         _pooling = descriptor.Pooling;
         _normalization = descriptor.Normalization;
         _inputNames = descriptor.InputNames;
-        _tokenEmbeddingsOutput = descriptor.TokenEmbeddingsOutput;
-        _embeddingOutput = descriptor.EmbeddingOutput;
         _session = new InferenceSession(modelPath);
 
         ValidateInputNames(descriptor);
-        if (_pooling == "model-output" && string.IsNullOrWhiteSpace(_embeddingOutput))
+        if (_pooling == "model-output" && string.IsNullOrWhiteSpace(descriptor.EmbeddingOutput))
         {
             throw new InvalidOperationException(
                 $"Pooling mode 'model-output' requires an onnx.embeddingOutput (manifest model '{descriptor.Model}').");
         }
 
-        Dimension = ReadOutputDimension(_session, OutputNameFor(descriptor), descriptor.Model);
+        _outputName = OutputNameFor(descriptor);
+        Dimension = ReadOutputDimension(_session, _outputName, descriptor.Model);
         if (descriptor.Dimensions != Dimension)
         {
             throw new InvalidOperationException(
                 $"Manifest model '{descriptor.Model}' declares {descriptor.Dimensions} dimensions but the ONNX session reports " +
-                $"{Dimension} for output '{OutputNameFor(descriptor)}'.");
+                $"{Dimension} for output '{_outputName}'.");
+        }
+
+        // Adapting to the graph's rank (see Pool) is deliberate, but never silent: a manifest whose
+        // pooling mode the graph makes unreachable is still a manifest to correct.
+        if (_pooling != "model-output" && ReadOutputRank(_session, _outputName) == 2)
+        {
+            Log.GraphPoolsItsOwnOutput(_logger, descriptor.Model, _pooling, _outputName);
         }
     }
 
@@ -140,34 +145,47 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
         }
 
         using var results = _session.Run(feed);
+        var output = results.First(r => r.Name == _outputName).AsTensor<float>();
+        var dense = output as DenseTensor<float>
+                    ?? throw new InvalidOperationException($"ONNX {_outputName} is not a dense tensor.");
 
-        if (_pooling == "model-output")
+        Pool(dense.Buffer.Span, dense.Dimensions, batch, maxLen, Dimension, attentionMask, _pooling, _normalization,
+            _outputName, embeddings);
+        return embeddings;
+    }
+
+    /// <summary>
+    ///     Turns one session run's selected output into one vector per batch row. The output's own
+    ///     RANK decides how, not the manifest's <c>pooling.mode</c> (issue #466): a rank-3
+    ///     <c>[batch, sequence, dimensions]</c> tensor is token-level and gets that mode applied
+    ///     here, while a rank-2 <c>[batch, dimensions]</c> tensor is already the embedding — a graph
+    ///     that pools inside itself, which no mode can be applied to. A manifest whose mode was
+    ///     inferred rather than read (<c>ModelDownloadPlanner</c>'s placeholder branch) is a guess;
+    ///     the rank is a fact.
+    /// </summary>
+    internal static void Pool(ReadOnlySpan<float> output, ReadOnlySpan<int> dimensions, int batch, int maxLen,
+        int dimension, ReadOnlySpan<long> attentionMask, string pooling, string normalization, string outputName,
+        GeneratedEmbeddings<Embedding<float>> embeddings)
+    {
+        if (pooling == "model-output" && (dimensions.Length != 2 || dimensions[1] != dimension))
         {
-            var output = results.First(r => r.Name == _embeddingOutput).AsTensor<float>();
-            if (output is not DenseTensor<float> denseOutput
-                || output.Dimensions.Length != 2 || output.Dimensions[1] != Dimension)
-            {
-                throw new InvalidOperationException(
-                    $"ONNX {_embeddingOutput} must be a dense [batch, {Dimension}] tensor for model-output pooling.");
-            }
-
-            for (var i = 0; i < batch; i++)
-            {
-                var vector = denseOutput.Buffer.Slice(i * Dimension, Dimension).ToArray();
-                if (_normalization == "l2")
-                {
-                    vector = EmbeddingMath.L2Normalize(vector);
-                }
-
-                embeddings.Add(new Embedding<float>(vector));
-            }
-
-            return embeddings;
+            throw new InvalidOperationException(
+                $"ONNX {outputName} must be a dense [batch, {dimension}] tensor for model-output pooling.");
         }
 
-        var hidden = results.First(r => r.Name == _tokenEmbeddingsOutput).AsTensor<float>();
-        var dense = hidden as DenseTensor<float>
-                    ?? throw new InvalidOperationException($"ONNX {_tokenEmbeddingsOutput} is not a dense tensor.");
+        if (dimensions.Length == 2)
+        {
+            PoolAlreadyPooledOutput(output, dimensions, batch, dimension, normalization, outputName, embeddings);
+            return;
+        }
+
+        if (dimensions.Length != 3)
+        {
+            throw new InvalidOperationException(
+                $"ONNX {outputName} is a rank-{dimensions.Length} tensor; a token-embeddings output must be "
+                + $"[batch, sequence, {dimension}] and an already-pooled one [batch, {dimension}].");
+        }
+
         var maskRow = new int[maxLen];
         for (var i = 0; i < batch; i++)
         {
@@ -176,21 +194,36 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
                 maskRow[s] = (int)attentionMask[i * maxLen + s];
             }
 
-            var row = dense.Buffer.Slice(i * maxLen * Dimension, maxLen * Dimension).Span;
-            var vector = _pooling switch
+            var row = output.Slice(i * maxLen * dimension, maxLen * dimension);
+            var vector = pooling switch
             {
-                "cls" => _normalization == "l2"
-                    ? EmbeddingMath.ClsPoolAndNormalize(row, Dimension)
-                    : EmbeddingMath.ClsPool(row, Dimension),
+                "cls" => normalization == "l2"
+                    ? EmbeddingMath.ClsPoolAndNormalize(row, dimension)
+                    : EmbeddingMath.ClsPool(row, dimension),
                 // "mean" — the bundled path; mean+l2 takes the exact pre-WP3 code shape (G3).
-                _ => _normalization == "l2"
-                    ? EmbeddingMath.MeanPoolAndNormalize(row, maskRow, maxLen, Dimension)
-                    : EmbeddingMath.MeanPool(row, maskRow, maxLen, Dimension)
+                _ => normalization == "l2"
+                    ? EmbeddingMath.MeanPoolAndNormalize(row, maskRow, maxLen, dimension)
+                    : EmbeddingMath.MeanPool(row, maskRow, maxLen, dimension)
             };
             embeddings.Add(new Embedding<float>(vector));
         }
+    }
 
-        return embeddings;
+    private static void PoolAlreadyPooledOutput(ReadOnlySpan<float> output, ReadOnlySpan<int> dimensions, int batch,
+        int dimension, string normalization, string outputName, GeneratedEmbeddings<Embedding<float>> embeddings)
+    {
+        if (dimensions[1] != dimension || output.Length < batch * dimension)
+        {
+            throw new InvalidOperationException(
+                $"ONNX {outputName} is a [batch, {dimensions[1]}] tensor of {output.Length} values; "
+                + $"{batch} × {dimension} were expected.");
+        }
+
+        for (var i = 0; i < batch; i++)
+        {
+            var vector = output.Slice(i * dimension, dimension).ToArray();
+            embeddings.Add(new Embedding<float>(normalization == "l2" ? EmbeddingMath.L2Normalize(vector) : vector));
+        }
     }
 
     private static void ValidateInputNames(EngineDescriptor descriptor)
@@ -227,6 +260,10 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
 
         return (int)dims[^1];
     }
+
+    /// <summary>Rank of a session output as the graph declares it: 3 for token embeddings, 2 for an already-pooled vector.</summary>
+    private static int ReadOutputRank(InferenceSession session, string outputName) =>
+        session.OutputMetadata.TryGetValue(outputName, out var metadata) ? metadata.Dimensions?.Length ?? 0 : 0;
 
     /// <summary>
     ///     A run of ~100+ characters with no space or punctuation (this tokenizer's pretokenizer does
@@ -273,5 +310,14 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
         [LoggerMessage(EventId = 415, Level = LogLevel.Warning,
             Message = "Chunk possibly collapsed to an unknown token at embed time: {Chars} characters tokenized to only {ActualTokens} tokens")]
         public static partial void ChunkPossiblyCollapsedToUnknownToken(ILogger logger, int chars, int actualTokens);
+
+        /// <summary>Issue #466: the graph emits a [batch, dimensions] vector, so the manifest's token-level
+        /// pooling mode cannot apply and the graph's own pooling is used instead.</summary>
+        [LoggerMessage(EventId = 417, Level = LogLevel.Warning,
+            Message = "Model '{Model}' pools inside its own ONNX graph: output '{Output}' is [batch, dimensions], "
+                      + "so the manifest's pooling mode '{Pooling}' cannot be applied and the graph's own vector is "
+                      + "used as-is. Embedding is correct; the manifest's pooling.mode is wrong and should say "
+                      + "'model-output'.")]
+        public static partial void GraphPoolsItsOwnOutput(ILogger logger, string model, string pooling, string output);
     }
 }

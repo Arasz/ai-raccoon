@@ -84,3 +84,18 @@ with a different window would need its own budget, and guessing one would be wor
 query is simply cut knowingly and audibly instead of silently. Embedding a long query faithfully
 (chunk it, pool the vectors) is a retrieval-semantics change that needs measurement before it ships,
 and it is not this record.
+
+## Amendment (2026-08-22) — the query-trim event is 418, not 416
+
+Everything this record decided stands; only the number moved. `OnnxEmbeddingGenerator`
+owned 414-415 and sat wedged between `BundledModel`'s 413 and this record's 416, so it had
+nowhere to put the new event #466 needed (417, the graph-pools-its-own-output warning) —
+the same wedge that moved `MetricsFlusher` off 962-964. The neighbour moved instead of the
+grower because 414 is named by number in three docs and a live test constant, and 416 in
+two: `EmbeddingService.Log.QueryTrimmedToWindow` is now **EventId 418**, and
+`QueryTruncationTests.QueryTrimmedEventId` follows it.
+
+**416 is retired, not reused** — nothing will be given that number again, so a log line
+reading `[416]` is always this event from a build before 1.32.0. The split this record
+argued for is unchanged: the stored-content event (414) and the query event (418) are still
+two countable ids, which was the point.

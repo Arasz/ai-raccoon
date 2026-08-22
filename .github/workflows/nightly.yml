@@ -106,10 +106,27 @@ jobs:
           mkdir -p .nupkg-local
           dotnet run --project src/AiRaccoon --no-launch-profile -- \
             model download BAAI/bge-m3 --dir "${{ runner.temp }}/bge-m3" --yes
+      - name: Restore code-daemon-embed-v1 (code engine gates)
+        id: code-model-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/code-daemon-embed-v1
+          key: code-daemon-embed-v1-v1-${{ hashFiles('tests/AiRaccoon.Tests/Resources/ManifestFixtures/code-daemon-embed-v1.json') }}
+      - name: Download code-daemon-embed-v1 (code engine gates)
+        if: steps.code-model-cache.outputs.cache-hit != 'true'
+        # 187 MB — an order of magnitude under bge-m3, and it unskips both AIRACCOON_CODE_MODEL_DIR
+        # gates: CodeModelGraphWindowTests (the #422 window measurement) and
+        # CodeEngineRealModelEmbedTests (issue #466 — the default code engine actually embedding,
+        # through EmbeddingService rather than a raw session).
+        run: |
+          mkdir -p .nupkg-local
+          dotnet run --project src/AiRaccoon --no-launch-profile -- \
+            model download faxenoff/code-daemon-embed-v1 --dir "${{ runner.temp }}/code-daemon-embed-v1" --yes
       - name: Full suite + failure triage
         env:
           GH_TOKEN: ${{ github.token }}
           AIRACCOON_POOLING_PARITY_MODEL_DIR: ${{ runner.temp }}/bge-m3
+          AIRACCOON_CODE_MODEL_DIR: ${{ runner.temp }}/code-daemon-embed-v1
         # nuget.config references the gitignored local feed .nupkg-local/; make it
         # exist on the fresh runner or restore fails with NU1301. dumps/ must exist
         # too, or the crash-dump env vars above cannot write (build-slow mkdirs it).

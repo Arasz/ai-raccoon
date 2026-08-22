@@ -9,7 +9,7 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **149** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **153** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
@@ -42,9 +42,10 @@ One block per source file that owns a `Log` class or equivalent:
 | 330 | `src/AiRaccoon/Setup/Dependencies.cs` |
 | 400 | `src/AiRaccoon.Infrastructure/Watch/WatchDigestExecutor.cs` |
 | 410-413 | `src/AiRaccoon.Infrastructure/Embedding/BundledModel.cs` |
-| 414-415 | `src/AiRaccoon.Infrastructure/Embedding/OnnxEmbeddingGenerator.cs` (docs/adr/0036: embed-time truncation and possible-[UNK]-collapse detectors — 414 is STORED CONTENT only since ADR-0071) |
-| 416 | `src/AiRaccoon.Infrastructure/Embedding/EmbeddingService.cs` (added 2026-08-15: a search query trimmed to the model window, ADR-0071 — split out of 414 so each is countable) |
+| 414-415, 417 | `src/AiRaccoon.Infrastructure/Embedding/OnnxEmbeddingGenerator.cs` (docs/adr/0036: embed-time truncation and possible-[UNK]-collapse detectors — 414 is STORED CONTENT only since ADR-0071; 417 added 2026-08-22, #466: the graph pools its own output, so the manifest's pooling.mode cannot be applied. **416 is a hole in this block, not a free id** — it was `EmbeddingService`'s query-trim event and moved to 418 to open 417, because this owner sat wedged between `BundledModel`'s 413 and that 416 with nowhere to grow, the same wedge that moved `MetricsFlusher` off 962-964. Retired, never reused) |
+| 418 | `src/AiRaccoon.Infrastructure/Embedding/EmbeddingService.cs` (added 2026-08-15 as **416**: a search query trimmed to the model window, ADR-0071 — split out of 414 so each is countable. Moved 416 -> 418 on 2026-08-22, #466, so `OnnxEmbeddingGenerator` could extend to 417 without interleaving; ADR-0071 and ADR-0072 name the old number and carry an amendment. 416 is retired) |
 | 420 | `src/AiRaccoon.Infrastructure/Chunking/NoOpCodeChunker.cs` (added 2026-08-21: the interim `ICodeChunker` — one Information line marking the code-engine-wave gap, logged once per process, docs/work/2026-08-21-code-search-implementation-plan.md §12.5) |
+| 421-423 | `src/AiRaccoon.Infrastructure/Embedding/CodeEmbedder.cs` (added 2026-08-22, #466: a code row that cannot embed used to reach `CodeCorpusSchema.MaxEmbedAttempts` and drop out of the drain's selection with no log line at all — 421 records the whole-batch fallback at Debug, 422 warns per failed attempt with its exception, 423 errors the moment a row crosses the ceiling and is abandoned) |
 | 500-506, 508 | `src/AiRaccoon.Infrastructure/Extraction/ExtractionHostedService.cs` (507/509 removed 2026-08-11: per-element candidate/failure logs de-noised) |
 | 525-527 | `src/AiRaccoon.Infrastructure/Maintenance/MaintenanceJobRunner.cs` (added 2026-08-15: one line per maintenance job that ran or failed, ADR-0070 — 530+ was taken by SweepHostedService and the uniqueness gate caught it; 527 added 2026-08-22, delta-review D6: the lastRun-ledger SELECT and `HasWorkAsync` used to run before the per-job try/catch, so either throwing escaped `RunDueAsync` and stopped every job registered after it — moved inside the same guard, logged distinctly from a run failure) |
 | 510-524 | `src/AiRaccoon.Infrastructure/Maintenance/BankMaintenanceHostedService.cs` (517-519 added 2026-08-14: the pending-embed retry sweep, .NET-F1 — a watch-driven embedding failure used to leave a row permanently pending; 520-521 added 2026-08-14: the noise-entry retention purge, ADR-0039; 522-524 added 2026-08-15: the promotion-discard and search-quality retention purges, ADR-0055. **512 and 516 are retired**: both are still declared here but have had no call site since ADR-0070 moved vacuuming into `MaintenanceJobRunner`, which logs 525 instead — they cannot fire. Retired rather than deleted so the numbers are not reused; found by the 2026-08-16 checklist run. ADR-0076's on-demand poll loop deliberately reuses `RunFailed` (513) instead of minting a new id — a second near-duplicate would have interleaved with `MaintenanceJobRunner`'s adjacent 525-526 block) |
