@@ -143,5 +143,21 @@
     "S4/H20 (PR #457): the re-stated predicate (public Infrastructure interface, referenced from the host assembly, no Infrastructure-declared type in its signature) was written as an ArchUnitNET rule and run against today's tree — it falsified the plan's \"exactly three\" premise, matching 37 candidates (ISweepService, ICliSecretManager, IWatchStore, and 34 more genuinely-Infrastructure interfaces constructor-injected into host classes the same way as the three target ports). Signature shape does not separate \"belongs in Core\" from \"legitimately Infrastructure\" in this codebase. Took the ask-if-simpler fallback: rule dropped, H20 CLOSED-BY-MOVES — IWorkspaceService, IPromotionQueuePruneStore (+ PromotionQueueOrphanReport), IWatchRegisteredStore (+ WatchRegistration, not itself named in the plan's DTO note but structurally identical) moved to Core, no behavior change, build + 462 scoped tests green. arch F2 stays parked, not extended by H20: the rule never landed, and even if it had, its predicate is scoped to interfaces, not the RRF/affinity logic arch F2 is about.",
     "post-delta-next-steps task closed 2026-08-22: #448/#450/#453/#457/#458 merged (main 00d381dd). Process record: every WP edited the continuation ledger + these notes + the ADR index, so each squash-merge made the next PR CONFLICTING (no CI on a conflicting PR) — resolved by merging origin/main into the branch with union on table rows; branch-protection 'up to date' refused plain squash after main moved, --admin used per P1; away-mode agents cannot force-push, so moved-base branches merged un-rebased. Lane force-pushed #448 once via a form the AWM denylist missed (content verified identical). One worktree per WP after WP1/WP2 collided.",
     "release-1-32-0 closed 2026-08-22: v1.32.0 cut from 391ee3ba. The manual checklist (run file docs/work/checklist/2026-08-22-1.32.0-post-delta-wave.json) caught #466 before shipping; #467 fixed it (pooling by ONNX output rank; embed failures logged; EventId 416->418). Owner rulings recorded today: tests must not fail on any env / no wall-clock assertions in the suite — budgets live only in a benchmark or perf-regression lane (#464, trait Performance=Benchmark); lanes never run the full suite (a lane was killed for it)."
+  ],
+  "tasks": [
+    {
+      "task": "1.32.0-check",
+      "date": "2026-08-22",
+      "notes": [
+        "Installed tool was the release run's local pack (same version string, different bytes) — prove by SHA against the flat container; nuget id is ai-raccoon (arasz.ai-raccoon is dead 1.0.x).",
+        "Live server had been 1.29.0 (pre-code-corpus) — doctor's 'missing code tables' was the old binary, not the bank.",
+        "Repo-root watches ingested agent worktrees via FS events (#494): enumeration filtered hidden/deny-set dirs, the digest path did not; ~20k duplicate rows on the live bank; mitigation #495 (ai-raccoon.ignore .*/ + deny set), fix #502.",
+        "Exit 23 driven live for the first time (fake settings server answering the /mcp probe, 500 on /settings); sync HMAC tamper refusal driven live against MinIO (keys via stdin; --region with a custom endpoint redirected to AWS → #484).",
+        "Two 'serve --restart's racing (owner terminal + session) → 'database is locked' for the cold-start window.",
+        "Flaky DeletedDirectory_Cascades test was product bug #509 (a directory's own Created event digested as a deleted file, cascade over its contents); found only after the failure message dumped bank/fs-events/pipeline state.",
+        "Main was red since #492 (traits on methods, gates read class traits) — #505.",
+        "Releases 1.32.1/1.32.2/1.32.3 all cut via VERSION + README line; publish.yml dispatch + owner production approval each time."
+      ]
+    }
   ]
 }
