@@ -1,7 +1,9 @@
 using AiRaccoon.Core.Chunking;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using System.ClientModel;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Security.Cryptography;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -18,7 +20,8 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     per-file sha256s — is part of the local fingerprint, so re-downloaded weights re-embed).
 /// </summary>
 public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, ILocalTokenizer localTokenizer,
-    ITokenizerFactory tokenizerFactory, IEmbeddingManifestLoader manifestDescriptor) : IEmbeddingService
+    ITokenizerFactory tokenizerFactory, IEmbeddingManifestLoader manifestDescriptor, ISettingsStore? settingsStore = null)
+    : IEmbeddingService
 {
     public const string DefaultOpenAiEndpoint = "https://api.openai.com/v1";
 
@@ -270,8 +273,36 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
         };
     }
 
+    /// <summary>
+    ///     WP11-A/G16: an unset setting halves the core count (never below 1); "0" means ORT's own
+    ///     default; anything else that doesn't parse to a non-negative integer is a garbage value —
+    ///     logged and treated as unset. <paramref name="coreCount" /> is the seam a test drives with
+    ///     10 or 1; production passes the real core count.
+    /// </summary>
+    internal int ResolveThreadCount(string? rawSetting, int coreCount)
+    {
+        if (string.IsNullOrWhiteSpace(rawSetting))
+        {
+            return Math.Max(1, coreCount / 2);
+        }
+
+        if (int.TryParse(rawSetting, NumberStyles.Integer, CultureInfo.InvariantCulture, out var threads) && threads >= 0)
+        {
+            return threads;
+        }
+
+        Log.InvalidThreadsSetting(_logger, rawSetting);
+        return Math.Max(1, coreCount / 2);
+    }
+
     private IEmbeddingGenerator<string, Embedding<float>> CreateLocal(EmbeddingSettings settings)
     {
+        // One-time per fingerprint (cached by _engines): sessions are rebuilt only on restart, so a
+        // blocking read here costs nothing recurring.
+        var rawThreads = settingsStore?.GetSettingAsync(EmbeddingSettingsKeys.Threads, CancellationToken.None)
+            .GetAwaiter().GetResult();
+        var threads = ResolveThreadCount(rawThreads, Environment.ProcessorCount);
+
         var modelPath = string.IsNullOrWhiteSpace(settings.Model)
             ? BundledModel.ResolveModelPath()
             : Path.GetFullPath(settings.Model);
@@ -283,7 +314,7 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
             // drain reconciles vec0 to the engine's dimension before writing (WP4/D3).
             var descriptor = manifestDescriptor.Load(modelPath);
             var tokenizer = ResolveManifestTokenizer(modelPath)!;
-            return new OnnxEmbeddingGenerator(Path.Combine(modelPath, descriptor.OnnxModelFile), tokenizer, descriptor, _logger);
+            return new OnnxEmbeddingGenerator(Path.Combine(modelPath, descriptor.OnnxModelFile), tokenizer, descriptor, _logger, threads);
         }
 
         // Fail fast on a missing/name-shaped path instead of a cryptic ONNX NoSuchFile error.
@@ -296,7 +327,7 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
 
         var bundledTokenizer = _tokenizers.GetOrAdd("bundled",
             _ => WordPieceEmbeddingTokenizer.Create(BundledModel.ResolveVocabPath()));
-        return new OnnxEmbeddingGenerator(modelPath, bundledTokenizer, BundledDescriptor, _logger);
+        return new OnnxEmbeddingGenerator(modelPath, bundledTokenizer, BundledDescriptor, _logger, threads);
     }
 
     private IEmbeddingTokenizer? ResolveManifestTokenizer(string? model)
@@ -371,6 +402,12 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
                       + "use a shorter, more specific query.")]
         public static partial void QueryTrimmedToWindow(ILogger logger, int tokens, int maxTokens,
             int trimmedChars, int originalChars);
+
+        /// <summary>WP11-A/G16: embedding.threads didn't parse to a non-negative integer; the halved-core default is used instead.</summary>
+        [LoggerMessage(EventId = 419, Level = LogLevel.Warning,
+            Message = "Invalid embedding.threads setting '{Value}': expected a non-negative integer (0 = ORT default). "
+                      + "Using max(1, cores/2) instead.")]
+        public static partial void InvalidThreadsSetting(ILogger logger, string value);
     }
 
 }
