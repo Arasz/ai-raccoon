@@ -11,8 +11,7 @@ internal static class RetrievalTuningSets
     ///     The 11 expected-source queries ADR-0005's and ADR-0006's grids selected their parameters
     ///     over — and gate them with. Every metric measured over these is in-sample by construction.
     /// </summary>
-    public static readonly string[] TuningQueryIds =
-        ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "S2", "C1", "C2", "C5"];
+    public static readonly string[] TuningQueryIds = [];
 
     /// <summary>The catalog entries that can be scored at all: those carrying an expectedSource.</summary>
     public static IReadOnlyList<CatalogQuery> Gradeable(IEnumerable<CatalogQuery> catalog) =>

@@ -4,18 +4,21 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration.Retrieval;
 
 /// <summary>
-///     What the query catalog can and cannot support as an out-of-sample measurement (docs/adr/0056).
-///     These assertions are the reason the held-out gate is three queries and not a family split.
+///     What the query catalog can and cannot support as an out-of-sample measurement (docs/adr/0056,
+///     docs/adr/0090). On the public docs corpus nothing has ever been tuned, so the held-out set is
+///     the WHOLE gradeable catalog and these assertions exist to keep it that way.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class RetrievalTuningSetsTests
 {
     /// <summary>
-    ///     The held-out set must never empty. Adding a query id to <see cref="RetrievalTuningSets.TuningQueryIds" />
-    ///     removes its whole document from the held-out side, so an unnoticed expansion of tuning
-    ///     silently converts the gate into an in-sample one. Raise history: 3 pinned 2026-08-15
-    ///     (A8/A9/A10). Raising this number is progress; lowering it is the gate eroding.
+    ///     On this corpus the held-out set is not merely non-empty, it is everything: no parameter
+    ///     sweep has ever selected against these documents. Adding a query id to
+    ///     <see cref="RetrievalTuningSets.TuningQueryIds" /> removes its whole document from the
+    ///     held-out side, so an unnoticed expansion of tuning silently converts the gate into an
+    ///     in-sample one — ADR-0056's original defect. History: 3 held out on the jsaa corpus
+    ///     (A8/A9/A10); 19 — all gradeable queries — on the public corpus (ADR-0090).
     /// </summary>
     [Fact]
     public void HeldOutSet_IsNotEmpty_AndIsDocumentDisjointFromTuning()
@@ -24,8 +27,9 @@ public sealed class RetrievalTuningSetsTests
         var heldOut = RetrievalTuningSets.HeldOut(catalog);
         var tunedDocuments = RetrievalTuningSets.TunedDocuments(catalog);
 
-        heldOut.Count.ShouldBeGreaterThanOrEqualTo(3,
-            "the held-out gate needs queries no sweep tuned over; expanding TuningQueryIds shrinks this");
+        heldOut.Count.ShouldBe(RetrievalTuningSets.Gradeable(catalog).Count,
+            "every gradeable query must be held out: nothing has been tuned on this corpus, and a " +
+            "shortfall means TuningQueryIds grew without ADR-0090 being amended");
         foreach (var query in heldOut)
         {
             tunedDocuments.ShouldNotContain(RetrievalTuningSets.Document(query.ExpectedSource!),
@@ -54,13 +58,13 @@ public sealed class RetrievalTuningSetsTests
     }
 
     /// <summary>
-    ///     Why the plan's leave-one-family-out control is not available here: the corpus has two
-    ///     generators ('docs' and 'ai-badger') and the tuning set spans both, so no family is
-    ///     unseen. This assertion fails the day someone fixes that — which is the point, and the
-    ///     signal to promote the gate from document-level to family-level.
+    ///     The corpus carries two generators ('docs' and 'ai-badger'), and on the public corpus
+    ///     NEITHER has been tuned on — the inverse of the jsaa situation, where the tuning set
+    ///     spanned both and no family was unseen. A selection that collapsed to one family would
+    ///     also fail here, which is what keeps corpus_config's two-family shape load-bearing.
     /// </summary>
     [Fact]
-    public void NoFamilyIsHeldOut_WhichIsWhyTheGateIsDocumentLevel()
+    public void EveryFamilyIsHeldOut_BecauseNothingWasTunedOnThisCorpus()
     {
         var catalog = BaselineQueryCatalog.Load();
         var gradeable = RetrievalTuningSets.Gradeable(catalog);
@@ -74,7 +78,26 @@ public sealed class RetrievalTuningSetsTests
 
         allFamilies.ShouldBe(new HashSet<string>(StringComparer.Ordinal) { "docs", "ai-badger" },
             ignoreOrder: true);
-        allFamilies.Except(tunedFamilies, StringComparer.Ordinal).ShouldBeEmpty(
-            "a family the sweeps never tuned on now exists — promote the held-out gate to leave-one-family-out (docs/adr/0056)");
+
+        tunedFamilies.ShouldBeEmpty(
+            "a family has been tuned on — the held-out gate is no longer leave-everything-out and " +
+            "ADR-0090's out-of-sample claim needs amending (docs/adr/0056)");
+    }
+
+    /// <summary>
+    ///     The anti-drift guard ADR-0090 rests on. ADR-0056's finding was that every published
+    ///     retrieval number was in-sample because the same queries selected the parameters and
+    ///     gated them. That circularity is gone here only because nothing has been tuned on this
+    ///     corpus. The day someone runs a sweep and records its winners in TuningQueryIds, this
+    ///     goes red — which is the moment ADR-0090's "every gradeable query is out-of-sample"
+    ///     claim stops being true and must be amended rather than quietly outgrown.
+    /// </summary>
+    [Fact]
+    public void TuningQueryIds_StayEmpty()
+    {
+        RetrievalTuningSets.TuningQueryIds.ShouldBeEmpty(
+            "nothing has been tuned on the public docs corpus. If a sweep now selects parameters " +
+            "here, amend ADR-0090 (and ADR-0056) in the same change: the held-out gate stops " +
+            "covering the whole catalog and the published numbers stop being out-of-sample.");
     }
 }
