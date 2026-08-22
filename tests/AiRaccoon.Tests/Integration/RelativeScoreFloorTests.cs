@@ -18,7 +18,7 @@ namespace AiRaccoon.Tests.Integration;
 [Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class RelativeScoreFloorTests : IDisposable
 {
-    private const string ProjectId = "job-search-ai-assistant";
+    private const string ProjectId = "ai-raccoon";
     private const int SearchLimit = 20;
 
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
@@ -41,7 +41,7 @@ public sealed class RelativeScoreFloorTests : IDisposable
     public RelativeScoreFloorTests()
     {
         _dataRoot = TestData.CreateTempRoot("ai-raccoon-relative-floor");
-        File.Copy(Path.Combine(AppContext.BaseDirectory, "Resources", "jsaa-memory.db"),
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "Resources", "docs-memory.db"),
             Path.Combine(_dataRoot, "memory.db"));
 
         var options = new InfrastructureOptions

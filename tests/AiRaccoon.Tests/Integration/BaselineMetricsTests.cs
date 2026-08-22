@@ -22,7 +22,7 @@ namespace AiRaccoon.Tests.Integration;
 [Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class BaselineMetricsTests : IDisposable
 {
-    private const string ProjectId = "job-search-ai-assistant"; // matches PROJECT_ID in scripts/ingest-jsaa-docs.py
+    private const string ProjectId = "ai-raccoon"; // matches PROJECT_ID in scripts/src/corpus_config.py
     private const string ReportFileName = "baseline-metrics-report.json";
 
     /// <summary>Metric cutoff: nDCG@5 and recall@5 both grade the top-5 window.</summary>
@@ -242,7 +242,7 @@ public sealed class BaselineMetricsTests : IDisposable
 
         results.Count.ShouldBeGreaterThanOrEqualTo(1,
             "vector-only search returned no results — the database has no embedding provider or " +
-            "vectors configured. The regenerated jsaa-memory.db (Wave 0 step 3) must set " +
+            "vectors configured. The regenerated docs-memory.db (Wave 0 step 3) must set " +
             "provider='local' with 100% embedded rows; the old committed DB (6675 entries, 0 " +
             "embeddings) is expected to fail this test.");
     }
@@ -405,8 +405,8 @@ public sealed class BaselineMetricsTests : IDisposable
 
     private static string ResolveBundledDbPath()
     {
-        // The jsaa-memory.db is copied to the output directory by the build.
-        var path = Path.Combine(AppContext.BaseDirectory, "Resources", "jsaa-memory.db");
+        // The docs-memory.db is copied to the output directory by the build.
+        var path = Path.Combine(AppContext.BaseDirectory, "Resources", "docs-memory.db");
         if (File.Exists(path))
         {
             return path;
@@ -414,7 +414,7 @@ public sealed class BaselineMetricsTests : IDisposable
 
         // Fallback: look for it relative to the project root during development.
         return Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory, "..", "..", "..", "Resources", "jsaa-memory.db"));
+            AppContext.BaseDirectory, "..", "..", "..", "Resources", "docs-memory.db"));
     }
 
     private static BaselineQuery[] LoadQueries()

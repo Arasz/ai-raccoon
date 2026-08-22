@@ -13,7 +13,7 @@ namespace AiRaccoon.Tests.Unit.Retrieval;
 
 /// <summary>
 ///     The acceptance test for WP4 (docs/plans/2026-08-14-code-quality-improvement-plan.md): the
-///     regenerated corpus (tests/AiRaccoon.Tests/Resources/jsaa-memory.db) is the first committed
+///     regenerated corpus (tests/AiRaccoon.Tests/Resources/docs-memory.db) is the first committed
 ///     gate fixture to carry real structure vectors (docs/adr/0004-dual-vector-structure-signal.md),
 ///     so it is the first fixture that can prove <see cref="StructureFusion" /> is load-bearing —
 ///     deliberately breaking it must make a gate here go red.
@@ -22,7 +22,7 @@ namespace AiRaccoon.Tests.Unit.Retrieval;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class StructureFusionGateTests : IDisposable
 {
-    private const string ProjectId = "job-search-ai-assistant";
+    private const string ProjectId = "ai-raccoon";
 
     /// <summary>
     ///     A deliberately generic query: its content-embedding similarity to any one candidate chunk
@@ -57,7 +57,7 @@ public sealed class StructureFusionGateTests : IDisposable
     public StructureFusionGateTests()
     {
         _dataRoot = TestData.CreateTempRoot("ai-raccoon-structure-fusion-gate");
-        var bundledDb = Path.Combine(AppContext.BaseDirectory, "Resources", "jsaa-memory.db");
+        var bundledDb = Path.Combine(AppContext.BaseDirectory, "Resources", "docs-memory.db");
         File.Copy(bundledDb, Path.Combine(_dataRoot, "memory.db"));
 
         _factory = new SqliteConnectionFactory(

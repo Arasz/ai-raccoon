@@ -46,7 +46,7 @@ public sealed class Vec0PartitionKeyProbe : IDisposable
         }
 
         var dbPath = Path.Combine(_dataRoot, "memory.db");
-        File.Copy(Path.Combine(AppContext.BaseDirectory, "Resources", "jsaa-memory.db"), dbPath);
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "Resources", "docs-memory.db"), dbPath);
 
         var options = new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));

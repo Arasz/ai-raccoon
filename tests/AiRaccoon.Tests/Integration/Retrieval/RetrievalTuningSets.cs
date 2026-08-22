@@ -31,7 +31,7 @@ internal static class RetrievalTuningSets
     /// <summary>
     ///     What generated the document, from the expectedSource prefix: 'docs' is the reviewed
     ///     project's own tree, 'ai-badger' is the vendored framework. Measured on the corpus:
-    ///     those are the only two generators jsaa-memory.db carries (112 and 78 source files).
+    ///     those are the only two generators docs-memory.db carries. // TODO(S6a): re-measure
     /// </summary>
     public static string Family(string expectedSource)
     {

@@ -29,7 +29,7 @@ namespace AiRaccoon.Tests.Integration;
 public sealed class PlatformNumericsProbe : IDisposable
 {
     private const string RunEnvVar = "AIRACCOON_PLATFORM_PROBE";
-    private const string ProjectId = "job-search-ai-assistant";
+    private const string ProjectId = "ai-raccoon";
     private const int SearchLimit = 10;
     private const int RankCutoff = 5;
 
@@ -59,7 +59,7 @@ public sealed class PlatformNumericsProbe : IDisposable
     {
         _dataRoot = TestData.CreateTempRoot("ai-raccoon-platform-probe");
         var dbPath = Path.Combine(_dataRoot, "memory.db");
-        File.Copy(Path.Combine(AppContext.BaseDirectory, "Resources", "jsaa-memory.db"), dbPath);
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "Resources", "docs-memory.db"), dbPath);
         (_, _fileHashes) = CorpusHashMap.Build(
             dbPath, LoadQueries().Where(q => q.ExpectedSource is not null).Select(q => q.ExpectedSource!));
     }

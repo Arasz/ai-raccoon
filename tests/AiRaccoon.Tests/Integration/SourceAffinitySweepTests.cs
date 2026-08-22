@@ -23,7 +23,7 @@ namespace AiRaccoon.Tests.Integration;
 [Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class SourceAffinitySweepTests : IDisposable
 {
-    private const string ProjectId = "job-search-ai-assistant";
+    private const string ProjectId = "ai-raccoon";
     private const int SearchLimit = 10;
     private const int RankCutoff = 5;
 
@@ -56,7 +56,7 @@ public sealed class SourceAffinitySweepTests : IDisposable
     {
         _output = output;
         _dataRoot = TestData.CreateTempRoot("ai-raccoon-source-affinity");
-        var bundledDb = Path.Combine(AppContext.BaseDirectory, "Resources", "jsaa-memory.db");
+        var bundledDb = Path.Combine(AppContext.BaseDirectory, "Resources", "docs-memory.db");
         var dbPath = Path.Combine(_dataRoot, "memory.db");
         File.Copy(bundledDb, dbPath);
 
@@ -66,7 +66,7 @@ public sealed class SourceAffinitySweepTests : IDisposable
         // Query vectors come from the committed fixture, not the live model: the bundled model is
         // u8s8-quantized, so the same query embeds differently on arm64, VNNI x64 and non-VNNI x64,
         // and this sweep's metric was a function of the host CPU rather than of the configuration it
-        // sweeps (docs/adr/0049, docs/adr/0050). The corpus vectors in jsaa-memory.db were already
+        // sweeps (docs/adr/0049, docs/adr/0050). The corpus vectors in docs-memory.db were already
         // fixed; the query vector was the one un-pinned input.
         _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
             PinnedQueryVectors.EmbeddingService());
@@ -333,7 +333,7 @@ public sealed class SourceAffinitySweepTests : IDisposable
         var builder = new StringBuilder();
         builder.AppendLine("# Wave 3 Source-Affinity Scoring — Parameter Sweep");
         builder.AppendLine();
-        builder.AppendLine("Date: 2026-08-04. Corpus: tests/AiRaccoon.Tests/Resources/jsaa-memory.db (752 chunks).");
+        builder.AppendLine("Date: 2026-08-04. Corpus: tests/AiRaccoon.Tests/Resources/docs-memory.db (2049 chunks).");
         builder.AppendLine($"Measured by SourceAffinitySweepTests (limit {SearchLimit}, RRF k=60, 1:1 weights).");
         builder.AppendLine();
         builder.AppendLine(

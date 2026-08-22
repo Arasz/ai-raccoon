@@ -16,14 +16,14 @@ namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
 ///     Wave 6 section-targeting gates (see docs/plans/retrieval-improvement-c.md §3 Wave 6):
-///     S2/S4, section hit@5, bounded file-level no-regression against the committed jsaa
+///     S2/S4, section hit@5, bounded file-level no-regression against the committed docs
 ///     corpus; limits in docs/adr/0004-dual-vector-structure-signal.md.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Retrieval)]
 [Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class SectionTargetedRetrievalTests : IDisposable
 {
-    private const string ProjectId = "job-search-ai-assistant"; // matches scripts/ingest-jsaa-docs.py
+    private const string ProjectId = "ai-raccoon"; // matches PROJECT_ID in scripts/src/corpus_config.py
     private const int RankCutoff = 5;
     private const int SearchLimit = 10;
 
@@ -361,14 +361,14 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
 
     private static string ResolveBundledDbPath()
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "Resources", "jsaa-memory.db");
+        var path = Path.Combine(AppContext.BaseDirectory, "Resources", "docs-memory.db");
         if (File.Exists(path))
         {
             return path;
         }
 
         return Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory, "..", "..", "..", "Resources", "jsaa-memory.db"));
+            AppContext.BaseDirectory, "..", "..", "..", "Resources", "docs-memory.db"));
     }
 
     public sealed record BaselineQuery(

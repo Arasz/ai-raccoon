@@ -24,7 +24,7 @@ namespace AiRaccoon.Tests.Integration.Embedding;
 ///     fresh every time, see <c>EmbeddingService.cs:200-209</c>).
 ///     <para />
 ///     Fixture note: the plan asked for a bank restored from a ≥200 MB copy when one exists in test
-///     resources. It does not — the largest fixture in Resources/ is <c>jsaa-memory.db</c> at 18 MB —
+///     resources. It does not — the largest fixture in Resources/ is <c>docs-memory.db</c> at 16.43 MiB —
 ///     so this uses that and says so here rather than inventing a synthetic multi-hundred-MB bank.
 ///     This does not weaken the measurement: the reconciler's bank-side cost is dimension-check-only
 ///     (never a repopulate) and does not scale with bank size.
@@ -60,7 +60,7 @@ public sealed class VecDimensionReconcileTimingTests(ITestOutputHelper output) :
         try
         {
             var dbPath = Path.Combine(dataRoot, "memory.db");
-            File.Copy(Path.Combine(AppContext.BaseDirectory, "Resources", "jsaa-memory.db"), dbPath);
+            File.Copy(Path.Combine(AppContext.BaseDirectory, "Resources", "docs-memory.db"), dbPath);
 
             var manifestDir = WriteManifestDir(dimensions: 384);
             await ConfigureManifestEngineAsync(dataRoot, manifestDir);
@@ -120,7 +120,7 @@ public sealed class VecDimensionReconcileTimingTests(ITestOutputHelper output) :
         try
         {
             var dbPath = Path.Combine(dataRoot, "memory.db");
-            File.Copy(Path.Combine(AppContext.BaseDirectory, "Resources", "jsaa-memory.db"), dbPath);
+            File.Copy(Path.Combine(AppContext.BaseDirectory, "Resources", "docs-memory.db"), dbPath);
 
             var manifestDir = WriteManifestDir(dimensions: 384);
             await ConfigureManifestEngineAsync(dataRoot, manifestDir);

@@ -19,7 +19,7 @@ namespace AiRaccoon.Tests.Integration;
 [Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class QueryConstructionTests : IDisposable
 {
-    private const string ProjectId = "job-search-ai-assistant"; // matches PROJECT_ID in scripts/ingest-jsaa-docs.py
+    private const string ProjectId = "ai-raccoon"; // matches PROJECT_ID in scripts/src/corpus_config.py
     private const string Adr0070File = "docs:adr:0070-documentation-structure-and-trust-model.md";
     private const int RankCutoff = 5;
     private const int SearchLimit = 10;
@@ -345,14 +345,14 @@ public sealed class QueryConstructionTests : IDisposable
 
     private static string ResolveBundledDbPath()
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "Resources", "jsaa-memory.db");
+        var path = Path.Combine(AppContext.BaseDirectory, "Resources", "docs-memory.db");
         if (File.Exists(path))
         {
             return path;
         }
 
         return Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory, "..", "..", "..", "Resources", "jsaa-memory.db"));
+            AppContext.BaseDirectory, "..", "..", "..", "Resources", "docs-memory.db"));
     }
 
     private static string FindProjectRoot()

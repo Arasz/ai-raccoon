@@ -19,7 +19,7 @@ namespace AiRaccoon.Tests.Integration.Retrieval;
 [Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class HeldOutRetrievalGateTests : IDisposable
 {
-    private const string ProjectId = "job-search-ai-assistant";
+    private const string ProjectId = "ai-raccoon";
     private const int RankCutoff = 5;
     private const int SearchLimit = 10;
 
@@ -58,7 +58,7 @@ public sealed class HeldOutRetrievalGateTests : IDisposable
         _output = output;
         _dataRoot = TestData.CreateTempRoot("ai-raccoon-held-out-gate");
         var dbPath = Path.Combine(_dataRoot, "memory.db");
-        File.Copy(Path.Combine(AppContext.BaseDirectory, "Resources", "jsaa-memory.db"), dbPath);
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "Resources", "docs-memory.db"), dbPath);
 
         var options = new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
