@@ -90,6 +90,16 @@ repo's own `config.json`, `tokenizer_config.json`, `1_Pooling/config.json` and
 `modules.json` rather than guessed. **A model directory without that manifest is
 refused**; only the legacy `model set local <file>.onnx` path keeps the bundled defaults.
 
+**Known refusal — a fairseq-offset tokenizer with no `added_tokens_decoder`.** An
+xlm-roberta-family repo (`tokenizer_class: XLMRoberta*`) numbers its vocabulary as the
+sentencepiece pieces shifted behind fairseq's own four specials, so its `<s>` is 0 and its
+`<unk>` is 3 — while the sentencepiece model file numbers them 1 and 0. When such a repo also
+ships no `added_tokens_decoder`, the only available source is the piece table, whose numbering
+is the wrong one; writing those ids would embed the wrong `<s>` and `<unk>` for every sequence
+without any error. The download refuses instead. Hand-write `ai-raccoon.manifest.json` with the
+model's real special-token ids and `tokenizer.options.vocabOffset`, then `model set local` the
+directory as usual.
+
 Downloading never activates: `model set local` is always the explicit next step.
 
 ### Recipe 5: Activate the code corpus's embedding engine
