@@ -30,16 +30,20 @@ public sealed class EventPumpTests
     }
 
     [Fact]
-    public void TryEnqueue_FullPump_ReturnsFalseInsteadOfWaiting()
+    public async Task TryEnqueue_FullPump_ReturnsFalseInsteadOfWaiting()
     {
         var pump = new EventPump<Item>(new PumpTopic(Ceiling: 1, Capacity: 1, Coalesce: false));
         pump.TryEnqueue(new Item(1)).ShouldBeTrue();
 
         // A blocking WriteAsync under FullMode.Wait would hang here forever (nothing drains);
         // a bounded wait proves TryEnqueue returns on the calling thread instead.
-        var task = Task.Run(() => pump.TryEnqueue(new Item(2)));
-        task.Wait(TimeSpan.FromSeconds(2)).ShouldBeTrue("TryEnqueue must never block waiting for space");
-        task.Result.ShouldBeFalse();
+        var enqueue = Task.Run(() => pump.TryEnqueue(new Item(2)), TestContext.Current.CancellationToken);
+        var hangGuard = Task.Delay(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+
+        var finished = await Task.WhenAny(enqueue, hangGuard);
+
+        finished.ShouldBe(enqueue, "TryEnqueue must never block waiting for space");
+        (await enqueue).ShouldBeFalse();
     }
 
     [Fact]
