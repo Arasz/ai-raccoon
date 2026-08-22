@@ -148,6 +148,14 @@ internal sealed class ConfigCommands(
             await streams.WriteErrorLineAsync(ex.Message);
             return ExitCode.SettingsServerUnavailable;
         }
+        catch (SettingsServerErrorException ex)
+        {
+            // Same unprefixed-message rule as the two exceptions above: ServerSettingsStore already
+            // stamped "ai-raccoon: ", so this goes to stderr as-is rather than through
+            // CliFailureFormatting, which would double it.
+            await streams.WriteErrorLineAsync(ex.Message);
+            return ExitCode.SettingsServerError;
+        }
         catch (Exception ex)
         {
             await streams.WriteErrorLineAsync(CliFailureFormatting.Format(ex, cliInput.ServerConfig.Options.DataRoot));

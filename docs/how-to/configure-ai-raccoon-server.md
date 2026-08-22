@@ -179,8 +179,14 @@ Dropping them degrades search to keyword-only until the re-embed lands, which is
 recoverable.
 
 If the server cannot be reached, a settings command **fails loudly rather than falling back to
-writing directly**, with distinct exit codes for *refused* and *unreachable*. A write that could not
-be delivered never reports success.
+writing directly**, with a distinct exit code per failure shape. A write that could not be
+delivered never reports success:
+
+| Exit code | Meaning |
+|---|---|
+| `17` | the server refused the loopback token — it may serve another data root |
+| `18` | the server could not be reached or auto-started within the acquire budget |
+| `23` | the server answered but failed with a 5xx — a server-side fault, distinct from `15` (`InvalidArgument`, "you mistyped") |
 
 **Why it works this way.** Two processes writing one SQLite file is a lock-contention problem nobody
 chose; it accumulated one command family at a time. Routing every settings write through the server

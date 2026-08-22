@@ -22,6 +22,13 @@ public class ExitCodeTests
         ExitCode.NoBank.ShouldBe(22);
     }
 
+    /// <summary>Delta review C2: distinguishes a settings-channel 5xx from InvalidArgument (15).</summary>
+    [Fact]
+    public void SettingsServerError_IsTwentyThree()
+    {
+        ExitCode.SettingsServerError.ShouldBe(23);
+    }
+
     /// <summary>One code, one reason: a value shared by two names is a code that cannot be acted on.</summary>
     [Fact]
     public void EveryExitCode_IsDistinct()
