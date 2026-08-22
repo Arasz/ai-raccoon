@@ -1,0 +1,17 @@
+# ai-raccoon.ignore — paths the memory and code corpora skip on ingest and watch (ADR-0086).
+# Hidden directories and the built-in deny set (bin, obj, node_modules, .git, .venv,
+# __pycache__, dist, build, target) are skipped already; this lists what is left.
+
+# Checklist evidence: large JSON transcripts of command output; the checklist skill reads them from disk.
+docs/work/checklist/
+
+# Test fixtures: golden JSON sets, a sample bank, model assets.
+tests/AiRaccoon.Tests/Resources/
+tests/AiRaccoon.Tests/Unit/Retrieval/assets/
+
+# Bundled model binaries.
+src/AiRaccoon/Models/
+
+# Generated code and CI bookkeeping.
+*.g.cs
+known-flakes.json
