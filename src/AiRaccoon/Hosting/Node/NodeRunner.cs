@@ -1,5 +1,6 @@
 using System.Net.Sockets;
 using AiRaccoon.Hosting.Common;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Setup;
@@ -23,6 +24,7 @@ internal partial class NodeRunner(
     IEncryptionKeyResolver encryptionKeyResolver,
     IEmbeddingAvailability
         embeddingAvailability,
+    IEntryEmbedder entryEmbedder,
     ILogger<NodeRunner>
         logger) : INodeRunner
 {
@@ -111,6 +113,15 @@ internal partial class NodeRunner(
             }
 
             await embeddingAvailability.EnsureEmbeddingAvailabilityAsync(ctx);
+
+            // D3: vec0 must match the configured engine's dimension before the first tool call —
+            // a serverless `model set` (no server around to drain it) leaves vec0 stale otherwise.
+            // Server-only by construction (`cli-asks-the-server-acts`): NodeRunner is the one path
+            // that becomes the server, never a CLI verb.
+            await using (var connection = await connectionFactory.OpenBankAsync(ctx).ConfigureAwait(false))
+            {
+                await entryEmbedder.ReconcileVecDimensionsAsync(connection, ctx).ConfigureAwait(false);
+            }
 
             await serverHost.StartAsync(ctx);
             await EmitBoundUrl(descriptor, streams, serverHost);
