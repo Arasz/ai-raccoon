@@ -30,6 +30,7 @@ flowchart LR
 ```
 
 ## What's new
+- **The default code model now installs with one command — `ai-raccoon model set code default` downloads and activates `faxenoff/code-daemon-embed-v1`, and code chunks use its real 512-token window instead of a mistaken 126-token cap.** (1.32.0) [#422](https://github.com/Arasz/ai-raccoon/issues/422) · [#453](https://github.com/Arasz/ai-raccoon/pull/453)
 - **Cloud snapshots are authenticity-checked (HMAC) before attach, and model activation verifies sha256 pins.** An encrypted bank synced by ≥1.31 cannot be pulled by <1.31; upgrade both ends of an encrypted sync pair together. (1.31.0) [#431](https://github.com/Arasz/ai-raccoon/pull/431) · [#429](https://github.com/Arasz/ai-raccoon/pull/429)
 - **A second corpus indexes your code, searchable via `memory_search kind=code` — never synced, never mixed with memory.** (1.30.0) [Feature](docs/features/code-corpus/) · [ADR-0085](docs/adr/0085-a-second-code-only-corpus-in-the-same-bank.md)
 - **Bring your own embedding model: manifest-driven engines, `ai-raccoon model download`, sentencepiece support.** (1.29.0) [ADR-0084](docs/adr/0084-arbitrary-embedding-models-are-manifest-described.md)
