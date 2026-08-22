@@ -11,8 +11,9 @@ namespace AiRaccoon.Tests.Unit.Setup;
 
 /// <summary>
 ///     WP7 §5.1: the CLI's half of "auto-start reuses BackendLauncher as-is". Exercised against a
-///     fake <see cref="IBackendLauncher" /> so the acquire/token/wrap logic is pinned without a real
-///     process spawn — the real spawn is covered end to end by
+///     fake <see cref="IBackendLauncher" /> and an explicit process path, so the acquire/token/wrap
+///     logic is pinned without a real process spawn and without depending on how the test host
+///     itself was launched — the real spawn is covered end to end by
 ///     <see cref="AiRaccoon.Tests.Integration.Setup.ServerSettingsStoreTests" /> and the CLI-contract
 ///     suites.
 /// </summary>
@@ -20,6 +21,12 @@ namespace AiRaccoon.Tests.Unit.Setup;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class CliSettingsBackendTests
 {
+    /// <summary>A packaged apphost: what Environment.ProcessPath names for an installed ai-raccoon.</summary>
+    private const string AppHost = "/opt/ai-raccoon/ai-raccoon";
+
+    /// <summary>The dotnet muxer: what Environment.ProcessPath names under `dotnet exec`/`dotnet run`.</summary>
+    private const string DotnetHost = "/usr/local/share/dotnet/dotnet";
+
     private static ServerConfig Config(int port, string dataRoot) =>
         new(port, McpTransport.Http, new InfrastructureOptions { DataRoot = dataRoot, Scope = InstallScope.User });
 
@@ -32,10 +39,11 @@ public sealed class CliSettingsBackendTests
             await new McpTokenFile(dataRoot).EnsureAsync(TestContext.Current.CancellationToken);
             var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:1/mcp", null));
 
-            var store = await CliSettingsBackend.AcquireAsync(launcher, Config(1, dataRoot),
+            var store = await CliSettingsBackend.AcquireAsync(launcher, AppHost, Config(1, dataRoot),
                 TestContext.Current.CancellationToken);
 
             store.ShouldBeOfType<ServerSettingsStore>();
+            launcher.FileName.ShouldBe(AppHost);
         }
         finally
         {
@@ -49,9 +57,34 @@ public sealed class CliSettingsBackendTests
         var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:0/mcp", null));
 
         var error = await Should.ThrowAsync<SettingsServerUnavailableException>(() =>
-            CliSettingsBackend.AcquireAsync(launcher, Config(0, "/tmp/unused"), TestContext.Current.CancellationToken));
+            CliSettingsBackend.AcquireAsync(launcher, AppHost, Config(0, "/tmp/unused"), TestContext.Current.CancellationToken));
 
         error.Message.ShouldContain("--port 0");
+        launcher.Calls.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task AcquireAsync_WhenTheProcessIsTheDotnetHost_ThrowsUnavailable_WithoutCallingTheLauncher()
+    {
+        var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54220/mcp", null));
+
+        var error = await Should.ThrowAsync<SettingsServerUnavailableException>(() =>
+            CliSettingsBackend.AcquireAsync(launcher, DotnetHost, Config(54220, "/tmp/unused"), TestContext.Current.CancellationToken));
+
+        error.Message.ShouldContain("dotnet host");
+        error.Message.ShouldContain("serve --port 54220");
+        launcher.Calls.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task AcquireAsync_WhenTheProcessPathIsUnknown_ThrowsUnavailable_WithoutCallingTheLauncher()
+    {
+        var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54221/mcp", null));
+
+        var error = await Should.ThrowAsync<SettingsServerUnavailableException>(() =>
+            CliSettingsBackend.AcquireAsync(launcher, null, Config(54221, "/tmp/unused"), TestContext.Current.CancellationToken));
+
+        error.Message.ShouldContain("unknown");
         launcher.Calls.ShouldBe(0);
     }
 
@@ -61,7 +94,7 @@ public sealed class CliSettingsBackendTests
         var launcher = new FakeBackendLauncher(new BackendResult(null, 3));
 
         var error = await Should.ThrowAsync<SettingsServerUnavailableException>(() =>
-            CliSettingsBackend.AcquireAsync(launcher, Config(54217, "/tmp/unused"), TestContext.Current.CancellationToken));
+            CliSettingsBackend.AcquireAsync(launcher, AppHost, Config(54217, "/tmp/unused"), TestContext.Current.CancellationToken));
 
         error.Message.ShouldContain("54217");
     }
@@ -72,7 +105,7 @@ public sealed class CliSettingsBackendTests
         var launcher = new FakeBackendLauncher(new BackendResult(null, 3, "ai-raccoon: could not decrypt the bank"));
 
         var error = await Should.ThrowAsync<SettingsServerUnavailableException>(() =>
-            CliSettingsBackend.AcquireAsync(launcher, Config(54219, "/tmp/unused"), TestContext.Current.CancellationToken));
+            CliSettingsBackend.AcquireAsync(launcher, AppHost, Config(54219, "/tmp/unused"), TestContext.Current.CancellationToken));
 
         error.Message.ShouldContain("could not decrypt the bank");
     }
@@ -83,7 +116,7 @@ public sealed class CliSettingsBackendTests
         var launcher = new FakeBackendLauncher(new BackendStartException("could not start it", new InvalidOperationException()));
 
         var error = await Should.ThrowAsync<SettingsServerUnavailableException>(() =>
-            CliSettingsBackend.AcquireAsync(launcher, Config(54218, "/tmp/unused"), TestContext.Current.CancellationToken));
+            CliSettingsBackend.AcquireAsync(launcher, AppHost, Config(54218, "/tmp/unused"), TestContext.Current.CancellationToken));
 
         error.Message.ShouldContain("could not start it");
     }
@@ -97,7 +130,7 @@ public sealed class CliSettingsBackendTests
             var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:1/mcp", null));
 
             var error = await Should.ThrowAsync<SettingsServerUnavailableException>(() =>
-                CliSettingsBackend.AcquireAsync(launcher, Config(1, dataRoot), TestContext.Current.CancellationToken));
+                CliSettingsBackend.AcquireAsync(launcher, AppHost, Config(1, dataRoot), TestContext.Current.CancellationToken));
 
             error.Message.ShouldContain(McpTokenFile.FileName);
         }
@@ -117,9 +150,12 @@ public sealed class CliSettingsBackendTests
 
         public int Calls { get; private set; }
 
+        public string? FileName { get; private set; }
+
         public Task<BackendResult> AcquireAsync(int port, string fileName, IReadOnlyList<string> arguments, CancellationToken ctx)
         {
             Calls++;
+            FileName = fileName;
             return _throws is null ? Task.FromResult(_result) : Task.FromException<BackendResult>(_throws);
         }
     }
