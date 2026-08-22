@@ -82,7 +82,7 @@
           "id": "G6",
           "claim": "QueryTrimmedToWindow keeps EventId 418; 416 is retired and never reused",
           "detail": [
-              "<code>EmbeddingService.cs:365-368</code> moved 416→418 in #467 because <code>OnnxEmbeddingGenerator</code>'s block runs 414-415, needed 417, and 416 was wedged against it. Keeping 418 meant amending ADR-0071, ADR-0072 and the ADR README — already done. Inverting (move 414-415 so 416 comes back) means five documents, because 414 is named in three ADRs plus a test. The reviewer sided with keeping 418.",
+              "<code>EmbeddingService.cs:365-368</code> moved 416→418 in #467 because <code>OnnxEmbeddingGenerator</code>'s block runs 414-415, needed 417, and 416 was wedged against it. Keeping 418 meant amending the documents naming 416: ADR-0071 and ADR-0072 carry the amendment, the register <code>docs/reference/logging-event-ids.md</code> records 416 as retired, and the ADR README's 0071 summary row (which still read 416) is amended in PR #471. Inverting (move 414-415 so 416 comes back) means five documents, because 414 is named in three ADRs plus a test. The reviewer sided with keeping 418.",
               "<strong>Recommendation: keep 418</strong>, register 416 as retired."
           ],
           "why": "<b>Event ids are the stable handle</b> in logs and ADRs; a second move later costs the same again.",

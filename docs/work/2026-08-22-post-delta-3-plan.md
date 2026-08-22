@@ -429,14 +429,16 @@ exists"). Review: code-reviewer / Opus.
 ### WP9 — EventId 416→418 disposition **[gated: G6]**
 
 **Scope.** Documentation only, and only if G6 says *invert*. If G6 says *keep* (recommended), the WP
-is one sentence in `docs/adr/README.md`'s event-id register recording 416 as retired and never
-reused, and nothing else.
+is already satisfied: the event-id register is `docs/reference/logging-event-ids.md`, and it records
+416 as "a hole in this block, not a free id … retired, never reused" (lines 45-46). The one remaining
+drift — `docs/adr/README.md`'s ADR-0071 summary row still reading "event **416**" — is fixed in PR
+#471 itself (review round 1), so the keep branch is a no-op.
 
 **Files / symbols.** `src/AiRaccoon.Infrastructure/Embedding/EmbeddingService.cs:365-368`
 (the `QueryTrimmedToWindow` `[LoggerMessage(EventId = 418…)]` and its explanatory comment);
 `docs/adr/0071-a-query-is-trimmed-deliberately-and-said-so.md`,
 `docs/adr/0072-a-term-budget-for-long-queries-is-not-adjudicable.md`, `docs/adr/README.md` (the
-three documents that name 416). Inverting instead means moving `OnnxEmbeddingGenerator`'s 414-415
+three documents that name 416), and the register `docs/reference/logging-event-ids.md`. Inverting instead means moving `OnnxEmbeddingGenerator`'s 414-415
 block, and 414 is named in three ADRs plus a test — five documents to change against these three.
 
 **RED first.** n/a for the *keep* branch (no behaviour). For the *invert* branch the gate is the
@@ -621,8 +623,10 @@ this does not match the flags actually used.
 
 **G6 — `QueryTrimmedToWindow` keeps EventId 418; 416 is retired and never reused.**
 *Detail.* `EmbeddingService.cs:365-368` moved 416→418 in #466 because `OnnxEmbeddingGenerator`'s
-block runs 414-415 and needed 417, and 416 was wedged between them. Keeping 418 means amending three
-documents that name 416 (ADR-0071, ADR-0072, `docs/adr/README.md`) — already done. Inverting instead
+block runs 414-415 and needed 417, and 416 was wedged between them. Keeping 418 meant amending the documents
+that name 416: ADR-0071 and ADR-0072 carry the 2026-08-22 amendment, the register
+`docs/reference/logging-event-ids.md` records 416 as retired, and `docs/adr/README.md`'s ADR-0071
+summary row (which still read "event **416**") is amended in PR #471. Inverting instead
 — moving 414-415 so 416 can come back — means changing five documents, because 414 is named in three
 ADRs plus a test. The reviewer sided with keeping 418. Either way the work is under an hour; the
 question is which set of documents stays true without amendment.
