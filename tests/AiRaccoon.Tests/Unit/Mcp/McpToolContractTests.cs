@@ -35,7 +35,7 @@ public sealed class McpToolContractTests : IAsyncLifetime
                                             memory_list(projectId:string!)
                                             memory_performance(projectId:string!, windowMinutes:integer|null?, bucketMinutes:integer|null?)
                                             memory_promotion_discard(projectId:string!, hash:string|null?)
-                                            memory_promotion_list(projectId:string|null?, limit:integer?, includeFullValue:boolean?)
+                                            memory_promotion_list(projectId:string|null?, limit:integer?, includeFullValue:boolean?, allProjects:boolean?)
                                             memory_record_followthrough(projectId:string!, correlationId:string!, filePath:string!)
                                             memory_record_grade(projectId:string!, correlationId:string!, grade:integer!, note:string|null?)
                                             memory_search(projectId:string!, query:string!, scope:string?, workspaceId:string|null?, limit:integer?, minRelativeScore:number?, rrfK:integer|null?, ftsWeight:integer|null?, vectorWeight:integer|null?, sourceLambda:number|null?, consolidationThreshold:number|null?, docScoreFormula:string|null?, candidateWindow:string|null?, contextLabel:string|null?, kind:string?, codeLimit:integer|null?, codeMinRelativeScore:number|null?)
