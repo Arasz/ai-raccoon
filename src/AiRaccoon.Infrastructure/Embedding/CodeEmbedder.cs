@@ -67,6 +67,10 @@ public sealed partial class CodeEmbedder(IEmbeddingService embeddings, ILogger<C
             return 0;
         }
 
+        // WP12-A: SQL selects in id order; sorting by length here keeps each BatchSize generator
+        // call length-homogeneous, so ONNX pads to that call's own max instead of the run's max.
+        rows = rows.OrderBy(row => row.Value.Length).ToList();
+
         var settings = SettingsFor(codeModel);
         IEmbeddingGenerator<string, Embedding<float>> generator;
         try

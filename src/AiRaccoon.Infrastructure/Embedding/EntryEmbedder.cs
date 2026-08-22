@@ -283,9 +283,13 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
 
         var settings = await ReadSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
         var generator = embeddings.CreateGenerator(settings);
-        for (var offset = 0; offset < rows.Count; offset += BatchSize)
+
+        // WP12-A: rows arrive in id order; sorting by length here keeps each BatchSize generator
+        // call length-homogeneous, so ONNX pads to that call's own max instead of the run's max.
+        var sorted = rows.OrderBy(row => row.Value.Length).ToList();
+        for (var offset = 0; offset < sorted.Count; offset += BatchSize)
         {
-            var batch = rows.Skip(offset).Take(BatchSize).ToList();
+            var batch = sorted.Skip(offset).Take(BatchSize).ToList();
             var result = await generator.GenerateAsync(batch.Select(r => r.Value),
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
