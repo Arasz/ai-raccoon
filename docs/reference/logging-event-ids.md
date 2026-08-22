@@ -32,7 +32,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 20 | `src/AiRaccoon/HostExtensions.cs` |
 | 30 | `src/AiRaccoon/Setup/McpServerSetup.cs` |
 | 40-41 | `src/AiRaccoon/Setup/EmbeddingAvailability.cs` |
-| 100 | `src/AiRaccoon.Infrastructure/Sync/SyncService.cs` |
+| 100-103 | `src/AiRaccoon.Infrastructure/Sync/SyncService.cs` (101-103 added 2026-08-22: the remote-blob HMAC authenticity check, docs/work/2026-08-21-delta-review-fix-plan.md S2 — 101 skips the push-side tag for an unencrypted bank, 102 skips the pull-side check for the same reason, 103 warns on a legacy remote blob with no tag) |
 | 200-202 | `src/AiRaccoon.Infrastructure/Sync/S3CloudStore.cs` |
 | 203-205 | `src/AiRaccoon.Infrastructure/Sync/AzureBlobCloudStore.cs` |
 | 300, 301 | `src/AiRaccoon.Infrastructure/Watch/WatchEventSource.cs` |

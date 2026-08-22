@@ -1,5 +1,6 @@
 using AiRaccoon.Infrastructure.Sync;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using Xunit;
 
@@ -122,7 +123,7 @@ public class SyncServiceEncryptedTests : IDisposable
     {
         var cloud = new FakeCloudStore();
         var service = new SyncService(cloud, ct => CreateAndOpenAsync(_bankPath, ct), OpenSnapshot(),
-            OpenSnapshotReadOnly(), TimeProvider.System, null!);
+            OpenSnapshotReadOnly(), TimeProvider.System, NullLogger<SyncService>.Instance);
 
         await InsertEntryAsync(_bankPath, "h1", "p1.md", "v1", TestContext.Current.CancellationToken);
 
@@ -174,7 +175,7 @@ public class SyncServiceEncryptedTests : IDisposable
         await InsertEntryAsync(_bankPath, "h1", "p1.md", "v1", TestContext.Current.CancellationToken);
 
         var service = new SyncService(cloud, ct => CreateAndOpenAsync(_bankPath, ct), OpenSnapshot(),
-            OpenSnapshotReadOnly(), TimeProvider.System, null!);
+            OpenSnapshotReadOnly(), TimeProvider.System, NullLogger<SyncService>.Instance);
 
         var result = await service.MemorySyncAsync("acme", "obj", TestContext.Current.CancellationToken);
         result.Received.ShouldBe(1);

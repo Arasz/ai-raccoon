@@ -522,6 +522,9 @@ sequenceDiagram
     S->>R: PullAsync(objectKey)
     R-->>S: remote snapshot (or null)
     alt remote exists
+        S->>R: PullAsync(objectKey + ".hmac")
+        R-->>S: authenticity tag (or null)
+        Note right of S: verify HMAC BEFORE quick_check/ATTACH — refuse<br/>on mismatch; warn and accept a legacy blob with no tag
         S->>L: PRAGMA quick_check on remote
         S->>L: ATTACH DATABASE remote
         S->>L: INSERT OR IGNORE entries (merge)
@@ -539,6 +542,7 @@ sequenceDiagram
     S->>R: PushAsync(objectKey, snapshot, if-match=remoteETag)
     R-->>S: new ETag
     S->>L: UPSERT sync_meta.last_etag = new ETag
+    S->>R: PushAsync(objectKey + ".hmac", HMAC(snapshot))
     alt 412 conflict
         Note right of S: re-pull, re-merge, re-push
     end
@@ -562,6 +566,19 @@ local code corpus untouched (ADR 0014 amendment).
 
 **Tombstone GC:** tombstones older than `last_pull_at` are deleted after each
 merge — they've done their job and the cloud copy has the deletion record.
+
+**Remote blob authenticity:** `PRAGMA quick_check` only detects corruption, not a
+valid-but-substituted blob, so on an encrypted bank a push also publishes an HMAC-SHA256 tag
+of the snapshot bytes to a `<objectKey>.hmac` sidecar object, keyed by `HKDF.DeriveKey`
+(SHA-256, info `"ai-raccoon-sync-auth"`) over the bank's own passphrase — platform primitives
+composed, not a hand-rolled scheme. A pull recomputes and compares the tag
+(`CryptographicOperations.FixedTimeEquals`) **before** `quick_check` and **before** `ATTACH`:
+a mismatching tag refuses the merge outright and never touches the live bank; a remote with
+no sidecar tag (a legacy blob pushed before this check existed) is accepted with a logged
+warning rather than refused. An unencrypted bank has no passphrase to key from and skips the
+check entirely — a keyless checksum would only duplicate what `quick_check` already covers
+(integrity, not authenticity), so unencrypted sync is documented as depending on transport/
+storage trust alone.
 
 **If-Match push:** the push carries the `remoteETag` from the pull. If another
 client pushed in between, the store returns 412 Precondition Failed. The
