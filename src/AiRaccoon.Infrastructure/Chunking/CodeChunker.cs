@@ -17,10 +17,16 @@ namespace AiRaccoon.Infrastructure.Chunking;
 /// </summary>
 public sealed class CodeChunker : ICodeChunker
 {
-    /// <summary>v1 default budget: min(510, ctx − reservation) for code-daemon-embed-v1's 128-token
-    /// context and 2-token &lt;s&gt;/&lt;/s&gt; reservation (plan §12.1 H3) — 126, never the flat 510
-    /// the engine plan's narrative text describes, and never the memory chunker's 254.</summary>
-    public const int DefaultBudget = 126;
+    /// <summary>
+    ///     min(510, ctx − reservation) for code-daemon-embed-v1's MEASURED 512-token window and its
+    ///     2-token &lt;s&gt;/&lt;/s&gt; reservation — 510, not the memory chunker's 254. Was 126 until
+    ///     #422: that came from the exploration spike's "128-token hard cap", which the graph
+    ///     contradicts (514-row position table, 512 accepted, 513 a hard Gather failure — see
+    ///     <c>CodeModelGraphWindowTests</c>). Derived from
+    ///     <see cref="EmbeddingService.MaxManifestChunkTokens" /> rather than restated, so the cap
+    ///     and the budget cannot drift apart.
+    /// </summary>
+    public const int DefaultBudget = EmbeddingService.MaxManifestChunkTokens;
 
     private readonly TokenCount _countTokens;
     private readonly int _budget;

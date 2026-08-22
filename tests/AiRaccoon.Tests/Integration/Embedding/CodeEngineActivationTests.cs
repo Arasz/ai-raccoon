@@ -151,27 +151,69 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
         (await ReadSettingAsync(EmbeddingSettingsKeys.CodeModel)).ShouldBeNull();
     }
 
+    /// <summary>
+    ///     #422: a manifest NARROWER than the chunker's budget is still refused — the chunker emits
+    ///     up to <see cref="CodeChunker.DefaultBudget" /> tokens and that engine would silently
+    ///     truncate every one of them at embed time. This is the half of the old fixed-126 gate that
+    ///     was protecting something real.
+    /// </summary>
     [Fact]
-    public async Task ActivateCodeEngineAsync_768DimButWrongContextWindow_RefusesOnChunkBudget_AndWritesNothing()
+    public async Task ActivateCodeEngineAsync_ManifestWindowNarrowerThanTheChunkerBudget_Refuses_AndWritesNothing()
     {
-        // 768 dims (passes the S4-adjacent dims gate) but a 256-token context resolves to a
-        // 254-token chunk budget (min(510, 256-2)), not the 126 CodeChunker is hard-pinned to
-        // (S4 ruling, orchestrator-decided — not re-litigated here, only guarded against drift).
-        var dir = Path.Combine(_dataRoot, "code-model-wrong-ctx");
+        var dir = Path.Combine(_dataRoot, "code-model-narrow-ctx");
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "sentencepiece.bpe.model"), "tokenizer");
         File.WriteAllText(Path.Combine(dir, "model.onnx"), "model");
         var manifest = File.ReadAllText(
                 TestData.RepoFile("tests/AiRaccoon.Tests/Resources/ManifestFixtures/code-daemon-embed-v1.json"))
-            .Replace("\"contextWindowTokens\": 128", "\"contextWindowTokens\": 256");
+            .Replace("\"contextWindowTokens\": 512", "\"contextWindowTokens\": 128");
         File.WriteAllText(Path.Combine(dir, EmbeddingManifest.FileName), manifest);
 
         var ex = await Should.ThrowAsync<InvalidOperationException>(
             () => _store.ActivateCodeEngineAsync(dir, TestContext.Current.CancellationToken));
 
-        ex.Message.ShouldContain("254");
+        ex.Message.ShouldContain("126");
         ex.Message.ShouldContain(CodeChunker.DefaultBudget.ToString());
         (await ReadSettingAsync(EmbeddingSettingsKeys.CodeModel)).ShouldBeNull();
+    }
+
+    /// <summary>
+    ///     #422: a WIDER window is accepted, not refused. Under-filled chunks are a retrieval-quality
+    ///     choice, never a correctness fault — the old gate refused this case too, which is what made
+    ///     the flagship model unactivatable.
+    /// </summary>
+    [Fact]
+    public async Task ActivateCodeEngineAsync_ManifestWindowWiderThanTheChunkerBudget_Activates()
+    {
+        var dir = Path.Combine(_dataRoot, "code-model-wide-ctx");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "sentencepiece.bpe.model"), "tokenizer");
+        File.WriteAllText(Path.Combine(dir, "model.onnx"), "model");
+        var manifest = File.ReadAllText(
+                TestData.RepoFile("tests/AiRaccoon.Tests/Resources/ManifestFixtures/code-daemon-embed-v1.json"))
+            .Replace("\"contextWindowTokens\": 512", "\"contextWindowTokens\": 8192");
+        File.WriteAllText(Path.Combine(dir, EmbeddingManifest.FileName), manifest);
+
+        var config = await _store.ActivateCodeEngineAsync(dir, TestContext.Current.CancellationToken);
+
+        config.Model.ShouldBe(Path.GetFullPath(dir));
+        (await ReadSettingAsync(EmbeddingSettingsKeys.CodeModel)).ShouldBe(Path.GetFullPath(dir));
+    }
+
+    /// <summary>
+    ///     The #422 acceptance in one test: the manifest `model download faxenoff/code-daemon-embed-v1`
+    ///     actually writes (512-token window, 768 dims) activates with no hand-edit in between.
+    /// </summary>
+    [Fact]
+    public async Task ActivateCodeEngineAsync_TheManifestTheDownloaderWritesForTheDefaultModel_Activates()
+    {
+        var dir = Path.Combine(_dataRoot, "code-model-as-downloaded");
+        TestData.SeedCodeManifestDirectory(dir);
+
+        var config = await _store.ActivateCodeEngineAsync(dir, TestContext.Current.CancellationToken);
+
+        config.Provider.ShouldBe("local");
+        (await ReadSettingAsync(EmbeddingSettingsKeys.CodeEngine)).ShouldBe(config.Engine);
     }
 
     private async Task SeedAnEmbeddedCodeRowAsync()

@@ -223,7 +223,7 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<IFileTypeMatcher, FileTypeMatcher>();
 
             // Code corpus (docs/work/2026-08-21-code-search-implementation-plan.md §3.4, WP2):
-            // real line-range CodeChunker, budget 126 (§12.1 H3), counted with the bundled
+            // real line-range CodeChunker, budget 510 (#422: the model's measured window), counted with the bundled
             // code-daemon-embed-v1 sentencepiece tokenizer — the v1 default until a configured
             // code engine (embedding.codeModel, WP5) replaces the counting path. Always-ingest
             // per §3.3: code files chunk + store `pending` even with no engine configured.
