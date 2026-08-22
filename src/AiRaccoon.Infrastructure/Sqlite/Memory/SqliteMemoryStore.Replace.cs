@@ -1,3 +1,5 @@
+using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -16,7 +18,7 @@ public sealed partial class SqliteMemoryStore
     ///     <paramref name="fileHash" />-comparing <c>guard</c>), not a separate connection — two
     ///     digests racing the same stale-to-new transition still chunk and embed exactly once.
     /// </summary>
-    public Task<bool> ReplaceIfFileChangedAsync(string projectId, string path, string fileHash,
+    public Task<ReplaceResult> ReplaceIfFileChangedAsync(string projectId, string path, string fileHash,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
@@ -87,13 +89,25 @@ public sealed partial class SqliteMemoryStore
                 ingestResult.CodeChunkHashes, cancellationToken)
             .ConfigureAwait(false);
 
-        if (ingestResult.RowsInserted > 0)
-        {
-            embedDrainPump.TryEnqueue(new EmbedDrainRequest(
-                ingestResult.CodeChunkHashes is not null ? EmbedCorpus.Code : EmbedCorpus.Memory));
-        }
-
+        EnqueueDrainFor(ingestResult.WrittenCorpus);
         return ingestResult.RowsInserted;
+    }
+
+    /// <summary>The one place a written <see cref="CorpusKind" /> becomes an embed-topic signal —
+    /// <see cref="CorpusKind.Neither" /> enqueues nothing.</summary>
+    private void EnqueueDrainFor(CorpusKind corpus)
+    {
+        switch (corpus)
+        {
+            case CorpusKind.Memory:
+                embedDrainPump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Memory));
+                break;
+            case CorpusKind.Code:
+                embedDrainPump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Code));
+                break;
+            case CorpusKind.Neither:
+                break;
+        }
     }
 
     /// <summary>
@@ -151,12 +165,12 @@ public sealed partial class SqliteMemoryStore
         }
     }
 
-    private async Task<bool> ReplaceIfChangedCoreAsync(string projectId, string path, string fileHash,
+    private async Task<ReplaceResult> ReplaceIfChangedCoreAsync(string projectId, string path, string fileHash,
         Func<SqliteConnection, Task<bool>>? guard, CancellationToken cancellationToken)
     {
-        var (ran, _) = await ReplaceCoreAsync(projectId, path, fileHash, guard, context: null,
+        var (ran, _, corpus) = await ReplaceCoreAsync(projectId, path, fileHash, guard, context: null,
             fingerprint: true, cancellationToken).ConfigureAwait(false);
-        return ran;
+        return new ReplaceResult(ran, corpus);
     }
 
     /// <summary>
@@ -168,8 +182,8 @@ public sealed partial class SqliteMemoryStore
     ///     each caller's own decision (<see cref="ReplaceIfFileChangedAsync" /> passes one,
     ///     <see cref="ReplaceAsync" /> passes none); this method knows nothing about fingerprints.
     /// </summary>
-    private async Task<(bool Ran, int Rows)> ReplaceCoreAsync(string projectId, string path, string? fileHash,
-        Func<SqliteConnection, Task<bool>>? guard, string? context, bool fingerprint,
+    private async Task<(bool Ran, int Rows, CorpusKind Corpus)> ReplaceCoreAsync(string projectId, string path,
+        string? fileHash, Func<SqliteConnection, Task<bool>>? guard, string? context, bool fingerprint,
         CancellationToken cancellationToken)
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
@@ -187,7 +201,7 @@ public sealed partial class SqliteMemoryStore
                         new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
                     .ConfigureAwait(false);
                 Log.TransactionHeld(logger, timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds, 0);
-                return (false, 0);
+                return (false, 0, CorpusKind.Neither);
             }
 
             var pathPrefix = LikePattern.Escape(path) + "/%";
@@ -235,7 +249,7 @@ public sealed partial class SqliteMemoryStore
                     new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
             Log.TransactionHeld(logger, timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds, ingestResult.RowsInserted);
-            return (true, ingestResult.RowsInserted);
+            return (true, ingestResult.RowsInserted, ingestResult.WrittenCorpus);
         }
         catch
         {

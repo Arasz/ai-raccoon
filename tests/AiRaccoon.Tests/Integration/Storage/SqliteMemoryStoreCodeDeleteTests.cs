@@ -116,7 +116,8 @@ public sealed class SqliteMemoryStoreCodeDeleteTests : IDisposable
         var replaced = await _store.ReplaceIfFileChangedAsync("acme", file, newHash,
             TestContext.Current.CancellationToken);
 
-        replaced.ShouldBeTrue();
+        replaced.Replaced.ShouldBeTrue();
+        replaced.Corpus.ShouldBe(CorpusKind.Code, "a watched .cs file must signal the code corpus, not memory");
         var currentHashes = (await CodeHashesAsync(file)).ToArray();
         currentHashes.ShouldNotBeEmpty();
         currentHashes.ShouldNotContain(h => oldHashes.Contains(h));
@@ -135,7 +136,8 @@ public sealed class SqliteMemoryStoreCodeDeleteTests : IDisposable
         var replaced = await _store.ReplaceIfFileChangedAsync("acme", file, newHash,
             TestContext.Current.CancellationToken);
 
-        replaced.ShouldBeTrue();
+        replaced.Replaced.ShouldBeTrue();
+        replaced.Corpus.ShouldBe(CorpusKind.Memory, "a watched .md file must signal memory, not code");
         (await CountCodeAsync(file)).ShouldBe(0);
     }
 

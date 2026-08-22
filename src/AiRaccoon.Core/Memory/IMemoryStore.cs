@@ -85,10 +85,10 @@ public interface IMemoryStore : IModelMigrationStore
     /// <summary>
     ///     Watch-digest replace-by-path: skips when the stored fingerprint already equals
     ///     <paramref name="fileHash" />, else atomically deletes the path's chunks, re-ingests the
-    ///     file and stores the fingerprint. False means the fingerprint already matched and nothing
-    ///     changed.
+    ///     file and stores the fingerprint. <see cref="ReplaceResult.Replaced" /> false means the
+    ///     fingerprint already matched and nothing changed.
     /// </summary>
-    Task<bool> ReplaceIfFileChangedAsync(string projectId, string path, string fileHash,
+    Task<ReplaceResult> ReplaceIfFileChangedAsync(string projectId, string path, string fileHash,
         CancellationToken cancellationToken = default);
 
     /// <summary>

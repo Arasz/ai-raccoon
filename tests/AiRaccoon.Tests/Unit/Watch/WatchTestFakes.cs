@@ -317,6 +317,10 @@ internal sealed class FakeWatchMemoryStore : FakeMemoryStore
     // Scheduler jobs run concurrently (Task.Run, concurrency 4) — plain lists would race.
     public List<(string ProjectId, string Path, string Content)> Ingested { get; } = [];
 
+    /// <summary>Which corpus the next successful ingest reports writing to — a test sets this to
+    /// simulate a watched file routing to the code corpus instead of memory.</summary>
+    public CorpusKind IngestedCorpus { get; set; } = CorpusKind.Memory;
+
     public List<(string ProjectId, string Path)> DeletedPaths { get; } = [];
 
     /// <summary>When set, IngestFileAsync throws it (digest failure injection).</summary>
@@ -360,18 +364,18 @@ internal sealed class FakeWatchMemoryStore : FakeMemoryStore
     }
 
     /// <summary>Mirrors the real transaction: re-check the fingerprint, then delete, ingest and store it.</summary>
-    public override async Task<bool> ReplaceIfFileChangedAsync(string projectId, string path, string fileHash,
+    public override async Task<ReplaceResult> ReplaceIfFileChangedAsync(string projectId, string path, string fileHash,
         CancellationToken cancellationToken = default)
     {
         if (string.Equals(ReadFingerprint?.Invoke(projectId, path), fileHash, StringComparison.Ordinal))
         {
-            return false;
+            return new ReplaceResult(false, CorpusKind.Neither);
         }
 
         await DeleteSourcePathAsync(projectId, path, cancellationToken);
         await IngestFileAsync(projectId, path, null, cancellationToken);
         WriteFingerprint?.Invoke(projectId, path, fileHash);
-        return true;
+        return new ReplaceResult(true, IngestedCorpus);
     }
 
     public override Task<int> DeleteSourcePathAsync(string projectId, string path,

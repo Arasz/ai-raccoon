@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Watch;
@@ -39,6 +40,26 @@ public sealed class WatchDigestExecutorTests
             WatchDigestExecutor.ComputeHash(file, "hello"));
         stack.Store.Watches[(Project, dir.Path)].LastChangeTs.ShouldBe(
             WatchTestStack.FixedNow.ToUnixTimeSeconds());
+    }
+
+    /// <summary>A watched file that routed to the code corpus must wake the code drain, not
+    /// memory — the fake reports which corpus the replace actually wrote to, exactly like the
+    /// real store's ReplaceIfFileChangedAsync now does.</summary>
+    [Fact]
+    public async Task Digest_FileRoutedToCodeCorpus_SignalsCodeNotMemory()
+    {
+        using var dir = TempDir.New("digest-code-corpus");
+        var file = dir.File("Program.cs");
+        await File.WriteAllTextAsync(file, "class Program\n{\n}\n", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+        stack.Memory.IngestedCorpus = CorpusKind.Code;
+
+        await Executor(stack).DigestAsync(Project, dir.Path, file, WatchEventKind.Created, null,
+            TestContext.Current.CancellationToken);
+
+        var queued = stack.EmbedDrainPump.DrainUpTo(10).ShouldHaveSingleItem();
+        queued.Corpus.ShouldBe(EmbedCorpus.Code);
     }
 
     [Fact]

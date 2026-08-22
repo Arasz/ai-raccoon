@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Ingestion;
@@ -31,7 +32,14 @@ public readonly record struct FileIngestResult(
     int RowsInserted,
     bool FingerprintEligible,
     IReadOnlyList<string>? ChunkHashes = null,
-    IReadOnlyList<string>? CodeChunkHashes = null);
+    IReadOnlyList<string>? CodeChunkHashes = null)
+{
+    /// <summary>Which corpus this ingest actually wrote new rows to — <see cref="CorpusKind.Neither" />
+    /// when nothing was inserted (ignored/hidden/unrouted, or a rediscovered-unchanged file). One
+    /// ingest call only ever touches one corpus — routing is by file type, never both at once.</summary>
+    public CorpusKind WrittenCorpus =>
+        RowsInserted == 0 ? CorpusKind.Neither : CodeChunkHashes is not null ? CorpusKind.Code : CorpusKind.Memory;
+}
 
 /// <summary>One walked file's current memory-corpus chunk set, so the caller can prune the rest.</summary>
 public readonly record struct WalkedFile(string Path, IReadOnlyList<string> ChunkHashes);

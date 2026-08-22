@@ -84,13 +84,20 @@ public sealed class WatchDigestExecutor(
         // Delete + re-ingest + fingerprint are one transaction in the store: the pre-check above is
         // only a cheap filter, and a concurrent process either loses the race and skips or, on a
         // crash mid-digest, rolls back — the file is never left chunkless behind a matching hash.
-        var replaced = await store.ReplaceIfFileChangedAsync(projectId, normalized, hash, cancellationToken)
+        var replaceResult = await store.ReplaceIfFileChangedAsync(projectId, normalized, hash, cancellationToken)
             .ConfigureAwait(false);
-        if (replaced)
+        // Signals whichever corpus the replace actually wrote to; rows stay embed_state='pending'
+        // (the durable outbox, ADR-0076) until EmbedDrainService's single reader drains them.
+        switch (replaceResult.Corpus)
         {
-            // Signals the embed topic; rows stay embed_state='pending' (the durable outbox,
-            // ADR-0076) until EmbedDrainService's single reader drains them.
-            embedDrainPump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Memory));
+            case CorpusKind.Memory:
+                embedDrainPump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Memory));
+                break;
+            case CorpusKind.Code:
+                embedDrainPump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Code));
+                break;
+            case CorpusKind.Neither:
+                break;
         }
 
         await watchStore.UpdateLastChangeAsync(projectId, normalizedWatch, Now(), cancellationToken)
