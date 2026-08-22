@@ -31,6 +31,7 @@ flowchart LR
 
 ## What's new
 
+- **`model download` no longer refuses a sentencepiece model just because it declares an xlm-roberta tokenizer class — the fairseq offset is measured (vocab_size − piece count), not assumed.** (1.31.1) [#447](https://github.com/Arasz/ai-raccoon/issues/447)
 - **A re-ingested file no longer leaves stale chunks behind — direct ingest prunes what the file no longer contains.** (1.31.0) [#420](https://github.com/Arasz/ai-raccoon/pull/420)
 - **Cloud snapshots are authenticity-checked (HMAC) before attach, and model activation verifies sha256 pins.** An encrypted bank synced by ≥1.31 cannot be pulled by <1.31; upgrade both ends of an encrypted sync pair together. (1.31.0) [#431](https://github.com/Arasz/ai-raccoon/pull/431) · [#429](https://github.com/Arasz/ai-raccoon/pull/429)
 - **A model with wrong-by-construction token ids is refused instead of silently mis-embedding.** (1.31.0) [#423](https://github.com/Arasz/ai-raccoon/pull/423)
