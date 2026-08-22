@@ -133,8 +133,13 @@ public class SyncServiceEncryptedTests : IDisposable
         var remote = await cloud.PullAsync("obj", TestContext.Current.CancellationToken);
         remote.ShouldNotBeNull();
 
+        // The pushed bytes carry an embedded authenticity header (S2) ahead of the encrypted
+        // snapshot itself — strip it before opening, same as the pull side does.
+        new SyncBlobAuthenticator().TryUnwrap(remote.Data, out _, out var innerBytes).ShouldBeTrue(
+            "a push against an encrypted bank must publish a wrapped blob carrying the embedded authenticity header");
+
         var pulledPath = Path.Combine(_dataRoot, "pulled.db");
-        await File.WriteAllBytesAsync(pulledPath, remote.Data, TestContext.Current.CancellationToken);
+        await File.WriteAllBytesAsync(pulledPath, innerBytes, TestContext.Current.CancellationToken);
 
         await Should.ThrowAsync<SqliteException>(async () =>
         {

@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -15,16 +13,11 @@ public partial class SyncService(
     Func<string, CancellationToken, Task<SqliteConnection>> openSnapshot,
     Func<string, CancellationToken, Task<SqliteConnection>> openReadOnly,
     TimeProvider timeProvider,
-    ILogger<SyncService> logger) : ISyncService
+    ILogger<SyncService> logger,
+    ISyncBlobAuthenticator? blobAuthenticator = null) : ISyncService
 {
     private const int MaxPushRetries = 3;
-
-    /// <summary>Sidecar object key suffix carrying the HMAC authenticity tag alongside a pushed blob.</summary>
-    private const string AuthTagObjectSuffix = ".hmac";
-
-    /// <summary>HKDF info label distinguishing this derived key from any other use of the bank passphrase.</summary>
-    private static readonly byte[] AuthKeyInfo = "ai-raccoon-sync-auth"u8.ToArray();
-
+    private readonly ISyncBlobAuthenticator _authenticator = blobAuthenticator ?? new SyncBlobAuthenticator();
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     /// <summary>Convenience ctor for a fixed store (tests); the DI path resolves per call.</summary>
@@ -130,11 +123,22 @@ public partial class SyncService(
             {
                 try
                 {
-                    var newETag = await cloud.PushAsync(objectKey, snapshotBytes, pushETag, cancellationToken)
+                    // The authenticity tag is embedded directly in the pushed bytes (not a
+                    // separate sidecar object): publication is then atomic under the existing
+                    // CAS push — there is no window between two writes for a torn publish (a
+                    // network blip, or a losing device's concurrent push) to leave a new blob
+                    // paired with a stale or missing tag.
+                    var passphrase = await ReadPassphraseAsync(cancellationToken).ConfigureAwait(false);
+                    var uploadBytes = string.IsNullOrEmpty(passphrase)
+                        ? snapshotBytes
+                        : _authenticator.Wrap(passphrase, snapshotBytes);
+
+                    var newETag = await cloud.PushAsync(objectKey, uploadBytes, pushETag, cancellationToken)
                         .ConfigureAwait(false);
 
-                    // Record the ETag watermark and publish the authenticity tag alongside the
-                    // blob — same connection, so the passphrase is read once per push attempt.
+                    // Record the ETag watermark and, on an encrypted bank, the authenticity
+                    // watermark (sync_auth_seen) — same connection, one read of the passphrase
+                    // already done above.
                     await using (var conn = await openBank(cancellationToken).ConfigureAwait(false))
                     {
                         await using var upsert = conn.CreateCommand();
@@ -142,16 +146,13 @@ public partial class SyncService(
                         upsert.Parameters.AddWithValue("@value", newETag);
                         await upsert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
 
-                        var passphrase = new SqliteConnectionStringBuilder(conn.ConnectionString).Password;
                         if (string.IsNullOrEmpty(passphrase))
                         {
                             Log.SkippingAuthenticityTagForUnencryptedBank(logger, objectKey);
                         }
                         else
                         {
-                            var tag = ComputeAuthenticityTag(passphrase, snapshotBytes);
-                            await cloud.PushAsync($"{objectKey}{AuthTagObjectSuffix}", tag, null, cancellationToken)
-                                .ConfigureAwait(false);
+                            await MarkAuthTagSeenAsync(conn, objectKey, cancellationToken).ConfigureAwait(false);
                         }
                     }
 
@@ -217,19 +218,20 @@ public partial class SyncService(
         var remotePath = Path.GetTempFileName();
         try
         {
-            await File.WriteAllBytesAsync(remotePath, remoteData, cancellationToken).ConfigureAwait(false);
-
             await using var conn = await openBank(cancellationToken).ConfigureAwait(false);
 
             // The same passphrase ATTACH will key the snapshot with also keys the authenticity
             // check — both read it off the live bank's connection string.
             var attachKey = new SqliteConnectionStringBuilder(conn.ConnectionString).Password;
 
-            // Authenticity check BEFORE integrity (quick_check only detects corruption, not a
-            // valid-but-substituted blob) and BEFORE ATTACH — a refused blob must never reach
-            // the live bank.
-            await VerifyRemoteAuthenticityAsync(cloud, objectKey, remoteData, attachKey, cancellationToken)
+            // Authenticity check (and, on an encrypted bank, stripping the embedded header)
+            // BEFORE integrity (quick_check only detects corruption, not a valid-but-substituted
+            // blob) and BEFORE ATTACH — a refused blob must never reach the live bank, and the
+            // header/tag must never reach the file SQLite itself opens.
+            var snapshotData = await VerifyAndUnwrapRemoteAsync(conn, objectKey, remoteData, attachKey, cancellationToken)
                 .ConfigureAwait(false);
+
+            await File.WriteAllBytesAsync(remotePath, snapshotData, cancellationToken).ConfigureAwait(false);
 
             // Integrity check the remote snapshot.
             try
@@ -518,46 +520,77 @@ public partial class SyncService(
         await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Verifies the pulled remote blob's HMAC sidecar tag before quick_check/ATTACH ever
-    /// runs on it. Unencrypted banks have no passphrase to key from and skip the check (a
-    /// keyless checksum would only re-cover what quick_check already does — integrity, not
-    /// authenticity). A remote with no sidecar tag is a legacy blob predating this feature and is
-    /// accepted with a logged warning; a present-but-mismatching tag is refused.</summary>
-    private async Task VerifyRemoteAuthenticityAsync(ICloudStore cloud, string objectKey, byte[] remoteData,
+    private async Task<string?> ReadPassphraseAsync(CancellationToken cancellationToken)
+    {
+        await using var conn = await openBank(cancellationToken).ConfigureAwait(false);
+        return new SqliteConnectionStringBuilder(conn.ConnectionString).Password;
+    }
+
+    /// <summary>Verifies the pulled remote blob's embedded HMAC tag before quick_check/ATTACH
+    /// ever runs on it, returning the snapshot bytes with the header stripped. Unencrypted banks
+    /// have no passphrase to key from and skip the check entirely (a keyless checksum would only
+    /// re-cover what quick_check already does — integrity, not authenticity). A headerless blob
+    /// this objectKey has never carried a verified tag for is a legacy blob predating this
+    /// feature and is accepted with a logged warning (first-contact trust: a remote already
+    /// tampered with before its first tagged push is indistinguishable from a genuine legacy
+    /// blob). A headerless blob for an objectKey that HAS previously carried a verified tag is
+    /// refused — the tag can only disappear by an attacker rewriting the whole object, which is
+    /// exactly the downgrade a separate sidecar object was vulnerable to at zero extra cost for
+    /// an attacker who already has delete access. A present-but-mismatching tag is always
+    /// refused.</summary>
+    private async Task<byte[]> VerifyAndUnwrapRemoteAsync(SqliteConnection conn, string objectKey, byte[] remoteData,
         string? passphrase, CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(passphrase))
         {
             Log.SkippingAuthenticityCheckForUnencryptedBank(logger, objectKey);
-            return;
+            return remoteData;
         }
 
-        var tagObject = await cloud.PullAsync($"{objectKey}{AuthTagObjectSuffix}", cancellationToken)
-            .ConfigureAwait(false);
-        if (tagObject is null)
+        if (_authenticator.TryUnwrap(remoteData, out var tag, out var innerData))
         {
-            Log.RemoteBlobMissingAuthenticityTag(logger, objectKey);
-            return;
+            if (!_authenticator.Verify(passphrase, tag, innerData))
+            {
+                throw new SyncTamperedRemoteException(
+                    $"Remote snapshot '{objectKey}' failed its authenticity check: the embedded HMAC tag does " +
+                    "not match its bytes. Refusing to merge — the remote object may have been tampered with, " +
+                    "corrupted in transit, or overwritten by a bank using a different passphrase. Verify the " +
+                    "remote object, or delete it and let this bank re-push a fresh copy.");
+            }
+
+            await MarkAuthTagSeenAsync(conn, objectKey, cancellationToken).ConfigureAwait(false);
+            return innerData;
         }
 
-        var expectedTag = ComputeAuthenticityTag(passphrase, remoteData);
-        if (!CryptographicOperations.FixedTimeEquals(expectedTag, tagObject.Data))
+        if (await HasSeenAuthTagAsync(conn, objectKey, cancellationToken).ConfigureAwait(false))
         {
             throw new SyncTamperedRemoteException(
-                $"Remote snapshot '{objectKey}' failed its authenticity check: the HMAC tag does not match the " +
-                "downloaded bytes. Refusing to merge — the remote object may have been tampered with, corrupted " +
-                "in transit, or overwritten by a bank using a different passphrase. Verify the remote object, or " +
-                "delete it and let this bank re-push a fresh copy.");
+                $"Remote snapshot '{objectKey}' has no authenticity tag, but this bank has previously verified " +
+                "one for this object. Refusing rather than trusting a blob that can only lose its tag by being " +
+                "rewritten wholesale — a tag-stripping or downgrade attempt, or (harmlessly) a hand-restored " +
+                "backup. Push a fresh tagged copy from a trusted bank to recover.");
         }
+
+        Log.RemoteBlobMissingAuthenticityTag(logger, objectKey);
+        return remoteData;
     }
 
-    /// <summary>Derives a purpose-specific key from the bank passphrase via HKDF (platform
-    /// primitive, not a hand-rolled scheme) and tags the blob with HMAC-SHA256.</summary>
-    private static byte[] ComputeAuthenticityTag(string passphrase, byte[] data)
+    private static string AuthSeenKey(string objectKey) => $"sync_auth_seen:{objectKey}";
+
+    private static async Task MarkAuthTagSeenAsync(SqliteConnection conn, string objectKey, CancellationToken cancellationToken)
     {
-        var key = HKDF.DeriveKey(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(passphrase), outputLength: 32,
-            info: AuthKeyInfo);
-        return HMACSHA256.HashData(key, data);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "INSERT INTO sync_meta (key, value) VALUES (@key, '1') ON CONFLICT(key) DO UPDATE SET value = excluded.value";
+        cmd.Parameters.AddWithValue("@key", AuthSeenKey(objectKey));
+        await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<bool> HasSeenAuthTagAsync(SqliteConnection conn, string objectKey, CancellationToken cancellationToken)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT 1 FROM sync_meta WHERE key = @key";
+        cmd.Parameters.AddWithValue("@key", AuthSeenKey(objectKey));
+        return await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is not null;
     }
 
     private static partial class Log

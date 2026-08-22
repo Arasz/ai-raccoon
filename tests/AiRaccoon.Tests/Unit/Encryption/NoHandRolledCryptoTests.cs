@@ -30,7 +30,10 @@ public sealed class NoHandRolledCryptoTests
         // S2 remote-blob authenticity: HMACSHA256.HashData tags a sync blob with a key already
         // derived via the platform KDF (HKDF.DeriveKey) — the raw call here applies that key, it
         // does not derive one, so this is the sanctioned "compose audited primitives" shape.
-        "AiRaccoon.Infrastructure/Sync/SyncService.cs"
+        // Narrowed to this one small component (not all of SyncService.cs) so the allowlist keeps
+        // meaning "here is exactly where a raw primitive appears", not "here is a whole file that
+        // happens to also do other things".
+        "AiRaccoon.Infrastructure/Sync/SyncBlobAuthenticator.cs"
     };
 
     /// <summary>The one file allowed to build a bank key; its legacy path exists only to rekey old banks (ADR-0012).</summary>

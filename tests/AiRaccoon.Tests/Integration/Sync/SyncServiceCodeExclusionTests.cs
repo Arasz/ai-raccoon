@@ -461,8 +461,14 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
 
         var pulled = await cloud.PullAsync("test-object", TestContext.Current.CancellationToken);
         pulled.ShouldNotBeNull();
+
+        // The pushed bytes carry an embedded authenticity header (S2) ahead of the encrypted
+        // snapshot itself — strip it before opening, same as the pull side does.
+        new SyncBlobAuthenticator().TryUnwrap(pulled.Data, out _, out var innerBytes).ShouldBeTrue(
+            "a push against an encrypted bank must publish a wrapped blob carrying the embedded authenticity header");
+
         var pulledPath = Path.Combine(_dataRoot, "pulled-encrypted.db");
-        await File.WriteAllBytesAsync(pulledPath, pulled.Data, TestContext.Current.CancellationToken);
+        await File.WriteAllBytesAsync(pulledPath, innerBytes, TestContext.Current.CancellationToken);
 
         // The pulled snapshot is itself encrypted (VACUUM INTO of an encrypted bank stays
         // encrypted, docs/work/archive/2026-08-06-sqlite3mc-feature-surface.md F9), so table
