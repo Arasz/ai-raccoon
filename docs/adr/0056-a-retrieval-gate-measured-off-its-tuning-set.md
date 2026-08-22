@@ -2,7 +2,11 @@
 
 Date: 2026-08-15
 
-Status: Accepted
+Status: Accepted — the finding stands; its measurement is historical and its gate is now wider.
+The in-sample/held-out gap (0.673 against 0.285) was measured over a tuning/held-out partition
+of the private jsaa corpus, which left the repository at ADR-0090. On the public corpus the gap
+is not merely unmeasured but undefined: nothing was ever tuned here, so `TuningQueryIds` is
+empty and every gradeable query is out-of-sample. Stronger gate, weaker record — both deliberate.
 
 ## Context
 

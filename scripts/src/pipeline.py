@@ -17,7 +17,16 @@ from pathlib import Path
 
 import httpx
 
-from jsaa_config import BATCH_SIZE, CONTEXTS_TO_DELETE, JSAA_PINNED_COMMIT, JSAA_ROOT, PROJECT_ID, SPOT_CHECKS
+from jsaa_config import (
+    BATCH_SIZE,
+    CONTEXTS_TO_DELETE,
+    JSAA_PINNED_COMMIT,
+    JSAA_PINNED_COMMIT_ENV,
+    JSAA_ROOT,
+    JSAA_ROOT_ENV,
+    PROJECT_ID,
+    SPOT_CHECKS,
+)
 from mcp_client import AiRaccoonClient
 from sources import classify_file, enumerate_files
 
@@ -122,6 +131,16 @@ def verify_jsaa_pin() -> None:
     The canonical corpus must be reproducible on a clean checkout; ingesting
     from a different jsaa commit would silently change what gets indexed.
     """
+    if JSAA_ROOT is None:
+        raise SystemExit(
+            f"FATAL: {JSAA_ROOT_ENV} is not set. This CLI ingests a private checkout that "
+            "lives outside this repository; point it at that tree and re-run."
+        )
+    if not JSAA_PINNED_COMMIT:
+        raise SystemExit(
+            f"FATAL: {JSAA_PINNED_COMMIT_ENV} is not set. Ingesting an unpinned tree would "
+            "silently change what gets indexed; set the pin and re-run."
+        )
     try:
         head = subprocess.run(
             ["git", "-C", str(JSAA_ROOT), "rev-parse", "HEAD"],
@@ -155,7 +174,7 @@ async def run_pipeline(
 
     # ── 1. Enumerate ──
     log.info("━━━ PHASE 1: File enumeration ━━━")
-    files = enumerate_files()
+    files = enumerate_files(JSAA_ROOT)
     log.info("Found %d files to ingest", len(files))
 
     type_counts: dict[str, int] = {}

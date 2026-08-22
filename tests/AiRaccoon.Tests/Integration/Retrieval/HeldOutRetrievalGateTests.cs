@@ -19,7 +19,7 @@ namespace AiRaccoon.Tests.Integration.Retrieval;
 [Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class HeldOutRetrievalGateTests : IDisposable
 {
-    private const string ProjectId = "job-search-ai-assistant";
+    private const string ProjectId = "ai-raccoon";
     private const int RankCutoff = 5;
     private const int SearchLimit = 10;
 
@@ -27,16 +27,21 @@ public sealed class HeldOutRetrievalGateTests : IDisposable
     private const double Tolerance = GoldenFile.RankingTolerance;
 
     /// <summary>
-    ///     Per-query held-out nDCG@5 at the shipped defaults, measured 2026-08-15 over the pinned
-    ///     query vectors (docs/adr/0050), so the number is the ranking's and not the host CPU's.
-    ///     Raise history: none — first pinning. Lowering an entry is a regression being accepted
-    ///     and belongs in a commit message, not in a quiet edit.
+    ///     Per-query held-out nDCG@5 at the shipped defaults, measured 2026-08-22 on the public
+    ///     docs corpus (ADR-0090) over the pinned query vectors (ADR-0050), so the number is the
+    ///     ranking's and not the host CPU's. Covers ALL 19 gradeable queries, not three: nothing
+    ///     was ever tuned on this corpus, so TuningQueryIds is empty and the held-out set is the
+    ///     whole gradeable catalog. Lowering an entry is a regression being accepted and belongs
+    ///     in a commit message, not in a quiet edit.
     /// </summary>
     private static readonly Dictionary<string, double> HeldOutNdcg5Floor = new(StringComparer.Ordinal)
     {
-        ["A8"] = 0.131205,
-        ["A9"] = 0.553146,
-        ["A10"] = 0.169580
+        ["A1"] = 0.315648, ["A2"] = 0.339160, ["A3"] = 0.277273, ["A4"] = 0.868795,
+        ["A5"] = 1.000000, ["A6"] = 0.722727, ["A7"] = 1.000000, ["A8"] = 0.315648,
+        ["A9"] = 0.722727, ["A10"] = 0.508740,
+        ["C1"] = 0.500000, ["C2"] = 0.500000, ["C5"] = 0.500000,
+        ["S1"] = 1.000000, ["S2"] = 0.169580, ["S3"] = 0.636682, ["S4"] = 0.868795,
+        ["S5"] = 1.000000, ["S6"] = 0.684352
     };
 
     /// <summary>
@@ -58,7 +63,7 @@ public sealed class HeldOutRetrievalGateTests : IDisposable
         _output = output;
         _dataRoot = TestData.CreateTempRoot("ai-raccoon-held-out-gate");
         var dbPath = Path.Combine(_dataRoot, "memory.db");
-        File.Copy(Path.Combine(AppContext.BaseDirectory, "Resources", "jsaa-memory.db"), dbPath);
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "Resources", "docs-memory.db"), dbPath);
 
         var options = new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
@@ -140,38 +145,19 @@ public sealed class HeldOutRetrievalGateTests : IDisposable
         scores.Average().ShouldBeGreaterThanOrEqualTo(HeldOutMeanFloor - Tolerance);
     }
 
-    /// <summary>
-    ///     The measurement WP11 exists to produce: the same search path, the same corpus and the
-    ///     same metric over the queries the sweeps tuned on and the queries they never saw. Every
-    ///     published retrieval figure comes from the first set.
-    /// </summary>
-    [Fact]
-    public async Task InSampleScore_ExceedsHeldOutScore_OnTheSamePath()
-    {
-        var catalog = BaselineQueryCatalog.Load();
-        var tuning = RetrievalTuningSets.Gradeable(catalog)
-            .Where(q => RetrievalTuningSets.TuningQueryIds.Contains(q.Id)).ToList();
-
-        var inSample = new List<double>(tuning.Count);
-        foreach (var query in tuning)
-        {
-            inSample.Add(await ScoreAsync(query, reverse: false, TestContext.Current.CancellationToken));
-        }
-
-        var heldOut = new List<double>();
-        foreach (var query in RetrievalTuningSets.HeldOut(catalog))
-        {
-            heldOut.Add(await ScoreAsync(query, reverse: false, TestContext.Current.CancellationToken));
-        }
-
-        _output.WriteLine(
-            $"in-sample mean nDCG@5={inSample.Average():F6} ({inSample.Count} queries), " +
-            $"held-out mean={heldOut.Average():F6} ({heldOut.Count} queries)");
-        inSample.Average().ShouldBeGreaterThan(heldOut.Average(),
-            "if this ever inverts, the in-sample numbers stopped being optimistic and the tuning " +
-            "set stopped being special — re-derive the partition before trusting either");
-    }
-
+    /* Retired at ADR-0090 —
+       RETIRED at ADR-0090, deliberately, not lost. This compared in-sample against held-out
+       scores to reproduce ADR-0056's circularity finding. On the public docs corpus there is
+       no in-sample population to compare against: nothing was ever tuned here, so
+       TuningQueryIds is empty and every gradeable query is out-of-sample. The assertion would
+       compare the held-out set against an empty set — vacuous, and it in fact inverted when
+       first run here (in-sample mean 0.563017 over 11 ids vs held-out 0.675432 over 6), which
+       is exactly the "if this ever inverts, re-derive the partition" case its own message
+       named. ADR-0056's measurement is preserved as history in that ADR's status line.
+       RetrievalTuningSetsTests.TuningQueryIds_StayEmpty is what keeps this honest: it goes
+       red the day someone re-tunes on this corpus, which is when this test becomes
+       meaningful again.
+    */
     private async Task<double> ScoreAsync(CatalogQuery query, bool reverse, CancellationToken cancellationToken)
     {
         var results = (await _store.SearchAsync(new SearchQuery(

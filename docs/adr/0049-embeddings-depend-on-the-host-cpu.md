@@ -2,7 +2,12 @@
 
 Date: 2026-08-14
 
-Status: Accepted
+Status: Accepted — the finding stands; its numeric table is historical.
+`PlatformNumericsProbe` still reproduces the phenomenon (three arithmetic paths, three
+different embeddings), but the figures 0.5260827785380623 / 0.5587755695473325 /
+0.48859561353453607 were measured on the private jsaa corpus, which left the repository at
+ADR-0090 and cannot be re-derived from it. This ADR is why the replacement corpus is still a
+committed bank with vectors baked on one arithmetic path rather than generated at test time.
 
 ## Context
 

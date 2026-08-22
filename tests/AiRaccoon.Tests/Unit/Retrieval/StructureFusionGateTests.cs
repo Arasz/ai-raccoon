@@ -13,7 +13,7 @@ namespace AiRaccoon.Tests.Unit.Retrieval;
 
 /// <summary>
 ///     The acceptance test for WP4 (docs/plans/2026-08-14-code-quality-improvement-plan.md): the
-///     regenerated corpus (tests/AiRaccoon.Tests/Resources/jsaa-memory.db) is the first committed
+///     regenerated corpus (tests/AiRaccoon.Tests/Resources/docs-memory.db) is the first committed
 ///     gate fixture to carry real structure vectors (docs/adr/0004-dual-vector-structure-signal.md),
 ///     so it is the first fixture that can prove <see cref="StructureFusion" /> is load-bearing —
 ///     deliberately breaking it must make a gate here go red.
@@ -22,7 +22,7 @@ namespace AiRaccoon.Tests.Unit.Retrieval;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class StructureFusionGateTests : IDisposable
 {
-    private const string ProjectId = "job-search-ai-assistant";
+    private const string ProjectId = "ai-raccoon";
 
     /// <summary>
     ///     A deliberately generic query: its content-embedding similarity to any one candidate chunk
@@ -46,18 +46,20 @@ public sealed class StructureFusionGateTests : IDisposable
     ///     the corpus to store repo-relative paths changed every hash while this chunk stayed
     ///     exactly the same file and heading.
     /// </summary>
-    private const string ExpectedSourceFile = "docs/adr/0068-what-erasure-does-not-erase.md";
+    private const string ExpectedSourceFile = "docs/adr/0077-table-chunking-is-not-adjudicable-on-a-table-blind-corpus.md";
 
     private const string ExpectedHeading = "Decision";
 
+    private readonly ITestOutputHelper _output;
     private readonly string _dataRoot;
     private readonly SqliteConnectionFactory _factory;
     private readonly SqliteMemoryStore _store;
 
-    public StructureFusionGateTests()
+    public StructureFusionGateTests(ITestOutputHelper output)
     {
+        _output = output;
         _dataRoot = TestData.CreateTempRoot("ai-raccoon-structure-fusion-gate");
-        var bundledDb = Path.Combine(AppContext.BaseDirectory, "Resources", "jsaa-memory.db");
+        var bundledDb = Path.Combine(AppContext.BaseDirectory, "Resources", "docs-memory.db");
         File.Copy(bundledDb, Path.Combine(_dataRoot, "memory.db"));
 
         _factory = new SqliteConnectionFactory(
@@ -83,6 +85,17 @@ public sealed class StructureFusionGateTests : IDisposable
             FtsWeight: 0, VectorWeight: 1), TestContext.Current.CancellationToken)).Results;
 
         results.ShouldNotBeEmpty();
+        await using (var probe = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            foreach (var r in results)
+            {
+                var row = await probe.QueryFirstOrDefaultAsync<string>(new CommandDefinition(
+                    "SELECT source_file || '  [' || COALESCE(heading_path,'-') || ']' FROM entries WHERE hash = @h",
+                    new { h = r.Hash }, cancellationToken: TestContext.Current.CancellationToken));
+                _output.WriteLine($"PROBE {r.Ranking:F4}  {row}");
+            }
+        }
+
         var expectedHash = await ExpectedTopHashAsync();
         results[0].Hash.ShouldBe(expectedHash,
             "the fused dual-vector rank must put the structure-matched (heading \"Decision\") chunk " +

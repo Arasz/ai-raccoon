@@ -16,7 +16,7 @@ namespace AiRaccoon.Tests.Integration;
 [Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class RetrievalBaselineTests : IDisposable
 {
-    private const string ProjectId = "job-search-ai-assistant"; // matches PROJECT_ID in scripts/ingest-jsaa-docs.py
+    private const string ProjectId = "ai-raccoon"; // matches PROJECT_ID in scripts/src/corpus_config.py
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
 
     /// <summary>Wave 0 corpus-exclusion markers (docs/plans/retrieval-improvement-c.md §0): docs/work/, docs/state.json + .ai-badger/state.json, docs/now.md + .remember/now.md.</summary>
@@ -406,9 +406,9 @@ public sealed class RetrievalBaselineTests : IDisposable
 
     private static string ResolveBundledDbPath()
     {
-        // The jsaa-memory.db is copied to the output directory by the build
+        // The docs-memory.db is copied to the output directory by the build
         var outputDir = AppContext.BaseDirectory;
-        var path = Path.Combine(outputDir, "Resources", "jsaa-memory.db");
+        var path = Path.Combine(outputDir, "Resources", "docs-memory.db");
         if (File.Exists(path))
         {
             return path;
@@ -417,7 +417,7 @@ public sealed class RetrievalBaselineTests : IDisposable
         // Fallback: look for it relative to the project root during development
         var devFallback = Path.Combine(
             AppContext.BaseDirectory,
-            "..", "..", "..", "Resources", "jsaa-memory.db");
+            "..", "..", "..", "Resources", "docs-memory.db");
         return Path.GetFullPath(devFallback);
     }
 

@@ -24,7 +24,7 @@ namespace AiRaccoon.Tests.Integration;
 [Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class RrfParameterSweepTests : IDisposable
 {
-    private const string ProjectId = "job-search-ai-assistant";
+    private const string ProjectId = "ai-raccoon";
     private const int SearchLimit = 10;
     private const int RankCutoff = 5;
 
@@ -41,7 +41,7 @@ public sealed class RrfParameterSweepTests : IDisposable
 
     /// <summary>ADR nDCG@5 at the chosen point over the committed query vectors — measured
     /// 2026-08-14, identical on every platform since the fixture landed (docs/adr/0050).</summary>
-    private const double PinnedAdrNdcg5 = 0.5260827785380623;
+    private const double PinnedAdrNdcg5 = 0.6070718913275679;
 
     /// <summary>Source-affinity parameters, fixed during this sweep.</summary>
     private const double FixedSourceLambda = 0.1;
@@ -57,7 +57,7 @@ public sealed class RrfParameterSweepTests : IDisposable
     /// <summary>The 11 expected-source queries the Wave 4 gates were measured over (see
     /// docs/adr/0006-rrf-parameter-optimization.md). Every number here is in-sample: the held-out
     /// gate that can fail is HeldOutRetrievalGateTests (docs/adr/0056).</summary>
-    private static readonly string[] RrfGateQueryIds = RetrievalTuningSets.TuningQueryIds;
+    private static readonly string[] RrfGateQueryIds = RetrievalTuningSets.SweepGateQueryIds(BaselineQueryCatalog.Load());
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
@@ -71,7 +71,7 @@ public sealed class RrfParameterSweepTests : IDisposable
     {
         _output = output;
         _dataRoot = TestData.CreateTempRoot("ai-raccoon-rrf-sweep");
-        var bundledDb = Path.Combine(AppContext.BaseDirectory, "Resources", "jsaa-memory.db");
+        var bundledDb = Path.Combine(AppContext.BaseDirectory, "Resources", "docs-memory.db");
         File.Copy(bundledDb, Path.Combine(_dataRoot, "memory.db"));
 
         var factory = new SqliteConnectionFactory(
@@ -80,12 +80,20 @@ public sealed class RrfParameterSweepTests : IDisposable
         // Query vectors come from the committed fixture, not the live model: the bundled model is
         // u8s8-quantized, so the same query embeds differently on arm64, VNNI x64 and non-VNNI x64,
         // and this sweep's metric was a function of the host CPU rather than of the RRF parameters
-        // it sweeps (docs/adr/0049, docs/adr/0050). The corpus vectors in jsaa-memory.db were
+        // it sweeps (docs/adr/0049, docs/adr/0050). The corpus vectors in docs-memory.db were
         // already fixed; the query vector was the one un-pinned input.
         _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
             PinnedQueryVectors.EmbeddingService());
 
-        (_hashMap, _fileHashes) = BuildHashMapFromCorpus(Path.Combine(_dataRoot, "memory.db"));
+        // CorpusHashMap, not a private copy. The copy this replaced compared heading_path to the
+        // '#section' suffix verbatim, while CorpusHashMap slugifies it ("Alternatives considered"
+        // -> "alternatives-considered"). The two agreed only while every gate section was a single
+        // word; on the public corpus the copy threw for
+        // docs:adr:0024-unknown-id-contract.md#alternatives-considered (ADR-0090).
+        (_hashMap, _fileHashes) = CorpusHashMap.Build(
+            Path.Combine(_dataRoot, "memory.db"),
+            LoadQueries().Where(q => q.ExpectedSource is not null && RrfGateQueryIds.Contains(q.Id))
+                .Select(q => q.ExpectedSource!));
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
@@ -121,7 +129,7 @@ public sealed class RrfParameterSweepTests : IDisposable
 
         // Gate (b): C2's hybrid rank collapsed on the re-pinned corpus
         // (docs/work/archive/2026-08-06-baseline-repin-new-corpus.md); its gate is FTS-only rank 1 in QueryConstructionTests.
-        chosen.C1ExactRank.ShouldBe(1, "C1 must hold hybrid rank 1");
+        chosen.C1ExactRank.ShouldBe(3, "C1 must hold its measured hybrid rank 3 (jsaa: 1; ADR-0090)");
         chosen.C5ExactRank.ShouldNotBeNull("C5 must appear in the top-k results");
         chosen.C5ExactRank!.Value.ShouldBeLessThanOrEqualTo(5, "C5 must hold its measured hybrid rank ceiling of 5");
 
@@ -129,7 +137,7 @@ public sealed class RrfParameterSweepTests : IDisposable
         // modality; the measured exclusions are documented in docs/work/archive/2026-08-06-baseline-repin-new-corpus.md.
         foreach (var item in fusion)
         {
-            if (item.QueryId is "C2" or "A3" or "A5" or "A6" or "A7" or "C5" or "S2")
+            if (item.QueryId is "A2" or "A3" or "A8" or "A10" or "C1" or "C2" or "C5" or "S2")
             {
                 continue;
             }
@@ -168,10 +176,11 @@ public sealed class RrfParameterSweepTests : IDisposable
         // already borderline before regeneration — A6 exact 6, A7 exact 7 on the prior corpus).
         // Not re-pinned to a wider window; recorded as a gap, same treatment as C2's hybrid
         // collapse above.
-        chosen.S2FileRank.ShouldNotBeNull("S2 ADR-0011 file must appear in the top 10");
-        chosen.S2FileRank!.Value.ShouldBeLessThanOrEqualTo(3, "S2 ADR-0011 file must rank <= 3 (re-pinned)");
-        chosen.ExactAt3Count.ShouldBeGreaterThanOrEqualTo(4,
-            $"exact-chunk @3 must hold >= 4/11 (re-pinned); got {chosen.ExactAt3Count}/11");
+        chosen.S2FileRank.ShouldNotBeNull("S2 expected file must appear in the top 10");
+        chosen.S2FileRank!.Value.ShouldBeLessThanOrEqualTo(3, "S2 expected file must rank <= 3 (re-pinned)");
+        chosen.ExactAt3Count.ShouldBeGreaterThanOrEqualTo(14,
+            $"exact-chunk @3 must hold >= 14/19 (measured on the public corpus; jsaa was 4/11); " +
+            $"got {chosen.ExactAt3Count}/19");
 
         // Gate (a): grid-optimality on the re-pinned corpus (docs/adr/0006-rrf-parameter-optimization.md);
         // no grid point beats the chosen point while holding the gates.
@@ -451,8 +460,8 @@ public sealed class RrfParameterSweepTests : IDisposable
         builder.AppendLine();
         builder.AppendLine("Date: 2026-08-04, re-measured 2026-08-14 (WP4 corpus regeneration, " +
                            "docs/plans/2026-08-14-code-quality-improvement-plan.md). Corpus: " +
-                           "tests/AiRaccoon.Tests/Resources/jsaa-memory.db (2518 chunks, regenerated through " +
-                           "the production FileIngestor — was 752/761 chunks through the retired Python re-chunker).");
+                           "tests/AiRaccoon.Tests/Resources/docs-memory.db (2049 chunks, regenerated by " +
+                           "DocsCorpusRegenerationTool with AIRACCOON_REGENERATE_DOCS_CORPUS=1).");
         builder.AppendLine("Measured by RrfParameterSweepTests (limit 10, Wave 3 source-affinity fixed at λ=0.1, thr=0.1, Max).");
         builder.AppendLine();
         builder.AppendLine(
@@ -528,81 +537,6 @@ public sealed class RrfParameterSweepTests : IDisposable
 
     private static string FileKey(string structuredPath) => structuredPath.Split('#')[0];
 
-    /// <summary>
-    ///     Derives the expected chunk hash for each of <see cref="RrfGateQueryIds" />' ExpectedSource
-    ///     strings directly from the regenerated corpus (docs/plans/2026-08-14-code-quality-improvement-plan.md
-    ///     WP4), instead of the retired scripts/chunk-hash-map.json. That file encoded
-    ///     scripts/src/chunking.py's structured-path hashes — byte-identical only to a fixture built
-    ///     through the old Python re-chunker; a different chunker (the production
-    ///     <see cref="AiRaccoon.Infrastructure.Ingestion.FileIngestor" />, WP7's engine-aware budget)
-    ///     produces different chunk boundaries, so those hashes no longer identify any real row.
-    ///     ExpectedSource format is "prefix:relPath[#section]" (scripts/src/chunking.py's
-    ///     `_chunk_path`); only the two prefixes the 11 gate queries use are handled here — an
-    ///     unrecognized prefix throws rather than silently mis-mapping a query to the wrong chunk.
-    /// </summary>
-    private static (Dictionary<string, string> HashMap, Dictionary<string, HashSet<string>> FileHashes)
-        BuildHashMapFromCorpus(string dbPath)
-    {
-        using var connection = new SqliteConnection($"Data Source={dbPath}");
-        connection.Open();
-        using var command = connection.CreateCommand();
-        command.CommandText = "SELECT source_file, heading_path, hash, chunk_index, value FROM entries " +
-                              "ORDER BY source_file, chunk_index";
-        using var reader = command.ExecuteReader();
-        var rows = new List<(string SourceFile, string? HeadingPath, string Hash, int ChunkIndex, string Value)>();
-        while (reader.Read())
-        {
-            rows.Add((reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetString(1),
-                reader.GetString(2), reader.GetInt32(3), reader.GetString(4)));
-        }
-
-        var byFile = rows.GroupBy(row => row.SourceFile, StringComparer.Ordinal).ToList();
-        var hashMap = new Dictionary<string, string>(StringComparer.Ordinal);
-        var fileHashes = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
-
-        var expectedSources = LoadQueries()
-            .Where(q => q.ExpectedSource is not null && RrfGateQueryIds.Contains(q.Id))
-            .Select(q => q.ExpectedSource!)
-            .Distinct(StringComparer.Ordinal);
-
-        foreach (var expected in expectedSources)
-        {
-            var (relSuffix, section) = ParseExpectedSource(expected);
-            var group = byFile.SingleOrDefault(g => g.Key.EndsWith(relSuffix, StringComparison.Ordinal))
-                        ?? throw new InvalidOperationException(
-                            $"BuildHashMapFromCorpus: no source_file in the regenerated corpus ends with " +
-                            $"'{relSuffix}' (expectedSource '{expected}')");
-            var chunks = group.OrderBy(row => row.ChunkIndex).ToList();
-            var match = section is null
-                ? chunks[0]
-                : chunks.FirstOrDefault(row => string.Equals(row.HeadingPath, section, StringComparison.OrdinalIgnoreCase));
-            if (match.Hash is null && section is not null)
-            {
-                // Fallback (measured on docs/adr/0046-retire-nfr-1-llm-cost-protection.md, "A5"): the
-                // chunker occasionally drops a heading line that is immediately followed by a
-                // one-line section body (the "## Decision\n\nDecision: ..." shape), so the chunk
-                // carries no heading_path at all. Match the section name as a line prefix in the
-                // chunk body instead — this is a real, narrow gap in the chunker's heading handling,
-                // not a mapping bug; reported in the WP4 findings, not fixed here (chunkers are
-                // off-limits for this package).
-                match = chunks.FirstOrDefault(row =>
-                    string.IsNullOrEmpty(row.HeadingPath)
-                    && row.Value.Contains($"{section}:", StringComparison.OrdinalIgnoreCase));
-            }
-
-            if (match.Hash is null)
-            {
-                throw new InvalidOperationException(
-                    $"BuildHashMapFromCorpus: no chunk of '{relSuffix}' has heading_path '{section}' " +
-                    $"(expectedSource '{expected}')");
-            }
-
-            hashMap[expected] = match.Hash;
-            fileHashes[FileKey(expected)] = [.. chunks.Select(row => row.Hash)];
-        }
-
-        return (hashMap, fileHashes);
-    }
 
     /// <summary>Reverses scripts/src/chunking.py's `_chunk_path`/`_source_prefix`/`_short_rel` for the
     /// two prefixes the 11 gate queries use: "docs:adr:X.md[#section]" and

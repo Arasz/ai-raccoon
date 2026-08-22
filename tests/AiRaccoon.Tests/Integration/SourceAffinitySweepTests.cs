@@ -23,7 +23,7 @@ namespace AiRaccoon.Tests.Integration;
 [Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class SourceAffinitySweepTests : IDisposable
 {
-    private const string ProjectId = "job-search-ai-assistant";
+    private const string ProjectId = "ai-raccoon";
     private const int SearchLimit = 10;
     private const int RankCutoff = 5;
 
@@ -35,14 +35,14 @@ public sealed class SourceAffinitySweepTests : IDisposable
 
     /// <summary>ADR nDCG@5 at the chosen point over the committed query vectors — measured
     /// 2026-08-14, identical on every platform since the fixture landed (docs/adr/0050).</summary>
-    private const double PinnedAdrNdcg5 = 0.5260827785380623;
+    private const double PinnedAdrNdcg5 = 0.6070718913275679;
 
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
 
     /// <summary>The 11 expected-source queries the Wave 3 gates were measured over (see
     /// docs/adr/0005-source-affinity-ranking.md). Every number here is in-sample: the held-out
     /// gate that can fail is HeldOutRetrievalGateTests (docs/adr/0056).</summary>
-    private static readonly string[] SourceAffinityGateQueryIds = RetrievalTuningSets.TuningQueryIds;
+    private static readonly string[] SourceAffinityGateQueryIds = RetrievalTuningSets.SweepGateQueryIds(BaselineQueryCatalog.Load());
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
@@ -56,7 +56,7 @@ public sealed class SourceAffinitySweepTests : IDisposable
     {
         _output = output;
         _dataRoot = TestData.CreateTempRoot("ai-raccoon-source-affinity");
-        var bundledDb = Path.Combine(AppContext.BaseDirectory, "Resources", "jsaa-memory.db");
+        var bundledDb = Path.Combine(AppContext.BaseDirectory, "Resources", "docs-memory.db");
         var dbPath = Path.Combine(_dataRoot, "memory.db");
         File.Copy(bundledDb, dbPath);
 
@@ -66,7 +66,7 @@ public sealed class SourceAffinitySweepTests : IDisposable
         // Query vectors come from the committed fixture, not the live model: the bundled model is
         // u8s8-quantized, so the same query embeds differently on arm64, VNNI x64 and non-VNNI x64,
         // and this sweep's metric was a function of the host CPU rather than of the configuration it
-        // sweeps (docs/adr/0049, docs/adr/0050). The corpus vectors in jsaa-memory.db were already
+        // sweeps (docs/adr/0049, docs/adr/0050). The corpus vectors in docs-memory.db were already
         // fixed; the query vector was the one un-pinned input.
         _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
             PinnedQueryVectors.EmbeddingService());
@@ -179,7 +179,7 @@ public sealed class SourceAffinitySweepTests : IDisposable
         // Gate (d): C1 holds hybrid rank 1; C5 holds rank <= 5 (secrets/config ADRs outrank it).
         // C2's hybrid rank collapsed on the re-pinned corpus — its FTS-only rank-1 gate lives in
         // QueryConstructionTests.
-        chosen.C1ExactRank.ShouldBe(1, "C1 must hold hybrid rank 1");
+        chosen.C1ExactRank.ShouldBe(3, "C1 must hold its measured hybrid rank 3 (jsaa: 1; ADR-0090)");
         chosen.C5ExactRank.ShouldNotBeNull("C5 must appear in the top-k results");
         chosen.C5ExactRank!.Value.ShouldBeLessThanOrEqualTo(5, "C5 must hold its measured hybrid rank ceiling of 5");
 
@@ -333,7 +333,7 @@ public sealed class SourceAffinitySweepTests : IDisposable
         var builder = new StringBuilder();
         builder.AppendLine("# Wave 3 Source-Affinity Scoring — Parameter Sweep");
         builder.AppendLine();
-        builder.AppendLine("Date: 2026-08-04. Corpus: tests/AiRaccoon.Tests/Resources/jsaa-memory.db (752 chunks).");
+        builder.AppendLine("Date: 2026-08-04. Corpus: tests/AiRaccoon.Tests/Resources/docs-memory.db (2049 chunks).");
         builder.AppendLine($"Measured by SourceAffinitySweepTests (limit {SearchLimit}, RRF k=60, 1:1 weights).");
         builder.AppendLine();
         builder.AppendLine(

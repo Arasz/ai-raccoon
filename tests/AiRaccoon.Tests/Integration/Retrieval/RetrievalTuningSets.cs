@@ -11,8 +11,18 @@ internal static class RetrievalTuningSets
     ///     The 11 expected-source queries ADR-0005's and ADR-0006's grids selected their parameters
     ///     over — and gate them with. Every metric measured over these is in-sample by construction.
     /// </summary>
-    public static readonly string[] TuningQueryIds =
-        ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "S2", "C1", "C2", "C5"];
+    public static readonly string[] TuningQueryIds = [];
+
+    /// <summary>
+    ///     The ids the parameter sweeps EVALUATE their chosen point against. Deliberately separate
+    ///     from <see cref="TuningQueryIds" />, which records what a sweep once SELECTED parameters
+    ///     over: on this corpus nothing was selected here, so that set is empty, and deriving the
+    ///     sweep's evaluation set from it left both sweeps measuring zero queries and reporting
+    ///     nDCG@5 = 0 (found while porting to the public corpus, ADR-0090). Derived from the
+    ///     catalog rather than hand-listed so it cannot drift from what is gradeable.
+    /// </summary>
+    public static string[] SweepGateQueryIds(IEnumerable<CatalogQuery> catalog) =>
+        [.. Gradeable(catalog).Select(q => q.Id)];
 
     /// <summary>The catalog entries that can be scored at all: those carrying an expectedSource.</summary>
     public static IReadOnlyList<CatalogQuery> Gradeable(IEnumerable<CatalogQuery> catalog) =>
@@ -29,9 +39,11 @@ internal static class RetrievalTuningSets
     }
 
     /// <summary>
-    ///     What generated the document, from the expectedSource prefix: 'docs' is the reviewed
-    ///     project's own tree, 'ai-badger' is the vendored framework. Measured on the corpus:
-    ///     those are the only two generators jsaa-memory.db carries (112 and 78 source files).
+    ///     What generated the document, from the expectedSource prefix: 'docs' is this project's
+    ///     own documentation tree, 'ai-badger' is the vendored framework. Measured on
+    ///     docs-memory.db 2026-08-22: those are the only two generators it carries — 109 source
+    ///     files under docs/, 87 under .ai-badger/, plus 3 at the repository root
+    ///     (README/CLAUDE/HERMES, which the expectedSource prefixes do not address).
     /// </summary>
     public static string Family(string expectedSource)
     {

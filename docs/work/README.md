@@ -11,6 +11,7 @@ Active records:
 | File | What it is |
 |---|---|
 | [2026-08-07-skill-discovery-mcp-server.md](2026-08-07-skill-discovery-mcp-server.md) | Active research, not yet implemented |
+| [2026-08-22-s6a-fixture-replacement-design.md](2026-08-22-s6a-fixture-replacement-design.md) | Design + execution record for replacing the private `jsaa-memory.db` retrieval fixture with a corpus built from this repo's own public docs (ai-raccoon#414 S6a, ADR-0090). §9 amends the plan with what execution measured differently. |
 
 Frozen, build-embedded Gherkin bundles — referenced by
 `tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj`'s `ReqnrollFeatureFiles`; never move,
