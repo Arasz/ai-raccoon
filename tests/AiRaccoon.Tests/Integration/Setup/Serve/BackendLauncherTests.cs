@@ -167,6 +167,28 @@ public sealed class BackendLauncherTests : IDisposable
         stopwatch.Elapsed.ShouldBeLessThan(BackendLauncher.DefaultBudget);
     }
 
+    /// <summary>
+    ///     The defect this gates: DrainAsync used to discard the child's stderr unconditionally, so a
+    ///     backend that started and then failed left the operator with nothing but a bare exit code.
+    /// </summary>
+    [Fact]
+    public async Task Acquire_WhenTheBackendExitsWithStderr_SurfacesItInTheResult()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "the fake failing child is a POSIX shell script");
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+
+        lease.ReleaseForBind();
+        var result = await Launcher().AcquireAsync(port, "sh",
+            ["-c", "echo 'ai-raccoon: could not decrypt the bank' 1>&2; exit 7"],
+            TestContext.Current.CancellationToken);
+
+        result.Url.ShouldBeNull();
+        result.ServeExitCode.ShouldBe(7);
+        result.ServeStderr.ShouldNotBeNull();
+        result.ServeStderr.ShouldContain("could not decrypt the bank");
+    }
+
     [Fact]
     public async Task Acquire_WhenTheBackendCannotBeStarted_FailsWithTheCommandItTried()
     {

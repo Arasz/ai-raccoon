@@ -30,7 +30,8 @@ public sealed class BackendSessions(IBackendLauncher backendLauncher, IHttpClien
         if (acquired.Url is null)
         {
             throw new BackendUnavailableException(Unavailable(
-                $"no MCP backend at {ServerProbe.EndpointFor(config.Port)} (serve exit {acquired.ServeExitCode?.ToString(CultureInfo.InvariantCulture) ?? "none"})"));
+                $"no MCP backend at {ServerProbe.EndpointFor(config.Port)} (serve exit {acquired.ServeExitCode?.ToString(CultureInfo.InvariantCulture) ?? "none"})" +
+                (acquired.ServeStderr is { } stderr ? $" — stderr: {stderr}" : string.Empty)));
         }
 
         var token = _tokenFile.Read() ?? throw new BackendUnavailableException(Unavailable(
