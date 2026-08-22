@@ -7,6 +7,9 @@ checkout: the corpus root is the ai-raccoon working tree.
 
 from __future__ import annotations
 
+import subprocess
+from pathlib import Path
+
 PROJECT_ID = "ai-raccoon"
 
 # Two document families on purpose: `docs/**` and `.ai-badger/**`. RetrievalTuningSetsTests
@@ -44,3 +47,32 @@ INCLUDE_GLOBS: list[str] = [
 # scripts/tests/test_corpus_config.py::test_excluded_trees_stay_out is what guards it —
 # that test goes red if an include glob is ever widened to reach a working-document tree.
 EXCLUDE_GLOBS: list[str] = []
+
+
+def select(root: Path) -> list[str]:
+    """The corpus selection for `root`: include globs, intersected with git-tracked files.
+
+    The tracked-file intersection is load-bearing, not hygiene. Without it any untracked
+    file sitting in the working tree that happens to match a glob is baked into the
+    committed bank — this was observed: a sibling branch's unmerged ADR left 29 chunks in
+    a regenerated fixture. Restricting to tracked files makes the corpus reproducible from
+    a clean clone, which is the property the pinned retrieval numbers rest on.
+    """
+    from sources import enumerate_files  # local import: sources imports config modules
+
+    tracked = set(
+        subprocess.run(
+            ["git", "-C", str(root), "ls-files"],
+            capture_output=True, text=True, check=True, timeout=60,
+        ).stdout.splitlines()
+    )
+    return [
+        rel
+        for _, rel, _ in enumerate_files(
+            root,
+            include_globs=INCLUDE_GLOBS,
+            exclude_globs=EXCLUDE_GLOBS,
+            include_skill_references=False,
+        )
+        if rel in tracked
+    ]

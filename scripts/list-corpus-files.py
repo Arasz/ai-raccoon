@@ -21,20 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
-from corpus_config import EXCLUDE_GLOBS, INCLUDE_GLOBS, PROJECT_ID  # noqa: E402
-from sources import enumerate_files  # noqa: E402
-
-
-def select(root: Path) -> list[str]:
-    return [
-        rel
-        for _, rel, _ in enumerate_files(
-            root,
-            include_globs=INCLUDE_GLOBS,
-            exclude_globs=EXCLUDE_GLOBS,
-            include_skill_references=False,
-        )
-    ]
+from corpus_config import PROJECT_ID, select  # noqa: E402
 
 
 def main() -> None:

@@ -14,8 +14,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from corpus_config import EXCLUDE_GLOBS, INCLUDE_GLOBS, PROJECT_ID
-from sources import enumerate_files
+from corpus_config import PROJECT_ID, select
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -33,15 +32,7 @@ ALLOWED_EMAIL_DOMAINS = ("example.com", "domain.com", "nuget.org", "example.org"
 
 
 def selection() -> list[str]:
-    return [
-        rel
-        for _, rel, _ in enumerate_files(
-            REPO_ROOT,
-            include_globs=INCLUDE_GLOBS,
-            exclude_globs=EXCLUDE_GLOBS,
-            include_skill_references=False,
-        )
-    ]
+    return select(REPO_ROOT)
 
 
 class TestSelection:
@@ -80,6 +71,20 @@ class TestSelection:
                           ".ai-badger/skills/learned/", ".github/"):
             offenders = [f for f in files if f.startswith(forbidden)]
             assert not offenders, f"{forbidden} leaked into the corpus: {offenders[:5]}"
+
+    def test_only_git_tracked_files_are_selected(self):
+        import subprocess
+
+        tracked = set(
+            subprocess.run(
+                ["git", "-C", str(REPO_ROOT), "ls-files"],
+                capture_output=True, text=True, check=True, timeout=60,
+            ).stdout.splitlines()
+        )
+        offenders = [f for f in selection() if f not in tracked]
+        # Observed: a sibling branch's unmerged ADR, untracked in this worktree, put 29
+        # chunks into a regenerated bank. The fixture must be reproducible from a clean clone.
+        assert not offenders, f"untracked files would be baked into the fixture: {offenders}"
 
     def test_skill_reference_files_are_not_selected(self):
         offenders = [f for f in selection() if "/references/" in f]
