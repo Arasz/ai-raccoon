@@ -155,4 +155,24 @@ public sealed class LayeringRulesTests
         port.Assembly.ShouldBe(CoreAssembly, "IMetricsReportService is a port and belongs in Core, beside the other ports");
         port.Namespace.ShouldBe("AiRaccoon.Core.Metrics");
     }
+
+    /// <summary>
+    ///     Rule 5 — D4: the legacy direct-configure path (<c>ConfigureEmbeddingAsync</c>) is gone
+    ///     from the port. Production configures embedding only through the ADR-0076 outbox
+    ///     (<c>IModelMigrationStore.StartModelMigrationAsync</c> then a relay drain); a second,
+    ///     synchronous configure path bypassed that outbox entirely — no migration row, no
+    ///     reconcile, and a throw mid-re-embed on a dimension change.
+    /// </summary>
+    [Fact]
+    public void IMemoryStore_ExposesNoConfigureMember()
+    {
+        var offenders = typeof(IMemoryStore).GetMethods()
+            .Where(m => m.Name.StartsWith("Configure", StringComparison.Ordinal))
+            .Select(m => m.Name)
+            .ToList();
+
+        offenders.ShouldBeEmpty(
+            "IMemoryStore must not expose a direct Configure* path; embedding configuration goes "
+            + "through IModelMigrationStore.StartModelMigrationAsync (ADR-0076): " + string.Join(", ", offenders));
+    }
 }
