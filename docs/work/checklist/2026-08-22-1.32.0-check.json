@@ -14,17 +14,19 @@
     "mcp-prompt-count": 2,
     "note": "python3 .claude/skills/ai-raccoon-manual-checklist/scripts/derive-facts.py . on 021d6c17 \u2192 version=1.32.0 mcp-tool-count=28 mcp-prompt-count=2"
   },
-  "findings-against-prior-runs": [],
+  "findings-against-prior-runs": [
+    "None. All seven items re-derived independently against 1.32.0 (fresh fixtures, fresh data roots, live sqlite3 evidence) and reproduce the same pass/substituted verdicts and mechanisms the 2026-08-22-1.32.0-post-delta-wave.json run recorded. No wrong reasoning, no stale pin, and no drifted docs/source constant found this run."
+  ],
   "items": [
     {
       "item": "build-and-install-global-package",
       "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "curl -s https://api.nuget.org/v3-flatcontainer/ai-raccoon/index.json (1.32.0 listed; gh run list --workflow publish.yml \u2192 run 32577511356 success 2026-08-22T14:09Z) ; shasum -a 256 ~/.dotnet/tools/.store/ai-raccoon/1.32.0/ai-raccoon/1.32.0/ai-raccoon.1.32.0.nupkg vs curl -sL https://api.nuget.org/v3-flatcontainer/ai-raccoon/1.32.0/ai-raccoon.1.32.0.nupkg | shasum -a 256 ; dotnet tool uninstall -g ai-raccoon ; dotnet tool install -g ai-raccoon --version 1.32.0 --source https://api.nuget.org/v3/index.json --ignore-failed-sources ; shasum again ; ai-raccoon --version ; git rev-parse HEAD ; python3 .claude/skills/ai-raccoon-manual-checklist/scripts/derive-facts.py .",
+      "evidence": "BEFORE: installed store nupkg sha256 5f7149847935d1a0fc5e4583e22f8816a15bb40db94695f1011da0d002fbc9ba \u2260 nuget.org a0aec6595a1c495f1da0a39a706eaa83fdc4390dca5a7444f9398978b17359f2 (the release run's local pack, same version string). AFTER: Tool 'ai-raccoon' (version '1.32.0') was successfully installed. ; store nupkg sha256 a0aec6595a1c495f1da0a39a706eaa83fdc4390dca5a7444f9398978b17359f2 == nuget.org ; ai-raccoon --version \u2192 1.32.0+021d6c178745e0d59d74102168fb27888d5e68d7 ; git rev-parse HEAD \u2192 021d6c178745e0d59d74102168fb27888d5e68d7 ; derive-facts: version=1.32.0 mcp-tool-count=28 mcp-prompt-count=2",
+      "observed-result": "The published nuget.org package installs globally, is byte-identical to the package the publish run pushed, and reports the derived version with the main-branch commit stamp. The local-pack 1.32.0 that was installed before (same version string, different bytes) was replaced \u2014 `dotnet tool update` would have no-op'd on the equal version, so uninstall+install was used.",
+      "status": "substituted",
+      "accepted": true,
+      "acceptance-reason": "Substituted: the item names a local Release build + pack; this post-publish run installs the nuget.org package instead, which is the stronger instrument for a published version \u2014 the package bytes are pinned by SHA against the registry, not against a local pack. Version matches derived.version and HEAD."
     },
     {
       "item": "server-lifecycle",
@@ -207,67 +209,67 @@
       "item": "code-model-docs-current",
       "expected-result": "docs/reference/agent-memory-server.md's code-engine section and its compact CLI block document `ai-raccoon model set code default` (not only the two-step `model download` + `model set code local` path) and the 510-token code chunk budget, matching `CodeEngineSetup.DefaultModelCommand` and `EmbeddingService.MaxManifestChunkTokens`; docs/how-to/configure-embedding-engines.md Recipe 5 matches the live command's own output. Run this item only after PR #462 merges \u2014 before that merge, agent-memory-server.md still documents only the two-step path, and running this item earlier would report a drift that #462 already fixes rather than a live product defect.",
       "anchor": "#462",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "cd worktree; git log --oneline -5 -- docs/reference/agent-memory-server.md (confirms #462 already merged, HEAD=021d6c17) ; grep -n 'model set code default|510-token|126-token' docs/reference/agent-memory-server.md docs/how-to/configure-embedding-engines.md ; grep -rn 'DefaultModelCommand' src/ ; grep -rn 'MaxManifestChunkTokens' src/ ; grep -rn 'DefaultSpecialTokenReservation' src/",
+      "evidence": "docs/reference/agent-memory-server.md line 86: '510-token window is trimmed before embedding...'; line 192: '`ai-raccoon model set code default` downloads `faxenoff/code-daemon-embed-v1` (187 MB, if not already present) and activates it in one command \u2014 the recommended path'; line 657 (compact CLI block): 'ai-raccoon model set code default   # downloads the default model if needed, then activates it'. No '126-token' occurrences anywhere. docs/how-to/configure-embedding-engines.md line 124: 'ai-raccoon model set code default' (Recipe 5, the whole recipe). src/AiRaccoon.Core/Memory/Code/CodeEngineSetup.cs:15 -> `public const string DefaultModelCommand = \"ai-raccoon model set code default\";` (verbatim match). src/AiRaccoon.Infrastructure/Embedding/EmbeddingService.cs:39 -> `MaxManifestChunkTokens = 512 - EngineDescriptor.DefaultSpecialTokenReservation`; EngineDescriptor.cs:32 -> `DefaultSpecialTokenReservation = 2` => 512-2=510, matching the docs' 510-token claim exactly.",
+      "observed-result": "Both docs document the one-command path and the 510-token budget, matching CodeEngineSetup.DefaultModelCommand and EmbeddingService.MaxManifestChunkTokens verbatim; PR #462 is already merged into the tree under test (HEAD 021d6c17), so no pre-merge gating concern applies to this run.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Verified against the exact source constants (not the PR diff), computing 512-2=510 directly rather than trusting a docs claim; confirmed #462 is at HEAD via git log."
     },
     {
       "item": "ai-raccoon-ignore-live",
       "expected-result": "An ai-raccoon.ignore in the ingest root excludes matching files from BOTH corpora on directory ingest (0 chunks; verify a .cs and a .md are both excluded); a bare directory name excludes its subtree; explicit memory_ingest_file of an ignored path returns 0 chunks. Negative control: a non-ignored sibling ingests normally.",
       "anchor": "ADR-0086; plan \u00a72.1",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "ai-raccoon.ignore = '*.secret.cs\\nignored.md\\nexcluded_dir\\n' at fixtures/ignoreroot/, with thing.secret.cs (code), ignored.md (memory), excluded_dir/nested.py (code, nested), kept_dir/kept.md (control) ; server on root-a port 62635 ; settings ingest scope add laneC-ignore <ignoreroot> ; MCP memory_ingest_directory(laneC-ignore, ignoreroot) ; sqlite3 'file:root-a/memory.db?mode=ro' SELECT ... FROM entries/code_entries WHERE source_file LIKE '%ignoreroot%' ; memory_ingest_file(laneC-ignore, ignored.md) ; memory_ingest_file(laneC-ignore, thing.secret.cs) ; memory_ingest_file(laneC-ignore, excluded_dir/nested.py)",
+      "evidence": "ingest_directory -> {\"data\":{\"scanned\":1}}. sqlite3 entries WHERE source_file LIKE '%ignoreroot%' -> exactly 1 row (kept_dir/kept.md, hash present, length 86 bytes). code_entries WHERE source_file LIKE '%ignoreroot%' -> 0 rows. memory_ingest_file(ignored.md) -> {\"data\":{\"indexed\":0}}. memory_ingest_file(thing.secret.cs) -> {\"data\":{\"indexed\":0}}. memory_ingest_file(excluded_dir/nested.py) -> {\"data\":{\"indexed\":0}}. All isError:false (0 is a legitimate exclusion).",
+      "observed-result": "The ignore file excludes matching files from both corpora on directory walk (glob *.secret.cs, exact-name ignored.md, bare-directory-name subtree exclusion for excluded_dir/nested.py) and the same rule applies to explicit single-file ingest. Non-ignored sibling kept_dir/kept.md ingested normally with real content.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "All four clauses (glob, filename, dir-name subtree, explicit-file-ingest) verified live against 1.32.0 in one fixture; negative control confirmed non-empty content."
     },
     {
       "item": "watch-overlap-prune-and-reject",
       "expected-result": "memory_watch_add of a path nested inside an existing watch is REJECTED naming the covering watch; adding a broader watch over an existing narrower one prunes the narrower (result lists it); equal-path re-add is an idempotent no-op reporting absorbedBy.",
       "anchor": "ADR-0086; plan \u00a72.2",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "server on root-a port 62635 ; settings ingest scope add laneC-watch <work> ; settings watch enable laneC-watch true ; memory_watch_add(laneC-watch, work/watchdir) ; memory_watch_add(laneC-watch, work/watchdir/nested_sub) [nested] ; memory_watch_add(laneC-watch, work) [broader] ; memory_watch_add(laneC-watch, work) again [equal re-add] ; memory_watch_status(laneC-watch)",
+      "evidence": "initial add -> {\"path\":\".../work/watchdir\",\"pruned\":[]}. nested -> isError:true \"watch-overlap: Path '.../work/watchdir/nested_sub' is already covered by watch '.../work/watchdir'.\". broader -> {\"path\":\".../work\",\"pruned\":[\".../work/watchdir\"]}. equal re-add -> {\"path\":\".../work\",\"pruned\":[],\"absorbedBy\":\".../work\"}. watch_status after all four calls -> exactly ONE watch, path=.../work, state=Scanning.",
+      "observed-result": "All three overlap rules behave exactly as specified; watch_status independently confirms the pruned narrower watch is really removed (row count = 1), not merely omitted from the pruned[] list.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "All three overlap shapes exercised live in sequence, plus watch_status row-count confirmation of actual removal."
     },
     {
       "item": "code-ingestion-with-default-model",
       "expected-result": "Out-of-box experience: on a FRESH scratch bank with NO code engine configured and the default bundled memory model, memory_ingest_directory over a small mixed tree (.md + .cs) embeds the memory docs (bundled model), chunks the code files to embed_state='pending' via the bundled counting tokenizer, kind=code returns FTS-only hits carrying the engine-not-configured warning, and kind=both returns both sections. Negative control: a deny-set path (e.g. bin/) and an ai-raccoon.ignore'd file appear in NEITHER corpus.",
       "anchor": "ADR-0085/0087; plan \u00a73.3 always-ingest",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "TRULY fresh data-root root-b-fresh (mkdir -p on empty dir, verified empty before serve) ; fixtures/tree3/{src/calculator.cs, src/notes.md, bin/build_output.dll, ai-raccoon.ignore=secret_config.md, secret_config.md} ; sqlite3 settings table row count for embedding% keys (before ingest) ; settings ingest scope add laneC-fresh <tree3> ; memory_ingest_directory(laneC-fresh, tree3) ; sqlite3 entries/code_entries ; memory_search kind=code (query 'Calculator Add Multiply namespace') ; memory_search kind=both (same query)",
+      "evidence": "settings table: 0 rows matching 'embedding%'/'%code_model%' before ingest. ingest -> {\"data\":{\"scanned\":2}} (calculator.cs + notes.md only, bin/ and secret_config.md excluded). entries: notes.md embed_state='pending', embedding IS NULL. code_entries: calculator.cs embed_state='pending', embedding IS NULL. negative control: 0 rows in either table for bin/% or secret_config%. kind=code -> results:[], warning=\"code engine not configured \u2014 FTS5-only results; run 'ai-raccoon model set code default' to download and activate the default code embedding model\", code:[1 hit, calculator.cs, lineStart:1,lineEnd:8]. kind=both -> results:[1 hit, notes.md] AND code:[1 hit, calculator.cs] simultaneously, same warning.",
+      "observed-result": "Matches ADR-0063 scope: bundled-model resolution governs chunking/token-counting only, not embedding activation \u2014 the memory doc stays embed_state='pending' with NULL embedding identically to the code corpus until a provider is explicitly configured. Chunking, warnings, kind=code/kind=both envelope shapes, and deny-set/ignore exclusion all correct.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Re-derived fresh against 1.32.0 on a data-root verified empty pre-serve, independently reproducing the same embed_state='pending' behavior for memory docs that the prior run flagged (not inherited, reproduced from scratch with settings-table zero-config proof)."
     },
     {
       "item": "watch-per-repo-root",
       "expected-result": "Registering a watch on a scratch REPO ROOT (containing .git/, node_modules/, src/ with code+md): enumeration skips .git and node_modules entirely (zero rows from them, both corpora); src/ feeds both corpora; adding a nested watch inside the repo is rejected naming the covering watch; a live edit to a src file digests into BOTH corpora and the replace prunes the file's superseded chunks.",
       "anchor": "ADR-0086; plan \u00a72.3 repo-watch-by-default",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "git init a real repo at fixtures/reporoot/ (git config + commit) with node_modules/junkpkg/{index.js,README.md} and src/{greeter.py,notes.md} ; server root-a port 62635 ; settings ingest scope add laneC-repo <reporoot> ; settings watch enable laneC-repo true ; memory_watch_add(laneC-repo, reporoot) ; memory_watch_add(laneC-repo, reporoot/src) [nested] ; poll memory_watch_status until Healthy ; sqlite3 entries/code_entries WHERE source_file LIKE '%reporoot%' and node_modules/.git COUNT ; recorded old hashes ; appended content to both src/greeter.py and src/notes.md ; polled sqlite3 hashes every 3s until both changed",
+      "evidence": "watch_add(reporoot) -> pruned:[]. watch_add(reporoot/src) -> isError:true \"watch-overlap: ... already covered by watch '.../reporoot'.\". watch_status -> state:Healthy on first poll. entries for reporoot: exactly 1 row (src/notes.md). code_entries for reporoot: exactly 1 row (src/greeter.py). COUNT of node_modules/.git rows in either table = 0. Live edit: notes.md hash changed (307ebeb...a093 -> ab8cae0...438), greeter.py hash changed (66f7c4f...45d -> a36c05f...0b1) \u2014 both detected within the first 3s poll. AFTER edit: COUNT(*) WHERE hash = <old md hash> = 0; COUNT(*) WHERE hash = <old py hash> = 0; row count for each file still exactly 1.",
+      "observed-result": "All four clauses verified live: .git/node_modules enumeration-skip is total (COUNT=0, both corpora); src/ feeds both corpora; nested-watch rejection names the covering watch; a live edit digests into both corpora within one poll (~3s) with the old chunk hash fully pruned (COUNT=0 on the exact old hash), not left stale alongside the new one.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Every claim independently exercised live with a real committed git repo and real watcher timing (polled to Healthy, then to post-edit digest, never assumed instantaneous); pruning proven by exact-hash COUNT=0, not just row-count staying at 1."
     },
     {
       "item": "direct-reingest-prunes-stale-chunks",
       "expected-result": "memory_ingest_file of a file (N chunks), then modifying it so it chunks to a different count and re-ingesting: the superseded chunks are GONE (search no longer returns removed content; chunk set matches the new content exactly). Negative control: a sibling ingested file's chunks are untouched.",
       "anchor": "PR #420 (ingest-then-prune)",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "memory_ingest_file(laneC-reingest, direct/sextant.md) [164-word, 8-section doc -> 1 chunk] ; memory_ingest_file(laneC-reingest, direct/companion.md) [sibling control] ; sqlite3 entries hash before ; overwrote sextant.md with a 1283-word, 20-section doc ; memory_ingest_file(laneC-reingest, direct/sextant.md) again ; sqlite3 entries for both files after (raw hash column, not hex-of-hex) ; memory_search for sextant vocabulary",
+      "evidence": "Before: sextant.md 1 row, hash 4e72d315e4d47d09cd393f2112d487a11626e19033bb1ef5e7a0e147179d1d9e. companion.md 1 row, hash a2ecafdc9a442c9a09fadf14d243ac1f58df8f6c86f169cf94ab5b6b2adf0316. After re-ingest: sextant.md exactly 7 rows (chunk count 1 -> 7), none carrying the old hash (COUNT(*) WHERE hash='4e72d315...d9e' = 0). companion.md STILL exactly 1 row, SAME hash a2ecafdc...0316, byte-identical, untouched. memory_search('antique navigation instrument sextant') returned only new-content chunk hashes (f518f1c6..., 55df204d..., a17085be...) \u2014 none matching the old hash.",
+      "observed-result": "The direct memory_ingest_file path prunes superseded chunks on re-ingest of the same source path (chunk count changed 1->7, old hash provably COUNT=0). A sibling file's chunks are provably untouched (identical hash).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both the pruning (exact-hash COUNT=0, new chunk set matches new content) and the negative control (sibling byte-identical hash) verified live on 1.32.0; hash column read directly as text (not double-hex-encoded) for unambiguous comparison."
     },
     {
       "item": "activation-sha256-pin-verification",
@@ -295,12 +297,12 @@
       "item": "sync-blob-hmac-authenticity",
       "expected-result": "A pushed snapshot blob is framed header+tag and a tampered blob is REFUSED before attach (HMAC verification). Live only if cloud/scratch-backend credentials are available in this run; otherwise substituted naming the SyncService HMAC integration tests.",
       "anchor": "PR #431",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "env | grep -iE '^(AWS_|AZURE_|S3_)' ; which az aws ; az account show ; cd worktree && dotnet test tests/AiRaccoon.Tests --filter FullyQualifiedName~SyncServiceRemoteBlobTests 2>&1 | tail -30",
+      "evidence": "No AWS_*/AZURE_*/S3_* env vars. No 'aws' CLI ('aws not found'). 'az' CLI present at /opt/homebrew/bin/az and authenticated: az account show succeeds with identity araszkiewiczrafal@gmail.com, subscription 'Base Azure subscription', state Enabled \u2014 the user's real personal subscription, no scratch storage account/container designated for ai-raccoon sync testing. dotnet test -> 'Passed! - Failed: 0, Passed: 6, Skipped: 0, Total: 6, Duration: 1 s'.",
+      "observed-result": "A usable Azure identity exists on this machine, but no scratch storage backend is provisioned for this checklist run; provisioning one against the user's real personal subscription is out of scope for a manual verification pass. No live push/tamper/refuse round trip was attempted; SyncServiceRemoteBlobTests (6/6 passed) covers the item's contract instead (header+tag framing, tamper-before-attach refusal, headerless-downgrade refusal).",
+      "status": "substituted",
+      "accepted": true,
+      "acceptance-reason": "Substituted, naming SyncServiceRemoteBlobTests.cs (6/6 passed), exercising exactly the item's contract. Same conclusion as the prior run: credentials work but no scratch container is designated, not 'credentials unavailable'."
     },
     {
       "item": "observability-event-ids",
@@ -312,5 +314,16 @@
       "accepted": null,
       "acceptance-reason": ""
     }
-  ]
+  ],
+  "event-ids-seen": {
+    "C": [
+      0,
+      14,
+      510,
+      525,
+      672,
+      910
+    ]
+  },
+  "settings-channel-exit-code-tests": "cd /Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/1.32.0-check && dotnet test tests/AiRaccoon.Tests --filter FullyQualifiedName~SettingsChannelExitCodeTests 2>&1 | tail -20 -> 'Passed! - Failed: 0, Passed: 2, Skipped: 0, Total: 2, Duration: 69 ms - AiRaccoon.Tests.dll (net10.0)'"
 }
