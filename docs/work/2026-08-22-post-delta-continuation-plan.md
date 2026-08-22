@@ -23,7 +23,7 @@ tasks — nothing leaves silently.
 | **QA F3 — full-suite seed-embed slowdown** | parked | re-raise on next occurrence | Q1's wall-clock budget (PR #428) now makes an occurrence diagnosable instead of a hang. |
 | **#435 — bge-m3 weak vector leg** | closure recommended | owner closes (or objects) on the posted evidence | P3's condition resolved negative: pooling hypothesis refuted (cosine 1.00000000), re-embed never spent; bge-m3 verified simply weaker on this corpus (−0.233 nDCG@5, p=0.001). Untested residual: re-chunking at the engine's own budget (an OQ5-eval experiment). |
 | **#436 — code-corpus prune gap** | accepted by ai-raccoon-cc, not started | cc's next session, or reassign | Complete design brief in the parent plan §S8. |
-| **#414 — jsaa-memory.db (G5 APPROVE)** | active — S6a then S6b | S6b: after no pre-rewrite branch remains open (#440 last); owner pushes | Not parked; listed for completeness since the issue references this ledger's parent. |
+| **#414 — jsaa-memory.db (G5 APPROVE)** | **S6a DONE (PR #450)**; S6b still owed | S6b: after no pre-rewrite branch remains open; owner pushes with the force-push hook deliberately lifted | S6a replaced the fixture with a public-docs corpus (ADR-0090): the private bank leaves HEAD, all 14 consumer classes keep running in CI, `Category=Retrieval` 74 passed / 3 skipped. Two follow-ups filed: #454 (AND-under-match anchor), #455 (benchmark corpus still carries jsaa prose). S6b is the only thing that reclaims the bytes and clears history. |
 
 ## Not carried here
 

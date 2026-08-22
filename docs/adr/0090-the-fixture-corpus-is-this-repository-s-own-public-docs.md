@@ -93,6 +93,29 @@ Three things are genuinely lost, and none is recoverable from this repository ag
    here. If the chosen point turns out not to dominate its neighbours on this corpus, that is
    a finding about parameters overfitted to one corpus — file it, do not widen the gate.
 
+## One honest qualification on "out-of-sample"
+
+This ADR claims the held-out gate is out-of-sample because no parameter sweep ever selected
+against this corpus. That is true of the *parameters*. It is not entirely true of the *queries*.
+
+Three catalog entries were revised against measured retrieval while authoring them:
+
+- **S6** was re-worded when its first phrasing did not retrieve ADR-0004's Decision chunk at all.
+- **S3** was moved twice — ADR-0006 → ADR-0024 → ADR-0031 — because the first two targets sat in
+  documents whose sibling chunks outranked them.
+- **S4** was moved from ADR-0006 to ADR-0024 for the same reason.
+
+The reason in every case was structural rather than score-chasing: ADR-0006 is a 26-chunk
+document, and a section target inside it measures sibling competition (this repo's own
+`docs/notes/adr-sibling-competition.md` names the effect), not section targeting. The final
+targets sit in 4-5 chunk ADRs where the section is the discriminating unit. No bound was
+loosened to accommodate a query, and the A and C sets were authored once and never revised
+against a score.
+
+Still, "chosen after looking at what the retriever returns" is a weaker claim than "never seen
+by the retriever", and the S set has the weaker one. Anyone reading a published S-set number
+should know that. The A set (10 queries) and C set (3 graded) carry the stronger claim.
+
 ## The choice that looks like a mistake
 
 This replaces a committed multi-megabyte binary fixture in a public repository with another
