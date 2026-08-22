@@ -20,7 +20,7 @@ public partial class ProxyRunner(IProxyForwarder proxyForwarder, IBackendLaunche
         }
 
         var loggerFactory = CreateMcpLoggerFactory(serverConfig);
-        await using var backendSessions = new BackendSessions(backendLauncher, httpClientFactory, loggerFactory, serverConfig);
+        await using var backendSessions = new BackendSessions(backendLauncher, httpClientFactory, loggerFactory, Environment.ProcessPath, serverConfig);
 
         McpClient backend;
         try
