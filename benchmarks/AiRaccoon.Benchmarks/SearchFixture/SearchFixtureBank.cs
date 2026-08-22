@@ -106,9 +106,7 @@ public sealed class SearchFixtureBank : IAsyncDisposable
             new JsonFileTypeHandler(new JsonFileTypeChunker(countTokens, markdownChunker, ChunkingDefaults.OverlayTokens))
         ]);
         var embedder = new EntryEmbedder(embeddingService, ModelMigrationLease, TimeProvider);
-        // No production Null object exists for this — nothing ever drains the topic in this
-        // benchmark fixture, so a real (unconsumed) pump is the honest choice. Ceiling/capacity
-        // match EmbedDrainService's own (internal, not visible across the assembly boundary here).
+        // Nothing drains this topic in the fixture: a real, unconsumed pump of any capacity.
         IEventPump<EmbedDrainRequest> embedDrainPump = new EventPump<EmbedDrainRequest>(
             new PumpTopic(Ceiling: 8, Capacity: 8, Coalesce: true));
         var fileIngestor = new FileIngestor(fileTypeMatcher, sourceStore, TimeProvider.System, embeddingService,

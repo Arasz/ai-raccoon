@@ -89,25 +89,8 @@ public sealed partial class SqliteMemoryStore
                 ingestResult.CodeChunkHashes, cancellationToken)
             .ConfigureAwait(false);
 
-        EnqueueDrainFor(ingestResult.WrittenCorpus);
+        embedDrainPump.SignalWritten(ingestResult.WrittenCorpus);
         return ingestResult.RowsInserted;
-    }
-
-    /// <summary>The one place a written <see cref="CorpusKind" /> becomes an embed-topic signal —
-    /// <see cref="CorpusKind.Neither" /> enqueues nothing.</summary>
-    private void EnqueueDrainFor(CorpusKind corpus)
-    {
-        switch (corpus)
-        {
-            case CorpusKind.Memory:
-                embedDrainPump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Memory));
-                break;
-            case CorpusKind.Code:
-                embedDrainPump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Code));
-                break;
-            case CorpusKind.Neither:
-                break;
-        }
     }
 
     /// <summary>

@@ -88,17 +88,7 @@ public sealed class WatchDigestExecutor(
             .ConfigureAwait(false);
         // Signals whichever corpus the replace actually wrote to; rows stay embed_state='pending'
         // (the durable outbox, ADR-0076) until EmbedDrainService's single reader drains them.
-        switch (replaceResult.Corpus)
-        {
-            case CorpusKind.Memory:
-                embedDrainPump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Memory));
-                break;
-            case CorpusKind.Code:
-                embedDrainPump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Code));
-                break;
-            case CorpusKind.Neither:
-                break;
-        }
+        embedDrainPump.SignalWritten(replaceResult.Corpus);
 
         await watchStore.UpdateLastChangeAsync(projectId, normalizedWatch, Now(), cancellationToken)
             .ConfigureAwait(false);
