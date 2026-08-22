@@ -1,0 +1,540 @@
+<meta charset="utf-8">
+<title>Post-delta open items — review</title>
+
+<!--
+  Refinement review form. Works unchanged as a local file:// page and as a published Artifact.
+  Deliberately has no <!doctype>/<html>/<head>/<body>: a browser synthesises them for a local
+  file. The <meta charset> is first in the byte stream so the local file decodes as UTF-8.
+  Dependency-free on purpose: no CDN, no fonts, no fetch.
+-->
+
+<script>
+  var CONFIG = {
+    title: "Post-delta open items — six decisions",
+    subtitle: "Owner gate · 2026-08-22 · delta-plan-implementation close-out",
+    source: "docs/work/2026-08-21-delta-review-fix-plan.md + docs/work/2026-08-21-delta-review-fix-plan-review.md",
+    outName: "2026-08-22-delta-open-items-feedback.md",
+    expectedDir: "/Users/arasz/RiderProjects/ai-raccoon/docs/work",
+    storageKey: "refinement:2026-08-22-delta-open-items:v1"
+  };
+
+  var DECISIONS = [
+    {
+      group: "Release",
+      id: "G1",
+      claim: "The 1.31.0 sync-blob compat note ships in the release notes and how-to; old clients fail loud with no fallback",
+      detail: [
+        "<strong>The release itself is already ratified elsewhere:</strong> you instructed the #405 session directly — PR #440 bumps 1.31.0 with a What's-new covering all eleven delta PRs plus #420/#423, and the full checklist runs against the branch-packed 1.31.0 before merge. This card is only about the one rollout consequence that still needs a decision: the sync blob format changed.",
+        "<strong>Scope correction (MoE facts lane):</strong> framing applies to <strong>encrypted banks only</strong> — <code>SyncService.cs:132-134</code> pushes unencrypted banks unwrapped, so those are unaffected by version skew. For an encrypted bank: a new client reading an old blob degrades cleanly (no header → passed through, TOFU warning); an <strong>old (≤1.30.x) client pulling a framed blob fails LOUD</strong> — the keyed open fails page authentication and maps to <code>SyncCorruptFileException</code> before ATTACH; never silent corruption. Peer recommendation: keep it loud, put the corrected compat sentence (“an <em>encrypted</em> bank synced by ≥1.31 cannot be pulled by &lt;1.31; upgrade both ends”) in the release notes + <code>docs/reference/agent-memory-server.md</code> (there is no sync how-to page), and do NOT add a header-stripping fallback — that would reintroduce the unauthenticated path the feature closes. #405 raised the alternative: a format-version gate on pull, turning the loud-but-anonymous failure into a <em>named</em> refusal."
+      ],
+      why: "<b>APPROVE</b> = docs-only compat note rides #440's release notes (my recommendation — the failure is already loud and old binaries cannot be changed retroactively anyway). <b>CHANGE</b> = also build the named format-version refusal for future skews. <b>REJECT</b> = you want the old-client fallback despite the security cost — say why.",
+      placeholder: "Notes — e.g. wording for the compat sentence, or demand the named refusal"
+    },
+    {
+      group: "Rulings owed",
+      id: "G2",
+      claim: "The project-identity ADR (H-C / O2) is commissioned as a near-term task",
+      detail: [
+        "<code>MemoryAccessGuard</code> resolves the access mode from the <em>caller-named</em> projectId — any caller can name any project and receive that project's mode. MEASURED, HIGH, carried since the 0814 campaign; it received no ruling among the delta campaign's fourteen.",
+        "It needs a server-side project-identity design (an ADR: where identity comes from, what the server can verify, what the mode table keys on), not a line fix. S1's <code>allProjects=true</code> gate (O6) deliberately avoided building a global mode so as not to pre-empt this design.",
+        "<strong>Peer constraints gathered for the ADR's scope:</strong> ai-raccoon-cc — the <code>mcp-token</code> is per-data-root, minted 0600 at server start; it authenticates <em>the bank, not the project</em>, so today project isolation is a naming convention over a shared credential — there is no per-project secret for the guard to distrust, and the ADR should say so in those words. #405 — the code corpus is hard project-scoped (<code>vec_code</code> partitions on <code>ctx=project_id</code>, no shared/workspace tier) and the search-quality exclusion's privacy reasoning assumed caller-named semantics; a redesign must preserve per-project vec0 partitioning and revisit that exclusion. #405 also ranks this FIRST among the carried items."
+      ],
+      why: "<b>Why now:</b> it is the highest-severity finding with no owner decision, and every tool-surface security question keeps deferring to it. APPROVE = I take the ADR as the next task; CHANGE = different scope or owner; DEFER = stays carried, re-found by every future review.",
+      placeholder: "Notes — constraints the ADR must respect, or who should own it"
+    },
+    {
+      group: "Ratifications",
+      id: "G3",
+      claim: "The five away-mode judgment calls stand (O1, O3, O4, O5, O6)",
+      detail: [
+        "Made under away-mode authority while you were out, recorded in the awm log: <strong>O3</strong> — S2 shipped <em>HMAC verification</em> (HKDF + HMACSHA256 framed blob + TOFU watermark) rather than the ruling's other branch, documented risk acceptance; this is the consequential one. <strong>O1</strong> — Q2 implemented as a label-triggered <code>Speed=Nightly</code> leg in build.yml (the ruling's literal 'workflow_dispatch' wording was stale). <strong>O4</strong> — C1 and D3 pulled into the first dispatch batch once #415's final scope freed their files. <strong>O5</strong> — H18 fixed as a one-line typed <code>Handle&lt;EmptyDownloadException&gt;()</code> inside Lane A's PR (same assembly, zero new dependencies). <strong>O6</strong> — S1 shipped an explicit <code>allProjects=true</code> argument instead of a non-existent global read-all mode.",
+        "All five are merged and CI-green. Overturning any of them is a follow-up task, not a revert of the whole wave."
+      ],
+      why: "<b>Why it matters:</b> these were your branch decisions, made without you. Silence would leave them ambiguously authorized. APPROVE ratifies all five; CHANGE/REJECT = name the subset to reshape in the notes.",
+      placeholder: "Notes — name any of O1/O3/O4/O5/O6 to overturn, and toward what"
+    },
+    {
+      group: "Carried / unresolved",
+      id: "G4",
+      claim: "Carried findings get the cheap ones scheduled and the rest explicitly parked (H20, H21, H16, H1, M5, M10)",
+      detail: [
+        "<strong>H20</strong> — port-placement drift (three ports living in Infrastructure); proposal: one generic ArchUnitNET placement rule instead of three moves — cheap now that LayeringRulesTests exists. <strong>H21</strong> — <code>IMemoryStore</code> at ~25 members after D4's deletion (Lane K independently re-observed <code>IMemoryStore</code>/<code>ISettingsStore</code> declaring identical settings members with no inheritance relation); real decomposition is a multi-PR carve-out, and #405 ranks it LAST — it collides with every active surface, so it belongs in a quiet window. <strong>H16</strong> — CI ubuntu-only, no OS matrix. <strong>H1</strong> — <code>ranking</code> still rank-derived, <code>SourceAffinityRanker</code> λ=0.1; <strong>correction (MoE facts lane): 0814 question 7 WAS answered</strong> (ADR-0058, Accepted 2026-08-15) — H1 is plannable and parks with M5 for the next tuning round, no ruling needed here. <strong>M5</strong> — thin out-of-sample retrieval control (3 pinned queries); next tuning round, reusing the four OQ5 repos you named. <strong>M10</strong> — <strong>already closed</strong>: <code>README.md:37</code> carries the 1.29.0 entry (rev-1's #440-supersede condition was measured false).",
+        "Default on APPROVE: I schedule <strong>H20</strong> (the placement rule); M10 is absorbed by #440; H21/H16/H1/M5 stay parked with named owners-on-demand, H21 explicitly tagged quiet-window-only. Separately, <strong>#436</strong> (code-corpus prune gap, already APPROVED near-term in the code-mem gate) is routed to ai-raccoon-cc, who holds the #420 context and a ready design — I coordinate, they implement."
+      ],
+      why: "<b>If nothing is decided:</b> carried items without owners get re-found by every future review at full review cost. CHANGE = a different split; note H1 needs an actual answer to 0814's question 7 before anyone can act on it.",
+      placeholder: "Notes — different split, or answer 0814 question 7 here"
+    },
+    {
+      id: "G5",
+      claim: "The jsaa-memory.db history rewrite (S3b, #414) runs in the current calm window",
+      detail: [
+        "The 19 MB test bank with 220 email-bearing rows needs <code>git filter-repo</code> plus a force-push; HEAD removal alone is insufficient (#414 records why). <strong>MoE corrections folded:</strong> (a) #414's <em>immediate half</em> is not yet done — the fixture is still tracked and consumed by 5+ test files, so step one (any PR) is a synthetic-fixture replacement + HEAD deletion with the suite green, BEFORE any rewrite; (b) the rewrite must not run while ANY branch based on pre-rewrite main is open (#436/#437/#440 merged or re-planted first) — merging such a branch afterwards resurrects the blob. <strong>Window status:</strong> ai-raccoon-cc is calm (pids confirmed dead); #405 is NOT yet calm — its 1.31.0 checklist runs shortly — and proposes the window <em>right after that run completes</em> (it will broadcast).",
+        "<strong>Constraints:</strong> every session must pause during the rewrite, everyone re-clones or hard-resets after, and force-push is hook-blocked for agents by your own policy — approving means either you run the push yourself or you explicitly authorize lifting the block for this one operation."
+      ],
+      why: "<b>Why now-ish:</b> the natural slot is immediately after #440's checklist completes and before new feature branches open. APPROVE = I prepare the exact filter-repo command set now and coordinate the pause on #405's broadcast; you execute the push. DEFER = stays tracked by #414 for the next calm window.",
+      placeholder: "Notes — e.g. schedule it for a specific time, or who pushes"
+    },
+    {
+      id: "G6",
+      claim: "The unexplained 1.29.0 checklist server-lifecycle failure gets a time-boxed diagnosis (or is closed as superseded)",
+      detail: [
+        "Observed once in the 1.29.0 manual checklist. Two hypotheses were falsified by measurement (probe-verdict contradiction; warming server — both retracted on the record); PR #415 fixed a real probe-retry defect (attempts 1→3) but explicitly does not explain this symptom. The item is <strong>unexplained, not diagnosed</strong> — both peers insist the gate not blur that.",
+        "<strong>Fresh negative evidence, with its limit:</strong> #405's full 1.30.0 checklist ran server-lifecycle PASS including <code>--restart</code> cycling on an ephemeral port. ai-raccoon-cc ran ~8 full server lifecycles overnight (several stop-then-rebind-same-port cycles) and never reproduced it — <em>but</em> always with 6–10 s between kill and rebind, so a <strong>fast rebind was never exercised</strong>; if anyone re-tests deliberately, the variable to vary is the stop-to-bind delay, not the port."
+      ],
+      why: "<b>The risk of closing:</b> if it was real, it is still latent in lifecycle code every auto-start exercises. <b>The cost of chasing:</b> a repro attempt on old bits, now with one concrete lead (fast rebind). APPROVE = time-boxed (half-day) diagnosis sweeping the stop-to-bind delay; REJECT = close as not-reproducible-on-1.30.x with the fast-rebind caveat recorded; DEFER = stays open unexplained.",
+      placeholder: "Notes — e.g. box it differently, or conditions for closing"
+    }
+  ];
+</script>
+
+<style>
+  :root {
+    --ink: #141a21; --paper: #eef2f5; --surface: #f8fafb; --sunk: #e4eaef;
+    --line: #cbd5dd; --grey: #56626e; --dim: #7d8894;
+    --warn: #a8503a; --live: #12707c; --flag: #8a6a1f; --ok: #2f6d4f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #e6ecf2; --paper: #0f141a; --surface: #161d25; --sunk: #10161c;
+      --line: #2b3742; --grey: #9aa7b4; --dim: #6f7c89;
+      --warn: #d98467; --live: #4fc3cf; --flag: #d7b45a; --ok: #6fbf95;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #e6ecf2; --paper: #0f141a; --surface: #161d25; --sunk: #10161c;
+    --line: #2b3742; --grey: #9aa7b4; --dim: #6f7c89;
+    --warn: #d98467; --live: #4fc3cf; --flag: #d7b45a; --ok: #6fbf95;
+  }
+  :root[data-theme="light"] {
+    --ink: #141a21; --paper: #eef2f5; --surface: #f8fafb; --sunk: #e4eaef;
+    --line: #cbd5dd; --grey: #56626e; --dim: #7d8894;
+    --warn: #a8503a; --live: #12707c; --flag: #8a6a1f; --ok: #2f6d4f;
+  }
+
+  body {
+    margin: 0; padding: clamp(1.5rem,4vw,3rem) 1.1rem 11rem;
+    background: var(--paper); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 54rem; margin: 0 auto; display: flex; flex-direction: column; gap: 2.5rem; }
+  .mono, h1, h2, .tag, .verdict-opt, .btn, .did { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; }
+
+  header { display: flex; flex-direction: column; gap: .8rem; }
+  .tag { font-size: .72rem; letter-spacing: .15em; text-transform: uppercase; color: var(--dim); }
+  h1 { margin: 0; font-size: clamp(1.5rem,4vw,2.2rem); line-height: 1.15; letter-spacing: -.03em; font-weight: 600; text-wrap: balance; }
+  .lede { margin: 0; max-width: 62ch; color: var(--grey); }
+  h2 {
+    margin: 0 0 -.6rem; font-size: .76rem; letter-spacing: .15em; text-transform: uppercase;
+    color: var(--dim); font-weight: 600; padding-bottom: .5rem; border-bottom: 1px solid var(--line);
+  }
+
+  .d { background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: .85rem; }
+  .d.answered { border-left: 3px solid var(--ok); }
+  .d-head { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: baseline; }
+  .did { font-size: .74rem; letter-spacing: .1em; font-weight: 600; color: var(--live); white-space: nowrap; }
+  .d-claim { font-weight: 600; font-size: 1.02rem; flex: 1 1 18rem; }
+  .d-body { margin: 0; color: var(--grey); font-size: .94rem; }
+  .d-body + .d-body { margin-top: -.35rem; }
+  .d-body strong { color: var(--ink); font-weight: 600; }
+  code { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; font-size: .87em; background: var(--sunk); border: 1px solid var(--line); border-radius: 3px; padding: .06em .32em; }
+  .why { border-left: 3px solid var(--flag); background: var(--sunk); padding: .6rem .85rem; border-radius: 0 4px 4px 0; font-size: .9rem; color: var(--grey); }
+  .why b { color: var(--ink); }
+
+  fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .55rem; }
+  legend { padding: 0; font-size: .74rem; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); font-family: ui-monospace, Menlo, monospace; }
+  .verdicts { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .verdict-opt { position: relative; }
+  .verdict-opt input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .verdict-opt span {
+    display: inline-block; cursor: pointer; user-select: none;
+    border: 1px solid var(--line); background: var(--paper); border-radius: 3px;
+    padding: .32rem .7rem; font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; color: var(--grey);
+  }
+  .verdict-opt input:focus-visible + span { outline: 2px solid var(--live); outline-offset: 2px; }
+  .verdict-opt input:checked + span[data-v="approve"] { background: var(--ok);   border-color: var(--ok);   color: var(--paper); }
+  .verdict-opt input:checked + span[data-v="change"]  { background: var(--flag); border-color: var(--flag); color: var(--paper); }
+  .verdict-opt input:checked + span[data-v="reject"]  { background: var(--warn); border-color: var(--warn); color: var(--paper); }
+  .verdict-opt input:checked + span[data-v="defer"]   { background: var(--grey); border-color: var(--grey); color: var(--paper); }
+
+  textarea {
+    width: 100%; box-sizing: border-box; resize: vertical; min-height: 3.2rem;
+    background: var(--paper); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 4px; padding: .55rem .7rem; font: inherit; font-size: .93rem; line-height: 1.5;
+  }
+  textarea:focus-visible { outline: 2px solid var(--live); outline-offset: 1px; border-color: var(--live); }
+  textarea::placeholder { color: var(--dim); }
+
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--surface); border-top: 1px solid var(--line); padding: .7rem 1.1rem; display: flex; flex-wrap: wrap; gap: .5rem .9rem; align-items: center; justify-content: center; }
+  .count { font-size: .85rem; color: var(--grey); font-variant-numeric: tabular-nums; }
+  .btn { cursor: pointer; border: 1px solid var(--live); background: var(--live); color: var(--paper); border-radius: 3px; padding: .45rem 1rem; font-size: .76rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; }
+  .btn.secondary { background: transparent; color: var(--live); }
+  .btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  #status { flex-basis: 100%; text-align: center; font-size: .86rem; color: var(--grey); margin: 0; }
+  #status.ok   { color: var(--ok); }
+  #status.warn { color: var(--flag); }
+  #status.bad  { color: var(--warn); }
+  #status code { font-size: .85em; }
+
+  .out { display: flex; flex-direction: column; gap: .6rem; }
+  .out textarea { min-height: 14rem; font-family: ui-monospace, Menlo, monospace; font-size: .84rem; }
+  .hint { font-size: .85rem; color: var(--dim); margin: 0; }
+  .path { word-break: break-all; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="tag" id="hdr-sub"></div>
+    <h1 id="hdr-title"></h1>
+    <p class="lede">
+      Rule on each item and add a note where it matters. Answers save in this browser as you type,
+      so you can leave and come back.
+    </p>
+    <p class="lede" id="hdr-stale"><strong>Reviewed something else in this browser before?</strong>
+      Press <b>Clear all</b> first — local pages share one storage area, and a stale answer that
+      looks like a fresh one is the failure mode this form exists to prevent.</p>
+    <p class="lede" id="hdr-src"></p>
+  </header>
+
+  <div id="cards"></div>
+
+  <div class="out" id="out" hidden>
+    <p class="hint" id="outHint">Select all and copy, then paste this back into the conversation.</p>
+    <textarea id="outText" readonly aria-label="Generated feedback"></textarea>
+  </div>
+</div>
+
+<div class="bar">
+  <span class="count" id="count"></span>
+  <button class="btn" id="save" type="button">Save feedback</button>
+  <button class="btn secondary" id="copy" type="button">Copy feedback</button>
+  <button class="btn secondary" id="show" type="button">Show as text</button>
+  <button class="btn secondary" id="clear" type="button">Clear all</button>
+  <p id="status" role="status" aria-live="polite"></p>
+</div>
+
+<script>
+  var VERDICTS = ["approve", "change", "reject", "defer"];
+
+  document.getElementById("hdr-title").textContent = CONFIG.title;
+  document.getElementById("hdr-sub").textContent = CONFIG.subtitle;
+  document.title = CONFIG.title;
+  if (CONFIG.source) {
+    document.getElementById("hdr-src").innerHTML = "Full document: <code>" + esc(CONFIG.source) + "</code>";
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  /* ---- render ---- */
+  var host = document.getElementById("cards");
+  var currentGroup = null;
+  DECISIONS.forEach(function (d) {
+    if (d.group && d.group !== currentGroup) {
+      currentGroup = d.group;
+      var h = document.createElement("h2");
+      h.textContent = d.group;
+      host.appendChild(h);
+    }
+    var card = document.createElement("div");
+    card.className = "d";
+    card.dataset.id = d.id;
+
+    var head = document.createElement("div");
+    head.className = "d-head";
+    var idSpan = document.createElement("span");
+    idSpan.className = "did";
+    idSpan.textContent = d.id;
+    var claimSpan = document.createElement("span");
+    claimSpan.className = "d-claim";
+    claimSpan.textContent = d.claim || "";
+    head.appendChild(idSpan);
+    head.appendChild(claimSpan);
+    card.appendChild(head);
+
+    (d.detail || []).forEach(function (p) {
+      var el = document.createElement("p");
+      el.className = "d-body";
+      el.innerHTML = p;
+      card.appendChild(el);
+    });
+
+    if (d.why) {
+      var why = document.createElement("div");
+      why.className = "why";
+      why.innerHTML = d.why;
+      card.appendChild(why);
+    }
+
+    var fs = document.createElement("fieldset");
+    var lg = document.createElement("legend");
+    lg.textContent = "Verdict";
+    fs.appendChild(lg);
+    var holder = document.createElement("div");
+    holder.className = "verdicts";
+    VERDICTS.forEach(function (v) {
+      var label = document.createElement("label");
+      label.className = "verdict-opt";
+      var input = document.createElement("input");
+      input.type = "radio";
+      input.name = "v-" + d.id;
+      input.value = v;
+      var span = document.createElement("span");
+      span.dataset.v = v;
+      span.textContent = v;
+      label.appendChild(input);
+      label.appendChild(span);
+      holder.appendChild(label);
+    });
+    fs.appendChild(holder);
+    card.appendChild(fs);
+
+    var ta = document.createElement("textarea");
+    ta.placeholder = d.placeholder || "Notes";
+    ta.setAttribute("aria-label", d.id + " notes");
+    card.appendChild(ta);
+
+    host.appendChild(card);
+  });
+
+  var cards = Array.prototype.slice.call(document.querySelectorAll(".d"));
+
+  /* ---- state ---- */
+  function state() {
+    var out = {};
+    cards.forEach(function (card) {
+      var id = card.dataset.id;
+      var picked = card.querySelector('input[name="v-' + id + '"]:checked');
+      var note = card.querySelector("textarea").value.trim();
+      if (picked || note) { out[id] = { verdict: picked ? picked.value : "", note: note }; }
+    });
+    return out;
+  }
+
+  function paint() {
+    var s = state();
+    cards.forEach(function (c) { c.classList.toggle("answered", !!(s[c.dataset.id] && s[c.dataset.id].verdict)); });
+    var n = Object.keys(s).filter(function (k) { return s[k].verdict; }).length;
+    document.getElementById("count").textContent = n + " of " + cards.length + " answered";
+  }
+
+  function save() {
+    try { localStorage.setItem(CONFIG.storageKey, JSON.stringify(state())); } catch (e) { /* private mode */ }
+    paint();
+  }
+
+  function load() {
+    var raw;
+    try { raw = localStorage.getItem(CONFIG.storageKey); } catch (e) { return; }
+    if (!raw) { return; }
+    var s;
+    try { s = JSON.parse(raw); } catch (e) { return; }
+    cards.forEach(function (card) {
+      var e = s[card.dataset.id];
+      if (!e) { return; }
+      if (e.verdict) {
+        var input = card.querySelector('input[name="v-' + card.dataset.id + '"][value="' + e.verdict + '"]');
+        if (input) { input.checked = true; }
+      }
+      if (e.note) { card.querySelector("textarea").value = e.note; }
+    });
+  }
+
+  /* ---- markdown ---- */
+  function markdownNote(note) {
+    return note.split("\n").map(function (line) { return "> " + line; }).join("\n");
+  }
+
+  function markdown() {
+    var s = state();
+    var lines = [];
+    var answered = cards.filter(function (c) { return s[c.dataset.id] && s[c.dataset.id].verdict; });
+    lines.push("# Refinement feedback — " + CONFIG.title);
+    lines.push("");
+    lines.push("<!-- refinement-form: " + CONFIG.storageKey +
+               " · saved " + new Date().toISOString() +
+               " · answered " + answered.length + "/" + cards.length + " -->");
+    if (CONFIG.source) { lines.push(""); lines.push("Source document: `" + CONFIG.source + "`"); }
+    lines.push("");
+
+    cards.forEach(function (card) {
+      var id = card.dataset.id;
+      var e = s[id];
+      if (!e || !e.verdict) { return; }
+      lines.push("## " + id + " — " + card.querySelector(".d-claim").textContent.trim());
+      lines.push("");
+      lines.push("**Verdict:** " + e.verdict.toUpperCase());
+      lines.push("");
+      lines.push("**Notes:**");
+      lines.push("");
+      lines.push(e.note ? markdownNote(e.note) : "_(none)_");
+      lines.push("");
+      lines.push("---");
+      lines.push("");
+    });
+
+    var missing = cards.filter(function (c) { return !(s[c.dataset.id] && s[c.dataset.id].verdict); });
+    lines.push("## Not answered");
+    lines.push("");
+    if (missing.length) {
+      missing.forEach(function (c) {
+        var e = s[c.dataset.id];
+        lines.push("- " + c.dataset.id + " — " + c.querySelector(".d-claim").textContent.trim() +
+                   (e && e.note ? " (note only, no verdict)" : ""));
+        if (e && e.note) { lines.push(""); lines.push(e.note.split("\n").map(function (line) {
+          return "  > " + line;
+        }).join("\n")); lines.push(""); }
+      });
+    } else {
+      lines.push("_(none — every item has a verdict)_");
+    }
+    lines.push("");
+    lines.push("<!-- end refinement feedback -->");
+    return lines.join("\n");
+  }
+
+  /* ---- status ---- */
+  var statusEl = document.getElementById("status");
+  function report(kind, html) {
+    statusEl.className = kind;
+    statusEl.innerHTML = html;
+  }
+
+  function revealText(hint) {
+    var out = document.getElementById("out");
+    document.getElementById("outText").value = markdown();
+    document.getElementById("outHint").textContent = hint || "Select all and copy, then paste this back into the conversation.";
+    out.hidden = false;
+    out.scrollIntoView({ block: "nearest" });
+  }
+
+  /* ---- remembered output directory ---- */
+  var DB = "refinement-fs", STORE = "handles", KEY = CONFIG.storageKey + ":dir";
+
+  function idb(mode, fn) {
+    return new Promise(function (resolve, reject) {
+      var open = indexedDB.open(DB, 1);
+      open.onupgradeneeded = function () { open.result.createObjectStore(STORE); };
+      open.onerror = function () { reject(open.error); };
+      open.onsuccess = function () {
+        var tx = open.result.transaction(STORE, mode);
+        var rq = fn(tx.objectStore(STORE));
+        rq.onsuccess = function () { resolve(rq.result); };
+        rq.onerror = function () { reject(rq.error); };
+      };
+    });
+  }
+
+  var loadDir = function () { return idb("readonly", function (s) { return s.get(KEY); }).catch(function () { return null; }); };
+  var saveDir = function (h) { return idb("readwrite", function (s) { return s.put(h, KEY); }).catch(function () { return null; }); };
+
+  async function writeInto(dir, text) {
+    var opts = { mode: "readwrite" };
+    if ((await dir.queryPermission(opts)) !== "granted"
+        && (await dir.requestPermission(opts)) !== "granted") { return false; }
+    var fh = await dir.getFileHandle(CONFIG.outName, { create: true });
+    var w = await fh.createWritable();
+    await w.write(text);
+    await w.close();
+    return true;
+  }
+
+  /* ---- save chain: remembered dir -> directory grant -> download -> clipboard -> textarea ---- */
+  document.getElementById("save").addEventListener("click", async function () {
+    var text = markdown();
+
+    if (typeof window.showDirectoryPicker === "function") {
+      try {
+        var dir = await loadDir();
+        if (dir && await writeInto(dir, text)) {
+          report("ok", "Saved <code>" + esc(CONFIG.outName) + "</code> to the folder you granted earlier — no dialog needed.");
+          return;
+        }
+
+        dir = await window.showDirectoryPicker({ id: "refinement-out", mode: "readwrite" });
+        if (await writeInto(dir, text)) {
+          await saveDir(dir);
+          report("ok", "Saved <code>" + esc(CONFIG.outName) + "</code> to <code>" + esc(dir.name) +
+            "</code>. That folder is remembered — later saves write straight there.");
+          return;
+        }
+        report("warn", "Write permission was refused — nothing was written.");
+        return;
+      } catch (err) {
+        if (err && err.name === "AbortError") {
+          report("warn", "Save cancelled — nothing was written.");
+          return;
+        }
+        report("warn", "Direct save failed (" + esc(err && err.name) + "). Falling back to a download…");
+      }
+    }
+
+    try {
+      var blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = CONFIG.outName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+      report("warn", "Download initiated for <code>" + esc(CONFIG.outName) + "</code> to your <b>browser's download folder</b> — " +
+        "this is <b>not</b> next to this page." +
+        (CONFIG.expectedDir ? " Move it to <code class=\"path\">" + esc(CONFIG.expectedDir) + "</code>, or tell the agent where it is." : ""));
+      revealText("The download was initiated. If it did not appear, copy this generated feedback manually.");
+      return;
+    } catch (err2) {
+      report("warn", "Download failed (" + esc(err2 && err2.name) + "). Trying the clipboard…");
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      report("ok", "Copied to the clipboard — paste it back into the conversation.");
+      revealText("Also shown below, in case the paste goes wrong.");
+      return;
+    } catch (err3) {
+      revealText("Could not save or copy automatically. Select all of this and copy it manually.");
+      report("bad", "Automatic save and copy both failed. The full feedback is in the box above — copy it by hand.");
+    }
+  });
+
+  document.getElementById("copy").addEventListener("click", async function (ev) {
+    var btn = ev.currentTarget;
+    try {
+      await navigator.clipboard.writeText(markdown());
+      btn.textContent = "Copied";
+      report("ok", "Copied to the clipboard — paste it back into the conversation.");
+    } catch (e) {
+      revealText("Clipboard access was refused. Select all of this and copy it manually.");
+      report("warn", "Clipboard refused — the text is in the box above.");
+    }
+    setTimeout(function () { btn.textContent = "Copy feedback"; }, 2200);
+  });
+
+  document.getElementById("show").addEventListener("click", function () {
+    revealText();
+    document.getElementById("outText").focus();
+    document.getElementById("outText").select();
+  });
+
+  document.getElementById("clear").addEventListener("click", function () {
+    cards.forEach(function (card) {
+      var picked = card.querySelector('input[name="v-' + card.dataset.id + '"]:checked');
+      if (picked) { picked.checked = false; }
+      card.querySelector("textarea").value = "";
+    });
+    document.getElementById("out").hidden = true;
+    report("", "Cleared. Nothing saved in this browser for this review.");
+    save();
+  });
+
+  document.addEventListener("input", save);
+  document.addEventListener("change", save);
+
+  load();
+  paint();
+</script>
