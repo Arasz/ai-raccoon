@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Net;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
@@ -328,15 +327,11 @@ public sealed class NodeRunnerTests : IDisposable
         url.ShouldBe($"http://127.0.0.1:{port}/mcp");
 
 
-        var stopwatch = Stopwatch.StartNew();
         var exit = await run.Exit;
-        stopwatch.Stop();
 
+        // The self-exit is the fact; its duration is not a verdict (PR #464). A fully broken idle
+        // timeout hangs the await above and is caught by the harness cap / job timeout.
         exit.ShouldBe(ExitCode.Success);
-        // Generous bound for slow shutdown: a starved runner (nightly 2026-08-15) took 20.6s to
-        // do the shutdown work after the 5s idle span. A fully broken idle timeout hangs the
-        // await above (no self-exit at all) and is caught by the job timeout, not this bound.
-        stopwatch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(30));
     }
 
     [Fact]

@@ -31,7 +31,6 @@ namespace AiRaccoon.Tests.Integration.Maintenance;
 public sealed class PendingEmbedMaintenanceDrainTests : IDisposable
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 17, 12, 0, 0, TimeSpan.Zero);
-    private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(5);
 
     private readonly string _dataRoot = TestData.CreateTempRoot("pending-embed-drain");
     private readonly SqliteConnectionFactory _factory;
@@ -67,8 +66,8 @@ public sealed class PendingEmbedMaintenanceDrainTests : IDisposable
         using var cts = new CancellationTokenSource();
         var maintenanceRun = maintenance.StartAsync(cts.Token);
         var drainRun = drain.StartAsync(cts.Token);
-        (await maintenance.Ticks.WaitAsync(1, SignalTimeout, TestContext.Current.CancellationToken)).ShouldBeTrue();
-        (await drain.Drains.WaitAsync(1, SignalTimeout, TestContext.Current.CancellationToken)).ShouldBeTrue();
+        await maintenance.Ticks.WaitAsync(1, TestContext.Current.CancellationToken);
+        await drain.Drains.WaitAsync(1, TestContext.Current.CancellationToken);
 
         (await PendingCountAsync()).ShouldBe(0);
 
@@ -94,7 +93,7 @@ public sealed class PendingEmbedMaintenanceDrainTests : IDisposable
 
         using var cts = new CancellationTokenSource();
         var run = service.StartAsync(cts.Token);
-        (await service.Ticks.WaitAsync(1, SignalTimeout, TestContext.Current.CancellationToken)).ShouldBeTrue();
+        await service.Ticks.WaitAsync(1, TestContext.Current.CancellationToken);
         for (var i = 0; i < 5; i++)
         {
             _time.Advance(BankMaintenanceHostedService.OnDemandPollInterval);

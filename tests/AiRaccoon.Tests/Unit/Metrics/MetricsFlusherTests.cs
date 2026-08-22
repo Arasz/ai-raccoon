@@ -193,14 +193,14 @@ public sealed class MetricsFlusherTests
 
     // ── ADR-0062: wait for the observable (TimerArmed / Flushes), never for the clock. No Task.Delay. ──
 
-    private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(5);
+    /// <summary>Step budget for the advance-until helpers: a count of fake-clock steps, never a wall-clock deadline (PR #464).</summary>
+    private const int MaxAdvanceSteps = 200;
     private static readonly TimeSpan AbsenceWindow = TimeSpan.FromMilliseconds(150);
 
     private static async Task AdvanceUntilAsync(FakeTimeProvider time, AiRaccoon.Infrastructure.Maintenance.TickSignal signal,
         long target, TimeSpan step, CancellationToken cancellationToken)
     {
-        var deadline = DateTime.UtcNow + SignalTimeout;
-        while (DateTime.UtcNow < deadline)
+        for (var attempt = 0; attempt < MaxAdvanceSteps; attempt++)
         {
             time.Advance(step);
             if (await signal.WaitAsync(target, AbsenceWindow, cancellationToken))
@@ -209,7 +209,7 @@ public sealed class MetricsFlusherTests
             }
         }
 
-        throw new TimeoutException($"signal {target} did not fire within {SignalTimeout}");
+        throw new TimeoutException($"signal {target} did not fire within {MaxAdvanceSteps} fake-clock steps");
     }
 
     [Fact]
@@ -226,7 +226,7 @@ public sealed class MetricsFlusherTests
         using var cts = new CancellationTokenSource();
         var run = flusher.StartAsync(cts.Token);
 
-        (await flusher.TimerArmed.WaitAsync(1, SignalTimeout, TestContext.Current.CancellationToken)).ShouldBeTrue();
+        await flusher.TimerArmed.WaitAsync(1, TestContext.Current.CancellationToken);
         await AdvanceUntilAsync(time, flusher.Flushes, 1, TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         run.IsFaulted.ShouldBeFalse();
@@ -246,7 +246,7 @@ public sealed class MetricsFlusherTests
         using var cts = new CancellationTokenSource();
         var run = flusher.StartAsync(cts.Token);
 
-        (await flusher.TimerArmed.WaitAsync(1, SignalTimeout, TestContext.Current.CancellationToken)).ShouldBeTrue();
+        await flusher.TimerArmed.WaitAsync(1, TestContext.Current.CancellationToken);
         await AdvanceUntilAsync(time, flusher.Flushes, 1,
             TimeSpan.FromSeconds(MetricsConfigKeys.DefaultFlushIntervalSeconds), TestContext.Current.CancellationToken);
 
@@ -296,9 +296,9 @@ public sealed class MetricsFlusherTests
         var stopTask = flusher.StopAsync(CancellationToken.None);
         time.Advance(MetricsFlusher.ShutdownFlushTimeout + TimeSpan.FromSeconds(1));
 
-        (await Task.WhenAny(stopTask, Task.Delay(SignalTimeout, TestContext.Current.CancellationToken)))
-            .ShouldBe(stopTask, "a hanging store must not hang shutdown");
-        await stopTask;
+        // The bound is fake time (ShutdownFlushTimeout, advanced above): StopAsync must complete
+        // on its own; only the test's token ends a genuine hang (PR #464).
+        await stopTask.WaitAsync(TestContext.Current.CancellationToken);
     }
 
     private sealed class FakeMetricsStore : IMetricsStore

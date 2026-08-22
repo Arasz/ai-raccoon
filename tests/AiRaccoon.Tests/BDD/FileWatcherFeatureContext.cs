@@ -106,38 +106,30 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
     }
 
     /// <summary>
-    ///     Bounded poll: advance 100ms fake time + one tick + a short real sleep for OS event
-    ///     delivery until the condition holds or the budgets expire. maxRealSeconds is a generous
-    ///     hang-stop only, not the timing assertion (docs/work/archive/2026-08-06-http-serve-code-review-gate.md).
+    ///     Bounded poll: advance 100ms fake time + one tick + a short real pause for OS event
+    ///     delivery until the condition holds or the fake-time (step) budget expires. No wall clock
+    ///     decides the outcome (PR #464); a blocked step ends only with the cancellation token.
     /// </summary>
     public async Task<bool> StepUntilAsync(Func<Task<bool>> condition, int maxFakeSeconds = 2,
-        int maxRealSeconds = 30, CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default)
     {
-        var startedAt = DateTime.UtcNow;
-        var realDeadline = startedAt.AddSeconds(maxRealSeconds);
         var fakeStart = TimeProvider.GetUtcNow();
         var steps = 0;
-        while (!await condition().ConfigureAwait(false))
+        while (!await condition().WaitAsync(cancellationToken).ConfigureAwait(false))
         {
             var fakeSpent = TimeProvider.GetUtcNow() - fakeStart;
-            var fakeExpired = fakeSpent >= TimeSpan.FromSeconds(maxFakeSeconds);
-            var realExpired = DateTime.UtcNow >= realDeadline;
-            if (fakeExpired || realExpired)
+            if (fakeSpent >= TimeSpan.FromSeconds(maxFakeSeconds))
             {
-                // Which budget ran out is the whole diagnosis, and the caller only sees a bool.
-                // Without this a load-induced timeout and a genuine behaviour break read alike.
                 TestContext.Current.TestOutputHelper?.WriteLine(
-                    $"StepUntilAsync gave up after {steps} steps: " +
-                    $"{(fakeExpired ? "fake-time budget" : "real-time hang-stop")} expired " +
-                    $"(fake {fakeSpent.TotalSeconds:F1}s/{maxFakeSeconds}s, " +
-                    $"real {(DateTime.UtcNow - startedAt).TotalSeconds:F1}s/{maxRealSeconds}s)");
+                    $"StepUntilAsync gave up after {steps} steps: fake-time budget expired " +
+                    $"(fake {fakeSpent.TotalSeconds:F1}s/{maxFakeSeconds}s)");
                 return false;
             }
 
             steps++;
             TimeProvider.Advance(TimeSpan.FromMilliseconds(100));
             await Pipeline.TickOnceAsync(cancellationToken).ConfigureAwait(false);
-            await Task.Delay(20, cancellationToken).ConfigureAwait(false);
+            await Task.Delay(FakeClockPoller.EventDeliveryPause, cancellationToken).ConfigureAwait(false);
         }
 
         return true;

@@ -155,7 +155,7 @@ public sealed class McpTokenFileTests : IDisposable
         healing.IsCompleted.ShouldBeFalse(); // still waiting out a possibly-live writer
 
         time.Advance(McpTokenFile.HealAfter);
-        var healed = await healing.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        var healed = await healing.WaitAsync(TestContext.Current.CancellationToken);
 
         healed.ShouldNotBeNullOrWhiteSpace();
         tokenFile.Read().ShouldBe(healed);
@@ -177,7 +177,7 @@ public sealed class McpTokenFileTests : IDisposable
         healing.IsCompleted.ShouldBeFalse(); // still waiting out a possibly-live writer
 
         time.Advance(McpTokenFile.HealAfter);
-        var healed = await healing.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        var healed = await healing.WaitAsync(TestContext.Current.CancellationToken);
 
         healed.ShouldNotBeNull().ShouldNotBe(truncated);
         tokenFile.Read().ShouldBe(healed);
@@ -198,7 +198,7 @@ public sealed class McpTokenFileTests : IDisposable
         await File.WriteAllTextAsync(tokenFile.Path, writers, TestContext.Current.CancellationToken);
         time.Advance(McpTokenFile.HealAfter);
 
-        var acquired = await healing.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        var acquired = await healing.WaitAsync(TestContext.Current.CancellationToken);
 
         acquired.ShouldBe(writers);
         tokenFile.Read().ShouldBe(writers);

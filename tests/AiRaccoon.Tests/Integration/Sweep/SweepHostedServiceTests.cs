@@ -27,7 +27,6 @@ public sealed class SweepHostedServiceTests : IDisposable
     private const int IntervalHours = 48;
 
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
-    private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(5);
 
     private readonly string _dataRoot = TestData.CreateTempRoot("sweep-hosted-service");
     private readonly SweepHostedService _service;
@@ -99,11 +98,11 @@ public sealed class SweepHostedServiceTests : IDisposable
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await _service.StartAsync(cancellationToken);
-        (await _service.TimerArmed.WaitAsync(1, SignalTimeout, cancellationToken)).ShouldBeTrue();
+        await _service.TimerArmed.WaitAsync(1, cancellationToken);
 
         _time.Advance(TimeSpan.FromHours(IntervalHours));
 
-        (await _service.Ticks.WaitAsync(1, SignalTimeout, cancellationToken)).ShouldBeTrue();
+        await _service.Ticks.WaitAsync(1, cancellationToken);
         await _service.StopAsync(cancellationToken);
     }
 

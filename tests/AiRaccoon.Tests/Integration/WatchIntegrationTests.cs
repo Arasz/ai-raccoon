@@ -10,7 +10,9 @@ using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Tests.TestHelpers;
 using Dapper;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
@@ -64,10 +66,12 @@ public sealed class WatchIntegrationTests
         _ = stack.Hosted.StartAsync(TestContext.Current.CancellationToken);
         try
         {
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-            while (stack.CatchUp.LastScan is null && DateTime.UtcNow < deadline)
+            // Wait on closure, not on a clock: the hosted reconcile starts the scan on its own
+            // fake-time poll, so step the clock until it does (the token is the only hang guard).
+            for (var step = 0; step < 600 && stack.CatchUp.LastScan is null; step++)
             {
-                await Task.Delay(20, TestContext.Current.CancellationToken);
+                stack.Time.Advance(TimeSpan.FromMilliseconds(100));
+                await Task.Delay(FakeClockPoller.EventDeliveryPause, TestContext.Current.CancellationToken);
             }
 
             var scan = stack.CatchUp.LastScan.ShouldNotBeNull("the hosted reconcile did not start a catch-up scan");
@@ -77,17 +81,16 @@ public sealed class WatchIntegrationTests
 
             // No manual TickOnceAsync anywhere: the pipeline loop's own 1s tick (fired by
             // advancing the fake clock) must drain the channel and digest the created file.
-            var pollDeadline = DateTime.UtcNow.AddSeconds(15);
             var searchable = false;
-            while (!searchable && DateTime.UtcNow < pollDeadline)
+            for (var step = 0; step < 600 && !searchable; step++)
             {
                 stack.Time.Advance(TimeSpan.FromSeconds(1));
-                await Task.Delay(50, TestContext.Current.CancellationToken);
+                await Task.Delay(FakeClockPoller.EventDeliveryPause, TestContext.Current.CancellationToken);
                 searchable = (await stack.SearchAsync("zephyrloop", TestContext.Current.CancellationToken))
                     .Any(r => r.SourceFile == stack.File("a.md"));
             }
 
-            searchable.ShouldBeTrue("the hosted service never started the pipeline tick loop");
+            searchable.ShouldBeTrue("the hosted service never started the pipeline tick loop (600 fake seconds stepped)");
         }
         finally
         {
@@ -345,12 +348,14 @@ public sealed class WatchIntegrationTests
             await seeded;
         }
 
-        (await stack.StepUntilAsync(async () =>
+        var seededSearchable = await stack.StepUntilAsync(async () =>
         {
             var nested = await stack.SearchAsync("zephyrnest", TestContext.Current.CancellationToken);
             var top = await stack.SearchAsync("zephyrtop", TestContext.Current.CancellationToken);
             return nested.Count >= 2 && top.Any();
-        }, TestContext.Current.CancellationToken)).ShouldBeTrue("seed files did not become searchable");
+        }, TestContext.Current.CancellationToken);
+        seededSearchable.ShouldBeTrue(
+            $"seed files did not become searchable — {await stack.DiagnosticsAsync(TestContext.Current.CancellationToken)}");
 
         // A directory delete event digests with the DIRECTORY path — the store must remove
         // every chunk under it, not just the exact path.
@@ -533,7 +538,7 @@ public sealed class WatchIntegrationTests
             var results = await stack.SearchAsync("zephyrword299", TestContext.Current.CancellationToken);
             var current = await stack.Service.StatusAsync(Project, TestContext.Current.CancellationToken);
             return results.Any() && current.Count == 1 && current[0].State == WatchState.Healthy;
-        }, TestContext.Current.CancellationToken, maxRealSeconds: 60)).ShouldBeTrue("large-dir scan did not finish");
+        }, TestContext.Current.CancellationToken)).ShouldBeTrue("large-dir scan did not finish");
         (await stack.CountEntriesUnderAsync(stack.WatchDir, TestContext.Current.CancellationToken))
             .ShouldBeGreaterThanOrEqualTo(300);
     }
@@ -660,7 +665,7 @@ public sealed class WatchIntegrationTests
         await stack.StepUntilAsync(
             async () => await stack.CountFingerprintsUnderAsync(Path.GetDirectoryName(hidden)!,
                 TestContext.Current.CancellationToken) > 0, TestContext.Current.CancellationToken,
-            maxFakeSeconds: 10, maxRealSeconds: 10);
+            maxFakeSeconds: 10);
 
         (await stack.CountEntriesUnderAsync(Path.GetDirectoryName(hidden)!, TestContext.Current.CancellationToken))
             .ShouldBe(0, "a file under .claude/worktrees/ must never reach the memory corpus");
@@ -677,14 +682,15 @@ public sealed class WatchIntegrationTests
     {
         private readonly bool _deleteDataRoot;
         private readonly SqliteConnectionFactory _factory;
-        private readonly WallClockBoundedPoller _poller;
+        private readonly FakeClockPoller _poller;
+        private readonly FakeLogCollector _logs = new();
 
         public Stack(string? name = null, DateTimeOffset? now = null, bool deleteDataRoot = true,
             ICodeChunker? codeChunker = null)
         {
             _deleteDataRoot = deleteDataRoot;
             Time = new FakeTimeProvider(now ?? FixedNow);
-            _poller = new WallClockBoundedPoller(Time);
+            _poller = new FakeClockPoller(Time);
             DataRoot = Path.Combine(Path.GetTempPath(), "ai-raccoon-watch-integration",
                 name ?? Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(DataRoot);
@@ -693,7 +699,7 @@ public sealed class WatchIntegrationTests
             _factory = new SqliteConnectionFactory(
                 new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
                 NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
-            Memory = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), Time,
+            Memory = TestData.CreateMemoryStore(_factory, new FakeLogger<SqliteMemoryStore>(_logs), new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), Time,
                 TestData.CreateEmbeddingService(), codeChunker: codeChunker);
             WatchStore = new WatchStore(_factory);
             ScanGuard = new WatchScanGuard();
@@ -703,14 +709,22 @@ public sealed class WatchIntegrationTests
                 new WatchDigestExecutor(Memory, WatchStore, Time,
                     new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => catchUp!), EmbedDrainPump),
                 new WatchRetryPolicy(),
-                ScanGuard, Memory, Time, NullLogger<WatchPipeline>.Instance);
-            EventSource = new WatchEventSource(Pipeline.Enqueue, Errors.Add,
-                NullLogger<WatchEventSource>.Instance);
+                ScanGuard, Memory, Time, new FakeLogger<WatchPipeline>(_logs));
+            EventSource = new WatchEventSource(evt =>
+                {
+                    lock (FsEvents)
+                    {
+                        FsEvents.Add(evt);
+                    }
+
+                    Pipeline.Enqueue(evt);
+                }, Errors.Add,
+                new FakeLogger<WatchEventSource>(_logs));
             CatchUp = catchUp = new WatchCatchUp(Pipeline, WatchStore, ScanGuard,
-                new SqliteWatchScanLease(_factory, Time), Time, NullLogger<WatchCatchUp>.Instance,
+                new SqliteWatchScanLease(_factory, Time), Time, new FakeLogger<WatchCatchUp>(_logs),
                 new IgnoreRulesProvider());
             Hosted = new WatchHostedService(Memory, WatchStore, Pipeline, EventSource, CatchUp, Time,
-                TestTelemetry.None, NullLogger<WatchHostedService>.Instance);
+                TestTelemetry.None, new FakeLogger<WatchHostedService>(_logs));
             Service = new WatchService(WatchStore, Memory, Pipeline, Time, new WatchOverlapResolver());
         }
 
@@ -739,6 +753,9 @@ public sealed class WatchIntegrationTests
         public WatchService Service { get; }
 
         public List<WatchEventError> Errors { get; } = [];
+
+        /// <summary>Every event the real watcher delivered, in order — the scan's own enqueues are not in here.</summary>
+        public List<WatchEvent> FsEvents { get; } = [];
 
         public void Dispose()
         {
@@ -801,6 +818,24 @@ public sealed class WatchIntegrationTests
                 new CommandDefinition(sql, parameters, cancellationToken: cancellationToken));
         }
 
+        /// <summary>What the bank and pipeline hold right now — for a failure message, so a give-up names its cause.</summary>
+        public async Task<string> DiagnosticsAsync(CancellationToken cancellationToken)
+        {
+            await using var connection = await _factory.OpenBankAsync(cancellationToken);
+            var states = await connection.QueryAsync<(string SourceFile, string State, int Count)>(new CommandDefinition(
+                "SELECT source_file AS SourceFile, embed_state AS State, count(*) AS Count FROM entries WHERE project_id = @p GROUP BY source_file, embed_state",
+                new { p = Project }, cancellationToken: cancellationToken));
+            var fingerprints = await connection.QueryAsync<string>(new CommandDefinition(
+                "SELECT path FROM watch_files WHERE project_id = @p", new { p = Project }, cancellationToken: cancellationToken));
+            var statuses = Pipeline.GetStatuses(Project).Select(st => $"{st.Path}:{st.State}");
+            return $"entries=[{string.Join(", ", states.Select(x => $"{Path.GetFileName(x.SourceFile)}:{x.State}x{x.Count}"))}] " +
+                   $"fingerprints=[{string.Join(", ", fingerprints.Select(Path.GetFileName))}] " +
+                   $"watches=[{string.Join(", ", statuses)}] errors=[{string.Join(" | ", Errors.Select(e => e.ToString()))}] " +
+                   $"fsEvents=[{string.Join(", ", FsEvents.ToArray().Select(e => $"{e.Kind}:{Path.GetFileName(e.Path)}{(e.OldPath is null ? "" : "<-" + Path.GetFileName(e.OldPath))}"))}] " +
+                   $"scans started={ScanGuard.StartedScans} skipped={ScanGuard.SkippedScans} lastScanDone={CatchUp.LastScan?.IsCompleted} fakeNow={Time.GetUtcNow():O} " +
+                   $"log=[{string.Join(" | ", _logs.GetSnapshot().Select(r => $"[{r.Id.Id}] {r.Message}{(r.Exception is null ? "" : $" :: {r.Exception.GetType().Name}: {r.Exception.Message}")}"))}]";
+        }
+
         public async Task<int> CountEntriesUnderAsync(string dirPrefix, CancellationToken cancellationToken)
         {
             await using var connection = await _factory.OpenBankAsync(cancellationToken);
@@ -842,18 +877,13 @@ public sealed class WatchIntegrationTests
         }
 
         /// <summary>
-        ///     Bounded poll: advance the fake clock 100ms, drain the pipeline once, sleep briefly
-        ///     for OS event delivery — until the condition holds or either budget expires.
-        ///     maxFakeSeconds bounds step count; maxRealSeconds is only a hang-stop for the real
-        ///     OS-event/embedding work these arrange-phase polls wait on, so it stays generous.
-        ///     Delegates to <see cref="WallClockBoundedPoller" /> (plan Q1 / M7-QA F2), which also
-        ///     races each individual await against the remaining real-time budget so a blocked
-        ///     step fails fast instead of hanging the loop past maxRealSeconds.
+        ///     maxFakeSeconds bounds the step count; no wall clock decides the outcome (PR #464) —
+        ///     a blocked step ends only with the test's cancellation token. Delegates to
+        ///     <see cref="FakeClockPoller" />.
         /// </summary>
         public Task<bool> StepUntilAsync(Func<Task<bool>> condition, CancellationToken cancellationToken,
-            int maxFakeSeconds = 60, int maxRealSeconds = 30) =>
+            int maxFakeSeconds = 60) =>
             _poller.StepUntilAsync(condition, Pipeline.TickOnceAsync, cancellationToken, maxFakeSeconds,
-                maxRealSeconds,
                 message => TestContext.Current.TestOutputHelper?.WriteLine(message));
     }
 }

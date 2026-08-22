@@ -40,6 +40,14 @@ public sealed class WatchDigestExecutor(
                 .ConfigureAwait(false);
         }
 
+        if (Directory.Exists(normalized))
+        {
+            // A directory's own Created/Changed event: nothing to digest, and NOT a vanished file —
+            // taking the delete cascade here would wipe the files inside it that a sibling digest in
+            // the same batch just ingested (#509).
+            return;
+        }
+
         if (!File.Exists(normalized))
         {
             await DeletePathAsync(projectId, normalizedWatch, normalized, cancellationToken).ConfigureAwait(false);
