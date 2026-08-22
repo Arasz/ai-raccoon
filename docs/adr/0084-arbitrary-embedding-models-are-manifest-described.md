@@ -110,3 +110,28 @@ activate and embed silently on the wrong bytes. `Load()` now hashes every pinned
 the manifest, so they were never covered by the activation check above. `EmbeddingManifest`
 now carries an optional `ProvenanceFiles` list (absent on pre-D2 manifests), pinned with
 the same trust-on-first-download SHA-256 mechanism as the tokenizer/ONNX files (D2).
+
+## Amendment (2026-08-22, #470) — `pooling.mode` is reconciled to the graph, not trusted over it
+
+"That file is the engine's contract" holds for every field except one. A model can pool
+inside its own ONNX graph — its token-embeddings output is `[batch, dimensions]`, already a
+vector — and no token-level `pooling.mode` can be applied to such an output. #466 made the
+embed path branch on the output's rank rather than the declared mode, which fixed the
+embedding but left the manifest saying something untrue and warning (417) on every load.
+
+The manifest is now reconciled to the graph at the two moments the file is written or an
+engine is activated, so the two never disagree for long:
+
+- **Download.** The ORT smoke test already loads the graph, so it reports each output's
+  declared rank; a rank-2 token-embeddings output writes `pooling.mode: model-output` plus
+  `onnx.embeddingOutput` instead of the planner's file-derived inference.
+- **Activation.** `IManifestPoolingRepair` rewrites an existing manifest with the same rule,
+  once, logging event 424 (or 425 when the file cannot be written, leaving 417 to keep
+  firing). It runs at activation and deliberately **not** at load: the local engine
+  fingerprint is a hash of the manifest's bytes, and `CodeReindexJob` reconciles that
+  fingerprint on every poll, so rewriting the file on a load would re-embed an entire corpus
+  for a correction that changes no vector — while an activation invalidates everything
+  anyway. Taking the fingerprint after the repair is what keeps the next poll quiet.
+
+Pins are unaffected: a manifest does not pin itself, so the rewrite leaves every recorded
+sha256 exactly as it was, and the activation pin check (the amendment above) still runs.
