@@ -251,6 +251,37 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal);
     }
 
+    /// <summary>
+    ///     Review finding 1 (#517), BLOCKING: an unbounded rows-per-run lets `EntryEmbedder`/
+    ///     `CodeEmbedder` materialise the whole `SELECT ... LIMIT` result as one List — exactly the
+    ///     burst this setting exists to prevent. The CLI rejects rather than silently clamping,
+    ///     mirroring `settings maintenance vacuum-interval`'s ceiling guard.
+    /// </summary>
+    [Fact]
+    public async Task MaintenanceEmbedRowsPerRunOverCeiling_Returns1_AndWritesError()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, _, err) = await Run(["settings", "maintenance", "embed-rows-per-run", "2000000000"], store);
+
+        exit.ShouldBe(ExitCode.InvalidArgument);
+        err.ShouldContain(BankMaintenanceConfigKeys.MaxEmbedRowsPerRun.ToString());
+        store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal);
+    }
+
+    [Fact]
+    public async Task MaintenanceEmbedRowsPerRunAtTheCeiling_WritesGlobalRow()
+    {
+        var store = new FakeConfigStore();
+        var ceiling = BankMaintenanceConfigKeys.MaxEmbedRowsPerRun.ToString();
+
+        var (exit, outp, _) = await Run(["settings", "maintenance", "embed-rows-per-run", ceiling], store);
+
+        exit.ShouldBe(0);
+        store.Settings[BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal].ShouldBe(ceiling);
+        outp.ShouldContain($"embed rows per run: {ceiling}");
+    }
+
     [Fact]
     public async Task MaintenanceList_ShowsEmbedRowsPerRun_DefaultAndConfigured()
     {

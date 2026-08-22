@@ -121,4 +121,38 @@ public sealed class BankMaintenanceConfigKeysTests
         BankMaintenanceConfigKeys.ParseEmbedRowsPerRun("garbage").ShouldBe(BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun);
         BankMaintenanceConfigKeys.ParseEmbedRowsPerRun(null).ShouldBe(BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun);
     }
+
+    /// <summary>Review finding 1 (#517): 4096 = 128 * EntryEmbedder/CodeEmbedder.BatchSize (32) — generous headroom above the 128 default while still bounding the drain's one-shot `SELECT ... LIMIT` materialisation to a modest burst.</summary>
+    [Fact]
+    public void MaxEmbedRowsPerRun_IsTheDocumentedCeiling()
+    {
+        BankMaintenanceConfigKeys.MaxEmbedRowsPerRun.ShouldBe(4096);
+    }
+
+    /// <summary>Review finding 1: clamp at the parse layer (mirrors ParseVacuumIntervalDays_ClampsAbsurdValues_ToTheTimeSpanSafeCeiling above) — and, unlike vacuum, this is also the CLI's one shared validity rule (finding 4), so an over-ceiling value is invalid, not silently accepted.</summary>
+    [Fact]
+    public void TryParseEmbedRowsPerRun_OverCeiling_ClampsToTheCeiling_AndIsInvalid()
+    {
+        BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun("2000000000", out var rows).ShouldBeFalse();
+        rows.ShouldBe(BankMaintenanceConfigKeys.MaxEmbedRowsPerRun);
+
+        BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun(
+            (BankMaintenanceConfigKeys.MaxEmbedRowsPerRun + 1).ToString(), out var rowsJustOver).ShouldBeFalse();
+        rowsJustOver.ShouldBe(BankMaintenanceConfigKeys.MaxEmbedRowsPerRun);
+    }
+
+    [Fact]
+    public void TryParseEmbedRowsPerRun_AtTheCeiling_IsValid()
+    {
+        BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun(
+            BankMaintenanceConfigKeys.MaxEmbedRowsPerRun.ToString(), out var rows).ShouldBeTrue();
+        rows.ShouldBe(BankMaintenanceConfigKeys.MaxEmbedRowsPerRun);
+    }
+
+    [Fact]
+    public void ParseEmbedRowsPerRun_OverCeiling_ClampsToTheCeiling()
+    {
+        BankMaintenanceConfigKeys.ParseEmbedRowsPerRun("2000000000")
+            .ShouldBe(BankMaintenanceConfigKeys.MaxEmbedRowsPerRun);
+    }
 }

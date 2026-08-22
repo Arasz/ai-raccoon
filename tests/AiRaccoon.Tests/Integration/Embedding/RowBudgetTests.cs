@@ -80,9 +80,9 @@ public sealed class RowBudgetTests : IDisposable
         logger.Collector.GetSnapshot().ShouldBeEmpty("an unset setting is not garbage — nothing to warn about");
     }
 
-    /// <summary>A present-but-unparseable value falls back to the default and warns exactly once — asserted on the logger's structured record, not its text.</summary>
+    /// <summary>A present-but-unparseable value falls back to the default and warns — asserted on the logger's structured record, not its text.</summary>
     [Fact]
-    public void ResolveRowsPerRun_Garbage_Returns128_AndWarnsOnce()
+    public void ResolveRowsPerRun_Garbage_Returns128_AndWarns()
     {
         var logger = new FakeLogger<EmbedDrainService>();
         var service = NewService(TestData.NewEmbedDrainPump(), logger: logger);
@@ -91,6 +91,48 @@ public sealed class RowBudgetTests : IDisposable
 
         var records = logger.Collector.GetSnapshot();
         records.Count(r => r.Level == LogLevel.Warning).ShouldBe(1);
+    }
+
+    /// <summary>
+    ///     Review finding 2 (#517): ResolveRowsPerRun runs on every drain pass (every ~15s
+    ///     on-demand poll, at least), so a persistent bad value used to warn forever. Two passes
+    ///     over the SAME bad raw value must log exactly once.
+    /// </summary>
+    [Fact]
+    public void ResolveRowsPerRun_CalledTwiceWithTheSameGarbage_WarnsOnlyOnce()
+    {
+        var logger = new FakeLogger<EmbedDrainService>();
+        var service = NewService(TestData.NewEmbedDrainPump(), logger: logger);
+
+        service.ResolveRowsPerRun("not-a-number");
+        service.ResolveRowsPerRun("not-a-number");
+
+        logger.Collector.GetSnapshot().Count(r => r.Level == LogLevel.Warning).ShouldBe(1);
+    }
+
+    /// <summary>A DIFFERENT bad value is a fresh occurrence — worth its own warning, not swallowed by the first one's memory.</summary>
+    [Fact]
+    public void ResolveRowsPerRun_TwoDistinctGarbageValues_WarnsForEach()
+    {
+        var logger = new FakeLogger<EmbedDrainService>();
+        var service = NewService(TestData.NewEmbedDrainPump(), logger: logger);
+
+        service.ResolveRowsPerRun("garbage-one");
+        service.ResolveRowsPerRun("garbage-two");
+
+        logger.Collector.GetSnapshot().Count(r => r.Level == LogLevel.Warning).ShouldBe(2);
+    }
+
+    /// <summary>Review finding 1: the parser clamps an over-ceiling value to the ceiling AND logs — same invalid-value warning path as garbage.</summary>
+    [Fact]
+    public void ResolveRowsPerRun_OverCeiling_ClampsToTheCeiling_AndWarns()
+    {
+        var logger = new FakeLogger<EmbedDrainService>();
+        var service = NewService(TestData.NewEmbedDrainPump(), logger: logger);
+
+        service.ResolveRowsPerRun("2000000000").ShouldBe(BankMaintenanceConfigKeys.MaxEmbedRowsPerRun);
+
+        logger.Collector.GetSnapshot().Count(r => r.Level == LogLevel.Warning).ShouldBe(1);
     }
 
     private EmbedDrainService NewService(IEventPump<EmbedDrainRequest> pump, ILogger<EmbedDrainService>? logger = null) =>
