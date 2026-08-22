@@ -6,10 +6,10 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Embedding;
 
 /// <summary>WP11-A / G16: the ORT intra-op thread cap. Counts only — never wall-clock (owner ruling #464).</summary>
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ThreadResolutionTests
 {
-    [Trait(TestCategories.Category, TestCategories.Unit)]
-    [Trait(TestCategories.Speed, TestCategories.Fast)]
     [Fact]
     public void Resolve_UnsetSetting_HalvesTheCoreCount()
     {
@@ -18,8 +18,6 @@ public sealed class ThreadResolutionTests
         service.ResolveThreadCount(null, 10).ShouldBe(5);
     }
 
-    [Trait(TestCategories.Category, TestCategories.Unit)]
-    [Trait(TestCategories.Speed, TestCategories.Fast)]
     [Fact]
     public void Resolve_UnsetSetting_OneCore_NeverGoesBelowOne()
     {
@@ -28,8 +26,6 @@ public sealed class ThreadResolutionTests
         service.ResolveThreadCount(null, 1).ShouldBe(1);
     }
 
-    [Trait(TestCategories.Category, TestCategories.Unit)]
-    [Trait(TestCategories.Speed, TestCategories.Fast)]
     [Fact]
     public void Resolve_ExplicitZero_MeansOrtDefault()
     {
@@ -38,8 +34,6 @@ public sealed class ThreadResolutionTests
         service.ResolveThreadCount("0", 10).ShouldBe(0);
     }
 
-    [Trait(TestCategories.Category, TestCategories.Unit)]
-    [Trait(TestCategories.Speed, TestCategories.Fast)]
     [Fact]
     public void Resolve_Garbage_FallsBackToTheHalvedDefault()
     {
@@ -48,8 +42,6 @@ public sealed class ThreadResolutionTests
         service.ResolveThreadCount("not-a-number", 10).ShouldBe(5);
     }
 
-    [Trait(TestCategories.Category, TestCategories.Unit)]
-    [Trait(TestCategories.Speed, TestCategories.Fast)]
     [Fact]
     public void Resolve_NegativeValue_IsGarbageToo()
     {
@@ -58,8 +50,6 @@ public sealed class ThreadResolutionTests
         service.ResolveThreadCount("-1", 10).ShouldBe(5);
     }
 
-    [Trait(TestCategories.Category, TestCategories.Unit)]
-    [Trait(TestCategories.Speed, TestCategories.Fast)]
     [Fact]
     public void Resolve_ExplicitPositiveValue_IsUsedAsIs()
     {

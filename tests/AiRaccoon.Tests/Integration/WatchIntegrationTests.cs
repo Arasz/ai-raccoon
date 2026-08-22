@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
@@ -623,6 +624,52 @@ public sealed class WatchIntegrationTests
                 "the ingested file's entries must carry a source_id pointing to a memory_source row");
     }
 
+    /// <summary>
+    ///     #494: filesystem events under a hidden or deny-set directory reach the digest even though
+    ///     the catch-up enumeration skips them — that is how agent worktrees under `.claude/worktrees/`
+    ///     flooded the owner's bank. Both corpora must stay empty for those paths; the events are
+    ///     enqueued directly so the assertion tests the digest gate, not FileSystemWatcher delivery.
+    /// </summary>
+    [Fact]
+    public async Task EventsUnderHiddenOrDeniedDirectories_LeaveBothCorporaEmpty()
+    {
+        using var stack = new Stack(codeChunker: new StubCodeChunker());
+        await stack.EnableAsync(TestContext.Current.CancellationToken);
+        await stack.AllowScopeAsync(TestContext.Current.CancellationToken);
+        await stack.AddWatchAsync(TestContext.Current.CancellationToken);
+        await stack.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+        if (stack.CatchUp.LastScan is { } initial)
+        {
+            await initial;
+        }
+
+        // Anchor first: an ordinary code file under the same watch reaches the code corpus.
+        var control = stack.WriteNested("src/keep.js", "const zephyrkeep = 1;");
+        stack.Pipeline.Enqueue(new WatchEvent(Project, control, WatchEventKind.Created));
+        (await stack.StepUntilAsync(
+                async () => await stack.CountCodeEntriesUnderAsync(control, TestContext.Current.CancellationToken) > 0,
+                TestContext.Current.CancellationToken))
+            .ShouldBeTrue("the non-excluded control file never reached the code corpus");
+
+        var hidden = stack.WriteNested(".claude/worktrees/z/doc.md", "zephyrleak worktree copy");
+        var denied = stack.WriteNested("node_modules/pkg/index.js", "const zephyrleak = 1;");
+        stack.Pipeline.Enqueue(new WatchEvent(Project, hidden, WatchEventKind.Created));
+        stack.Pipeline.Enqueue(new WatchEvent(Project, denied, WatchEventKind.Created));
+        await stack.StepUntilAsync(
+            async () => await stack.CountFingerprintsUnderAsync(Path.GetDirectoryName(hidden)!,
+                TestContext.Current.CancellationToken) > 0, TestContext.Current.CancellationToken,
+            maxFakeSeconds: 10, maxRealSeconds: 10);
+
+        (await stack.CountEntriesUnderAsync(Path.GetDirectoryName(hidden)!, TestContext.Current.CancellationToken))
+            .ShouldBe(0, "a file under .claude/worktrees/ must never reach the memory corpus");
+        (await stack.CountCodeEntriesUnderAsync(Path.GetDirectoryName(denied)!, TestContext.Current.CancellationToken))
+            .ShouldBe(0, "a file under node_modules/ must never reach the code corpus");
+        (await stack.CountFingerprintsUnderAsync(Path.GetDirectoryName(hidden)!,
+            TestContext.Current.CancellationToken)).ShouldBe(0, "an excluded path must never be fingerprinted");
+        (await stack.CountFingerprintsUnderAsync(Path.GetDirectoryName(denied)!,
+            TestContext.Current.CancellationToken)).ShouldBe(0, "an excluded path must never be fingerprinted");
+    }
+
     /// <summary>Real-FS harness: bank under a temp DataRoot, watched repo dir beside it.</summary>
     private sealed class Stack : IDisposable
     {
@@ -630,7 +677,8 @@ public sealed class WatchIntegrationTests
         private readonly SqliteConnectionFactory _factory;
         private readonly WallClockBoundedPoller _poller;
 
-        public Stack(string? name = null, DateTimeOffset? now = null, bool deleteDataRoot = true)
+        public Stack(string? name = null, DateTimeOffset? now = null, bool deleteDataRoot = true,
+            ICodeChunker? codeChunker = null)
         {
             _deleteDataRoot = deleteDataRoot;
             Time = new FakeTimeProvider(now ?? FixedNow);
@@ -644,7 +692,7 @@ public sealed class WatchIntegrationTests
                 new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
                 NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
             Memory = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), Time,
-                TestData.CreateEmbeddingService());
+                TestData.CreateEmbeddingService(), codeChunker: codeChunker);
             WatchStore = new WatchStore(_factory);
             ScanGuard = new WatchScanGuard();
             WatchCatchUp? catchUp = null;
@@ -714,6 +762,16 @@ public sealed class WatchIntegrationTests
             System.IO.File.SetLastWriteTimeUtc(path, Time.GetUtcNow().UtcDateTime);
         }
 
+        /// <summary>Writes a file at a relative path under the watch root, creating its directories.</summary>
+        public string WriteNested(string relative, string content)
+        {
+            var path = Path.Combine(WatchDir, relative.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            System.IO.File.WriteAllText(path, content);
+            System.IO.File.SetLastWriteTimeUtc(path, Time.GetUtcNow().UtcDateTime);
+            return path;
+        }
+
         /// <summary>Rewinds a file's mtime so catch-up treats it as unchanged since the watermark.</summary>
         public void Age(string name, TimeSpan age)
         {
@@ -743,6 +801,14 @@ public sealed class WatchIntegrationTests
             await using var connection = await _factory.OpenBankAsync(cancellationToken);
             return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
                 "SELECT count(*) FROM entries WHERE project_id = @p AND source_file LIKE @prefix",
+                new { p = Project, prefix = $"{dirPrefix}%" }, cancellationToken: cancellationToken));
+        }
+
+        public async Task<int> CountCodeEntriesUnderAsync(string dirPrefix, CancellationToken cancellationToken)
+        {
+            await using var connection = await _factory.OpenBankAsync(cancellationToken);
+            return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                "SELECT count(*) FROM code_entries WHERE project_id = @p AND path LIKE @prefix",
                 new { p = Project, prefix = $"{dirPrefix}%" }, cancellationToken: cancellationToken));
         }
 
