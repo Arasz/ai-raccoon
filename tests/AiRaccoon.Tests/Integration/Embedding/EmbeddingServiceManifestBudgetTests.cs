@@ -93,6 +93,43 @@ public sealed class EmbeddingServiceManifestBudgetTests
             .ShouldBe(EmbeddingService.MaxManifestChunkTokens, "ctx − 2 = 8190, capped at the D6 constant 510");
     }
 
+    /// <summary>
+    ///     D1 cost regression: Load() now hashes every pinned file (including the ~90 MB ONNX
+    ///     weights on a real model). ResolveChunkBudgetFor sits on the write hot path (FileIngestor,
+    ///     SqliteMemoryStore's ChunkToBudgetAsync) — hashing on every call, not once per engine,
+    ///     is the plan's explicitly forbidden shape (plan D1, "not per tool call").
+    /// </summary>
+    [Fact]
+    public void ResolveChunkBudgetFor_CalledRepeatedly_HashesTheManifestFilesOnlyOncePerEngine()
+    {
+        var vocab = BundledModel.ResolveVocabPath();
+        var dir = WriteManifestDir(Manifest(vocabSha: ShaOfFile(vocab)), ("vocab.txt", File.ReadAllText(vocab)), ("model.onnx", "model"));
+        var hasher = new CountingFileHasher();
+        var service = new EmbeddingService(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(),
+            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator(), hasher));
+        var settings = new EmbeddingSettings("local", dir, null, null);
+
+        for (var i = 0; i < 5; i++)
+        {
+            service.ResolveChunkBudgetFor(settings);
+        }
+
+        hasher.CallCount.ShouldBeLessThanOrEqualTo(2,
+            "the manifest's 2 pinned files must be hashed once per engine fingerprint, not once per call");
+    }
+
+    private sealed class CountingFileHasher : IFileHasher
+    {
+        private readonly IFileHasher _real = new FileHasher();
+        public int CallCount { get; private set; }
+
+        public string Sha256OfFile(string path)
+        {
+            CallCount++;
+            return _real.Sha256OfFile(path);
+        }
+    }
+
     [Fact]
     public void ResolveChunkBudgetFor_ManifestWith300Window_IsCtxMinusTwo()
     {

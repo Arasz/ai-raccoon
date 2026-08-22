@@ -78,12 +78,16 @@ public sealed class ModelDownloadPinsProvenanceFilesTests : IDisposable
         var request = new ModelDownloadRequest(repo.RepoId, repo.Revision, _targetDir);
         await Service().DownloadAsync(request, TestContext.Current.CancellationToken);
 
-        File.WriteAllText(Path.Combine(_targetDir, "config.json"), "{\"tampered\": true}");
+        const string tampered = "{\"tampered\": true}";
+        File.WriteAllText(Path.Combine(_targetDir, "config.json"), tampered);
 
         var ex = Should.Throw<InvalidOperationException>(() =>
             new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()).Load(_targetDir));
 
+        // Must be the sha-mismatch refusal, not the (also config.json-naming) missing-file one.
         ex.Message.ShouldContain("config.json");
+        ex.Message.ShouldContain(Sha(repo.ConfigJson), customMessage: "the refusal must name the pinned digest");
+        ex.Message.ShouldContain(Sha(tampered), customMessage: "the refusal must name the actual on-disk digest");
     }
 
     private sealed class PassingSmokeTester : IOnnxSmokeTester
