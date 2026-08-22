@@ -14,7 +14,7 @@ namespace AiRaccoon.Infrastructure.Sqlite.Code;
 ///     it does not earn a third constructor parameter there.
 /// </summary>
 public sealed class SqliteCodeEngineStore(ISqliteConnectionFactory factory, IEmbeddingService embeddings,
-    IEmbeddingManifestLoader manifestLoader) : ICodeEngineStore
+    IEmbeddingManifestLoader manifestLoader, IManifestPoolingRepair poolingRepair) : ICodeEngineStore
 {
     public async Task<EmbeddingConfig> ActivateCodeEngineAsync(string directory,
         CancellationToken cancellationToken = default)
@@ -66,6 +66,12 @@ public sealed class SqliteCodeEngineStore(ISqliteConnectionFactory factory, IEmb
                 $"'model set code local' at a manifest whose window is at least {CodeChunker.DefaultBudget} " +
                 "content tokens.");
         }
+
+        // #470: correct a manifest the graph contradicts — AFTER every refusal leg above, so a
+        // refused activation never rewrites the user's file, and immediately BEFORE the fingerprint
+        // is taken, so this activation's own unconditional invalidation is the only re-embed and
+        // the code-reindex job's next poll sees a stable engine rather than a second change.
+        poolingRepair.Repair(fullPath);
 
         var fingerprint = embeddings.EngineFingerprint("local", fullPath, null);
 

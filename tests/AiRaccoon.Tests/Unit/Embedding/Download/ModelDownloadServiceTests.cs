@@ -271,6 +271,46 @@ public class ModelDownloadServiceTests : IDisposable
         File.Exists(Path.Combine(_targetDir, EmbeddingManifest.FileName)).ShouldBeFalse();
     }
 
+    /// <summary>
+    ///     #470: the graph's declared output rank is a fact, the planner's placeholder mode is a
+    ///     guess. A sole rank-2 output means the model pooled itself, so the manifest the download
+    ///     writes must say so — not 'cls', which the engine then cannot apply and warns about (417)
+    ///     on every single load.
+    /// </summary>
+    [Fact]
+    public async Task GraphPoolsItsOwnOutput_ManifestSaysModelOutput()
+    {
+        var repo = FakeRepo.CodeDaemon(_server);
+        var service = Service(repo, smoke: new FakeSmokeTester(ok: true,
+            ranks: new Dictionary<string, int>(StringComparer.Ordinal) { ["last_hidden_state"] = 2 }));
+
+        var result = await service.DownloadAsync(Request(repo), TestContext.Current.CancellationToken);
+
+        var manifest = LoadManifest();
+        manifest.Pooling.Mode.ShouldBe(PoolingMode.ModelOutput);
+        manifest.Onnx.EmbeddingOutput.ShouldBe("last_hidden_state");
+        manifest.Onnx.TokenEmbeddingsOutput.ShouldBe("last_hidden_state");
+        manifest.Pooling.OutputNames!.Embedding.ShouldBe("last_hidden_state");
+        result.Plan.PoolingProvenance.ShouldBe("onnx-graph");
+        new EmbeddingManifestValidator().Validate(manifest).ShouldBeEmpty();
+    }
+
+    /// <summary>Negative control: a rank-3 (token-level) output leaves the planner's decision alone.</summary>
+    [Fact]
+    public async Task GraphEmitsTokenEmbeddings_KeepsThePlannedPoolingMode()
+    {
+        var repo = FakeRepo.CodeDaemon(_server);
+        var service = Service(repo, smoke: new FakeSmokeTester(ok: true,
+            ranks: new Dictionary<string, int>(StringComparer.Ordinal) { ["last_hidden_state"] = 3 }));
+
+        var result = await service.DownloadAsync(Request(repo), TestContext.Current.CancellationToken);
+
+        var manifest = LoadManifest();
+        manifest.Pooling.Mode.ShouldBe(PoolingMode.Cls);
+        manifest.Onnx.EmbeddingOutput.ShouldBeNull();
+        result.Plan.PoolingProvenance.ShouldContain("placeholder");
+    }
+
     [Fact]
     public void ModelSlug_SanitizesRepoId()
     {
@@ -301,14 +341,18 @@ public class ModelDownloadServiceTests : IDisposable
     private EmbeddingManifest LoadManifest() =>
         new EmbeddingManifestSerializer().Deserialize(File.ReadAllText(Path.Combine(_targetDir, EmbeddingManifest.FileName)));
 
-    private sealed class FakeSmokeTester(bool ok) : IOnnxSmokeTester
+    /// <summary>Reports the output ranks a real graph would declare; the default (empty) is a
+    /// graph nothing was asked about, which must leave the planner's pooling decision alone.</summary>
+    private sealed class FakeSmokeTester(bool ok, IReadOnlyDictionary<string, int>? ranks = null) : IOnnxSmokeTester
     {
-        public void Verify(string onnxPath)
+        public IReadOnlyDictionary<string, int> Verify(string onnxPath)
         {
             if (!ok)
             {
                 throw new OnnxSmokeTestException("simulated ONNX Runtime load failure");
             }
+
+            return ranks ?? new Dictionary<string, int>(StringComparer.Ordinal);
         }
     }
 

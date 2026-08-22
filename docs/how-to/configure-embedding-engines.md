@@ -90,6 +90,17 @@ repo's own `config.json`, `tokenizer_config.json`, `1_Pooling/config.json` and
 `modules.json` rather than guessed. **A model directory without that manifest is
 refused**; only the legacy `model set local <file>.onnx` path keeps the bundled defaults.
 
+**`pooling.mode` comes from the graph, not only from those files.** A repo with no
+`1_Pooling/config.json` leaves the mode to be inferred, and some models pool *inside* their
+own ONNX graph — their token-embeddings output is `[batch, dimensions]`, already a vector, so
+no token-level mode can be applied to it. After the download verifies the graph it reads that
+output's declared rank, and a rank-2 output writes `pooling.mode: model-output` with
+`onnx.embeddingOutput` naming it. A manifest written before this existed says something else
+(`cls`, typically) and the engine logs event 417 on every load; **activating that directory
+corrects the file once** and logs event 424 — activation re-embeds anyway, so the correction
+costs nothing there, and the vectors are identical either way (the graph's own pooling was
+always what ran). The sha256 pins are not the manifest's own and are left untouched.
+
 **Known refusal — a fairseq-offset tokenizer with no `added_tokens_decoder`.** Whether a
 sentencepiece repo is fairseq-offset is decided from data, never the tokenizer class: once the
 sentencepiece model file is downloaded, its own piece count is compared against config.json's
@@ -126,7 +137,8 @@ ai-raccoon model set code default
 
 That is the whole recipe. It downloads `faxenoff/code-daemon-embed-v1` (187 MB) into
 `<data-root>/models/faxenoff__code-daemon-embed-v1` if it is not already there, and then
-activates it. Run it again later and it only re-activates — nothing is re-fetched.
+activates it. Run it again later and it only re-activates — nothing is re-fetched, and a
+manifest whose `pooling.mode` the graph contradicts is corrected in that same pass.
 
 It is the one command every surface that can notice a missing code engine quotes: the
 `code engine not configured` search warning, `ai-raccoon doctor`, the MCP server

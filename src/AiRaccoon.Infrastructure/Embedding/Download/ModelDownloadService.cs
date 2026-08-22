@@ -33,8 +33,10 @@ public sealed class ModelDownloadRejectedException(string message) : Exception(m
 /// <summary>Loads a downloaded ONNX model in ONNX Runtime as an opset compatibility smoke test (D4 m10).</summary>
 public interface IOnnxSmokeTester
 {
-    /// <summary>Throws <see cref="OnnxSmokeTestException" /> when the model cannot be loaded.</summary>
-    void Verify(string onnxPath);
+    /// <summary>Loads the graph and reports each output's declared rank — one session load answers
+    /// both "does it run here" and "does it pool itself" (#470), so nothing opens the model twice.
+    /// Throws <see cref="OnnxSmokeTestException" /> when the model cannot be loaded.</summary>
+    IReadOnlyDictionary<string, int> Verify(string onnxPath);
 }
 
 public sealed class OnnxSmokeTestException(string message, Exception? inner = null) : Exception(message, inner);
@@ -42,11 +44,12 @@ public sealed class OnnxSmokeTestException(string message, Exception? inner = nu
 /// <summary>Real smoke tester: an InferenceSession constructor over the downloaded graph.</summary>
 public sealed class OrtOnnxSmokeTester : IOnnxSmokeTester
 {
-    public void Verify(string onnxPath)
+    public IReadOnlyDictionary<string, int> Verify(string onnxPath)
     {
         try
         {
             using var session = new Microsoft.ML.OnnxRuntime.InferenceSession(onnxPath);
+            return session.OutputRanks();
         }
         catch (Exception ex)
         {
@@ -166,14 +169,17 @@ public sealed class ModelDownloadService(
 
             // ORT opset smoke test at download-verify time (D4 m10) — before the manifest exists,
             // so a model that cannot load is never recorded as installed.
+            IReadOnlyDictionary<string, int> outputRanks;
             try
             {
-                smokeTester.Verify(Path.Combine(targetDir, TargetPath(plan.ModelFilePath, plan.ModelFilePath)));
+                outputRanks = smokeTester.Verify(Path.Combine(targetDir, TargetPath(plan.ModelFilePath, plan.ModelFilePath)));
             }
             catch (OnnxSmokeTestException ex)
             {
                 throw new ModelDownloadException(ex.Message, ex);
             }
+
+            plan = PoolingFromGraph(plan, outputRanks);
 
             var manifestPath = await WriteManifestAsync(plan, targetDir, cancellationToken).ConfigureAwait(false);
             return new ModelDownloadResult(plan, targetDir, manifestPath, downloaded);
@@ -183,6 +189,29 @@ public sealed class ModelDownloadService(
             Cleanup(targetDir, cleanup, createdTargetDir);
             throw;
         }
+    }
+
+    /// <summary>
+    ///     #470: a graph whose token-embeddings output is <c>[batch, dimensions]</c> pooled inside
+    ///     itself, so the planner's mode — inferred from the repo's files — is unappliable. The
+    ///     downloaded graph's own rank overrides it, and the manifest records what the engine will
+    ///     actually do instead of a guess it warns about (417) on every load.
+    /// </summary>
+    private static ModelDownloadPlan PoolingFromGraph(ModelDownloadPlan plan, IReadOnlyDictionary<string, int> outputRanks)
+    {
+        var output = plan.TokenEmbeddingsOutput;
+        if (plan.PoolingMode == PoolingMode.ModelOutput || string.IsNullOrWhiteSpace(output)
+            || !outputRanks.TryGetValue(output, out var rank) || rank != OnnxOutputRanks.PooledRank)
+        {
+            return plan;
+        }
+
+        return plan with
+        {
+            PoolingMode = PoolingMode.ModelOutput,
+            EmbeddingOutput = output,
+            PoolingProvenance = "onnx-graph"
+        };
     }
 
     /// <summary>

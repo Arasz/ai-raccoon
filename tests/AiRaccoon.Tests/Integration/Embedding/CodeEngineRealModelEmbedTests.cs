@@ -94,11 +94,16 @@ public sealed class CodeEngineRealModelEmbedTests
         result.ShouldHaveSingleItem().Vector.Length.ShouldBe(descriptor.Dimensions);
     }
 
-    /// <summary>The adaptation is deliberate but reported: event 417 names the model whose manifest to correct.</summary>
+    /// <summary>
+    ///     The adaptation is deliberate but reported: event 417 names the model whose manifest to
+    ///     correct. The wrong mode is forced onto the descriptor rather than read from the
+    ///     directory — since #470 a downloaded manifest says 'model-output', so a test that waited
+    ///     for the file to be wrong would pass only until the model was re-downloaded.
+    /// </summary>
     [Fact]
     public async Task TheCodeEngine_WarnsThatTheManifestsPoolingModeCannotApply()
     {
-        var descriptor = LoadDescriptorOrSkip(out var modelDirectory);
+        var descriptor = LoadDescriptorOrSkip(out var modelDirectory) with { Pooling = "cls" };
         var logger = new FakeLogger<OnnxEmbeddingGenerator>();
         var tokenizerFactory = new EmbeddingTokenizerFactory();
         using var generator = new OnnxEmbeddingGenerator(Path.Combine(modelDirectory, descriptor.OnnxModelFile),

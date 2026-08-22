@@ -304,6 +304,7 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<IEmbeddingManifestSerializer, EmbeddingManifestSerializer>();
             services.AddRequiredSingleton<IEmbeddingManifestValidator, EmbeddingManifestValidator>();
             services.AddRequiredSingleton<IEmbeddingManifestLoader, EmbeddingManifestLoader>();
+            services.AddRequiredSingleton<IManifestPoolingRepair, ManifestPoolingRepair>();
             services.AddRequiredSingleton<IModelDownloadPlanner, ModelDownloadPlanner>();
             services.AddRequiredSingleton<IOnnxGraphProbeReader, OnnxGraphProbeReader>();
             services.AddRequiredSingleton<ISentencePieceVocabularyReader, SentencePieceVocabularyReader>();

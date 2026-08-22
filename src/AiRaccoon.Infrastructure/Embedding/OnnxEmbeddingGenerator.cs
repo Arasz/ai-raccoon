@@ -70,7 +70,7 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
 
         // Adapting to the graph's rank (see Pool) is deliberate, but never silent: a manifest whose
         // pooling mode the graph makes unreachable is still a manifest to correct.
-        if (_pooling != "model-output" && ReadOutputRank(_session, _outputName) == 2)
+        if (_pooling != "model-output" && _session.OutputRank(_outputName) == OnnxOutputRanks.PooledRank)
         {
             Log.GraphPoolsItsOwnOutput(_logger, descriptor.Model, _pooling, _outputName);
         }
@@ -260,10 +260,6 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
 
         return (int)dims[^1];
     }
-
-    /// <summary>Rank of a session output as the graph declares it: 3 for token embeddings, 2 for an already-pooled vector.</summary>
-    private static int ReadOutputRank(InferenceSession session, string outputName) =>
-        session.OutputMetadata.TryGetValue(outputName, out var metadata) ? metadata.Dimensions?.Length ?? 0 : 0;
 
     /// <summary>
     ///     A run of ~100+ characters with no space or punctuation (this tokenizer's pretokenizer does

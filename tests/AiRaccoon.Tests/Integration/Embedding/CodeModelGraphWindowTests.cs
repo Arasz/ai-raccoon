@@ -56,6 +56,21 @@ public sealed class CodeModelGraphWindowTests
     }
 
     /// <summary>
+    ///     #470 rests on one fact about these weights: the graph pools itself, so its sole output is
+    ///     <c>[batch, dimensions]</c>. Read it back through the very helper the download and the
+    ///     repair decide on, so the rule and the model cannot drift apart unnoticed.
+    /// </summary>
+    [Fact]
+    public void TheGraph_DeclaresAnAlreadyPooledOutput()
+    {
+        var descriptor = LoadDescriptorOrSkip(out var modelDirectory);
+        using var session = new InferenceSession(Path.Combine(modelDirectory, descriptor.OnnxModelFile));
+
+        session.OutputRanks().Keys.ShouldBe(["last_hidden_state"]);
+        session.OutputRank("last_hidden_state").ShouldBe(OnnxOutputRanks.PooledRank);
+    }
+
+    /// <summary>
     ///     The spike's "hard 128-token cap" would mean everything past token 128 is ignored, which
     ///     would make both cosines below exactly 1. They are not: the graph attends to the whole
     ///     sequence, so a 126-token budget was throwing away model capacity rather than respecting it.
