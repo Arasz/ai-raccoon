@@ -1,4 +1,4 @@
-using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;

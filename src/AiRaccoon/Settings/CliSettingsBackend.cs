@@ -26,11 +26,14 @@ internal static class CliSettingsBackend
         using var probeClient = new HttpClient();
         var launcher = new BackendLauncher(new ServerProbe(probeClient), BackendLauncher.DefaultBudget,
             TimeProvider.System, loggerFactory.CreateLogger<BackendLauncher>());
-        return await AcquireAsync(launcher, config, ctx);
+        return await AcquireAsync(launcher, Environment.ProcessPath, config, ctx);
     }
 
-    /// <summary>The testable core: takes the launcher as a seam so a fake can stand in for a real spawn.</summary>
-    internal static async Task<ISettingsStore> AcquireAsync(IBackendLauncher launcher, ServerConfig config, CancellationToken ctx)
+    /// <summary>
+    ///     The testable core: takes the launcher and this process's path as seams, so a fake can stand
+    ///     in for a real spawn and the verdict does not depend on how the calling process was launched.
+    /// </summary>
+    internal static async Task<ISettingsStore> AcquireAsync(IBackendLauncher launcher, string? processPath, ServerConfig config, CancellationToken ctx)
     {
         if (config.Port is < 1 or > 65535)
         {
@@ -38,8 +41,8 @@ internal static class CliSettingsBackend
                 $"ai-raccoon: cannot dial --port {config.Port}: expected 1-65535, and 0 means \"any free port\"; pass a fixed --port");
         }
 
-        var executable = BackendLaunchArguments.Executable() ??
-            throw new SettingsServerUnavailableException($"ai-raccoon: {BackendLaunchArguments.UnavailableExecutableMessage(config)}");
+        var executable = BackendLaunchArguments.Executable(processPath) ??
+            throw new SettingsServerUnavailableException($"ai-raccoon: {BackendLaunchArguments.UnavailableExecutableMessage(processPath, config)}");
 
         BackendResult acquired;
         try

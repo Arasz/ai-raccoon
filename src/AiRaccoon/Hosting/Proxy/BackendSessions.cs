@@ -9,9 +9,11 @@ namespace AiRaccoon.Hosting.Proxy;
 /// <summary>
 ///     Owns every backend session the forwarder is handed, including the ones it swaps away: the
 ///     forwarder only ever replaces its reference. Re-opening re-runs the acquire, so a backend
-///     that died is started again.
+///     that died is started again. processPath is this process's own path (Environment.ProcessPath
+///     in production): the backend is another ai-raccoon started as `serve`, so an unpackaged host
+///     cannot be it.
 /// </summary>
-public sealed class BackendSessions(IBackendLauncher backendLauncher, IHttpClientFactory httpClientFactory, ILoggerFactory loggerFactory, ServerConfig config) : IBackendSessions
+public sealed class BackendSessions(IBackendLauncher backendLauncher, IHttpClientFactory httpClientFactory, ILoggerFactory loggerFactory, string? processPath, ServerConfig config) : IBackendSessions
 {
     private const string BackendName = "ai-raccoon-backend";
 
@@ -26,7 +28,7 @@ public sealed class BackendSessions(IBackendLauncher backendLauncher, IHttpClien
 
     public async Task<McpClient> OpenAsync(string? revision, CancellationToken ctx)
     {
-        var acquired = await AcuireBackend(ctx);
+        var acquired = await AcquireBackend(ctx);
         if (acquired.Url is null)
         {
             throw new BackendUnavailableException(Unavailable(
@@ -58,10 +60,10 @@ public sealed class BackendSessions(IBackendLauncher backendLauncher, IHttpClien
         _httpClient.Dispose();
     }
 
-    private async Task<BackendResult> AcuireBackend(CancellationToken ctx)
+    private async Task<BackendResult> AcquireBackend(CancellationToken ctx)
     {
-        var executable = BackendLaunchArguments.Executable() ?? throw new BackendUnavailableException(
-            Unavailable(BackendLaunchArguments.UnavailableExecutableMessage(config)));
+        var executable = BackendLaunchArguments.Executable(processPath) ?? throw new BackendUnavailableException(
+            Unavailable(BackendLaunchArguments.UnavailableExecutableMessage(processPath, config)));
 
         BackendResult acquired;
         try

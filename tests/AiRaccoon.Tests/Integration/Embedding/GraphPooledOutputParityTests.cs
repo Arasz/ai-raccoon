@@ -16,9 +16,16 @@ namespace AiRaccoon.Tests.Integration.Embedding;
 ///     well below 1 — it is invisible to every shape or norm check, because a wrongly-pooled vector
 ///     is still the right length and still normalized.
 ///     <para>
-///         Needs a real dual-output model on disk (bge-m3 is 2.3 GB), so it is NOT a CI dependency:
-///         point <see cref="ModelDirEnvVar" /> at a model directory carrying an
-///         <see cref="EmbeddingManifest.FileName" />, or the test skips.
+///         Needs a real dual-output model on disk (bge-m3, ~2.27 GB): point
+///         <see cref="ModelDirEnvVar" /> at a model directory carrying an
+///         <see cref="EmbeddingManifest.FileName" />, or the test skips. Too large to ship with the
+///         suite or run on every PR, so it runs only in <c>nightly.yml</c>'s <c>full-suite</c> job,
+///         which downloads bge-m3 via <c>ai-raccoon model download BAAI/bge-m3</c> (the product's
+///         own download path — <c>docs/how-to/configure-embedding-engines.md</c> Recipe 4), cached
+///         across runs by <c>actions/cache</c>. Deliberately absent from <c>build.yml</c>'s PR-label
+///         <c>build-nightly-gates</c> lane (see that job's own comment for why). To run locally:
+///         <c>ai-raccoon model download BAAI/bge-m3 --dir &lt;dir&gt; --yes</c>, then
+///         <c>AIRACCOON_POOLING_PARITY_MODEL_DIR=&lt;dir&gt; dotnet test --filter "FullyQualifiedName~GraphPooledOutputParityTests"</c>.
 ///     </para>
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]

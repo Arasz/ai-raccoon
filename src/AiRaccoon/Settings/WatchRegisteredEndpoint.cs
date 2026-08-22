@@ -1,5 +1,5 @@
+using AiRaccoon.Core.Watch;
 using AiRaccoon.Hosting.Node;
-using AiRaccoon.Infrastructure.Watch;
 
 namespace AiRaccoon.Settings;
 
