@@ -53,6 +53,7 @@ internal sealed class ConfigCommands(
                 ["model", "set", "local"] => await settings.ModelSetLocalAsync(parsedCliArgs, store, modelMigrations, streams, ctx),
                 ["model", "set", "openai"] => await settings.ModelSetOpenAiAsync(parsedCliArgs, store, modelMigrations, streams, ctx),
                 ["model", "set", "code", "local"] => await settings.ModelSetCodeLocalAsync(parsedCliArgs, codeEngine, streams, ctx),
+                ["model", "set", "code", "default"] => await settings.ModelSetCodeDefaultAsync(modelDownload, codeEngine, cliInput.Options.DataRoot, streams, ctx),
                 ["model", "download"] => await modelDownload.RunAsync(parsedCliArgs, cliInput.Options.DataRoot, streams, ctx),
                 ["settings", "model", "reset"] => await settings.ModelResetAsync(store, streams, ctx),
                 ["settings", "model", "show"] => await settings.ModelShowAsync(store, streams, ctx),

@@ -1,5 +1,6 @@
 using System.CommandLine;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Hosting.Node;
 using AiRaccoon.Infrastructure.Options;
 
@@ -163,6 +164,15 @@ internal static class CliCommandTree
                 },
                 new Command("code", "Code corpus embedding engine (local only in v1); configuration is under 'settings model code'")
                 {
+                    // #422: `default` deliberately downloads AND activates, and it sits under
+                    // `model set` — the activating family — so `model download`'s "never activates"
+                    // contract is untouched. A hint that needs a second command with a path the
+                    // reader has to construct is a hint nobody follows, and this string is quoted
+                    // to users from the search warning, doctor, the MCP instructions and the docs.
+                    new Command("default",
+                        $"Downloads the code corpus's default embedding model ({CodeEngineSetup.DefaultModelRepoId}) into " +
+                        "<data-root>/models/ if it is not already there, then ACTIVATES it — unlike 'model download', " +
+                        "which never activates. Re-running it against an already-downloaded directory only re-activates."),
                     new Command("local",
                         "Activates a manifest directory for the code corpus and invalidates its embedded rows to 'pending' " +
                         "(§3.3 D-E9, one transaction — no re-embed here, the code-reindex maintenance job drains it). " +

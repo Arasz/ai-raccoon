@@ -8,8 +8,12 @@ public static class CodeSearchWarnings
     ///     the one command that fixes it (#422) — a caller that cannot act on the warning will keep
     ///     reading keyword-only code hits as if they were the whole answer.
     /// </summary>
+    /// <summary>The part a caller matches on; the rest of the warning is advice that may be reworded.</summary>
+    public const string EngineNotConfiguredPrefix = "code engine not configured";
+
+    /// <inheritdoc cref="EngineNotConfiguredPrefix" />
     public const string EngineNotConfigured =
-        "code engine not configured — FTS5-only results; run '" + CodeEngineSetup.DefaultModelCommand
+        EngineNotConfiguredPrefix + " — FTS5-only results; run '" + CodeEngineSetup.DefaultModelCommand
         + "' to download and activate the default code embedding model";
 
     /// <summary>

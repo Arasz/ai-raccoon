@@ -98,7 +98,12 @@ public sealed partial class MemoryTools(
 
     [McpServerTool(Name = TnMemorySearch)]
     [Description(
-        "Hybrid semantic search over the bank. scope=all (default) searches shared + project (+ workspace when named); scope=project searches the project only; scope=shared searches the shared promotion tier only. A project scope covers every context in the project unless contextLabel narrows it to one.")]
+        "Hybrid semantic search over the bank. scope=all (default) searches shared + project (+ workspace when named); "
+        + "scope=project searches the project only; scope=shared searches the shared promotion tier only. A project scope "
+        + "covers every context in the project unless contextLabel narrows it to one. A result warning of '"
+        + CodeSearchWarnings.EngineNotConfiguredPrefix + "' means the code section is keyword-only because the code "
+        + "embedding engine is not installed: relay '" + CodeEngineSetup.DefaultModelCommand + "' to the user once and "
+        + "treat the code hits as incomplete; re-running the search changes nothing until that command runs.")]
     public async Task<ApiEnvelope<SearchResultList>> Search(
         [Description("The project id.")] string projectId,
         [Description(
@@ -106,7 +111,7 @@ public sealed partial class MemoryTools(
             "characters of English prose, approximate) — for a long paste (a log, stack trace, test " +
             "output), search its identifying line (exception type, error code, failing test name) " +
             "instead of the whole dump. Keyword matching still covers the query in full. When kind " +
-            "is code or both, the code leg's own engine window is narrower still (126 tokens for " +
+            "is code or both, the code leg's own engine window is wider (510 tokens for " +
             "code-daemon-embed-v1) — a query trimmed for code may still fit the memory leg in full.")]
         string query,
         [Description("Search scope: all (default), project, or shared.")]

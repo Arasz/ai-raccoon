@@ -9,6 +9,7 @@ using AiRaccoon.Settings;
 using AiRaccoon.Setup.Logging;
 using AiRaccoon.Tools;
 using CommunityToolkit.Diagnostics;
+using ModelContextProtocol.Server;
 using DotNext.Collections.Generic;
 using ShutdownEndpoint = AiRaccoon.Hosting.Node.ShutdownEndpoint;
 
@@ -181,6 +182,10 @@ internal static partial class McpServerSetup
     {
         private IMcpServerBuilder ConfigureMcpTransport(IReadOnlyCollection<McpTransport> selectedTransports)
         {
+            // Both hosts (stdio AppHost and the web host) route through here, so the instructions
+            // are set once rather than copied into each AddMcpServer call.
+            mcpServerBuilder.Services.Configure<McpServerOptions>(
+                options => options.ServerInstructions = McpServerInstructions.Text);
             mcpServerBuilder = mcpServerBuilder.WithRequestFilters(f => f
                 .AddCallToolFilter(ToolRefusals.Filter)
                 .AddCallToolFilter(ToolTelemetry.Filter));
