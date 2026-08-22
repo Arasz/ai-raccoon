@@ -16,6 +16,9 @@ internal sealed class SettingsServerUnavailableException(string message, Excepti
 /// <summary>The settings server answered but refused the credential.</summary>
 internal sealed class SettingsServerRefusedException(string message) : Exception(message);
 
+/// <summary>The settings server answered but failed processing the request (5xx) — a server-side fault, not a bad argument.</summary>
+internal sealed class SettingsServerErrorException(string message) : Exception(message);
+
 /// <summary>
 ///     Reaches settings through the server rather than the bank (ADR-0075), so a CLI process never
 ///     writes the bank. Same <see cref="ISettingsStore" /> surface as the bank-backed store, so a
@@ -208,6 +211,12 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
         {
             throw new SettingsServerRefusedException(
                 $"ai-raccoon: the settings server at {_client.BaseAddress} refused this credential — it may serve another data root");
+        }
+
+        if ((int)response.StatusCode >= 500)
+        {
+            throw new SettingsServerErrorException(
+                $"ai-raccoon: the settings server at {_client.BaseAddress} failed with {(int)response.StatusCode} {response.ReasonPhrase} — this is a server-side fault, not a bad argument");
         }
 
         response.EnsureSuccessStatusCode();

@@ -65,5 +65,10 @@ public static class ExitCode
     /// from HEALTHY (0), so a wrong `--data-root` cannot read as a healthy bank.</summary>
     public const int NoBank = 22;
 
+    /// <summary>A settings command (delta review C2) reached a server that answered but failed
+    /// processing the request (5xx) — distinct from <see cref="InvalidArgument" /> so a script can
+    /// tell "the server broke" from "you mistyped".</summary>
+    public const int SettingsServerError = 23;
+
     public const int Success = 0;
 }
