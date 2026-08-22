@@ -247,12 +247,7 @@ public sealed class FileIngestor(
                         }, cancellationToken))
                 .ConfigureAwait(false);
 
-            long chunkId;
-            if (existingId is not null)
-            {
-                chunkId = existingId.Value;
-            }
-            else
+            if (existingId is null)
             {
                 // InsertEntry is ON CONFLICT DO NOTHING: affected rows already says whether this
                 // call won the insert or a concurrent same-bucket insert got there first — no
@@ -279,15 +274,15 @@ public sealed class FileIngestor(
                             },
                             cancellationToken))
                     .ConfigureAwait(false);
-                if (affected == 0)
+                if (affected > 0)
                 {
-                    continue;
+                    inserted++;
                 }
 
-                inserted++;
                 continue;
             }
 
+            var chunkId = existingId.Value;
             await connection.ExecuteAsync(
                     Def(MemorySql.SetChunkPosition, new { id = chunkId, chunkIndex = ordinal, totalChunks = chunks.Count },
                         cancellationToken))
