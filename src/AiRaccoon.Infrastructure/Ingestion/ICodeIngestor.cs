@@ -18,6 +18,13 @@ public interface ICodeIngestor
 ///     <see cref="ContentWhitespaceOnly" /> lets the caller decide fingerprint eligibility (S3)
 ///     without re-reading the file the ingestor already read (review round 1, FileIngestor.cs:95).
 /// </summary>
-public readonly record struct CodeIngestResult(int Rows, bool ContentWhitespaceOnly)
+/// <param name="ChunkHashes">
+///     Every code-corpus chunk hash this ingest wrote OR rediscovered unchanged — the file's
+///     current chunk set (#436). Empty when the chunker produced zero chunks, whether because the
+///     content is empty/whitespace-only or because a stand-in chunker cannot chunk yet; the caller
+///     decides which of those two zero-chunk cases is trustworthy enough to prune by.
+/// </param>
+public readonly record struct CodeIngestResult(int Rows, bool ContentWhitespaceOnly,
+    IReadOnlyList<string>? ChunkHashes = null)
 {
 }
