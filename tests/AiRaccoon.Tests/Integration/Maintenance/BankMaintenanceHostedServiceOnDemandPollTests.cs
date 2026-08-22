@@ -23,7 +23,8 @@ namespace AiRaccoon.Tests.Integration.Maintenance;
 public sealed class BankMaintenanceHostedServiceOnDemandPollTests : IDisposable
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 16, 12, 0, 0, TimeSpan.Zero);
-    private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(5);
+    /// <summary>Step budget for the advance-until helpers: a count of fake-clock steps, never a wall-clock deadline (PR #464).</summary>
+    private const int MaxAdvanceSteps = 200;
     private static readonly TimeSpan AbsenceWindow = TimeSpan.FromMilliseconds(150);
 
     private readonly string _dataRoot = TestData.CreateTempRoot("bank-maintenance-on-demand");
@@ -50,8 +51,7 @@ public sealed class BankMaintenanceHostedServiceOnDemandPollTests : IDisposable
 
     private async Task AdvanceUntilOnDemandPollsAsync(long target)
     {
-        var deadline = DateTime.UtcNow + SignalTimeout;
-        while (DateTime.UtcNow < deadline)
+        for (var step = 0; step < MaxAdvanceSteps; step++)
         {
             _time.Advance(BankMaintenanceHostedService.OnDemandPollInterval);
             if (await _service.OnDemandPolls.WaitAsync(target, AbsenceWindow, TestContext.Current.CancellationToken))
@@ -60,7 +60,7 @@ public sealed class BankMaintenanceHostedServiceOnDemandPollTests : IDisposable
             }
         }
 
-        throw new TimeoutException($"on-demand poll {target} did not fire within {SignalTimeout}");
+        throw new TimeoutException($"on-demand poll {target} did not fire within {MaxAdvanceSteps} fake-clock steps");
     }
 
     [Fact]
@@ -69,7 +69,7 @@ public sealed class BankMaintenanceHostedServiceOnDemandPollTests : IDisposable
         using var cts = new CancellationTokenSource();
         var run = _service.StartAsync(cts.Token);
 
-        (await _service.Ticks.WaitAsync(1, SignalTimeout, TestContext.Current.CancellationToken)).ShouldBeTrue(); // startup pass
+        await _service.Ticks.WaitAsync(1, TestContext.Current.CancellationToken); // startup pass
         _onDemandJob.Runs.ShouldBe(1); // the startup pass itself always calls RunDueAsync (crash-recovery guarantee)
 
         _onDemandJob.SimulateNewWorkArriving();
@@ -92,7 +92,7 @@ public sealed class BankMaintenanceHostedServiceOnDemandPollTests : IDisposable
         using var cts = new CancellationTokenSource();
         var run = _service.StartAsync(cts.Token);
 
-        (await _service.Ticks.WaitAsync(1, SignalTimeout, TestContext.Current.CancellationToken)).ShouldBeTrue(); // startup pass
+        await _service.Ticks.WaitAsync(1, TestContext.Current.CancellationToken); // startup pass
         _hourlyJob.Runs.ShouldBe(1); // due on first-ever pass (lastRunAt is null), same as any Interval-gated job
 
         // 40 on-demand polls at 15s = 10 minutes: nowhere near the hourly job's own interval.

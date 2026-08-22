@@ -39,7 +39,7 @@ public sealed class LoopbackPortOccupyTests
         var read = await client.GetStream()
             .ReadAsync(buffer, TestContext.Current.CancellationToken)
             .AsTask()
-            .WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            .WaitAsync(TestContext.Current.CancellationToken);
 
         read.ShouldBe(0);
     }

@@ -33,17 +33,12 @@ public sealed class CapturingCollector : IDisposable
         _cts.Dispose();
     }
 
-    public async Task WaitForRequestAsync(string path, TimeSpan timeout)
+    /// <summary>Waits for the request itself; the caller's token is the only hang guard (PR #464).</summary>
+    public async Task WaitForRequestAsync(string path, CancellationToken cancellationToken)
     {
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
+        while (!RequestedPaths.Any(p => p.Contains(path, StringComparison.Ordinal)))
         {
-            if (RequestedPaths.Any(p => p.Contains(path, StringComparison.Ordinal)))
-            {
-                return;
-            }
-
-            await Task.Delay(50);
+            await Task.Delay(50, cancellationToken);
         }
     }
 

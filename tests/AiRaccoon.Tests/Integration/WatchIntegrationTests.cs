@@ -61,10 +61,12 @@ public sealed class WatchIntegrationTests
         _ = stack.Hosted.StartAsync(TestContext.Current.CancellationToken);
         try
         {
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-            while (stack.CatchUp.LastScan is null && DateTime.UtcNow < deadline)
+            // Wait on closure, not on a clock: the hosted reconcile starts the scan on its own
+            // fake-time poll, so step the clock until it does (the token is the only hang guard).
+            for (var step = 0; step < 600 && stack.CatchUp.LastScan is null; step++)
             {
-                await Task.Delay(20, TestContext.Current.CancellationToken);
+                stack.Time.Advance(TimeSpan.FromMilliseconds(100));
+                await Task.Delay(FakeClockPoller.EventDeliveryPause, TestContext.Current.CancellationToken);
             }
 
             var scan = stack.CatchUp.LastScan.ShouldNotBeNull("the hosted reconcile did not start a catch-up scan");
@@ -74,17 +76,16 @@ public sealed class WatchIntegrationTests
 
             // No manual TickOnceAsync anywhere: the pipeline loop's own 1s tick (fired by
             // advancing the fake clock) must drain the channel and digest the created file.
-            var pollDeadline = DateTime.UtcNow.AddSeconds(15);
             var searchable = false;
-            while (!searchable && DateTime.UtcNow < pollDeadline)
+            for (var step = 0; step < 600 && !searchable; step++)
             {
                 stack.Time.Advance(TimeSpan.FromSeconds(1));
-                await Task.Delay(50, TestContext.Current.CancellationToken);
+                await Task.Delay(FakeClockPoller.EventDeliveryPause, TestContext.Current.CancellationToken);
                 searchable = (await stack.SearchAsync("zephyrloop", TestContext.Current.CancellationToken))
                     .Any(r => r.SourceFile == stack.File("a.md"));
             }
 
-            searchable.ShouldBeTrue("the hosted service never started the pipeline tick loop");
+            searchable.ShouldBeTrue("the hosted service never started the pipeline tick loop (600 fake seconds stepped)");
         }
         finally
         {
@@ -530,7 +531,7 @@ public sealed class WatchIntegrationTests
             var results = await stack.SearchAsync("zephyrword299", TestContext.Current.CancellationToken);
             var current = await stack.Service.StatusAsync(Project, TestContext.Current.CancellationToken);
             return results.Any() && current.Count == 1 && current[0].State == WatchState.Healthy;
-        }, TestContext.Current.CancellationToken, maxRealSeconds: 60)).ShouldBeTrue("large-dir scan did not finish");
+        }, TestContext.Current.CancellationToken)).ShouldBeTrue("large-dir scan did not finish");
         (await stack.CountEntriesUnderAsync(stack.WatchDir, TestContext.Current.CancellationToken))
             .ShouldBeGreaterThanOrEqualTo(300);
     }
@@ -628,13 +629,13 @@ public sealed class WatchIntegrationTests
     {
         private readonly bool _deleteDataRoot;
         private readonly SqliteConnectionFactory _factory;
-        private readonly WallClockBoundedPoller _poller;
+        private readonly FakeClockPoller _poller;
 
         public Stack(string? name = null, DateTimeOffset? now = null, bool deleteDataRoot = true)
         {
             _deleteDataRoot = deleteDataRoot;
             Time = new FakeTimeProvider(now ?? FixedNow);
-            _poller = new WallClockBoundedPoller(Time);
+            _poller = new FakeClockPoller(Time);
             DataRoot = Path.Combine(Path.GetTempPath(), "ai-raccoon-watch-integration",
                 name ?? Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(DataRoot);
@@ -771,18 +772,13 @@ public sealed class WatchIntegrationTests
         }
 
         /// <summary>
-        ///     Bounded poll: advance the fake clock 100ms, drain the pipeline once, sleep briefly
-        ///     for OS event delivery — until the condition holds or either budget expires.
-        ///     maxFakeSeconds bounds step count; maxRealSeconds is only a hang-stop for the real
-        ///     OS-event/embedding work these arrange-phase polls wait on, so it stays generous.
-        ///     Delegates to <see cref="WallClockBoundedPoller" /> (plan Q1 / M7-QA F2), which also
-        ///     races each individual await against the remaining real-time budget so a blocked
-        ///     step fails fast instead of hanging the loop past maxRealSeconds.
+        ///     maxFakeSeconds bounds the step count; no wall clock decides the outcome (PR #464) —
+        ///     a blocked step ends only with the test's cancellation token. Delegates to
+        ///     <see cref="FakeClockPoller" />.
         /// </summary>
         public Task<bool> StepUntilAsync(Func<Task<bool>> condition, CancellationToken cancellationToken,
-            int maxFakeSeconds = 60, int maxRealSeconds = 30) =>
+            int maxFakeSeconds = 60) =>
             _poller.StepUntilAsync(condition, Pipeline.TickOnceAsync, cancellationToken, maxFakeSeconds,
-                maxRealSeconds,
                 message => TestContext.Current.TestOutputHelper?.WriteLine(message));
     }
 }

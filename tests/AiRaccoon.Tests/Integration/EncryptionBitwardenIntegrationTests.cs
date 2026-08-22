@@ -602,7 +602,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         using var process = Process.Start(psi)!;
         var stderrTask = process.StandardError.ReadToEndAsync();
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
-        await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        await process.WaitForExitAsync(TestContext.Current.CancellationToken);
         return (process.ExitCode, await stderrTask, await stdoutTask);
     }
 

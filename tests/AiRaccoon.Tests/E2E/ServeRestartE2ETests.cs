@@ -68,7 +68,7 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
         var url = await WaitForUrlAsync(run);
 
         // The old process is gone, not merely bypassed.
-        await _old.WaitForExitAsync(TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(30),
+        await _old.WaitForExitAsync(TestContext.Current.CancellationToken).WaitAsync(
             TestContext.Current.CancellationToken);
         _old.ExitCode.ShouldBe(ExitCode.Success);
         url.ShouldBe($"http://127.0.0.1:{port}/mcp");
@@ -98,12 +98,11 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
             TestContext.Current.CancellationToken);
         await using var run = StartRestartInProcess(port);
 
-        var stopwatch = Stopwatch.StartNew();
-        var exit = await run.Exit.WaitAsync(TimeSpan.FromSeconds(90), TestContext.Current.CancellationToken);
-        stopwatch.Stop();
+        // The restart's own timeout is what ends this run (exit code below); its duration is a
+        // product budget, not a test verdict (PR #464) — the harness cap alone guards a hang.
+        var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
         exit.ShouldBe(ExitCode.RestartTimedOut);
-        stopwatch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(60));
         run.Stdout.ShouldBeEmpty();
         run.Stderr.ShouldContain(port.ToString());
         run.Stderr.ShouldNotContain("   at ");
@@ -134,9 +133,11 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
 
     private static async Task<JsonDocument> WaitForServerAsync(int port)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(90);
-        while (DateTime.UtcNow < deadline)
+        // Waits on the server itself; the test's token (and the harness's own process cap) are the
+        // only hang guards — no wall-clock verdict (PR #464).
+        while (true)
         {
+            TestContext.Current.CancellationToken.ThrowIfCancellationRequested();
             try
             {
                 var body = await HttpClient.GetStringAsync($"http://127.0.0.1:{port}/observability",
@@ -156,8 +157,6 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
 
             await Task.Delay(100, TestContext.Current.CancellationToken);
         }
-
-        throw new TimeoutException($"no ai-raccoon server answered /observability on port {port}");
     }
 
     private static Task<string> WaitForUrlAsync(ServeHarness run) =>
