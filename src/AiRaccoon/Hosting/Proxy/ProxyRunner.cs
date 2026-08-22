@@ -10,8 +10,7 @@ namespace AiRaccoon.Hosting.Proxy;
 /// </summary>
 public partial class ProxyRunner(IProxyForwarder proxyForwarder, IBackendLauncher backendLauncher, IHttpClientFactory httpClientFactory, ILogger<ProxyRunner> logger) : IProxyRunner
 {
-    /// <summary>Relays stdio traffic to the backend until the client disconnects; loud on failure, never falls back.</summary>
-    public async Task<int> RunAsync(ServerConfig serverConfig, StandardStreams streams, CancellationToken ctx)
+    public async Task<int> RunAsync(ServerConfig serverConfig, StandardStreams streams, string? processPath, CancellationToken ctx)
     {
         if (serverConfig.Port is < 1 or > 65535)
         {
@@ -20,7 +19,7 @@ public partial class ProxyRunner(IProxyForwarder proxyForwarder, IBackendLaunche
         }
 
         var loggerFactory = CreateMcpLoggerFactory(serverConfig);
-        await using var backendSessions = new BackendSessions(backendLauncher, httpClientFactory, loggerFactory, Environment.ProcessPath, serverConfig);
+        await using var backendSessions = new BackendSessions(backendLauncher, httpClientFactory, loggerFactory, processPath, serverConfig);
 
         McpClient backend;
         try

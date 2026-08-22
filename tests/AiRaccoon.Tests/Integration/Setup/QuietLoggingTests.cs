@@ -1,6 +1,7 @@
 using System.Net;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Settings;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Logging;
 using AiRaccoon.Tools;
@@ -25,6 +26,10 @@ namespace AiRaccoon.Tests.Integration.Setup;
 [Collection(QuietLoggingCollection.Name)]
 public sealed class QuietLoggingTests : IAsyncLifetime
 {
+    /// <summary>A packaged apphost path for the proxy tests: the relay must reach the backend
+    /// regardless of how this test host was launched (Rider runs it through the dotnet muxer).</summary>
+    private const string AppHost = "/opt/ai-raccoon/ai-raccoon";
+
     private readonly List<string> _dataRoots = [];
 
     private IAsyncDisposable? _envGate;
@@ -193,7 +198,7 @@ public sealed class QuietLoggingTests : IAsyncLifetime
 
         var (stdout, stderr) = await ConsoleCapture.RunAsync(async () =>
         {
-            var exit = await new AppRunner().Run(
+            var exit = await new AppRunner(CliSettingsBackend.AcquireAsync, AppHost).Run(
                 ["--quiet", "--data-root", options.DataRoot, "--port", port.ToString()]);
         });
 
@@ -217,7 +222,7 @@ public sealed class QuietLoggingTests : IAsyncLifetime
 
         var (_, stderr) = await ConsoleCapture.RunAsync(async () =>
         {
-            await new AppRunner().Run(
+            await new AppRunner(CliSettingsBackend.AcquireAsync, AppHost).Run(
                 ["--data-root", options.DataRoot, "--port", port.ToString()]);
         });
 
