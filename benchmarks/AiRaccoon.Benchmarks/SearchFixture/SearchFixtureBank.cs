@@ -1,6 +1,7 @@
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using System.Text;
 using AiRaccoon.Core.Chunking;
+using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Infrastructure.Chunking;
@@ -105,7 +106,11 @@ public sealed class SearchFixtureBank : IAsyncDisposable
             new JsonFileTypeHandler(new JsonFileTypeChunker(countTokens, markdownChunker, ChunkingDefaults.OverlayTokens))
         ]);
         var embedder = new EntryEmbedder(embeddingService, ModelMigrationLease, TimeProvider);
-        var embedDrainPump = NullEmbedDrainPump.Instance;
+        // No production Null object exists for this — nothing ever drains the topic in this
+        // benchmark fixture, so a real (unconsumed) pump is the honest choice. Ceiling/capacity
+        // match EmbedDrainService's own (internal, not visible across the assembly boundary here).
+        IEventPump<EmbedDrainRequest> embedDrainPump = new EventPump<EmbedDrainRequest>(
+            new PumpTopic(Ceiling: 8, Capacity: 8, Coalesce: true));
         var fileIngestor = new FileIngestor(fileTypeMatcher, sourceStore, TimeProvider.System, embeddingService,
             NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
             NullWatchStore.Instance, embedDrainPump);

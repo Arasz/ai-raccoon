@@ -2,6 +2,7 @@ using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Data.Sqlite;
 using Xunit;
 
