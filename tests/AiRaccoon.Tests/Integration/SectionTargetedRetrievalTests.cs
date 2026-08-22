@@ -30,6 +30,12 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     /// <summary>Bounded file-level no-regression tolerance; strict rank-equality is not achievable (see docs/adr/0004-dual-vector-structure-signal.md).</summary>
     private const int MaxFileRankRegression = 2;
 
+    /// <summary>Section-target ceiling. Re-measured on the public corpus at ADR-0090; see the
+    /// re-pin table in the S6a work note for the jsaa value each bound replaces.</summary>
+    private const int SectionRankCeiling = 3;
+
+    private const int FileRankCeiling = 3;
+
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -73,105 +79,47 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     /// <summary>
-    ///     Wave 6 gate S4: restored to the production SearchLimit=10 window and rank &lt;= 3 once
-    ///     FileIngestor populated section from the heading leaf.
+    ///     Section-target gates S1/S3/S4/S5/S6: the query's own section chunk must rank &lt;= 3.
+    ///     Query text and expected source are read from the committed catalog by id rather than
+    ///     repeated here — the previous copies drifted to name a corpus that has left the repo
+    ///     (ADR-0090), and a duplicated list is one the catalog cannot keep honest.
     /// </summary>
-    [Fact]
-    public async Task S4_ConsequencesOfAdr0011_ConsequencesChunkAtRankAtMost3()
+    [Theory]
+    [InlineData("S1")]
+    [InlineData("S3")]
+    [InlineData("S4")]
+    [InlineData("S5")]
+    [InlineData("S6")]
+    public async Task SectionTarget_RanksItsOwnSectionChunkAtMost3(string id)
     {
-        var expectedHash = _hashMap["docs:adr:0011-frontend-chassis-stack.md#consequences"];
-        var results = (await _store.SearchAsync(new SearchQuery(
-            ProjectId, "Consequences of ADR-0011?", SearchScope.Project,
-            Limit: 10, MinRelativeScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 1), TestContext.Current.CancellationToken)).Results;
-        var rank = results.ToList().FindIndex(r => r.Hash == expectedHash) + 1;
+        var query = Catalog(id);
 
-        _output.WriteLine($"S4 section rank: {rank}");
-        rank.ShouldBeGreaterThan(0, "S4: the ADR-0011 Consequences chunk must appear in the top 10.");
-        rank.ShouldBeLessThanOrEqualTo(3,
-            "S4: the ADR-0011 Consequences chunk must rank <= 3 (section-targeted structure signal).");
-    }
+        var rank = await SectionRankAsync(query.Query, query.ExpectedSource!, TestContext.Current.CancellationToken);
 
-    /// <summary>Wave 5b gate S1 (docs/plans/retrieval-improvement-c.md §3 Wave 5b): ADR-0011's Context section target finds the Context chunk at rank ≤ 3.</summary>
-    [Fact]
-    public async Task S1_ContextOfAdr0011_ContextChunkAtRankAtMost3()
-    {
-        var rank = await SectionRankAsync("What context led to the ADR-0011 frontend stack decisions?",
-            "docs:adr:0011-frontend-chassis-stack.md#context", TestContext.Current.CancellationToken);
-
-        _output.WriteLine($"S1 section rank: {rank?.ToString() ?? "not found"}");
-        rank.ShouldNotBeNull("S1: the ADR-0011 Context chunk must appear in the results.");
-        rank.Value.ShouldBeLessThanOrEqualTo(3,
-            "S1: the ADR-0011 Context chunk must rank <= 3 (section-targeted structure signal).");
-    }
-
-    /// <summary>Wave 5b gate S3 (docs/plans/retrieval-improvement-c.md §3 Wave 5b): ADR-0011's Alternatives-considered section target finds that chunk at rank ≤ 3.</summary>
-    [Fact]
-    public async Task S3_AlternativesOfAdr0011_AlternativesChunkAtRankAtMost3()
-    {
-        var rank = await SectionRankAsync("What alternatives were considered for ADR-0011?",
-            "docs:adr:0011-frontend-chassis-stack.md#alternatives-considered", TestContext.Current.CancellationToken);
-
-        _output.WriteLine($"S3 section rank: {rank?.ToString() ?? "not found"}");
-        rank.ShouldNotBeNull("S3: the ADR-0011 Alternatives-considered chunk must appear in the results.");
-        rank.Value.ShouldBeLessThanOrEqualTo(3,
-            "S3: the ADR-0011 Alternatives-considered chunk must rank <= 3.");
+        _output.WriteLine($"{id} section rank: {rank?.ToString() ?? "not found"} ({query.ExpectedSource})");
+        rank.ShouldNotBeNull($"{id}: the '{query.ExpectedSource}' chunk must appear in the results.");
+        rank.Value.ShouldBeLessThanOrEqualTo(SectionRankCeiling,
+            $"{id}: the '{query.ExpectedSource}' chunk must rank <= {SectionRankCeiling} (section-targeted structure signal).");
     }
 
     /// <summary>
-    ///     Wave 5b gate S5 (docs/plans/retrieval-improvement-c.md §3 Wave 5b): a cross-document structural
-    ///     query — ADR-0011 is the formal record, docs/frontend-architecture.md §2-3 the deep-dive — must
-    ///     rank the formal record's Decision chunk at ≤ 3.
+    ///     Wave 6 gate (b) + Wave 3 amendment: S2 must answer at the FILE level within the top 3.
+    ///     Section-exact retrieval of the Decision chunk is a known gap, not asserted here.
     /// </summary>
     [Fact]
-    public async Task S5_FrontendStackDecisionDocument_FindsFormalRecordAtRankAtMost3()
+    public async Task S2_SectionQuery_AnswersAtFileLevel()
     {
-        var rank = await SectionRankAsync("Which documents record the frontend stack decision?",
-            "docs:adr:0011-frontend-chassis-stack.md#decision", TestContext.Current.CancellationToken);
+        var query = Catalog("S2");
+        var fileHashes = _fileHashes[CorpusHashMap.FileKey(query.ExpectedSource!)];
 
-        _output.WriteLine($"S5 section rank: {rank?.ToString() ?? "not found"}");
-        rank.ShouldNotBeNull("S5: the ADR-0011 Decision chunk must appear in the results.");
-        rank.Value.ShouldBeLessThanOrEqualTo(3,
-            "S5: the formal decision record's chunk must rank <= 3 (cross-document structural query).");
-    }
-
-    /// <summary>Wave 5b gate S6 (docs/plans/retrieval-improvement-c.md §3 Wave 5b): a section target on a second ADR — ADR-0060's What-is-lost chunk must rank ≤ 3.</summary>
-    [Fact]
-    public async Task S6_WhatIsLostByMcpDeletion_WhatIsLostChunkAtRankAtMost3()
-    {
-        var rank = await SectionRankAsync("What is lost by deleting the MCP server?",
-            "docs:adr:0060-delete-the-mcp-server.md#what-is-lost", TestContext.Current.CancellationToken);
-
-        _output.WriteLine($"S6 section rank: {rank?.ToString() ?? "not found"}");
-        rank.ShouldNotBeNull("S6: the ADR-0060 What-is-lost chunk must appear in the results.");
-        rank.Value.ShouldBeLessThanOrEqualTo(3,
-            "S6: the ADR-0060 What-is-lost chunk must rank <= 3 (section target on a second ADR).");
-    }
-
-    /// <summary>
-    ///     Wave 6 gate (b) + Wave 3 amendment (docs/plans/retrieval-improvement-c.md §3): "What does
-    ///     ADR-0011 decide?" must answer at the file level within the top 3. (Section-exact retrieval of
-    ///     the Decision chunk is a known gap, not asserted here — see the in-body note.)
-    /// </summary>
-    [Fact]
-    public async Task S2_WhatDoesAdr0011Decide_AnswersAtFileLevel()
-    {
-        var query = "What does ADR-0011 decide?";
-        var decisionSource = "docs:adr:0011-frontend-chassis-stack.md#decision";
-        var fileHashes = _fileHashes[CorpusHashMap.FileKey(decisionSource)];
-
-        var results = await TopResultsAsync(query, TestContext.Current.CancellationToken);
+        var results = await TopResultsAsync(query.Query, TestContext.Current.CancellationToken);
         var fileRank = results.FindIndex(r => fileHashes.Contains(r.Hash)) + 1;
-        var sectionRank = results.FindIndex(r => r.Hash == _hashMap[decisionSource]) + 1;
+        var sectionRank = results.FindIndex(r => r.Hash == _hashMap[query.ExpectedSource!]) + 1;
 
         _output.WriteLine($"S2 file rank: {fileRank}, Decision-chunk rank: {(sectionRank == 0 ? "not found" : sectionRank.ToString())}");
-        fileRank.ShouldBeGreaterThan(0, "S2: an ADR-0011 chunk must appear in the results.");
-        fileRank.ShouldBeLessThanOrEqualTo(3,
-            "S2: the ADR-0011 file must answer the query within the top 3.");
-        // File-level answers at rank 1; the exact Decision chunk sits outside the top 10 because
-        // structure_embedding is unpopulated (tracked follow-up) — file-level is the asserted contract.
-        _output.WriteLine(
-            "S2 section-exact gap: decision chunk outside top-10 on the re-pinned corpus " +
-            "(structure-signal follow-up; see docs/work/2026-08-06-baseline-repin-new-corpus.md)");
+        fileRank.ShouldBeGreaterThan(0, "S2: a chunk of the expected file must appear in the results.");
+        fileRank.ShouldBeLessThanOrEqualTo(FileRankCeiling,
+            $"S2: the expected file must answer the query within the top {FileRankCeiling}.");
     }
 
     /// <summary>
@@ -297,6 +245,12 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
             FtsWeight: 1, VectorWeight: 1), cancellationToken)).Results;
         return [.. results];
     }
+
+    /// <summary>The committed catalog entry for <paramref name="id" /> — the single source of the
+    /// query text and its expected section chunk.</summary>
+    private BaselineQuery Catalog(string id) =>
+        LoadQueries().FirstOrDefault(q => q.Id == id)
+        ?? throw new InvalidOperationException($"scripts/baseline-queries.json has no query '{id}'");
 
     private List<BaselineQuery> QueriesWithSectionGroundTruth() =>
     [
