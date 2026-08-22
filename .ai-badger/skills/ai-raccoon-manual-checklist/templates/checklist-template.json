@@ -158,8 +158,8 @@
         },
         {
             "item": "code-model-activation-and-refusal",
-            "expected-result": "model set code local against a directory holding a non-768 manifest refuses with an actionable error naming 768 (server-side, not just CLI); a missing manifest surfaces the loader's own error; activating the real downloaded code-daemon-embed-v1 (ai-raccoon model download) succeeds and writes embedding.codeModel/codeEngine. The refusal legs must be run live; if the 187 MB download is infeasible in this run, the activation leg is 'substituted' naming the BDD/integration instrument.",
-            "anchor": "ADR-0087/0088; plan \u00a73.3",
+            "expected-result": "model set code local against a directory holding a non-768 manifest refuses with an actionable error naming 768 (server-side, not just CLI); a missing manifest surfaces the loader's own error. Scoped to these two refusal legs only \u2014 the positive activation path (download + activate) is exercised by 'code-model-one-command-install' below via the #453 one-command install, so this item does not repeat a second live download in the same run.",
+            "anchor": "ADR-0087/0088; #453",
             "command": "",
             "evidence": "",
             "observed-result": "",
@@ -168,9 +168,53 @@
             "acceptance-reason": ""
         },
         {
-            "item": "code-reindex-drain-and-semantic-code-search",
-            "expected-result": "After code-model activation, pending code rows drain via the code-reindex job (no memory tool is blocked while it runs), and a kind=code query that shares NO literal token with the stored code (e.g. describe an algorithm by its behavior, not its identifiers) returns the chunk \u2014 proving the vector leg. Skipped-with-reason if activation was substituted.",
-            "anchor": "ADR-0087",
+            "item": "doctor-reports-code-engine-state",
+            "expected-result": "On a scratch data root with NO code engine configured, `ai-raccoon doctor` prints `code engine: not configured \u2014 run 'ai-raccoon model set code default' to enable semantic code search` and `code rows pending: 0`. After ingesting a code file with still no engine configured (so the row lands `embed_state='pending'`), `doctor` reports `code rows pending: N` with N > 0.",
+            "anchor": "#422; #453; src/AiRaccoon/Setup/Cli/Commands/DoctorCommands.cs",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "code-model-one-command-install",
+            "expected-result": "`ai-raccoon model set code default` against a scratch data root with no prior download resolves and downloads `faxenoff/code-daemon-embed-v1` into `<data-root>/models/faxenoff__code-daemon-embed-v1`, then activates it \u2014 writing embedding.codeModel/codeEngine \u2014 with NO manifest hand-edit (#422's done-criterion). Re-running the same command against an already-downloaded directory only re-activates, with no re-fetch. After activation, the code-reindex job drains any pending code rows to 0. The ~187 MB download may be substituted against a pre-downloaded model directory if network egress is infeasible in this run; record as `substituted` naming the pre-downloaded path used.",
+            "anchor": "#422; #453; docs/how-to/configure-embedding-engines.md Recipe 5",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "code-search-discriminates-on-engine-activation",
+            "expected-result": "BEFORE 'code-model-one-command-install' activates the engine: `memory_search kind=code` for a query sharing NO literal token with the indexed code returns a `warning` whose text contains `code engine not configured` and the exact `ai-raccoon model set code default` command, and results come from FTS only. AFTER activation: the SAME query \u2014 still sharing no keyword with the stored code \u2014 returns the code hit (a dead vector leg must fail this) and the response carries NO `code engine not configured` warning.",
+            "anchor": "#422; #453; ADR-0088",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "doctor-reports-active-code-model",
+            "expected-result": "AFTER 'code-model-one-command-install' activates the engine, `ai-raccoon doctor` prints `code engine: faxenoff/code-daemon-embed-v1 (<dir>)` naming the activated model's directory, not the not-configured message.",
+            "anchor": "#422; #453; src/AiRaccoon/Setup/Cli/Commands/DoctorCommands.cs",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "code-model-docs-current",
+            "expected-result": "docs/reference/agent-memory-server.md's code-engine section and its compact CLI block document `ai-raccoon model set code default` (not only the two-step `model download` + `model set code local` path) and the 510-token code chunk budget, matching `CodeEngineSetup.DefaultModelCommand` and `EmbeddingService.MaxManifestChunkTokens`; docs/how-to/configure-embedding-engines.md Recipe 5 matches the live command's own output. Run this item only after PR #462 merges \u2014 before that merge, agent-memory-server.md still documents only the two-step path, and running this item earlier would report a drift that #462 already fixes rather than a live product defect.",
+            "anchor": "#462",
             "command": "",
             "evidence": "",
             "observed-result": "",
