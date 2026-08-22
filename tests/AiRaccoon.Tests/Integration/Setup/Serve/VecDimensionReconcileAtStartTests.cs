@@ -90,12 +90,6 @@ public sealed class VecDimensionReconcileAtStartTests : IDisposable
     }
 
     /// <summary>
-<<<<<<< HEAD
-    ///     The hard-invariant guard (`cli-asks-the-server-acts`): every leaf CLI command type
-    ///     except <see cref="ServeCommands" /> (the one path that IS becoming the server, not asking
-    ///     one to act) must never resolve to an object graph reaching a live
-    ///     <see cref="IEntryEmbedder" /> — the only thing the reconcile call can run through.
-=======
     ///     The hard-invariant guard (`cli-asks-the-server-acts`), narrow by design: every leaf CLI
     ///     command type except <see cref="ServeCommands" /> (the one path that IS becoming the
     ///     server, not asking one to act) must never hold a live <see cref="IEntryEmbedder" /> as
@@ -106,16 +100,11 @@ public sealed class VecDimensionReconcileAtStartTests : IDisposable
     ///     never holds that port as a field. That vector is covered separately, and more directly, by
     ///     <c>LayeringRulesTests.CliReachablePorts_ExposeNoReconcileOrVecDdlMember</c>, which asserts
     ///     on the port's own member surface instead of an object graph.
->>>>>>> origin/main
     ///     Mirrors <c>CliCommandsDoNotOpenTheBankTests</c>'s derive-from-the-DI-graph technique
     ///     rather than a hand-maintained list (`derive-or-delete-the-list`).
     /// </summary>
     [Fact]
-<<<<<<< HEAD
-    public void NoLeafCommandTypeOtherThanServe_ReachesALiveEntryEmbedder()
-=======
     public void NoLeafCommandTypeOtherThanServe_HoldsALiveEntryEmbedderAsAConstructedField()
->>>>>>> origin/main
     {
         var leafCommandTypes = DeriveLeafCommandTypesFromTheCommandRegistration();
         leafCommandTypes.Length.ShouldBeGreaterThanOrEqualTo(8);
@@ -142,8 +131,6 @@ public sealed class VecDimensionReconcileAtStartTests : IDisposable
             $"only {nameof(ServeCommands)} may reach a live {nameof(IEntryEmbedder)} — offenders:\n{string.Join('\n', violations)}");
     }
 
-<<<<<<< HEAD
-=======
     /// <summary>
     ///     The positive control the rule above needs: proves <see cref="FindLiveEntryEmbedder" /> can
     ///     actually find an embedder that IS there (planted as a field, exactly like
@@ -195,7 +182,6 @@ public sealed class VecDimensionReconcileAtStartTests : IDisposable
             CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
->>>>>>> origin/main
     private static Type[] DeriveLeafCommandTypesFromTheCommandRegistration()
     {
         var configCommandsConstructor = typeof(ConfigCommands)
