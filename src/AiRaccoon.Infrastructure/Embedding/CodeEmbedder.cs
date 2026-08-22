@@ -85,7 +85,7 @@ public sealed partial class CodeEmbedder(IEmbeddingService embeddings, ILogger<C
         for (var offset = 0; offset < rows.Count; offset += BatchSize)
         {
             var slice = rows.Skip(offset).Take(BatchSize).ToList();
-            embedded += await EmbedSliceAsync(connection, generator, slice, engine, logger, cancellationToken)
+            embedded += await EmbedSliceAsync(connection, generator, slice, engine, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -98,9 +98,9 @@ public sealed partial class CodeEmbedder(IEmbeddingService embeddings, ILogger<C
     ///     — including the healthy ones — staying pending for the maintenance loop's 15s on-demand
     ///     poll to retry identically forever.
     /// </summary>
-    private static async Task<int> EmbedSliceAsync(SqliteConnection connection,
+    private async Task<int> EmbedSliceAsync(SqliteConnection connection,
         IEmbeddingGenerator<string, Embedding<float>> generator, IReadOnlyList<EmbedRow> slice, string? engine,
-        ILogger logger, CancellationToken cancellationToken)
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -120,7 +120,7 @@ public sealed partial class CodeEmbedder(IEmbeddingService embeddings, ILogger<C
             // Recoverable on its own — the per-row retry below reports whatever actually fails —
             // but a batch call that only fails in a batch is invisible without this line.
             Log.CodeEmbedBatchFellBackToOneRowAtATime(logger, slice.Count, ex);
-            return await EmbedRowByRowAsync(connection, generator, slice, engine, logger, cancellationToken)
+            return await EmbedRowByRowAsync(connection, generator, slice, engine, cancellationToken)
                 .ConfigureAwait(false);
         }
     }
@@ -131,9 +131,9 @@ public sealed partial class CodeEmbedder(IEmbeddingService embeddings, ILogger<C
     ///     excludes it from future selection, bounding a poison row's cost instead of retrying it
     ///     forever.
     /// </summary>
-    private static async Task<int> EmbedRowByRowAsync(SqliteConnection connection,
+    private async Task<int> EmbedRowByRowAsync(SqliteConnection connection,
         IEmbeddingGenerator<string, Embedding<float>> generator, IReadOnlyList<EmbedRow> slice, string? engine,
-        ILogger logger, CancellationToken cancellationToken)
+        CancellationToken cancellationToken)
     {
         var embedded = 0;
         foreach (var row in slice)
