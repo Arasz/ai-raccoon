@@ -118,8 +118,19 @@ public sealed class SearchFixtureBank : IAsyncDisposable
         var embeddings = await FakeEmbeddingEndpoint.StartAsync(cancellationToken).ConfigureAwait(false);
         await store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "bench-fake-key", cancellationToken)
             .ConfigureAwait(false);
-        await store.ConfigureEmbeddingAsync("openai", "bench-embed-model", embeddings.BaseUrl, cancellationToken)
+        // D4: ConfigureEmbeddingAsync is gone from the port. Production configures embedding
+        // through the ADR-0076 outbox (StartModelMigrationAsync writes settings; a relay drains
+        // it) — drive that same seam here, then drain immediately with a REAL lease (not the
+        // fixture's NSubstitute ModelMigrationLease, which never acquires) since the fixture
+        // needs the engine usable before EmbedPendingAsync runs below.
+        await store.StartModelMigrationAsync("openai", "bench-embed-model", embeddings.BaseUrl, cancellationToken)
             .ConfigureAwait(false);
+        var drainEmbedder = new EntryEmbedder(embeddingService, new SqliteModelMigrationLease(TimeProvider.System),
+            TimeProvider.System);
+        await using (var migrationConnection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false))
+        {
+            await drainEmbedder.DrainMigrationAsync(migrationConnection, cancellationToken).ConfigureAwait(false);
+        }
         var embedded = await store.EmbedPendingAsync(ProjectId, null, cancellationToken).ConfigureAwait(false);
         if (embedded.Pending > 0)
         {
