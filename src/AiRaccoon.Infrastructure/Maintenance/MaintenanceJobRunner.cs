@@ -29,15 +29,17 @@ public sealed partial class MaintenanceJobRunner(TimeProvider timeProvider, ILog
         var outcomes = new List<MaintenanceJobOutcome>(jobs.Count);
         foreach (var job in jobs)
         {
-            if (job is VacuumJob vacuum)
-            {
-                // The only job whose cadence is user-configurable; read it before asking for Interval.
-                await vacuum.RefreshIntervalAsync(connection, cancellationToken).ConfigureAwait(false);
-            }
-
             bool due;
             try
             {
+                if (job is VacuumJob vacuum)
+                {
+                    // The only job whose cadence is user-configurable; read it before asking for
+                    // Interval. Reads the same connection as the ledger SELECT below, so it shares
+                    // the same guard: a broken settings read must not stop the pass either.
+                    await vacuum.RefreshIntervalAsync(connection, cancellationToken).ConfigureAwait(false);
+                }
+
                 var lastRun = await connection.ExecuteScalarAsync<long?>(new CommandDefinition(
                         "SELECT last_run_at FROM maintenance_jobs WHERE name = @name",
                         new { name = job.Name }, cancellationToken: cancellationToken))

@@ -171,6 +171,35 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
         job.Runs.ShouldBe(0);
     }
 
+    /// <summary>D6 follow-up: VacuumJob.RefreshIntervalAsync reads its interval from the same
+    /// connection, before the ledger SELECT — a broken read there must share the same guard.</summary>
+    [Fact]
+    public async Task AVacuumJobWhoseIntervalReadThrows_DoesNotStopLaterJobs()
+    {
+        await using var connection = await OpenAsync();
+        var brokenVacuum = new VacuumJob((_, _) => throw new InvalidOperationException("settings read failed"));
+        var healthy = new CountingJob("good-after-vacuum", interval: null);
+
+        var outcomes = await Runner().RunDueAsync(connection, [brokenVacuum, healthy], TestContext.Current.CancellationToken);
+
+        outcomes[0].Ran.ShouldBeFalse();
+        outcomes[0].Error.ShouldNotBeNull();
+        healthy.Runs.ShouldBe(1, "a job registered after a broken vacuum interval read must still run in the same pass");
+    }
+
+    /// <summary>D6 follow-up: shutdown cancellation must still abort the pass, not be logged as a
+    /// benign per-job skip — the `when (ex is not OperationCanceledException)` filter is the only
+    /// thing standing between those two behaviours.</summary>
+    [Fact]
+    public async Task AJobWhoseHasWorkAsyncThrowsOperationCanceled_PropagatesOutOfRunDueAsync()
+    {
+        await using var connection = await OpenAsync();
+        var cancelling = new CountingJob("cancelling", interval: null) { ThrowOperationCanceledFromHasWorkAsync = true };
+
+        await Should.ThrowAsync<OperationCanceledException>(
+            () => Runner().RunDueAsync(connection, [cancelling], TestContext.Current.CancellationToken));
+    }
+
     [Fact]
     public async Task ARunRecordsItsTimestampAndCount()
     {
@@ -202,6 +231,8 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
 
         public bool ThrowFromHasWorkAsync { get; init; }
 
+        public bool ThrowOperationCanceledFromHasWorkAsync { get; init; }
+
         private bool _thrown;
 
         public string Name => name;
@@ -210,10 +241,17 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
 
         public TimeSpan? Interval => interval;
 
-        public Task<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
-            ThrowFromHasWorkAsync
+        public Task<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken)
+        {
+            if (ThrowOperationCanceledFromHasWorkAsync)
+            {
+                throw new OperationCanceledException("shutting down");
+            }
+
+            return ThrowFromHasWorkAsync
                 ? throw new InvalidOperationException("has-work check failed")
                 : Task.FromResult(false);
+        }
 
         public Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
         {
