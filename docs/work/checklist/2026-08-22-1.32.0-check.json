@@ -6,7 +6,7 @@
     "branch": "task/1.32.0-check",
     "commit": "021d6c178745e0d59d74102168fb27888d5e68d7",
     "data-root": "per-lane scratch roots under /private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/ae7fa78e-588a-473d-984f-f003ee0aaaaa/scratchpad/ only; the live bank ~/.ai-raccoon was touched only by the owner-requested steps (server restart on the nuget binary, model set code default, repo-root watches), never by a checklist item",
-    "note": "Binary under test is the nuget.org ai-raccoon 1.32.0 package (sha256 a0aec659\u202659f2), not a local pack."
+    "note": "Binary under test is the nuget.org ai-raccoon 1.32.0 package (sha256 a0aec659\u202659f2), not a local pack. Live-bank steps (owner-requested, not checklist items): live server restarted on the nuget binary (the previous one was 1.29.0+155f281e, pre-code-corpus \u2014 doctor showed the code tables missing until then); `model set code default` downloaded faxenoff/code-daemon-embed-v1 (194 MB) and activated it; repo-root watches registered for all 8 repos under ~/RiderProjects; a kind=code search on the main bank returned code hits with no engine warning. Defects found this run: #470 (download writes pooling.mode 'cls' for a self-pooling graph; [417] warns on every load \u2014 owner feedback) and the bare HTTP 500 on the server-side 768 guard (lane B, see code-model-activation-and-refusal)."
   },
   "derived": {
     "version": "1.32.0",
@@ -21,6 +21,27 @@
       "what-is-actually-true": "The prior run's server-lifecycle evidence shows a clean single-attempt --restart with no probe failure. This run's first --restart attempt hit ADR-0043's 'unanswered probe' path (exit 16, NodeRunner[609]) before succeeding on an immediate retry. This is not a defect in the prior run's verdict (server-lifecycle still correctly passes both runs) -- it is a note that --restart's success is probe-timing-dependent under load, exactly as ADR-0043 documents and explicitly designed for ('retryable in the sense 10 is'), and a future run seeing the same transient refusal should not treat it as a new regression without first checking ADR-0043.",
       "evidence": "lane A serve.log: NodeRunner[609] + exit 16 on the first --restart, clean cycle on the immediate retry",
       "so-what": "Under load the first --restart can exit 16 (ADR-0043 unanswered-probe refusal, retryable by design); a future run must not file it as a regression, and a single clean attempt is a property of the run, not of the feature."
+    },
+    {
+      "prior-run": "docs/work/checklist/2026-08-22-1.32.0-post-delta-wave.json \u2014 item code-search-discriminates-on-engine-activation, BEFORE leg",
+      "prior-claim": "A query described as having zero literal overlap with greeter.py returned \"code\":[1 hit] from the FTS5-only path while the engine was unconfigured.",
+      "this-run": "On the published 1.32.0 build, a genuinely zero-overlap query ('produce valediction phrase bidding departing colleague continued prosperity') returns \"code\":[] pre-activation, while a literal-overlap query ('farewell greeting') on the SAME pre-activation bank returns the hit. The FTS-only leg cannot produce a hit for a query with no shared token.",
+      "conclusion": "The prior run's BEFORE query must have shared at least one token with its fixture (a plausible candidate is 'off', from the phrase 'sign-off' in a farewell docstring). Its BEFORE/AFTER pair therefore did not discriminate as strongly as recorded: an FTS hit was available before activation, so the AFTER hit was not by itself evidence of a live vector leg. The verdict (pass) still stands on this run's own evidence; the BEFORE evidence line does not.",
+      "severity": "evidence-quality, not a product defect"
+    },
+    {
+      "prior-run": "docs/work/checklist/2026-08-22-1.32.0-post-delta-wave.json \u2014 item code-search-discriminates-on-engine-activation, acceptance-reason",
+      "prior-claim": "The reason both zero-overlap semantic queries ranked greeter.py first is that 'greeter.py's full-sentence docstrings share more natural-language register with any English-prose query than math_utils.py's terse, mostly-identifier-only content, biasing the embedding toward greeter.py regardless of topic.'",
+      "this-run": "With a comparable two-file corpus the bias ran the other way: the farewell-topic zero-overlap query ranked math_utils.py first (1) and greeter.py second (0.98387). Adding a third file (util.ts) made util.ts win all three obscure-paraphrase queries, including the two whose topic it did not match. Meanwhile three plain natural-language queries under vector-only fusion (ftsWeight:0) ranked the topically correct file first 3/3, and three identifier-style controls also ranked correctly.",
+      "conclusion": "The prior run's outcome (topically wrong file ranked first) reproduces, but its stated cause does not: there is no consistent prose-register pull toward the docstring-rich file. What actually degrades ranking is the deliberately obscure, vocabulary-avoiding phrasing used to guarantee zero literal overlap; ordinary natural-language phrasing retrieves correctly. This matters because the prior explanation implies 'write terser docstrings', while the real reading is that the zero-overlap construction pushes the query off-distribution \u2014 exactly the 'right about the outcome, wrong about the cause' failure the checklist skill warns about.",
+      "severity": "causal explanation wrong; would have misdirected a follow-up"
+    },
+    {
+      "prior-run": "docs/work/checklist/2026-08-22-1.32.0-post-delta-wave.json \u2014 item code-model-activation-and-refusal",
+      "prior-claim": "Recorded pass for the clause 'refuses with an actionable error naming 768 (server-side, not just CLI)' on evidence consisting only of the two CLI invocations plus a settings read.",
+      "this-run": "The 768 check exists twice \u2014 src/AiRaccoon/Setup/Cli/Commands/SettingsCommands.cs:257 (CLI pre-check, runs before the request is sent) and src/AiRaccoon.Infrastructure/Sqlite/Code/SqliteCodeEngineStore.cs:35 (server). No server log line was produced by either CLI leg, so the CLI evidence alone is consistent with a CLI-only guard. Bypassing the CLI with a direct POST /settings/model/code proved the server guard fires (500 with the same exception text at SqliteCodeEngineStore.cs:33 and :30, nothing committed), with a 200 positive control on the real directory.",
+      "conclusion": "The prior verdict was right but its evidence did not establish the 'server-side' half of the clause it was accepting. New defect surfaced by the probe: the server-side refusal escapes as an unhandled exception, so the HTTP reply is a bare 500 with Content-Length: 0 \u2014 any non-CLI caller of /settings/model/code gets no reason at all, and the actionable text survives only in the server log.",
+      "severity": "prior evidence insufficient; plus a real (minor) diagnosability defect in the published build"
     }
   ],
   "items": [
@@ -138,78 +159,78 @@
       "item": "code-corpus-kind-search-and-envelope",
       "expected-result": "A watched/ingested code file is searchable via memory_search kind=code (FTS hits carry lineStart/lineEnd and the engine-not-configured warning when no code model is active); kind=memory returns NO code key in the envelope and does not surface the code hit; kind=both returns both sections; the code/both response omits correlationId. Negative control: a memory entry is NOT returned by kind=code.",
       "anchor": "ADR-0088",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "memory_write {projectId:laneb, content:'Team convention for a farewell greeting in release announcements: \u2026'} -> hash 02afbd66\u2026\nmemory_search {projectId:laneb, scope:project, query:'farewell greeting', kind:code | memory | both}  (all three, pre-activation)",
+      "evidence": "kind=code  -> {\"results\":[],\"warning\":\"code engine not configured \u2014 FTS5-only results; run 'ai-raccoon model set code default' \u2026\",\"code\":[{\"hash\":\"314c68a2\u2026\",\"ranking\":1,\"path\":\"\u2026/srcA/greeter.py\",\"lineStart\":1,\"lineEnd\":11}]}, \"meta\":{\"waitingPromotionsCount\":0} \u2014 NO correlationId; the memory note 02afbd66 is absent (negative control).\nkind=memory -> {\"results\":[{\"hash\":\"02afbd66\u2026\",\"ranking\":1,\"path\":\"48e5fb35\u2026.md\",\"chunkIndex\":-1,\"totalChunks\":0}]}, no \"code\" key anywhere, \"meta\":{\u2026,\"correlationId\":\"01a029dcf9ec7574af9a74bb38574af3\"}; greeter.py absent.\nkind=both  -> results:[02afbd66\u2026] + the same warning + code:[314c68a2\u2026, lineStart:1, lineEnd:11]; meta has NO correlationId.",
+      "observed-result": "Every clause holds on the published binary: code hits carry lineStart/lineEnd, the not-configured warning rides the code and both envelopes, kind=memory has no code key and no code hit, kind=both carries both sections, correlationId appears only on the memory-only envelope, and the negative control holds in both directions (the memory note never appears under kind=code, greeter.py never under kind=memory) even though both match the same query term.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Exercised live with one query that genuinely matches BOTH corpora, so the separation is a real filter result rather than two disjoint queries that could not have crossed over."
     },
     {
       "item": "code-get-returns-chunk-by-hash",
       "expected-result": "code_get returns the exact chunk content for a hash from a kind=code hit; an unknown hash is refused with an error, not an empty fabrication.",
       "anchor": "ADR-0088",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "tools/call code_get {projectId:laneb, hash:'314c68a2b2641eaf68978664cf11e9b69980df3b4d43823a09b4901986579ac3'}\ntools/call code_get {projectId:laneb, hash:'0000000000000000000000000000000000000000000000000000000000000000'}\npython3 byte-comparison of the returned value against <laneB>/srcA/greeter.py on disk",
+      "evidence": "known -> {\"data\":{\"hash\":\"314c68a2\u2026\",\"value\":\"\\\"\\\"\\\"Small helpers for addressing people politely.\\\"\\\"\\\"\\n\\n\\ndef greet(name: str) -> str:\\n \u2026\",\"path\":\"\u2026/srcA/greeter.py\",\"lineStart\":1,\"lineEnd\":11}}\nbyte comparison -> EXACT MATCH: True | lens 335 335\nunknown -> {\"content\":[{\"type\":\"text\",\"text\":\"unknown-hash: No entry with hash '000\u20260' in project 'laneb'.\"}],\"isError\":true}\nserve.log -> warn: AiRaccoon.Tools.ToolRefusals[911] \"code_get\" refused: unknown-hash",
+      "observed-result": "The known hash returns the chunk byte-for-byte identical to the file on disk (verified programmatically, 335 == 335 bytes), with the same lineStart/lineEnd the search hit carried. The unknown hash is refused with isError:true and a named refusal reason, and the refusal is logged server-side under event 911 \u2014 not an empty or fabricated entry.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both directions run live; correctness of the positive leg was decided by a byte comparison against the source file, not by eyeballing the snippet."
     },
     {
       "item": "code-model-activation-and-refusal",
       "expected-result": "model set code local against a directory holding a non-768 manifest refuses with an actionable error naming 768 (server-side, not just CLI); a missing manifest surfaces the loader's own error. Scoped to these two refusal legs only \u2014 the positive activation path (download + activate) is exercised by 'code-model-one-command-install' below via the #453 one-command install, so this item does not repeat a second live download in the same run.",
       "anchor": "ADR-0087/0088; #453",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "fixture: cp the REAL downloaded model.onnx / sentencepiece.bpe.model / config.json / tokenizer_config.json into <laneB>/bad-dims-dir, manifest copied with only \"dimensions\" changed 768 -> 1024 ; <laneB>/no-manifest-dir left empty\nai-raccoon --data-root <laneB>/rootA --port 62665 model set code local <laneB>/bad-dims-dir\nai-raccoon --data-root <laneB>/rootA --port 62665 model set code local <laneB>/no-manifest-dir\nsqlite3 'file:\u2026?mode=ro' \"select key,value from settings where key like 'embedding.code%';\" before and after\nSERVER-SIDE leg (bypassing the CLI pre-check at src/AiRaccoon/Setup/Cli/Commands/SettingsCommands.cs:257):\n  curl -i -X POST http://127.0.0.1:62665/settings/model/code -H 'X-AiRaccoon-Token: \u2026' -d '{\"Directory\":\"<laneB>/bad-dims-dir\"}'\n  same with no-manifest-dir, and a positive control with the real 768-dim model directory",
+      "evidence": "non-768 leg (CLI) -> exit 15: \"Manifest '<laneB>/bad-dims-dir' declares 1024-dimension embeddings, but the code corpus's vec_code index is fixed at 768 dimensions \u2014 there is no dimension-reconcile phase for code, unlike the memory bank. Point 'model set code local' at a manifest with dimensions: 768.\"\nmissing-manifest leg (CLI) -> exit 15: \"Configured embedding model directory '<laneB>/no-manifest-dir' has no ai-raccoon.manifest.json. A local model directory must contain a ai-raccoon.manifest.json describing its files, tokenizer, pooling and dimensions \u2014 run 'ai-raccoon model download <repo-id>' to create one, or point embedding.model at a .onnx file for the legacy path.\"\nsettings before and after both legs: byte-identical (embedding.codeModel + embedding.codeEngine still the real faxenoff engine) \u2014 neither refusal committed anything.\nserver-side leg: both direct POSTs -> HTTP/1.1 500, Content-Length: 0; serve.log line 52 \"System.InvalidOperationException: Manifest '<laneB>/bad-dims-dir' declares 1024-dimension embeddings \u2026 dimensions: 768.\" at AiRaccoon.Infrastructure.Sqlite.Code.SqliteCodeEngineStore.ActivateCodeEngineAsync \u2026 SqliteCodeEngineStore.cs:line 33, and the missing-manifest twin at SqliteCodeEngineStore.cs:line 30. Settings still unchanged after both direct POSTs.\npositive control: POST with the real 768-dim directory -> HTTP/1.1 200 OK, {\"model\":\"\u2026/faxenoff__code-daemon-embed-v1\",\"engine\":\"local:\u2026#cfedd23b\u2026\"} \u2014 so the 500s are the guard firing, not a broken endpoint or a wrong request shape.",
+      "observed-result": "Both refusal legs behave as specified from the CLI (exit 15, the 768 message, the loader's own missing-manifest message) and neither commits. The 'server-side, not just CLI' clause needed its own probe: the CLI has its own pre-check that fires first, so CLI output alone cannot establish it. A direct POST to /settings/model/code bypasses that pre-check and shows the server guard does fire in SqliteCodeEngineStore.ActivateCodeEngineAsync and commits nothing \u2014 with a 200 positive control ruling out a dead endpoint. Recorded caveat: the server-side refusal escapes as an unhandled exception, so the HTTP response is a bare 500 with an empty body; the actionable text reaches only the server log, and a non-CLI caller gets no reason.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both legs run live with a real, correctly-pinned model.onnx and tokenizer copied from the genuinely downloaded faxenoff model, so the dimension check is exercised against real file content; settings-unchanged was read directly from the bank rather than inferred; and the server-side clause was proven by bypassing the CLI, with a positive control. The bare-500 body is a diagnosability gap worth a follow-up, not a failure of the behaviour this item names."
     },
     {
       "item": "doctor-reports-code-engine-state",
       "expected-result": "On a scratch data root with NO code engine configured, `ai-raccoon doctor` prints `code engine: not configured \u2014 run 'ai-raccoon model set code default' to enable semantic code search` and `code rows pending: 0`. After ingesting a code file with still no engine configured (so the row lands `embed_state='pending'`), `doctor` reports `code rows pending: N` with N > 0.",
       "anchor": "#422; #453; src/AiRaccoon/Setup/Cli/Commands/DoctorCommands.cs",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "ai-raccoon --data-root <laneB>/rootA --port 0 doctor  (before any bank existed)\nai-raccoon --data-root <laneB>/rootA --port 0 serve --idle-timeout 0 > <laneB>/rootA/serve.log 2>&1 &  -> bound 62665\nai-raccoon --data-root <laneB>/rootA --port 62665 doctor\nai-raccoon --data-root <laneB>/rootA --port 62665 settings ingest scope add laneb <laneB>/srcA\nPOST /mcp tools/call memory_ingest_file {projectId:laneb, path:<laneB>/srcA/greeter.py}\nai-raccoon --data-root <laneB>/rootA --port 62665 doctor\nsqlite3 'file:<laneB>/rootA/memory.db?mode=ro' \"select id,path,embed_state,embed_attempts from code_entries;\"",
+      "evidence": "no-bank leg -> \"ai-raccoon: doctor: no bank at <laneB>/rootA/memory.db\" (doctor needs the bank to exist; server started to create it).\nBEFORE (fresh bank, nothing ingested) ->\n  code engine: not configured \u2014 run 'ai-raccoon model set code default' to enable semantic code search\n  code rows pending: 0\n  status: HEALTHY\nmemory_ingest_file -> {\"data\":{\"indexed\":1},\"meta\":{\"waitingPromotionsCount\":0}}\nAFTER ingest ->\n  code engine: not configured \u2014 run 'ai-raccoon model set code default' to enable semantic code search\n  code rows pending: 1\nsqlite3 ro -> 1|<laneB>/srcA/greeter.py|pending|0",
+      "observed-result": "Both legs word-for-word as specified on the published 1.32.0 binary: the exact not-configured sentence with the exact install command, pending:0 on a genuinely empty bank, and pending:1 after one real MCP ingest with the engine still unconfigured. The sqlite read confirms the row is 'pending' with 0 attempts, so doctor's count reflects real state rather than a constant.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Run live against the published binary; the N>0 leg came from a real memory_ingest_file, not a hand-inserted row, and was cross-checked directly in the bank read-only."
     },
     {
       "item": "code-model-one-command-install",
       "expected-result": "`ai-raccoon model set code default` against a scratch data root with no prior download resolves and downloads `faxenoff/code-daemon-embed-v1` into `<data-root>/models/faxenoff__code-daemon-embed-v1`, then activates it \u2014 writing embedding.codeModel/codeEngine \u2014 with NO manifest hand-edit (#422's done-criterion). Re-running the same command against an already-downloaded directory only re-activates, with no re-fetch. After activation, the code-reindex job drains any pending code rows to 0. The ~187 MB download may be substituted against a pre-downloaded model directory if network egress is infeasible in this run; record as `substituted` naming the pre-downloaded path used.",
       "anchor": "#422; #453; docs/how-to/configure-embedding-engines.md Recipe 5",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "ls <laneB>/rootA/models  (-> No such file or directory: no prior download)\nmemory_ingest_file math_utils.py  (so the drain has 2 pending rows, not 1)\ntime ai-raccoon --data-root <laneB>/rootA --port 62665 model set code default\nstat -f '%N %m %z' <laneB>/rootA/models/faxenoff__code-daemon-embed-v1/*   (mtimes snapshot 1)\nsqlite3 'file:\u2026?mode=ro' \"select key,value from settings where key like 'embedding%';\"\nsqlite3 poll of code_entries.embed_state/embed_attempts until no 'pending'\ntime ai-raccoon --data-root <laneB>/rootA --port 62665 model set code default   (second run)\nstat \u2026 (mtimes snapshot 2); diff snapshot1 snapshot2; grep -c huggingface.co on both run logs",
+      "evidence": "pre-state -> \"ls: <laneB>/rootA/models: No such file or directory\".\nfirst run (27.166 s total, 14 huggingface.co request lines) -> \"downloaded faxenoff/code-daemon-embed-v1@main to <laneB>/rootA/models/faxenoff__code-daemon-embed-v1 (4 file(s)); ai-raccoon.manifest.json written. Trust note: the SHA-256 pins were captured from Hugging Face's LFS oids before download \u2026\" then \"code embedding engine set to local (\u2026); the code-reindex maintenance job will re-embed pending rows\".\ngenerated manifest (no hand edit) -> \"dimensions\": 768, \"contextWindowTokens\": 512, onnx sha256 57bcfc6a\u2026, tokenizer sha256 3236c10b\u2026.\nsettings -> embedding.codeModel|<laneB>/rootA/models/faxenoff__code-daemon-embed-v1 ; embedding.codeEngine|local:<same>#cfedd23b82f64208efafdd081a931eb60eaae251394edfa86c7a18c6a61e3f13\ndrain -> poll [1] 1:pending:0 2:pending:0 ; poll [2] 1:embedded:0 2:embedded:0  (both rows, embed_attempts stayed 0)\nsecond run (4.331 s total) -> \"faxenoff/code-daemon-embed-v1 is already downloaded at \u2026; activating it\" + the same activation line; grep -c huggingface.co = 0 (vs 14 on the first run); diff of the two mtime+size snapshots is empty -> IDENTICAL, no file re-fetched.\nserve.log -> info: AiRaccoon[675] code engine activation to local:\u2026#cfedd23b\u2026 committed; info: MaintenanceJobRunner[525] job 'code-reindex' ran in 11156 ms; warn: EmbeddingService[417] pooling-mode diagnostic (informational).",
+      "observed-result": "Real live download (~187 MB in 27 s) into the expected directory, activation writing both settings keys, a manifest generated with dimensions 768 and contextWindowTokens 512 and never hand-edited. The re-run is a pure re-activation: zero Hugging Face requests and byte-identical file mtimes/sizes. The drain went 2 pending -> 0 with embed_attempts still 0.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Not substituted \u2014 the download really ran against the published 1.32.0 binary on a root with no models directory. 'No re-fetch' was decided by two independent instruments (0 vs 14 HTTP request lines, and an empty diff of mtime+size snapshots) rather than by the CLI's own claim, and the drain used two pending rows so the count is not degenerate."
     },
     {
       "item": "code-search-discriminates-on-engine-activation",
       "expected-result": "BEFORE 'code-model-one-command-install' activates the engine: `memory_search kind=code` for a query sharing NO literal token with the indexed code returns a `warning` whose text contains `code engine not configured` and the exact `ai-raccoon model set code default` command, and results come from FTS only. AFTER activation: the SAME query \u2014 still sharing no keyword with the stored code \u2014 returns the code hit (a dead vector leg must fail this) and the response carries NO `code engine not configured` warning.",
       "anchor": "#422; #453; ADR-0088",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "BEFORE (rootA, pre-activation, corpus = greeter.py only):\n  memory_search {projectId:laneb, kind:code, scope:project, query:'produce valediction phrase bidding departing colleague continued prosperity'}\n  FTS-alive control on the same pre-activation bank: same call with query:'farewell greeting'\nAFTER (rootA, post-activation, post-drain; math_utils.py then util.ts added to the corpus and drained):\n  same zero-overlap query; then topic probes and literal-overlap controls; then the same probes with ftsWeight:0,vectorWeight:1 to isolate the vector leg.",
+      "evidence": "BEFORE -> {\"results\":[],\"warning\":\"code engine not configured \u2014 FTS5-only results; run 'ai-raccoon model set code default' to download and activate the default code embedding model\",\"code\":[]}\nBEFORE control (literal overlap, same bank) -> same warning, but \"code\":[{hash 314c68a2\u2026,ranking:1,path:\u2026/greeter.py,lineStart:1,lineEnd:11}] \u2014 proves the empty BEFORE result is genuine zero literal overlap, not a broken FTS leg.\nAFTER (same query, 2-file corpus) -> NO 'warning' key at all; code:[math_utils.py 1, greeter.py 0.9838709677419354].\nAFTER (3-file corpus) obscure-paraphrase probes: valediction query -> util.ts 1 / math_utils 0.98387 / greeter 0.96825 ; 'check that an integer cannot be evenly split by any smaller quantity' -> util.ts 1 ; 'reissue failing network calls with growing pauses plus randomness between tries' -> util.ts 1 (correct).\nAFTER literal-overlap controls: 'is_prime factorial divisor' -> math_utils.py 1 / util.ts 0.49194 / greeter 0.48413 ; 'farewell greeting Goodbye' -> greeter.py 1 ; 'retryWithBackoff jitter setTimeout' -> util.ts 1. Ranking flips with the query, so it is not an ingestion-order artifact.\nAFTER vector-only (ftsWeight:0) plain-NL probes: 'a function that returns a polite spoken salutation for a person' -> greeter.py 1 ; 'a function that decides whether a number is prime' -> math_utils.py 1 ; 'a function that retries a web request after waiting longer each time' -> util.ts 1 \u2014 3/3 topically correct.",
+      "observed-result": "BEFORE: the warning is present and contains both required strings, and the code section is empty \u2014 with the literal-overlap control proving FTS itself works, this BEFORE leg can actually fail, which the prior run's BEFORE (1 FTS hit on a supposedly zero-overlap query) could not. AFTER: the warning is gone and the query returns code hits, so the vector leg is alive. Strengthened beyond the item: with three files, three literal-overlap controls rank the right file first, and three plain natural-language vector-only queries rank the right file first 3/3. The only misses are deliberately obscure vocabulary-avoiding paraphrases (2 of 3 wrong) \u2014 a model paraphrase-robustness limit on a 3-document toy corpus, not a dead or unresponsive leg.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both halves of the item's contract verified live on the published binary, each with a control that makes it able to fail (FTS-alive control on the BEFORE leg, literal-overlap and vector-only controls on the AFTER leg). The obscure-paraphrase misses are recorded as a caveat and as a correction to the prior run's stated cause; they do not touch what this item is chartered to prove."
     },
     {
       "item": "doctor-reports-active-code-model",
       "expected-result": "AFTER 'code-model-one-command-install' activates the engine, `ai-raccoon doctor` prints `code engine: faxenoff/code-daemon-embed-v1 (<dir>)` naming the activated model's directory, not the not-configured message.",
       "anchor": "#422; #453; src/AiRaccoon/Setup/Cli/Commands/DoctorCommands.cs",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "ai-raccoon --data-root <laneB>/rootA --port 62665 doctor   (after model set code default and after the drain)",
+      "evidence": "code engine: faxenoff/code-daemon-embed-v1 (/private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/ae7fa78e-588a-473d-984f-f003ee0aaaaa/scratchpad/lane-B/rootA/models/faxenoff__code-daemon-embed-v1)\ncode rows pending: 0\nstatus: HEALTHY\n(compare the same command on the same root before activation: \"code engine: not configured \u2014 run 'ai-raccoon model set code default' \u2026\", \"code rows pending: 1\")",
+      "observed-result": "doctor names the model and its exact activated directory, replacing the not-configured message, and reports pending:0 on a corpus that really did drain. The before/after pair on one root shows the line is derived from bank state, not printed unconditionally.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Verified live with its own negative control (the same command on the same root produced the not-configured line minutes earlier), and the pending:0 it reports is corroborated by the sqlite read showing both rows 'embedded'."
     },
     {
       "item": "code-model-docs-current",
@@ -281,12 +302,12 @@
       "item": "activation-sha256-pin-verification",
       "expected-result": "Tampering a model file AFTER its manifest was generated (flip one byte) makes model set refuse at activation, naming the sha256 pin mismatch; restoring the byte activates cleanly.",
       "anchor": "PR #429",
-      "command": "",
-      "evidence": "",
-      "observed-result": "",
-      "status": "",
-      "accepted": null,
-      "acceptance-reason": ""
+      "command": "fixture: cp -R <laneB>/rootA/models/faxenoff__code-daemon-embed-v1 <laneB>/mem-model-fixture  (a manifest generated by the product itself, with pins captured from Hugging Face LFS oids \u2014 not hand-authored)\nserver: ai-raccoon --data-root <laneB>/rootC --port 0 serve --idle-timeout 0 -> bound 63480\nai-raccoon --data-root <laneB>/rootC --port 63480 model set local <laneB>/mem-model-fixture        (baseline)\nprintf '\\xff' | dd of=<fixture>/model.onnx bs=1 seek=1000 count=1 conv=notrunc                       (flip byte 0x65 -> 0xff at offset 1000)\nai-raccoon --data-root <laneB>/rootC --port 63480 model set local <laneB>/mem-model-fixture        (tampered)\nprintf '\\x65' | dd \u2026 conv=notrunc                                                                    (restore)\nai-raccoon --data-root <laneB>/rootC --port 63480 model set local <laneB>/mem-model-fixture        (restored)\nai-raccoon --data-root <laneB>/rootC --port 63480 doctor",
+      "evidence": "pin realism check first: manifest pins model.onnx to 57bcfc6aed11ea239d01f2b124f2f948456f2284ad6e2c4744452509c9c25ca9 and shasum -a 256 of the fixture file returns exactly that \u2014 a real pin over a real, working model file.\nbaseline -> \"embedding engine set to local (<laneB>/mem-model-fixture); re-embedding in the background\", exit 0.\ntamper -> shasum becomes f76fb1522bcce36190d193e68b99a3e361e9ff8dd0a1d1556e4bfefc020af6f0 ; model set local -> exit 15: \"Manifest '<laneB>/mem-model-fixture/ai-raccoon.manifest.json' pins 'model.onnx' to sha256 57bcfc6aed11ea239d01f2b124f2f948456f2284ad6e2c4744452509c9c25ca9, but the file on disk hashes to f76fb1522bcce36190d193e68b99a3e361e9ff8dd0a1d1556e4bfefc020af6f0. The model directory may have been tampered with or partially replaced \u2014 re-run 'ai-raccoon model download' to restore a clean copy.\"\nrestore -> shasum back to 57bcfc6a\u2026 ; model set local -> \"embedding engine set to local (\u2026); re-embedding in the background\", exit 0.\ndoctor (rootC) -> status: HEALTHY.\nserve.log (rootC) -> info: AiRaccoon[673] settings deleted embedding.apiKey / embedding.dimensions ; info: AiRaccoon[674] model migration to local:<fixture>#cfedd23b\u2026 committed.",
+      "observed-result": "A one-byte change to a 187 MB model file is caught at activation: the refusal names the pinned file, the expected sha256 and the actual sha256, and gives the recovery command; exit 15. Restoring that single byte returns the directory to a clean activation on the same command, and doctor reports HEALTHY afterwards. Baseline-tamper-restore makes the check demonstrably able to both fail and pass.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Run live on the published binary against a manifest the product generated itself with pins from Hugging Face LFS oids (no hand-authored hashes), and the fixture's pin was verified to match the untampered file before the tamper, so the refusal cannot be an artefact of a wrong fixture pin."
     },
     {
       "item": "cli-exit-codes-nobank-and-settings-error",
@@ -423,7 +444,50 @@
         "resolves": "n/a",
         "note": "framework id, correctly not in the AiRaccoon table"
       }
-    ]
+    ],
+    "B": {
+      "ai-raccoon-owned": [
+        417,
+        510,
+        525,
+        672,
+        673,
+        674,
+        675,
+        911
+      ],
+      "framework": [
+        0,
+        13,
+        14
+      ],
+      "sorted-unique": [
+        0,
+        13,
+        14,
+        417,
+        510,
+        525,
+        672,
+        673,
+        674,
+        675,
+        911
+      ],
+      "detail": {
+        "0": "Microsoft.Hosting.Lifetime \u2014 application started / environment / content root",
+        "13": "Microsoft.AspNetCore.Server.Kestrel \u2014 unhandled exception (the two /settings/model/code refusals)",
+        "14": "Microsoft.Hosting.Lifetime \u2014 Now listening on",
+        "417": "AiRaccoon.Infrastructure.Embedding.EmbeddingService \u2014 warn: faxenoff model pools inside its own ONNX graph; manifest pooling.mode 'cls' unusable, graph vector used as-is",
+        "510": "AiRaccoon.Infrastructure.Maintenance.BankMaintenanceHostedService \u2014 Bank WAL checkpoint complete",
+        "525": "AiRaccoon.Infrastructure.Maintenance.MaintenanceJobRunner \u2014 maintenance job ran in N ms (chunk-backfill, vec0-reclaim, vacuum, metrics-retention, model-migration, repair-chunk-index, repair-reingest, promotion-queue-prune, pending-embed, code-reindex)",
+        "672": "AiRaccoon \u2014 settings wrote ingest.scope.laneb",
+        "673": "AiRaccoon \u2014 settings deleted embedding.apiKey / embedding.dimensions",
+        "674": "AiRaccoon \u2014 model migration to local:\u2026 committed",
+        "675": "AiRaccoon \u2014 code engine activation to local:\u2026 committed",
+        "911": "AiRaccoon.Tools.ToolRefusals \u2014 warn: \"code_get\" refused: unknown-hash"
+      }
+    }
   },
   "settings-channel-exit-code-tests": "cd /Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/1.32.0-check && dotnet test tests/AiRaccoon.Tests --filter FullyQualifiedName~SettingsChannelExitCodeTests 2>&1 | tail -20 -> 'Passed! - Failed: 0, Passed: 2, Skipped: 0, Total: 2, Duration: 69 ms - AiRaccoon.Tests.dll (net10.0)'"
 }
