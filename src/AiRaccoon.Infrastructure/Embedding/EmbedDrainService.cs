@@ -131,12 +131,23 @@ public sealed partial class EmbedDrainService(
         }
     }
 
-    /// <summary>Unset defaults to 128; a present-but-unparseable value also defaults, but warns once. Test seam.</summary>
+    /// <summary>The most recently warned-about invalid raw value, or null once a valid one is seen — this pass runs every drain, so warning on every pass for a persistent bad value would never stop (review finding 2, #517).</summary>
+    private string? _lastWarnedRowsPerRun;
+
+    /// <summary>Unset defaults to 128; a present-but-invalid value (unparseable, non-positive, or over the ceiling) also falls back, warning once per DISTINCT bad value — not every pass. Test seam.</summary>
     internal int ResolveRowsPerRun(string? raw)
     {
         if (!BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun(raw, out var rows))
         {
-            Log.InvalidRowsPerRunSetting(logger, raw!);
+            if (raw != _lastWarnedRowsPerRun)
+            {
+                Log.InvalidRowsPerRunSetting(logger, raw!, BankMaintenanceConfigKeys.MaxEmbedRowsPerRun);
+                _lastWarnedRowsPerRun = raw;
+            }
+        }
+        else
+        {
+            _lastWarnedRowsPerRun = null; // a value that goes bad again after being fixed warns again
         }
 
         return rows;
@@ -159,7 +170,7 @@ public sealed partial class EmbedDrainService(
         public static partial void DrainFailed(ILogger logger, EmbedCorpus corpus, Exception exception);
 
         [LoggerMessage(EventId = 1006, Level = LogLevel.Warning,
-            Message = "Invalid maintenance.embed-rows-per-run.global setting '{Value}': expected a positive integer. Using the default instead.")]
-        public static partial void InvalidRowsPerRunSetting(ILogger logger, string value);
+            Message = "Invalid maintenance.embed-rows-per-run.global setting '{Value}': expected a positive integer, at most {Max}. Falling back to the default or clamped value.")]
+        public static partial void InvalidRowsPerRunSetting(ILogger logger, string value, int max);
     }
 }

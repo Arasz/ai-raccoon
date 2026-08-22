@@ -43,17 +43,27 @@ public static class BankMaintenanceConfigKeys
 
     /// <summary>
     ///     Rows drained per signal, for both corpora (WP11-C, owner gate G18) — today's
-    ///     4 * EntryEmbedder.BatchSize, unchanged behaviour on day one. Read by
-    ///     <see cref="AiRaccoon.Infrastructure.Embedding.EmbedDrainService" /> on every drain pass.
+    ///     4 * EntryEmbedder.BatchSize, unchanged behaviour on day one. Read by the embed drain
+    ///     (ADR-0091's single consumer) on every drain pass.
     /// </summary>
     public const string EmbedRowsPerRunGlobal = "maintenance.embed-rows-per-run.global";
 
     public const int DefaultEmbedRowsPerRun = 128;
 
     /// <summary>
-    ///     True when <paramref name="value" /> is empty (unset) or a positive integer; false only for
-    ///     a present value that failed to parse — the caller's cue to warn. <paramref name="rows" />
-    ///     is always usable either way.
+    ///     Ceiling for embed-rows-per-run: the drain's one `SELECT ... LIMIT` materialises the whole
+    ///     result as a single List before sub-batching at BatchSize (32) — 4096 = 128 * BatchSize
+    ///     bounds that one-shot list to a modest burst while leaving generous headroom above the
+    ///     128 default.
+    /// </summary>
+    public const int MaxEmbedRowsPerRun = 4096;
+
+    /// <summary>
+    ///     True when <paramref name="value" /> is empty (unset) or a positive integer at most
+    ///     <see cref="MaxEmbedRowsPerRun" />; false for a present value that failed to parse, was not
+    ///     positive, or exceeded the ceiling — the caller's cue to warn (and, at the CLI, to reject).
+    ///     <paramref name="rows" /> is always usable either way: the default for unset/unparseable,
+    ///     the ceiling for an over-ceiling value.
     /// </summary>
     public static bool TryParseEmbedRowsPerRun(string? value, out int rows)
     {
@@ -65,6 +75,12 @@ public static class BankMaintenanceConfigKeys
 
         if (int.TryParse(value, out var parsed) && parsed > 0)
         {
+            if (parsed > MaxEmbedRowsPerRun)
+            {
+                rows = MaxEmbedRowsPerRun;
+                return false;
+            }
+
             rows = parsed;
             return true;
         }

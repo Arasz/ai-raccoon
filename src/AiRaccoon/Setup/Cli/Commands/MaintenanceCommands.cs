@@ -8,11 +8,11 @@ using AiRaccoon.Infrastructure.Sqlite;
 namespace AiRaccoon.Setup.Cli.Commands;
 
 /// <summary>
-///     One-shot bank-maintenance verb handlers: interval, vacuum-interval, list — the CLI-only
-///     channel for the maintenance service. `list` additionally reports live bank disk stats
-///     (db/WAL sizes, reclaimable bytes, delta vs the previous check via a stats sidecar) — a thin
-///     client over <see cref="IMaintenanceStatsStore" /> (ADR-0075 amendment): the stats are
-///     computed server-side and the CLI never opens the bank for them.
+///     One-shot bank-maintenance verb handlers: interval, vacuum-interval, embed-rows-per-run, list
+///     — the CLI-only channel for the maintenance service. `list` additionally reports live bank
+///     disk stats (db/WAL sizes, reclaimable bytes, delta vs the previous check via a stats
+///     sidecar) — a thin client over <see cref="IMaintenanceStatsStore" /> (ADR-0075 amendment):
+///     the stats are computed server-side and the CLI never opens the bank for them.
 /// </summary>
 public sealed class MaintenanceCommands(IMaintenanceStatsStore maintenanceStats, InfrastructureOptions options)
 {
@@ -58,14 +58,21 @@ public sealed class MaintenanceCommands(IMaintenanceStatsStore maintenanceStats,
         return 0;
     }
 
-    /// <summary>WP11-C (owner gate G18): the "cheaper first move" — takes effect on the drain's next pass, no restart.</summary>
+    /// <summary>
+    ///     WP11-C (owner gate G18): the "cheaper first move" — takes effect on the drain's next
+    ///     pass, no restart. Review finding 4 (#517): validity is Core's one rule
+    ///     (<see cref="BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun" />) — the CLI calls it
+    ///     rather than restating "positive" or the ceiling itself; a present-but-invalid value is
+    ///     rejected here rather than silently clamped, unlike a stored setting read at drain time.
+    /// </summary>
     public async Task<int> SetEmbedRowsPerRunAsync(ParseResult parseResult, IMemoryStore store,
         StandardStreams streams, CancellationToken cancellationToken)
     {
         var raw = parseResult.GetValue<string>("rows");
-        if (!int.TryParse(raw, out var parsed) || parsed <= 0)
+        if (!BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun(raw, out var parsed))
         {
-            await streams.WriteErrorLineAsync("ai-raccoon: embed rows per run must be a positive integer");
+            await streams.WriteErrorLineAsync(
+                $"ai-raccoon: embed rows per run must be a positive integer, at most {BankMaintenanceConfigKeys.MaxEmbedRowsPerRun}");
             return ExitCode.InvalidArgument;
         }
 
