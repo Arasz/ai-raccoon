@@ -65,7 +65,7 @@ public sealed class FileIngestorIgnoreTests : IDisposable
         var count = await _ingestor.IngestDirectoryAsync(_conn, "test_project", _testDir, null,
             TestContext.Current.CancellationToken);
 
-        count.ShouldBe(1);
+        count.Indexed.ShouldBe(1);
         var paths = SelectSourceFiles();
         paths.ShouldContain(Path.Combine(_testDir, "keep.md"));
         paths.ShouldNotContain(Path.Combine(_testDir, "secret.md"));

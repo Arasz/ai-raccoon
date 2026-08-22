@@ -68,7 +68,7 @@ public sealed class FileIngestorHiddenAndDenySetTests : IDisposable
             TestContext.Current.CancellationToken);
 
         // README.md + docs/guide.md only.
-        count.ShouldBe(2);
+        count.Indexed.ShouldBe(2);
 
         var indexedPaths = SelectSourceFiles();
         indexedPaths.ShouldContain(Path.Combine(_testDir, "README.md"));

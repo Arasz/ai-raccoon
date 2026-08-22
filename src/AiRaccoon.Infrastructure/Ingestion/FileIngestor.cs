@@ -62,9 +62,10 @@ public sealed class FileIngestor(
         }
 
         var content = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
-        var rows = await InsertChunksAsync(connection, projectId, path, content, handler, context, cancellationToken, embedInline)
+        var (rows, hashes) = await InsertChunksAsync(connection, projectId, path, content, handler, context,
+                cancellationToken, embedInline)
             .ConfigureAwait(false);
-        return new FileIngestResult(rows, true);
+        return new FileIngestResult(rows, true, hashes);
     }
 
     /// <summary>
@@ -128,8 +129,8 @@ public sealed class FileIngestor(
         return Path.GetDirectoryName(path) ?? path;
     }
 
-    public async Task<int> IngestDirectoryAsync(SqliteConnection connection, string projectId, string path,
-        string? context, CancellationToken cancellationToken)
+    public async Task<DirectoryIngestResult> IngestDirectoryAsync(SqliteConnection connection, string projectId,
+        string path, string? context, CancellationToken cancellationToken)
     {
         var scope = await ReadScopeAsync(connection, projectId, cancellationToken).ConfigureAwait(false);
         RequireInScope(scope, path);
@@ -140,6 +141,7 @@ public sealed class FileIngestor(
             .OrderBy(file => file, StringComparer.Ordinal);
 
         var indexed = 0;
+        var walked = new List<WalkedFile>();
         foreach (var file in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -155,11 +157,14 @@ public sealed class FileIngestor(
             }
 
             var content = await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false);
-            indexed += await InsertChunksAsync(connection, projectId, file, content, handler, context, cancellationToken)
+            var (rows, hashes) = await InsertChunksAsync(connection, projectId, file, content, handler, context,
+                    cancellationToken)
                 .ConfigureAwait(false);
+            indexed += rows;
+            walked.Add(new WalkedFile(file, hashes));
         }
 
-        return indexed;
+        return new DirectoryIngestResult(indexed, walked);
     }
 
     /// <summary>
@@ -180,17 +185,19 @@ public sealed class FileIngestor(
     }
 
     /// <summary>Embeds one freshly inserted row when an engine is configured; deferred otherwise (FR-NM-3 s4; see docs/work/features-native-memory/native-memory.feature).</summary>
-    private async Task<int> InsertChunksAsync(SqliteConnection connection, string projectId, string path,
-        string content, IFileTypeHandler handler, string? context, CancellationToken cancellationToken, bool embedInline = true)
+    private async Task<(int Rows, List<string> Hashes)> InsertChunksAsync(SqliteConnection connection,
+        string projectId, string path, string content, IFileTypeHandler handler, string? context,
+        CancellationToken cancellationToken, bool embedInline = true)
     {
         var resolvedContext = context ?? ContextNaming.ProjectContext(projectId);
         var bucket = EntryBucket.For(resolvedContext, projectId);
         var (chunkMaxTokens, chunkOverlayTokens, chunkCountTokens) = await ChunkSizeForAsync(connection, cancellationToken)
             .ConfigureAwait(false);
         var chunks = handler.Chunker.Chunk(content, chunkMaxTokens, chunkOverlayTokens, chunkCountTokens);
+        var hashes = new List<string>(chunks.Count);
         if (chunks.Count == 0)
         {
-            return 0;
+            return (0, hashes);
         }
 
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
@@ -209,6 +216,7 @@ public sealed class FileIngestor(
         {
             var chunk = chunks[ordinal];
             var hash = ContentHash.Of(path, chunk);
+            hashes.Add(hash);
             // SourcePathQuery ANDs a "file#section" anchor against the FTS {source_file section}
             // columns, so a chunk with a null section can never satisfy one. Derived from the
             // chunk's own heading rather than left null; heading_path carries the full trail and
@@ -291,7 +299,7 @@ public sealed class FileIngestor(
                 .ConfigureAwait(false);
         }
 
-        return inserted > 0 ? 1 : 0;
+        return (inserted > 0 ? 1 : 0, hashes);
     }
 
     /// <summary>The engine an unconfigured bank will embed with once one is configured (docs/adr/0063).</summary>
