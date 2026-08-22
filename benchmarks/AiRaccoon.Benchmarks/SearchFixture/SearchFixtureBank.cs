@@ -1,6 +1,7 @@
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using System.Text;
 using AiRaccoon.Core.Chunking;
+using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Infrastructure.Chunking;
@@ -105,10 +106,16 @@ public sealed class SearchFixtureBank : IAsyncDisposable
             new JsonFileTypeHandler(new JsonFileTypeChunker(countTokens, markdownChunker, ChunkingDefaults.OverlayTokens))
         ]);
         var embedder = new EntryEmbedder(embeddingService, ModelMigrationLease, TimeProvider);
-        var fileIngestor = new FileIngestor(fileTypeMatcher, embedder, sourceStore, TimeProvider.System, embeddingService);
+        // Nothing drains this topic in the fixture: a real, unconsumed pump of any capacity.
+        IEventPump<EmbedDrainRequest> embedDrainPump = new EventPump<EmbedDrainRequest>(
+            new PumpTopic(Ceiling: 8, Capacity: 8, Coalesce: true));
+        var fileIngestor = new FileIngestor(fileTypeMatcher, sourceStore, TimeProvider.System, embeddingService,
+            NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
+            NullWatchStore.Instance, embedDrainPump);
         var noiseFilteringService = new NoiseFilteringService([]);
         var store = new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, TimeProvider.System,
-            NullLogger<SqliteMemoryStore>.Instance, noiseFilteringService, new SqliteSettingsStore(factory));
+            NullLogger<SqliteMemoryStore>.Instance, noiseFilteringService, new SqliteSettingsStore(factory),
+            embedDrainPump);
 
         // Rows land pending (no engine configured yet) so the fixture write loop pays for one
         // round trip per row, not one HTTP call per row; embedding happens once, batched, below.

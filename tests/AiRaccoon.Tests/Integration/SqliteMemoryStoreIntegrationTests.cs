@@ -435,7 +435,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         var replaced = await _store.ReplaceIfFileChangedAsync(
             "acme", file, "same-hash", TestContext.Current.CancellationToken);
 
-        replaced.ShouldBeFalse("the watch-digest gate must skip a fingerprint it already has on file");
+        replaced.Replaced.ShouldBeFalse("the watch-digest gate must skip a fingerprint it already has on file");
     }
 
     [Fact]
@@ -477,12 +477,12 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
 
         var first = await storeWithNoOpChunker.ReplaceIfFileChangedAsync(
             "acme", file, "unchanged-hash", TestContext.Current.CancellationToken);
-        first.ShouldBeTrue("no fingerprint on file yet, so the first digest must run");
+        first.Replaced.ShouldBeTrue("no fingerprint on file yet, so the first digest must run");
         (await CountCodeEntriesAsync(file)).ShouldBe(0, "the NoOp chunker never produces rows");
 
         var second = await storeWithNoOpChunker.ReplaceIfFileChangedAsync(
             "acme", file, "unchanged-hash", TestContext.Current.CancellationToken);
-        second.ShouldBeTrue(
+        second.Replaced.ShouldBeTrue(
             "a code file the NoOp chunker produced zero rows for must not be fingerprinted — RED " +
             "before the fix: this hash-skips (returns false) and the file is stuck that way forever");
 
@@ -492,12 +492,12 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
 
         var third = await storeWithRealChunker.ReplaceIfFileChangedAsync(
             "acme", file, "unchanged-hash", TestContext.Current.CancellationToken);
-        third.ShouldBeTrue("a real chunker landing must still be able to digest the file — no watch re-add needed");
+        third.Replaced.ShouldBeTrue("a real chunker landing must still be able to digest the file — no watch re-add needed");
         (await CountCodeEntriesAsync(file)).ShouldBeGreaterThan(0);
 
         var fourth = await storeWithRealChunker.ReplaceIfFileChangedAsync(
             "acme", file, "unchanged-hash", TestContext.Current.CancellationToken);
-        fourth.ShouldBeFalse("chunking succeeded this time, so the fingerprint is now recorded and hash-skip resumes");
+        fourth.Replaced.ShouldBeFalse("chunking succeeded this time, so the fingerprint is now recorded and hash-skip resumes");
     }
 
     private async Task<int> CountCodeEntriesAsync(string path)

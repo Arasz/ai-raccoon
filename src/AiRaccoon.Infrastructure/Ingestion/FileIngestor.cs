@@ -19,31 +19,22 @@ namespace AiRaccoon.Infrastructure.Ingestion;
 /// </summary>
 public sealed class FileIngestor(
     IFileTypeMatcher fileTypeMatcher,
-    IEntryEmbedder embedder,
     IMemorySourceStore sourceStore,
     TimeProvider timeProvider,
     IEmbeddingService embeddingService,
-    IIgnoreRulesProvider? ignoreRulesProvider = null,
-    ICodeFileTypeMatcher? codeFileTypeMatcher = null,
-    ICodeIngestor? codeIngestor = null,
-    IWatchStore? watchStore = null,
-    IEventPump<EmbedDrainRequest>? embedDrainPump = null) : IFileIngestor
+    IIgnoreRulesProvider ignoreRulesProvider,
+    ICodeFileTypeMatcher codeFileTypeMatcher,
+    ICodeIngestor codeIngestor,
+    IWatchStore watchStore,
+    IEventPump<EmbedDrainRequest> embedDrainPump) : IFileIngestor
 {
-    private readonly ICodeFileTypeMatcher _codeFileTypeMatcher = codeFileTypeMatcher ?? NullCodeFileTypeMatcher.Instance;
-    private readonly ICodeIngestor _codeIngestor = codeIngestor ?? NullCodeIngestor.Instance;
-    private readonly IIgnoreRulesProvider _ignoreRulesProvider = ignoreRulesProvider ?? NullIgnoreRulesProvider.Instance;
-    private readonly IWatchStore _watchStore = watchStore ?? NullWatchStore.Instance;
-    private readonly IEventPump<EmbedDrainRequest> _embedDrainPump = embedDrainPump ?? NullEmbedDrainPump.Instance;
-
     /// <summary>
-    ///     Set <paramref name="embedInline" /> false when the caller holds a write transaction: embedding
-    ///     runs the engine per chunk, and a lock held that long stalls another process's first bank open.
-    ///     Ignore rules apply here too, ahead of routing (B2/§2.1: ignore wins for both the memory
-    ///     and the code pipeline) — <see cref="ResolveIgnoreRootAsync" /> finds the right root even
-    ///     though (unlike <see cref="IngestDirectoryAsync" />) no walk root is given directly.
+    ///     Ignore rules apply ahead of routing, for both the memory and code pipelines —
+    ///     <see cref="ResolveIgnoreRootAsync" /> finds the right root. Rows are left <c>pending</c>;
+    ///     the caller enqueues the corpus's <see cref="EmbedDrainRequest" /> once it is safe to.
     /// </summary>
     public async Task<FileIngestResult> IngestFileAsync(SqliteConnection connection, string projectId, string path,
-        string? context, CancellationToken cancellationToken, bool embedInline = true)
+        string? context, CancellationToken cancellationToken)
     {
         await RequireInScopeAsync(connection, projectId, path, cancellationToken).ConfigureAwait(false);
 
@@ -53,7 +44,7 @@ public sealed class FileIngestor(
         }
 
         var ignoreRoot = await ResolveIgnoreRootAsync(connection, projectId, path, cancellationToken).ConfigureAwait(false);
-        var ignoreRules = await _ignoreRulesProvider.LoadAsync(ignoreRoot, cancellationToken).ConfigureAwait(false);
+        var ignoreRules = await ignoreRulesProvider.LoadAsync(ignoreRoot, cancellationToken).ConfigureAwait(false);
         if (IsIgnored(ignoreRules, ignoreRoot, path))
         {
             return new FileIngestResult(0, true);
@@ -66,34 +57,26 @@ public sealed class FileIngestor(
 
         var content = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
         var (rows, hashes) = await InsertChunksAsync(connection, projectId, path, content, handler, context,
-                cancellationToken, embedInline)
+                cancellationToken)
             .ConfigureAwait(false);
         return new FileIngestResult(rows, true, hashes);
     }
 
     /// <summary>
-    ///     OQ4 (docs/work/2026-08-21-code-search-implementation-plan.md §12.4): explicit single-file
-    ///     ingest routes code extensions to the code corpus too. Not a code file at all — fingerprint
-    ///     eligible as before, nothing will ever come of it regardless of chunker. A code file the
-    ///     chunker produced zero rows for is NOT fingerprint eligible (B1) UNLESS the content is
-    ///     empty/whitespace-only (S3): a stand-in chunker (e.g. `NoOpCodeChunker`) producing zero
-    ///     rows for real content must not let the watch digest settle into treating the file as
-    ///     done, but a genuinely empty/whitespace-only file chunks to zero rows FOREVER regardless
-    ///     of chunker quality — refusing to fingerprint it would re-ingest it on every poll forever.
-    ///     #436: <see cref="FileIngestResult.CodeChunkHashes" /> follows the chunker's actual chunk
-    ///     count, not whether any row was freshly inserted, so a fully rediscovered (deduped) file
-    ///     still reports its real, non-empty current chunk set. It stays null (no prune) exactly
-    ///     when the zero-chunk/non-whitespace S3 guard applies.
+    ///     Explicit single-file ingest also routes code extensions to the code corpus
+    ///     (docs/work/2026-08-21-code-search-implementation-plan.md §12.4). Fingerprint-eligible
+    ///     when chunking produced rows, or when zero rows is because the content is
+    ///     empty/whitespace-only — never for a stand-in chunker's zero rows on real content.
     /// </summary>
     private async Task<FileIngestResult> IngestAsCodeAsync(SqliteConnection connection, string projectId, string path,
         CancellationToken cancellationToken)
     {
-        if (!_codeFileTypeMatcher.IsCodeFile(path))
+        if (!codeFileTypeMatcher.IsCodeFile(path))
         {
             return new FileIngestResult(0, true);
         }
 
-        var result = await _codeIngestor.IngestFileAsync(connection, projectId, path, cancellationToken)
+        var result = await codeIngestor.IngestFileAsync(connection, projectId, path, cancellationToken)
             .ConfigureAwait(false);
         if (result.ChunkHashes is { Count: > 0 })
         {
@@ -106,19 +89,17 @@ public sealed class FileIngestor(
     }
 
     /// <summary>
-    ///     B2: the `ai-raccoon.ignore` root for an explicit single-file ingest — the containing
-    ///     registered watch if one exists (longest/most specific match), else the ingest-scope
-    ///     allowlist entry that admits the path (same tie-break), else the file's own parent
-    ///     directory as the last resort. `IgnoreRulesProvider` reads exactly one file at whatever
-    ///     root it is given — no nested discovery — so picking the wrong root here silently misses
-    ///     the real ignore file instead of erroring.
+    ///     The `ai-raccoon.ignore` root for an explicit single-file ingest: the containing
+    ///     registered watch if one exists (longest match), else the ingest-scope allowlist entry
+    ///     that admits the path, else the file's own parent directory. `IgnoreRulesProvider` reads
+    ///     one file at whatever root it is given — no nested discovery.
     /// </summary>
     private async Task<string> ResolveIgnoreRootAsync(SqliteConnection connection, string projectId, string path,
         CancellationToken cancellationToken)
     {
         var normalized = IngestPath.Normalize(path);
 
-        var watches = await _watchStore.ListWatchesAsync(cancellationToken).ConfigureAwait(false);
+        var watches = await watchStore.ListWatchesAsync(cancellationToken).ConfigureAwait(false);
         var containingWatch = watches
             .Where(w => w.ProjectId == projectId && IngestPath.IsWithinScope(normalized, w.Path))
             .OrderByDescending(w => w.Path.Length)
@@ -147,41 +128,51 @@ public sealed class FileIngestor(
         var scope = await ReadScopeAsync(connection, projectId, cancellationToken).ConfigureAwait(false);
         RequireInScope(scope, path);
 
-        var ignoreRules = await _ignoreRulesProvider.LoadAsync(path, cancellationToken).ConfigureAwait(false);
+        var ignoreRules = await ignoreRulesProvider.LoadAsync(path, cancellationToken).ConfigureAwait(false);
         var files = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
             .Where(file => !IsHidden(path, file) && !IsIgnored(ignoreRules, path, file) && IsInScope(scope, file))
             .OrderBy(file => file, StringComparer.Ordinal);
 
         var indexed = 0;
+        var memoryRowsWritten = false;
+        var codeRowsWritten = false;
         var walked = new List<WalkedFile>();
         foreach (var file in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!fileTypeMatcher.TryGetHandler(file, out var handler))
             {
-                if (_codeFileTypeMatcher.IsCodeFile(file))
+                if (codeFileTypeMatcher.IsCodeFile(file))
                 {
-                    indexed += (await _codeIngestor.IngestFileAsync(connection, projectId, file, cancellationToken, scope)
-                        .ConfigureAwait(false)).Rows;
+                    var codeResult = await codeIngestor.IngestFileAsync(connection, projectId, file, cancellationToken, scope)
+                        .ConfigureAwait(false);
+                    indexed += codeResult.Rows;
+                    codeRowsWritten |= codeResult.Rows > 0;
                 }
 
                 continue;
             }
 
             var content = await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false);
-            // WP11-B2 (Finding (a)): embedInline false — a per-file generator call, serially, on
-            // the shared session was a third uncoordinated consumer of the inference pool. One
-            // enqueue below covers the whole walk instead.
             var (rows, hashes) = await InsertChunksAsync(connection, projectId, file, content, handler, context,
-                    cancellationToken, embedInline: false)
+                    cancellationToken)
                 .ConfigureAwait(false);
             indexed += rows;
+            memoryRowsWritten |= rows > 0;
             walked.Add(new WalkedFile(file, hashes));
         }
 
-        if (indexed > 0)
+        // One signal per corpus the walk actually wrote rows for — never per file (a per-file
+        // generator call, serially, on the shared inference session was a third uncoordinated
+        // consumer of the pool alongside the two maintenance jobs).
+        if (memoryRowsWritten)
         {
-            _embedDrainPump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Memory));
+            embedDrainPump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Memory));
+        }
+
+        if (codeRowsWritten)
+        {
+            embedDrainPump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Code));
         }
 
         return new DirectoryIngestResult(indexed, walked);
@@ -204,10 +195,11 @@ public sealed class FileIngestor(
             : [content];
     }
 
-    /// <summary>Embeds one freshly inserted row when an engine is configured; deferred otherwise (FR-NM-3 s4; see docs/work/features-native-memory/native-memory.feature).</summary>
+    /// <summary>Leaves every freshly inserted row `embed_state = 'pending'` — the caller enqueues
+    /// the corpus's drain once it is safe to (see <see cref="IngestDirectoryAsync" />).</summary>
     private async Task<(int Rows, List<string> Hashes)> InsertChunksAsync(SqliteConnection connection,
         string projectId, string path, string content, IFileTypeHandler handler, string? context,
-        CancellationToken cancellationToken, bool embedInline = true)
+        CancellationToken cancellationToken)
     {
         var resolvedContext = context ?? ContextNaming.ProjectContext(projectId);
         var bucket = EntryBucket.For(resolvedContext, projectId);
@@ -255,14 +247,12 @@ public sealed class FileIngestor(
                         }, cancellationToken))
                 .ConfigureAwait(false);
 
-            long chunkId;
-            if (existingId is not null)
+            if (existingId is null)
             {
-                chunkId = existingId.Value;
-            }
-            else
-            {
-                await connection.ExecuteAsync(
+                // InsertEntry is ON CONFLICT DO NOTHING: affected rows already says whether this
+                // call won the insert or a concurrent same-bucket insert got there first — no
+                // follow-up SELECT needed to find out.
+                var affected = await connection.ExecuteAsync(
                         Def(MemorySql.InsertEntry,
                             new
                             {
@@ -284,35 +274,15 @@ public sealed class FileIngestor(
                             },
                             cancellationToken))
                     .ConfigureAwait(false);
-
-                var newId = await connection.ExecuteScalarAsync<long?>(
-                        Def(MemorySql.SelectChunkIdByPathAndHashInBucket,
-                            new
-                            {
-                                hash,
-                                path,
-                                scope = bucket.Scope,
-                                projectId = bucket.ProjectId,
-                                contextLabel = bucket.ContextLabel,
-                                workspaceId = bucket.WorkspaceId
-                            }, cancellationToken))
-                    .ConfigureAwait(false);
-                if (newId is null)
+                if (affected > 0)
                 {
-                    continue;
+                    inserted++;
                 }
 
-                chunkId = newId.Value;
-                if (embedInline)
-                {
-                    await embedder.EmbedIfConfiguredAsync(connection, chunkId, chunk, cancellationToken)
-                        .ConfigureAwait(false);
-                }
-
-                inserted++;
                 continue;
             }
 
+            var chunkId = existingId.Value;
             await connection.ExecuteAsync(
                     Def(MemorySql.SetChunkPosition, new { id = chunkId, chunkIndex = ordinal, totalChunks = chunks.Count },
                         cancellationToken))
@@ -429,9 +399,9 @@ public sealed class FileIngestor(
     /// </summary>
     private static bool IsHidden(string root, string path) => WatchDenySet.Excludes(root, path);
 
-    /// <summary>`ai-raccoon.ignore` check against the walk root's rules (§2.1): never true for the
-    /// ignore file's own path — it is unindexable by extension anyway, but a `*` pattern must not
-    /// hide it from the caller's own re-scan/reconcile bookkeeping.</summary>
+    /// <summary>`ai-raccoon.ignore` check against the walk root's rules: never true for the ignore
+    /// file's own path — a `*` pattern must not hide it from the caller's own re-scan/reconcile
+    /// bookkeeping.</summary>
     private static bool IsIgnored(IgnoreRules rules, string root, string path)
     {
         if (!rules.HasRules)

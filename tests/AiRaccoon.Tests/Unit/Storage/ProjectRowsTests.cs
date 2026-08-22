@@ -3,6 +3,7 @@ using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -37,11 +38,13 @@ public sealed class ProjectRowsTests : IDisposable
         var options = TestData.CreateInfrastructureOptions(_dataRoot);
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         var embedder = new EntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider);
-        _store = new SqliteMemoryStore(_factory, new SqliteMemorySourceStore(_factory),
-            new FileIngestor(new FileTypeMatcher([]), embedder, new SqliteMemorySourceStore(_factory),
-                new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService()),
+        var fileIngestor = new FileIngestor(new FileTypeMatcher([]), new SqliteMemorySourceStore(_factory),
+            new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService(),
+            NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
+            NullWatchStore.Instance, NullEmbedDrainPump.Instance);
+        _store = new SqliteMemoryStore(_factory, new SqliteMemorySourceStore(_factory), fileIngestor,
             embedder, new FakeTimeProvider(FixedNow), NullLogger<SqliteMemoryStore>.Instance,
-            new NoiseFilteringService([]), new SqliteSettingsStore(_factory));
+            new NoiseFilteringService([]), new SqliteSettingsStore(_factory), NullEmbedDrainPump.Instance);
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);

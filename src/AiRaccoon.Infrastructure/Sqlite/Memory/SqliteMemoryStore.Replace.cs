@@ -1,3 +1,6 @@
+using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Embedding;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
@@ -15,7 +18,7 @@ public sealed partial class SqliteMemoryStore
     ///     <paramref name="fileHash" />-comparing <c>guard</c>), not a separate connection — two
     ///     digests racing the same stale-to-new transition still chunk and embed exactly once.
     /// </summary>
-    public Task<bool> ReplaceIfFileChangedAsync(string projectId, string path, string fileHash,
+    public Task<ReplaceResult> ReplaceIfFileChangedAsync(string projectId, string path, string fileHash,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
@@ -63,12 +66,12 @@ public sealed partial class SqliteMemoryStore
     ///         until it drained.
     ///     </para>
     ///     <para>
-    ///         The ingest keeps embedding inline, as this path always has, so it deliberately does
-    ///         NOT run inside the prune's transaction — embedding runs the engine per chunk and a
-    ///         write lock held that long stalls another process's first bank open. Only the prune
-    ///         takes the lock, and only for one DELETE. A crash between the two leaves the stale
-    ///         rows exactly where today's code leaves them, so the window costs nothing that is not
-    ///         already the status quo.
+    ///         The ingest leaves its row(s) `embed_state = 'pending'` and deliberately does NOT run
+    ///         inside the prune's transaction — each insert autocommits, so by the time this method
+    ///         enqueues the embed-drain signal below, the rows it is signalling for already exist.
+    ///         Only the prune takes the write lock, and only for one DELETE. A crash between the two
+    ///         leaves the stale rows exactly where today's code leaves them, so the window costs
+    ///         nothing that is not already the status quo.
     ///     </para>
     ///     No watch fingerprint is written: a direct ingest of a file nobody watches must not claim
     ///     one.
@@ -85,6 +88,8 @@ public sealed partial class SqliteMemoryStore
         await PruneChunksNotIn(connection, projectId, path, ingestResult.ChunkHashes ?? [],
                 ingestResult.CodeChunkHashes, cancellationToken)
             .ConfigureAwait(false);
+
+        embedDrainPump.SignalWritten(ingestResult.WrittenCorpus);
         return ingestResult.RowsInserted;
     }
 
@@ -143,12 +148,12 @@ public sealed partial class SqliteMemoryStore
         }
     }
 
-    private async Task<bool> ReplaceIfChangedCoreAsync(string projectId, string path, string fileHash,
+    private async Task<ReplaceResult> ReplaceIfChangedCoreAsync(string projectId, string path, string fileHash,
         Func<SqliteConnection, Task<bool>>? guard, CancellationToken cancellationToken)
     {
-        var (ran, _) = await ReplaceCoreAsync(projectId, path, fileHash, guard, context: null,
+        var (ran, _, corpus) = await ReplaceCoreAsync(projectId, path, fileHash, guard, context: null,
             fingerprint: true, cancellationToken).ConfigureAwait(false);
-        return ran;
+        return new ReplaceResult(ran, corpus);
     }
 
     /// <summary>
@@ -160,15 +165,13 @@ public sealed partial class SqliteMemoryStore
     ///     each caller's own decision (<see cref="ReplaceIfFileChangedAsync" /> passes one,
     ///     <see cref="ReplaceAsync" /> passes none); this method knows nothing about fingerprints.
     /// </summary>
-    private async Task<(bool Ran, int Rows)> ReplaceCoreAsync(string projectId, string path, string? fileHash,
-        Func<SqliteConnection, Task<bool>>? guard, string? context, bool fingerprint,
+    private async Task<(bool Ran, int Rows, CorpusKind Corpus)> ReplaceCoreAsync(string projectId, string path,
+        string? fileHash, Func<SqliteConnection, Task<bool>>? guard, string? context, bool fingerprint,
         CancellationToken cancellationToken)
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
 
-        // WP11 Finding (b): which writer holds the bank's write lock long enough for another one
-        // to time out at 5s was not established from the log alone — this is the instrumentation
-        // that answers it, a logged value, never a threshold assertion.
+        // Logs how long the write lock was held — a measurement, never a threshold assertion.
         var heldFrom = timeProvider.GetTimestamp();
         await connection.ExecuteAsync(
                 new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
@@ -181,7 +184,7 @@ public sealed partial class SqliteMemoryStore
                         new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
                     .ConfigureAwait(false);
                 Log.TransactionHeld(logger, timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds, 0);
-                return (false, 0);
+                return (false, 0, CorpusKind.Neither);
             }
 
             var pathPrefix = LikePattern.Escape(path) + "/%";
@@ -204,7 +207,7 @@ public sealed partial class SqliteMemoryStore
             // to ICodeIngestor internally (FileIngestor.IngestFileAsync) — one re-ingest call
             // covers both corpora; each ingestor's own matcher decides whether it does anything.
             var ingestResult = await fileIngestor
-                .IngestFileAsync(connection, projectId, path, context, cancellationToken, false)
+                .IngestFileAsync(connection, projectId, path, context, cancellationToken)
                 .ConfigureAwait(false);
             await connection.ExecuteAsync(
                     Def(MemorySql.RestoreQueueRowsStillBacked, null, cancellationToken))
@@ -229,7 +232,7 @@ public sealed partial class SqliteMemoryStore
                     new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
             Log.TransactionHeld(logger, timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds, ingestResult.RowsInserted);
-            return (true, ingestResult.RowsInserted);
+            return (true, ingestResult.RowsInserted, ingestResult.WrittenCorpus);
         }
         catch
         {

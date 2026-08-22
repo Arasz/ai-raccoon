@@ -1,5 +1,4 @@
 using AiRaccoon.Core.Ingestion;
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -7,8 +6,6 @@ using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Time.Testing;
-using NSubstitute;
 using Shouldly;
 using Xunit;
 
@@ -24,9 +21,7 @@ namespace AiRaccoon.Tests.Integration.Ingestion;
 public sealed class FileIngestorCodeRoutingTests : IDisposable
 {
     private readonly SqliteConnection _conn;
-    private readonly IModelMigrationLease _modelMigrationLease = Substitute.For<IModelMigrationLease>();
     private readonly string _testDir;
-    private readonly TimeProvider _timeProvider = new FakeTimeProvider();
 
     public FileIngestorCodeRoutingTests()
     {
@@ -57,16 +52,18 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
                 new InfrastructureOptions { DataRoot = _testDir, Rid = "osx-arm64", Scope = InstallScope.User },
                 NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _testDir, Rid = "osx-arm64", Scope = InstallScope.User })));
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker())]);
-        var embedder = new EntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider);
 
         if (!withCodeSupport)
         {
-            return new FileIngestor(matcher, embedder, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService());
+            return new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
+                NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
+                NullWatchStore.Instance, NullEmbedDrainPump.Instance);
         }
 
         var codeIngestor = new CodeIngestor(new CodeFileTypeMatcher(), new StubCodeChunker(), TimeProvider.System);
-        return new FileIngestor(matcher, embedder, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
-            codeFileTypeMatcher: new CodeFileTypeMatcher(), codeIngestor: codeIngestor);
+        return new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
+            NullIgnoreRulesProvider.Instance, new CodeFileTypeMatcher(), codeIngestor,
+            NullWatchStore.Instance, NullEmbedDrainPump.Instance);
     }
 
     [Fact]
@@ -235,10 +232,10 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
                 new InfrastructureOptions { DataRoot = _testDir, Rid = "osx-arm64", Scope = InstallScope.User },
                 NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _testDir, Rid = "osx-arm64", Scope = InstallScope.User })));
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker())]);
-        var embedder = new EntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider);
         var codeIngestor = new CodeIngestor(new CodeFileTypeMatcher(), new StubCodeChunker(), TimeProvider.System);
-        return new FileIngestor(matcher, embedder, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
-            new IgnoreRulesProvider(), new CodeFileTypeMatcher(), codeIngestor, watchStore);
+        return new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
+            new IgnoreRulesProvider(), new CodeFileTypeMatcher(), codeIngestor,
+            watchStore ?? NullWatchStore.Instance, NullEmbedDrainPump.Instance);
     }
 
     private async Task<IWatchStore> RegisterWatchAsync(string path)

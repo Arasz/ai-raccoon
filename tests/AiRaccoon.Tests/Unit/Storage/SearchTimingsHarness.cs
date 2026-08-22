@@ -3,6 +3,7 @@ using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -26,11 +27,12 @@ internal static class SearchTimingsHarness
         IEntryEmbedder? embedder = null)
     {
         embedder ??= new EntryEmbedder(TestData.CreateEmbeddingService(), ModelMigrationLease, TimeProvider);
-        return new SqliteMemoryStore(factory, new SqliteMemorySourceStore(factory),
-            new FileIngestor(new FileTypeMatcher([]), embedder, new SqliteMemorySourceStore(factory), timeProvider,
-                TestData.CreateEmbeddingService()),
+        var fileIngestor = new FileIngestor(new FileTypeMatcher([]), new SqliteMemorySourceStore(factory), timeProvider,
+            TestData.CreateEmbeddingService(), NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance,
+            NullCodeIngestor.Instance, NullWatchStore.Instance, NullEmbedDrainPump.Instance);
+        return new SqliteMemoryStore(factory, new SqliteMemorySourceStore(factory), fileIngestor,
             embedder, timeProvider, NullLogger<SqliteMemoryStore>.Instance,
-            new NoiseFilteringService([]), new SqliteSettingsStore(factory));
+            new NoiseFilteringService([]), new SqliteSettingsStore(factory), NullEmbedDrainPump.Instance);
     }
 
     /// <summary>

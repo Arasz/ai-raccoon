@@ -4,6 +4,7 @@ using AiRaccoon.Core.Memory.Filtering.Policies;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -46,11 +47,13 @@ public sealed class SqliteMemoryStoreNoiseEntryTests : IDisposable
     {
         var entryEmbedder = new EntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider);
         var noiseFilteringService = new NoiseFilteringService([new HermesProcessNoisePolicy()]);
-        return new SqliteMemoryStore(_factory, new SqliteMemorySourceStore(_factory),
-            new FileIngestor(new FileTypeMatcher([]), entryEmbedder, new SqliteMemorySourceStore(_factory), new FakeTimeProvider(FixedNow),
-                TestData.CreateEmbeddingService()),
+        var fileIngestor = new FileIngestor(new FileTypeMatcher([]), new SqliteMemorySourceStore(_factory), new FakeTimeProvider(FixedNow),
+            TestData.CreateEmbeddingService(), NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance,
+            NullCodeIngestor.Instance, NullWatchStore.Instance, NullEmbedDrainPump.Instance);
+        return new SqliteMemoryStore(_factory, new SqliteMemorySourceStore(_factory), fileIngestor,
             entryEmbedder, new FakeTimeProvider(FixedNow), NullLogger<SqliteMemoryStore>.Instance,
-            noiseFilteringService, new SqliteSettingsStore(_factory), NoOpNoiseShadowObserverForTests.Instance, noiseEntryStore);
+            noiseFilteringService, new SqliteSettingsStore(_factory), NullEmbedDrainPump.Instance,
+            NoOpNoiseShadowObserverForTests.Instance, noiseEntryStore);
     }
 
     [Fact]
