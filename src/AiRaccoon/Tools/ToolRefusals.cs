@@ -36,6 +36,7 @@ internal static partial class ToolRefusals
         [typeof(SyncConflictException)] = "sync-conflict",
         [typeof(SyncNetworkException)] = "sync-network",
         [typeof(SyncCorruptFileException)] = "sync-corrupt-file",
+        [typeof(SyncTamperedRemoteException)] = "sync-tampered-remote",
         [typeof(AccessDeniedException)] = "access-denied",
         // ADR-0076: refuses every bank operation for the duration of a model migration.
         [typeof(ModelMigrationInProgressException)] = "model-migration-in-progress",
@@ -71,7 +72,7 @@ internal static partial class ToolRefusals
 
     /// <summary>Expected refusals remain visible at Warning without being logged as errors.</summary>
     private static readonly HashSet<string> WarningPrefixes =
-        ["sync-network", "sync-corrupt-file", "unknown-hash", "embedding-install-replaced", "code-engine-unloadable"];
+        ["sync-network", "sync-corrupt-file", "sync-tampered-remote", "unknown-hash", "embedding-install-replaced", "code-engine-unloadable"];
 
     /// <summary>
     ///     The wire prefix for a known refusal, or null when the exception is a genuine failure.
