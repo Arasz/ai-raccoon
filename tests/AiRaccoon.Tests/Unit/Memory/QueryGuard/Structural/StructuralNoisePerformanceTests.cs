@@ -16,6 +16,7 @@ namespace AiRaccoon.Tests.Unit.Memory.QueryGuard.Structural;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
+[Trait(TestCategories.Performance, TestCategories.Benchmark)]
 public class StructuralNoisePerformanceTests
 {
     private static readonly string[] SampleQueries =

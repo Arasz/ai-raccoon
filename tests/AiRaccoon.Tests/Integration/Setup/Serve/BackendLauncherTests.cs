@@ -126,16 +126,18 @@ public sealed class BackendLauncherTests : IDisposable
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         var port = HoldListener(ForeignServerResponse);
-        var stopwatch = Stopwatch.StartNew();
 
         var result = await Launcher().AcquireAsync(port, ServeExecutable, ServeArguments(port),
             TestContext.Current.CancellationToken);
-        stopwatch.Stop();
 
         result.Url.ShouldBeNull();
+        // ServeExitCode IS the fast-path/budget-expiry discriminator, so no clock is needed to
+        // tell them apart: the HasExited fast path reports the child's exit code, and budget
+        // expiry reports null — see Acquire_WhenTheBackendNeverAnswers_GivesUpAtTheBudget, which
+        // asserts exactly that null on the other path. This used to also assert
+        // `stopwatch.Elapsed < 20s`, which added no discrimination and could only ever go red
+        // because the host was busy (owner ruling 2026-08-22: no test asserts wall clock).
         result.ServeExitCode.ShouldBe(ExitCode.PortInUse);
-        // Well inside the budget: this is the HasExited fast path, not budget expiry.
-        stopwatch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(20));
     }
 
     [Fact]
@@ -147,7 +149,6 @@ public sealed class BackendLauncherTests : IDisposable
         var timers = new TimerRegistrations(clock);
         var launcher = new BackendLauncher(TestData.CreateServerProbe(), BackendLauncher.DefaultBudget,
             timers, NullLogger<BackendLauncher>.Instance);
-        var stopwatch = Stopwatch.StartNew();
 
         // A process that starts, never listens and outlives the budget.
         lease.ReleaseForBind();
@@ -158,13 +159,15 @@ public sealed class BackendLauncherTests : IDisposable
         acquire.IsCompleted.ShouldBeFalse();
 
         clock.Advance(BackendLauncher.DefaultBudget);
+        // The 10s ceiling is a hang guard, not a budget: it is a THIRD of DefaultBudget, so a
+        // launcher that waited on the real clock instead of the injected one cannot reach this
+        // line at all. That is what proves "no wall-clock time was spent waiting the budget out"
+        // — the `stopwatch.Elapsed < DefaultBudget` assertion this replaces asserted the same
+        // thing more loosely, on the system clock, and could go red purely from host load.
         var result = await acquire.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
-        stopwatch.Stop();
 
         result.Url.ShouldBeNull();
         result.ServeExitCode.ShouldBeNull();
-        // The budget expired on the fake clock, so no wall-clock time was spent waiting it out.
-        stopwatch.Elapsed.ShouldBeLessThan(BackendLauncher.DefaultBudget);
     }
 
     /// <summary>
