@@ -1,8 +1,7 @@
-# Plan — post-delta session 3 (rev 1.2 — WP11's gate answered; G1–G15 still pending)
+# Plan — post-delta session 3 (rev 1.4 — closed 2026-08-23; WP12-B/C/D/E, WP10 and WP6 carried to session 4)
 
 **Date:** 2026-08-22 · **Base:** main `021d6c17` (v1.32.0 released 14:00:31Z **and published to
-nuget.org**; PRs #463/#464/#466/#467/#468 merged) · **Status:** rev 1.2 — **G1–G15 still
-pending**; **G16–G19 answered** (`docs/work/2026-08-22-post-delta-3-wp11-feedback.md`), so WP11 is
+nuget.org**; PRs #463/#464/#466/#467/#468 merged) · **Status:** rev 1.4 — **closed 2026-08-23** (G1–G15 answered 15/15 APPROVE in `docs/work/2026-08-22-post-delta-3-feedback.md`; G16–G19 answered; G20–G22 unanswered, carried to session 4); **G16–G19 answered** (`docs/work/2026-08-22-post-delta-3-wp11-feedback.md`), so WP11 is
 open. No other gated work package starts until its gate is answered, except the two marked *ungated* ·
 **Task:** `post-delta-3` · **Lane:** architect (plan + gate), Opus.
 
@@ -55,6 +54,26 @@ nuget.org flat-container index for `ai-raccoon`; `docs/work/2026-08-22-post-delt
     inference for the code engine (**G22**; architect, research only).
 13. **WP6 — #455 re-derive corpus, queries and the parity golden (G14, scoped by G9). LAST**, per
     the owner's ruling of 2026-08-22 ~19:38: everything else finishes before the corpus moves under it.
+
+## Session outcome (rev 1.4 — closing record, 2026-08-23)
+
+| Todo item | Result |
+|---|---|
+| 1 plan + gate | #471 merged; gate G1–G15 answered 15/15 APPROVE; WP11 gate G16/G18/G19 APPROVE, G17 CHANGE (one channel-based pump); WP12 gate G20–G22 **unanswered** (form open, no feedback file) |
+| 2 WP7 | #474 investigation merged; mitigations applied: `pull.rebase=false`/`pull.ff=only`, ruleset 21200876 (`non_fast_forward` on `task/**`, `fix/**`); #479 filed for the unattributed actor; settings.json soft-deny stays owner-only |
+| 3 WP5 | #473 runbook + `scripts/verify-history-scrubbed.py` merged; S6b push stays owner-only, after WP6 |
+| 4 rev 1.1/1.2/1.3 | #478, #508 merged |
+| 5 WP1 | #483 merged (`search.adjustment` exported) |
+| 6 WP2 | #496 + #501 merged (graph-pooled override, distinct-second-output guard); #497 filed |
+| 7 WP4 | #486 merged (p95 leg split, fixture-owned sweep) |
+| 9 WP3 | #481 merged (`code_entries` prune leg); #485 filed |
+| 10 WP8 / WP9 | #491 merged (AND-under-match re-pinned); ADR-0089 Accepted + 0071 row names 418 in #480 |
+| 11 WP11 | **A** #492 (`embedding.threads`, EventId 419) · **B1** #490 (`EventPump<T>`, metrics first topic) · **B2** #507 (embed drain topic, three producers, inline watch drain deleted) · **C** #517 (`maintenance.embed-rows-per-run.global`, default 128, ceiling 4096, `IMaintenanceJob` → `ValueTask<bool>`) · ADR-0091 #516 · FileIngestor required deps + `embedInline` removed + watch-digest signals the written corpus #518 (#519 filed) |
+| 12 WP12 | **A** #511 **closed unmerged**: six 150 s windows, branch never faster than main (aggregate ~30 % slower under lane contention) — do not ship · **B, D, E** gated on G20–G22, **carried** · **C** not started, **carried** (#477) |
+| 13 WP6 | **parked LAST** per owner: branch `task/pd3-455-public-benchmark-corpus` @ `ea174faf`, draft #499; resume re-runs the parity/retrieval gate in the foreground |
+| WP10 | G15 approved, **not started — carried** |
+
+Release: the perf work ships as **1.33.0** (VERSION bump PR after the pre-release checklist on `a52b00dd`); the nuget publish approval is the owner's. Next session: `post-delta-4` (owner instruction 2026-08-23).
 
 ---
 

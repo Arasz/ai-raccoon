@@ -1,15 +1,15 @@
 {
-  "lastUpdated": "2026-08-22",
+  "lastUpdated": "2026-08-23",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
     {
-      "id": "1.32.0-check",
-      "title": "1.32.0 post-publish check: nuget package proven, code model on the main bank, repo-root watches, full manual checklist; fixes shipped as 1.32.1/1.32.2/1.32.3",
-      "pr": 469,
+      "id": "post-delta-3",
+      "title": "post-delta-3: plan + owner gate (G1–G15 15/15, G16–G19), 16 PRs merged incl. the embed/ingest load governor (EventPump, embed drain topic, ORT thread cap, rows-per-run) and FileIngestor required deps; WP12-A measured negative; WP12-B/C/D/E, WP10, WP6 carried to post-delta-4",
+      "pr": 471,
       "merged": true,
-      "date": "2026-08-22",
-      "summary": "Published 1.32.0 proven by SHA (the installed tool had been the release run's local pack). Main bank: live server moved off 1.29.0, faxenoff/code-daemon-embed-v1 activated, repo-root watches for all 8 repos, ai-raccoon.ignore. Checklist 28/28: 24 pass / 4 substituted / 0 fail; the 4 substituted items then driven live on merged main (exit 23 via a fake 500 settings server; sync HMAC tamper refusal against a local MinIO — both first-ever). Defects found and fixed: #470 manifest pooling.mode (#475), #472 bare 500 on code-engine refusals (#476, #482), #484 S3 --region redirected to AWS (#487), #494 watch events under hidden/deny-set dirs ingested agent worktrees — ~20k duplicate rows on the live bank (#495 mitigation, #502 fix), #489 chunk labelled with the next heading (#500), #509 a directory's own watch event cascade-deleted its files (#510). Main was red since #492 (class-level traits, #505). Releases: 1.32.1 (6171a36b), 1.32.2 (b56d7fb3), 1.32.3 (#509). Tests: no wall-clock verdicts (#506) — the flaky watch test was #509. Filed, not started: #477 job metrics, #479 unattributed force-pushes (post-delta-3). Live bank: manifest still says 'cls' until the owner runs 'model set code default' after the leak prune; two racing 'serve --restart's caused transient 'database is locked'."
+      "date": "2026-08-23",
+      "summary": "Plan rev 1.0→1.4 (#471, #478, #508) with two owner-gate forms answered (G1–G15 15/15 APPROVE; G16/G18/G19 APPROVE, G17 CHANGE → one bounded-channel pump, ADR-0091 #516) and one unanswered (G20–G22, WP12). Merged: #473 S6b runbook + verify-history-scrubbed.py; #474 force-push investigation (git pull.rebase=false/ff=only, ruleset 21200876 non_fast_forward on task/** fix/**; #479 filed); #480 ADR-0089 Accepted + EventId 418 row; #481 code_entries prune leg (#436; #485 filed); #483 search.adjustment exported (#465); #486 ParityGate p95 leg split (fixture-owned sweep); #490 EventPump<T> in Core (FullMode.Wait + TryWrite only, reservation soft cap, metrics first topic); #491 AND-under-match anchor (#454); #492 embedding.threads ORT intra-op cap (EventId 419; merged --admin past red build-fast — peer #505 fixed; rule: never --admin past FAILURE); #496+#501 graph-pooled override + distinct-second-output guard (#459; #497 filed); #507 embed drain topic, EmbedDrainService single consumer, three producers, inline watch drain deleted; #517 maintenance.embed-rows-per-run.global (default 128, ceiling 4096 per ADR-0010, warn-once per distinct bad value, EventId 1006; IMaintenanceJob → ValueTask<bool>); #518 FileIngestor required deps (five optional Null defaults gone), embedInline removed (the drain is the only embedder), watch digest signals the corpus actually written (ReplaceResult), one EmbedDrainSignal mapping, NullEmbedDrainPump moved to tests (#519 filed for TestData.CreateMemoryStore). Profile (#508): ingest 0.34 % / drain 99.66 % of wall, InferenceSession.Run 99.6 % of the drain. WP12-A length-sorted batches (#511) closed unmerged: never faster than main over six 150 s windows. Lanes killed twice by usage limits; uncommitted GREEN work rescued as pushed WIP commits. Release 1.33.0 = checklist on a52b00dd then VERSION bump; owner instruction: start post-delta-4 after publish."
     },
     {
       "id": "1.32.0-check",
@@ -300,10 +300,15 @@
       "summary": "Live test of the 7721 serve + hermes bridge against the real bank. 23/23 tools exercised on an isolated test project with zero residue verified; watch cycle proven end-to-end; metrics = memory_stats + queue meta + maintenance-stats (OTLP export off, /metrics 404). DB: 13,523 entries all embedded, 0 TTLs, 8 stale Active workspaces. Promotion queue: 998 bank-wide vs reserved ~200, borrowing, shared tier = 1 row, extraction propose-only. BUG (code+experiment): DeleteBySourcePath matches source_file not path, so the watch digest deletes manual memory_write rows citing a watched file (2/2 collateral victims in the test). Full report: docs/work/2026-08-09-ai-raccoon-mem-test.md."
     }
   ],
-  "next": "#477 job-level metrics (MaintenanceJobRunner/WatchCatchUp series into memory_performance); owner runs 'ai-raccoon model set code default' on the live bank once the #494 leak prune has drained (repairs the manifest's pooling.mode, re-embeds all code rows); #459 (post-delta-3); ADR-0086 amendment for the #494 event filter; feed-badger: checklist template item 'source-path-anchor-resolves-its-chunk' → chunk identity wording (see PR #498 report); owner: run 'ai-raccoon model set code default' on the live bank once the #494 leak prune finishes (repairs the 'cls' manifest, clears [417]); #477 job-level metrics (not started); #459 (post-delta-3); SettingsCommands duplicate non-768 refusal text (one type); bank-side model set local does not run ManifestPoolingRepair; checklist template item 'source-path-anchor-resolves-its-chunk' wording → feed-badger (text in PR #498 report); S6b — #414 history rewrite (owner-executed; no pre-rewrite branch open now that #460/#463 are merged — verify with gh pr list first); owner ratifies ADR-0089; owner bumps ai-badger VERSION for #424; #459 PoolingDecision (now adjacent to #467's rank-based pooling); #465 search.adjustment export; ParityGateTests p95 leg split; investigate the origin ref-rewriting actor; #436 prune gap",
+  "next": "Release 1.33.0 (checklist PR on a52b00dd, then VERSION bump; nuget publish approval is the owner's) → post-delta-4: G20–G22 answers (WP12-B continuous drain inside EmbedDrainService, WP12-D nested ignore roots, WP12-E quantized/CoreML research), WP12-C job-line counters (#477), WP10 ADR-0089 implementation (G15 approved), WP6 #455 LAST (task/pd3-455-public-benchmark-corpus @ ea174faf, draft #499, parity/retrieval gate in the foreground), WP11-C follow-up Option B (drop the enqueue-only PendingEmbedJob/CodeReindexJob). Owner-only: S6b force-push (#414 runbook, after WP6), ~/.claude/settings.json soft-deny patterns (#474 §5.2), answer G20–G22.",
   "filedNotStarted": [
     "#477 no job-level metrics (feature gap)",
-    "#479 unattributed force-pushes on task branches (post-delta-3 investigation)"
+    "#479 unattributed force-pushes on task branches (post-delta-3 investigation)",
+    "#485 directory-walk prune gap (post-delta-3, from #481)",
+    "#493 PerformanceTools description drift",
+    "#497 repair for bge-m3 manifests downloaded before #496",
+    "#504 embedding fallback-chain shapes",
+    "#519 TestData.CreateMemoryStore optional Null defaults (from #518)"
   ],
   "research": [],
   "stillTrue": [
