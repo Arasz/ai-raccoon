@@ -42,16 +42,18 @@ public sealed class CodeIngestor(
         var chunks = codeChunker.Chunk(content);
         if (chunks.Count == 0)
         {
-            return new CodeIngestResult(0, string.IsNullOrWhiteSpace(content));
+            return new CodeIngestResult(0, string.IsNullOrWhiteSpace(content), []);
         }
 
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
         var inserted = 0;
+        var hashes = new List<string>(chunks.Count);
 
         for (var ordinal = 0; ordinal < chunks.Count; ordinal++)
         {
             var chunk = chunks[ordinal];
             var hash = ContentHash.Of(normalizedPath, chunk.Text);
+            hashes.Add(hash);
             var existingId = await connection.ExecuteScalarAsync<long?>(
                     Def(MemorySql.SelectCodeChunkIdByPathAndHash,
                         new { projectId, path = normalizedPath, hash }, cancellationToken))
@@ -96,7 +98,7 @@ public sealed class CodeIngestor(
             inserted++;
         }
 
-        return new CodeIngestResult(inserted > 0 ? 1 : 0, false);
+        return new CodeIngestResult(inserted > 0 ? 1 : 0, false, hashes);
     }
 
     private static async Task RequireInScopeAsync(SqliteConnection connection, string projectId, string path,

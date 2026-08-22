@@ -447,7 +447,7 @@ public sealed partial class MemoryTools(
     public sealed record EmbedResult(int Processed, int Pending);
 
     /// <summary>
-    ///     Tags each of the eight search phases plus the measured total — plus the fusion diff,
+    ///     Tags each of the nine search phases plus the measured total — plus the fusion diff,
     ///     present only when the no-fusion-regression flag is on (docs/adr/0078) — with the query
     ///     hash and correlation id and hands them to the recorder; never the query text itself
     ///     (SqliteMetricsStore's save-time allowlist rejects it). queryHash is null for a

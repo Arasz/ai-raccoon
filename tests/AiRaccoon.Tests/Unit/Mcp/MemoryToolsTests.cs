@@ -302,7 +302,7 @@ public class MemoryToolsTests
         _store.LastQuery.ProjectId.ShouldBe("acme");
     }
 
-    /// <summary>WP10/S1: the eight SearchTimings phases plus the measured total reach the recorder, each tagged with the query hash and this call's own correlation id — never the query text.</summary>
+    /// <summary>WP10/S1: the nine SearchTimings phases plus the measured total reach the recorder, each tagged with the query hash and this call's own correlation id — never the query text.</summary>
     [Fact]
     public async Task Search_RecordsNineSeriesMeasurements_TaggedWithHashAndCorrelationId_NeverQueryText()
     {
@@ -345,7 +345,7 @@ public class MemoryToolsTests
         fusion.ShouldAllBe(m => m.Tags == null);
     }
 
-    /// <summary>The default path records the eight phases and the total, and nothing else — the flag must not leak into it.</summary>
+    /// <summary>The default path records the nine phases and the total, and nothing else — the flag must not leak into it.</summary>
     [Fact]
     public async Task Search_StoreReportsNoFusionDiff_RecordsNoFusionMeasurement()
     {

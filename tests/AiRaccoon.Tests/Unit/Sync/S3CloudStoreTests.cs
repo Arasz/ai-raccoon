@@ -3,6 +3,7 @@ using System.Reflection;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sync;
+using Amazon;
 using Amazon.Runtime;
 using Amazon.S3;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -35,6 +36,53 @@ public class S3CloudStoreTests
         client.ShouldBeOfType<AmazonS3Client>();
         // The SDK normalizes the endpoint Uri, appending the trailing slash.
         ((AmazonS3Client)client).Config.ServiceURL.ShouldBe("http://s3.example.com/");
+    }
+
+    [Fact]
+    public void CreateClient_EndpointAndRegion_KeepsServiceUrlAndSetsAuthenticationRegion()
+    {
+        var options = new SyncOptions
+        {
+            Endpoint = "http://127.0.0.1:32828",
+            Bucket = "memories",
+            Region = "us-east-1",
+            S3Chain = true
+        };
+
+        var client = (AmazonS3Client)S3CloudStore.CreateClient(options);
+
+        client.Config.ServiceURL.ShouldBe("http://127.0.0.1:32828/");
+        client.Config.AuthenticationRegion.ShouldBe("us-east-1");
+    }
+
+    [Fact]
+    public void CreateClient_EndpointWithoutRegion_KeepsServiceUrl()
+    {
+        var options = new SyncOptions
+        {
+            Endpoint = "http://127.0.0.1:32828",
+            Bucket = "memories",
+            S3Chain = true
+        };
+
+        var client = (AmazonS3Client)S3CloudStore.CreateClient(options);
+
+        client.Config.ServiceURL.ShouldBe("http://127.0.0.1:32828/");
+    }
+
+    [Fact]
+    public void CreateClient_RegionWithoutEndpoint_SetsRegionEndpoint()
+    {
+        var options = new SyncOptions
+        {
+            Bucket = "memories",
+            Region = "us-east-1",
+            S3Chain = true
+        };
+
+        var client = (AmazonS3Client)S3CloudStore.CreateClient(options);
+
+        client.Config.RegionEndpoint.ShouldBe(RegionEndpoint.USEast1);
     }
 
     [Fact]
