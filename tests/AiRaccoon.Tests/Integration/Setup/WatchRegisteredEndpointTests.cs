@@ -1,9 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
+using AiRaccoon.Core.Watch;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
 using AiRaccoon.Infrastructure.Options;
-using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Settings;
 using AiRaccoon.Setup;
 using AiRaccoon.Tests.TestHelpers;
