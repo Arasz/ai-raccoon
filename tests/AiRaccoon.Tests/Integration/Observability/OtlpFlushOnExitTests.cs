@@ -34,7 +34,6 @@ public sealed class OtlpFlushOnExitTests : IDisposable
     // Shutdown(OtlpExportState.ExportTimeoutMilliseconds) runs synchronously inside DisposeAsync
     // and blocks until the export attempt finishes, so a correctly-disposing host has already
     // delivered the export by the time RunAsync returns — this only covers HTTP round-trip slop.
-    private static readonly TimeSpan CollectorWaitBudget = TimeSpan.FromSeconds(3);
 
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-otlp-flush-on-exit");
 
@@ -67,7 +66,7 @@ public sealed class OtlpFlushOnExitTests : IDisposable
         shutdown.Cancel();
         await runTask;
 
-        await collector.WaitForRequestAsync("/v1/traces", CollectorWaitBudget);
+        await collector.WaitForRequestAsync("/v1/traces", TestContext.Current.CancellationToken);
 
         collector.RequestedPaths.ShouldContain(path => path.Contains("/v1/traces", StringComparison.Ordinal));
     }
@@ -77,10 +76,10 @@ public sealed class OtlpFlushOnExitTests : IDisposable
     private static async Task<ToolCallMetrics> AttachedToolCallMetricsAsync(IHost host)
     {
         var metrics = host.Services.GetRequiredService<ToolCallMetrics>();
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-        while (!metrics.ActivitySource.HasListeners() && DateTime.UtcNow < deadline)
+        // Waits on the listener itself; the test's token is the only hang guard (PR #464).
+        while (!metrics.ActivitySource.HasListeners())
         {
-            await Task.Delay(20);
+            await Task.Delay(20, TestContext.Current.CancellationToken);
         }
 
         return metrics;

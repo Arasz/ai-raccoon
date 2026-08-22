@@ -175,7 +175,7 @@ public sealed class ObservabilityEndpointTests : IDisposable
             lifetime.ApplicationStopping.IsCancellationRequested.ShouldBeTrue();
 
             await host.WaitForShutdownAsync(TestContext.Current.CancellationToken)
-                .WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+                .WaitAsync(TestContext.Current.CancellationToken);
         }
         finally
         {

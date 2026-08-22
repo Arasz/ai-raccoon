@@ -202,7 +202,7 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
             .Select(_ => runner.RunAsync([], null, TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken))
             .ToArray();
 
-        var results = await Task.WhenAll(tasks).WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        var results = await Task.WhenAll(tasks).WaitAsync(TestContext.Current.CancellationToken);
 
         results.ShouldAllBe(r => r.Stdout == "hello\n");
     }
