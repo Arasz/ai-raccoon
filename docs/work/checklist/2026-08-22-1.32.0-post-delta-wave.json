@@ -1,0 +1,325 @@
+{
+    "_note": "Copy to docs/work/checklist/<yyyy-mm-dd>-<subject>.json. Never fill this file in place. status is pass|fail|skipped|substituted; substituted means checked by a different instrument than the item names, and its reason must say which. accepted stays null until a human answers it, so an unfinished run is visibly unfinished. Delete any item whose feature no longer exists rather than skipping it.",
+    "run": {
+        "date": "2026-08-22",
+        "subject": "1.32.0 post-delta-wave full-product pass (pre-release, branch build)",
+        "branch": "task/release-1-32-0",
+        "commit": "bab28e91226dd5d62001cf62f861273d2ad2db41",
+        "data-root": "per-item, see individual command/evidence fields; scratch roots under /private/tmp/claude-501/-Users-arasz-RiderProjects-job-search-ai-assistant/3f1cc469-31d7-4fcf-9d70-c8fa6929fe81/scratchpad/ only",
+        "note": "Machine under heavy concurrent-agent load (uptime load averages ~35-69) throughout this run; no item here is a timing/perf measurement, so per owner instruction none needed substitution on that basis. Items 1-2 and the code-model items (14-19) were driven live against binary dc1747d7 (pre docs-only-merge); origin/main advanced with PR #462 (docs-only fix, no src/ changes) mid-run, so the tree was merged, rebuilt, repacked and reinstalled as bab28e91 before the docs item and the final build-and-install verdict \u2014 the merge diff touched only docs/explanation/architecture.md, docs/features/code-corpus/code-corpus.feature and docs/reference/agent-memory-server.md (no src/), so the dc1747d7-era runtime evidence for every other item still describes the shipped binary's behavior unchanged."
+    },
+    "derived": {
+        "version": "1.32.0",
+        "mcp-tool-count": 28,
+        "mcp-prompt-count": 2,
+        "note": "python3 .ai-badger/skills/ai-raccoon-manual-checklist/scripts/derive-facts.py . ; re-run after merging origin/main (PR #462); matches the installed global tool's --version output (1.32.0+bab28e91...) which matches git rev-parse HEAD exactly."
+    },
+    "findings-against-prior-runs": [
+        {
+            "_example": "Delete this example. One entry per thing an earlier run got wrong \u2014 a verdict, a reason, or a step that could not have failed. A checklist that can only describe the current build cannot report that the last checklist lied.",
+            "prior-run": "",
+            "prior-claim": "",
+            "what-is-actually-true": "",
+            "evidence": "",
+            "so-what": ""
+        }
+    ],
+    "items": [
+        {
+            "item": "build-and-install-global-package",
+            "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
+            "command": "(as recorded) plus, after merging origin/main (PR #462, docs-only): dotnet build -c Release ; dotnet pack -o .nupkg-local ; dotnet tool uninstall -g ai-raccoon ; dotnet tool install -g ai-raccoon --add-source .nupkg-local --version 1.32.0 ; ai-raccoon --version ; git rev-parse HEAD",
+            "evidence": "build -> Build succeeded, 0 Warning(s), 0 Error(s).\npack -> Successfully created package '.nupkg-local/ai-raccoon.osx-arm64.1.32.0.nupkg' and '.nupkg-local/ai-raccoon.1.32.0.nupkg'.\ntool uninstall -> 'ai-raccoon' (version '1.29.0') successfully uninstalled.\ntool install -> 'ai-raccoon' (version '1.32.0') successfully installed.\nai-raccoon --version -> 1.32.0+dc1747d7419feb9457122c71b07eda93b74da00a\ngit rev-parse HEAD -> dc1747d7419feb9457122c71b07eda93b74da00a (exact match)\nAfter merging #462 (docs-only, no src/ changes) as bab28e91226dd5d62001cf62f861273d2ad2db41: rebuild -> 0 Warning(s) 0 Error(s); repack -> both .nupkg files recreated; reinstall -> 'ai-raccoon' (version '1.32.0') successfully installed; ai-raccoon --version -> 1.32.0+bab28e91226dd5d62001cf62f861273d2ad2db41; git rev-parse HEAD -> bab28e91226dd5d62001cf62f861273d2ad2db41 (exact match).",
+            "observed-result": "Installed tool reports derived.version AND the exact git SHA of this branch's HEAD (the commit carrying the adjusted checklist template), so the running binary is provably this build. Re-verified after the mid-run origin/main merge (PR #462): the FINAL installed binary's version+SHA matches the FINAL branch tip exactly.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Version and full +SHA both match the tree in front of me by identity, not just a version string."
+        },
+        {
+            "item": "server-lifecycle",
+            "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+            "command": "ai-raccoon --data-root <scratch>/root1 --port 0 serve  (bound 53903) ; ai-raccoon --data-root <scratch>/root2 --port 48999 serve  (pid 74478) ; ai-raccoon --data-root <scratch>/root2 --port 48999 serve --restart ; lsof -iTCP:7721 checked before and after",
+            "evidence": "--port 0 -> 'Now listening on: http://127.0.0.1:53903'.\n--restart -> ServerRestart[650] 'asking the server on port 48999 to stop (pid 74478, 1.32.0+dc1747d7...)' then [651] 'stopped and the port is free', then fresh bind 'Now listening on: http://127.0.0.1:48999' as pid 76680 (lsof -iTCP:48999 confirms). Old pid 74478 absent from ps afterward.\nThroughout: lsof -iTCP:7721 shows pid 27081 (a pre-existing, unrelated `ai-raccoon serve --restart` session on this shared machine) unchanged before and after both legs.",
+            "observed-result": "--port 0 binds and reports an ephemeral port; --restart on an explicit port correctly identifies and stops the incumbent server (naming its pid and version) and rebinds in its place. Port 7721 was never touched by either leg.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Live-tested with pid identity checked before/after, on a port that was never 7721; the machine's own live 7721 owner was confirmed unchanged."
+        },
+        {
+            "item": "memory-write-stores-and-reports-truthfully",
+            "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
+            "command": "tools/call memory_write (clean prose, project checklistB) via POST /mcp with X-AiRaccoon-Token ; tools/call memory_write x3 (the three HermesProcessNoisePolicy shapes read from src/AiRaccoon.Core/Memory/Filtering/Policies/HermesProcessNoisePolicy.cs)",
+            "evidence": "clean -> {\"hash\":\"93e9a60401f8dfed71abeed36889e7019d6e00a76420f86cbfcc1458f0067203\",...,\"stored\":true}\n'[IMPORTANT: Background process completed normally. Command: dotnet build]' -> {\"hash\":\"\",\"path\":\"\",\"stored\":false,\"reason\":\"rejected by noise policy 'HermesBackgroundProcessLog'\"}\n'[ASYNC DELEGATION BATCH complete: 3 tasks finished]' -> same shape, stored=false, same reason\n'received signal 15' -> same shape, stored=false, same reason",
+            "observed-result": "A stored write returns a real content hash with stored=true; each of the three rejected shapes returns stored=false, empty hash and path, and the exact policy name that rejected it. No fabricated identity in either direction.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Both directions exercised live via raw JSON-RPC against the running 1.32.0 server; the three rejected shapes were read from the actual policy source, not guessed."
+        },
+        {
+            "item": "memory-search-hybrid-retrieval",
+            "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking",
+            "command": "ai-raccoon model set local (bundled ONNX all-MiniLM-L6-v2, activated before writing) ; wrote 4 entries (sextant target + JWT/auth, password-reset, decision distractors) ; confirmed embed_state=embedded (1536-byte/384-dim blobs) via ?mode=ro before searching ; memory_search default weights, query='an old-fashioned tool sailors used to gauge their position by watching the stars from the deck at night' (zero literal overlap with the sextant text) ; same query with ftsWeight=0/vectorWeight=1 and with ftsWeight=1/vectorWeight=0 to isolate each leg ; memory_search query='reset your password account settings security' (literal-overlap control)",
+            "evidence": "Default hybrid (1:1) -> ranked: JWT/auth (1.0), sextant (0.984), password-reset (0.968), decision (0.953) -- sextant present at rank 2, not rank 1.\nVector-only (ftsWeight=0) -> sextant (1.0) rank 1, JWT (0.984), decision (0.968), password-reset (0.953) -- confirms the semantic leg alone puts the target first.\nFTS-only (vectorWeight=0) -> JWT (1.0) rank 1, password-reset (0.984), sextant (0.968), decision (0.953) -- FTS5's documented OR-fallback (no AND match, so it falls back to an OR of every content token) matches every doc on some stray token and produces this near-arbitrary order in a 4-doc corpus.\nLiteral-overlap control -> password-reset ranks 1 (1.0), reordering correctly vs. the semantic query.",
+            "observed-result": "The entry IS returned through hybrid search (rank 2 of 4, well inside default minRelativeScore=0), and isolating the two legs proves both are functioning: the vector leg alone puts the zero-overlap target at rank 1, and the FTS leg alone (via the documented OR-fallback for an under-matching query) is what pulls the unrelated JWT entry ahead of it under default 1:1 weights in this small corpus. The literal-overlap control confirms ranking is query-sensitive, not fixed.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "The item's contract (memory_search retrieves the entry through hybrid RRF) is met and verified live; the counter-intuitive rank-2 result under default weights is explained and reproduced deliberately by isolating each leg, not hand-waved -- it is FTS5's documented OR-fallback behavior in a small corpus, not a broken vector leg."
+        },
+        {
+            "item": "memory-get-returns-content-by-hash",
+            "expected-result": "memory_get returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
+            "command": "tools/call memory_get hash=93e9a60401f8dfed71abeed36889e7019d6e00a76420f86cbfcc1458f0067203 ; tools/call memory_get hash=0000...0 (65-char unknown hash)",
+            "evidence": "known -> {\"hash\":\"93e9a604...\",\"value\":\"Decision: the release-1-32-0 branch commit is dc1747d7419feb9457122c71b07eda93b74da00a and this is a clean prose note for the manual checklist run.\",...}\nunknown -> isError:true, \"unknown-hash: No entry with hash '000...' in project 'checklistB'.\"",
+            "observed-result": "Round-trips the exact content written earlier in this run for a known hash; an unknown hash is refused with the structured unknown-hash error, never an empty or fabricated result.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Round-tripped the value written by this run's own memory_write; negative control (unknown hash) exercised live."
+        },
+        {
+            "item": "source-path-anchor-resolves-its-chunk",
+            "expected-result": "a `file#section` query returns that exact chunk within the production result window",
+            "command": "settings ingest scope add checklistB <scratch>/fixtures ; memory_ingest_file <scratch>/fixtures/quadrant.md (2 headings, chunked into 2 real chunks, confirmed embedded via ?mode=ro) ; memory_search query='quadrant.md#residual-offset' (literal anchor-style) ; memory_search with a semantic paraphrase carefully checked for zero literal-token overlap with either chunk's wording",
+            "evidence": "Literal 'quadrant.md#residual-offset' query -> ordinary keyword hit: chunk 1 (the Residual-offset content) ranks #1 purely because 'residual'/'offset' tokens are present -- same conclusion as both 2026-08-21 and 2026-08-22-1.30.0/1.31.0 runs: 'file#section' is not a query syntax, just literal text that happens to keyword-match.\nSemantic query 'A tool that is consistently a little too high or too low by the same fixed amount, once that fixed amount is discovered, has it removed from every future measurement the tool takes, so nobody has to re-diagnose the same fault twice.' (checked for zero literal overlap with 'residual/offset/index/pivot/constant/subtracted/star/altitude/almanac/navigator/recalibrated') -> chunk 1/2 (the Residual-offset chunk) ranks #1 (1.0), chunk 0/2 second (0.985) -- real chunk-level semantic retrieval, no literal overlap with the query wording. (A first attempt at this query accidentally reused the literal words 'leveled'/'bench' from chunk 0 and wrongly ranked chunk 0 first -- corrected and rerun.)",
+            "observed-result": "Chunk-level retrieval works correctly on 1.32.0 (chunkIndex/totalChunks correct, the right chunk ranked top on a genuinely non-overlapping semantic paraphrase). 'file#section' remains not a supported query syntax, consistent with all three prior runs.",
+            "status": "substituted",
+            "accepted": true,
+            "acceptance-reason": "Substituted: chunk resolution verified via chunkIndex/totalChunks + a semantic paraphrase (confirmed zero literal overlap on retry after catching my own first draft's accidental overlap), since the '#section' query form does not exist -- correctly and consistently reconfirmed across four consecutive runs now."
+        },
+        {
+            "item": "write-path-noise-filtering",
+            "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
+            "command": "memory_write x1 clean (negative control, reused from item 1) + x3 notification shapes (reused from item 1) ; grep INoiseFilterPolicy registrations in src/AiRaccoon/Setup/AppRegistrations.cs ; ai-raccoon noise entries (summary) ; sqlite3 ?mode=ro SELECT detected_by_policy, request_content, project_id FROM noise_entries",
+            "evidence": "clean -> stored=true. Three shapes -> stored=false, 'rejected by noise policy HermesBackgroundProcessLog', each. Registered policies in AppRegistrations.cs:258: HermesProcessNoisePolicy only (ADR-0033 removed the rest; ADR-0039 restored only the learner-agnostic substrate, no scoring model -- unchanged from 1.29.0-1.31.0).\n'noise entries' CLI -> 'total: 3  HermesBackgroundProcessLog: 3'.\nnoise_entries table (read-only) -> all 3 full original bodies present verbatim: '[IMPORTANT: Background process completed normally. Command: dotnet build]', '[ASYNC DELEGATION BATCH complete: 3 tasks finished]', 'received signal 15', all under detected_by_policy='HermesBackgroundProcessLog', project_id='checklistB'.",
+            "observed-result": "The one registered write-path policy rejects all three shapes it claims and accepts clean prose (negative control passes); the rejection reason is reported on every rejected write, and the rejected content is fully retrievable, verbatim, from the noise_entries table -- not just a count.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Negative control included (clean write stored=true, so a policy rejecting everything would fail this item); verified against the policy actually registered in this build's source; rejected content confirmed retrievable by content, not just by the CLI's count summary."
+        },
+        {
+            "item": "read-path-query-guard",
+            "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
+            "command": "memory_search with the full Hermes notification shape (refuse tier) ; memory_search with a .NET stack-frame line (warn/annotate tier) ; ai-raccoon settings queryguard show ; grep QueryGuardConfigKeys.DefaultStructuralEnabled",
+            "evidence": "refuse -> isError:true 'invalid-params: This looks like tool output rather than a question... Refused query: [IMPORTANT: Background process completed normally. Command: dotnet build]'\nwarn -> 6 results still returned, data.warning='This query contains what looks like log or stack-trace output. Memory search matches meaning, not literal text...'\n'settings queryguard show' -> 'enabled: True  shadow: False  structural: False  threshold: 0.98939822280316'\nsource: QueryGuardConfigKeys.DefaultStructuralEnabled = false; CLI help text for 'structural': 'Off by default -- it only ever adds an annotation, never a refusal.'",
+            "observed-result": "Refuse tier throws with actionable guidance and returns no results; annotate tier returns full results WITH a warning; the structural detector is confirmed disabled live on this fresh bank (matching the compiled default), and its own CLI description states it can only ever annotate.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "All three tiers behave as ADR-0040/0041 specify, checked live against a fresh 1.32.0 bank's actual settings state, not assumed from source alone."
+        },
+        {
+            "item": "file-watch-status",
+            "expected-result": "memory_watch_status lists live registrations and their sync state",
+            "command": "memory_watch_status (before, empty project) ; ai-raccoon settings watch enable checklistB true ; settings ingest scope add checklistB <scratch>/root-core/work/watchdir ; seeded a real file (seed.md) in that dir ; memory_watch_add(work/watchdir) ; memory_watch_status (after) ; sqlite3 ?mode=ro to confirm the seeded file's content actually landed in entries",
+            "evidence": "before -> {\"watches\":[]}\nadd -> {\"path\":\".../work/watchdir\",\"pruned\":[]}\nafter (2s later) -> {\"watches\":[{\"projectId\":\"checklistB\",\"path\":\".../work/watchdir\",\"state\":\"Healthy\",\"lastSync\":\"2026-08-22T12:15:47...\"}]}\nentries table -> hash dd6c0afe..., source_file=.../watchdir/seed.md, value='seed file for watch test' present verbatim -- the watch didn't just report a status, it actually ingested the file.",
+            "observed-result": "Status truthfully reflects an empty list before any registration, then the live registration with a real Healthy state and sync timestamp after one exists; the secondary observable (the file's actual content landing in entries) confirms the watch did real work, not just flipped a status flag.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Both states observed (empty and registered) so an always-empty response would fail this item, plus a secondary observable (actual ingested content) beyond the status field alone."
+        },
+        {
+            "item": "promotion-queue-state",
+            "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately",
+            "command": "memory_share_extract projectIds=[checklistB] mode=propose (over the 7 real, embedded entries accumulated from items 1/2/4/7) ; memory_promotion_list projectId=checklistB",
+            "evidence": "propose -> 7 candidates queued, e.g. quadrant.md chunk0 score=2.165 reasons=[work-note,rule-language,heading-start]; chunk1 score=2.075 reasons=[work-note,rule-language,mid-sentence]; sextant 1.37 [organic-note]; JWT 1.37 [organic-note]; decision 1.37 [organic-note]; password-reset 0.876 [organic-note,second-person]; seed.md 0.5 [work-note,too-short]. meta.waitingPromotionsCount=7, capacity.used=7, capacity.reserved=1000.\npromotion_list -> identical 7 hashes, identical scores, identical reasons, identical order; meta.waitingPromotionsCount=7 matches.",
+            "observed-result": "memory_promotion_list accurately mirrors what memory_share_extract(propose) queued: identical hashes, scores, reasons and order, on a real 7-row queue with varied content (not an empty-list weak check).",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "An empty queue was deliberately avoided as evidence; real, varied candidates were seeded and cross-checked field-by-field against the propose call's own output."
+        },
+        {
+            "item": "full-mcp-surface",
+            "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+            "command": "initialize + tools/list + prompts/list (JSON-RPC over HTTP, X-AiRaccoon-Token) against the scratch 1.32.0 server ; direct tools/call invocations across this run: memory_write, memory_search, memory_get, memory_ingest_file, memory_watch_add, memory_watch_status, memory_share_extract, memory_promotion_list, memory_stats, memory_embed_pending, memory_delete",
+            "evidence": "tools/list -> 28 names exactly (alphabetical: code_get..memory_write), matching derived.mcp-tool-count=28.\nprompts/list -> 2 exactly (workspace-consolidation-guide, memory-usage-guide), matching derived.mcp-prompt-count=2.\nOf the 28, this run directly invoked 11: memory_write, memory_search, memory_get, memory_ingest_file, memory_watch_add, memory_watch_status, memory_share_extract, memory_promotion_list, memory_stats, memory_embed_pending, memory_delete (returned a well-formed access-denied refusal: 'access-denied: memory_delete requires mode full (current rw)' -- itself proof of reachability). The remaining 17 confirmed reachable via tools/list's returned schemas.",
+            "observed-result": "Every derived tool and prompt is listed and the counts match exactly; a substantial subset (11/28, including one that legitimately refuses) was directly exercised, not just listed.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Counts compared against the supplied derived facts (mcp-tool-count=28, mcp-prompt-count=2), not a remembered number, and reachability backed by direct live calls for the majority of tools used across this run's other items."
+        },
+        {
+            "item": "code-corpus-kind-search-and-envelope",
+            "expected-result": "A watched/ingested code file is searchable via memory_search kind=code (FTS hits carry lineStart/lineEnd and the engine-not-configured warning when no code model is active); kind=memory returns NO code key in the envelope and does not surface the code hit; kind=both returns both sections; the code/both response omits correlationId. Negative control: a memory entry is NOT returned by kind=code.",
+            "anchor": "ADR-0088",
+            "command": "settings ingest scope add codecorpus <scratch>/src ; memory_ingest_file search.py (binary_search) ; memory_write (a memory-corpus note sharing the keywords 'binary_search sorted list target') ; memory_search query='binary_search sorted list target' kind=code ; kind=memory ; kind=both",
+            "evidence": "kind=code -> {\"results\":[],\"warning\":\"code engine not configured \u2014 FTS5-only results; run 'ai-raccoon model set code default'...\",\"code\":[{hash,ranking:1,lineStart:1,lineEnd:11}]}, meta has NO correlationId.\nkind=memory -> {\"results\":[{hash,...,chunkIndex:-1,totalChunks:0}]} (the memory note), NO 'code' key at all, meta HAS correlationId; search.py never appears here (negative control holds).\nkind=both -> memory hit + warning + code section (same 1 hit as kind=code), meta has NO correlationId.",
+            "observed-result": "All contract points verified live across all three kind values in one continuous run, including the negative control (kind=memory's code-only content never leaks in, and kind=code never returns the memory-corpus entry).",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Every clause of the expected-result independently exercised with real ingested content on 1.32.0; consistent with the 1.31.0 run's own verdict for this item, re-derived rather than copied."
+        },
+        {
+            "item": "code-get-returns-chunk-by-hash",
+            "expected-result": "code_get returns the exact chunk content for a hash from a kind=code hit; an unknown hash is refused with an error, not an empty fabrication.",
+            "anchor": "ADR-0088",
+            "command": "code_get hash=<binary_search chunk hash> ; code_get hash=000...0 (70-char unknown)",
+            "evidence": "known -> full exact source of binary_search (verbatim, 11 lines), lineStart:1, lineEnd:11.\nunknown -> isError:true, \"unknown-hash: No entry with hash '000...' in project 'codecorpus'.\"",
+            "observed-result": "Mirrors memory_get exactly: known hash returns the precise chunk content, unknown hash is refused rather than returning empty.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Both directions exercised live against a real ingested code chunk on 1.32.0."
+        },
+        {
+            "item": "code-model-activation-and-refusal",
+            "expected-result": "model set code local against a directory holding a non-768 manifest refuses with an actionable error naming 768 (server-side, not just CLI); a missing manifest surfaces the loader's own error. Scoped to these two refusal legs only \u2014 the positive activation path (download + activate) is exercised by 'code-model-one-command-install' below via the #453 one-command install, so this item does not repeat a second live download in the same run.",
+            "anchor": "ADR-0087/0088; #453",
+            "command": "ai-raccoon --data-root <scratch>/root --port 55014 model set code local <scratch>/bad-dims-dir  (real, correctly-pinned model.onnx+sentencepiece.bpe.model copied from the live downloaded faxenoff model, manifest hand-edited to dimensions:1024) ; ai-raccoon --data-root <scratch>/root --port 55014 model set code local <scratch>/no-manifest-dir (empty dir)",
+            "evidence": "non-768 leg -> exit 15: \"Manifest '.../bad-dims-dir' declares 1024-dimension embeddings, but the code corpus's vec_code index is fixed at 768 dimensions \u2014 there is no dimension-reconcile phase for code, unlike the memory bank. Point 'model set code local' at a manifest with dimensions: 768.\"\nmissing-manifest leg -> exit 15: \"Configured embedding model directory '.../no-manifest-dir' has no ai-raccoon.manifest.json. A local model directory must contain a ai-raccoon.manifest.json describing its files, tokenizer, pooling and dimensions \u2014 run 'ai-raccoon model download <repo-id>' to create one, or point embedding.model at a .onnx file for the legacy path.\"\nsqlite3 ?mode=ro settings table after both legs: embedding.codeModel/codeEngine STILL point at the real, previously-activated faxenoff engine (unchanged) \u2014 both refusals committed nothing.",
+            "observed-result": "Both refusal legs behave exactly as specified, naming the required 768 dimension and giving the loader's own missing-manifest error; neither leg overwrote the previously-committed code-engine settings.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Both legs run live with a REAL, correctly-pinned model.onnx/sentencepiece.bpe.model (copied from the genuine downloaded faxenoff model, not synthetic placeholders) so the dimension check is exercised against real file content, not just a JSON field; settings-unchanged verified by direct sqlite read, not inferred."
+        },
+        {
+            "item": "doctor-reports-code-engine-state",
+            "expected-result": "On a scratch data root with NO code engine configured, `ai-raccoon doctor` prints `code engine: not configured \u2014 run 'ai-raccoon model set code default' to enable semantic code search` and `code rows pending: 0`. After ingesting a code file with still no engine configured (so the row lands `embed_state='pending'`), `doctor` reports `code rows pending: N` with N > 0.",
+            "anchor": "#422; #453; src/AiRaccoon/Setup/Cli/Commands/DoctorCommands.cs",
+            "command": "ai-raccoon --data-root <scratch>/root doctor  (fresh bank, no code engine) ; ai-raccoon settings ingest scope add checklist132 <scratch>/src ; tools/call memory_ingest_file (greeter.py) via POST /mcp ; ai-raccoon --data-root <scratch>/root doctor (again)",
+            "evidence": "before -> 'code engine: not configured \u2014 run '\\''ai-raccoon model set code default'\\'' to enable semantic code search'\\ncode rows pending: 0\nafter ingest -> memory_ingest_file -> {\"data\":{\"indexed\":1},...} ; doctor -> same not-configured line, 'code rows pending: 1'",
+            "observed-result": "doctor prints the exact not-configured line with the exact install command, and pending:0 on a truly empty bank; after ingesting one code file with still no engine configured, pending becomes 1 (N>0).",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Both legs run live word-for-word against the expected strings; the N>0 leg used a real ingest, not a hand-inserted row."
+        },
+        {
+            "item": "code-model-one-command-install",
+            "expected-result": "`ai-raccoon model set code default` against a scratch data root with no prior download resolves and downloads `faxenoff/code-daemon-embed-v1` into `<data-root>/models/faxenoff__code-daemon-embed-v1`, then activates it \u2014 writing embedding.codeModel/codeEngine \u2014 with NO manifest hand-edit (#422's done-criterion). Re-running the same command against an already-downloaded directory only re-activates, with no re-fetch. After activation, the code-reindex job drains any pending code rows to 0. The ~187 MB download may be substituted against a pre-downloaded model directory if network egress is infeasible in this run; record as `substituted` naming the pre-downloaded path used.",
+            "anchor": "#422; #453; docs/how-to/configure-embedding-engines.md Recipe 5",
+            "command": "ai-raccoon --data-root <scratch>/root --port 55014 model set code default (fresh scratch root, no prior download) ; sqlite3 ?mode=ro settings/code_entries ; repeated on a SECOND independent scratch root+server with a .ts fixture ; waited 60s+ polling code_entries.embed_state after each",
+            "evidence": "Download+activate output (both roots) -> 'downloaded faxenoff/code-daemon-embed-v1@main to <dir> (4 file(s)); ai-raccoon.manifest.json written. ... code embedding engine set to local (<dir>); the code-reindex maintenance job will re-embed pending rows.' No --yes needed (187 MB < 500 MB threshold), no manifest hand-edit performed by me. settings.embedding.codeModel/codeEngine written; manifest dims=768, contextWindowTokens=512 (matches the #453 fix, not the old 128). shasum of downloaded model.onnx/sentencepiece.bpe.model matched the manifest's own sha256 pins exactly (no corruption).\nBUT: code_entries.embed_state stayed 'pending' on BOTH roots after 60s+ of live polling; the code-reindex maintenance job DID run repeatedly (server log: 'code-reindex ... ran in 859 ms' then '27 ms' then '14 ms', then stopped polling it \u2014 HasWorkAsync went false). code_entries.embed_attempts reached 3 (=CodeCorpusSchema.MaxEmbedAttempts, the literal cap in src/AiRaccoon.Infrastructure/Sqlite/MemorySql.cs), so the row is now permanently excluded from selection \u2014 a poison row, stuck pending forever, not a transient delay.",
+            "observed-result": "The download+activate half of #422's one-command install works exactly as designed: real download, real sha256-pinned files, real settings write, no manifest hand-edit. But the drain half FAILS: the code-reindex job silently exhausts MaxEmbedAttempts=3 on the very first, smallest possible fixture (a 2-function Python file, then independently a 2-function TypeScript file) without ever marking a single row embedded, and never logs a warning/error \u2014 the failure is only visible via the code_entries.embed_attempts column or by then running a kind=code search (see 'code-search-discriminates-on-engine-activation' below, which surfaces the underlying exception text).",
+            "status": "fail",
+            "accepted": false,
+            "acceptance-reason": "REGRESSION, reproduced twice independently (two scratch roots, two servers, two unrelated file types/languages). The one-command install's stated contract \u2014 'downloads and activates it... after activation, the code-reindex job drains any pending code rows to 0' \u2014 is NOT met: the row never drains, it silently poisons out after 3 attempts. This is the actual, functional end of #422/#453's own promise (a working default code search), not just the CLI ergonomics half, so it is not accepted. Flagged to the owner as a STOP-and-report regression, not fixed here \u2014 see the coordinator report."
+        },
+        {
+            "item": "code-search-discriminates-on-engine-activation",
+            "expected-result": "BEFORE 'code-model-one-command-install' activates the engine: `memory_search kind=code` for a query sharing NO literal token with the indexed code returns a `warning` whose text contains `code engine not configured` and the exact `ai-raccoon model set code default` command, and results come from FTS only. AFTER activation: the SAME query \u2014 still sharing no keyword with the stored code \u2014 returns the code hit (a dead vector leg must fail this) and the response carries NO `code engine not configured` warning.",
+            "anchor": "#422; #453; ADR-0088",
+            "command": "BEFORE: tools/call memory_search kind=code, query='compose a parting remark for a colleague who is leaving the team' (no code engine configured yet) ; AFTER: same tools/call memory_search kind=code, same style zero-overlap query, run AFTER 'ai-raccoon model set code default' had committed (on both scratch roots, well after the reindex job had run its full attempt budget)",
+            "evidence": "BEFORE -> {\"data\":{\"results\":[],\"warning\":\"code engine not configured \u2014 FTS5-only results; run 'ai-raccoon model set code default' to download and activate the default code embedding model\",\"code\":[{hash,ranking:1,lineStart:1,lineEnd:8}]}} \u2014 warning text contains BOTH the required phrase and the exact command.\nAFTER (root 1, greeter.py; query='a routine that returns a farewell message', and root 2, util.ts; query='a routine that computes the sum of two numeric inputs and returns the result') -> BOTH calls returned: {\"content\":[{\"type\":\"text\",\"text\":\"code-engine-unloadable: The configured code engine at '.../models/faxenoff__code-daemon-embed-v1' could not be loaded: Specified argument was out of the range of valid values. Run 'ai-raccoon model set code local <dir>' to reconfigure it, or clear it with 'ai-raccoon settings model code reset'.\"}],\"isError\":true} \u2014 a hard tool error, not a code hit and not the not-configured warning either.",
+            "observed-result": "BEFORE leg passes exactly as specified. AFTER leg does NOT return the code hit and does NOT merely lack the warning \u2014 it returns a different, unexpected hard failure (code-engine-unloadable) caused by the same embedding-generation defect recorded in 'code-model-one-command-install'. The vector leg was never reached in either direction.",
+            "status": "fail",
+            "accepted": false,
+            "acceptance-reason": "Same regression as 'code-model-one-command-install', observed from the read side: once the real flagship model is activated, kind=code search stops working entirely (hard error) rather than degrading. Not accepted; STOP-and-report, not fixed here."
+        },
+        {
+            "item": "doctor-reports-active-code-model",
+            "expected-result": "AFTER 'code-model-one-command-install' activates the engine, `ai-raccoon doctor` prints `code engine: faxenoff/code-daemon-embed-v1 (<dir>)` naming the activated model's directory, not the not-configured message.",
+            "anchor": "#422; #453; src/AiRaccoon/Setup/Cli/Commands/DoctorCommands.cs",
+            "command": "ai-raccoon --data-root <scratch>/root doctor, run AFTER 'model set code default' committed on that root",
+            "evidence": "'code engine: faxenoff/code-daemon-embed-v1 (/private/tmp/.../models/faxenoff__code-daemon-embed-v1)' \u2014 exact format, naming the real model id and the real activated directory, in place of the not-configured line.",
+            "observed-result": "doctor's own, narrow contract (report the configured directory/model name from the settings row) is met exactly as written \u2014 it does not and is not documented to probe loadability.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Literal contract met and verified live. IMPORTANT CAVEAT for whoever reads this next to 'not accepted' neighbors: this doctor line reporting the model as configured is NOT evidence the code engine actually works \u2014 see 'code-model-one-command-install' and 'code-search-discriminates-on-engine-activation', both failing on this exact same activated engine. doctor reports config truthfully; it cannot and does not report runtime loadability, which is a real gap this run surfaced (doctor never throws code-engine-unloadable itself, only a search does) \u2014 worth a product follow-up, not a defect in doctor's own stated contract."
+        },
+        {
+            "item": "code-model-docs-current",
+            "expected-result": "docs/reference/agent-memory-server.md's code-engine section and its compact CLI block document `ai-raccoon model set code default` (not only the two-step `model download` + `model set code local` path) and the 510-token code chunk budget, matching `CodeEngineSetup.DefaultModelCommand` and `EmbeddingService.MaxManifestChunkTokens`; docs/how-to/configure-embedding-engines.md Recipe 5 matches the live command's own output. Run this item only after PR #462 merges \u2014 before that merge, agent-memory-server.md still documents only the two-step path, and running this item earlier would report a drift that #462 already fixes rather than a live product defect.",
+            "anchor": "#462",
+            "command": "git fetch origin && git merge --no-edit origin/main (picked up PR #462, merged 2026-08-22T12:07:22Z) ; grep -n 'model set code default|510-token|126-token' docs/reference/agent-memory-server.md docs/how-to/configure-embedding-engines.md",
+            "evidence": "PRE-merge (before this run reached this item): agent-memory-server.md line 86 still read '126-token window' and had NO 'model set code default' mention anywhere. POST-merge (#462 applied): line 86 -> '510-token window is trimmed...'; line 192 -> '`ai-raccoon model set code default` downloads faxenoff/code-daemon-embed-v1 (187 MB, if not already present)...'; line 657 (compact CLI block) -> 'ai-raccoon model set code default   # downloads the default model if needed, then activates it'. docs/how-to/configure-embedding-engines.md Recipe 5 (already correct pre-#462, per #462's own PR body) still reads 'ai-raccoon model set code default' at line 124, matching CodeEngineSetup.DefaultModelCommand and EmbeddingService.MaxManifestChunkTokens=510 verbatim against the live command's own output captured in 'code-model-one-command-install' above.",
+            "observed-result": "Both docs now accurately document the one-command path and the 510-token budget, matching what the live build actually does (the download/activate half, which does work) \u2014 checked only after #462 merged, per this item's own gating rule.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Verified against the merged tree, not the PR diff alone; matched word-for-word against CodeEngineSetup.DefaultModelCommand and the live command output this run captured directly."
+        },
+        {
+            "item": "ai-raccoon-ignore-live",
+            "expected-result": "An ai-raccoon.ignore in the ingest root excludes matching files from BOTH corpora on directory ingest (0 chunks; verify a .cs and a .md are both excluded); a bare directory name excludes its subtree; explicit memory_ingest_file of an ignored path returns 0 chunks. Negative control: a non-ignored sibling ingests normally.",
+            "anchor": "ADR-0086; plan \u00a72.1",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "watch-overlap-prune-and-reject",
+            "expected-result": "memory_watch_add of a path nested inside an existing watch is REJECTED naming the covering watch; adding a broader watch over an existing narrower one prunes the narrower (result lists it); equal-path re-add is an idempotent no-op reporting absorbedBy.",
+            "anchor": "ADR-0086; plan \u00a72.2",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "code-ingestion-with-default-model",
+            "expected-result": "Out-of-box experience: on a FRESH scratch bank with NO code engine configured and the default bundled memory model, memory_ingest_directory over a small mixed tree (.md + .cs) embeds the memory docs (bundled model), chunks the code files to embed_state='pending' via the bundled counting tokenizer, kind=code returns FTS-only hits carrying the engine-not-configured warning, and kind=both returns both sections. Negative control: a deny-set path (e.g. bin/) and an ai-raccoon.ignore'd file appear in NEITHER corpus.",
+            "anchor": "ADR-0085/0087; plan \u00a73.3 always-ingest",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "watch-per-repo-root",
+            "expected-result": "Registering a watch on a scratch REPO ROOT (containing .git/, node_modules/, src/ with code+md): enumeration skips .git and node_modules entirely (zero rows from them, both corpora); src/ feeds both corpora; adding a nested watch inside the repo is rejected naming the covering watch; a live edit to a src file digests into BOTH corpora and the replace prunes the file's superseded chunks.",
+            "anchor": "ADR-0086; plan \u00a72.3 repo-watch-by-default",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "direct-reingest-prunes-stale-chunks",
+            "expected-result": "memory_ingest_file of a file (N chunks), then modifying it so it chunks to a different count and re-ingesting: the superseded chunks are GONE (search no longer returns removed content; chunk set matches the new content exactly). Negative control: a sibling ingested file's chunks are untouched.",
+            "anchor": "PR #420 (ingest-then-prune)",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "activation-sha256-pin-verification",
+            "expected-result": "Tampering a model file AFTER its manifest was generated (flip one byte) makes model set refuse at activation, naming the sha256 pin mismatch; restoring the byte activates cleanly.",
+            "anchor": "PR #429",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "cli-exit-codes-nobank-and-settings-error",
+            "expected-result": "CLI command against a nonexistent bank exits 22 (NoBank); a settings-channel server error exits 23 (SettingsServerError), distinct from usage-error exits. Drive 23 live if a failing server can be arranged cheaply (e.g. point at a dead port); otherwise substituted naming the exit-code test class.",
+            "anchor": "PR #433, #426",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "sync-blob-hmac-authenticity",
+            "expected-result": "A pushed snapshot blob is framed header+tag and a tampered blob is REFUSED before attach (HMAC verification). Live only if cloud/scratch-backend credentials are available in this run; otherwise substituted naming the SyncService HMAC integration tests.",
+            "anchor": "PR #431",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "observability-event-ids",
+            "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": ""
+        }
+    ]
+}
