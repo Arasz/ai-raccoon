@@ -123,7 +123,7 @@
           "id": "G10",
           "claim": "#459 (planner ignores a graph-baked pooled output) is scheduled in session 3",
           "detail": [
-              "WP2. <code>ModelDownloadPlanner.PoolingDecision</code> (<code>:345-366</code>) returns from the <code>1_Pooling/config.json</code> branch before consulting the ONNX probe, so bge-m3 gets <code>pooling.mode: cls</code> while the fixture asserts <code>model-output</code> — right today only because BGE-M3's dense recipe is CLS (cosine 1.0). A model whose baked output is not CLS-pooled gets a silently wrong manifest. One method, one new test, the fixture is the oracle; same file as the merged #467, no open work there.",
+              "WP2. <code>ModelDownloadPlanner.PoolingDecision</code> (<code>:345-366</code>) returns from the <code>1_Pooling/config.json</code> branch before consulting the ONNX probe, so bge-m3 gets <code>pooling.mode: cls</code> while the fixture asserts <code>model-output</code> — right today only because BGE-M3's dense recipe is CLS (cosine 1.0). A model whose baked output is not CLS-pooled gets a silently wrong manifest. One method, one new test, the fixture is the oracle; same files as the merged #467 <strong>and as PR #475 (fix for #470, in flight from a peer session)</strong> — #470 is the rank-2 case, #459 the rank-3-plus-pooled-output case; WP2 starts after #475 merges and reuses its <code>OnnxOutputRanks</code> seam.",
               "<strong>Recommendation: schedule</strong> — small, RED test is cheap."
           ],
           "why": "<b>It is the defect class</b> the nightly parity gate exists to catch, in the code that writes what that gate reads.",

@@ -124,6 +124,15 @@ second hand-written copy (`derive-or-delete-the-list`); the attribution plan nam
 
 ### WP2 — #459: a graph-baked pooled output beats the sentence-transformers flags **[gated: G10]**
 
+> **Sequencing update (2026-08-22 16:55, peer session ai-raccoon-fd):** PR **#475** (fix for #470, in
+> flight) touches the same files — `ModelDownloadService.cs`, `OnnxEmbeddingGenerator.cs`, a new
+> `OnnxOutputRanks` extension, and makes `IOnnxSmokeTester.Verify` return each output's declared
+> rank. #470 is the **rank-2** case (the sole output is already pooled); #459 is the **rank-3 plus a
+> second pooled-shaped output** case (bge-m3) and #475 states "rank-3 graphs are untouched", so the
+> two are adjacent, not duplicates. WP2 **starts only after #475 merges**, builds on its rank seam
+> rather than re-probing, and its RED test must still be the bge-m3 manifest fixture. main also
+> moves to **VERSION 1.32.1** shortly (peer bump) — WPs that touch `VERSION` merge `origin/main` first.
+
 **Scope.** `ModelDownloadPlanner.PoolingDecision`
 (`src/AiRaccoon.Infrastructure/Embedding/Download/ModelDownloadPlanner.cs:345-366`) returns from the
 `1_Pooling/config.json` branch **before it ever consults `probe`** — the `OnnxGraphProbe?` parameter
