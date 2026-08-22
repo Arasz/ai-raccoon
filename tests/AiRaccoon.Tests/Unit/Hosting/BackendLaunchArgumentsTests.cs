@@ -7,9 +7,10 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Hosting;
 
 /// <summary>
-///     Auto-start (ADR-0020) only works when this process is the packaged apphost: the dotnet muxer
-///     (`dotnet run`, `dotnet exec`) does not understand ai-raccoon's own CLI shape, so spawning
-///     "&lt;muxer&gt; serve" as a child is doomed before it starts.
+///     Auto-start (ADR-0020) only works when this process is the packaged apphost: the dotnet host
+///     (`dotnet run`, `dotnet exec`, or a dotnet-tool shim published without an apphost) does not
+///     understand ai-raccoon's own CLI shape, so spawning "&lt;host&gt; serve" as a child is doomed
+///     before it starts.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -53,7 +54,7 @@ public sealed class BackendLaunchArgumentsTests
 
         var message = BackendLaunchArguments.UnavailableExecutableMessage("/usr/local/share/dotnet/dotnet", config);
 
-        message.ShouldContain("dotnet run");
+        message.ShouldContain("dotnet host");
         message.ShouldContain("serve");
         message.ShouldContain("58432");
         message.ShouldContain("/tmp/some-root");
@@ -67,7 +68,7 @@ public sealed class BackendLaunchArgumentsTests
         var message = BackendLaunchArguments.UnavailableExecutableMessage(null, config);
 
         message.ShouldContain("unknown");
-        message.ShouldNotContain("dotnet run");
+        message.ShouldNotContain("dotnet host");
     }
 
     private static ServerConfig Config(int port, string dataRoot) =>

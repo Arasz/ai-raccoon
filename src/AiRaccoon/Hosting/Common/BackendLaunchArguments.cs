@@ -10,7 +10,8 @@ namespace AiRaccoon.Hosting.Common;
 /// </summary>
 internal static class BackendLaunchArguments
 {
-    /// <summary>The dotnet muxer's own file name: what `Environment.ProcessPath` names under `dotnet run`/`dotnet exec`.</summary>
+    /// <summary>The dotnet host's own file name: what `Environment.ProcessPath` names under `dotnet run`,
+    /// `dotnet exec`, or a dotnet-tool published without an apphost (a `dotnet &lt;dll&gt;` shim).</summary>
     private const string DotnetMuxerFileName = "dotnet";
 
     /// <summary>
@@ -39,7 +40,7 @@ internal static class BackendLaunchArguments
 
     internal static string UnavailableExecutableMessage(string? processPath, ServerConfig config) =>
         IsUnpackagedInvocation(processPath)
-            ? "this process was started via `dotnet run`/`dotnet exec` (unpackaged) — it cannot auto-start a backend; " +
+            ? "this process was started through the dotnet host, which cannot auto-start a backend; " +
               $"start the server manually first: ai-raccoon {string.Join(' ', ServeArguments(config))}, then retry"
             : "the running executable path is unknown";
 
