@@ -13,7 +13,7 @@
   "tokenizer": {
     "family": "sentencepiece",
     "files": [
-      { "path": "sentencepiece.bpe.model", "sha256": "1111111111111111111111111111111111111111111111111111111111111111" }
+      { "path": "sentencepiece.bpe.model", "sha256": "5f97e3774c51edd1d63706c2ec3826c564a067794770cdab0f8c4797971cacf9" }
     ],
     "options": {
       "addBeginOfSentence": true,
@@ -25,7 +25,7 @@
     "inputs": [ "input_ids", "attention_mask" ],
     "embeddingOutput": "sentence_embedding",
     "files": [
-      { "path": "model.onnx", "sha256": "2222222222222222222222222222222222222222222222222222222222222222" }
+      { "path": "model.onnx", "sha256": "9372c470eeadd5ecd9c3c74c2b3cb633f8e2f2fad799250a0f70d652b6b825e4" }
     ]
   }
 }

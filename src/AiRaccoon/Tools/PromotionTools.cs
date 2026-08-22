@@ -19,14 +19,16 @@ public sealed class PromotionTools(
 
     [McpServerTool(Name = TnMemoryPromotionList)]
     [Description(
-        "Lists the propose tier — candidates waiting for promotion review, ranked by score. Propose with memory_share_extract to fill it; promote the keepers with memory_share_extract (mode=promote) or drop them with memory_promotion_discard. Values are previews by default; pass includeFullValue=true for the full text.")]
+        "Lists the propose tier — candidates waiting for promotion review, ranked by score. Propose with memory_share_extract to fill it; promote the keepers with memory_share_extract (mode=promote) or drop them with memory_promotion_discard. Values are previews by default; pass includeFullValue=true for the full text. Omitting projectId requires allProjects=true.")]
     public async Task<ApiEnvelope<PromotionListResult>> List(
-        [Description("The project id; omit to see every project's queue.")]
+        [Description("The project id; omit with allProjects=true to see every project's queue.")]
         string? projectId = null,
         [Description("Maximum rows (default 50).")]
         int limit = 50,
         [Description("Return each row's full value instead of a preview. Off by default — a full queue can be hundreds of KB.")]
         bool includeFullValue = false,
+        [Description("Required to be true when projectId is omitted — explicit consent to list every project's queue.")]
+        bool allProjects = false,
         CancellationToken cancellationToken = default)
     {
         if (limit < 1)
@@ -37,6 +39,11 @@ public sealed class PromotionTools(
         if (projectId is not null)
         {
             await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryPromotionList, cancellationToken);
+        }
+        else if (!allProjects)
+        {
+            throw new McpException(
+                "invalid-params: projectId is required unless allProjects=true; pass projectId to scope the listing, or allProjects=true to explicitly list every project's queue");
         }
 
         var rows = await queue.ListAsync(projectId, limit, cancellationToken);

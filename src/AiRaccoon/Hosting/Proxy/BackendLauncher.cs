@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Text;
 using AiRaccoon.Hosting.Common;
 using CommunityToolkit.Diagnostics;
 
@@ -20,6 +21,9 @@ internal sealed partial class BackendLauncher : IBackendLauncher
     public static readonly TimeSpan DefaultBudget = TimeSpan.FromSeconds(30);
 
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>Stderr is captured for the failure path only, bounded to its last ~4 KB.</summary>
+    private const int StderrCaptureCharLimit = 4096;
 
     /// <summary>Bounds the re-probe that follows an exited backend, which the spent budget cannot.</summary>
     private static readonly TimeSpan LastChanceBudget = TimeSpan.FromSeconds(5);
@@ -53,7 +57,7 @@ internal sealed partial class BackendLauncher : IBackendLauncher
         }
 
         Log.StartingBackend(_logger, port);
-        var backend = Start(fileName, arguments);
+        var (backend, stderr) = Start(fileName, arguments);
 
         // A cold start pays the encryption-key resolve, the bank decrypt probe and the ONNX model
         // load, so a first probe miss is expected: poll until it answers or the budget expires.
@@ -95,7 +99,7 @@ internal sealed partial class BackendLauncher : IBackendLauncher
             }
         }
 
-        return GaveUp(url, backend.HasExited ? backend.ExitCode : null);
+        return GaveUp(url, backend.HasExited ? backend.ExitCode : null, stderr.Snapshot());
     }
 
     /// <summary>A probe under its own bound: the bound expiring is a miss, the caller's token is not.</summary>
@@ -113,18 +117,19 @@ internal sealed partial class BackendLauncher : IBackendLauncher
         }
     }
 
-    private BackendResult GaveUp(string url, int? serveExitCode)
+    private BackendResult GaveUp(string url, int? serveExitCode, string? serveStderr)
     {
-        Log.BackendUnavailable(_logger, url, (int)_budget.TotalSeconds, serveExitCode);
-        return new BackendResult(null, serveExitCode);
+        Log.BackendUnavailable(_logger, url, (int)_budget.TotalSeconds, serveExitCode, serveStderr ?? string.Empty);
+        return new BackendResult(null, serveExitCode, serveStderr);
     }
 
     /// <summary>
     ///     Starts the backend with all three pipes redirected and both output pipes drained on
     ///     background tasks: the proxy's own stdout is the JSON-RPC channel, and an unread pipe
-    ///     buffer blocks the child.
+    ///     buffer blocks the child. Stdout stays discarded — it is not the proxy's to relay — but
+    ///     stderr is captured (bounded) so a failure can report why, not just an exit code.
     /// </summary>
-    private static Process Start(string fileName, IReadOnlyList<string> arguments)
+    private static (Process Backend, TailCapture Stderr) Start(string fileName, IReadOnlyList<string> arguments)
     {
         var startInfo = new ProcessStartInfo(fileName)
         {
@@ -149,8 +154,9 @@ internal sealed partial class BackendLauncher : IBackendLauncher
         }
 
         _ = DrainAsync(backend.StandardOutput);
-        _ = DrainAsync(backend.StandardError);
-        return backend;
+        var stderr = new TailCapture(StderrCaptureCharLimit);
+        _ = CaptureAsync(backend.StandardError, stderr);
+        return (backend, stderr);
     }
 
     private static async Task DrainAsync(TextReader pipe)
@@ -169,6 +175,51 @@ internal sealed partial class BackendLauncher : IBackendLauncher
         }
     }
 
+    private static async Task CaptureAsync(TextReader pipe, TailCapture capture)
+    {
+        try
+        {
+            var buffer = new char[4096];
+            int read;
+            while ((read = await pipe.ReadAsync(buffer)) > 0)
+            {
+                capture.Append(buffer.AsSpan(0, read));
+            }
+        }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException)
+        {
+            // The pipe closed with the backend; nothing left to capture.
+        }
+    }
+
+    /// <summary>Thread-safe accumulator keeping only the last <paramref name="maxChars"/> characters
+    /// written, readable at any time — the backend may still be running when a snapshot is taken.</summary>
+    private sealed class TailCapture(int maxChars)
+    {
+        private readonly StringBuilder _buffer = new();
+        private readonly Lock _gate = new();
+
+        public void Append(ReadOnlySpan<char> chars)
+        {
+            lock (_gate)
+            {
+                _buffer.Append(chars);
+                if (_buffer.Length > maxChars)
+                {
+                    _buffer.Remove(0, _buffer.Length - maxChars);
+                }
+            }
+        }
+
+        public string? Snapshot()
+        {
+            lock (_gate)
+            {
+                return _buffer.Length == 0 ? null : _buffer.ToString();
+            }
+        }
+    }
+
     internal static partial class Log
     {
         [LoggerMessage(EventId = 633, Level = LogLevel.Information, Message = "ai-raccoon: starting the backend on port {Port}")]
@@ -178,7 +229,7 @@ internal sealed partial class BackendLauncher : IBackendLauncher
         public static partial void BackendLive(ILogger logger, string url);
 
         [LoggerMessage(EventId = 635, Level = LogLevel.Error,
-            Message = "ai-raccoon: the backend at {Url} did not answer within {BudgetSeconds}s (serve exit {ServeExitCode})")]
-        public static partial void BackendUnavailable(ILogger logger, string url, int budgetSeconds, int? serveExitCode);
+            Message = "ai-raccoon: the backend at {Url} did not answer within {BudgetSeconds}s (serve exit {ServeExitCode}) stderr: {ServeStderr}")]
+        public static partial void BackendUnavailable(ILogger logger, string url, int budgetSeconds, int? serveExitCode, string serveStderr);
     }
 }

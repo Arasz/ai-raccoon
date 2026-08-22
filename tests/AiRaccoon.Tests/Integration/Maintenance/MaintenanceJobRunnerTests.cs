@@ -2,7 +2,9 @@ using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
@@ -121,6 +123,83 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
         healthy.Runs.ShouldBe(1);
     }
 
+    /// <summary>D6: a broken due-ness check must not stop the pass — the SELECT and
+    /// HasWorkAsync happen before the run try/catch, so either escaping stops every later job.</summary>
+    [Fact]
+    public async Task AJobWhoseHasWorkAsyncThrows_DoesNotStopLaterJobs()
+    {
+        await using var connection = await OpenAsync();
+        var broken = new CountingJob("broken-check", interval: null) { ThrowFromHasWorkAsync = true };
+        var healthy = new CountingJob("good-after", interval: null);
+
+        var outcomes = await Runner().RunDueAsync(connection, [broken, healthy], TestContext.Current.CancellationToken);
+
+        outcomes[0].Ran.ShouldBeFalse();
+        outcomes[0].Error.ShouldNotBeNull();
+        healthy.Runs.ShouldBe(1, "a job registered after a broken HasWorkAsync check must still run in the same pass");
+    }
+
+    [Fact]
+    public async Task AJobWhoseHasWorkAsyncThrows_LogsTheSkipWithJobName()
+    {
+        await using var connection = await OpenAsync();
+        var logger = new FakeLogger<MaintenanceJobRunner>();
+        var broken = new CountingJob("broken-check", interval: null) { ThrowFromHasWorkAsync = true };
+
+        await new MaintenanceJobRunner(_time, logger).RunDueAsync(connection, [broken], TestContext.Current.CancellationToken);
+
+        var record = logger.Collector.LatestRecord;
+        record.ShouldNotBeNull();
+        record.Id.Id.ShouldBe(527);
+        record.Level.ShouldBe(LogLevel.Warning);
+        record.Message.ShouldContain("broken-check");
+    }
+
+    /// <summary>D6: the lastRun ledger SELECT shares the same guard, so a broken read is
+    /// skipped and logged rather than escaping RunDueAsync.</summary>
+    [Fact]
+    public async Task AJobWhoseLastRunReadThrows_IsSkippedAndLoggedInsteadOfEscaping()
+    {
+        await using var connection = await OpenAsync();
+        await connection.ExecuteAsync("DROP TABLE maintenance_jobs");
+        var job = new CountingJob("no-ledger", interval: null);
+
+        var outcomes = await Runner().RunDueAsync(connection, [job], TestContext.Current.CancellationToken);
+
+        outcomes.Single().Ran.ShouldBeFalse();
+        outcomes.Single().Error.ShouldNotBeNull();
+        job.Runs.ShouldBe(0);
+    }
+
+    /// <summary>D6 follow-up: VacuumJob.RefreshIntervalAsync reads its interval from the same
+    /// connection, before the ledger SELECT — a broken read there must share the same guard.</summary>
+    [Fact]
+    public async Task AVacuumJobWhoseIntervalReadThrows_DoesNotStopLaterJobs()
+    {
+        await using var connection = await OpenAsync();
+        var brokenVacuum = new VacuumJob((_, _) => throw new InvalidOperationException("settings read failed"));
+        var healthy = new CountingJob("good-after-vacuum", interval: null);
+
+        var outcomes = await Runner().RunDueAsync(connection, [brokenVacuum, healthy], TestContext.Current.CancellationToken);
+
+        outcomes[0].Ran.ShouldBeFalse();
+        outcomes[0].Error.ShouldNotBeNull();
+        healthy.Runs.ShouldBe(1, "a job registered after a broken vacuum interval read must still run in the same pass");
+    }
+
+    /// <summary>D6 follow-up: shutdown cancellation must still abort the pass, not be logged as a
+    /// benign per-job skip — the `when (ex is not OperationCanceledException)` filter is the only
+    /// thing standing between those two behaviours.</summary>
+    [Fact]
+    public async Task AJobWhoseHasWorkAsyncThrowsOperationCanceled_PropagatesOutOfRunDueAsync()
+    {
+        await using var connection = await OpenAsync();
+        var cancelling = new CountingJob("cancelling", interval: null) { ThrowOperationCanceledFromHasWorkAsync = true };
+
+        await Should.ThrowAsync<OperationCanceledException>(
+            () => Runner().RunDueAsync(connection, [cancelling], TestContext.Current.CancellationToken));
+    }
+
     [Fact]
     public async Task ARunRecordsItsTimestampAndCount()
     {
@@ -150,6 +229,10 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
 
         public bool ThrowAlways { get; init; }
 
+        public bool ThrowFromHasWorkAsync { get; init; }
+
+        public bool ThrowOperationCanceledFromHasWorkAsync { get; init; }
+
         private bool _thrown;
 
         public string Name => name;
@@ -157,6 +240,18 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
         public string DisplayName => $"counting job {name}";
 
         public TimeSpan? Interval => interval;
+
+        public Task<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken)
+        {
+            if (ThrowOperationCanceledFromHasWorkAsync)
+            {
+                throw new OperationCanceledException("shutting down");
+            }
+
+            return ThrowFromHasWorkAsync
+                ? throw new InvalidOperationException("has-work check failed")
+                : Task.FromResult(false);
+        }
 
         public Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
         {

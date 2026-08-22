@@ -56,7 +56,7 @@ config channel (see [Command-line options](#command-line-options)).
 | `memory_sweep`                 | `projectId`, `dryRun=true`                                                                                                                                  | `{candidates, deleted}`                                                                            |
 | `memory_set_ttl`               | `projectId`, `hash`, `ttlDays?`                                                                                                                             | `{hash, ttlDays, rating, threshold, canEverExpire}`                                                |
 | `memory_sync`                  | `projectId`                                                                                                                                                 | `{sent, received, reindexed}`                                                                      |
-| `memory_promotion_list`        | `projectId?`, `limit=50`, `includeFullValue=false`                                                                                                                                  | `{rows: [PromotionQueueRow]}`                                                                       |
+| `memory_promotion_list`        | `projectId?`, `limit=50`, `includeFullValue=false`, `allProjects=false`                                                                                                             | `{rows: [PromotionQueueRow]}`                                                                       |
 | `memory_promotion_discard`     | `projectId`, `hash?`                                                                                                                                        | `{discarded: n}`                                                                                   |
 | `memory_performance`           | `projectId`, `windowMinutes?=180`, `bucketMinutes?=1`                                                                                                       | `{generatedAt, window, bucket, bucketCount, series: [{tool, count, p50, p95, p99, min, max, buckets: [{start, count, average}]}]}` |
 | `code_get`                     | `projectId`, `hash`                                                                                                                                         | `{hash, value, path, lineStart, lineEnd}`                                                          |
@@ -114,7 +114,8 @@ config channel (see [Command-line options](#command-line-options)).
 - **`memory_promotion_list` / `memory_promotion_discard`:** the propose tier
   (ADR-0007) — `memory_share_extract` in `mode=propose` fills a persisted
   per-project queue (`promotion_queue`) ranked by score; `memory_promotion_list`
-  reads it (omit `projectId` to see every project's queue); `memory_promotion_discard`
+  reads it (omitting `projectId` requires `allProjects=true` — explicit consent
+  to see every project's queue); `memory_promotion_discard`
   drops one row (`hash`) or, with `hash` omitted, the whole project's queue.
   **A discard is permanent** (ADR-0026): the rejected hash is recorded in
   `promotion_discards`, and propose will never re-queue it — not on the next pass, not
