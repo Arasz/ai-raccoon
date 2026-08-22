@@ -13,6 +13,17 @@ internal static class RetrievalTuningSets
     /// </summary>
     public static readonly string[] TuningQueryIds = [];
 
+    /// <summary>
+    ///     The ids the parameter sweeps EVALUATE their chosen point against. Deliberately separate
+    ///     from <see cref="TuningQueryIds" />, which records what a sweep once SELECTED parameters
+    ///     over: on this corpus nothing was selected here, so that set is empty, and deriving the
+    ///     sweep's evaluation set from it left both sweeps measuring zero queries and reporting
+    ///     nDCG@5 = 0 (found while porting to the public corpus, ADR-0090). Derived from the
+    ///     catalog rather than hand-listed so it cannot drift from what is gradeable.
+    /// </summary>
+    public static string[] SweepGateQueryIds(IEnumerable<CatalogQuery> catalog) =>
+        [.. Gradeable(catalog).Select(q => q.Id)];
+
     /// <summary>The catalog entries that can be scored at all: those carrying an expectedSource.</summary>
     public static IReadOnlyList<CatalogQuery> Gradeable(IEnumerable<CatalogQuery> catalog) =>
         [.. catalog.Where(q => q.ExpectedSource is not null).OrderBy(q => q.Id, StringComparer.Ordinal)];
