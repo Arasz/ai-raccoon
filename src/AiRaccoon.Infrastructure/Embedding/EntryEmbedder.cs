@@ -22,36 +22,6 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
 
     private const string BundledModel = "bundled";
 
-    /// <summary>Writes the engine settings and, when the engine fingerprint changed, re-embeds the whole bank.</summary>
-    public async Task<EmbeddingConfig> ConfigureAsync(SqliteConnection connection, string provider, string? model,
-        string? baseUrl, CancellationToken cancellationToken)
-    {
-        var previous = await ReadSettingAsync(connection, EmbeddingSettingsKeys.Engine, cancellationToken)
-            .ConfigureAwait(false);
-
-        await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.Provider, provider, cancellationToken)
-            .ConfigureAwait(false);
-        await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.Model, model, cancellationToken)
-            .ConfigureAwait(false);
-        await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.BaseUrl, baseUrl, cancellationToken)
-            .ConfigureAwait(false);
-
-        var engine = embeddings.EngineFingerprint(provider, model, baseUrl);
-        await connection.ExecuteAsync(Def(MemorySql.UpsertSetting,
-            new { key = EmbeddingSettingsKeys.Engine, value = engine }, cancellationToken)).ConfigureAwait(false);
-
-        if (string.Equals(previous, engine, StringComparison.Ordinal))
-        {
-            return new EmbeddingConfig(provider, model ?? BundledModel, engine);
-        }
-
-        var reEmbed = (await connection.QueryAsync<EmbedRow>(Def(MemorySql.SelectAllEmbedded, cancellationToken))
-            .ConfigureAwait(false)).ToList();
-        await EmbedAsync(connection, reEmbed, cancellationToken).ConfigureAwait(false);
-
-        return new EmbeddingConfig(provider, model ?? BundledModel, engine);
-    }
-
     /// <inheritdoc />
     public async Task<EmbeddingConfig> StartMigrationAsync(SqliteConnection connection, string provider,
         string? model, string? baseUrl, DateTimeOffset now, CancellationToken cancellationToken)
