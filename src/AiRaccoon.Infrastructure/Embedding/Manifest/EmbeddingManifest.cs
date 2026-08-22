@@ -120,6 +120,8 @@ public sealed record ManifestFile(
     [property: JsonRequired] string Path,
     [property: JsonRequired] string Sha256);
 
+/// <summary><see cref="Files" /> lists the model file FIRST, then any external-data siblings —
+/// the order the download writes and every reader (loader, pooling repair) relies on.</summary>
 public sealed record OnnxManifest(
     [property: JsonRequired] IReadOnlyList<string> Inputs,
     string? EmbeddingOutput,

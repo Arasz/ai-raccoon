@@ -321,9 +321,10 @@ public static class TestData
 
     /// <summary>A real <see cref="IManifestPoolingRepair" /> over a stand-in graph; the default
     /// graph declares no outputs, so a manifest that already tells the truth is left alone.</summary>
-    public static IManifestPoolingRepair CreateManifestPoolingRepair(IOnnxSmokeTester? graph = null) =>
+    public static IManifestPoolingRepair CreateManifestPoolingRepair(
+        IOnnxSmokeTester? graph = null, ILogger<ManifestPoolingRepair>? logger = null) =>
         new ManifestPoolingRepair(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator(),
-            graph ?? GraphWithOutputRanks(), NullLogger<ManifestPoolingRepair>.Instance);
+            graph ?? GraphWithOutputRanks(), logger ?? NullLogger<ManifestPoolingRepair>.Instance);
 
     /// <summary>An ONNX graph that loads and declares the given output ranks — the injectable half
     /// of every rank-driven decision (#470), so no test needs a real multi-hundred-MB graph.</summary>

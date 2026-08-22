@@ -8,6 +8,7 @@ using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Code;
 using Dapper;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
 
@@ -148,12 +149,51 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
             "job's next poll sees a changed engine and re-embeds the whole corpus a second time");
     }
 
+    /// <summary>
+    ///     Gate review of #475: the repair must sit AFTER every refusal leg. A model this corpus
+    ///     will never accept (1024 dims) whose manifest also names a self-pooling output must be
+    ///     refused with its file untouched — rewriting a manifest whose pins were never verified,
+    ///     for an activation that is about to be refused, is a write nobody asked for.
+    /// </summary>
+    [Fact]
+    public async Task ActivateCodeEngineAsync_RefusedManifest_IsNotRepaired()
+    {
+        var dir = Path.Combine(_dataRoot, "code-model-non768-selfpooling");
+        Directory.CreateDirectory(dir);
+        await File.WriteAllTextAsync(Path.Combine(dir, "sentencepiece.bpe.model"), "tokenizer",
+            TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Combine(dir, "model.onnx"), "model",
+            TestContext.Current.CancellationToken);
+        File.Copy(TestData.RepoFile("tests/AiRaccoon.Tests/Resources/ManifestFixtures/code-daemon-embed-v1-non768.json"),
+            Path.Combine(dir, EmbeddingManifest.FileName));
+        TestData.WriteManifestPooling(dir, PoolingMode.Cls, "last_hidden_state");
+        var before = await File.ReadAllTextAsync(Path.Combine(dir, EmbeddingManifest.FileName),
+            TestContext.Current.CancellationToken);
+        var logger = new FakeLogger<ManifestPoolingRepair>();
+        var store = new SqliteCodeEngineStore(_factory, TestData.CreateEmbeddingService(),
+            TestData.CreateManifestLoader(),
+            TestData.CreateManifestPoolingRepair(TestData.GraphWithOutputRanks(("last_hidden_state", 2)), logger));
+
+        await Should.ThrowAsync<CodeEngineActivationRefusedException>(
+            () => store.ActivateCodeEngineAsync(dir, TestContext.Current.CancellationToken));
+
+        (await File.ReadAllTextAsync(Path.Combine(dir, EmbeddingManifest.FileName),
+            TestContext.Current.CancellationToken)).ShouldBe(before,
+            "a refused activation must leave the user's manifest exactly as it found it");
+        logger.Collector.GetSnapshot().ShouldBeEmpty();
+    }
+
+    /// <summary>
+    ///     #472: this refusal must carry a type the settings endpoint can catch and map to a 4xx —
+    ///     a bare <see cref="InvalidOperationException" /> escapes as an unhandled 500. It stays an
+    ///     <see cref="InvalidOperationException" /> (the CLI's own pre-flight catch is unaffected).
+    /// </summary>
     [Fact]
     public async Task ActivateCodeEngineAsync_NonexistentDirectory_RefusesAndWritesNothing()
     {
         var dir = Path.Combine(_dataRoot, "does-not-exist");
 
-        await Should.ThrowAsync<InvalidOperationException>(
+        await Should.ThrowAsync<CodeEngineActivationRefusedException>(
             () => _store.ActivateCodeEngineAsync(dir, TestContext.Current.CancellationToken));
 
         (await ReadSettingAsync(EmbeddingSettingsKeys.CodeModel)).ShouldBeNull(
@@ -162,6 +202,7 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
             "a refused activation must never commit the code-engine setting row");
     }
 
+    /// <summary>#472: same refusal type as the missing-manifest case above.</summary>
     [Fact]
     public async Task ActivateCodeEngineAsync_Non768Manifest_RefusesAndWritesNothing()
     {
@@ -172,7 +213,7 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
         File.Copy(TestData.RepoFile("tests/AiRaccoon.Tests/Resources/ManifestFixtures/code-daemon-embed-v1-non768.json"),
             Path.Combine(dir, EmbeddingManifest.FileName));
 
-        var ex = await Should.ThrowAsync<InvalidOperationException>(
+        var ex = await Should.ThrowAsync<CodeEngineActivationRefusedException>(
             () => _store.ActivateCodeEngineAsync(dir, TestContext.Current.CancellationToken));
 
         ex.Message.ShouldContain("1024");

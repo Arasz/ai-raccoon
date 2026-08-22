@@ -98,9 +98,16 @@ internal static partial class SettingsEndpoint
                         return Results.BadRequest("ai-raccoon: a code model activation needs a directory");
                     }
 
-                    var config = await store.ActivateCodeEngineAsync(request.Directory, ctx);
-                    Log.CodeEngineActivated(logger, config.Engine);
-                    return Results.Ok(new ModelCodeActivationResponse(config.Model, config.Engine));
+                    try
+                    {
+                        var config = await store.ActivateCodeEngineAsync(request.Directory, ctx);
+                        Log.CodeEngineActivated(logger, config.Engine);
+                        return Results.Ok(new ModelCodeActivationResponse(config.Model, config.Engine));
+                    }
+                    catch (CodeEngineActivationRefusedException ex)
+                    {
+                        return Results.BadRequest(ex.Message);
+                    }
                 });
         }
     }

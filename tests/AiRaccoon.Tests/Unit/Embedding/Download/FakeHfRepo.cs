@@ -145,11 +145,9 @@ namespace AiRaccoon.Tests.Unit.Embedding.Download;
         ///     is NOT fairseq-offset. Uses the REAL bundled code-sentencepiece.bpe.model bytes (not a
         ///     fake placeholder) — the fix derives special-token ids from this file's own piece
         ///     table, so the fixture must be a piece table an actual sentencepiece parse can read.
-        /// </summary>
-        /// <summary>
-        ///     The real faxenoff/code-daemon-embed-v1 shape (#470): its graph declares ONE output,
-        ///     last_hidden_state, and pools inside itself, so there is no sentence_embedding for the
-        ///     planner to spot and no 1_Pooling layout to read the mode from.
+        ///     Its graph declares ONE output, last_hidden_state, and pools inside itself (#470), so
+        ///     there is no sentence_embedding for the planner to spot and no 1_Pooling layout to
+        ///     read the mode from — the real repo's shape.
         /// </summary>
         public static FakeRepo CodeDaemon(FakeHfServer server, bool declareUnresolvablePiece = false)
         {

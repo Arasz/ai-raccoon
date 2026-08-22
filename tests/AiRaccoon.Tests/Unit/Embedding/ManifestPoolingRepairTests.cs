@@ -1,4 +1,5 @@
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Embedding.Download;
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
@@ -97,6 +98,37 @@ public sealed class ManifestPoolingRepairTests : IDisposable
         record.Level.ShouldBe(LogLevel.Warning);
     }
 
+    /// <summary>Gate review of #475: nothing else on the activation path opens the graph, so a
+    /// graph that will not load must be reported here rather than swallowed.</summary>
+    [Fact]
+    public void Repair_GraphWillNotLoad_WarnsAndLeavesTheManifestAlone()
+    {
+        SeedManifest(PoolingMode.Cls);
+        var before = File.ReadAllText(Path.Combine(_dir, EmbeddingManifest.FileName));
+        var repair = new ManifestPoolingRepair(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator(),
+            new UnloadableGraph(), _logger);
+
+        repair.Repair(_dir).ShouldBeFalse();
+
+        File.ReadAllText(Path.Combine(_dir, EmbeddingManifest.FileName)).ShouldBe(before);
+        var record = _logger.Collector.GetSnapshot().ShouldHaveSingleItem();
+        record.Id.Id.ShouldBe(425);
+        record.Level.ShouldBe(LogLevel.Warning);
+        record.Message.ShouldContain("unsupported opset");
+    }
+
+    /// <summary>Leaves no temp file behind either — a stray sibling nothing cleans up is litter
+    /// inside the user's installed model directory.</summary>
+    [Fact]
+    public void Repair_LeavesNoTemporaryFileBehind()
+    {
+        SeedManifest(PoolingMode.Cls);
+
+        Repair(("last_hidden_state", 2)).Repair(_dir).ShouldBeTrue();
+
+        Directory.GetFiles(_dir).ShouldNotContain(f => f.EndsWith(".tmp", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Repair_DirectoryWithNoManifest_DoesNothing()
     {
@@ -105,6 +137,13 @@ public sealed class ManifestPoolingRepairTests : IDisposable
         Repair(("last_hidden_state", 2)).Repair(_dir).ShouldBeFalse();
 
         _logger.Collector.GetSnapshot().ShouldBeEmpty();
+    }
+
+    private sealed class UnloadableGraph : IOnnxSmokeTester
+    {
+        public IReadOnlyDictionary<string, int> Verify(string onnxPath) =>
+            throw new OnnxSmokeTestException("the downloaded model failed to load in ONNX Runtime: "
+                                             + "the export uses an unsupported opset");
     }
 
     private ManifestPoolingRepair Repair(params (string Output, int Rank)[] ranks) =>
