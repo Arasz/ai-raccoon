@@ -24,17 +24,9 @@ public static class TestCategories
     public const string Nightly = "Nightly";
 
     /// <summary>
-    ///     Orthogonal to Category/Speed: marks a test whose verdict depends on how fast the host
-    ///     is — a wall-clock budget, a latency percentile, a throughput floor. Owner ruling
-    ///     (2026-08-22): "the budget is for benchmarking or for special performance regression test
-    ///     suite — not for the unit tests", because such a test can go red with no defect present.
-    ///     Every PR lane in .github/workflows/build.yml excludes it with
-    ///     <c>&amp;Performance!=Benchmark</c>; it still runs in nightly.yml's unfiltered backstop,
-    ///     and on demand with <c>dotnet test --filter "Performance=Benchmark"</c>.
-    ///     <para />
-    ///     Reach for it only when the budget IS the acceptance criterion. A correctness test that
-    ///     happens to hold a <c>Stopwatch</c> — a timeout, a refusal, a fast-path-vs-budget-expiry
-    ///     choice — belongs on a fake clock instead, not behind this trait.
+    ///     Marks a test whose verdict depends on host speed (a wall-clock budget or percentile). Excluded
+    ///     from every PR lane via <c>Performance!=Benchmark</c> (see .github/workflows/build.yml); still runs
+    ///     in nightly and on demand. A correctness test holding a Stopwatch belongs on a fake clock instead.
     /// </summary>
     public const string Performance = "Performance";
 
