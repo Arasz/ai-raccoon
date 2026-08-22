@@ -35,8 +35,7 @@ public sealed class ParityGateTests(ManagedHarnessFixture fixture, ITestOutputHe
         var golden = GoldenFile.Load(Path.Combine(ReferenceAssets.AssetsDirectory, GoldenFile.FileName));
         var reference = AggregateFromGolden(golden);
 
-        var outcomes = await SweepRunner.RunAsync(
-            RealWorldQueries.Queries, fixture.Harness.RankAsync, TestContext.Current.CancellationToken);
+        var outcomes = await fixture.EnsureSweptAsync(TestContext.Current.CancellationToken);
 
         var rows = new StringBuilder();
         var regressions = new List<string>();
@@ -62,11 +61,13 @@ public sealed class ParityGateTests(ManagedHarnessFixture fixture, ITestOutputHe
 
         // p95 latency is reported here, not asserted: the wall-clock budget is a separate
         // Performance=Benchmark fact (FusedSearch_P95LatencyWithinBudget) so a slow host cannot
-        // fail this correctness gate (owner gate G7; ruling #464).
-        var p95 = TestData.Percentile(fixture.Harness.QueryLatenciesMs, 0.95);
+        // fail this correctness gate (owner gate G7; ruling #464). Scoped to this sweep's own
+        // samples (fixture.SweepQueryLatenciesMs), not the shared Harness.QueryLatenciesMs pool
+        // other facts/helpers also append to.
+        var p95 = TestData.Percentile(fixture.SweepQueryLatenciesMs, 0.95);
 
         output.WriteLine($"reference (golden k={golden.K}): nDCG@10 {reference.NdcgAt10:F4}, MRR {reference.Mrr:F4}, Recall@10 {reference.RecallAt10:F4}");
-        output.WriteLine($"new-side p95 {p95:F1} ms / p50 {TestData.Percentile(fixture.Harness.QueryLatenciesMs, 0.50):F1} ms over {fixture.Harness.QueryLatenciesMs.Count} queries");
+        output.WriteLine($"new-side p95 {p95:F1} ms / p50 {TestData.Percentile(fixture.SweepQueryLatenciesMs, 0.50):F1} ms over {fixture.SweepQueryLatenciesMs.Count} queries");
         output.WriteLine(rows.ToString());
 
         WriteReportIfRequested(golden, reference, outcomes, p95);
@@ -74,19 +75,28 @@ public sealed class ParityGateTests(ManagedHarnessFixture fixture, ITestOutputHe
 
     /// <summary>
     ///     Wall-clock companion to <see cref="FusedSearch_NdcgParityWithinDelta_AtEverySweepPoint"/>: asserts
-    ///     that run's p95 query latency against <see cref="P95LatencyBudgetMs"/>. Split out (owner gate G7,
-    ///     ruling #464) so a slow host cannot turn the nDCG correctness gate red. Reads the
-    ///     <see cref="ManagedHarness.QueryLatenciesMs"/> already populated by that fact's sweep — no second
-    ///     corpus pass.
+    ///     the sweep's p95 query latency against <see cref="P95LatencyBudgetMs"/>. Split out (owner gate G7,
+    ///     ruling #464) so a slow host cannot turn the nDCG correctness gate red. Calls
+    ///     <see cref="ManagedHarnessFixture.EnsureSweptAsync"/> itself and reads only
+    ///     <see cref="ManagedHarnessFixture.SweepQueryLatenciesMs"/> (that sweep's own samples, not the
+    ///     shared <see cref="ManagedHarness.QueryLatenciesMs"/> pool other facts also append to), so this
+    ///     holds run alone (<c>--filter "Performance=Benchmark"</c>) or in any method order — no
+    ///     <c>ITestCaseOrderer</c> required, and the sweep executes at most once per fixture regardless of
+    ///     which fact triggers it first.
     /// </summary>
     [Fact]
     [Trait(TestCategories.Performance, TestCategories.Benchmark)]
-    public void FusedSearch_P95LatencyWithinBudget()
+    public async Task FusedSearch_P95LatencyWithinBudget()
     {
-        var p95 = TestData.Percentile(fixture.Harness.QueryLatenciesMs, 0.95);
+        await fixture.EnsureSweptAsync(TestContext.Current.CancellationToken);
+
+        fixture.SweepQueryLatenciesMs.Count.ShouldBeGreaterThan(0,
+            "p95 fact ran without a populated sweep");
+
+        var p95 = TestData.Percentile(fixture.SweepQueryLatenciesMs, 0.95);
         p95.ShouldBeLessThanOrEqualTo(P95LatencyBudgetMs,
             $"p95 managed query latency {p95:F1} ms exceeds the {P95LatencyBudgetMs:F0} ms budget over " +
-            $"{fixture.Harness.QueryLatenciesMs.Count} queries");
+            $"{fixture.SweepQueryLatenciesMs.Count} queries");
     }
 
     [Fact]
@@ -242,7 +252,7 @@ public sealed class ParityGateTests(ManagedHarnessFixture fixture, ITestOutputHe
         report.AppendLine($"| p50 | p95 | max | samples |");
         report.AppendLine($"|---|---|---|---|");
         report.AppendLine(
-            $"{$"| {TestData.Percentile(fixture.Harness.QueryLatenciesMs, 0.50):F1} ms | {p95:F1} ms | {(fixture.Harness.QueryLatenciesMs.Count == 0 ? 0 : fixture.Harness.QueryLatenciesMs.Max()):F1} ms | "}{fixture.Harness.QueryLatenciesMs.Count} |");
+            $"{$"| {TestData.Percentile(fixture.SweepQueryLatenciesMs, 0.50):F1} ms | {p95:F1} ms | {(fixture.SweepQueryLatenciesMs.Count == 0 ? 0 : fixture.SweepQueryLatenciesMs.Max()):F1} ms | "}{fixture.SweepQueryLatenciesMs.Count} |");
 
         Directory.CreateDirectory(managedDir);
         File.WriteAllText(Path.Combine(managedDir, "parity-report.md"), report.ToString());
