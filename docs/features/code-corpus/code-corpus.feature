@@ -11,7 +11,7 @@ Feature: Code corpus
     # Baseline (plan §1, §3.1): a second, code-only corpus in the SAME memory.db
     # (code_entries + code_fts + vec_code float[768]), fed by the existing watch/ingest
     # machinery, reachable through memory_search kind=memory|code|both and code_get.
-    # Model: faxenoff/code-daemon-embed-v1, 768-dim, chunk budget 126 (ctx-2).
+    # Model: faxenoff/code-daemon-embed-v1, 768-dim, chunk budget 510 (min(510, ctx-2)).
 
     # Explicitly OUT OF SCOPE for this contract (plan §1, §12.4 OQ5):
     # - Flipping the shipped default embedding model or chunker arm — the owner decides
