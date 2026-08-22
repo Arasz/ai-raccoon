@@ -1,9 +1,25 @@
-# Plan — post-delta session 3 (rev 1 — owner gate pending)
+# Plan — post-delta session 3 (rev 1.2 — WP11's gate answered; G1–G15 still pending)
 
 **Date:** 2026-08-22 · **Base:** main `021d6c17` (v1.32.0 released 14:00:31Z **and published to
-nuget.org**; PRs #463/#464/#466/#467/#468 merged) · **Status:** rev 1 — **owner gate pending**; no
-work package starts until the gate below is answered, except the two marked *ungated* ·
+nuget.org**; PRs #463/#464/#466/#467/#468 merged) · **Status:** rev 1.2 — **G1–G15 still
+pending**; **G16–G19 answered** (`docs/work/2026-08-22-post-delta-3-wp11-feedback.md`), so WP11 is
+open. No other gated work package starts until its gate is answered, except the two marked *ungated* ·
 **Task:** `post-delta-3` · **Lane:** architect (plan + gate), Opus.
+
+**rev 1.2 — gate answered (WP11 only).** The owner ruled on G16–G19 in
+`docs/work/2026-08-22-post-delta-3-wp11-feedback.md`: **G16 APPROVE** (ORT intra-op cap at
+`max(1, cores/2)` via `embedding.threads`, gated on `MiniLmGoldenVectorTests`), **G18 APPROVE**
+(one key `maintenance.embed-rows-per-run.global`, default 128, no pacing delay), **G19 APPROVE**
+(bank settings on the existing `/settings` route) — all three stand exactly as this plan first wrote them.
+**G17 CHANGE**, verbatim: *"We want to use one system, based on bounded channels - not a semaphore -
+exactly the same solution as for metrics. It should be a separate 'topic' than for metrics - but I
+want you to extract the channel based events pump. We can even use single pump with round robin
+consumers with a limited processing budget"*. §WP11's design and PR split are rewritten to follow it:
+the `SemaphoreSlim` is gone, an `EventPump<T>` is extracted (Finding (c) records what the metrics
+path actually is today — **not** a `Channel<T>`, but a bounded queue with drop-on-full, which is the
+same contract), metrics becomes one topic and embed another, and WP11 is now **four** PRs (A, B1, B2,
+C) instead of two. The round-robin variant the owner offered is evaluated and **rejected for two
+topics**, with the reason recorded — see §WP11 *Chosen / Rejected*.
 
 **Sources** (all re-verified against the tree/API today, not quoted from a prior document):
 `gh issue view 414/436/454/455/459/465`; `docs/adr/0089-the-project-id-is-a-guidv7-and-that-is-not-access-control.md`;
@@ -25,6 +41,11 @@ nuget.org flat-container index for `ai-raccoon`; `docs/work/2026-08-22-post-delt
 8. WP6 — #455 re-derive corpus, queries and the parity golden (G14, scoped by G9).
 9. WP3 — #436 the re-ingest prune reaches `code_entries` (G12).
 10. WP8 — #454 AND-under-match anchor (G13); WP9 — EventId disposition (G6).
+11. WP11 — the embed/ingest load governor (**gate answered**, rev 1.2): four PRs in order —
+    **A** the ORT thread cap (waits for #475), **B1** extract the bounded-channel `EventPump<T>` and
+    move metrics onto it with its existing tests unmodified, **B2** the embed topic, its producers
+    and the deleted inline watch drain (waits for B1 **and** WP3 #436), **C** the
+    `maintenance.embed-rows-per-run.global` key (waits for B2).
 
 ---
 
@@ -494,6 +515,431 @@ alongside WP6 in one session** — that is the substance of G15.
 
 ---
 
+### WP11 — embed/ingest load governor **[scope extension; G16/G18/G19 APPROVED, G17 answered CHANGE — design below is rev 1.2]**
+
+**Trigger.** The owner's live server today: `pending-embed` ran **13,307 ms**; a watch digest's
+best-effort embed failed with `SQLite Error 5: 'database is locked'` at `EntryEmbedder.EmbedAsync`
+(`:302`) ← `EmbedPendingAsync` (`:218`) ← `SqliteMemoryStore.EmbedPendingAsync` (`:431`/`:435`) ←
+`WatchDigestExecutor.TryEmbedPendingAsync` (`:116`); `code-reindex` started in the same window.
+Owner's words: *"it seems the code ingestion is saturating the machine CPU — we need to tune how
+often and how much work at once we do with code ingestion to limit the impact."*
+
+*Not in scope:* the `[418]` "Search query was shortened … 1095 tokens exceeded the 254-token window"
+warning in the same log is a 1,095-token **agent query** being trimmed deliberately and said so
+(ADR-0071); it is informational, costs one inference, and has nothing to do with the load problem.
+
+#### Finding (a) — CPU: unbounded ORT threads × unserialised drains
+
+- **Nothing in this repository ever constructs a `SessionOptions`.** The one ONNX session in the
+  tree is `OnnxEmbeddingGenerator.cs:53` — `_session = new InferenceSession(modelPath);`, no options
+  argument. Verified: `grep -rn "SessionOptions\|IntraOpNumThreads\|InterOpNumThreads\|ExecutionMode"
+  src/ tests/ benchmarks/` returns **0 lines**, and `grep -rn "new InferenceSession" src/` returns
+  exactly that one line.
+- **ORT's documented default is one intra-op thread per physical core.** onnxruntime.ai's
+  threading page (re-fetched today, not recalled): *"Default: (not specified or 0)
+  `sess_options.intra_op_num_threads = 0`"* → *"INTRA Threads Total = Number of physical CPU Cores."*
+  The owner's host reports `hw.physicalcpu` = **10** (arm64). So each session runs a 10-thread
+  intra-op pool.
+- **There are two such sessions, not one.** `EmbeddingService.CreateGenerator`
+  (`EmbeddingService.cs:85-96`) caches one generator per engine fingerprint
+  (`_engines.GetOrAdd(EngineFingerprint(provider, model, baseUrl), …)`), and the code corpus has its
+  own engine (`EmbeddingSettingsKeys.CodeModel`/`CodeEngine`, `:25`/`:28`; `CodeEmbedder.cs:70-74`
+  builds its settings from `codeModel`). Memory drain + code drain = **2 sessions × 10 threads = 20
+  intra-op threads on 10 cores**, before counting the ingest and query paths that use the same
+  cached sessions concurrently.
+- **`ExecutionMode.ORT_SEQUENTIAL` is already the default** (same page: *"Default:
+  `sess_options.execution_mode = rt.ExecutionMode.ORT_SEQUENTIAL`"*). Setting it explicitly changes
+  nothing — dropped from the design below on `ask-if-simpler` grounds.
+- **Batch sizes are the same on both corpora and are not the lever.** `EntryEmbedder.BatchSize` = 32
+  (`EntryEmbedder.cs:21`), `CodeEmbedder.BatchSize` = 32 (`CodeEmbedder.cs:18`); each drain runs
+  4 × 32 = 128 rows per run (`PendingEmbedJob.cs:36`, `CodeReindexJob.cs:31`). A batch of 32 short
+  strings is a small amount of *work*; what makes it saturating is that each batch is handed to a
+  10-thread pool and several batches are in flight at once.
+
+#### Finding (b) — lock: three unserialised writers, and a holder that can exceed 5 s
+
+- **Nothing serialises the embed paths.** `grep -rn "SemaphoreSlim\|Mutex\|lock (" ` over
+  `Infrastructure/Embedding/`, `Infrastructure/Maintenance/` and `Infrastructure/Watch/` finds no
+  gate over any embedder. The only semaphore in the neighbourhood is `WatchScheduler`'s **per-project
+  digest gate**, whose default limit is **4** (`WatchScheduler.cs:10`, `:31-33`) — it permits
+  concurrency, it does not restrain embedding.
+- **The maintenance service itself runs two independent loops that both call the same runner.**
+  `BankMaintenanceHostedService.ExecuteAsync` does
+  `await Task.WhenAll(RunHeavyPassLoopAsync(...), RunOnDemandPollLoopAsync(...))` (`:112-114`); the
+  heavy pass calls `_jobRunner.RunDueAsync(connection, _jobs, …)` at `:249-251` on its own
+  connection, and the on-demand poll calls the same method at `:163-164` on a *different* connection
+  every `OnDemandPollInterval` = **15 s** (`:79`). `MaintenanceJobRunner.RunDueAsync`
+  (`MaintenanceJobRunner.cs:22-99`) holds no lock and takes no lease. **The same `PendingEmbedJob`
+  can therefore be running in both loops at once.**
+- **And when it is, both runs embed the same rows.** `MemorySql.SelectAllPendingForEmbed`
+  (`MemorySql.cs:354-355`) is `SELECT id, value FROM entries WHERE embed_state = 'pending' ORDER BY
+  id LIMIT @limit` — **no claim, no lease, no state transition to 'embedding'**. Two overlapping
+  drains select the identical first 128 ids and pay for every inference twice.
+- **The watch-digest leg is an *unbounded* drain, unlike the job.**
+  `WatchDigestExecutor.cs:88` calls `TryEmbedPendingAsync` after every successful replace, which
+  calls `store.EmbedPendingAsync(projectId, **null**, …)` (`:116`) — `limit: null`, i.e.
+  `EntryEmbedder.EmbedPendingAsync`'s `while (true)` loop (`EntryEmbedder.cs:202-219`) runs until the
+  project has no pending row left, *plus* an equally unbounded structure heal (`:223-227`). The watch
+  pipeline ticks every **1 s** (`WatchPipeline.cs:61`) and admits up to 4 digests per project, so up
+  to **four unbounded drains** can be in flight while `PendingEmbedJob` runs its own.
+- **Neither embedder embeds inside a write transaction — that part is already right.** `grep -rn
+  "BeginTransaction" src/` shows the only transactions near embedding are
+  `EntryEmbedder.cs:50` (the `model set` outbox, ADR-0076) and `CodeEmbedder.cs:189` (the fingerprint
+  reconcile, ADR-0087); `EntryEmbedder.EmbedAsync` (`:276-316`) and `CodeEmbedder.EmbedPendingBatchAsync`
+  (`:47-93`) run the generator first and then write per row. The watch replace path deliberately
+  passes `embedInline: false` (`SqliteMemoryStore.Replace.cs:185`; the contract is spelled out at
+  `IFileIngestor.cs:35-40` — *"Set embedInline false when the caller holds a write transaction"*).
+  `docs/work/2026-08-07-moe-b-persistence.md:218-220` recorded the same conclusion: *"Embedding is
+  **not** awaited under a write lock … The most likely hazard in this design is genuinely absent."*
+  **So "never embed inside a write transaction" is a rule to keep, not a fix to make** — with one
+  loose end below.
+- **The statement that threw is a write, and the timeout is 5 s.** `EntryEmbedder.cs:302` is the
+  `MarkEmbedded` UPDATE (`MemorySql.cs:328-330`), which fires the vec0 triggers. It waited on
+  another writer for the full `DefaultTimeout = 5` / `PRAGMA busy_timeout=5000`
+  (`SqliteConnectionFactory.cs:295-299`, `:346-348`) and gave up.
+- **Which writer held it that long — not established.** Two candidates, both consistent with the
+  log, and the log alone cannot separate them:
+  1. `ReplaceCoreAsync` (`SqliteMemoryStore.Replace.cs:146-210`) issues `BEGIN IMMEDIATE` at
+     `:152-154` and holds it across the queue capture, `DeleteBySourcePath`, `DeleteCodeBySourcePath`,
+     the **full re-ingest and re-chunking** of the file (`:184-186`) and the fingerprint upsert,
+     committing only at `:206-208`. Chunking a large code file inside that span, on a box whose
+     cores are all busy running inference, is the obvious way to exceed 5 s — and three more digests
+     may be queued behind it (concurrency 4).
+  2. Write **starvation** rather than a single long holder: SQLite's busy handler is not fair, so a
+     128-row `MarkEmbedded` loop of short autocommit writes from one connection can keep a waiter
+     spinning for its whole 5 s without any one transaction lasting that long.
+  **Settling it is one instrumentation change, not a guess:** a `[LoggerMessage]` around
+  `ReplaceCoreAsync`'s BEGIN…COMMIT recording the held span, or `sqlite3_profile`. WP11's first
+  commit should add that log line so the fix is aimed rather than assumed.
+- **One loose end worth closing while here.** `FileIngestor.IngestDirectoryAsync`
+  (`FileIngestor.cs:132-168`) opens **no** transaction and calls `InsertChunksAsync` with
+  `embedInline` at its default `true` (`:286-290` → `EntryEmbedder.EmbedIfConfiguredAsync`,
+  `EntryEmbedder.cs:164-195`), so a directory ingest embeds **one generator call per chunk**,
+  serially, on the same shared session. It is not a lock hazard (no transaction), but it is a third
+  uncoordinated consumer of the inference pool, and B2 turns it into a producer like the rest.
+
+#### Finding (c) — what the metrics path actually is (the mechanism G17 asks to extract)
+
+The owner's ruling calls it "the channel based events pump … exactly the same solution as for
+metrics". Re-read today, and the wording needs one correction before anything is extracted:
+
+- **The metrics path does not use `Channel<T>` today.** `grep -rn "Channel<\|CreateBounded\|BoundedChannelOptions" src/`
+  returns **exactly one line in the whole tree**, and it is not metrics:
+  `src/AiRaccoon.Infrastructure/Watch/WatchPipeline.cs:56` —
+  `private readonly Channel<WatchEvent> _events = Channel.CreateUnbounded<WatchEvent>();`.
+- **What metrics has is a bounded queue with drop-on-full plus a timed drain** — semantically the
+  same object, hand-rolled. `MeasurementBuffer.cs:9` holds a `ConcurrentQueue<Measurement>`;
+  `TryEnqueue` (`:21-36`) reserves a slot with `Interlocked.Increment` **before** enqueuing (`:25`),
+  and on overflow decrements, increments `_dropped` and **returns false** (`:26-31`) — it never
+  blocks and never grows. `DrainAll()` (`:38-48`) dequeues everything. `ApplyCapacity` (`:50`)
+  changes the cap at runtime with a `Volatile.Write`.
+- **Port:** `IMeasurementBuffer.cs:10-27` — `Capacity`, `EnqueuedCount`, `DroppedCount`,
+  `TryEnqueue` (false = dropped), `DrainAll`, `ApplyCapacity`.
+- **Producer:** `MetricsRecorder.cs:14-24` — one `buffer.TryEnqueue(...)` inside a `try`, exception-proof,
+  return value deliberately ignored; a failure logs EventId **960** (`:28-30`) and the caller's search
+  is unaffected. Fire-and-forget, never awaited.
+- **Consumer:** `MetricsFlusher.cs:18-51` — a `BackgroundService` with a `PeriodicTimer` on the
+  injected `TimeProvider` (`:43-44`), period read from `metrics.flush-interval-seconds.global`
+  (default **30 s**, `MetricsConfigKeys.cs:16-21`) and **re-read after every tick** (`:49`); buffer
+  capacity applied once at startup from `metrics.buffer-capacity.global` (default **1000**,
+  `MetricsConfigKeys.cs:6-14`) at `:41`/`:175-191`. One pass = `FlushOnceAsync` (`:84-117`):
+  `DrainAll` (`:88`), batch write, and self-metrics **only when the batch was non-empty** (`:103-105`).
+- **Failure and shutdown:** a failed batch write is logged (EventId **970**) and *dropped, not
+  retried* (`:119-140`); `StopAsync` (`:59-81`) runs one final flush bounded by
+  `ShutdownFlushTimeout` = 5 s (`:31`) so a hanging store cannot hang shutdown. Log block:
+  EventIds **970-974** (`:212-231`).
+- **Test seams:** `TickSignal Flushes` (`:34`) and `TickSignal TimerArmed` (`:37`) — count-based
+  broadcast signals (`src/AiRaccoon.Infrastructure/Maintenance/TickSignal.cs:41-59`), so the tests
+  await a *count*, never a wall clock. Registration: `AppRegistrations.cs:203-206`.
+- **Tests that pin it:** `tests/AiRaccoon.Tests/Unit/Metrics/MeasurementBufferTests.cs` (6 facts —
+  burst within capacity, exactly at capacity, overflow drops-and-reports, drain restores occupancy,
+  `EnqueuedCount` unaffected by draining, `ApplyCapacity`), `MetricsFlusherTests.cs` (16 facts),
+  `MetricsRecorderTests.cs` (2), plus `MetricsFlusherTelemetryTests.cs` and
+  `MetricsDependenciesSmokeTests.cs`. All `Unit`+`Fast`.
+- **The coalescing precedent is in the watch pipeline, not metrics.** `WatchPipeline.TickOnceAsync`
+  (`:176-185`) drains the channel with `TryRead` and folds each event into a
+  `Dictionary<(ProjectId, Path), WatchEvent>` — last-writer-wins per key — then drains the
+  *dictionary* to the scheduler. Duplicate signals for one key collapse to one job.
+
+**Consequence for the extraction.** `Channel.CreateBounded<T>` with
+`BoundedChannelFullMode.Wait` and **`TryWrite` only** (never `WriteAsync`) has exactly
+`MeasurementBuffer`'s contract: full → `TryWrite` returns `false` immediately, nothing blocks,
+nothing is silently discarded behind the caller's back. (`DropWrite` would return `true` and drop —
+**not** today's semantics, and it would take `MeasurementBufferTests` red.) So the ruling is
+buildable as a *behaviour-identical* reimplementation, with the existing metrics tests as the proof.
+
+#### Design — one pump type, one instance per topic (G17 answered: CHANGE)
+
+**The unit being extracted.** `src/AiRaccoon.Core/EventPump/` — `IEventPump<T>` / `EventPump<T>` /
+`PumpTopic.cs`. Core, not Infrastructure: the pump is a `Channel<T>` plus counters, and
+`System.Threading.Channels` is BCL, not framework/persistence/SDK, so `clean-architecture-layering`
+is satisfied. **No SQLite, ONNX or Hosting type is visible from the pump** — the drain loops that
+own those live in Infrastructure. The folder is a named mechanism, not a generic bucket: the
+`screaming-architecture` invariant bans `Services/`/`Utils/`, not the thing itself under its own name.
+
+**Surface** (deliberately five members; each one is demanded by a topic that exists today):
+
+| Member | Contract | Which topic needs it |
+|---|---|---|
+| `bool TryEnqueue(T item)` | `TryWrite` on a bounded channel. `false` = at capacity (drop, counted) **or** coalesced away. Never blocks, never throws. | both |
+| `IReadOnlyList<T> DrainUpTo(int budget)` | `TryRead` up to `budget` items, FIFO; returns fewer when the pump is empty. `budget` is a **count**, never a duration. | both |
+| `Task WaitForItemAsync(CancellationToken)` | `WaitToReadAsync` — the wake-up the metrics buffer cannot give, and the only reason a channel beats today's `ConcurrentQueue`. | embed |
+| `long EnqueuedCount` / `long DroppedCount` / `long CoalescedCount` | `Interlocked` counters; the assertion surface for every test below. | both |
+| `void ApplyCapacity(int capacity)` | Mutable soft cap enforced by the same `Interlocked` reservation that exists today (`MeasurementBuffer.cs:25-31`), in front of the channel. | metrics |
+
+`ApplyCapacity` is the one place the shape is not a pure channel, and it is deliberate: a
+`Channel`'s bound is fixed at construction, while `metrics.buffer-capacity.global` is read from the
+bank at flusher startup and pinned by
+`MeasurementBufferTests.ApplyCapacity_ChangesTheCapAppliedToFutureEnqueues`. So the channel is
+constructed at the topic's **ceiling** (a number that never changes) and the *effective* cap is the
+mutable reservation counter. *Rejected:* fix capacity at construction — it is simpler by one
+counter and would force an edit to `MeasurementBufferTests`, destroying the behaviour-preservation
+proof that makes B1 safe at all.
+
+**Topics.** A topic is one `EventPump<T>` instance plus one drain loop. Two exist:
+
+| Topic | Item | Capacity | Coalesce | Trigger | Budget per pass |
+|---|---|---|---|---|---|
+| `metrics` | `Measurement` | `metrics.buffer-capacity.global`, default 1000 | no — every measurement is distinct data | `PeriodicTimer`, `metrics.flush-interval-seconds.global`, default 30 s | drain-all (bounded by capacity, unchanged) |
+| `embed` | `EmbedDrainRequest(EmbedCorpus Corpus)` — `Memory` or `Code` | **8** (the item space is 2; 8 is slack, not a queue) | **yes**, on the record's own structural equality | `WaitForItemAsync` — signalled, not timed | **1 item**, then `maintenance.embed-rows-per-run.global` rows (default 128) |
+
+##### Chosen: one pump type, one instance per topic. Rejected: a single pump with round-robin consumers.
+
+The owner offered the round-robin shape ("we can even…"). For the two topics that exist it is the
+worse of the two, on three grounds, and none of them is style:
+
+1. **The topics have different trigger shapes.** Metrics is *time-triggered, drain-all*: its
+   30-second cadence is a promise pinned by
+   `MetricsFlusherTests.ExecuteAsync_FlushesAtTheConfiguredInterval`. Embed is *signal-triggered,
+   drain-one*. A single round-robin consumer has to have one loop shape, so one of the two topics
+   gets the wrong one.
+2. **A shared consumer is a shared failure domain, and the embed side is the slow one.** The
+   trigger for this whole work package was a **13,307 ms** `pending-embed` run. Round-robin puts a
+   metrics flush behind that drain. Today's separation guarantees a measurement flush costs one
+   batched INSERT and nothing else; round-robin trades that guarantee away for no gain.
+3. **Round-robin exists to ration a resource two topics contend for. These two do not contend.**
+   The scarce resource here is the inference pool, and after this change it has exactly **one**
+   consumer — the embed topic. Metrics costs a batched SQLite write. There is nothing to arbitrate.
+
+What the budget *means* under the chosen shape, stated so it cannot drift into a clock: **the embed
+consumer takes exactly one work item per pass and drains exactly `maintenance.embed-rows-per-run.global`
+rows for it — two counts, no duration anywhere.** The round-robin option stays additively
+available: a third topic that genuinely shares the inference pool would be the moment to build it,
+and it would be a change to the drain loops, not to the pump.
+
+##### The embed topic in detail
+
+**Producers** (they enqueue; none of them calls a generator for a drain any more):
+
+| Producer | Today | After B2 |
+|---|---|---|
+| `PendingEmbedJob.RunAsync` (`:52-56`) | `embedder.EmbedPendingBatchAsync(connection, 128, ct)` | `pump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Memory))`. `HasWorkAsync` (`:38-49`) is unchanged and is what makes the 15 s poll the recovery path. |
+| `CodeReindexJob.RunAsync` (`CodeReindexJob.cs:46-50`) | `embedder.EmbedPendingBatchAsync(connection, 128, ct)` | `pump.TryEnqueue(… EmbedCorpus.Code)`; `HasWorkAsync` (`:38-42`, incl. the fingerprint reconcile) unchanged. |
+| `WatchDigestExecutor.TryEmbedPendingAsync` (`:112-121`, called at `:88`) | `store.EmbedPendingAsync(projectId, **null**, ct)` — unbounded, per digest, up to 4 concurrent per project | **deleted**; the digest enqueues one `Memory` item and returns. The rows stay `embed_state='pending'`, which is what already survives a crash. |
+| `FileIngestor.IngestDirectoryAsync` (`:132-168` → `:286-290`) | `embedder.EmbedIfConfiguredAsync` **per chunk**, serially, `embedInline` defaulting to `true` | pass `embedInline: false` and enqueue **once** at the end of the directory. |
+
+**Not producers, deliberately** — two single-row inline embeds on the write path stay exactly as
+they are: `SqliteMemoryStore.cs:146` and `:509` (`EmbedIfConfiguredAsync` for one just-written row).
+That is one inference on the caller's own thread, in the latency the caller asked for; routing it
+through a queue would make a synchronous write eventually-consistent for no benefit.
+
+**One remaining direct drain, named rather than hidden.** `MemoryTools.cs:402` —
+`memory_embed_pending` — calls `store.EmbedPendingAsync(projectId, limit, ct)` and returns counts to
+the caller. It stays direct in B2: it is operator-initiated, bounded by its own `limit`, and turning
+it into "queued, ask later" changes a tool contract (and its tests) for a path nobody complained
+about. **Consequence to accept explicitly:** an operator running `memory_embed_pending` by hand can
+overlap the consumer's drain. That is a deliberate act on an idle-ish bank, not the background
+surprise the owner reported.
+
+**Why the item carries no project id.** The brief for this rewrite described items as "drain project
+X (memory|code), up to N rows". Two of the three drains cannot honour a project id today:
+`IEntryEmbedder.EmbedPendingBatchAsync(connection, limit, ct)` (`IEntryEmbedder.cs:44`) and
+`ICodeEmbedder.EmbedPendingBatchAsync` (`ICodeEmbedder.cs:39`) are **bank-wide** — the interface has
+no project parameter, and `MemorySql.SelectAllPendingForEmbed` (`:354-355`) has no project filter.
+Only the watch leg's `EmbedPendingAsync(projectId, …)` is scoped. Carrying a field the consumer
+cannot honour without a new SQL path and a new store method would be a field that does nothing, and
+it doubles the coalescing key space for that non-benefit. So the item is
+`EmbedDrainRequest(EmbedCorpus Corpus)` — **two possible values in the entire system**.
+*Consequence:* a fresh edit in project A is drained in row-id order alongside project B's older
+pending rows rather than jumping the queue. Bounded by the budget, and strictly more work drained
+per pass than the per-project shape. *If per-project priority is later wanted*, it is additive: add
+`ProjectId` to the record and a filtered `LIMIT` query. Nothing else moves.
+
+**Coalescing, and where the key is released.** `TryEnqueue` on a coalescing topic checks a
+`HashSet<T>` under a `Lock` before `TryWrite`; an item already queued is not queued twice and
+increments `CoalescedCount`. **The key is released at `DrainUpTo` — when the item is taken, before
+the drain runs**, not at completion. A change that lands *during* a drain therefore queues a fresh
+item and gets its own pass. *Rejected:* releasing at completion — it folds the mid-drain signal
+into the run that already passed those rows, and would rely on the 15 s poll to notice. Releasing at
+take costs at most one extra bounded drain and loses no wake-up.
+
+**Backpressure: drop, never wait — the metrics path's choice, inherited.** `TryWrite` only. On a
+full pump the signal is dropped and `DroppedCount` increments. This is safe here for a reason that
+must not be lost: **the channel is a wake-up, not the record.** The durable record is
+`embed_state = 'pending'` on the row — that is ADR-0076's outbox, already in the schema — and
+`PendingEmbedJob.HasWorkAsync` / `CodeReindexJob.HasWorkAsync` are the relay that re-derives the
+signal every **15 s** (`BankMaintenanceHostedService.OnDemandPollInterval`, `:79`). A lost signal
+costs at most one poll interval of latency and zero rows. *Rejected, again:* a second queue table.
+`derive-or-delete-the-list` — one durable record of one fact.
+
+**Why this closes the duplicate-inference bug structurally.** `RunDueAsync` is reachable from both
+`BankMaintenanceHostedService` loops (`:112-114`, `:163-164` and `:249-251`), on two connections, so
+`PendingEmbedJob` can run twice at once today and — because `SelectAllPendingForEmbed` has no claim
+or lease — both runs select the same 128 ids. After B2 both runs *enqueue*, the second enqueue
+coalesces away, and the single-reader consumer is the only drainer in the process. **No lease, no
+`'embedding'` state, no semaphore.** (Cross-process — two servers on one bank — is unchanged and out
+of scope; `busy_timeout` still governs it.)
+
+**State machine — asked, and answered "plain record".** The invariant
+(`state-transitions-through-a-machine`) applies to a domain object with explicit states. The work
+item has none worth recording: *queued* is "in the channel", *running* is "held by the single
+reader", *done* is "gone". A `Status` field would be a second copy of a fact the structure already
+carries, on an object with no identity, no persistence and no observer (`derive-or-delete-the-list`).
+The state machine that matters here already exists and is durable: `embed_state` on the row —
+`'pending'` → embedded — and B2 changes nothing about it except who performs the transition.
+
+**Consumer.** `src/AiRaccoon.Infrastructure/Embedding/EmbedDrainService.cs`, a `BackgroundService`
+following `BankMaintenanceHostedService`'s shape exactly: `ISqliteConnectionFactory.OpenBankAsync`
+per pass (`BankMaintenanceHostedService.cs:163`), a `try`/`catch` that logs and keeps looping, an
+`IOperationTelemetry` span that calls `NoteWork()` only on a non-empty drain (`MetricsFlusher.cs:90-98`
+is the precedent), and a `TickSignal Drains` test seam. Loop: `WaitForItemAsync` → `DrainUpTo(1)` →
+open connection → `EmbedPendingBatchAsync(connection, rowsPerRun, ct)` for that corpus → loop.
+
+**It does not re-enqueue itself when rows remain.** This is the pacing decision, and it is the one
+that answers the owner's actual complaint. Draining until empty would run the (now capped) inference
+pool flat out until a large backlog cleared — which is the saturation that started WP11. Instead the
+pace stays exactly today's: **128 rows per signal**, and signals arrive from the 15 s poll plus one
+per digest or directory ingest. The gain over today is not throughput, it is that N digests in one
+second now cause **at most one** extra drain instead of N unbounded ones.
+
+**New log EventIds** come from the next free block in `docs/reference/logging-event-ids.md` — read
+the register at implementation time, do not guess a number; the existing event-id uniqueness test is
+the guard.
+
+#### Owner-visible knobs (unchanged — G18 and G19 both APPROVED as written)
+
+| Key | Default | Surface | Effect |
+|---|---|---|---|
+| `embedding.threads` | `max(1, physicalCores / 2)` = **5** on the owner's 10-core host; `0` means "ORT default" | `settings model threads <n>` / shown by the existing `settings model show` (`CliCommandTree.cs:198-217`) | ORT `IntraOpNumThreads` for every local session; takes effect on the next server restart (the session is cached per fingerprint, `EmbeddingService.cs:91`) |
+| `maintenance.embed-rows-per-run.global` | **128** (today's `4 * BatchSize`, unchanged) | `settings maintenance embed-rows-per-run <n>`, listed by `settings maintenance list\|show` (`CliCommandTree.cs:548-562`) | The embed consumer's rows-per-drain, for **both** corpora — replacing `PendingEmbedJob.RowsPerRun` (`:36`) and `CodeReindexJob.RowsPerRun` (`:31`); takes effect on the next drain |
+
+Two keys, not five. **The serialisation is not a knob** — under the chosen shape it is not even a
+setting to omit: one channel with one reader is single-file by construction, so there is no value an
+operator could write that puts three drains back on the inference pool. Both keys ride the generic
+`/settings?key=` route (`SettingsProtocol.cs:9`, `:17`) — no new endpoint (G19).
+
+#### Acceptance criteria
+
+1. **No lock error under the load that produced one.** With ≥ 1,000 rows seeded `pending` in
+   `entries`, ≥ 1,000 in `code_entries`, and a watch active over a real directory, a **10-minute**
+   `ai-raccoon serve --idle-timeout 0` run logs **zero** `SQLITE_BUSY` / `database is locked`
+   occurrences and zero EventId `400` warnings. Owner-run; the check is
+   `grep -c "database is locked\|SQLITE_BUSY" <logfile>` = 0.
+2. **The configured thread count is what the session got.** Asserted in a unit test (A1/A2), and
+   `settings model show` reports it.
+3. **Embeddings are unchanged, bit-for-bit.** `MiniLmGoldenVectorTests.BundledMiniLm_Embeddings_MatchCommittedGoldens`
+   passes on arm64 with the cap applied. If it does not, WP11-A stops and G16 is re-asked.
+4. **CPU is bounded.** Owner-run, both numbers on the same host and the same backlog:
+   `top -l 3 -stats pid,cpu,command -pid $(pgrep -f 'ai-raccoon serve')` (or `ps -o %cpu= -p <pid>`
+   sampled 10×). Baseline uncapped first, then capped. Target: peak `%CPU` ≤ **550** (5 of 10 cores)
+   at the default, against a baseline expected near 1000–2000.
+5. **The backlog still drains.** Rows drained per signal ≥ the pre-change figure at the same row
+   budget — read from `maintenance_jobs.run_count` and the falling `pending` count, not a stopwatch.
+   ADR-0076 measured ~72.6 rows/s uncapped; the drain needs 128 rows / 15 s ≈ **8.5 rows/s** to keep
+   up, so a halved thread pool has ~4× headroom.
+6. **Each pending row is embedded once**, and **the metrics topic behaves exactly as it did** — both
+   by test, not inspection (E8 and the unmodified metrics suite).
+
+#### Gates — RED first, counts and ordering only, no wall-clock assertions (owner ruling #464)
+
+**B1 — the pump, and metrics as a topic.** New suite `AiRaccoon.Tests.Unit.EventPump.EventPumpTests`.
+
+| # | Test | Must be seen failing on | Assertion shape |
+|---|---|---|---|
+| P1 | `TryEnqueue_BeyondCapacity_ReturnsFalseAndCountsTheDrop` | HEAD — the type does not exist | cap 2, three enqueues: `false` on the third; `EnqueuedCount == 2`, `DroppedCount == 1` |
+| P2 | `TryEnqueue_FullPump_ReturnsFalseInsteadOfWaiting` | HEAD | the call returns on the calling thread with `false` — pins `FullMode.Wait` + `TryWrite`, and would go red under `DropWrite` (which returns `true`) |
+| P3 | `DrainUpTo_BudgetSmallerThanBacklog_TakesExactlyTheBudgetInOrder` | HEAD | enqueue 5, `DrainUpTo(2)` → items 1,2; next call → 3,4. Counts **and** order |
+| P4 | `DrainUpTo_EmptyPump_ReturnsEmpty` | HEAD | `Count == 0`, no exception |
+| P5 | `TryEnqueue_CoalescingTopic_IdenticalItemIsNotQueuedTwice` | HEAD | 3 identical enqueues → `CoalescedCount == 2`, one item drained |
+| P6 | `DrainUpTo_ReleasesTheCoalesceKey_SoAnItemArrivingAfterTheTakeQueuesAgain` | HEAD | take, re-enqueue same item → queued; the no-lost-wake-up assertion |
+| P7 | `TryEnqueue_NonCoalescingTopic_KeepsDuplicates` | HEAD | metrics semantics: 3 identical measurements → 3 drained |
+| P8 | `ApplyCapacity_ChangesTheCapForFutureEnqueues_NotWhatIsQueued` | HEAD | mirrors the existing metrics fact at pump level |
+| P9 | `WaitForItemAsync_CompletesOnceAnItemArrives` | HEAD | `await` the task after enqueuing; assert it completed. **Never** assert elapsed time |
+| P10 | `MeasurementBufferTests` (6 facts) — **unmodified** | see the defect injection below | the behaviour-preservation proof for the metrics topic |
+| P11 | `MetricsFlusherTests` (16), `MetricsRecorderTests` (2), `MetricsFlusherTelemetryTests`, `MetricsDependenciesSmokeTests` — **unmodified** | — | must stay green with zero edits; an edit to any of them is the signal that the refactor changed behaviour |
+
+**The prove-the-check-fails step for B1** (a refactor's tests all start green, so one must be *made*
+to fail): after rewiring `MeasurementBuffer` onto `EventPump<Measurement>`, temporarily set the
+metrics topic's coalescing flag to `true`, watch
+`MeasurementBufferTests.TryEnqueue_BurstWithinCapacity_AllSucceedAndDrainWhole` go **red**, revert,
+watch it go green. Quote both outputs in the PR description. Without that step P10/P11 are
+"tests that have only ever passed".
+
+**B2 — the embed topic.** New suite `AiRaccoon.Tests.Unit.EmbedDrain.*` (fakes for
+`IEntryEmbedder`/`ICodeEmbedder`, no real ONNX).
+
+| # | Test | Must be seen failing on | Assertion shape |
+|---|---|---|---|
+| E1 | `EmbedDrainServiceTests.OneSignal_RunsExactlyOneDrainOfTheRowBudget` | HEAD — no consumer exists | fake embedder: exactly 1 call, `limit == 128` |
+| E2 | `EmbedDrainServiceTests.ManySignalsForOneCorpus_CoalesceToAtMostOneFurtherDrain` | HEAD — every digest drains today | 10 enqueues during a held drain → ≤ 2 total drains; `CoalescedCount == 9` |
+| E3 | `EmbedDrainServiceTests.MemoryAndCodeSignals_NeverOverlapInTheEmbedder` | HEAD — the paths are unserialised | fake records **max observed concurrent entrants**; assert `== 1`. Counters, not clocks |
+| E4 | `EmbedDrainServiceTests.DrainThrows_LoopSurvives_AndTheNextSignalStillDrains` | HEAD | call count 2 after a throwing first pass |
+| E5 | `EmbedDrainServiceTests.RowsRemain_NoSelfReEnqueue_TheNextSignalDoesTheRest` | HEAD | after a full-budget drain the pump is **empty**; pins the pacing decision |
+| E6 | `WatchDigestTests.Digest_LeavesRowsPending_AndSignalsTheDrain` | HEAD — `WatchDigestExecutor.cs:116` drains inline and unbounded | fake embedder call count **== 0** during the digest; pump `EnqueuedCount == 1`; rows still `pending` |
+| E7 | `PendingEmbedJobTests.RunAsync_EnqueuesInsteadOfEmbedding` | HEAD (`:54`) | embedder calls 0, pump count 1 |
+| E8 | `MaintenanceRunnerTests.TwoOverlappingPasses_EnqueueOneDrain_AndEachRowIsEmbeddedOnce` | HEAD — `SelectAllPendingForEmbed` (`MemorySql.cs:354`) has no lease, so both passes take the same ids | drive `RunDueAsync` from two connections; each row id appears **once** in the fake's call log |
+| E9 | `CodeReindexJobTests.RunAsync_EnqueuesTheCodeItem` | HEAD (`CodeReindexJob.cs:48`) | as E7, on the code topic |
+| E10 | `FileIngestorTests.IngestDirectory_EmbedsNoChunkInline_AndSignalsOnce` | HEAD — `FileIngestor.cs:286-290` embeds per chunk | per-chunk embed calls 0; pump `EnqueuedCount == 1` for N files |
+| E11 | `EmbedDrainServiceTests.DroppedSignal_IsRecoveredByTheNextPoll` | HEAD | fill the pump to capacity so the signal drops; assert `HasWorkAsync` still true and the next poll's enqueue drains the rows. Proves "the channel is a wake-up, not the record" |
+
+E3, E6 and E8 are the RED texts to quote in B2's PR description.
+
+**A — the thread cap** (G16, unchanged from the proposal the owner approved): A1 `ThreadResolutionTests.Resolve_UnsetSetting_HalvesTheCoreCount`
+(`(null, 10)`→5, `(null, 1)`→1, `("0", 10)`→0, garbage→default; resolution lives on the injectable
+`EmbeddingService`, **not** a new static helper); A2 `ThreadResolutionTests.Generator_ReportsTheIntraOpThreadsItWasBuiltWith`
+(assert the int, never timing); A3 `MiniLmGoldenVectorTests.BundledMiniLm_Embeddings_MatchCommittedGoldens`
+— existing, `Slow`+`Integration`, run **first, before any production edit lands**, on a throwaway
+build with the cap forced. It is the falsification test for the whole of A.
+
+**C — the row budget** (G18, unchanged): C1 `RowBudgetTests.RowsPerRun_ComesFromTheBankSetting`
+(set the key to 7, seed 20 pending, assert exactly 7 rows in one drain; unset → 128);
+C2 `RowBudgetTests.CodeReindex_HonoursTheSameSetting` (same, on `code_entries`).
+
+#### PR split, gates, collisions
+
+**Lane.** dotnet-engineer / **Sonnet** for all four PRs; reviewer is a different agent
+(code-reviewer / Opus), per §*How work lands*. Four PRs, run in the order below.
+
+| PR | Owns | Gate | Blocked by |
+|---|---|---|---|
+| **WP11-A** — the ORT thread cap and its setting | `OnnxEmbeddingGenerator.cs`, `EmbeddingService.cs`, `EmbeddingSettingsKeys.cs`, `SettingsCommands.cs`, `CliCommandTree.cs` | `dotnet test --filter "FullyQualifiedName~ThreadResolution" --nologo -v m`, **plus** `dotnet test --filter "FullyQualifiedName~MiniLmGoldenVectorTests" --nologo -v m` run first | open PR **#475** (`fix/470-manifest-pooling-mode`) edits the same constructor |
+| **WP11-B1** — extract the pump; metrics becomes a topic | new `src/AiRaccoon.Core/EventPump/*`; `src/AiRaccoon.Infrastructure/Metrics/MeasurementBuffer.cs` (body only — class name, namespace and `IMeasurementBuffer` unchanged); `AppRegistrations.cs`; new `tests/AiRaccoon.Tests/Unit/EventPump/*` | `dotnet test --filter "FullyQualifiedName~EventPump\|FullyQualifiedName~Metrics" --nologo -v m` — the new suite **and** the whole metrics suite, the latter with zero edits | nothing |
+| **WP11-B2** — the embed topic, its producers, and the inline watch drain deleted | new `src/AiRaccoon.Infrastructure/Embedding/EmbedDrainService.cs`, `EmbedDrainRequest.cs`; `WatchDigestExecutor.cs`, `PendingEmbedJob.cs`, `CodeReindexJob.cs`, `FileIngestor.cs`, `AppRegistrations.cs`, `docs/reference/logging-event-ids.md`; the `ReplaceCoreAsync` held-span log line from Finding (b) as its **first** commit | `dotnet test --filter "FullyQualifiedName~EmbedDrain\|FullyQualifiedName~WatchDigest\|FullyQualifiedName~EventPump" --nologo -v m` | **B1**, and **WP3 (#436)** — shared `FileIngestor.cs` |
+| **WP11-C** — `maintenance.embed-rows-per-run.global` | `BankMaintenanceConfigKeys.cs`, `EmbedDrainService.cs`, `SettingsCommands.cs`, `CliCommandTree.cs` | `dotnet test --filter "FullyQualifiedName~RowBudget\|FullyQualifiedName~EmbedDrain" --nologo -v m` | **B2** (it configures B2's consumer) |
+
+**Collisions.**
+- **#475 → A.** Hard sequence; verified with `gh pr view 475 --json files`.
+- **B1 → B2 → C.** All three touch `AppRegistrations.cs`; B2 and C both touch `EmbedDrainService.cs`.
+  Serial by construction, and each is small.
+- **WP3 (#436) → B2.** Shared `FileIngestor.cs`, and WP3 also changes what a re-ingest leaves
+  `pending` — which is exactly what B2's consumer drains. Right order on substance as well as files.
+- **#476** (`fix/472-code-engine-guard-4xx`) touches `SettingsEndpoint.cs` / `SettingsProtocol` tests
+  — **no collision**: both WP11 keys ride the generic `/settings?key=` route.
+- **A is parallel to B1.** Disjoint files (`Embedding/Onnx*` vs `Core/EventPump` + `Metrics`), so
+  once #475 lands A can run alongside B1.
+- **WP2 (#459)** touches `ModelDownloadPlanner.cs` only — no overlap with any of the four.
+
+**Open items this rewrite could not settle from the tree** (do not treat as facts):
+- Whether `Channel.CreateBounded<T>(capacity)` pre-allocates for its capacity, which decides whether
+  the metrics topic's channel ceiling can be `MetricsConfigKeys.MaxBufferCapacity` (1,000,000) or
+  must be something smaller. **Settle it in B1's first commit** with an allocation assertion or by
+  reading the BCL source — not by assuming.
+- Which writer held the lock past 5 s in the owner's log (Finding (b) lists two candidates). B2's
+  first commit is the `ReplaceCoreAsync` held-span log line that answers it; the fix is aimed only
+  after that line has produced a number.
+
+---
+
 ## Sequencing
 
 **Parallel from the start** (no shared files): WP1, WP2, WP7, WP8, WP5.
@@ -503,7 +949,29 @@ the corpus under it.
 anything added later touching ingestion queues behind it.
 **Shared-file map:** `ParityGateTests.cs` (WP4, then WP6 re-runs it); `RealWorldCorpus.cs` /
 `reference-topk.json` (WP6 only); `SearchResults.cs` (WP1 only); `ModelDownloadPlanner.cs` (WP2
-only); `docs/adr/README.md` (WP9 only). No two parallel WPs touch the same file.
+only); `docs/adr/README.md` (WP9 only). `OnnxEmbeddingGenerator.cs`
+(WP11-A, **after open PR #475 merges**); `FileIngestor.cs` (WP3, then WP11-B2);
+`AppRegistrations.cs` (WP11-B1, then B2, then C — serial); `MeasurementBuffer.cs` + the whole
+`Metrics/` tree (WP11-B1 only); `EmbedDrainService.cs` (WP11-B2, then C). No two parallel WPs
+touch the same file.
+
+**WP11 (the scope extension, gate answered in rev 1.2) sits outside the chain above** and is now
+four PRs in two independent strands:
+
+- **Strand 1 — A alone.** WP11-A (the ORT thread cap and `embedding.threads`) is blocked only by
+  open PR **#475**, which edits the same constructor, and is otherwise parallel to everything.
+- **Strand 2 — B1 → B2 → C, strictly serial.** **B1** (extract `EventPump<T>`, move metrics onto it)
+  is blocked by nothing and can start immediately, in parallel with A and with every other WP: it
+  touches only `Core/EventPump/`, `Metrics/MeasurementBuffer.cs` and `AppRegistrations.cs`, none of
+  which any other WP opens. **B2** (the embed topic, its producers, the deleted inline watch drain)
+  needs B1's pump **and** shares `FileIngestor.cs` with WP3 — so it runs **after WP3 #436 merges**,
+  which is also the right order on substance, since WP3 changes what a re-ingest leaves `pending`
+  and B2's consumer is what drains it. **C** (the rows-per-run key) configures B2's consumer and
+  runs last.
+
+The two strands are file-disjoint (`Embedding/Onnx*` and the settings CLI for A;
+`Core/EventPump` + `Metrics/` for B1), so A and B1 can run at the same time once #475 is out of the
+way. The whole of WP11 is behind neither WP4 nor WP6.
 
 **The one sequencing insight to honour:** **#455 (WP6) lands before the S6b rewrite.** Verified: the
 three private-prose paths are `jsaa-memory.db` (7 reachable blobs), `RealWorldCorpus.cs` (1 blob,
@@ -746,3 +1214,90 @@ session on its own) and WP3 (the widest blast radius), this does not fit.
 used to accept.
 *Recommendation.* **Ratify now (G2), park the implementation** for session 4 with the sizing above
 carried into the ledger.
+
+### The embed/ingest load governor (WP11 — scope extension you ruled in today)
+
+Four more cards. WP11's *scheduling* is not a card — you already ruled it into this session; these
+four are the design decisions inside it, each decidable on its own.
+
+**G16 — The ONNX intra-op thread pool is capped at half the physical cores by default, via a bank
+setting `embedding.threads`.**
+**ANSWERED: APPROVE** — built as WP11-A; `MiniLmGoldenVectorTests` (A3) remains its falsification gate.
+*Detail.* The tree constructs exactly one ONNX session — `OnnxEmbeddingGenerator.cs:53`,
+`new InferenceSession(modelPath)` with **no** `SessionOptions`; `grep -rn
+"SessionOptions\|IntraOpNumThreads\|InterOpNumThreads\|ExecutionMode" src/ tests/ benchmarks/`
+returns **0 lines**. ONNX Runtime's threading page (re-fetched today) states the default
+`intra_op_num_threads = 0` means *"INTRA Threads Total = Number of physical CPU Cores"*; your host
+reports `hw.physicalcpu` = **10**. Two engines are cached independently
+(`EmbeddingService.cs:85-96` — memory model and `embedding.codeModel` have different fingerprints),
+so a memory drain plus a code drain is **20 intra-op threads on 10 cores** before any query or
+ingest joins in. Proposed default `max(1, cores/2)` = 5, with `0` meaning "ORT default" for anyone
+who wants the old behaviour back. The alternatives are: leave it uncapped (today), pin to 1 (safest
+for the host, slowest drain), or `cores - 2`. Throughput headroom is large either way — ADR-0076
+measured ~72.6 rows/s and the drain needs ~8.5 rows/s to keep up with its own 15 s poll.
+*The one thing that could veto this:* ADR-0049 says this bank's vectors depend on the host's
+arithmetic path, and `MiniLmGoldenVectorTests` asserts byte identity against a committed golden. If
+thread count perturbs the float reduction order, the cap changes stored vectors and the answer has
+to be different. That test is run **first**, before any production edit.
+*Why it matters.* This is the only change that addresses the saturation itself rather than rationing
+the work that causes it, and it is roughly ten lines.
+*Recommendation.* **Cap at `max(1, cores/2)`, expose `embedding.threads`, gate on the golden
+vectors** — and if the goldens move, come back for a re-ruling rather than re-capturing them.
+
+**G17 — Only one embed drain runs at a time, and the watch digest stops draining inline.**
+**ANSWERED: CHANGE** (`docs/work/2026-08-22-post-delta-3-wp11-feedback.md`) — bounded channels, not a
+semaphore; one extracted events pump with metrics and embed as separate topics. The design that
+replaces the proposal below is **§WP11 rev 1.2** (*Finding (c)*, *Design — one pump type, one
+instance per topic*, and the four-PR split). The card is kept verbatim beneath this line as the
+record of what was asked; do not build from it.
+*Detail.* Nothing serialises the three paths today: no semaphore or lock exists over any embedder
+(`grep -rn "SemaphoreSlim\|Mutex\|lock (" ` over `Embedding/`, `Maintenance/`, `Watch/`), and
+`BankMaintenanceHostedService.ExecuteAsync` runs the heavy-pass loop and the 15 s on-demand poll
+loop concurrently (`:112-114`), each calling the same `_jobRunner.RunDueAsync` on its own connection
+(`:249-251` and `:163-164`) — so `PendingEmbedJob` can be running **twice at once**, and because
+`MemorySql.SelectAllPendingForEmbed` (`:354-355`) has no claim or lease, both runs select the same
+128 ids and pay for every inference twice. Meanwhile `WatchDigestExecutor.cs:116` runs
+`EmbedPendingAsync(projectId, **null**, …)` — an **unbounded** drain — after every replace, and the
+watch pipeline ticks every second (`WatchPipeline.cs:61`) with up to 4 concurrent digests per
+project (`WatchScheduler.cs:10`). Proposal: one process-wide `SemaphoreSlim(1,1)` in an injectable
+component that every generator-calling path acquires, **and** delete the inline drain so the digest
+leaves rows `pending` for `PendingEmbedJob`'s bounded relay — ADR-0076's own shape (`embed_state =
+'pending'` already *is* the durable record; no second queue table). The alternative is to keep the
+paths parallel and rely on G16's cap alone, which halves the threads but leaves the duplicated work
+and the four unbounded drains in place.
+*Why it matters.* Duplicated inference is CPU spent for nothing, and it is invisible — nothing logs
+that two drains embedded the same row.
+*Recommendation.* **Serialise, and make the relay the only drainer.** Not configurable: a bank that
+can be set back to three concurrent drains is a bank that can be set back into today's log line.
+
+**G18 — Both drains take their rows-per-run from one bank setting,
+`maintenance.embed-rows-per-run.global`, defaulting to today's 128.**
+**ANSWERED: APPROVE** — built as WP11-C, one key, default 128, no pacing delay.
+*Detail.* `PendingEmbedJob.RowsPerRun` = `4 * EntryEmbedder.BatchSize` = 128 (`:36`) and
+`CodeReindexJob.RowsPerRun` = `4 * CodeEmbedder.BatchSize` = 128 (`:31`) are both `const`. One key
+replaces both; the default changes nothing on day one, so this card is about *reachability*, not a
+new behaviour. The tempting alternative — a delay between batches, "how often" in the literal sense
+— is **not** recommended: it turns a throughput problem into a latency problem, adds a knob nobody
+can tune from evidence, and can only be tested with a wall-clock assertion, which your #464 ruling
+forbids. The row budget already sets the pace: 128 rows per 15 s poll, expressed as a **count**.
+A second alternative is two separate keys (memory and code tuned apart); it is one more key to
+document and drift, for a distinction nobody has yet needed.
+*Why it matters.* When the cap in G16 turns out to be one notch wrong on some host, this is the knob
+that fixes it without a release.
+*Recommendation.* **One key, default 128, no pacing delay.**
+
+**G19 — Both knobs are bank settings written by the server, not CLI flags or environment variables.**
+**ANSWERED: APPROVE** — both keys ride the existing generic `/settings?key=` route; no new endpoint.
+*Detail.* ADR-0075: the MCP server is the only writer to the bank. Both keys ride the **existing**
+generic `/settings?key=` route (`SettingsProtocol.cs:9`, `:17`), so no new endpoint and no new
+protocol record — the CLI surface is two commands under nodes that already exist
+(`settings model threads <n>` beside `settings model show`, `CliCommandTree.cs:198-217`;
+`settings maintenance embed-rows-per-run <n>` beside `settings maintenance list|show`, `:548-562`).
+Names follow the conventions already in the tree verbatim: `embedding.<camelCase>`
+(`EmbeddingSettingsKeys.cs:9-28`) and `maintenance.<kebab-case>.global`
+(`BankMaintenanceConfigKeys.cs:6-17`). The alternative — an env var like `AIRACCOON_EMBED_THREADS` —
+is faster to build and invisible to `doctor`, unversioned, unsynced, and unreadable by the server
+that has to honour it.
+*Why it matters.* A tuning knob that lives outside the bank is a knob that disagrees with the bank,
+and the process that has to obey it is not the process that was told.
+*Recommendation.* **Bank settings, both of them**, on the existing route.

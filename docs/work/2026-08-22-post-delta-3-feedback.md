@@ -1,4 +1,4 @@
-Refinement feedback — Post-delta session 3 — fifteen decisions
+# Refinement feedback — Post-delta session 3 — fifteen decisions
 
 <!-- refinement-form: refinement:2026-08-22-post-delta-3:v1 · saved 2026-08-22T15:27:15.134Z · answered 15/15 -->
 

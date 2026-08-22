@@ -2,9 +2,9 @@
 
 Date: 2026-08-22
 
-Status: Proposed — the owner ratifies this one; ratification flips it to Accepted. (No prior ADR
-in this repo has used `Proposed`; the nearest shape is ADR-0012's
-"Accepted (decision to replace; implementation … is a separate work item)".)
+Status: Accepted — ratified by the owner on 2026-08-22 (post-delta-3 gate G2, 15/15 APPROVE,
+`docs/work/2026-08-22-post-delta-3-feedback.md`); implementation is a separate work item, parked for
+session 4 per gate G15 (sizing in `docs/work/2026-08-22-post-delta-3-plan.md` §WP10).
 
 Plan: `docs/work/2026-08-22-post-delta-next-steps-plan.md` (rev 4, §S2), owner gate G2
 (`docs/work/2026-08-22-delta-open-items-feedback.md` §G2, binding design input), review round on

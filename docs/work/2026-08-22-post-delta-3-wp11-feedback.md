@@ -20,8 +20,7 @@ _(none)_
 
 **Notes:**
 
-> We want to use one system, based on bounded channels - not a semaphore - exactly the same solution as for metrics. It should be a separate 'topic' than for metrics - but I want you to extract the channel based events pump. We can even use
-> single pump with round robin consumers with a limited processing budget
+> We want to use one system, based on bounded channels - not a semaphore - exactly the same solution as for metrics. It should be a separate 'topic' than for metrics - but I want you to extract the channel based events pump. We can even use single pump with round robin consumers with a limited processing budget
 
 ---
 
