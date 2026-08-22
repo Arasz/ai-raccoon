@@ -63,7 +63,7 @@ public sealed class ChunkIndexRepairJobTests : IDisposable
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
 
-        await Should.NotThrowAsync(() => NewJob().RunAsync(connection, TestContext.Current.CancellationToken));
+        await Should.NotThrowAsync(() => NewJob().RunAsync(connection, TestContext.Current.CancellationToken).AsTask());
     }
 
     [Fact]

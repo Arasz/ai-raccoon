@@ -70,7 +70,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
 
         var request = pump.DrainUpTo(1).ShouldHaveSingleItem();
         var drainService = new EmbedDrainService(pump, _factory, entryEmbedder, new FakeCodeEmbedder(),
-            TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
+            new SqliteSettingsStore(_factory), TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
         await drainService.DrainOnceAsync(request, TestContext.Current.CancellationToken);
 
         (await PendingCountAsync()).ShouldBe(0, "one drain pass is enough — every row is embedded exactly once");
@@ -309,7 +309,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
 
         public TimeSpan? Interval => interval;
 
-        public Task<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken)
+        public ValueTask<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken)
         {
             if (ThrowOperationCanceledFromHasWorkAsync)
             {
@@ -318,10 +318,10 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
 
             return ThrowFromHasWorkAsync
                 ? throw new InvalidOperationException("has-work check failed")
-                : Task.FromResult(false);
+                : ValueTask.FromResult(false);
         }
 
-        public Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
+        public ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
         {
             if (ThrowAlways || (ThrowOnce && !_thrown))
             {
@@ -330,7 +330,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
             }
 
             Runs++;
-            return Task.FromResult(false);
+            return ValueTask.FromResult(false);
         }
     }
 }

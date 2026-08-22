@@ -716,9 +716,11 @@ ai-raccoon extract prune [--apply]
 # settings maintenance: bank housekeeping (every process checkpoints the WAL at startup
 # and shutdown — stdio included; the periodic timer runs on HTTP/S hosts,
 # default 60 min — and VACUUM + ANALYZE on the vacuum cadence, default 7 days;
-# config changes apply live, no server restart needed)
+# embed-rows-per-run bounds the embed topic's single consumer's rows per drain
+# pass, for both corpora, default 128; config changes apply live, no server restart needed)
 ai-raccoon settings maintenance interval {minutes}
 ai-raccoon settings maintenance vacuum-interval {days}
+ai-raccoon settings maintenance embed-rows-per-run {rows}
 ai-raccoon settings maintenance list
 ```
 

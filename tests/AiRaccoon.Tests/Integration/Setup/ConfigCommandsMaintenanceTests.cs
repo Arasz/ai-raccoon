@@ -12,7 +12,7 @@ namespace AiRaccoon.Tests.Integration.Setup;
 
 /// <summary>
 ///     Maintenance-config commands pin the settings-key contract the bank-maintenance hosted
-///     service reads (checkpoint interval, vacuum interval); the list verb also reports live
+///     service reads (checkpoint interval, vacuum interval, embed rows per run); the list verb also reports live
 ///     bank disk stats with delta-vs-previous via the maintenance-stats.json sidecar.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
@@ -212,5 +212,100 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         exit.ShouldBe(0);
         outp.ShouldContain("checkpoint interval: 30 min");
         outp.ShouldContain("vacuum interval: 3 days");
+    }
+
+    /// <summary>WP11-C (G18): the "cheaper first move" the owner can turn without a release.</summary>
+    [Fact]
+    public async Task MaintenanceEmbedRowsPerRunSet_WritesGlobalRow()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, outp, _) = await Run(["settings", "maintenance", "embed-rows-per-run", "512"], store);
+
+        exit.ShouldBe(0);
+        store.Settings[BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal].ShouldBe("512");
+        outp.ShouldContain("embed rows per run: 512");
+    }
+
+    [Fact]
+    public async Task MaintenanceEmbedRowsPerRunInvalid_Returns1_AndWritesError()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, _, err) = await Run(["settings", "maintenance", "embed-rows-per-run", "0"], store);
+
+        exit.ShouldBe(ExitCode.InvalidArgument);
+        err.ShouldContain("positive");
+        store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal);
+    }
+
+    [Fact]
+    public async Task MaintenanceEmbedRowsPerRunNonNumeric_Returns1_AndWritesError()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, _, err) = await Run(["settings", "maintenance", "embed-rows-per-run", "many"], store);
+
+        exit.ShouldBe(ExitCode.InvalidArgument);
+        err.ShouldContain("positive");
+        store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal);
+    }
+
+    [Fact]
+    public async Task MaintenanceEmbedRowsPerRunEmpty_Returns1_AndWritesNothing()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, _, err) = await Run(["settings", "maintenance", "embed-rows-per-run", ""], store);
+
+        exit.ShouldBe(ExitCode.InvalidArgument);
+        err.ShouldContain("positive");
+        store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal);
+    }
+
+    /// <summary>
+    ///     Review finding 1 (#517), BLOCKING: an unbounded rows-per-run lets `EntryEmbedder`/
+    ///     `CodeEmbedder` materialise the whole `SELECT ... LIMIT` result as one List — exactly the
+    ///     burst this setting exists to prevent. The CLI rejects rather than silently clamping,
+    ///     mirroring `settings maintenance vacuum-interval`'s ceiling guard.
+    /// </summary>
+    [Fact]
+    public async Task MaintenanceEmbedRowsPerRunOverCeiling_Returns1_AndWritesError()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, _, err) = await Run(["settings", "maintenance", "embed-rows-per-run", "2000000000"], store);
+
+        exit.ShouldBe(ExitCode.InvalidArgument);
+        err.ShouldContain(BankMaintenanceConfigKeys.MaxEmbedRowsPerRun.ToString());
+        store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal);
+    }
+
+    [Fact]
+    public async Task MaintenanceEmbedRowsPerRunAtTheCeiling_WritesGlobalRow()
+    {
+        var store = new FakeConfigStore();
+        var ceiling = BankMaintenanceConfigKeys.MaxEmbedRowsPerRun.ToString();
+
+        var (exit, outp, _) = await Run(["settings", "maintenance", "embed-rows-per-run", ceiling], store);
+
+        exit.ShouldBe(0);
+        store.Settings[BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal].ShouldBe(ceiling);
+        outp.ShouldContain($"embed rows per run: {ceiling}");
+    }
+
+    [Fact]
+    public async Task MaintenanceList_ShowsEmbedRowsPerRun_DefaultAndConfigured()
+    {
+        var store = new FakeConfigStore();
+
+        var (exitDefault, outpDefault, _) = await Run(["settings", "maintenance", "list"], store);
+        exitDefault.ShouldBe(0);
+        outpDefault.ShouldContain($"embed rows per run: {BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun}");
+
+        store.Settings[BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal] = "512";
+        var (exit, outp, _) = await Run(["settings", "maintenance", "list"], store);
+        exit.ShouldBe(0);
+        outp.ShouldContain("embed rows per run: 512");
     }
 }
