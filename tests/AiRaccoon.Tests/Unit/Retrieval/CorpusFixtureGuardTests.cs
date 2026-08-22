@@ -1,3 +1,4 @@
+using System.Linq;
 using Shouldly;
 using Xunit;
 
@@ -74,6 +75,52 @@ public sealed class CorpusFixtureGuardTests
         bytes.ShouldBeGreaterThanOrEqualTo(BankFloorBytes,
             $"docs-memory.db is only {bytes:N0} bytes; measured {MeasuredBankBytes:N0} when pinned. " +
             "A collapse means the selection lost a glob, and the rank gates now pass on almost nothing.");
+    }
+
+    // Same composition rule as ForbiddenBankName above, for the same reason (ai-raccoon#455):
+    // RealWorldCorpus.cs, RealWorldQueries.cs and the vendored parity golden carried verbatim
+    // prose from the private job-search-ai-assistant repo, and the two Python generator files
+    // named its checkout path outright.
+    private static readonly string ForbiddenJsaaToken = "js" + "aa";
+    private static readonly string ForbiddenPrivateRepoName = "job-search-ai-" + "assistant";
+    private static readonly string ForbiddenOwnerSurname = "arasz" + "kiewicz";
+
+    private static readonly IReadOnlyList<string> ForbiddenBenchmarkTokens =
+    [
+        ForbiddenJsaaToken,
+        ForbiddenPrivateRepoName,
+        ForbiddenOwnerSurname
+    ];
+
+    private static readonly IReadOnlyList<string> BenchmarkArtefactRelativePaths =
+    [
+        "benchmarks/AiRaccoon.Benchmarks/Corpus/RealWorldCorpus.cs",
+        "benchmarks/AiRaccoon.Benchmarks/Corpus/RealWorldQueries.cs",
+        "tests/AiRaccoon.Tests/Unit/Retrieval/assets/reference-topk.json",
+        "scripts/src/benchmark_corpus.py",
+        "scripts/tests/test_benchmark_corpus.py"
+    ];
+
+    [Fact]
+    public void BenchmarkCorpusArtefacts_CarryNoPrivateRepoContent()
+    {
+        var root = RepoRoot();
+        var offenders = new List<string>();
+        foreach (var relativePath in BenchmarkArtefactRelativePaths)
+        {
+            var path = Path.Combine(root, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            File.Exists(path).ShouldBeTrue($"{relativePath} must exist (ai-raccoon#455 benchmark artefact).");
+
+            var content = File.ReadAllText(path);
+            offenders.AddRange(
+                from token in ForbiddenBenchmarkTokens
+                where content.Contains(token, StringComparison.OrdinalIgnoreCase)
+                select $"{relativePath} contains '{token}'");
+        }
+
+        offenders.ShouldBeEmpty(
+            "no benchmark corpus artefact may carry private job-search-ai-assistant prose, its repo " +
+            $"name, or the owner's surname (ai-raccoon#455, see ADR-0090). Offenders: {string.Join("; ", offenders)}");
     }
 
     private static bool IsBuildOutput(string path) =>
