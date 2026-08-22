@@ -298,3 +298,13 @@ drain recorded as 6s, a ~60x understatement. `started_at` was unaffected — it 
 before the short outbox transaction that writes it, not before a long-running loop. Fixed by giving
 `EntryEmbedder` its own `TimeProvider` and reading `finished_at` from it after the drain loop
 completes, not from a caller-supplied value.
+
+## Amendment 2026-08-22 — the on-demand-relay pattern extends to `PendingEmbedJob`/`CodeReindexJob`, not `ModelMigrationJob`
+
+ADR-0091 (`0091-the-event-pump-never-blocks-a-producer.md`) amends this ADR's general pattern — an
+on-demand `IMaintenanceJob` (`HasWorkAsync` gated on a row, not a clock) relaying a durable pending
+flag — for `embed_state = 'pending'`'s other producers: `PendingEmbedJob` and `CodeReindexJob` keep
+this ADR's on-demand shape but no longer drain inline themselves; they signal
+`AiRaccoon.Core.EventPump<EmbedDrainRequest>`, and `EmbedDrainService`, the pump's single consumer,
+performs the drain. `ModelMigrationJob` — this ADR's own named relay for `model set` — is untouched
+and does not go through the pump; it still drains `model_migration` directly under its lease.
