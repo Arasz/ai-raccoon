@@ -39,7 +39,7 @@ public sealed class EmbedDrainServiceTests : IDisposable
     private EmbedDrainService NewService(IEventPump<EmbedDrainRequest> pump, IEntryEmbedder? entry = null,
         ICodeEmbedder? code = null) =>
         new(pump, _factory, entry ?? new RecordingEntryEmbedder(), code ?? new RecordingCodeEmbedder(),
-            TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
+            new SqliteSettingsStore(_factory), TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
 
     /// <summary>E1.</summary>
     [Fact]
@@ -54,7 +54,7 @@ public sealed class EmbedDrainServiceTests : IDisposable
         pump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Memory)).ShouldBeTrue();
         (await service.Drains.WaitAsync(1, SignalTimeout, TestContext.Current.CancellationToken)).ShouldBeTrue();
 
-        entry.Calls.ShouldHaveSingleItem().ShouldBe(EmbedDrainService.RowsPerRun);
+        entry.Calls.ShouldHaveSingleItem().ShouldBe(BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun);
         run.IsFaulted.ShouldBeFalse();
         await service.StopAsync(TestContext.Current.CancellationToken);
     }
@@ -153,7 +153,7 @@ public sealed class EmbedDrainServiceTests : IDisposable
     public async Task RowsRemain_NoSelfReEnqueue_TheNextSignalDoesTheRest()
     {
         var pump = TestData.NewEmbedDrainPump();
-        var entry = new RecordingEntryEmbedder { RowsToReturn = EmbedDrainService.RowsPerRun };
+        var entry = new RecordingEntryEmbedder { RowsToReturn = BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun };
         var service = NewService(pump, entry: entry);
 
         using var cts = new CancellationTokenSource();

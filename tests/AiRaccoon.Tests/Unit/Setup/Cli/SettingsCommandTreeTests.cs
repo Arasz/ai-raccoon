@@ -98,6 +98,7 @@ public class SettingsCommandTreeTests
         ("settings extract list", ["settings", "extract", "list"]),
         ("settings maintenance interval", ["settings", "maintenance", "interval", "60"]),
         ("settings maintenance vacuum-interval", ["settings", "maintenance", "vacuum-interval", "7"]),
+        ("settings maintenance embed-rows-per-run", ["settings", "maintenance", "embed-rows-per-run", "128"]),
         ("settings maintenance list", ["settings", "maintenance", "list"]),
         ("settings performance buffer-capacity", ["settings", "performance", "buffer-capacity", "1000"]),
         ("settings performance flush-interval", ["settings", "performance", "flush-interval", "30"]),

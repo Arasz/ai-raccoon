@@ -60,8 +60,8 @@ public sealed class PendingEmbedMaintenanceDrainTests : IDisposable
         var entryEmbedder = new EntryEmbedder(new CountingEmbeddingService(), _modelMigrationLease, _time);
         var jobs = new IMaintenanceJob[] { new PendingEmbedJob(entryEmbedder, pump) };
         var maintenance = ServiceWith(jobs);
-        var drain = new EmbedDrainService(pump, _factory, entryEmbedder, new FakeCodeEmbedder(), TestTelemetry.None,
-            NullLogger<EmbedDrainService>.Instance);
+        var drain = new EmbedDrainService(pump, _factory, entryEmbedder, new FakeCodeEmbedder(),
+            new SqliteSettingsStore(_factory), TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
 
         using var cts = new CancellationTokenSource();
         var maintenanceRun = maintenance.StartAsync(cts.Token);

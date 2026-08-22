@@ -122,14 +122,14 @@ public sealed class BankMaintenanceHostedServiceOnDemandPollTests : IDisposable
 
         public void SimulateNewWorkArriving() => _hasWork = true;
 
-        public Task<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
-            Task.FromResult(_hasWork);
+        public ValueTask<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+            ValueTask.FromResult(_hasWork);
 
-        public Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
+        public ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
         {
             Runs++;
             _hasWork = false; // drained until SimulateNewWorkArriving is called again
-            return Task.FromResult(false);
+            return ValueTask.FromResult(false);
         }
     }
 
@@ -143,10 +143,10 @@ public sealed class BankMaintenanceHostedServiceOnDemandPollTests : IDisposable
 
         public TimeSpan? Interval => interval;
 
-        public Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
+        public ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
         {
             Runs++;
-            return Task.FromResult(false);
+            return ValueTask.FromResult(false);
         }
     }
 }

@@ -126,7 +126,7 @@ public sealed class ModelMigrationJobTests : IAsyncLifetime
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
 
-        await Should.NotThrowAsync(() => NewJob().RunAsync(connection, TestContext.Current.CancellationToken));
+        await Should.NotThrowAsync(() => NewJob().RunAsync(connection, TestContext.Current.CancellationToken).AsTask());
     }
 
     [Fact]

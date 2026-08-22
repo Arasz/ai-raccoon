@@ -8,11 +8,11 @@ using AiRaccoon.Infrastructure.Sqlite;
 namespace AiRaccoon.Setup.Cli.Commands;
 
 /// <summary>
-///     One-shot bank-maintenance verb handlers: interval, vacuum-interval, list — the CLI-only
-///     channel for the maintenance service. `list` additionally reports live bank disk stats
-///     (db/WAL sizes, reclaimable bytes, delta vs the previous check via a stats sidecar) — a thin
-///     client over <see cref="IMaintenanceStatsStore" /> (ADR-0075 amendment): the stats are
-///     computed server-side and the CLI never opens the bank for them.
+///     One-shot bank-maintenance verb handlers: interval, vacuum-interval, embed-rows-per-run, list
+///     — the CLI-only channel for the maintenance service. `list` additionally reports live bank
+///     disk stats (db/WAL sizes, reclaimable bytes, delta vs the previous check via a stats
+///     sidecar) — a thin client over <see cref="IMaintenanceStatsStore" /> (ADR-0075 amendment):
+///     the stats are computed server-side and the CLI never opens the bank for them.
 /// </summary>
 public sealed class MaintenanceCommands(IMaintenanceStatsStore maintenanceStats, InfrastructureOptions options)
 {
@@ -58,12 +58,36 @@ public sealed class MaintenanceCommands(IMaintenanceStatsStore maintenanceStats,
         return 0;
     }
 
+    /// <summary>
+    ///     Sets the embed rows-per-run cap; takes effect on the drain's next pass, no restart.
+    ///     Validity is Core's one rule (<see cref="BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun" />);
+    ///     an empty or invalid value is rejected here, never clamped or defaulted (ADR-0010).
+    /// </summary>
+    public async Task<int> SetEmbedRowsPerRunAsync(ParseResult parseResult, IMemoryStore store,
+        StandardStreams streams, CancellationToken cancellationToken)
+    {
+        var raw = parseResult.GetValue<string>("rows");
+        if (string.IsNullOrWhiteSpace(raw) || !BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun(raw, out var parsed))
+        {
+            await streams.WriteErrorLineAsync(
+                $"ai-raccoon: embed rows per run must be a positive integer, at most {BankMaintenanceConfigKeys.MaxEmbedRowsPerRun}");
+            return ExitCode.InvalidArgument;
+        }
+
+        await store.SetSettingAsync(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal, parsed.ToString(),
+            cancellationToken);
+        await streams.WriteOutputLineAsync($"embed rows per run: {parsed}");
+        return 0;
+    }
+
     public async Task<int> ListAsync(IMemoryStore store, StandardStreams streams, CancellationToken cancellationToken)
     {
         var checkpoint = BankMaintenanceConfigKeys.ParseCheckpointIntervalMinutes(
             await store.GetSettingAsync(BankMaintenanceConfigKeys.CheckpointIntervalMinutesGlobal, cancellationToken));
         var vacuum = BankMaintenanceConfigKeys.ParseVacuumIntervalDays(
             await store.GetSettingAsync(BankMaintenanceConfigKeys.VacuumIntervalDaysGlobal, cancellationToken));
+        var embedRowsPerRun = BankMaintenanceConfigKeys.ParseEmbedRowsPerRun(
+            await store.GetSettingAsync(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal, cancellationToken));
 
         var current = await maintenanceStats.GetStatsAsync(cancellationToken);
         var previous = ReadPreviousStats();
@@ -73,6 +97,7 @@ public sealed class MaintenanceCommands(IMaintenanceStatsStore maintenanceStats,
 
         await streams.WriteOutputLineAsync($"checkpoint interval: {checkpoint} min");
         await streams.WriteOutputLineAsync($"vacuum interval: {vacuum} days");
+        await streams.WriteOutputLineAsync($"embed rows per run: {embedRowsPerRun}");
         await streams.WriteOutputLineAsync($"db file: {FormatBytes(current.DbBytes)}");
         await streams.WriteOutputLineAsync($"wal: {FormatBytes(current.WalBytes)}");
         await streams.WriteOutputLineAsync($"shm: {FormatBytes(current.ShmBytes)}");

@@ -771,7 +771,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
         await Ctx.ReindexJob.RunAsync(connection, CancellationToken.None);
         if (Ctx.EmbedDrainPump.DrainUpTo(1).Count > 0)
         {
-            await Ctx.CodeEmbedder.EmbedPendingBatchAsync(connection, EmbedDrainService.RowsPerRun, CancellationToken.None);
+            await Ctx.CodeEmbedder.EmbedPendingBatchAsync(connection, BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun, CancellationToken.None);
         }
     }
 

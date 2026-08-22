@@ -34,16 +34,16 @@ public sealed class CodeReindexJob(ICodeEmbedder embedder, IEventPump<EmbedDrain
     ///     not only when a re-activation happens to run. Runs on every poll (15s on-demand cadence),
     ///     same as every other on-every-open reconcile in this codebase.
     /// </summary>
-    public async Task<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    public async ValueTask<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         await embedder.ReconcileFingerprintAsync(connection, cancellationToken).ConfigureAwait(false);
         return await embedder.HasPendingWorkAsync(connection, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Signals the embed topic instead of embedding inline (WP11-B2); never leaves anything new pending itself.</summary>
-    public Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    public ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         embedDrainPump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Code));
-        return Task.FromResult(false);
+        return ValueTask.FromResult(false);
     }
 }

@@ -22,7 +22,7 @@ public interface IMaintenanceJob
     ///     pass sweep again: vacuum and reclaim never make work, and an unconditional extra sweep
     ///     doubles the window in which a background embed races an in-flight write.
     /// </summary>
-    Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken);
+    ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken);
 
     /// <summary>
     ///     On-demand due-ness: true when the job has outstanding work right now, independent of
@@ -31,6 +31,6 @@ public interface IMaintenanceJob
     ///     again. Default false: every cadence-based job (vacuum, backfill, retention) is unaffected.
     ///     Called every pass, so it must be cheap (one indexed read).
     /// </summary>
-    Task<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
-        Task.FromResult(false);
+    ValueTask<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(false);
 }
