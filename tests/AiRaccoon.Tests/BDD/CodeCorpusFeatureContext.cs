@@ -54,7 +54,7 @@ public sealed class CodeCorpusFeatureContext : IDisposable
         TimeProvider = new FakeTimeProvider(FixedNow);
         Settings = new SqliteSettingsStore(Factory);
         FakeEmbeddingService = new FakeCodeEmbeddingService();
-        CodeEmbedder = new CodeEmbedder(FakeEmbeddingService);
+        CodeEmbedder = new CodeEmbedder(FakeEmbeddingService, NullLogger<CodeEmbedder>.Instance);
 
         WatchStore = new WatchStore(Factory);
         Store = ComposeStore();

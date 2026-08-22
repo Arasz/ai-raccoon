@@ -376,7 +376,8 @@ internal static class MemorySql
     /// S2: the same MaxEmbedAttempts exclusion as HasPendingCodeEmbed (see its own remark on the literal 3) — a
     /// quarantined poison row is never re-selected.</summary>
     public const string SelectAllPendingCodeForEmbed =
-        "SELECT id AS Id, value AS Value FROM code_entries WHERE embed_state = 'pending' AND embed_attempts < 3 " +
+        "SELECT id AS Id, value AS Value, path AS Path, source_file AS SourceFile FROM code_entries " +
+        "WHERE embed_state = 'pending' AND embed_attempts < 3 " +
         "ORDER BY id LIMIT @limit";
 
     /// <summary>Fills the embedding column and flips embed_state — fires vec_code_au, which writes the row into vec_code.
@@ -392,8 +393,10 @@ internal static class MemorySql
     /// <summary>S2: bumps a row's failure count after an individual (not whole-batch) embed attempt fails
     /// — the per-row fallback's own progress marker, so a poison row eventually crosses MaxEmbedAttempts
     /// and drops out of SelectAllPendingCodeForEmbed/HasPendingCodeEmbed instead of retrying forever.</summary>
+    /// <remarks>RETURNING hands back the new count in the same statement, so the moment a row crosses the
+    /// ceiling is knowable without a second read (#466: crossing it must be logged, not just recorded).</remarks>
     public const string IncrementCodeEmbedAttempts =
-        "UPDATE code_entries SET embed_attempts = embed_attempts + 1 WHERE id = @id";
+        "UPDATE code_entries SET embed_attempts = embed_attempts + 1 WHERE id = @id RETURNING embed_attempts";
 
     // ---- model_migration (ADR-0076) ----
 

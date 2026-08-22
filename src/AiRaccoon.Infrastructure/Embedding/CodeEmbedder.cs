@@ -3,11 +3,13 @@ using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Infrastructure.Embedding;
 
 /// <inheritdoc cref="ICodeEmbedder" />
-public sealed class CodeEmbedder(IEmbeddingService embeddings) : ICodeEmbedder
+public sealed partial class CodeEmbedder(IEmbeddingService embeddings, ILogger<CodeEmbedder> logger)
+    : ICodeEmbedder
 {
     /// <summary>Generator-call sub-batch size (§3.3 D-E9: "batches of 32"), mirroring
     /// EntryEmbedder.EmbedAsync (S8) — a smaller generator call also shrinks S1's stale-engine race
@@ -83,7 +85,7 @@ public sealed class CodeEmbedder(IEmbeddingService embeddings) : ICodeEmbedder
         for (var offset = 0; offset < rows.Count; offset += BatchSize)
         {
             var slice = rows.Skip(offset).Take(BatchSize).ToList();
-            embedded += await EmbedSliceAsync(connection, generator, slice, engine, cancellationToken)
+            embedded += await EmbedSliceAsync(connection, generator, slice, engine, logger, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -98,7 +100,7 @@ public sealed class CodeEmbedder(IEmbeddingService embeddings) : ICodeEmbedder
     /// </summary>
     private static async Task<int> EmbedSliceAsync(SqliteConnection connection,
         IEmbeddingGenerator<string, Embedding<float>> generator, IReadOnlyList<EmbedRow> slice, string? engine,
-        CancellationToken cancellationToken)
+        ILogger logger, CancellationToken cancellationToken)
     {
         try
         {
@@ -115,7 +117,10 @@ public sealed class CodeEmbedder(IEmbeddingService embeddings) : ICodeEmbedder
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return await EmbedRowByRowAsync(connection, generator, slice, engine, cancellationToken)
+            // Recoverable on its own — the per-row retry below reports whatever actually fails —
+            // but a batch call that only fails in a batch is invisible without this line.
+            Log.CodeEmbedBatchFellBackToOneRowAtATime(logger, slice.Count, ex);
+            return await EmbedRowByRowAsync(connection, generator, slice, engine, logger, cancellationToken)
                 .ConfigureAwait(false);
         }
     }
@@ -128,7 +133,7 @@ public sealed class CodeEmbedder(IEmbeddingService embeddings) : ICodeEmbedder
     /// </summary>
     private static async Task<int> EmbedRowByRowAsync(SqliteConnection connection,
         IEmbeddingGenerator<string, Embedding<float>> generator, IReadOnlyList<EmbedRow> slice, string? engine,
-        CancellationToken cancellationToken)
+        ILogger logger, CancellationToken cancellationToken)
     {
         var embedded = 0;
         foreach (var row in slice)
@@ -142,8 +147,15 @@ public sealed class CodeEmbedder(IEmbeddingService embeddings) : ICodeEmbedder
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                await connection.ExecuteAsync(new CommandDefinition(MemorySql.IncrementCodeEmbedAttempts,
-                    new { id = row.Id }, cancellationToken: cancellationToken)).ConfigureAwait(false);
+                var attempts = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                    MemorySql.IncrementCodeEmbedAttempts, new { id = row.Id }, cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                Log.CodeRowEmbedAttemptFailed(logger, row.Id, row.Path, attempts,
+                    CodeCorpusSchema.MaxEmbedAttempts, ex);
+                if (attempts >= CodeCorpusSchema.MaxEmbedAttempts)
+                {
+                    Log.CodeRowAbandonedAfterMaxEmbedAttempts(logger, row.Id, row.Path, row.SourceFile, attempts);
+                }
             }
         }
 
@@ -222,10 +234,40 @@ public sealed class CodeEmbedder(IEmbeddingService embeddings) : ICodeEmbedder
             new { key = EmbeddingSettingsKeys.CodeEngine }, cancellationToken: cancellationToken))
             .ConfigureAwait(false);
 
+    /// <summary>
+    ///     #466: a code row that cannot embed used to reach the attempt ceiling and drop out of the
+    ///     drain's selection with nothing written anywhere — a column value was the only evidence.
+    /// </summary>
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 421, Level = LogLevel.Debug,
+            Message = "A batch of {Rows} code rows failed to embed as one call; retrying them one at a time")]
+        public static partial void CodeEmbedBatchFellBackToOneRowAtATime(ILogger logger, int rows, Exception exception);
+
+        [LoggerMessage(EventId = 422, Level = LogLevel.Warning,
+            Message = "Code chunk {Path} (row {RowId}) failed to embed on attempt {Attempts} of {MaxAttempts}; "
+                      + "it stays pending and the drain will retry it")]
+        public static partial void CodeRowEmbedAttemptFailed(ILogger logger, long rowId, string path, int attempts,
+            int maxAttempts, Exception exception);
+
+        [LoggerMessage(EventId = 423, Level = LogLevel.Error,
+            Message = "Giving up on code chunk {Path} from {SourceFile} (row {RowId}) after {Attempts} failed embed "
+                      + "attempts: it will never be selected for embedding again and code search cannot match it on "
+                      + "meaning. Fix the engine or re-index {SourceFile} once the cause is gone.")]
+        public static partial void CodeRowAbandonedAfterMaxEmbedAttempts(ILogger logger, long rowId, string path,
+            string sourceFile, int attempts);
+    }
+
     private sealed record EmbedRow
     {
         public long Id { get; init; }
 
         public string Value { get; init; } = "";
+
+        /// <summary>The chunk's own path (file plus symbol) — what a reader needs to find the row that failed.</summary>
+        public string Path { get; init; } = "";
+
+        /// <summary>The file the chunk was extracted from.</summary>
+        public string SourceFile { get; init; } = "";
     }
 }
