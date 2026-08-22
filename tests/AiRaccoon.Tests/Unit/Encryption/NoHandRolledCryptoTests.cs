@@ -26,7 +26,11 @@ public sealed class NoHandRolledCryptoTests
         "AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs",
         "AiRaccoon.Infrastructure/Sqlite/SnippetFallback.cs",
         "AiRaccoon.Infrastructure/Sqlite/Memory/SqliteMemoryStore.cs",
-        "AiRaccoon.Infrastructure/Watch/WatchDigestExecutor.cs"
+        "AiRaccoon.Infrastructure/Watch/WatchDigestExecutor.cs",
+        // S2 remote-blob authenticity: HMACSHA256.HashData tags a sync blob with a key already
+        // derived via the platform KDF (HKDF.DeriveKey) — the raw call here applies that key, it
+        // does not derive one, so this is the sanctioned "compose audited primitives" shape.
+        "AiRaccoon.Infrastructure/Sync/SyncService.cs"
     };
 
     /// <summary>The one file allowed to build a bank key; its legacy path exists only to rekey old banks (ADR-0012).</summary>
