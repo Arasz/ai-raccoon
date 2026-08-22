@@ -27,10 +27,22 @@ public sealed class SqliteCodeEngineStore(ISqliteConnectionFactory factory, IEmb
         // method directly with no CLI in the path, so this is the only refusal that actually
         // protects vec_code's fixed 768-dimension index and the code chunker's budget. Nothing is
         // written when either check refuses.
-        var descriptor = manifestLoader.Load(fullPath);
+        // #472: every refusal leg below throws CodeEngineActivationRefusedException (an
+        // InvalidOperationException subtype) so the endpoint can catch just this refusal and
+        // answer 4xx with the reason, instead of it escaping as a bare 500.
+        EngineDescriptor descriptor;
+        try
+        {
+            descriptor = manifestLoader.Load(fullPath);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new CodeEngineActivationRefusedException(ex.Message, ex);
+        }
+
         if (descriptor.Dimensions != CodeCorpusSchema.EmbeddingDimensions)
         {
-            throw new InvalidOperationException(
+            throw new CodeEngineActivationRefusedException(
                 $"Manifest '{fullPath}' declares {descriptor.Dimensions}-dimension embeddings, but the code " +
                 $"corpus's vec_code index is fixed at {CodeCorpusSchema.EmbeddingDimensions} dimensions — there " +
                 "is no dimension-reconcile phase for code, unlike the memory bank. Point 'model set code local' " +
@@ -47,7 +59,7 @@ public sealed class SqliteCodeEngineStore(ISqliteConnectionFactory factory, IEmb
         var chunkBudget = embeddings.ResolveChunkBudgetFor(new EmbeddingSettings("local", fullPath, null, null));
         if (chunkBudget < CodeChunker.DefaultBudget)
         {
-            throw new InvalidOperationException(
+            throw new CodeEngineActivationRefusedException(
                 $"Manifest '{fullPath}' resolves to a {chunkBudget}-token chunk budget (min(510, context - " +
                 $"reservation)), narrower than the {CodeChunker.DefaultBudget}-token chunks the code corpus's " +
                 "chunker emits — that engine would silently truncate every chunk at embed time. Point " +
