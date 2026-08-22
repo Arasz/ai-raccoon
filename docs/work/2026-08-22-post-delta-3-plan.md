@@ -355,11 +355,13 @@ rule is "merge, never rebase".
 The AWM hook's regex does cover them, but AWM arms per directory, so a worktree created after arming
 is uncovered. The resume cron (`*/30`, `resume_cron.py`) has **no 2026-08-22 log entries** — ruled out.
 
-**Attribution so far.** Grepping every transcript under `~/.claude/projects` modified today
-(subagents included) finds **exactly one** history-rewriting command: a `--force-with-lease` push in
-`.ai-badger/worktrees/post-delta-next-steps`, the S6a branch — which matches the 08:54:30Z event and
-is precisely the pattern `soft_deny` failed to catch. **No transcript contains a `git pull`.** The
-other five appear in no agent transcript, so they were issued outside a Claude lane — an interactive
+**Attribution (corrected by the WP7 lane, PR #474).** Grepping every transcript under
+`~/.claude/projects` modified today (subagents included) finds **exactly one** force command — a
+`--force-with-lease` push in `.ai-badger/worktrees/post-delta-next-steps` at 08:50:06Z — and it was
+**blocked by the dotnet-claude-kit `pre-bash-guard.sh` hook and never ran**; that lane then
+fast-forwarded with a plain push at 08:51:03Z. Twenty `git pull`s ran today, every one with
+`--no-rebase` or `--ff-only`, so `pull.rebase=true` never fired. **All six events appear in no agent
+transcript,** so they were issued outside a Claude lane — an interactive
 shell or the IDE's git integration (Rider's push dialog offers a multi-branch force push, which
 would explain two events ~25 s apart on different branches). **This is a hypothesis, not a finding**;
 only the owner can confirm or deny that they, or Rider on their behalf, pushed those branches (G5).
@@ -604,9 +606,12 @@ runs every lane, so the login identifies nobody. Six today: pd-s2 08:54:05Z, pd-
 rebase-shaped rewrites (four preserve subject *and* author date; one replaced a merge commit with an
 earlier non-merge commit); one is a reset whose new tip is `origin/main`'s ADR-0089 commit.
 `pull.rebase=true` is set globally, which turns any `git pull` into exactly that. `soft_deny`
-carries only `Bash(git push:* --force)` — it does not match `--force-with-lease` or the `-f` short
-form, and one agent transcript today used `--force-with-lease` (matching the pd-s6a event). The
-other five appear in no transcript; an interactive shell or Rider's multi-branch push dialog would
+carries only `Bash(git push:* --force)` — by the documented permission syntax the `:*` form is only
+recognised at the end of a pattern, so this rule matches *nothing*. What blocks agents today is the
+dotnet-claude-kit `pre-bash-guard.sh` hook: the single `--force-with-lease` an agent typed today was
+**blocked and never ran** (PR #474 quotes the hook output). **All six events are unattributed** —
+none appears in any transcript; the 20 `git pull`s today all passed `--no-rebase`/`--ff-only`, so
+`pull.rebase=true` did not fire either. An interactive shell or Rider's multi-branch push dialog would
 fit the two ~25 s pairs, but **the agent is not asserting that** — please confirm or deny.
 *Why it matters.* Two branches lost work mid-run today; the guardrail that was supposed to prevent
 this does not match the flags actually used.
