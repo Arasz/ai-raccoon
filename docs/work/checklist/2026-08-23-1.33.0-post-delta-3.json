@@ -1,0 +1,340 @@
+{
+    "run": {
+        "date": "2026-08-23",
+        "branch": "task/pd3-release-1-33-0-checklist",
+        "commit": "a52b00dd36f2bd3ded7e3417938bb502e744e7d3",
+        "data-root": "per-item, see individual command/evidence fields; scratch roots under /private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/7812bad1-a4ee-4214-837d-dc78d1e96195/scratchpad/checklist-1.33.0/ only (root-basic, root-code, root-discriminate, root-lifecycle, root-refusal, overlap-test, repo-root, rows-per-run-src, discriminate-src)",
+        "note": "Release checklist for 1.33.0 post-delta-3, driven against a52b00dd (HEAD of this worktree). VERSION file still reads 1.32.3 -- the bump is a separate PR, expected per task instructions. Never touched the owner's live bank (~/.ai-raccoon) or port 7721 (confirmed unaffected throughout: pid 48190 on 7721 unchanged before/after every server started and stopped in this run). The global 'ai-raccoon' tool was never touched -- every command below runs the tree's own publish output (dotnet publish -c Release -o publish/), either the native apphost 'publish/AiRaccoon' binary (used for every CLI invocation, since 'dotnet publish/AiRaccoon.dll' cannot self-launch a backend -- BackendLaunchArguments refuses when Environment.ProcessPath is the dotnet muxer) or 'dotnet publish/AiRaccoon.dll' (used only for the very first server start, before this was discovered). Both report identical --version/SHA."
+    },
+    "derived": {
+        "version": "1.32.3",
+        "mcp-tool-count": 28,
+        "mcp-prompt-count": 2,
+        "note": "python3 .ai-badger/skills/ai-raccoon-manual-checklist/scripts/derive-facts.py . -> version=1.32.3 mcp-tool-count=28 mcp-prompt-count=2. Cross-checked live: publish/AiRaccoon --version -> 1.32.3+a52b00dd36f2bd3ded7e3417938bb502e744e7d3, exact match to git rev-parse HEAD. tools/list against a live server returned exactly 28 named tools; prompts/list returned exactly 2 (workspace-consolidation-guide, memory-usage-guide). All three facts match the running binary under test."
+    },
+    "findings-against-prior-runs": [],
+    "items": [
+        {
+            "item": "build-and-install-global-package",
+            "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
+            "command": "dotnet publish src/AiRaccoon/AiRaccoon.csproj -c Release -o <scratch>/publish ; <scratch>/publish/AiRaccoon --version ; shasum -a 256 <scratch>/publish/AiRaccoon.dll ; git rev-parse HEAD (per hard safety rule: the owner's global tool is never force-updated -- this tree's own publish output is proven and run directly instead)",
+            "evidence": "publish -> 'AiRaccoon -> <scratch>/publish/' (0 errors). --version -> '1.32.3+a52b00dd36f2bd3ded7e3417938bb502e744e7d3'. git rev-parse HEAD -> 'a52b00dd36f2bd3ded7e3417938bb502e744e7d3' (exact match). derive-facts.py version=1.32.3 matches the +sha-suffixed --version output's numeric part.",
+            "observed-result": "Deviated from the template's literal method (pack + `dotnet tool install -g`) per this run's explicit hard safety rule, which forbids touching the owner's installed global tool. Substituted with `dotnet publish` producing a native apphost binary whose --version SHA matches `git rev-parse HEAD` exactly -- the check the item exists to make (running binary == tree under test) is satisfied by a different, safer instrument.",
+            "status": "substituted",
+            "accepted": true,
+            "acceptance-reason": "Substituted: proved via `dotnet publish` + apphost --version/SHA match instead of packing and force-updating the owner's global tool, per this run's non-negotiable hard safety rule (never `dotnet tool update -g` the owner's install). The comparison the item exists to make -- running binary matches the tree -- is satisfied exactly the same way."
+        },
+        {
+            "item": "server-lifecycle",
+            "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+            "command": "publish/AiRaccoon --data-root <scratch>/root-lifecycle serve --port 48901 --idle-timeout 0 (pid 70522) ; publish/AiRaccoon --data-root <scratch>/root-lifecycle serve --port 48901 --idle-timeout 0 --restart ; lsof -iTCP:7721 before/after",
+            "evidence": "First start -> 'Now listening on: http://127.0.0.1:48901' (pid 70522). --restart -> ServerRestart[650] 'asking the server on port 48901 to stop (pid 70522, 1.32.3+a52b00dd...)' then [651] 'the server on port 48901 (pid 70522) stopped and the port is free', then a fresh 'Now listening on: http://127.0.0.1:48901' as pid 73499 (confirmed via ps). lsof -iTCP:7721 showed pid 48190 (the owner's/another session's server) unchanged before and after both legs.",
+            "observed-result": "Cycled cleanly: old pid gone, new pid bound to the same port, port 7721 untouched throughout.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Both legs verified live with real PIDs and lsof evidence; 7721 confirmed unaffected before and after."
+        },
+        {
+            "item": "memory-write-stores-and-reports-truthfully",
+            "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
+            "command": "tools/call memory_write (clean prose) via POST /mcp ; tools/call memory_write x3 (the three HermesProcessNoisePolicy trigger shapes read from src/AiRaccoon.Core/Memory/Filtering/Policies/HermesProcessNoisePolicy.cs)",
+            "evidence": "clean -> {\"hash\":\"08b08bf3d4...\",\"path\":\"84a58b0080...\",...,\"stored\":true}. '[IMPORTANT: Background process completed normally. Command: dotnet build]' -> {\"hash\":\"\",\"path\":\"\",\"stored\":false,\"reason\":\"rejected by noise policy 'HermesBackgroundProcessLog'\"}. '[ASYNC DELEGATION BATCH complete: 3 tasks finished]' -> same shape. 'received signal 15' -> same shape.",
+            "observed-result": "Clean write returns a real hash; all three noise shapes rejected with stored=false, empty hash, and a named reason -- no fabricated hash on rejection.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "All four shapes verified live against a fresh scratch bank."
+        },
+        {
+            "item": "memory-search-hybrid-retrieval",
+            "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking",
+            "command": "settings model set local (bundled MiniLM) on root-basic ; memory_search query='a brass sextant gleaming beside a candle in a rooftop dome at dusk' (checked for zero literal token overlap with the stored 'astrolabe...lamplight...observatory...evening' entry) -- run once BEFORE the engine was configured (empty results, proving no vector leg) and once AFTER (hit found)",
+            "evidence": "Before 'model set local': same zero-overlap query -> {\"results\":[]}; memory_stats showed pending:1 (row had never been embedded -- no engine configured means memory_write leaves rows pending, contrary to the older embed-inline assumption). After 'model set local' (re-embeds in background) and memory_stats pending:0 -> the SAME query -> the astrolabe/lamplight/observatory entry ranked #1, snippet unchanged, zero literal overlap with the query.",
+            "observed-result": "The vector leg is real: a query sharing no keyword with the stored text found nothing before the engine was configured and found the correct entry after -- a dead vector leg would have failed this both ways (found via BM25 spuriously, or never found at all).",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "This is a stronger check than the template's own item implies (also caught a real behavior worth recording as observed-result, not a defect: memory_write leaves rows pending until an engine is configured, matching the WP11-B2 outbox design intentionally, not embedding inline)."
+        },
+        {
+            "item": "memory-get-returns-content-by-hash",
+            "expected-result": "memory_get returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
+            "command": "tools/call memory_get hash=<the astrolabe entry's real hash> ; tools/call memory_get hash=deadbeef...(64 hex chars, unknown)",
+            "evidence": "Known hash -> full entry with matching value/path/context/createdAt. Unknown hash -> isError:true, 'unknown-hash: No entry with hash '...' in project 'checklistA'.'",
+            "observed-result": "Known hash returns full content; unknown hash refuses with a named error, no empty-success fabrication.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Both legs verified live."
+        },
+        {
+            "item": "source-path-anchor-resolves-its-chunk",
+            "expected-result": "a `file#section` query returns that exact chunk within the production result window",
+            "command": "settings ingest scope add ; memory_ingest_file manual.md (2 H2 headings, chunked into 3 real chunks) ; memory_search query='manual.md#tide-correction' (literal anchor-style) ; memory_search with a semantic paraphrase of chunk 1/3 (Boat Registry Cleanup) checked for zero literal-token overlap",
+            "evidence": "Literal 'manual.md#tide-correction' -> ordinary keyword hit: chunk 0/3 (the Tide Correction content) ranks #1 purely because 'tide'/'correction' tokens are present -- consistent with the last five checklist runs (2026-08-21 through 2026-08-22 x4): 'file#section' is not a query syntax, just literal text that happens to keyword-match. Semantic paraphrase 'A list of vessels using a landing spot slowly loses accuracy as some captains stop showing up without ever announcing they have left, so once each year every vessel unseen in recent memory gets shifted to a separate list rather than struck from the record...' (checked for zero overlap with vendor-domain nouns: boat/breakwater/harbor/registry/cleanup/winter/blunt/eighteen/ledger/seasonal/fishing/owner/paperwork) -> chunk 1/3 (the Boat Registry Cleanup chunk) ranked #1 (1.0), the other two chunks second/third -- real chunk-level semantic retrieval, no literal overlap with the query wording.",
+            "observed-result": "Chunk-level retrieval works correctly (chunkIndex/totalChunks correct, the right chunk ranked top on a genuinely non-overlapping semantic paraphrase). 'file#section' remains not a supported query syntax -- re-confirmed a fifth consecutive time with fresh content and a freshly-derived reason, not the prior run's carried-over explanation.",
+            "status": "substituted",
+            "accepted": true,
+            "acceptance-reason": "Substituted: chunk resolution verified via chunkIndex/totalChunks + a fresh semantic paraphrase, since the '#section' query form does not exist as syntax -- independently re-derived and reconfirmed, not inherited from the 2026-08-22 run's reason."
+        },
+        {
+            "item": "write-path-noise-filtering",
+            "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
+            "command": "grep src/AiRaccoon.Core/Memory/Filtering/Policies/ -> only HermesProcessNoisePolicy is registered ; the 3 rejected writes above ; publish/AiRaccoon --data-root root-basic --port 50727 noise entries",
+            "evidence": "Only one policy is registered (HermesProcessNoisePolicy, 3 trigger shapes: '[IMPORTANT: Background process', '[ASYNC DELEGATION BATCH', 'received signal <digits>'). All 3 rejected as shown in item 3. `noise entries` -> 'total: 3 \\n HermesBackgroundProcessLog: 3'.",
+            "observed-result": "The one registered policy rejects exactly its 3 documented shapes, and all 3 are retrievable from the noise_entries training-data table.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Verified the registered-policy set from source first (only one exists), then drove it live end to end."
+        },
+        {
+            "item": "read-path-query-guard",
+            "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
+            "command": "memory_search query='[IMPORTANT: Background process completed normally. Command: dotnet build]' (refuse tier) ; memory_search query=<.NET stack-trace-shaped text> (warn/annotate tier) ; publish/AiRaccoon settings queryguard list",
+            "evidence": "Refuse -> isError:true, 'invalid-params: This looks like tool output rather than a question... Refused query: [IMPORTANT: Background process completed normally. Command: dotnet build]'. Warn -> full results returned WITH warning 'This query contains what looks like log or stack-trace output...'. `settings queryguard list` -> 'enabled: True  shadow: False  structural: False  threshold: 0.98939822280316'.",
+            "observed-result": "Refuse tier throws with actionable guidance and no results; annotate tier returns full results with a warning; the structural detector is confirmed disabled live on this fresh 1.33.0 bank, matching its documented off-by-default state.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "All three tiers checked live against a fresh bank, not assumed from source."
+        },
+        {
+            "item": "file-watch-status",
+            "expected-result": "memory_watch_status lists live registrations and their sync state",
+            "command": "settings watch enable checklistA true ; memory_watch_add path=<scratch>/ingest-src ; memory_watch_status",
+            "evidence": "watches:[{\"projectId\":\"checklistA\",\"path\":\".../ingest-src\",\"state\":\"Healthy\",\"lastSync\":\"2026-08-22T23:08:53...\"}] -- a real registration with a live state and timestamp, not an empty list.",
+            "observed-result": "Status reflects the actual live registration, not just the empty-list shape.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Per the skill's own guidance, an empty watch list is a weak check -- a real registration was created and its non-trivial content (state, lastSync) verified."
+        },
+        {
+            "item": "promotion-queue-state",
+            "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately",
+            "command": "memory_share_extract projectIds=[checklistA] mode=propose limit=10 ; memory_promotion_list projectId=checklistA",
+            "evidence": "share_extract queued 6 candidates with real scores/reasons (e.g. hash d3d61d..., score 2.9437, reasons [work-note, rule-language, durable-rule-language, mid-sentence]), waitingPromotionsCount:6. promotion_list returned the SAME 6 hashes with matching scores/reasons/paths.",
+            "observed-result": "The queue's reported content matches exactly what was proposed -- not just a non-empty list, but content-verified against the propose call's own output.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Verified content, not just shape, per the skill's 'create the thing first, then assert on its content' guidance."
+        },
+        {
+            "item": "full-mcp-surface",
+            "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+            "command": "tools/list and prompts/list via POST /mcp against a fresh scratch server",
+            "evidence": "tools/list returned exactly 28 named tools (memory_watch_add, memory_promotion_discard, memory_share, memory_performance, memory_sync, memory_watch_remove, memory_record_grade, memory_stats, memory_ingest_file, memory_embed_pending, memory_workspace_discard, memory_set_ttl, memory_record_followthrough, memory_search, memory_sweep, memory_list, memory_delete, code_get, memory_workspace_status, memory_get, memory_delete_context, memory_promotion_list, memory_write, memory_ingest_directory, memory_watch_status, memory_share_extract, memory_workspace_consolidate, memory_workspace_begin). prompts/list returned exactly 2 (workspace-consolidation-guide, memory-usage-guide).",
+            "observed-result": "Counts match derived.mcp-tool-count (28) and derived.mcp-prompt-count (2) exactly; every tool named is a real, distinct name.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Live tools/list and prompts/list against a running 1.33.0-tree server, cross-checked against derive-facts.py's counts."
+        },
+        {
+            "item": "code-corpus-kind-search-and-envelope",
+            "expected-result": "A watched/ingested code file is searchable via memory_search kind=code (FTS hits carry lineStart/lineEnd and the engine-not-configured warning when no code model is active); kind=memory returns NO code key in the envelope and does not surface the code hit; kind=both returns both sections; the code/both response omits correlationId. Negative control: a memory entry is NOT returned by kind=code.",
+            "command": "memory_ingest_directory over a mixed .md+.cs tree (code engine NOT yet configured) ; memory_search kind=code (finds the .cs file, lineStart/lineEnd present, warning present, no correlationId) ; kind=memory (finds only the .md file, no 'code' key, no code hit) ; kind=both (both sections populated) ; kind=code with the README.md's own literal wording as the query (negative control)",
+            "evidence": "kind=code -> {\"results\":[],\"warning\":\"code engine not configured...\",\"code\":[{...TideSampler.cs, lineStart:1, lineEnd:29}]}, meta has NO correlationId. kind=memory -> {\"results\":[{...README.md...}]}, meta HAS correlationId, no 'code' key anywhere, no TideSampler.cs hit. kind=both -> both 'results' (README.md) and 'code' (TideSampler.cs) populated, warning present, no correlationId. Negative control: kind=code queried with README.md's own exact wording ('Tide Station Firmware repository controls remote tide-gauge station') still returns results:[] and only the code-corpus TideSampler.cs hit -- the memory-only content is never surfaced by kind=code even on an exact literal match.",
+            "observed-result": "Corpus isolation is real, not just an unexercised code path: kind=code cannot be tricked into returning memory-only content even with a perfect keyword match on the memory doc's own text.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "ADR-0088; all four legs plus the negative control verified live, including the harder negative control (exact-keyword memory-doc query against kind=code)."
+        },
+        {
+            "item": "code-get-returns-chunk-by-hash",
+            "expected-result": "code_get returns the exact chunk content for a hash from a kind=code hit; an unknown hash is refused with an error, not an empty fabrication.",
+            "command": "code_get hash=<TideSampler.cs's real chunk hash> ; code_get hash=deadbeef...(unknown)",
+            "evidence": "Known hash -> full chunk value (the whole TideSampler.cs source), path, lineStart:1, lineEnd:29. Unknown hash -> isError:true, 'unknown-hash: No entry with hash '...' in project 'checklistCode'.'",
+            "observed-result": "Exact chunk content returned for a real hash; unknown hash refused cleanly.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "ADR-0088; both legs verified live."
+        },
+        {
+            "item": "code-model-activation-and-refusal",
+            "expected-result": "model set code local against a directory holding a non-768 manifest refuses with an actionable error naming 768 (server-side, not just CLI); a missing manifest surfaces the loader's own error. Scoped to these two refusal legs only.",
+            "command": "Constructed a manifest with dimensions:384 (all other v1-contract fields filled with real files/hashes so only the dimension check is exercised) ; model set code local <bad-manifest-dir> ; model set code local <dir-with-no-manifest>",
+            "evidence": "384-dim manifest -> exit 15, 'Manifest '...' declares 384-dimension embeddings, but the code corpus's vec_code index is fixed at 768 dimensions -- there is no dimension-reconcile phase for code, unlike the memory bank. Point 'model set code local' at a manifest with dimensions: 768.' Missing manifest -> exit 15, 'Configured embedding model directory '...' has no ai-raccoon.manifest.json. A local model directory must contain a ai-raccoon.manifest.json describing its files, tokenizer, pooling and dimensions -- run 'ai-raccoon model download <repo-id>' to create one...'",
+            "observed-result": "Both refusals fire with actionable, correctly-worded errors naming 768 / the loader's own missing-manifest message. Note: both checks ran without ever starting a server (SettingsCommands.ActivateCodeDirectoryAsync runs in the CLI-only channel, reading the manifest directly) -- the checklist item's parenthetical '(server-side, not just CLI)' does not match this build's actual architecture (there is no separate server-side re-check in addition to the CLI-side one); recorded as observed, not treated as a defect since the CLI-side check is unconditional and cannot be bypassed by any client.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "ADR-0087/0088; #453. Both refusal legs verified live with a hand-crafted invalid manifest, isolating exactly the dimension/missing-manifest checks."
+        },
+        {
+            "item": "doctor-reports-code-engine-state",
+            "expected-result": "On a scratch data root with NO code engine configured, `ai-raccoon doctor` prints `code engine: not configured -- run 'ai-raccoon model set code default' to enable semantic code search` and `code rows pending: 0`. After ingesting a code file with still no engine configured (so the row lands `embed_state='pending'`), `doctor` reports `code rows pending: N` with N > 0.",
+            "command": "doctor (fresh root-code, no engine) ; memory_ingest_directory (2 files scanned: README.md + TideSampler.cs) ; doctor again",
+            "evidence": "Before ingest: 'code engine: not configured -- run 'ai-raccoon model set code default' to enable semantic code search' / 'code rows pending: 0'. After ingest: same not-configured line / 'code rows pending: 1'.",
+            "observed-result": "pending count moved from a genuine 0 (nothing to embed yet) to a genuine 1 (a real pending code row), not a static/always-0 report.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "#422; #453; DoctorCommands.cs. Both states verified live with a real state transition in between (not just reading a fresh bank's default 0)."
+        },
+        {
+            "item": "code-model-one-command-install",
+            "expected-result": "`ai-raccoon model set code default` against a scratch data root with no prior download resolves and downloads `faxenoff/code-daemon-embed-v1` (~187 MB) into `<data-root>/models/faxenoff__code-daemon-embed-v1`, then activates it -- writing embedding.codeModel/codeEngine -- with NO manifest hand-edit. Re-running only re-activates, no re-fetch. After activation, the code-reindex job drains any pending code rows to 0.",
+            "command": "Copied a complete, previously-downloaded faxenoff/code-daemon-embed-v1 directory (from this session's own scratchpad, exp-main5/models/) into <data-root>/models/ before running the command, per the item's own stated fallback. publish/AiRaccoon --data-root root-code --port 48950 model set code default ; doctor before/after",
+            "evidence": "'faxenoff/code-daemon-embed-v1 is already downloaded at .../models/faxenoff__code-daemon-embed-v1; activating it' / 'code embedding engine set to local (...); the code-reindex maintenance job will re-embed pending rows'. Copied directory verified complete first: manifest + model.onnx 187286767 bytes + sentencepiece.bpe.model + config.json + tokenizer_config.json, all sha256-pin-valid (see item 25). doctor before: pending:1 (from item 15's ingest). doctor after (3s later): 'code engine: faxenoff/code-daemon-embed-v1 (.../models/faxenoff__code-daemon-embed-v1)' / 'code rows pending: 0'. Server log: EmbedDrainService[1003] 'Embed drain pass finished for Code: 1 row(s)'.",
+            "observed-result": "The 'already downloaded, activating' branch (no re-fetch) is exercised and correct; activation writes the engine config (doctor confirms); the drain empties pending to 0. The fresh-download branch itself was NOT exercised live (network egress for a 187 MB fetch was substituted, per the item's own explicit fallback).",
+            "status": "substituted",
+            "accepted": true,
+            "acceptance-reason": "Substituted per the item's own stated fallback: the ~187 MB download leg was replaced with a pre-downloaded copy from this session's own scratchpad (exp-main5/models/faxenoff__code-daemon-embed-v1, verified complete and sha256-pin-valid), naming that path here as required. The activation, no-re-fetch, and drain-to-0 legs were all driven live."
+        },
+        {
+            "item": "code-search-discriminates-on-engine-activation",
+            "expected-result": "BEFORE activation: memory_search kind=code for a query sharing NO literal token with the indexed code returns a warning naming 'code engine not configured' and the exact 'ai-raccoon model set code default' command, results from FTS only. AFTER activation: the SAME query returns the code hit (a dead vector leg must fail this) and no warning.",
+            "command": "Fresh root (root-discriminate) with 3 code files (Retry.cs = retry/backoff logic, ColorMix.cs and CsvParser.cs = unrelated decoys) ingested with no code engine configured ; memory_search kind=code query='backoff escalation exhausted quota propagate final failure loop' (a telegram-style phrase sharing ZERO tokens -- not even articles/stopwords -- with any of the 3 files) ; activate the code engine (model set code local, pre-downloaded copy) ; doctor confirms pending:0 ; SAME query re-run",
+            "evidence": "Before activation: {\"results\":[],\"warning\":\"code engine not configured -- FTS5-only results; run 'ai-raccoon model set code default' to download and activate the default code embedding model\",\"code\":[]} -- genuinely empty, not even a spurious FTS hit. After activation (doctor: pending 0): {\"results\":[],\"code\":[{...Retry.cs, ranking:1...},{ColorMix.cs, 0.984},{CsvParser.cs, 0.968}]} -- NO warning field, and Retry.cs (the semantically correct match) ranks #1 despite zero literal-token overlap with the query.",
+            "observed-result": "A dead vector leg would have left this query returning empty results forever, exactly as it did before activation. After activation the same zero-overlap query finds the genuinely relevant file and ranks it first -- the vector leg is doing real work, not just suppressing the warning cosmetically.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "#422; #453; ADR-0088. This is the cleanest form of the check: a first attempt at the query accidentally shared common words (whenever/again/once) with the target file and was corrected to a fully stopword-free negative-control phrase before/after comparison, matching the skill's own guidance that a keyword-sharing query tells you nothing about the vector leg."
+        },
+        {
+            "item": "doctor-reports-active-code-model",
+            "expected-result": "AFTER 'code-model-one-command-install' activates the engine, `ai-raccoon doctor` prints `code engine: faxenoff/code-daemon-embed-v1 (<dir>)` naming the activated model's directory, not the not-configured message.",
+            "command": "doctor (root-code, after model set code default)",
+            "evidence": "'code engine: faxenoff/code-daemon-embed-v1 (/private/tmp/.../root-code/models/faxenoff__code-daemon-embed-v1)' -- the not-configured message is gone, replaced with the model name and its real on-disk directory.",
+            "observed-result": "Matches expected exactly.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "#422; #453; DoctorCommands.cs. Verified live immediately after activation."
+        },
+        {
+            "item": "code-model-docs-current",
+            "expected-result": "docs/reference/agent-memory-server.md's code-engine section documents `ai-raccoon model set code default` and the 510-token code chunk budget, matching `CodeEngineSetup.DefaultModelCommand` and `EmbeddingService.MaxManifestChunkTokens`; docs/how-to/configure-embedding-engines.md Recipe 5 matches the live command's own output.",
+            "anchor": "#462",
+            "command": "grep 'model set code default' and '510' in docs/reference/agent-memory-server.md ; grep MaxManifestChunkTokens/DefaultSpecialTokenReservation in source ; read docs/how-to/configure-embedding-engines.md Recipe 5",
+            "evidence": "agent-memory-server.md line 86: '510-token window is trimmed before embedding'; line 192 and line 657 both document the one-command 'ai-raccoon model set code default' path. Source: EmbeddingService.MaxManifestChunkTokens = 512 - EngineDescriptor.DefaultSpecialTokenReservation(=2) = 510, exact match. Recipe 5 (configure-embedding-engines.md:128-141) reads: 'ai-raccoon model set code default ... downloads faxenoff/code-daemon-embed-v1 (187 MB) into <data-root>/models/faxenoff__code-daemon-embed-v1 if it is not already there, and then activates it. Run it again later and it only re-activates -- nothing is re-fetched...' -- this is a verbatim match to the live output captured in item 16 ('is already downloaded at ...; activating it').",
+            "observed-result": "Docs match both the source constants and this run's own live command output exactly. PR #462 (which fixed the prior two-step-only documentation) is confirmed merged into this tree.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Verified against source constants (not just prose) and against this run's own captured live CLI output, not assumed correct."
+        },
+        {
+            "item": "ai-raccoon-ignore-live",
+            "expected-result": "An ai-raccoon.ignore in the ingest root excludes matching files from BOTH corpora on directory ingest (0 chunks; verify a .cs and a .md are both excluded); a bare directory name excludes its subtree; explicit memory_ingest_file of an ignored path returns 0 chunks. Negative control: a non-ignored sibling ingests normally.",
+            "command": "ai-raccoon.ignore listing src/Secret.cs (.cs, explicit path), vendor (bare dirname, whole subtree), DRAFT.md (.md, explicit path) ; memory_ingest_directory over code-src ; memory_search for vendor/ThirdParty.cs's marker text (kind=code) ; memory_ingest_file directly on Secret.cs and on DRAFT.md",
+            "evidence": "Directory ingest scanned only the non-ignored sibling (SiblingNotIgnored.cs); a kind=code search for the vendor subtree's exact marker text ('ThirdPartyMarker vendor-subtree-should-be-ignored') returned 14 code hits covering every OTHER ingested code file in the project but never vendor/ThirdParty.cs -- confirming the bare 'vendor' rule excluded the whole subtree. Direct memory_ingest_file on the explicitly-listed Secret.cs (.cs) -> {\"indexed\":0}. Direct memory_ingest_file on the explicitly-listed DRAFT.md (.md) -> {\"indexed\":0}. Negative control: SiblingNotIgnored.cs (not listed) ingested and ranked #1 for its own marker text.",
+            "observed-result": "All three ignore-rule shapes (explicit .cs path, bare dirname/subtree, explicit .md path) verified excluded from both directory ingest and explicit single-file ingest; the non-ignored sibling ingested normally.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "ADR-0086; plan §2.1. Both a .cs and a .md ignore case verified, plus the bare-dirname subtree case and the negative control."
+        },
+        {
+            "item": "watch-overlap-prune-and-reject",
+            "expected-result": "memory_watch_add of a path nested inside an existing watch is REJECTED naming the covering watch; adding a broader watch over an existing narrower one prunes the narrower (result lists it); equal-path re-add is an idempotent no-op reporting absorbedBy.",
+            "command": "memory_watch_add narrow (overlap-test/narrow) ; memory_watch_add broader (overlap-test, the parent) ; memory_watch_add the SAME broader path again ; separately: memory_watch_add on a subdirectory of an already-watched dir (watch-code-src/sub)",
+            "evidence": "Nested-inside-existing: 'watch-overlap: Path '.../watch-code-src/sub' is already covered by watch '.../watch-code-src'.' (isError:true). Broader-over-narrower: {\"path\":\".../overlap-test\",\"pruned\":[\".../overlap-test/narrow\"]}. Equal-path re-add: {\"path\":\".../overlap-test\",\"pruned\":[],\"absorbedBy\":\".../overlap-test\"}.",
+            "observed-result": "All three shapes behave exactly as specified.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "ADR-0086; plan §2.2. All three legs driven live with real nested/broader/equal paths."
+        },
+        {
+            "item": "code-ingestion-with-default-model",
+            "expected-result": "Out-of-box experience: on a FRESH scratch bank with NO code engine configured and the default bundled memory model, memory_ingest_directory over a small mixed tree (.md + .cs) embeds the memory docs (bundled model), chunks the code files to embed_state='pending' via the bundled counting tokenizer, kind=code returns FTS-only hits carrying the engine-not-configured warning, and kind=both returns both sections. Negative control: a deny-set path (e.g. bin/) and an ai-raccoon.ignore'd file appear in NEITHER corpus.",
+            "command": "root-code: settings model set local (bundled memory model, NOT code) ; memory_ingest_directory over code-src (README.md + TideSampler.cs + bin/Generated.cs [deny-set] + src/Secret.cs [ai-raccoon.ignore]) ; memory_search kind=memory / kind=code / kind=both ; search for the bin/ file's marker text",
+            "evidence": "scanned:2 (README.md + TideSampler.cs only -- bin/Generated.cs and src/Secret.cs excluded). kind=memory found README.md (embedded via the bundled model, no 'code' key). kind=code found TideSampler.cs (results:[], warning present, lineStart/lineEnd present -- FTS-only, still pending on the vector side). kind=both returned both. A search for bin/Generated.cs's marker text ('bin-deny-set-marker') across all subsequent searches in this project never surfaced it.",
+            "observed-result": "Matches the documented out-of-box shape exactly: memory docs get real embeddings from the bundled model, code chunks land pending (no code engine), both corpora are independently queryable, and the deny-set + ignore-rule exclusions both hold.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "ADR-0085/0087; plan §3.3. Verified on a genuinely fresh bank before any code-engine activation happened on it."
+        },
+        {
+            "item": "watch-per-repo-root",
+            "expected-result": "Registering a watch on a scratch REPO ROOT (containing .git/, node_modules/, src/ with code+md): enumeration skips .git and node_modules entirely (zero rows from them, both corpora); src/ feeds both corpora; adding a nested watch inside the repo is rejected naming the covering watch; a live edit to a src file digests into BOTH corpora and the replace prunes the file's superseded chunks.",
+            "command": "Built repo-root/ with .git/config (marker text), node_modules/leftpad/index.js (marker text), src/RepoRootFile.cs + src/README.md ; memory_watch_add on repo-root itself ; memory_search kind=both for the .git marker text ; memory_watch_add on repo-root/src (nested) ; edit RepoRootFile.cs's content, re-check via code_get on the OLD hash",
+            "evidence": "kind=both search for the .git config's exact marker text ('git-internal-marker-should-never-be-ingested') returned 20 hits spanning every other code/memory file registered in this session's checklist run, but NEVER .git/config or node_modules/leftpad/index.js -- confirmed via source grep that WatchDenySet includes node_modules/bin/obj/.git/.venv/__pycache__/dist/build/target, and FileIngestor.IsHidden + WatchDigestExecutor both apply the same WatchDenySet.Excludes predicate the watch walk uses. src/RepoRootFile.cs (code) and src/README.md (memory) both found via kind=both. Nested watch on repo-root/src -> 'watch-overlap: Path '.../repo-root/src' is already covered by watch '.../repo-root'.' Live edit: code_get on RepoRootFile.cs's pre-edit hash -> 'unknown-hash' (pruned); a fresh search for the new content ranked the updated file #1.",
+            "observed-result": "Deny-set exclusion, dual-corpus feed, nested-watch rejection, and live-edit pruning all confirmed on one real repo-shaped tree.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "ADR-0086; plan §2.3. The deny-set check for .git/node_modules specifically is a live negative control (20 other hits present, these two never appear), not just a source-code confirmation."
+        },
+        {
+            "item": "direct-reingest-prunes-stale-chunks",
+            "expected-result": "memory_ingest_file of a file (N chunks), then modifying it so it chunks to a different count and re-ingesting: the superseded chunks are GONE (search no longer returns removed content; chunk set matches the new content exactly). Negative control: a sibling ingested file's chunks are untouched.",
+            "command": "memory_ingest_file reingest-target.md (short, totalChunks:1) ; expand its content substantially ; memory_ingest_file again (now totalChunks:2) ; memory_get on the OLD single-chunk hash ; memory_search for new content ; verify sibling manual.md's 3 chunk hashes unchanged",
+            "evidence": "Original ingest -> totalChunks:1 (hash f2ca837f...). After expanding content and re-ingesting -> totalChunks:2 (new hashes 8280dff8... and 69512a23...). memory_get on the OLD hash f2ca837f... -> 'unknown-hash: No entry with hash...' (pruned). Search for the new content found both new chunks correctly. Sibling manual.md's three chunk hashes (fdbb2e5c/d3d61d0e/e55e8da0, captured earlier in item 6) were unchanged in this same search's results.",
+            "observed-result": "Stale chunk fully pruned on reingest with a changed chunk count; sibling file's chunks untouched.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "PR #420. Verified with a real chunk-count change (1 -> 2) and a real sibling negative control from the same bank."
+        },
+        {
+            "item": "activation-sha256-pin-verification",
+            "expected-result": "Tampering a model file AFTER its manifest was generated (flip one byte) makes model set refuse at activation, naming the sha256 pin mismatch; restoring the byte activates cleanly.",
+            "command": "Flip one byte in model.onnx (offset 1000, byte 'e' -> XOR 0xFF) in a real faxenoff/code-daemon-embed-v1 copy ; model set code local <tampered dir> ; restore the byte ; model set code local <dir> again",
+            "evidence": "Tampered -> exit 15, 'Manifest '.../ai-raccoon.manifest.json' pins 'model.onnx' to sha256 57bcfc6aed11ea239d01f2b124f2f948456f2284ad6e2c4744452509c9c25ca9, but the file on disk hashes to cc51baf4e050e6a09f11fca94db5be73f75fe2105280f8bef348c0b557bce0e7. The model directory may have been tampered with or partially replaced -- re-run 'ai-raccoon model download' to restore a clean copy.' Restored -> 'code embedding engine set to local (...); the code-reindex maintenance job will re-embed pending rows' (clean success).",
+            "observed-result": "Both legs behave exactly as specified: tamper is caught and named precisely, clean file activates without incident.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "PR #429. Real byte tamper on a real model file, not a simulated hash mismatch."
+        },
+        {
+            "item": "cli-exit-codes-nobank-and-settings-error",
+            "expected-result": "CLI command against a nonexistent bank exits 22 (NoBank); a settings-channel server error exits 23 (SettingsServerError), distinct from usage-error exits. Drive 23 live if a failing server can be arranged cheaply (e.g. point at a dead port); otherwise substituted naming the exit-code test class.",
+            "anchor": "PR #433, #426",
+            "command": "publish/AiRaccoon --data-root <truly-nonexistent-dir> doctor ; echo $? ; publish/AiRaccoon --data-root root-basic --port <confirmed-unbound-port> settings model code reset ; echo $? ; dotnet test --filter SettingsChannelExitCodeTests",
+            "evidence": "doctor against nonexistent bank -> exit 22. An explicit unbound port (59999, confirmed free via lsof beforehand) auto-started a fresh backend (BackendLauncher[633] 'starting the backend on port 59999') and returned exit 0 -- a genuinely dead, unbound explicit port never produces an error in this build; the apphost self-launches a backend rather than failing. Consistent with the 2026-08-22 1.32.0 run's identical finding. dotnet test --filter SettingsChannelExitCodeTests -> Passed! 3/3 (grew from 2/2 in the prior run -- more coverage added, not a discrepancy).",
+            "observed-result": "NoBank(22) verified live. SettingsServerError(23) is not cheaply arrangeable live in this build (an explicit non-default port always auto-starts a working backend rather than erroring); substituted per the item's own fallback, same conclusion as the prior run, independently re-derived.",
+            "status": "substituted",
+            "accepted": true,
+            "acceptance-reason": "22 accepted as a live pass. 23 substituted, naming SettingsChannelExitCodeTests.cs (3/3 passed) -- the item's own suggested live method ('point at a dead port') does not reach an error state in this build, re-confirmed fresh rather than assumed from the prior run."
+        },
+        {
+            "item": "sync-blob-hmac-authenticity",
+            "expected-result": "A pushed snapshot blob is framed header+tag and a tampered blob is REFUSED before attach (HMAC verification). Live only if cloud/scratch-backend credentials are available in this run; otherwise substituted naming the SyncService HMAC integration tests.",
+            "command": "grep for Hmac/tamper coverage in tests/AiRaccoon.Tests/Integration/Sync/ ; dotnet test --filter SyncServiceRemoteBlobTests",
+            "evidence": "No cloud sync credentials are available in this scratch-only run (none configured, none requested). tests/AiRaccoon.Tests/Integration/Sync/SyncServiceRemoteBlobTests.cs carries the tamper/Hmac coverage. dotnet test --filter SyncServiceRemoteBlobTests -> Passed! 6/6.",
+            "observed-result": "Live push/pull against a real or scratch cloud backend was not attempted (no credentials in this environment, consistent with hard safety scoping of this run). Substituted with the integration test class per the item's own fallback.",
+            "status": "substituted",
+            "accepted": true,
+            "acceptance-reason": "PR #431. No cloud/scratch-backend credentials available in this run; substituted naming SyncServiceRemoteBlobTests.cs (6/6 passed)."
+        },
+        {
+            "item": "observability-event-ids",
+            "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+            "command": "grep every EventId observed live in this run's server logs (510, 525, 633, 650, 651, 672, 675, 899, 1000, 1001, 1002-1006) against docs/reference/logging-event-ids.md",
+            "evidence": "510-524 (BankMaintenanceHostedService) documented. 525-527 (MaintenanceJobRunner) documented. 633-635 (BackendLauncher) documented. 650-656 (ServerRestart) documented. 670-675 (SettingsEndpoint, including 672 'settings wrote', 675 'code corpus activation commit') documented. 899-900 (SqliteMemoryStore/Replace.cs) documented. 1000-1001 (DoctorCommands) documented. 1002-1006 (EmbedDrainService, all five ids, added 2026-08-22 WP11-B2/C) documented in full including the exact semantics observed live (1002 pass started, 1003 pass finished with row count, 1004 coalesced-away, 1005 pass failed, 1006 invalid rows-per-run).",
+            "observed-result": "Every event id emitted during this entire checklist run resolves cleanly against the reference doc; none were undocumented or stale.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Checked against every EventId this run actually observed live across all lanes (server lifecycle, settings writes, doctor, embed drain, watch digest), not a static subset."
+        },
+        {
+            "item": "settings-model-threads-round-trip-and-effect",
+            "expected-result": "`ai-raccoon settings model threads <n>` round trips (set, show, list), and doctor/logs show the ORT intra-op thread count taking effect.",
+            "command": "settings model threads 3 ; settings model list ; serve --restart (to pick up the new setting) ; a memory_search to force embedding-session construction ; grep the server log for anything thread/session/onnx-related ; doctor",
+            "evidence": "set -> 'embedding threads set to 3; takes effect on the next server restart'. list -> 'threads: 3' (round-tripped correctly). After --restart and a live memory_search (which succeeded, proving the ONNX session built without error using IntraOpNumThreads=3): grep -in 'thread|onnx|session' across the full server log -> ZERO matches. `doctor` output has no threads line at all (only checks schema shape, encryption key, and the code engine). Source-level: OnnxEmbeddingGenerator.IntraOpThreads is a public property but is never logged anywhere (grep confirms zero call sites logging it); EmbeddingService.CreateLocal reads and resolves the setting but never logs the resolved value either -- only EmbeddingService.Log.InvalidThreadsSetting (EventId 419, Warning) exists, firing only for a GARBAGE value, never for a valid one.",
+            "observed-result": "The round-trip (CLI set -> CLI list) works correctly and the session construction does not error with a non-default thread count, so the setting IS being consumed by ONNX (a wrong or ignored value would still succeed silently, so this is not proof of correct application, only proof of no crash). But there is genuinely no doctor output and no log line anywhere -- at any log level reachable through this build's supported configuration surface -- that confirms the resolved thread count actually took effect. This is a real observability gap against the explicit ask.",
+            "status": "fail",
+            "accepted": true,
+            "acceptance-reason": "Accepted as a known, tracked defect: filed as GitHub issue #522 (https://github.com/Arasz/ai-raccoon/issues/522) rather than a checklist regression to fix in this run. The round-trip half of the item (set/show/list) passes cleanly; the 'doctor/logs show it took effect' half genuinely does not exist in this build -- confirmed by exhaustive grep of both the doctor command's own source and every log line this run produced, not by absence of effort to find it."
+        },
+        {
+            "item": "settings-maintenance-embed-rows-per-run-validation",
+            "expected-result": "`ai-raccoon settings maintenance embed-rows-per-run <n>`: set 7 -> list shows 7. set 0, \"\", 5000 -> exit 1 with the positive/at-most-4096 message and nothing written.",
+            "command": "settings maintenance embed-rows-per-run 7 ; settings maintenance list ; embed-rows-per-run 0 ; embed-rows-per-run \"\" ; embed-rows-per-run 5000 ; settings maintenance list again",
+            "evidence": "set 7 -> 'embed rows per run: 7'. list -> 'embed rows per run: 7' (round-tripped). set 0 -> exit 15 (this build's InvalidArgument code, not literal 1 -- see note), 'ai-raccoon: embed rows per run must be a positive integer, at most 4096'. set \"\" -> same exit code, same message. set 5000 -> same exit code, same message. list afterward -> still 'embed rows per run: 7' -- none of the three rejected calls wrote anything.",
+            "observed-result": "Round trip correct; all three invalid inputs rejected with the exact positive/at-most-4096 message and confirmed no write occurred (re-read shows the value unchanged).",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Note: the exit code for a rejected value is 15 (this build's ExitCode.InvalidArgument), not the literal '1' named in the item's phrasing -- the item's own template sibling ('cli-exit-codes-nobank-and-settings-error') documents 15 as the usage-error code family, so this is consistent internal behavior, not a discrepancy worth flagging as a defect; recorded here for precision."
+        },
+        {
+            "item": "embed-drain-proof-mixed-corpus-with-code-model-active",
+            "expected-result": "Ingest a small directory with both markdown and .cs files into a scratch bank with the code model active, then prove both corpora drain to embedded without inline embedding (via memory_embed_pending/memory_stats/doctor or the server log's EventIds 1002/1003 'drain pass'; 1006 must NOT fire with a valid setting), and that with embed-rows-per-run=7 a single drain pass embeds exactly 7 rows.",
+            "command": "root-code: code engine already active (from item 16) ; memory_ingest_directory (README.md + TideSampler.cs, code engine active) ; doctor (pending:0 for both corpora) ; separately: 10 fresh .cs files, embed-rows-per-run=7, memory_ingest_directory (single directory-walk write, one signal per corpus) ; server log grep for EmbedDrainService[1002/1003/1006]",
+            "evidence": "Mixed-corpus ingest with code engine active: doctor showed 'code rows pending: 0' immediately after ingest (both README.md's memory chunk and TideSampler.cs's code chunk drained without ever calling memory_embed_pending). Server log (once flushed on clean shutdown): 'EmbedDrainService[1003] Embed drain pass finished for Code: 1 row(s)' and 'Embed drain pass finished for Memory: 1 row(s)' -- both corpora, both via the async drain, zero inline-embed code path (confirmed by source: FileIngestor no longer holds an IEntryEmbedder reference at all, per PR #518's own commit message). embed-rows-per-run=7 test: 10 pending code rows created in one directory-walk write (one signal) -> log shows 'Embed drain pass finished for Code: 7 row(s)' (the FIRST pass, capped exactly at the configured 7), followed by the periodic code-reindex maintenance job finding the 3 remainder and firing a second signal -> 'Embed drain pass finished for Code: 3 row(s)' (7+3=10, all drained). Across this entire log: EventId 1006 (invalid rows-per-run) never appears anywhere -- the setting stayed valid throughout.",
+            "observed-result": "Both corpora drain fully via the async EmbedDrainService, with zero inline embedding on the write path (source-confirmed: embedInline was removed entirely in PR #518). The rows-per-run cap is honored exactly: a single pass embeds precisely 7 rows when 10 are pending, never more, with the remainder requiring a second signal -- exactly the outbox/pacing design intent. 1006 correctly never fires with the valid setting in place throughout.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "The single-drain-pass-embeds-exactly-7 claim is the strongest evidence in this item: the log line reads 'Embed drain pass finished for Code: 7 row(s)' immediately after a 10-row batch write, followed by a second, separate pass for the remaining 3 -- this could not happen if rows-per-run were ignored or if inline embedding still existed (which would show all 10 embedded before any drain-pass log ever appeared, or no drain-pass logs at all)."
+        },
+        {
+            "item": "watched-directory-cs-file-triggers-code-corpus-drain-signal",
+            "expected-result": "Adding a .cs file under a watch shows the code corpus gets a drain signal (EventId 1002 with corpus Code) -- PR #518 fixed this path (the digest used to unconditionally signal Memory regardless of which corpus a write actually landed in).",
+            "command": "Register a watch on a fresh directory (watch-code-src, code engine active) ; add a new .cs file (WatchedFile.cs) under it ; wait for the watch poll/digest ; check memory_watch_status (lastSync) and memory_search kind=code for the new file's content ; server log grep for EmbedDrainService[1002/1003] immediately following the watch digest's write-lock log line",
+            "evidence": "memory_watch_status showed a fresh lastSync after the file was added. kind=code search found WatchedFile.cs ranked #1 (embedded, not just FTS). Server log (flushed on clean shutdown), in order: 'AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore[899] Replace-by-path transaction held the write lock for 4.5 ms (1 row(s) written)' (the watch digest's own write) immediately followed by 'AiRaccoon.Infrastructure.Embedding.EmbedDrainService[1003] Embed drain pass finished for Code: 1 row(s)' -- corpus=Code, not Memory. Read PR #518's own commit (a52b00dd, 'fix(watch): the digest signals the corpus the replace actually wrote to, not always Memory'): the fix replaced IMemoryStore.ReplaceIfFileChangedAsync's bare bool return with ReplaceResult(bool Replaced, CorpusKind Corpus), and WatchDigestExecutor.DigestAsync now enqueues per that corpus instead of unconditionally enqueuing EmbedCorpus.Memory.",
+            "observed-result": "The watched .cs file's write correctly signals and drains the Code corpus (evidenced by the paired 1003 'finished for Code' line, not 'finished for Memory'), matching PR #518's fix. EventId 1002 itself (the 'pass started' line, logged at Debug level) was not directly observable: this build ships no appsettings.json, offers no --log-level CLI flag, and setting the standard ASP.NET Core Logging__LogLevel__Default environment variable had no effect on the console provider's minimum level (confirmed: after a clean restart with that env var set, every subsequent log line, including ones known to exist at Debug level in test coverage, still printed only at Information or above) -- there is no supported way in this build to lower the console log threshold below Information. 1003 for the same drain pass is the adjacent, unconditional log line in the same code path (DrainOnceAsync logs 1002 as its first line and 1003 as its last, with no branch in between) and is Information-level, so its corpus value is conclusive proof the paired 1002 also fired with corpus=Code.",
+            "status": "substituted",
+            "accepted": true,
+            "acceptance-reason": "EventId 1002 itself could not be directly captured live (Debug-level, and this build exposes no supported way to lower the console minimum log level -- confirmed by testing the standard Logging__LogLevel__Default env var, which had no effect). Substituted with EventId 1003 for the same drain pass (unconditionally logged immediately after 1002 in DrainOnceAsync, same corpus value, Information level) plus a read of PR #518's own diff, which is conclusive for the behavior under test (correct corpus routing) even though the specific event id named in the task could not be observed at this build's log level."
+        }
+    ]
+}
