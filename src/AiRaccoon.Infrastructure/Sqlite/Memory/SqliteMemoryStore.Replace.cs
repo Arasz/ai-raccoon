@@ -242,7 +242,7 @@ public sealed partial class SqliteMemoryStore
 
     private static partial class Log
     {
-        [LoggerMessage(EventId = 1002, Level = LogLevel.Information,
+        [LoggerMessage(EventId = 899, Level = LogLevel.Information,
             Message = "Replace-by-path transaction held the write lock for {ElapsedMs:F1} ms ({Rows} row(s) written)")]
         public static partial void TransactionHeld(ILogger logger, double elapsedMs, int rows);
     }

@@ -21,7 +21,7 @@ namespace AiRaccoon.Tests.Integration.Storage;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ReplaceCoreTransactionSpanLogTests : IDisposable
 {
-    private const int TransactionHeldEventId = 1002;
+    private const int TransactionHeldEventId = 899;
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
     private readonly string _dataRoot = TestData.CreateTempRoot("airaccoon-replace-span-log");

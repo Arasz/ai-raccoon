@@ -136,18 +136,18 @@ public sealed partial class EmbedDrainService(
 
     private static partial class Log
     {
-        [LoggerMessage(EventId = 1003, Level = LogLevel.Debug, Message = "Embed drain pass started for {Corpus}")]
+        [LoggerMessage(EventId = 1002, Level = LogLevel.Debug, Message = "Embed drain pass started for {Corpus}")]
         public static partial void DrainStarted(ILogger logger, EmbedCorpus corpus);
 
-        [LoggerMessage(EventId = 1004, Level = LogLevel.Information,
+        [LoggerMessage(EventId = 1003, Level = LogLevel.Information,
             Message = "Embed drain pass finished for {Corpus}: {Rows} row(s)")]
         public static partial void DrainFinished(ILogger logger, EmbedCorpus corpus, int rows);
 
-        [LoggerMessage(EventId = 1005, Level = LogLevel.Debug,
+        [LoggerMessage(EventId = 1004, Level = LogLevel.Debug,
             Message = "Embed drain signalled but the pump was already empty when taken (coalesced away)")]
         public static partial void DrainSkippedCoalesced(ILogger logger);
 
-        [LoggerMessage(EventId = 1006, Level = LogLevel.Warning, Message = "Embed drain pass failed for {Corpus}")]
+        [LoggerMessage(EventId = 1005, Level = LogLevel.Warning, Message = "Embed drain pass failed for {Corpus}")]
         public static partial void DrainFailed(ILogger logger, EmbedCorpus corpus, Exception exception);
     }
 }

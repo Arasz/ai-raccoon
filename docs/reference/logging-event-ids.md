@@ -9,7 +9,7 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **156** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **160** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
@@ -40,7 +40,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 310-312 | `src/AiRaccoon.Infrastructure/Watch/WatchCatchUp.cs` |
 | 320, 321 | `src/AiRaccoon.Infrastructure/Watch/WatchHostedService.cs` |
 | 330 | `src/AiRaccoon/Setup/Dependencies.cs` |
-| 400 | `src/AiRaccoon.Infrastructure/Watch/WatchDigestExecutor.cs` |
+| 400 | *(retired 2026-08-22, WP11-B2)* — was `src/AiRaccoon.Infrastructure/Watch/WatchDigestExecutor.cs`'s best-effort-embed-failed warning; the digest no longer embeds inline (it signals the embed topic via `IEventPump<EmbedDrainRequest>.TryEnqueue`, which cannot throw), so the call site — and the `Log` class it lived in — is gone. Retired rather than reused, same convention as 416/512/516. |
 | 410-413 | `src/AiRaccoon.Infrastructure/Embedding/BundledModel.cs` |
 | 414-415, 417 | `src/AiRaccoon.Infrastructure/Embedding/OnnxEmbeddingGenerator.cs` (docs/adr/0036: embed-time truncation and possible-[UNK]-collapse detectors — 414 is STORED CONTENT only since ADR-0071; 417 added 2026-08-22, #466: the graph pools its own output, so the manifest's pooling.mode cannot be applied. **416 is a hole in this block, not a free id** — it was `EmbeddingService`'s query-trim event and moved to 418 to open 417, because this owner sat wedged between `BundledModel`'s 413 and that 416 with nowhere to grow, the same wedge that moved `MetricsFlusher` off 962-964. Retired, never reused) |
 | 418-419 | `src/AiRaccoon.Infrastructure/Embedding/EmbeddingService.cs` (418 added 2026-08-15 as **416**: a search query trimmed to the model window, ADR-0071 — split out of 414 so each is countable. Moved 416 -> 418 on 2026-08-22, #466, so `OnnxEmbeddingGenerator` could extend to 417 without interleaving; ADR-0071 and ADR-0072 name the old number and carry an amendment. 416 is retired. 419 added 2026-08-22, WP11-A/G16: `embedding.threads` didn't parse to a non-negative integer, so the halved-core default is used instead — the block's next free id, no longer left open for `ManifestPoolingRepair`) |
@@ -68,7 +68,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 686 | `src/AiRaccoon/Settings/WatchRegisteredEndpoint.cs` (ADR-0075 amendment: the control-plane watch-registered resource — read-only, no outbox; closes `watch registered`'s latent bank-open) |
 | 700, 702-704, 707-709 | `src/AiRaccoon.Infrastructure/Promotion/PromotionQueueService.cs` (701/705/706 removed 2026-08-11: per-element eviction/failure logs de-noised; 708 = prune summary; 709 added 2026-08-14 = stale promotion claims reclaimed, ADR-0037) |
 | 800-807 | `src/AiRaccoon/Setup/Cli/Commands/EncryptionCommands.cs` |
-| 900 | `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs` |
+| 899-900 | `src/AiRaccoon.Infrastructure/Sqlite/Memory/SqliteMemoryStore.cs` and `SqliteMemoryStore.Replace.cs` (path corrected 2026-08-22, same commit that added 899: the doc named `Sqlite/SqliteMemoryStore.cs`, but the file has lived at `Sqlite/Memory/SqliteMemoryStore.cs` since the class was split into partials — 899 is WP11 Finding (b)'s `ReplaceCoreAsync` held-transaction-span log, in `Replace.cs`, sharing the `Log` class nested in the outer `SqliteMemoryStore` partial; placed immediately below 900 rather than after 903, since `SqliteConnectionFactory` already owns 901-903) |
 | 901, 902, 903 | `src/AiRaccoon.Infrastructure/Sqlite/SqliteConnectionFactory.cs` (added 2026-08-21: the overlap-prune report (formerly the v11 ladder step, now an unconditional open-time step)'s overlap-prune report — one line per pruned watch + a count, docs/work/2026-08-21-code-search-implementation-plan.md §4; the migration itself is silent and only returns the pruned list, since `SqliteConnectionFactory.InitializeAsync` is the one caller in the chain that owns a logger) |
 | 910-912 | `src/AiRaccoon/Tools/ToolRefusals.cs` |
 | 920-921 | `src/AiRaccoon/Tools/MemoryTools.cs` (docs/adr/0040: read-path query guard shadow-mode verdict; 921 added — WP10, docs/plans/2026-08-15-performance-metrics-implementation.md: best-effort phase-measurement recording failure) |
@@ -78,6 +78,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 970-974 | `src/AiRaccoon.Infrastructure/Metrics/MetricsFlusher.cs` (WP3; moved from 962-964 and extended to 973-974 — the bounded shutdown-time final flush, review-fixes blocker 2 — freeing room the old block did not have: it sat wedged between SqliteMetricsStore's 961 and SqliteSearchQualityService's 965) |
 | 965 | `src/AiRaccoon.Infrastructure/Sqlite/SqliteSearchQualityService.cs` (WP10, docs/plans/2026-08-15-performance-metrics-implementation.md: `RecordSearchSafeAsync`'s best-effort failure) |
 | 1000-1001 | `src/AiRaccoon/Setup/Cli/Commands/DoctorCommands.cs` (GH #357: `doctor`'s key-resolution and bank-open failure logs) |
+| 1002-1005 | `src/AiRaccoon.Infrastructure/Embedding/EmbedDrainService.cs` (added 2026-08-22, WP11-B2: the embed topic's single consumer — 1002 a drain pass started, 1003 a drain pass finished with its row count, 1004 a signal that raced to an already-empty pump (structurally unreachable for this 2-value coalescing topic, logged defensively), 1005 a drain pass failed) |
 
 ## How this table is produced
 
