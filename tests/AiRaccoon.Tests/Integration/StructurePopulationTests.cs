@@ -23,6 +23,7 @@ public sealed class StructurePopulationTests : IAsyncLifetime
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
     private readonly string _dataRoot = TestData.CreateTempRoot();
+    private readonly FakeTimeProvider _clock = new(FixedNow);
     private SqliteConnectionFactory _factory = null!;
     private SqliteMemoryStore _store = null!;
 
@@ -32,7 +33,7 @@ public sealed class StructurePopulationTests : IAsyncLifetime
         _factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
-        _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
+        _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), _clock,
             TestData.CreateEmbeddingService());
     }
 
@@ -46,7 +47,8 @@ public sealed class StructurePopulationTests : IAsyncLifetime
     [Fact]
     public async Task Ingest_MarkdownWithHeadings_PopulatesTheStructureVectorTable()
     {
-        await _store.ConfigureEmbeddingAsync("local", null, null, TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
+            "local", null, null, TestContext.Current.CancellationToken, _clock);
 
         var file = Path.Combine(_dataRoot, "guide.md");
         await File.WriteAllTextAsync(file,

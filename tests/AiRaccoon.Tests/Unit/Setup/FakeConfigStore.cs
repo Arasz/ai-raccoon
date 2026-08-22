@@ -17,7 +17,8 @@ internal sealed class FakeConfigStore : FakeMemoryStore, ICodeEngineStore
 
     public (string Provider, string? Model, string? BaseUrl)? Configured { get; private set; }
 
-    public override Task<EmbeddingConfig> ConfigureEmbeddingAsync(string provider, string? model, string? baseUrl,
+    /// <summary>ADR-0076: model set reaches this via IModelMigrationStore — the fake just records it.</summary>
+    public override Task<EmbeddingConfig> StartModelMigrationAsync(string provider, string? model, string? baseUrl,
         CancellationToken cancellationToken = default)
     {
         Configured = (provider, model, baseUrl);
@@ -44,11 +45,6 @@ internal sealed class FakeConfigStore : FakeMemoryStore, ICodeEngineStore
         return Task.FromResult(new EmbeddingConfig(provider, model ?? "bundled",
             Fingerprint().EngineFingerprint(provider, model, baseUrl)));
     }
-
-    /// <summary>ADR-0076: model set now reaches this via IModelMigrationStore, not ConfigureEmbeddingAsync — same recording shape.</summary>
-    public override Task<EmbeddingConfig> StartModelMigrationAsync(string provider, string? model, string? baseUrl,
-        CancellationToken cancellationToken = default) =>
-        ConfigureEmbeddingAsync(provider, model, baseUrl, cancellationToken);
 
     public override Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
         Task.FromResult(Settings.TryGetValue(key, out var value) ? value : null);

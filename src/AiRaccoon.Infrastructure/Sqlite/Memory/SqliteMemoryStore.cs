@@ -413,20 +413,6 @@ public sealed partial class SqliteMemoryStore(
         return result.Indexed;
     }
 
-    public async Task<EmbeddingConfig> ConfigureEmbeddingAsync(
-        string provider, string? model, string? baseUrl, CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(provider);
-        if (string.Equals(provider, "openai", StringComparison.OrdinalIgnoreCase))
-        {
-            ArgumentException.ThrowIfNullOrWhiteSpace(model);
-        }
-
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        return await embedder.ConfigureAsync(connection, provider, model, baseUrl, cancellationToken)
-            .ConfigureAwait(false);
-    }
-
     public async Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
         CancellationToken cancellationToken = default)
     {

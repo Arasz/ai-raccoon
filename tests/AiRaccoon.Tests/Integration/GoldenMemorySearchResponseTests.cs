@@ -56,13 +56,15 @@ public sealed class GoldenMemorySearchResponseTests : IAsyncLifetime
     {
         var options = new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+        var clock = new FakeTimeProvider(FixedNow);
         _settings = new SqliteSettingsStore(factory);
         _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance,
-            new SqliteMemorySourceStore(factory), new StubChunker(), new FakeTimeProvider(FixedNow),
+            new SqliteMemorySourceStore(factory), new StubChunker(), clock,
             TestData.CreateEmbeddingService(), settings: _settings);
         _openAi = await FakeEmbeddingEndpoint.StartAsync(TestContext.Current.CancellationToken);
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
-        await _store.ConfigureEmbeddingAsync("openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken);
+        await TestData.ConfigureAndDrainEmbeddingAsync(_store, factory, TestData.CreateEmbeddingService(),
+            "openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken, clock);
     }
 
     public async ValueTask DisposeAsync()

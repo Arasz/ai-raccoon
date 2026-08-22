@@ -310,10 +310,6 @@ public sealed class MemoryToolsAccessModeTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(1);
 
-        public override Task<EmbeddingConfig> ConfigureEmbeddingAsync(string provider, string? model, string? baseUrl,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new EmbeddingConfig(provider, model ?? "bundled", provider == "local" ? "local" : "remote"));
-
         public override Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new EmbedPendingResult(0, 0));

@@ -53,18 +53,6 @@ public class MemoryStorePortTests
     }
 
     [Fact]
-    public async Task ConfigureEmbeddingAsync_IsPartOfThePort_AndReturnsTheConfig()
-    {
-        var store = new RecordingStore();
-
-        var config = await store.ConfigureEmbeddingAsync(
-            "local", "/models/custom.onnx", null, TestContext.Current.CancellationToken);
-
-        config.Engine.ShouldBe("local");
-        store.Configured.ShouldBe(("local", "/models/custom.onnx", null));
-    }
-
-    [Fact]
     public async Task EmbedPendingAsync_IsPartOfThePort_AndReportsProcessedAndPending()
     {
         var store = new RecordingStore();
@@ -156,8 +144,6 @@ public class MemoryStorePortTests
 
         public (string Path, string? Context)? IngestedDirectory { get; private set; }
 
-        public (string Provider, string? Model, string? BaseUrl)? Configured { get; private set; }
-
         public string? ListedContext { get; private set; }
 
         public (string ProjectId, string Path)? DeletedSourcePath { get; private set; }
@@ -213,14 +199,6 @@ public class MemoryStorePortTests
         {
             IngestedDirectory = (path, context);
             return Task.FromResult(3);
-        }
-
-        public override Task<EmbeddingConfig> ConfigureEmbeddingAsync(
-            string provider, string? model, string? baseUrl,
-            CancellationToken cancellationToken = default)
-        {
-            Configured = (provider, model, baseUrl);
-            return Task.FromResult(new EmbeddingConfig(provider, model ?? "bundled", provider == "local" ? "local" : "remote"));
         }
 
         public override Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,

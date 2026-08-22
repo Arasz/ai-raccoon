@@ -5,10 +5,6 @@ namespace AiRaccoon.Infrastructure.Embedding;
 
 public interface IEntryEmbedder
 {
-    /// <summary>Writes the engine settings and, when the engine fingerprint changed, re-embeds the whole bank.</summary>
-    Task<EmbeddingConfig> ConfigureAsync(SqliteConnection connection, string provider, string? model,
-        string? baseUrl, CancellationToken cancellationToken);
-
     /// <summary>
     ///     The outbox half of a model migration (ADR-0076): in one transaction, writes the engine
     ///     settings, a migration-started record and marks the bank's embedded rows pending — then

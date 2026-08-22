@@ -54,14 +54,6 @@ public interface IMemoryStore : IModelMigrationStore
     Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    ///     Sets the bank's embedding provider/model/endpoint, persists them in the settings table,
-    ///     records the engine fingerprint, and re-embeds previously embedded rows (bank-global) when
-    ///     the engine changes; the remote API key is a separate settings row (embedding.apiKey).
-    /// </summary>
-    Task<EmbeddingConfig> ConfigureEmbeddingAsync(string provider, string? model, string? baseUrl,
-        CancellationToken cancellationToken = default);
-
     /// <summary>Embeds pending deferred rows in batches (see docs/work/features-agent-memory/spec-issue-1.md §4.1 memory_embed_pending).</summary>
     Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
         CancellationToken cancellationToken = default);

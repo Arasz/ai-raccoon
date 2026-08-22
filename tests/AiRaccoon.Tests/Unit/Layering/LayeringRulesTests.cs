@@ -159,7 +159,41 @@ public sealed class LayeringRulesTests
     }
 
     /// <summary>
-    ///     Rule 5 (plan D3 follow-up, quality-gate finding on PR #432): a CLI verb never reaches a
+    ///     Rule 5 — D4: the legacy direct-configure path (<c>ConfigureEmbeddingAsync</c>) is gone
+    ///     from the port. Production configures embedding only through the ADR-0076 outbox
+    ///     (<c>IModelMigrationStore.StartModelMigrationAsync</c> then a relay drain); a second,
+    ///     synchronous configure path bypassed that outbox entirely — no migration row, no
+    ///     reconcile, and a throw mid-re-embed on a dimension change.
+    /// </summary>
+    /// <remarks>
+    ///     <see cref="Type.GetMethods()" /> on an INTERFACE returns only members declared directly
+    ///     on it, not on interfaces it extends — <c>IMemoryStore : IModelMigrationStore</c> means a
+    ///     <c>Configure*</c> member reintroduced on the base interface would land on the port's
+    ///     surface but stay invisible to a plain <c>GetMethods()</c> call. Walking
+    ///     <see cref="Type.GetInterfaces" /> closes that gap. This is still a name-only check: a
+    ///     differently-named member that bypasses the outbox the same way would not be caught — a
+    ///     known limit of this gate, not a false green on the case it does cover.
+    /// </remarks>
+    [Fact]
+    public void IMemoryStore_ExposesNoConfigureMember()
+    {
+        var offenders = AllMethodsIncludingBaseInterfaces(typeof(IMemoryStore))
+            .Where(m => m.Name.StartsWith("Configure", StringComparison.Ordinal))
+            .Select(m => m.Name)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        offenders.ShouldBeEmpty(
+            "IMemoryStore (including the interfaces it extends) must not expose a direct Configure* "
+            + "path; embedding configuration goes through IModelMigrationStore.StartModelMigrationAsync "
+            + "(ADR-0076): " + string.Join(", ", offenders));
+    }
+
+    private static IEnumerable<MethodInfo> AllMethodsIncludingBaseInterfaces(Type interfaceType) =>
+        interfaceType.GetMethods().Concat(interfaceType.GetInterfaces().SelectMany(i => i.GetMethods()));
+
+    /// <summary>
+    ///     Rule 6 (plan D3 follow-up, quality-gate finding on PR #432): a CLI verb never reaches a
     ///     reconcile/vec-DDL operation through a PORT it receives as a method argument, not just
     ///     through a constructor-injected field. <c>ConfigCommands</c> holds <c>IMemoryStore</c> as
     ///     its own field and threads it into every leaf verb method

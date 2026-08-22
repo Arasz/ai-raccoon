@@ -54,11 +54,12 @@ public sealed class ManagedHarness
         var factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero));
         var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(),
-            new FakeTimeProvider(new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero)), TestData.CreateEmbeddingService());
+            clock, TestData.CreateEmbeddingService());
 
-        await store.ConfigureEmbeddingAsync("local", null, null, cancellationToken)
-            .ConfigureAwait(false);
+        await TestData.ConfigureAndDrainEmbeddingAsync(store, factory, TestData.CreateEmbeddingService(),
+            "local", null, null, cancellationToken, clock).ConfigureAwait(false);
 
         foreach (var doc in RealWorldCorpus.Documents)
         {
