@@ -27,6 +27,15 @@ public interface IEntryEmbedder
     /// </summary>
     Task<bool> DrainMigrationAsync(SqliteConnection connection, CancellationToken cancellationToken);
 
+    /// <summary>
+    ///     Brings vec0 (`vec_entries`/`vec_structure`) to the configured engine's dimension (plan
+    ///     D3). Server-only by construction: reached only from <c>NodeRunner</c> (before it binds
+    ///     the port) and from this type's own <see cref="DrainMigrationAsync" /> — never from a CLI
+    ///     verb (`cli-asks-the-server-acts`). A bank with no engine configured has nothing to
+    ///     reconcile against and is left alone.
+    /// </summary>
+    Task ReconcileVecDimensionsAsync(SqliteConnection connection, CancellationToken cancellationToken);
+
     /// <summary>Embeds one row when an engine is configured; a bank with no engine is left pending.</summary>
     Task EmbedIfConfiguredAsync(SqliteConnection connection, long id, string value,
         CancellationToken cancellationToken);

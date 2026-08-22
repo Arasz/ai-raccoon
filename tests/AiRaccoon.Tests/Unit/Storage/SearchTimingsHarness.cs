@@ -50,6 +50,9 @@ internal static class SearchTimingsHarness
 
         public Task<bool> DrainMigrationAsync(SqliteConnection connection, CancellationToken cancellationToken) => throw new NotSupportedException("Not exercised by SearchAsync.");
 
+        public Task ReconcileVecDimensionsAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+            throw new NotSupportedException("Not exercised by SearchAsync.");
+
         public Task EmbedIfConfiguredAsync(SqliteConnection connection, long id, string value,
             CancellationToken cancellationToken) =>
             Task.CompletedTask;

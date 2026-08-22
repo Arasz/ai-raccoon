@@ -176,11 +176,8 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
         }
     }
 
-    /// <summary>
-    ///     Reconciles vec0 to the configured engine's dimension. A bank with no engine has nothing to
-    ///     reconcile against, so it is left alone.
-    /// </summary>
-    private async Task ReconcileVecDimensionsAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    /// <inheritdoc />
+    public async Task ReconcileVecDimensionsAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var reconciler = vecDimensions ?? new VecDimensionReconciler();
         var settings = await ReadSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
