@@ -106,24 +106,6 @@ jobs:
           mkdir -p .nupkg-local
           dotnet run --project src/AiRaccoon --no-launch-profile -- \
             model download BAAI/bge-m3 --dir "${{ runner.temp }}/bge-m3" --yes
-      - name: SCRATCH pass+red proof (WP5, to be reverted before merge)
-        run: |
-          mkdir -p .nupkg-local
-          echo "::group::manifest written by model download"
-          cat "${{ runner.temp }}/bge-m3/ai-raccoon.manifest.json"
-          echo "::endgroup::"
-          echo "::group::GREEN - real manifest, filtered verbose run"
-          AIRACCOON_POOLING_PARITY_MODEL_DIR="${{ runner.temp }}/bge-m3" \
-            dotnet test --filter "FullyQualifiedName~GraphPooledOutputParityTests" \
-            --logger "console;verbosity=detailed" --nologo
-          echo "::endgroup::"
-          echo "::group::RED proof - pooling.mode forced to the wrong value"
-          cp -r "${{ runner.temp }}/bge-m3" "${{ runner.temp }}/bge-m3-red"
-          python3 -c "import json; p='${{ runner.temp }}/bge-m3-red/ai-raccoon.manifest.json'; m=json.load(open(p)); print('before:', m['pooling']['mode']); m['pooling']['mode']='mean'; print('after:', m['pooling']['mode']); json.dump(m, open(p, 'w'))"
-          AIRACCOON_POOLING_PARITY_MODEL_DIR="${{ runner.temp }}/bge-m3-red" \
-            dotnet test --filter "FullyQualifiedName~GraphPooledOutputParityTests" \
-            --logger "console;verbosity=detailed" --nologo || echo "RED_PROOF_EXIT=$?"
-          echo "::endgroup::"
       - name: Full suite + failure triage
         env:
           GH_TOKEN: ${{ github.token }}
