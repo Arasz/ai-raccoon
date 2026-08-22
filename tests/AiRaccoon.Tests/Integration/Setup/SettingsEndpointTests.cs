@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
@@ -213,6 +214,32 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         body.ShouldContain("126");
         body.ShouldContain(CodeChunker.DefaultBudget.ToString());
+    }
+
+    /// <summary>
+    ///     Found by the 1.32.0 post-publish check after #476: the chunk-budget leg is the one
+    ///     refusal SettingsCommands does not pre-check locally, so it is the only leg that actually
+    ///     drives ServerSettingsStore.ActivateCodeEngineAsync's own 400 handling. Before the fix,
+    ///     Ensure() fell through to EnsureSuccessStatusCode() and this threw a bare
+    ///     HttpRequestException with no reason in it.
+    /// </summary>
+    [Fact]
+    public async Task ServerSettingsStore_ActivateCodeEngine_OnAChunkBudgetRefusal_ThrowsWithTheReason()
+    {
+        var dir = Path.Combine(_dataRoot, "code-model-narrow-ctx-cli");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "sentencepiece.bpe.model"), "tokenizer");
+        File.WriteAllText(Path.Combine(dir, "model.onnx"), "model");
+        var manifest = File.ReadAllText(
+                TestData.RepoFile("tests/AiRaccoon.Tests/Resources/ManifestFixtures/code-daemon-embed-v1.json"))
+            .Replace("\"contextWindowTokens\": 512", "\"contextWindowTokens\": 128");
+        File.WriteAllText(Path.Combine(dir, EmbeddingManifest.FileName), manifest);
+        var store = new ServerSettingsStore(new HttpClient { BaseAddress = new Uri(_app.Urls.First()) }, Token);
+
+        var ex = await Should.ThrowAsync<CodeEngineActivationRefusedException>(
+            () => store.ActivateCodeEngineAsync(dir, TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldContain(CodeChunker.DefaultBudget.ToString());
     }
 
     private Task<HttpResponseMessage> PutAsync(string key, string value) =>

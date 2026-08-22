@@ -118,6 +118,11 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
         var response = await SendAsync(() =>
             _client.PostAsJsonAsync(SettingsProtocol.ModelCodePath, new ModelCodeActivationRequest(directory),
                 cancellationToken));
+        if (response.StatusCode == HttpStatusCode.BadRequest)
+        {
+            throw new CodeEngineActivationRefusedException(await response.Content.ReadAsStringAsync(cancellationToken));
+        }
+
         Ensure(response);
         var body = await response.Content.ReadFromJsonAsync<ModelCodeActivationResponse>(cancellationToken);
         return new EmbeddingConfig("local", body!.Model, body.Engine);
