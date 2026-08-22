@@ -206,6 +206,13 @@ internal static class CliCommandTree
         show.Aliases.Add("list");
         model.Add(show);
 
+        model.Add(new Command("threads",
+            "ORT intra-op thread cap for local embedding sessions (0 = ORT default, unset = max(1, logicalCores/2)). " +
+            "Takes effect on the next server restart — sessions are cached per engine fingerprint.")
+        {
+            new Argument<string>("n") { HelpName = "n" }
+        });
+
         var code = new Command("code", "Code corpus embedding engine configuration (the engine itself is selected by 'model set code local')");
         var codeReset = new Command("reset", "Deletes ONLY the code engine rows (embedding.codeModel/codeEngine) — the memory engine is untouched");
         codeReset.Aliases.Add("unset");

@@ -98,7 +98,46 @@ public sealed class MarkdownChunker : IMarkdownChunker
             c--;
         }
 
+        int deferred;
+        do
+        {
+            deferred = DeferTrailingHeading(chunkUnits, newUnitCount);
+            newUnitCount -= deferred;
+            c -= deferred;
+        } while (deferred > 0);
+
         return (chunkUnits, c);
+    }
+
+    /// <summary>
+    ///     A heading line must open the chunk that holds its section's content, not end the previous
+    ///     one empty-handed (#489): when this chunk's new units trail off in a heading — followed by
+    ///     nothing but blank lines, if anything — that heading is handed back to the next chunk.
+    ///     Returns 0, leaving the heading in place, when it is the chunk's only new unit; deferring it
+    ///     then would make no forward progress.
+    /// </summary>
+    private static int DeferTrailingHeading(List<Unit> chunkUnits, int newUnitCount)
+    {
+        var newStart = chunkUnits.Count - newUnitCount;
+        var i = chunkUnits.Count - 1;
+        while (i >= newStart && IsBlankUnit(chunkUnits[i]))
+        {
+            i--;
+        }
+
+        if (i < newStart || !IsHeadingUnit(chunkUnits[i]))
+        {
+            return 0;
+        }
+
+        var removeCount = chunkUnits.Count - i;
+        if (newUnitCount - removeCount < 1)
+        {
+            return 0;
+        }
+
+        chunkUnits.RemoveRange(i, removeCount);
+        return removeCount;
     }
 
     private static List<Unit> BuildOverlay(List<Unit>? previousUnits, int overlayTokens)
@@ -368,6 +407,24 @@ public sealed class MarkdownChunker : IMarkdownChunker
         var trimmed = line.TrimStart();
         return trimmed.StartsWith("```", StringComparison.Ordinal)
                || trimmed.StartsWith("~~~", StringComparison.Ordinal);
+    }
+
+    private static bool IsHeadingUnit(Unit unit) => unit.Lines.Count == 1 && IsHeadingLine(unit.Lines[0]);
+
+    private static bool IsBlankUnit(Unit unit) => unit.Lines.Count == 1 && string.IsNullOrWhiteSpace(unit.Lines[0]);
+
+    /// <summary>ATX heading, levels 1-6 (a bare '#' or '#Text' does not count) — same shape HeadingPathParser parses.</summary>
+    private static bool IsHeadingLine(string line)
+    {
+        var trimmed = line.TrimStart();
+        var level = 0;
+        while (level < trimmed.Length && trimmed[level] == '#')
+        {
+            level++;
+        }
+
+        return level is >= 1 and <= 6 && level < trimmed.Length && trimmed[level] == ' '
+               && trimmed[(level + 1)..].Trim().Length > 0;
     }
 
     private static List<string> SplitLines(string text)

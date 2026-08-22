@@ -1,51 +1,35 @@
-using System.Collections.Concurrent;
+using AiRaccoon.Core.EventPump;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Metrics;
 
 namespace AiRaccoon.Infrastructure.Metrics;
 
+/// <summary>
+///     Thin adapter over the metrics topic's <see cref="EventPump{T}" /> (docs/work/2026-08-22-post-delta-3-plan.md
+///     WP11-B1): every measurement is distinct data, so this topic never coalesces. The channel's
+///     fixed ceiling is <see cref="MetricsConfigKeys.MaxBufferCapacity" />; the effective cap an
+///     operator sets stays a runtime-mutable reservation ahead of it (<see cref="ApplyCapacity" />).
+/// </summary>
 /// <inheritdoc cref="IMeasurementBuffer" />
 public sealed class MeasurementBuffer(int capacity) : IMeasurementBuffer
 {
-    private readonly ConcurrentQueue<Measurement> _queue = new();
+    private readonly IEventPump<Measurement> _pump =
+        new EventPump<Measurement>(new PumpTopic(MetricsConfigKeys.MaxBufferCapacity, capacity, Coalesce: false));
     private int _capacity = capacity;
-    private long _queued;
-    private long _enqueuedTotal;
-    private long _dropped;
 
     public int Capacity => Volatile.Read(ref _capacity);
 
-    public long EnqueuedCount => Interlocked.Read(ref _enqueuedTotal);
+    public long EnqueuedCount => _pump.EnqueuedCount;
 
-    public long DroppedCount => Interlocked.Read(ref _dropped);
+    public long DroppedCount => _pump.DroppedCount;
 
-    public bool TryEnqueue(Measurement measurement)
+    public bool TryEnqueue(Measurement measurement) => _pump.TryEnqueue(measurement);
+
+    public IReadOnlyList<Measurement> DrainAll() => _pump.DrainUpTo(int.MaxValue);
+
+    public void ApplyCapacity(int capacity)
     {
-        // Reserve a slot before enqueuing so concurrent callers cannot both pass a stale
-        // count-check and overflow the cap — the reservation itself is the cap enforcement.
-        var reserved = Interlocked.Increment(ref _queued);
-        if (reserved > Capacity)
-        {
-            Interlocked.Decrement(ref _queued);
-            Interlocked.Increment(ref _dropped);
-            return false;
-        }
-
-        _queue.Enqueue(measurement);
-        Interlocked.Increment(ref _enqueuedTotal);
-        return true;
+        Volatile.Write(ref _capacity, capacity);
+        _pump.ApplyCapacity(capacity);
     }
-
-    public IReadOnlyList<Measurement> DrainAll()
-    {
-        var batch = new List<Measurement>();
-        while (_queue.TryDequeue(out var measurement))
-        {
-            Interlocked.Decrement(ref _queued);
-            batch.Add(measurement);
-        }
-
-        return batch;
-    }
-
-    public void ApplyCapacity(int capacity) => Volatile.Write(ref _capacity, capacity);
 }

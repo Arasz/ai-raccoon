@@ -121,11 +121,55 @@ public sealed class ManagedHarness
 /// <summary>Builds the managed harness once per test collection; the corpus load is the expensive step.</summary>
 public sealed class ManagedHarnessFixture : IAsyncLifetime
 {
+    private readonly SemaphoreSlim _sweepGate = new(1, 1);
+    private IReadOnlyList<SweepOutcome>? _sweepOutcomes;
+
     public ManagedHarness Harness { get; private set; } = null!;
+
+    /// <summary>
+    ///     Query latencies recorded by <see cref="EnsureSweptAsync"/>'s own sweep only — a slice of
+    ///     <see cref="ManagedHarness.QueryLatenciesMs"/> taken around that call, so it excludes samples
+    ///     any other fact's own RankAsync calls (e.g. DegenerateQuerySubset, the per-query audit) add
+    ///     to that shared list before or after the sweep runs.
+    /// </summary>
+    public IReadOnlyList<double> SweepQueryLatenciesMs { get; private set; } = [];
 
     public async ValueTask InitializeAsync() => Harness = await ManagedHarness.BuildAsync();
 
     public async ValueTask DisposeAsync() => await Harness.DisposeAsync();
+
+    /// <summary>
+    ///     Runs the full query sweep once per fixture lifetime (memoized): whichever fact in the
+    ///     collection calls this first pays the one corpus pass, every later caller reuses its result
+    ///     and <see cref="SweepQueryLatenciesMs"/> — order-independent, no <c>ITestCaseOrderer</c> needed.
+    /// </summary>
+    public async Task<IReadOnlyList<SweepOutcome>> EnsureSweptAsync(CancellationToken cancellationToken)
+    {
+        if (_sweepOutcomes is not null)
+        {
+            return _sweepOutcomes;
+        }
+
+        await _sweepGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_sweepOutcomes is not null)
+            {
+                return _sweepOutcomes;
+            }
+
+            var before = Harness.QueryLatenciesMs.Count;
+            var outcomes = await SweepRunner.RunAsync(
+                RealWorldQueries.Queries, Harness.RankAsync, cancellationToken).ConfigureAwait(false);
+            SweepQueryLatenciesMs = [.. Harness.QueryLatenciesMs.Skip(before)];
+            _sweepOutcomes = outcomes;
+            return _sweepOutcomes;
+        }
+        finally
+        {
+            _sweepGate.Release();
+        }
+    }
 }
 
 [CollectionDefinition("managed-parity")]
