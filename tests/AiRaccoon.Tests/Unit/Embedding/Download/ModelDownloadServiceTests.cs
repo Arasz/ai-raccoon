@@ -77,7 +77,11 @@ public class ModelDownloadServiceTests : IDisposable
     /// <summary>
     ///     Regression: a repo's own sentence-transformers 1_Pooling/config.json must never be
     ///     mistaken for the model's config.json — dims/ctx still come from onnx/config.json and
-    ///     the pooling layout is read separately (the real BAAI/bge-m3 ships both).
+    ///     the pooling layout is read separately (the real BAAI/bge-m3 ships both). The fake
+    ///     repo's graph also bakes a second, distinctly-named pooled output beside the token-level
+    ///     one (the real bge-m3 shape), so pooling itself resolves to the graph, not the flags
+    ///     (issue #459 — <c>ModelDownloadPlannerTests.Pooling_GraphBakedOutput_OutranksSentenceTransformersFlags</c>
+    ///     covers that decision directly).
     /// </summary>
     [Fact]
     public async Task PoolingLayoutInRepo_DoesNotShadowTheModelConfig()
@@ -88,8 +92,8 @@ public class ModelDownloadServiceTests : IDisposable
 
         result.Plan.Dimensions.ShouldBe(1024);
         result.Plan.ContextWindowTokens.ShouldBe(8192);
-        result.Plan.PoolingMode.ShouldBe(PoolingMode.Cls);
-        result.Plan.PoolingProvenance.ShouldBe("sentence-transformers");
+        result.Plan.PoolingMode.ShouldBe(PoolingMode.ModelOutput);
+        result.Plan.PoolingProvenance.ShouldBe("onnx-graph");
         File.Exists(Path.Combine(_targetDir, EmbeddingManifest.FileName)).ShouldBeTrue();
     }
 
