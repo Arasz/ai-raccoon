@@ -85,29 +85,31 @@ public sealed class QueryConstructionTests : IDisposable
     }
 
     /// <summary>
-    ///     KNOWN REGRESSION (WP3b), not a passing guarantee. An AND primary with fewer matches
-    ///     than it has terms is over-constrained, so the OR fallback fires (A6 measured case) --
-    ///     that behaviour still holds. Before the 2026-08-14 corpus regeneration the restored
-    ///     file ranked within the FTS-only top 5; on the 3.3x denser corpus it falls to rank 8.
-    ///     Widened to Limit=30 (same query, same FtsWeight=1/VectorWeight=0, only Limit differs
-    ///     -- confirmed stable at Limit=10 too, so this isn't a candidate-window artifact) purely
-    ///     to make the exact current rank observable. Asserted exactly so the suite stays
-    ///     honest: when ranking improves this test FAILS, and that failure is the signal to
-    ///     restore the original assertion (rank &lt;= RankCutoff). Do not "fix" it by widening
-    ///     the bound.
+    ///     ai-raccoon#454 re-pin, measured on the public docs corpus 2026-08-22. S2 "What does
+    ///     ADR-0006 decide?" tokenizes to {adr, 0006, decide} (TokenCount=3); its AND primary
+    ///     "adr AND 0006 AND decide" is over-constrained -- only 2 rows match anywhere in the
+    ///     corpus (docs/adr/0088, docs/adr/0078), neither a chunk of ADR-0006. Measured directly
+    ///     against the AND-only rows (entries_fts MATCH plan.Expression, OR fallback bypassed):
+    ///     ADR-0006 is absent (FirstFileRank -&gt; null). Through the real search path -- AND
+    ///     primary plus the automatic OR fallback -- ADR-0006 is restored to rank 1.
     /// </summary>
     [Fact]
-    public async Task AndPrimary_UnderMatchedRows_DocumentsKnownRankRegression()
+    public async Task AndPrimary_UnderMatchedRows_S2Adr0006RestoredByFallback()
     {
-        Assert.Skip("ai-raccoon#454: this pinned a jsaa-corpus-specific measurement — the query " +
-                    "'How does the project handle data erasure?', whose AND primary matched only " +
-                    "ADR-0068 rows, with ADR-0067 restored at exactly rank 8. Both ADRs and the " +
-                    "query belong to the corpus that left HEAD at ADR-0090, and no equivalent " +
-                    "under-matched pair has been measured on the public corpus yet. Skipped rather " +
-                    "than re-pinned to an invented number: an assertion never seen red on this " +
-                    "corpus is not a gate (.ai-badger/invariants/prove-the-check-fails.md). The " +
-                    "OR-fallback TRIGGER is still gated by AndPrimary_ZeroMatch_RetriesWithOrFallback.");
-        await Task.CompletedTask;
+        await EnsureModelAsync();
+        var query = LoadQueries().First(q => q.Id == "S2");
+        var results = (await _store.SearchAsync(new SearchQuery(
+                ProjectId, query.Query, SearchScope.Project,
+                Limit: 30, MinRelativeScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 0),
+            TestContext.Current.CancellationToken)).Results;
+
+        var rank = FirstFileRank([.. results.Select(r => r.Hash)], FileLevel(query.ExpectedSource!));
+        rank.ShouldNotBeNull(
+            "S2's AND primary ('adr AND 0006 AND decide') matches only docs/adr/0088 and " +
+            "docs/adr/0078, excluding ADR-0006 entirely; the OR fallback must restore it");
+        rank.Value.ShouldBe(1,
+            $"ADR-0006 measured at exactly rank 1 once the OR fallback runs (Limit=30, " +
+            $"FtsWeight=1/VectorWeight=0), got {rank}");
     }
 
     /// <summary>A provably zero-matching AND primary must retry with the OR fallback (results equal the OR-only expression).</summary>
