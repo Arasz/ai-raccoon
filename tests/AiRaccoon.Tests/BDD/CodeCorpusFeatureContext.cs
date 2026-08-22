@@ -1,5 +1,6 @@
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
+using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Code;
@@ -43,6 +44,8 @@ public sealed class CodeCorpusFeatureContext : IDisposable
 
     private static readonly IModelMigrationLease ModelMigrationLease = Substitute.For<IModelMigrationLease>();
 
+    public IEventPump<EmbedDrainRequest> EmbedDrainPump { get; } = TestData.NewEmbedDrainPump();
+
     public CodeCorpusFeatureContext()
     {
         DataRoot = TestData.CreateTempRoot("airaccoon-code-corpus-bdd");
@@ -63,7 +66,7 @@ public sealed class CodeCorpusFeatureContext : IDisposable
             new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
             TestData.CreateManifestPoolingRepair());
         SearchQuality = new SqliteSearchQualityService(Factory, NullLogger<SqliteSearchQualityService>.Instance);
-        ReindexJob = new CodeReindexJob(CodeEmbedder);
+        ReindexJob = new CodeReindexJob(CodeEmbedder, EmbedDrainPump);
 
         var gate = new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue());
         MemoryTools = new MemoryTools(Store, gate,
@@ -240,8 +243,8 @@ public sealed class CodeCorpusFeatureContext : IDisposable
         var scanGuard = new WatchScanGuard();
         WatchCatchUp? catchUp = null;
         Pipeline = new WatchPipeline(new WatchScheduler(),
-            new WatchDigestExecutor(Store, WatchStore, TimeProvider, NullLogger<WatchDigestExecutor>.Instance,
-                new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => catchUp!)),
+            new WatchDigestExecutor(Store, WatchStore, TimeProvider,
+                new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => catchUp!), EmbedDrainPump),
             new WatchRetryPolicy(), scanGuard, Store, TimeProvider,
             NullLogger<WatchPipeline>.Instance);
         EventSource = new WatchEventSource(Pipeline.Enqueue, _ => { }, NullLogger<WatchEventSource>.Instance);

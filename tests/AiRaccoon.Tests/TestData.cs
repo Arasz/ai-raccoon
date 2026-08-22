@@ -1,6 +1,7 @@
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using System.Security.Cryptography;
 using AiRaccoon.Core.Chunking;
+using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.Filtering;
@@ -217,6 +218,11 @@ public static class TestData
     }
 
     public static InfrastructureOptions CreateInfrastructureOptions(string dataRoot, string rid = "osx-arm64") => new() { DataRoot = dataRoot, Rid = rid, Scope = InstallScope.User };
+
+    /// <summary>The embed topic's pump, built with production's own shape (WP11-B2) — a fresh
+    /// instance per test so pump counters never leak between tests.</summary>
+    public static IEventPump<EmbedDrainRequest> NewEmbedDrainPump() =>
+        new EventPump<EmbedDrainRequest>(new PumpTopic(EmbedDrainService.PumpCeiling, EmbedDrainService.PumpCapacity, Coalesce: true));
 
     /// <summary>BundledModel with a null logger and a factory that never opens real connections; the model copy beside the test host makes EnsureAsync return all-present.</summary>
     public static BundledModel CreateBundledModel() => new(NullLogger<BundledModel>.Instance, new NoopHttpClientFactory());

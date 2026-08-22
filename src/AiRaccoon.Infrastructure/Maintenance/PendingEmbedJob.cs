@@ -1,3 +1,4 @@
+using AiRaccoon.Core.EventPump;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
@@ -6,14 +7,14 @@ using Microsoft.Data.Sqlite;
 namespace AiRaccoon.Infrastructure.Maintenance;
 
 /// <summary>
-///     Drains rows a write, a watch digest, or a repair (e.g. `repair reingest`) left
-///     `embed_state = 'pending'` (.NET-F1): fills the embedding column on already-committed rows
-///     only — it never deletes, re-chunks or moves anything, unlike the explicit-only `repair`
-///     verbs. On-demand, like <see cref="ModelMigrationJob" />: <see cref="HasWorkAsync" /> is the
-///     only gate, so a bank with no configured embedding provider is legitimately never due — a
-///     pending row with no engine has nothing to embed with, forever, not just until the next poll.
+///     Signals the embed topic's single consumer (<see cref="EmbedDrainService" />, WP11-B2) when
+///     a write, a watch digest, or a repair (e.g. `repair reingest`) left
+///     `embed_state = 'pending'` (.NET-F1) — it no longer drains inline itself. On-demand, like
+///     <see cref="ModelMigrationJob" />: <see cref="HasWorkAsync" /> is the only gate, so a bank
+///     with no configured embedding provider is legitimately never due — a pending row with no
+///     engine has nothing to embed with, forever, not just until the next poll.
 /// </summary>
-public sealed class PendingEmbedJob(IEntryEmbedder embedder) : IMaintenanceJob
+public sealed class PendingEmbedJob(IEntryEmbedder embedder, IEventPump<EmbedDrainRequest> embedDrainPump) : IMaintenanceJob
 {
     public const string JobName = "pending-embed";
 
@@ -23,17 +24,6 @@ public sealed class PendingEmbedJob(IEntryEmbedder embedder) : IMaintenanceJob
 
     /// <summary>Never due by the clock; <see cref="HasWorkAsync" /> is the only gate.</summary>
     public TimeSpan? Interval => null;
-
-    /// <summary>
-    ///     4 generator batches per run (<see cref="EntryEmbedder.BatchSize" /> = 32): ADR-0076
-    ///     measured ~72.6 rows/s draining the same generator path, so 128 rows costs ~1.8s —
-    ///     comfortably inside the 15s on-demand poll
-    ///     (<see cref="BankMaintenanceHostedService.OnDemandPollInterval" />). A full unbounded drain
-    ///     would instead occupy that poll loop for minutes on a large backlog, starving every other
-    ///     on-demand job behind it; <see cref="HasWorkAsync" /> brings this job back next poll for
-    ///     whatever a run doesn't finish.
-    /// </summary>
-    private const int RowsPerRun = 4 * EntryEmbedder.BatchSize;
 
     public async Task<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -48,10 +38,15 @@ public sealed class PendingEmbedJob(IEntryEmbedder embedder) : IMaintenanceJob
             .ConfigureAwait(false);
     }
 
-    /// <summary>Embeds up to <see cref="RowsPerRun" /> pending rows; never leaves anything new pending itself.</summary>
-    public async Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    /// <summary>
+    ///     Signals the embed topic instead of embedding inline (WP11-B2): two overlapping passes —
+    ///     the heavy pass and the 15s on-demand poll both call <see cref="MaintenanceJobRunner.RunDueAsync" />
+    ///     — used to both select and embed the same rows; now the second signal coalesces away and
+    ///     <see cref="EmbedDrainService" />'s single reader drains once.
+    /// </summary>
+    public Task<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
-        await embedder.EmbedPendingBatchAsync(connection, RowsPerRun, cancellationToken).ConfigureAwait(false);
-        return false;
+        embedDrainPump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Memory));
+        return Task.FromResult(false);
     }
 }

@@ -20,6 +20,11 @@ namespace AiRaccoon.Tests.Integration.Maintenance;
 ///     hours. This drives the real <see cref="BankMaintenanceHostedService" /> loop, not just
 ///     <see cref="PendingEmbedJob" /> in isolation, so it also proves the job is actually wired into
 ///     the maintenance machinery, not merely capable of draining if someone remembered to call it.
+///     <para>
+///         WP11-B2: <see cref="PendingEmbedJob" /> only signals now, so the first test also runs the
+///         real <see cref="EmbedDrainService" /> consumer sharing the same pump — the production
+///         wiring end to end, not just "the job enqueued something".
+///     </para>
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -42,23 +47,35 @@ public sealed class PendingEmbedMaintenanceDrainTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    /// <summary>The fix: with PendingEmbedJob registered, the loop's own startup pass — no restart, no 15s wait even — drains everything.</summary>
+    /// <summary>
+    ///     The fix, end to end: with PendingEmbedJob registered, the loop's own startup pass signals
+    ///     the embed topic — no restart, no 15s wait even — and EmbedDrainService's single reader
+    ///     drains it, exactly as production wires them.
+    /// </summary>
     [Fact]
     public async Task StartupPass_WithPendingEmbedJobRegistered_DrainsPendingRowsWithinTheStartupPass()
     {
         await SeedPendingRowsAsync(3);
         await ConfigureProviderAsync();
-        var jobs = new IMaintenanceJob[] { new PendingEmbedJob(new EntryEmbedder(new CountingEmbeddingService(), _modelMigrationLease, _time)) };
-        var service = ServiceWith(jobs);
+        var pump = TestData.NewEmbedDrainPump();
+        var entryEmbedder = new EntryEmbedder(new CountingEmbeddingService(), _modelMigrationLease, _time);
+        var jobs = new IMaintenanceJob[] { new PendingEmbedJob(entryEmbedder, pump) };
+        var maintenance = ServiceWith(jobs);
+        var drain = new EmbedDrainService(pump, _factory, entryEmbedder, new FakeCodeEmbedder(), TestTelemetry.None,
+            NullLogger<EmbedDrainService>.Instance);
 
         using var cts = new CancellationTokenSource();
-        var run = service.StartAsync(cts.Token);
-        (await service.Ticks.WaitAsync(1, SignalTimeout, TestContext.Current.CancellationToken)).ShouldBeTrue();
+        var maintenanceRun = maintenance.StartAsync(cts.Token);
+        var drainRun = drain.StartAsync(cts.Token);
+        (await maintenance.Ticks.WaitAsync(1, SignalTimeout, TestContext.Current.CancellationToken)).ShouldBeTrue();
+        (await drain.Drains.WaitAsync(1, SignalTimeout, TestContext.Current.CancellationToken)).ShouldBeTrue();
 
         (await PendingCountAsync()).ShouldBe(0);
 
-        run.IsFaulted.ShouldBeFalse();
-        await service.StopAsync(TestContext.Current.CancellationToken);
+        maintenanceRun.IsFaulted.ShouldBeFalse();
+        drainRun.IsFaulted.ShouldBeFalse();
+        await maintenance.StopAsync(TestContext.Current.CancellationToken);
+        await drain.StopAsync(TestContext.Current.CancellationToken);
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using AiRaccoon.Core.EventPump;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -17,6 +18,13 @@ namespace AiRaccoon.Tests.Integration.Maintenance;
 ///     is the only gate, so it is picked up by the maintenance loop's startup pass and every 15s
 ///     on-demand poll after that (<see cref="BankMaintenanceHostedService.OnDemandPollInterval" />),
 ///     never waiting for the heavy pass's own (default 60-minute) cadence.
+///     <para>
+///         WP11-B2: <see cref="PendingEmbedJob.RunAsync" /> no longer embeds — it signals the embed
+///         topic's single consumer (<see cref="EmbedDrainService" />). The rows-per-run bound and
+///         the actual pending-&gt;embedded transition are that consumer's own tests now
+///         (EmbedDrainServiceTests); this file keeps only what <see cref="PendingEmbedJob" /> itself
+///         still owns: due-ness and the enqueue.
+///     </para>
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -37,7 +45,9 @@ public sealed class PendingEmbedJobTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    private PendingEmbedJob NewJob() => new(new EntryEmbedder(new CountingEmbeddingService(), _modelMigrationLease, _timeProvider));
+    private PendingEmbedJob NewJob(IEventPump<EmbedDrainRequest>? pump = null) =>
+        new(new EntryEmbedder(new CountingEmbeddingService(), _modelMigrationLease, _timeProvider),
+            pump ?? TestData.NewEmbedDrainPump());
 
     /// <summary>
     ///     Mutation-check this one (project instruction: a check never seen to fail is not a check):
@@ -72,52 +82,24 @@ public sealed class PendingEmbedJobTests : IDisposable
         (await NewJob().HasWorkAsync(connection, TestContext.Current.CancellationToken)).ShouldBeTrue();
     }
 
+    /// <summary>E7: RunAsync signals the embed topic instead of embedding — rows stay pending and
+    /// the drain consumer's own generator is never called from here.</summary>
     [Fact]
-    public async Task RunAsync_EmbedsPendingRows_HasWorkAsyncThenFalse()
+    public async Task RunAsync_EnqueuesInsteadOfEmbedding()
     {
         await ConfigureProviderAsync();
         await SeedPendingRowsAsync(3);
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
-        var job = NewJob();
+        var pump = TestData.NewEmbedDrainPump();
+        var job = NewJob(pump);
 
-        await job.RunAsync(connection, TestContext.Current.CancellationToken);
+        var createdWork = await job.RunAsync(connection, TestContext.Current.CancellationToken);
 
-        (await PendingCountAsync()).ShouldBe(0);
-        (await job.HasWorkAsync(connection, TestContext.Current.CancellationToken)).ShouldBeFalse();
-    }
-
-    /// <summary>
-    ///     The per-run bound (RowsPerRun = 4 * EntryEmbedder.BatchSize = 128): a run leaves the
-    ///     remainder pending rather than draining a whole backlog in one on-demand poll, and
-    ///     HasWorkAsync stays true so the runner brings the job back next poll for what is left.
-    /// </summary>
-    [Fact]
-    public async Task RunAsync_MoreRowsThanTheBound_LeavesTheRemainderPending_AndHasWorkAsyncStaysTrue()
-    {
-        const int rowsPerRun = 4 * EntryEmbedder.BatchSize;
-        await ConfigureProviderAsync();
-        await SeedPendingRowsAsync(rowsPerRun + 2);
-        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
-        var job = NewJob();
-
-        await job.RunAsync(connection, TestContext.Current.CancellationToken);
-
-        (await PendingCountAsync()).ShouldBe(2);
-        (await job.HasWorkAsync(connection, TestContext.Current.CancellationToken)).ShouldBeTrue();
-    }
-
-    /// <summary>Never anything but a fill: the job only ever writes embed_state/embedding/heading columns on rows already committed by something else.</summary>
-    [Fact]
-    public async Task RunAsync_NeverChangesRowCount()
-    {
-        await ConfigureProviderAsync();
-        await SeedPendingRowsAsync(3);
-        var before = await RowCountAsync();
-        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
-
-        await NewJob().RunAsync(connection, TestContext.Current.CancellationToken);
-
-        (await RowCountAsync()).ShouldBe(before);
+        createdWork.ShouldBeFalse();
+        (await PendingCountAsync()).ShouldBe(3, "RunAsync must never embed itself — that is the drain consumer's job now");
+        pump.EnqueuedCount.ShouldBe(1);
+        var queued = pump.DrainUpTo(1).ShouldHaveSingleItem();
+        queued.Corpus.ShouldBe(EmbedCorpus.Memory);
     }
 
     private async Task SeedPendingRowsAsync(int count)
@@ -154,12 +136,5 @@ public sealed class PendingEmbedJobTests : IDisposable
         return await connection.ExecuteScalarAsync<long>(new CommandDefinition(
             "SELECT count(*) FROM entries WHERE embed_state = 'pending'",
             cancellationToken: TestContext.Current.CancellationToken));
-    }
-
-    private async Task<long> RowCountAsync()
-    {
-        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
-        return await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-            "SELECT count(*) FROM entries", cancellationToken: TestContext.Current.CancellationToken));
     }
 }

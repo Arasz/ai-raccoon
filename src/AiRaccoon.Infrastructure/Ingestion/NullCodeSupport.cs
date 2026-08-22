@@ -1,5 +1,7 @@
+using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Watch;
 using Microsoft.Data.Sqlite;
 
@@ -55,4 +57,28 @@ public sealed class NullWatchStore : IWatchStore
 
     public Task<IReadOnlyList<string>> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<string>>([]);
+}
+
+/// <summary>Null object for callers that construct <see cref="FileIngestor" /> without an embed
+/// topic (test/legacy positional call sites) — every enqueue reports "dropped", never queues, and
+/// nothing ever drains it. Production always supplies the real shared pump.</summary>
+public sealed class NullEmbedDrainPump : IEventPump<EmbedDrainRequest>
+{
+    public static NullEmbedDrainPump Instance { get; } = new();
+
+    public long EnqueuedCount => 0;
+
+    public long DroppedCount => 0;
+
+    public long CoalescedCount => 0;
+
+    public bool TryEnqueue(EmbedDrainRequest item) => false;
+
+    public IReadOnlyList<EmbedDrainRequest> DrainUpTo(int budget) => [];
+
+    public Task WaitForItemAsync(CancellationToken cancellationToken) => Task.Delay(Timeout.Infinite, cancellationToken);
+
+    public void ApplyCapacity(int capacity)
+    {
+    }
 }
