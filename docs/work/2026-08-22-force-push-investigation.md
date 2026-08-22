@@ -145,10 +145,12 @@ plugin is disabled or the marketplace entry moves.
 r"\bgit\s+push\b[^|;&]*\s(--force|-f)\b",
 ```
 
-`(--force|-f)\b` matches `--force-with-lease` too — the `\b` sits between `e` and `-`. But
-`python3 ~/.claude/skills/auto-wm/scripts/awm.py status` reports `AWM: inactive in this project.` and
-lists 21 *other* directories where it is still active, none of them a worktree created today. A
-worktree made after arming is uncovered.
+`(--force|-f)\b` matches `--force-with-lease` too — the `\b` sits between `e` and `-`. But arming is
+per directory, and `python3 ~/.claude/skills/auto-wm/scripts/awm.py status` reports `AWM: inactive in
+this project.` while listing 21 *other* directories as still active. Five of those 21 are
+`.claude/worktrees/agent-*` paths that no longer exist on disk (`ls -ld` on each → `No such file or
+directory`), so the registry holds stale entries and says nothing about coverage of a worktree
+created after arming. A worktree made after arming is uncovered.
 
 **The resume cron is ruled out.**
 
