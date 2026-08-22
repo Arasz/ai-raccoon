@@ -76,4 +76,29 @@ public sealed class SentencePieceVocabParityTests : IAsyncLifetime
 
         ids.ShouldAllBe(id => id >= 0 && id < 250002);
     }
+
+    /// <summary>
+    ///     WHOLE-SEQUENCE parity against the reference tokenizer, not one piece at a time. Each
+    ///     expected sequence is HuggingFace <c>XLMRobertaTokenizer</c>'s own rule applied to this
+    ///     exact sentencepiece model: <c>&lt;s&gt;</c>, then <c>spm_id + 1</c> for every piece
+    ///     (<c>spm_id 0</c>, sentencepiece's own <c>&lt;unk&gt;</c>, maps to the model's
+    ///     <c>&lt;unk&gt;</c> = 3), then <c>&lt;/s&gt;</c>. The per-piece tests above each walk one
+    ///     axis; the cases here cross them — Latin text with an apostrophe and a digit-bearing
+    ///     identifier, mixed scripts (CJK + accents + an em dash) in one string, and a
+    ///     snake_case/camelCase identifier that the pretokenizer splits — because an off-by-one that
+    ///     survives "," can still land on a rarer piece.
+    /// </summary>
+    [Theory]
+    [InlineData("...", new[] { 0, 153, 2 })]
+    [InlineData("The drain reconciles vec0 to the engine's dimension before writing.",
+        new[] { 0, 581, 8167, 73, 44188, 318, 1577, 22834, 2389, 47, 70, 87907, 25, 7, 6, 91403, 8108, 32562, 5, 2 })]
+    [InlineData("sqlite hybrid search fuses the FTS and vector legs with reciprocal rank fusion",
+        new[] { 0, 91, 95255, 67, 113490, 33938, 57574, 90, 70, 563, 12763, 136, 173, 18770, 6049, 7, 678, 159826, 289, 30648, 119485, 2 })]
+    [InlineData("Wie heißt du? Ça va — naïve café, 東京 2026.",
+        new[] { 0, 4887, 61202, 115, 32, 25909, 307, 292, 24, 9392, 272, 26216, 4, 6, 22888, 387, 4046, 5, 2 })]
+    [InlineData("memory_search projectId scope=all",
+        new[] { 0, 98323, 454, 86250, 13452, 568, 71, 6, 70820, 1369, 5584, 2 })]
+    public void TheWholeSequenceMatchesTheReferenceXlmRobertaIds(string text, int[] expected) =>
+        Build().EncodeToIds(text, addSpecialTokens: true).ShouldBe(expected,
+            $"'{text}' must tokenize to the ids XLMRobertaTokenizer produces for this sentencepiece model");
 }
