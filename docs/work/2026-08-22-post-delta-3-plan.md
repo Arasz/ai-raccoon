@@ -38,7 +38,7 @@ nuget.org flat-container index for `ai-raccoon`; `docs/work/2026-08-22-post-delt
 5. WP1 — #465 export `search.adjustment` (G11, shaped by G8).
 6. WP2 — #459 a graph-baked pooled output beats the ST flags (G10).
 7. WP4 — split the parity gate's p95 leg into its own benchmark fact (G7).
-8. WP6 — #455 re-derive corpus, queries and the parity golden (G14, scoped by G9).
+8. *(WP6 moved to the end — owner ruling 2026-08-22 ~19:38: it runs **LAST**.)*
 9. WP3 — #436 the re-ingest prune reaches `code_entries` (G12).
 10. WP8 — #454 AND-under-match anchor (G13); WP9 — EventId disposition (G6).
 11. WP11 — the embed/ingest load governor (**gate answered**, rev 1.2): four PRs in order —
@@ -46,6 +46,15 @@ nuget.org flat-container index for `ai-raccoon`; `docs/work/2026-08-22-post-delt
     move metrics onto it with its existing tests unmodified, **B2** the embed topic, its producers
     and the deleted inline watch drain (waits for B1 **and** WP3 #436), **C** the
     `maintenance.embed-rows-per-run.global` key (waits for B2).
+12. WP12 — code-ingestion performance (profile PR #508; ingest is 0.34 % of the clock, the embed
+    drain 99.66 %, and 99.6 % of the drain is `InferenceSession.Run`): **A** length-sorted batching
+    in `CodeEmbedder`/`EntryEmbedder` (**dispatched**, ungated, independent of WP11) — **C** rows /
+    batches / elapsed on the EventId-525 job line (ungated) — **B** no 15 s gaps while the backlog
+    is non-empty, *inside* WP11-B2's consumer (**G20**; after B2 and C) — **D** directory-ingest
+    ignore root (**G21**; after WP3 #436 and WP11-B2) — **E** research: quantized / CoreML
+    inference for the code engine (**G22**; architect, research only).
+13. **WP6 — #455 re-derive corpus, queries and the parity golden (G14, scoped by G9). LAST**, per
+    the owner's ruling of 2026-08-22 ~19:38: everything else finishes before the corpus moves under it.
 
 ---
 
@@ -938,6 +947,59 @@ C2 `RowBudgetTests.CodeReindex_HonoursTheSameSetting` (same, on `code_entries`).
   first commit is the `ReplaceCoreAsync` held-span log line that answers it; the fix is aimed only
   after that line has produced a number.
 
+### WP12 — code-ingestion performance (from the 2026-08-22 profile, PR #508)
+
+**Source of every number below:** `docs/work/2026-08-22-code-ingestion-profile.md` (PR #508) —
+measured on `Mac16,12`, 10 physical / 10 logical cores, Release build of `b56d7fb3`, scratch bank on
+port 7931. That document carries the commands and the measured/read/inferred tag for each figure;
+this section carries only what the work packages are shaped by.
+
+**Headline.** For this repository's own `src/` (469 `.cs`, 2,045,873 B → **1,762** `code_entries`):
+
+| Phase | Wall | Share |
+|---|---|---|
+| `memory_ingest_directory` — walk + match + chunk + tokenize + SQLite writes | **3.57 s** | **0.34 %** |
+| code embed drain to zero pending, default thread cap | **1,061.3 s** | **99.66 %** |
+
+`dotnet-trace` (45 s speedscope, mid-drain): `OnnxEmbeddingGenerator.RunBatch` **99.6 %** of wall,
+of which `InferenceSession.RunImpl` is 99.5 %; `SqliteCommand.ExecuteReader` 1.5 %; SentencePiece
+encode **0.02 %**. **The chunker is not the problem and neither is SQLite — one native call is.**
+
+Thread cap, identical protocol (restart, re-activate, fixed 150 s window, 1,762-row backlog):
+
+| `settings model threads` | rows/s | CPU (`top`) |
+|---|---|---|
+| 1 | 0.213 | 19–23 % |
+| **5** — the merged default, `max(1, cores/2)` | **2.347** | 124–140 % |
+| 0 — ORT default (10) | 1.902 | 82–124 % |
+
+So **WP11-A's cap is 23 % faster than ORT's own default**, not merely quieter, and a "be quiet"
+setting must never be defaulted to 1. `ThreadResolutionTests.cs` already pins the resolution
+(#492, trait fix #505) — no further work is owed there.
+
+#### Work packages, in execution order
+
+| PR | Owns | RED-first test (counts/ordering only — #464) | Gate | Lane | Blocked by / collides |
+|---|---|---|---|---|---|
+| **WP12-A** — length-sorted batching | `Embedding/CodeEmbedder.cs:85-90` (order the run's rows by `Value.Length` before the `Skip/Take(BatchSize)` slicing) and the same shape in `EntryEmbedder.EmbedAsync` | Fake generator records each batch: given 64 pending rows of alternating short/long text, **the first generator call receives the 32 shortest**. Red today: it receives rows 1–32 in id order. | `dotnet test --filter "FullyQualifiedName~CodeEmbedder\|FullyQualifiedName~EntryEmbedder" --nologo -v m` | dotnet-engineer / Sonnet — **dispatched** | `CodeEmbedder.cs`/`EntryEmbedder.cs`: no other WP touches them. Independent of WP11. |
+| **WP12-B** — no 15 s gaps while the backlog is non-empty | WP11-B2's `EmbedDrainService.cs` **only** — the consumer re-signals its own topic when a drain returns a full `RowsPerRun`, so `WaitForItemAsync` returns at once. `BankMaintenanceHostedService.cs:79` (`OnDemandPollInterval`) is **not** edited. | Fake `TimeProvider`: a job reporting `HasWork` and consuming a full `RowsPerRun` is invoked **N times without the clock being advanced**. Red today: once per advanced tick. | `dotnet test --filter "FullyQualifiedName~EmbedDrain\|FullyQualifiedName~EventPump" --nologo -v m` | dotnet-engineer / Sonnet | **G20**, and hard-blocked on **WP11-B2** — outside a single consumer this speeds all three uncoordinated drains up at once and makes the saturation worse. Collides with **WP11-C** on `EmbedDrainService.cs`; run after C. |
+| **WP12-C** — ingest counters on the existing job line | `Maintenance/MaintenanceJobRunner.cs` — the EventId **525** "ran in N ms" message gains `rows`, `batches`, `elapsed` | The log record for a run that embedded 128 rows in 4 batches carries `Rows=128`, `Batches=4`. Red today: the message has no such fields. | `dotnet test --filter "FullyQualifiedName~MaintenanceJobRunner" --nologo -v m`, plus `docs/reference/logging-event-ids.md` updated | dotnet-engineer / Sonnet | Ungated. Touches `MaintenanceJobRunner.cs`, which no other WP owns. |
+| **WP12-D** — directory ingest honours nested ignore roots | `Ingestion/FileIngestor.cs:147` — reuse `ResolveIgnoreRootAsync` (`:113-139`) instead of loading rules only at the walk root | `FileIngestorIgnoreTests`: ingest `root/sub` where `root/ai-raccoon.ignore` excludes `sub/skip/**`; **row count for `skip/` is 0**. Red today: non-zero. | `dotnet test --filter "FullyQualifiedName~FileIngestorIgnore" --nologo -v m` | dotnet-engineer / Sonnet | **G21**. `FileIngestor.cs` — behind **WP3 (#436)** and **WP11-B2**, both of which own that file first. |
+| **WP12-E** — research: quantized or accelerated code inference | No production file. Output is a dated research record + an ADR draft. | n/a — a research record, gated by its own measurement plan, not by a test. | The measurement plan in the record must reproduce PR #508's S3–S5 protocol so the numbers are comparable. | architect / Opus | **G22**. No file collision. |
+
+**Why WP12-C is the whole of the instrumentation gap.** The profile's §7 proposes a five-phase
+`IngestTimings` record mirroring `SearchTimings`. Applying `ask-if-simpler`: ingest is 0.34 % of the
+clock, so a five-phase split of it buys nothing today. **Three integers on a log line that already
+fires is the right first step**; the record only earns its place if a drain run ever shows time that
+rows × mean-tokens does not explain. `IngestTimings` is therefore *parked*, not scheduled.
+
+**What WP12 deliberately leaves out.** `CodeChunker.VerifyAndShed` re-tokenizes and re-concatenates
+per shed step, and `BuildChunks:68` concatenates the winning text a second time (`CodeChunker.cs:115-129`,
+`:68`). Measured at **below the noise floor** — the phase it lives in is 0.02 % of the end-to-end
+clock. Recorded so nobody spends a day on it; file it as tidy-up only if other work lands in that file.
+
+---
+
 ---
 
 ## Sequencing
@@ -954,6 +1016,12 @@ only); `docs/adr/README.md` (WP9 only). `OnnxEmbeddingGenerator.cs`
 `AppRegistrations.cs` (WP11-B1, then B2, then C — serial); `MeasurementBuffer.cs` + the whole
 `Metrics/` tree (WP11-B1 only); `EmbedDrainService.cs` (WP11-B2, then C). No two parallel WPs
 touch the same file.
+
+**WP12 (from PR #508) adds one more strand and one tail.** **WP12-A** (`CodeEmbedder.cs`,
+`EntryEmbedder.cs`) and **WP12-C** (`MaintenanceJobRunner.cs`) share no file with anything above and
+run in parallel from now. **WP12-B** is inside `EmbedDrainService.cs` and is therefore last in the
+WP11 chain: B1 -> B2 -> C -> **12-B**. **WP12-D** is last in the `FileIngestor.cs` chain:
+WP3 (#436) -> WP11-B2 -> **12-D**. **WP12-E** is research and touches no file.
 
 **WP11 (the scope extension, gate answered in rev 1.2) sits outside the chain above** and is now
 four PRs in two independent strands:
@@ -1021,8 +1089,9 @@ while the quiet window (zero open PRs, right now) is open — that trade is gate
 
 ## Owner gate — decisions only you can make
 
-Fifteen cards. Each says what becomes true if you approve, gives the numbers behind it, and carries
-a recommendation. Nothing in *Scheduling* starts before you rule.
+One card per decision, `G1`-numbered in order — count them, do not trust a total written here
+(G16-G19 were answered in rev 1.2; G20-G22 are new with WP12). Each says what becomes true if you
+approve, gives the numbers behind it, and carries a recommendation. Nothing in *Scheduling* starts before you rule.
 
 ### Owner actions
 
@@ -1301,3 +1370,75 @@ that has to honour it.
 *Why it matters.* A tuning knob that lives outside the bank is a knob that disagrees with the bank,
 and the process that has to obey it is not the process that was told.
 *Recommendation.* **Bank settings, both of them**, on the existing route.
+
+### Code-ingestion performance (WP12 — from the 2026-08-22 profile, PR #508)
+
+Three cards. Each is shaped by a number that was measured on this hardware today, not recalled;
+`docs/work/2026-08-22-code-ingestion-profile.md` carries the command behind every figure.
+
+**G20 — The single-consumer embed drain runs continuously while rows are pending, bounded by
+`embedding.threads`, instead of pacing on the 15 s poll.**
+*Detail.* A full code drain of 1,762 rows took **1,061.3 s** end to end = 1.66 rows/s, but a clean
+150-second window mid-drain measured **2.347 rows/s** — so roughly **29 % of the drain's wall clock
+is not inference**. The mechanism is read straight out of the tree: `CodeReindexJob.RowsPerRun` =
+`4 * CodeEmbedder.BatchSize` = 128 (`:31`), and the job is re-offered only by
+`BankMaintenanceHostedService.OnDemandPollInterval` = 15 s (`:79`). 1,762 ÷ 128 = 13.8 runs × 15 s =
+**207 s of pure idle inside a 1,061 s drain — 19.5 %**, with the rest of the 29 % being the 187 MB
+session load and per-run setup. This card asks you to reverse a position **this plan itself argued**
+in G18: there, the 15 s poll was described as the pace-setter — *"The row budget already sets the
+pace: 128 rows per 15 s poll, expressed as a count"* — and a deliberate delay between batches was
+rejected. That argument was right about *delays* and wrong about *this* delay: the 15 s here is not
+pacing anybody, it is a timer that a known-non-empty backlog waits out fourteen times. The real
+governor is the thread cap, which is now measured: 2.347 rows/s at 124–140 % CPU (cap 5) versus
+1.902 at 82–124 % (cap 0, ten threads). **The bound stays; only the idle goes.** Two things make
+this safe only in one order: outside WP11-B2's single consumer, removing the gap speeds up all three
+uncoordinated drains at once — `PendingEmbedJob`, `CodeReindexJob`, and up to four unbounded
+watch-digest drains — which is exactly the saturation you reported. So WP12-B edits
+`EmbedDrainService.cs` and nothing else, and cannot start before B2 lands.
+*Why it matters.* A fifth of every code re-index is a timer, not work, and the fix is inside a
+component WP11 is already building.
+*Recommendation.* **Approve, sequenced strictly after WP11-B2 and WP11-C.** Cheaper first move if
+you want the gain sooner with no new mechanism: WP11-C's `maintenance.embed-rows-per-run.global`
+already ships the key — set it to 512 and 13.8 idle gaps collapse to 3.4.
+
+**G21 — Directory ingest honours `ai-raccoon.ignore` at every level, not only at the walk root.**
+*Detail.* `FileIngestor.IngestDirectoryAsync` enumerates with
+`Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)` (`:148`) and filters with rules
+loaded from **one** file at the walk root — `_ignoreRulesProvider.LoadAsync(path, …)` (`:147`), no
+nested discovery, as the code's own prose says at `:109-111`. This repository's `ai-raccoon.ignore`
+sits at the repo root, so `memory_ingest_directory` pointed at `src/` would enumerate `src/**/bin`
+and `src/**/obj`: **379 MB of build output against 2.0 MB of source** on this checkout (`du -sh src`).
+The single-file path already solves this — `ResolveIgnoreRootAsync` (`:113-139`) finds the containing
+watch, else the admitting scope entry, else the parent. WP12-D reuses it. This is a **behaviour
+change, not a speed-up**: an ignore file that has no effect today would start having one, and a bank
+could lose rows on its next re-ingest. The cheap alternative is one documentation line — *"point
+`memory_ingest_directory` at a directory that has its own ignore file"* — zero risk, zero code.
+*Why it matters.* Build output that enters the code corpus is not just wasted walk time; every chunk
+of it becomes a row that has to be embedded, and embedding is 99.66 % of the clock.
+*Recommendation.* **Approve the code fix**, behind WP3 (#436) and WP11-B2, which own `FileIngestor.cs`
+first — but the documentation-only option is real and it is your call which cost you prefer.
+
+**G22 — A time-boxed research item on quantized or accelerated inference for the code engine is
+scheduled (WP12-E).**
+*Detail.* Every fix ranked in PR #508 shaves 10–20 % off a 1,061-second drain. Changing the
+*arithmetic* is the only lever with a different order of magnitude, and it has never been examined
+for this repository. What is already known and constrains it: **ADR-0049** — "The bundled model's
+embeddings depend on the host CPU" — established that three arithmetic paths on CI hosts produced
+three different, individually-deterministic embeddings (`avx512_vnni` present vs absent), and that is
+precisely why the replacement corpus is a committed bank with vectors baked on one path rather than
+generated at test time. Int8/u8s8 quantization and a CoreML execution provider are both changes of
+arithmetic path, so both land squarely on that ADR: they would change stored vectors, and the parity
+golden and `MiniLmGoldenVectorTests` are downstream of that. Also measured today and relevant: at the
+best thread cap the drain uses ~140 % of 1,000 % available CPU, so this box has ~7× headroom that no
+amount of batching will reach. **The experiment** is one run of PR #508's S3–S5 protocol per variant
+— restart, re-activate all 1,762 rows to pending, take a fixed 150-second window, record rows/s and
+`top` CPU — against three arms: today's fp32 CPU session, an int8-quantized `code-daemon-embed-v1`,
+and the CoreML EP on this arm64 host; plus a vector-drift check of the same 1,762 chunks against the
+fp32 vectors. **The decision it would settle:** whether the code corpus gets its own engine variant
+(and therefore its own fingerprint, its own re-index, and an ADR-0049 amendment saying which
+arithmetic path its vectors were baked on), or whether the ~20 % batching-and-idle wins in WP12-A/B
+are the whole of what is available and the ranked list is closed.
+*Why it matters.* Without this, WP12 tops out at roughly a third off a seventeen-minute drain, and
+nobody can say whether that is the ceiling or the floor.
+*Recommendation.* **Approve as research only** — architect lane, one dated record plus an ADR draft,
+**no production edit and no engine swap** until you rule on what it finds.

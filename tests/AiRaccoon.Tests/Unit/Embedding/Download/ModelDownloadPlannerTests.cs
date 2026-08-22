@@ -409,6 +409,30 @@ public class ModelDownloadPlannerTests
         plan.PoolingProvenance.ShouldBe("sentence-transformers");
     }
 
+    /// <summary>
+    ///     Review fix (#459 PR #496): a SOLE output literally named <c>sentence_embedding</c> is
+    ///     the #470/#475 sole-output shape, not a second, distinctly-named pooled output beside a
+    ///     real token-level one — <c>SelectTokenEmbeddingsOutput</c>'s fallback and
+    ///     <c>SelectEmbeddingOutput</c>'s exact-name match must not collide on the same single
+    ///     name. The ST flags still decide here; #475's rank-2 repair (download-time
+    ///     <c>PoolingFromGraph</c> / activation-time <c>ManifestPoolingRepair</c>) is what actually
+    ///     corrects this shape once the graph's real rank confirms it.
+    /// </summary>
+    [Fact]
+    public void Pooling_SoleOutputNamedSentenceEmbedding_DoesNotOverrideSentenceTransformersFlags()
+    {
+        var tree = BgeM3Tree().Append(PoolingConfig).Append(Modules).ToList();
+        var raw = BgeM3Raw();
+        raw["1_Pooling/config.json"] = """{"word_embedding_dimension": 1024, "pooling_mode_cls_token": true, "pooling_mode_mean_tokens": false}""";
+        raw["modules.json"] = """[{"idx": 0, "name": "1_Pooling", "path": "", "type": "sentence_transformers.models.Pooling"}, {"idx": 1, "name": "2_Normalize", "path": "", "type": "sentence_transformers.models.Normalize"}]""";
+        var probe = BgeM3Probe() with { OutputNames = ["sentence_embedding"] };
+
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", tree, raw, probe);
+
+        plan.PoolingMode.ShouldBe(PoolingMode.Cls);
+        plan.PoolingProvenance.ShouldBe("sentence-transformers");
+    }
+
     [Fact]
     public void Pooling_Placeholder_WhenSentenceTransformersLayoutAbsent()
     {

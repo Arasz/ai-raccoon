@@ -95,5 +95,21 @@ allows a check to bypass the ladder.
 - **Not addressed**: this ADR does not cover the code drain mechanism (ADR-0087) or the search
   surface (ADR-0088).
 
+## Amendment — 2026-08-22 (#494): the rule in §6 governs events, not only enumeration
+
+Decision 6 was implemented in the catch-up **enumeration** only. `WatchDigestExecutor` applied
+`ai-raccoon.ignore` and nothing else, so a filesystem **event** for a path under a hidden or
+deny-set directory was digested like any other file — and every agent git worktree created under
+`.claude/worktrees/` or `.ai-badger/worktrees/` inside a watched repo re-indexed the whole repo
+(measured on the owner's bank: 15,940 duplicate memory rows and 6,753 code rows in ~2.5 h).
+The rule now lives in one predicate, `WatchDenySet.Excludes(root, path)`, which the enumeration,
+the digest and `FileIngestor`'s directory walk all call: a segment strictly below the watch root
+that is hidden (starts with `.`) or is in the deny set is excluded; a watch whose root *is* the
+target — a single-file watch — is never excluded by its own path. An excluded event is handled
+exactly like an ignore match (never fingerprinted, never chunked; stale chunks and the fingerprint
+deleted, `last_change_ts` updated), and the catch-up scan's reconcile pass enqueues Deleted for
+fingerprinted files that the predicate now covers, so a bank polluted before this shipped cleans
+itself on the next catch-up scan.
+
 Extends ADR-0023 (probe-first, unconditional, idempotent migrations beside
 `MigrateIngestScopeKeysAsync`) and depends on ADR-0085 (the corpus this watch machinery feeds).
