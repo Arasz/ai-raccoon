@@ -37,6 +37,24 @@ internal sealed class TickSignal
         }
     }
 
+    /// <summary>Waits until the count reaches the target; only cancellation ends it early (a test's hang guard, never a clock).</summary>
+    public async Task WaitAsync(long target, CancellationToken cancellationToken)
+    {
+        TaskCompletionSource<bool> completion;
+        lock (_gate)
+        {
+            if (_count >= target)
+            {
+                return;
+            }
+
+            completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _waiters.Add((target, completion));
+        }
+
+        await completion.Task.WaitAsync(cancellationToken);
+    }
+
     /// <summary>True when the count reached the target; false on timeout or cancellation.</summary>
     public async Task<bool> WaitAsync(long target, TimeSpan timeout, CancellationToken cancellationToken)
     {

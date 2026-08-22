@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -7,80 +6,67 @@ using Xunit;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     Pins down <see cref="WallClockBoundedPoller" />, the piece extracted from
-///     <c>WatchIntegrationTests.Stack.StepUntilAsync</c> so a blocked await inside the poll loop
-///     fails within its wall-clock budget instead of hanging the testhost (plan Q1 / M7-QA F2).
+///     Pins down <see cref="FakeClockPoller" />: the verdict comes from the fake-time step budget
+///     or the condition, never from the wall clock; a blocked await ends with the caller's token.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class StepUntilAsyncTests
 {
     [Fact]
-    public async Task ABlockedAwait_FailsWithinTheWallClockBudget()
+    public async Task ABlockedCondition_EndsOnlyWithTheCallersCancellation()
     {
-        var poller = new WallClockBoundedPoller(new FakeTimeProvider(DateTimeOffset.UtcNow));
+        var poller = new FakeClockPoller(new FakeTimeProvider(DateTimeOffset.UtcNow));
         var neverCompletes = new TaskCompletionSource<bool>();
+        var entered = new TaskCompletionSource();
+        using var caller = new CancellationTokenSource();
         var gaveUp = false;
-        var stopwatch = Stopwatch.StartNew();
 
-        var exception = await Should.ThrowAsync<TimeoutException>(() =>
-            poller.StepUntilAsync(
-                condition: () => neverCompletes.Task,
-                tick: _ => Task.CompletedTask,
-                cancellationToken: TestContext.Current.CancellationToken,
-                maxRealSeconds: 2,
-                onGiveUp: _ => gaveUp = true));
-        stopwatch.Stop();
+        var poll = poller.StepUntilAsync(
+            condition: () =>
+            {
+                entered.TrySetResult();
+                return neverCompletes.Task;
+            },
+            tick: _ => Task.CompletedTask,
+            cancellationToken: caller.Token,
+            onGiveUp: _ => gaveUp = true);
 
-        exception.Message.ShouldContain("condition");
-        stopwatch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(10));
-        gaveUp.ShouldBeFalse("a blocked await is a hang, not a normal give-up — the two must stay distinguishable");
+        await entered.Task;
+        await caller.CancelAsync();
+
+        await Should.ThrowAsync<OperationCanceledException>(() => poll);
+        gaveUp.ShouldBeFalse("a blocked await is a hang, not a give-up — the two must stay distinguishable");
     }
 
     [Fact]
-    public async Task ABlockedTick_FailsWithinTheWallClockBudgetNamingTickOnceAsync()
+    public async Task ABlockedTick_EndsOnlyWithTheCallersCancellation()
     {
-        var poller = new WallClockBoundedPoller(new FakeTimeProvider(DateTimeOffset.UtcNow));
+        var poller = new FakeClockPoller(new FakeTimeProvider(DateTimeOffset.UtcNow));
         var neverCompletes = new TaskCompletionSource();
-        var stopwatch = Stopwatch.StartNew();
+        var entered = new TaskCompletionSource();
+        using var caller = new CancellationTokenSource();
 
-        var exception = await Should.ThrowAsync<TimeoutException>(() =>
-            poller.StepUntilAsync(
-                condition: () => Task.FromResult(false),
-                tick: _ => neverCompletes.Task,
-                cancellationToken: TestContext.Current.CancellationToken,
-                maxRealSeconds: 2));
-        stopwatch.Stop();
+        var poll = poller.StepUntilAsync(
+            condition: () => Task.FromResult(false),
+            tick: _ =>
+            {
+                entered.TrySetResult();
+                return neverCompletes.Task;
+            },
+            cancellationToken: caller.Token);
 
-        exception.Message.ShouldContain("TickOnceAsync");
-        stopwatch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(10));
-    }
+        await entered.Task;
+        await caller.CancelAsync();
 
-    [Fact]
-    public async Task ACallerCancellation_FailsPromptlyWithOperationCanceledInsteadOfTimeout()
-    {
-        var poller = new WallClockBoundedPoller(new FakeTimeProvider(DateTimeOffset.UtcNow));
-        var neverCompletes = new TaskCompletionSource<bool>();
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
-        var stopwatch = Stopwatch.StartNew();
-
-        await Should.ThrowAsync<OperationCanceledException>(() =>
-            poller.StepUntilAsync(
-                condition: () => neverCompletes.Task,
-                tick: _ => Task.CompletedTask,
-                cancellationToken: cts.Token,
-                maxRealSeconds: 30));
-        stopwatch.Stop();
-
-        stopwatch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(5),
-            "caller cancellation must be prompt, not deferred until the (much larger) wall-clock budget expires");
+        await Should.ThrowAsync<OperationCanceledException>(() => poll);
     }
 
     [Fact]
     public async Task AConditionThatBecomesTrue_ReturnsTrueAndStopsCallingTick()
     {
         var time = new FakeTimeProvider(DateTimeOffset.UtcNow);
-        var poller = new WallClockBoundedPoller(time);
+        var poller = new FakeClockPoller(time);
         var conditionCalls = 0;
         var tickCalls = 0;
 
@@ -102,10 +88,10 @@ public sealed class StepUntilAsyncTests
     }
 
     [Fact]
-    public async Task AConditionThatNeverHoldsButNeverBlocks_GivesUpAndReturnsFalseWithoutThrowing()
+    public async Task AConditionThatNeverHoldsButNeverBlocks_GivesUpOnTheFakeBudgetAndReturnsFalse()
     {
         var time = new FakeTimeProvider(DateTimeOffset.UtcNow);
-        var poller = new WallClockBoundedPoller(time);
+        var poller = new FakeClockPoller(time);
         string? giveUpMessage = null;
 
         var result = await poller.StepUntilAsync(
@@ -113,11 +99,12 @@ public sealed class StepUntilAsyncTests
             tick: _ => Task.CompletedTask,
             cancellationToken: TestContext.Current.CancellationToken,
             maxFakeSeconds: 1,
-            maxRealSeconds: 30,
             onGiveUp: message => giveUpMessage = message);
 
         result.ShouldBeFalse();
         giveUpMessage.ShouldNotBeNull();
         giveUpMessage.ShouldContain("fake-time budget");
+        (time.GetUtcNow() - time.Start).ShouldBe(TimeSpan.FromSeconds(1),
+            "ten 100ms steps spend exactly the one-second fake budget — the verdict is a step count, not a clock");
     }
 }

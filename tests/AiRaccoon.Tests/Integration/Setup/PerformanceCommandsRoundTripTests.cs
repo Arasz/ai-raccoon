@@ -27,7 +27,6 @@ namespace AiRaccoon.Tests.Integration.Setup;
 public sealed class PerformanceCommandsRoundTripTests : IDisposable
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 8, 16, 0, 0, 0, TimeSpan.Zero);
-    private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(5);
 
     private readonly string _dataRoot = TestData.CreateTempRoot("performance-cli-roundtrip");
 
@@ -67,7 +66,7 @@ public sealed class PerformanceCommandsRoundTripTests : IDisposable
 
         using var cts = new CancellationTokenSource();
         var run = flusher.StartAsync(cts.Token);
-        (await flusher.TimerArmed.WaitAsync(1, SignalTimeout, TestContext.Current.CancellationToken)).ShouldBeTrue();
+        await flusher.TimerArmed.WaitAsync(1, TestContext.Current.CancellationToken);
 
         buffer.Capacity.ShouldBe(17, "MetricsFlusher must have read the CLI-set capacity at startup, not the default");
         run.IsFaulted.ShouldBeFalse();
@@ -93,17 +92,12 @@ public sealed class PerformanceCommandsRoundTripTests : IDisposable
 
         using var cts = new CancellationTokenSource();
         var run = flusher.StartAsync(cts.Token);
-        (await flusher.TimerArmed.WaitAsync(1, SignalTimeout, TestContext.Current.CancellationToken)).ShouldBeTrue();
+        await flusher.TimerArmed.WaitAsync(1, TestContext.Current.CancellationToken);
 
-        var deadline = DateTime.UtcNow + SignalTimeout;
-        while (DateTime.UtcNow < deadline)
-        {
-            time.Advance(TimeSpan.FromSeconds(5));
-            if (await flusher.Flushes.WaitAsync(1, TimeSpan.FromMilliseconds(150), TestContext.Current.CancellationToken))
-            {
-                break;
-            }
-        }
+        // The flusher's own tick, on fake time: advance once past the interval, then wait on the
+        // flush signal itself — no wall-clock verdict (PR #464).
+        time.Advance(TimeSpan.FromSeconds(5));
+        await flusher.Flushes.WaitAsync(1, TestContext.Current.CancellationToken);
 
         store.Saved.ShouldContain(m => m.Name == "metrics.flush.duration_ms",
             "the flusher must have ticked at the CLI-set 5s interval, not the 30s default");

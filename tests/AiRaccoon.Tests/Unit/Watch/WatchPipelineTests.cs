@@ -412,16 +412,17 @@ public sealed class WatchPipelineTests
         await run;
     }
 
-    /// <summary>Drives the fake clock forward in small steps until the condition holds (loop cadence is real-async).</summary>
+    /// <summary>Drives the fake clock forward in small steps until the condition holds; bounded by steps, never by wall clock.</summary>
     private static async Task AdvanceUntilAsync(WatchTestStack stack, Func<bool> condition,
         CancellationToken cancellationToken)
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-        while (!condition())
+        // A step budget, not a clock: 6,000 steps is 600 fake seconds, far past any cadence
+        // under test; a hang ends with the token (PR #464).
+        for (var step = 0; !condition(); step++)
         {
-            if (DateTime.UtcNow > deadline)
+            if (step >= 6_000)
             {
-                throw new TimeoutException("Condition not met while advancing the fake clock.");
+                throw new TimeoutException("Condition not met after 600 fake seconds of advancing the fake clock.");
             }
 
             stack.Time.Advance(TimeSpan.FromMilliseconds(100));

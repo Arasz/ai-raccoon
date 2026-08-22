@@ -56,19 +56,11 @@ public sealed class EnvScopeTests
         await Should.ThrowAsync<ArgumentException>(async () => await EnvScope.AcquireAsync(
             TestContext.Current.CancellationToken, (HadAValue, "applied"), (Unsettable, "boom")));
 
-        // A stranded gate is never reacquirable, so a generous bound costs nothing here and a short
-        // one turns another test legitimately holding the gate into a false "stranded" report.
-        var reacquired = await TestData.EnvVarGate.WaitAsync(TimeSpan.FromSeconds(120),
-            TestContext.Current.CancellationToken);
-        try
-        {
-            reacquired.ShouldBeTrue("EnvScope stranded the process-global gate");
-        }
-        finally
-        {
-            // Balanced either way: the permit we just took, or the one EnvScope leaked.
-            TestData.EnvVarGate.Release();
-        }
+        // A stranded gate is never reacquirable: completing this wait IS the assertion, and only the
+        // test's token ends a genuine strand (no wall-clock verdict, PR #464).
+        await TestData.EnvVarGate.WaitAsync(TestContext.Current.CancellationToken);
+        // Balanced either way: the permit we just took, or the one EnvScope leaked.
+        TestData.EnvVarGate.Release();
     }
 
     [Fact]
@@ -81,8 +73,8 @@ public sealed class EnvScopeTests
             using var caller = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
             acquire = EnvScope.AcquireAsync(caller.Token, (HadAValue, "x")).AsTask();
 
-            // Bounded on purpose: a gate taken without a token never returns, and that has to
-            // surface as a TimeoutException here rather than hang the run.
+            // A negative check ("never completes") needs a window by nature; this bound can only
+            // pass vacuously under load, never fail a correct build (PR #464).
             await Should.ThrowAsync<OperationCanceledException>(() =>
                 acquire.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
         }

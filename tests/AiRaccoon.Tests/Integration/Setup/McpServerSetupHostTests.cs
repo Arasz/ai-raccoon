@@ -351,7 +351,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
             // The runner's shutdown signal: WaitForShutdownAsync (what ServeRunner
             // awaits) returns, then the runner stops the host and it stops cleanly.
             await host.WaitForShutdownAsync(TestContext.Current.CancellationToken)
-                .WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+                .WaitAsync(TestContext.Current.CancellationToken);
             await host.StopAsync(TestContext.Current.CancellationToken);
             lifetime.ApplicationStopped.WaitHandle.WaitOne(TimeSpan.FromSeconds(5)).ShouldBeTrue();
         }

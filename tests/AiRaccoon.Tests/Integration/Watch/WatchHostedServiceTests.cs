@@ -350,8 +350,8 @@ public sealed class WatchHostedServiceTests
         _ = hosted.StartAsync(TestContext.Current.CancellationToken);
         try
         {
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-            while (catchUp.LastScan is null && DateTime.UtcNow < deadline)
+            // Step budget, not a clock (PR #464): the poll loop runs on fake time.
+            for (var step = 0; step < 6_000 && catchUp.LastScan is null; step++)
             {
                 stack.Time.Advance(TimeSpan.FromMilliseconds(100));
                 await Task.Delay(10, TestContext.Current.CancellationToken);
