@@ -565,7 +565,7 @@ internal static class CliCommandTree
                     $"Sets the embed drain's rows-per-signal, for both corpora (positive integer; default {BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun}) — takes effect on the drain's next pass, no restart")
                 { new Argument<string>("rows") { HelpName = "rows" } }
         };
-        var list = new Command("list", "Shows the bank maintenance configuration (checkpoint interval, vacuum interval)");
+        var list = new Command("list", "Shows the bank maintenance configuration (checkpoint interval, vacuum interval, embed rows per run)");
         list.Aliases.Add("show");
         maintenance.Add(list);
         return maintenance;

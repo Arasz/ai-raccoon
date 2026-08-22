@@ -12,7 +12,7 @@ namespace AiRaccoon.Tests.Integration.Setup;
 
 /// <summary>
 ///     Maintenance-config commands pin the settings-key contract the bank-maintenance hosted
-///     service reads (checkpoint interval, vacuum interval); the list verb also reports live
+///     service reads (checkpoint interval, vacuum interval, embed rows per run); the list verb also reports live
 ///     bank disk stats with delta-vs-previous via the maintenance-stats.json sidecar.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
