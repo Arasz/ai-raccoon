@@ -10,7 +10,10 @@ public interface IEventPump<T>
     /// <summary>Total items ever accepted. Untouched by draining.</summary>
     long EnqueuedCount { get; }
 
-    /// <summary>Items dropped because the pump was at its effective capacity.</summary>
+    /// <summary>
+    ///     Items dropped because the pump was full: at its effective capacity, or at the topic's fixed
+    ///     <see cref="PumpTopic.Ceiling" /> when <see cref="ApplyCapacity" /> raised the capacity above it.
+    /// </summary>
     long DroppedCount { get; }
 
     /// <summary>Items not queued because an identical item was already queued (coalescing topics only).</summary>
