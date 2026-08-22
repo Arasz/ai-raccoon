@@ -296,11 +296,14 @@ public class ModelDownloadPlannerTests
 
     /// <summary>The post-download derivation: given the sp model's own piece table (read from disk
     /// by the caller, never inside the pure planner), the same six well-known keys resolve to the
-    /// pieces' real ids — a derivation from the model's own data, not a guess (D1).</summary>
+    /// pieces' real ids — a derivation from the model's own data, not a guess (D1). vocab_size is
+    /// overridden to match the fake table's own count: the derivation only fires when config.json's
+    /// vocab_size and the piece count agree (issue #423 fix — measured from data, not guessed).</summary>
     [Fact]
     public void MissingAddedTokensDecoder_SentencePieceFamily_WithVocabulary_DerivesIds()
     {
         var raw = BgeM3Raw();
+        raw["onnx/config.json"] = """{"model_type": "xlm-roberta", "hidden_size": 1024, "max_position_embeddings": 8194, "vocab_size": 4}""";
         raw["onnx/tokenizer_config.json"] = XlmRobertaTokenizerConfigNoDecoder;
         var vocabulary = new Dictionary<string, int> { ["<pad>"] = 0, ["<unk>"] = 1, ["<s>"] = 2, ["</s>"] = 3 };
 
@@ -308,6 +311,7 @@ public class ModelDownloadPlannerTests
             sentencePieceVocabulary: vocabulary);
 
         plan.SpecialTokensPending.ShouldBeFalse();
+        plan.VocabOffset.ShouldBe(0);
         plan.SpecialTokens.Count.ShouldBe(4);
         plan.SpecialTokens["<s>"].ShouldBe(2);
         plan.SpecialTokens["</s>"].ShouldBe(3);
@@ -316,11 +320,14 @@ public class ModelDownloadPlannerTests
     }
 
     /// <summary>Negative control: D1 still applies — a piece the sp model's vocabulary does not
-    /// contain is never guessed, even when the derivation path is exercised.</summary>
+    /// contain is never guessed, even when the derivation path is exercised. vocab_size matches the
+    /// fake table's count so the offset check passes and the missing-piece error is the one that
+    /// actually fires.</summary>
     [Fact]
     public void MissingAddedTokensDecoder_SentencePieceFamily_VocabularyMissingPiece_Fails()
     {
         var raw = BgeM3Raw();
+        raw["onnx/config.json"] = """{"model_type": "xlm-roberta", "hidden_size": 1024, "max_position_embeddings": 8194, "vocab_size": 3}""";
         raw["onnx/tokenizer_config.json"] = XlmRobertaTokenizerConfigNoDecoder;
         var vocabulary = new Dictionary<string, int> { ["<unk>"] = 1, ["<s>"] = 2, ["</s>"] = 3 }; // no <pad>
 
@@ -520,15 +527,15 @@ public class ModelDownloadPlannerTests
     }
 
     /// <summary>
-    ///     The two #417 and #416 mechanisms must not silently combine. Special-token ids derived from
-    ///     the sp model's piece table are in SENTENCEPIECE numbering (&lt;unk&gt;=0, &lt;s&gt;=1); a
-    ///     fairseq-offset model needs them in ITS numbering (&lt;s&gt;=0, &lt;unk&gt;=3). Writing the
-    ///     former into a manifest that also carries vocabOffset 1 embeds the wrong bos and unk for
-    ///     every sequence — the same silent-wrong-embeddings failure the offset exists to fix, so it
-    ///     is refused rather than guessed at from the fairseq convention.
+    ///     #423 regression (false refusal on faxenoff/code-daemon-embed-v1): whether a decoder-less
+    ///     sentencepiece repo is fairseq-offset can only be measured once the sp model's own piece
+    ///     table is known — the tokenizer_class string alone is not enough (an XLMRoberta-classed
+    ///     repo can still have vocab_size == piece count, i.e. no offset at all). Before the sp file
+    ///     is downloaded there is no piece table to measure against, so the plan must defer exactly
+    ///     like any other no-decoder sentencepiece repo — never refuse on the class name alone.
     /// </summary>
     [Fact]
-    public void AnXlmRobertaRepoWithoutAddedTokensDecoder_IsRefused_RatherThanMixingVocabularies()
+    public void MissingAddedTokensDecoder_XlmRobertaClass_WithoutVocabulary_DefersInsteadOfThrowing()
     {
         var raw = BgeM3Raw();
         raw["onnx/tokenizer_config.json"] = """
@@ -536,12 +543,69 @@ public class ModelDownloadPlannerTests
              "unk_token": "<unk>", "pad_token": "<pad>"}
             """;
 
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), raw, BgeM3Probe());
+
+        plan.SpecialTokens.ShouldBeEmpty();
+        plan.SpecialTokensPending.ShouldBeTrue();
+    }
+
+    /// <summary>
+    ///     The other half of the #423 fix: an XLMRoberta-classed repo whose vocab_size DOES equal
+    ///     the piece count (faxenoff/code-daemon-embed-v1: 22739 == 22739, verified against the real
+    ///     repo) is NOT fairseq-offset and must derive ids from the piece table like any other
+    ///     sentencepiece repo with no added_tokens_decoder — the class string must never override
+    ///     what the data says.
+    /// </summary>
+    [Fact]
+    public void MissingAddedTokensDecoder_XlmRobertaClass_VocabSizeMatchesPieces_DerivesIds_NotRefused()
+    {
+        var raw = BgeM3Raw();
+        raw["onnx/config.json"] = """{"model_type": "xlm-roberta", "hidden_size": 1024, "max_position_embeddings": 8194, "vocab_size": 4}""";
+        raw["onnx/tokenizer_config.json"] = """
+            {"tokenizer_class": "XLMRobertaTokenizer", "bos_token": "<s>", "eos_token": "</s>",
+             "unk_token": "<unk>", "pad_token": "<pad>"}
+            """;
+        var vocabulary = new Dictionary<string, int> { ["<pad>"] = 0, ["<unk>"] = 1, ["<s>"] = 2, ["</s>"] = 3 };
+
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), raw, BgeM3Probe(),
+            sentencePieceVocabulary: vocabulary);
+
+        plan.SpecialTokensPending.ShouldBeFalse();
+        plan.VocabOffset.ShouldBe(0);
+        plan.SpecialTokens["<s>"].ShouldBe(2);
+        plan.SpecialTokens["<unk>"].ShouldBe(1);
+    }
+
+    /// <summary>
+    ///     The two #417 and #416 mechanisms must not silently combine. Special-token ids derived from
+    ///     the sp model's piece table are in SENTENCEPIECE numbering (&lt;unk&gt;=0, &lt;s&gt;=1); a
+    ///     fairseq-offset model needs them in ITS numbering (&lt;s&gt;=0, &lt;unk&gt;=3). Writing the
+    ///     former into a manifest that also carries a nonzero offset embeds the wrong bos and unk for
+    ///     every sequence — the same silent-wrong-embeddings failure the offset exists to fix, so it
+    ///     is refused rather than guessed at from the fairseq convention. vocab_size 6 vs. a 4-piece
+    ///     table pins the real bge-m3 shape (vocab_size 250002 vs. 250000 pieces, difference 2 —
+    ///     verified against the real repo) at a size the test can construct by hand.
+    /// </summary>
+    [Fact]
+    public void XlmRobertaRepoWithoutAddedTokensDecoder_VocabSizeExceedsPieces_IsRefused_CitingMeasuredDifference()
+    {
+        var raw = BgeM3Raw();
+        raw["onnx/config.json"] = """{"model_type": "xlm-roberta", "hidden_size": 1024, "max_position_embeddings": 8194, "vocab_size": 6}""";
+        raw["onnx/tokenizer_config.json"] = """
+            {"tokenizer_class": "XLMRobertaTokenizer", "bos_token": "<s>", "eos_token": "</s>",
+             "unk_token": "<unk>", "pad_token": "<pad>"}
+            """;
+        var vocabulary = new Dictionary<string, int> { ["<unk>"] = 0, ["<s>"] = 1, ["</s>"] = 2, ["x"] = 3 };
+
         var ex = Should.Throw<ModelDownloadPlanException>(() =>
-            Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), raw, BgeM3Probe()));
+            Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), raw, BgeM3Probe(),
+                sentencePieceVocabulary: vocabulary));
 
         ex.Message.ShouldContain("added_tokens_decoder");
-        ex.Message.ShouldContain("vocabOffset",
-            customMessage: "the refusal must name the conflict, not just the missing field");
+        ex.Message.ShouldContain("6", customMessage: "must name the measured vocab_size, not the class name");
+        ex.Message.ShouldContain("4", customMessage: "must name the measured piece count");
+        ex.Message.ShouldNotContain("'xlm-roberta'",
+            customMessage: "#423 refused by quoting the model_type; the fix must cite the measured difference instead");
     }
 
     /// <summary>A plain sentencepiece model numbers its own pieces; shifting them would break it.</summary>

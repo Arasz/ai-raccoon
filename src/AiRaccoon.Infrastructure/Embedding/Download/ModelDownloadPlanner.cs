@@ -67,7 +67,10 @@ public interface IModelDownloadPlanner
 ///     <c>hidden_size</c>/<c>max_position_embeddings − 2</c>, and pins numeric special-token ids
 ///     from <c>tokenizer_config.json</c>'s added_tokens_decoder — never a guessed mask mapping (D1).
 ///     A sentencepiece repo without a decoder defers to the sp model's own piece table instead of
-///     refusing outright (issue #417); every other family is unaffected. Stateless and injectable.
+///     refusing outright (issue #417); every other family is unaffected. Whether that repo is
+///     fairseq-offset is measured from config.json's vocab_size against the piece table itself, not
+///     the tokenizer_class string (issue #423's false-refusal fix) — a real difference still refuses,
+///     naming the measured numbers. Stateless and injectable.
 /// </summary>
 public sealed class ModelDownloadPlanner : IModelDownloadPlanner
 {
@@ -95,6 +98,8 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
 
         var (family, tokenizerFileName) = PairTokenizer(configJson);
         var tokenizerFilePath = TokenizerFilePath(tree, modelDir, tokenizerFileName, family);
+        var hasAddedTokensDecoder = HasAddedTokensDecoder(tokenizerConfigJson);
+        var vocabOffset = ResolveVocabOffset(configJson, tokenizerConfigJson, family, hasAddedTokensDecoder, sentencePieceVocabulary);
         var (specialTokens, specialTokensPending) = ResolveSpecialTokens(tokenizerConfigJson, family, sentencePieceVocabulary);
         // HF puts the wrapper behaviour in the tokenizer CLASS, not the config: xlm-roberta's
         // tokenizer_config.json declares neither flag, yet the tokenizer always emits <s> … </s>.
@@ -102,22 +107,6 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
         var wrapsByDefault = WrapsWithBosEos(tokenizerConfigJson);
         var addBos = ReadBool(tokenizerConfigJson, "add_bos_token") ?? ReadBool(tokenizerConfigJson, "add_bos") ?? wrapsByDefault;
         var addEos = ReadBool(tokenizerConfigJson, "add_eos_token") ?? ReadBool(tokenizerConfigJson, "add_eos") ?? wrapsByDefault;
-        var vocabOffset = FairseqVocabOffset(tokenizerConfigJson);
-        if (vocabOffset != 0 && specialTokensPending)
-        {
-            // #417 derives ids from the sp model's piece table, which numbers them its own way
-            // (<unk>=0, <s>=1). #416's vocabOffset exists because a fairseq model numbers them
-            // differently (<s>=0, <unk>=3). Combining the two writes the wrong bos and unk into the
-            // manifest and embeds them for every sequence — silently, exactly the failure the offset
-            // was added to fix. The fairseq convention would predict the right ids, but predicting
-            // is what produced the normalization and bos/eos defects this ADR already records.
-            throw new ModelDownloadPlanException(
-                $"'{ModelType(configJson)}' is a fairseq-offset tokenizer (vocabOffset {vocabOffset}) and its "
-                + "tokenizer_config.json ships no added_tokens_decoder, so the special-token ids can only be read "
-                + "from the sentencepiece piece table — which numbers them differently. Deriving them would embed "
-                + "the wrong <s>/<unk> for every sequence. Hand-write ai-raccoon.manifest.json for this model with "
-                + "its real special-token ids (docs/how-to/configure-embedding-engines.md, Recipe 4).");
-        }
 
         var dimensions = RequiredInt(configJson, "hidden_size", "dimensions");
         var contextWindowTokens = RequiredInt(configJson, "max_position_embeddings", "contextWindowTokens") - 2;
@@ -425,6 +414,14 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
     ///     Deliberately narrow: plain RoBERTa is byte-level BPE and never reaches the sentencepiece
     ///     path, and other fairseq ports (CamemBERT) use different offsets and must be hand-written.
     /// </summary>
+    /// <remarks>
+    ///     Only reached when tokenizer_config.json HAS added_tokens_decoder: the ids are already
+    ///     pinned from that decoder, so this offset only shifts the ordinary (non-special) piece ids
+    ///     at tokenize time. Without a decoder the offset is measured from data instead — see
+    ///     <see cref="ResolveVocabOffset" /> — because the class string alone cannot tell a
+    ///     fairseq-offset repo from one that merely uses the XLMRoberta tokenizer class without being
+    ///     offset (issue #423's false-refusal regression on faxenoff/code-daemon-embed-v1).
+    /// </remarks>
     private static int FairseqVocabOffset(string tokenizerConfigJson)
     {
         using var doc = JsonDocument.Parse(tokenizerConfigJson);
@@ -433,6 +430,57 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
                && cls.GetString()?.StartsWith("XLMRoberta", StringComparison.OrdinalIgnoreCase) == true
             ? 1
             : 0;
+    }
+
+    private static bool HasAddedTokensDecoder(string tokenizerConfigJson)
+    {
+        using var doc = JsonDocument.Parse(tokenizerConfigJson);
+        return doc.RootElement.TryGetProperty("added_tokens_decoder", out var decoder) && decoder.ValueKind == JsonValueKind.Object;
+    }
+
+    /// <summary>
+    ///     Whether a sentencepiece repo is fairseq-offset is measured from data — config.json's
+    ///     vocab_size against the sp model's own piece count, once that piece table is known — never
+    ///     the tokenizer_class string alone (issue #423's regression: an XLMRoberta-classed repo can
+    ///     still have vocab_size == piece count, i.e. no offset at all; faxenoff/code-daemon-embed-v1
+    ///     is exactly that shape and was wrongly refused on the class name).
+    /// </summary>
+    /// <remarks>
+    ///     A repo whose tokenizer_config.json HAS added_tokens_decoder is unaffected: its special-
+    ///     token ids already come straight from that decoder, so the offset stays the class-string
+    ///     heuristic (<see cref="FairseqVocabOffset" />) that only shifts ordinary piece ids. Before
+    ///     the sp model file is downloaded (<paramref name="sentencePieceVocabulary" /> null) the
+    ///     piece count is not yet knowable, so the decision is deferred exactly like
+    ///     <c>ResolveSpecialTokens</c> defers special-token resolution — never refused on the class
+    ///     name alone.
+    /// </remarks>
+    private static int ResolveVocabOffset(
+        string configJson, string tokenizerConfigJson, TokenizerFamily family, bool hasAddedTokensDecoder,
+        IReadOnlyDictionary<string, int>? sentencePieceVocabulary)
+    {
+        if (hasAddedTokensDecoder || family != TokenizerFamily.SentencePiece)
+        {
+            return FairseqVocabOffset(tokenizerConfigJson);
+        }
+
+        if (sentencePieceVocabulary is null)
+        {
+            return 0;
+        }
+
+        var vocabSize = RequiredInt(configJson, "vocab_size", "the fairseq-offset check (measured against the sentencepiece piece table)");
+        var pieceCount = sentencePieceVocabulary.Count;
+        var difference = vocabSize - pieceCount;
+        if (difference == 0)
+        {
+            return 0;
+        }
+
+        throw new ModelDownloadPlanException(
+            $"config.json vocab_size ({vocabSize}) and the sentencepiece model's own piece table ({pieceCount} pieces) "
+            + $"differ by {difference}, so this is a fairseq-offset tokenizer, and its tokenizer_config.json ships no "
+            + "added_tokens_decoder, so the special-token ids can only be guessed. Hand-write ai-raccoon.manifest.json "
+            + "for this model with its real special-token ids (docs/how-to/configure-embedding-engines.md, Recipe 4).");
     }
 
     /// <summary>
