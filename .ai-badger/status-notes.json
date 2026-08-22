@@ -159,5 +159,14 @@
         "Releases 1.32.1/1.32.2/1.32.3 all cut via VERSION + README line; publish.yml dispatch + owner production approval each time."
       ]
     }
+  ],
+  "1.32.0-check": [
+    "Published package proof: dotnet tool update no-ops on an equal version string — uninstall + install from nuget.org, then compare the store nupkg sha256 with the flat-container download; 1.32.0 a0aec659, 1.32.1 6022823f, 1.32.2 09ec27d0.",
+    "Live bank (owner-requested): server was 1.29.0 (pre-code-corpus; doctor showed the code tables missing); restarted on the nuget binary; model set code default (194 MB, faxenoff/code-daemon-embed-v1); repo-root watches on all 8 repos (project ids: ai-raccoon, ai-badger, arasz-home-page, jsaa, vue-kanban, deepseek-harness, dotnet-ignore, interview-tasks); ai-raccoon.ignore (#469) then .*/ + deny set (#495).",
+    "Checklist 28/28: 24 pass / 4 substituted / 0 fail; post-fix re-check drove all 4 live: exit 23 needs a listener that answers POST /mcp with a jsonrpc body and 500s /settings (a dead port auto-starts a backend); sync HMAC needs an encrypted scratch bank + MinIO (keys on stdin; --cli goes to the SDK chain; NO --region before #487).",
+    "Defects found → fixed: #470→#475 (pooling.mode from ONNX rank + activation repair), #472→#476/#482 (400 with reason; CLI prints it), #484→#487 (--region cleared ServiceURL), #494→#495/#502 (events under hidden/deny-set dirs; agent worktrees leaked ~20k rows into the live bank), #489→#500 (chunk labelled with next heading), #509→#510 (directory Created event cascade-deleted its files — the 'flaky' watch test), #505 (main red since #492: class-level traits).",
+    "Tests: #506 removed every wall-clock verdict (FakeClockPoller, TickSignal.WaitAsync(target, token), step budgets, token-only hang guards); Stack.DiagnosticsAsync prints bank/fs-events/pipeline state on a give-up — that is what found #509.",
+    "Process: two 'serve --restart's racing (owner terminal + session) put two processes on the bank for the cold-start window → transient 'database is locked'; never restart the owner's terminal server from a session. Subagents stalled twice on background test monitors; finished by hand. Token usage in task-tracking.",
+    "Open for the owner: run 'ai-raccoon model set code default' once the leak prune drains (manifest still says cls → [417] each load; re-embeds all code rows); #477; the ADR-0086 amendment for the event filter; feed-badger for the checklist template wording."
   ]
 }
