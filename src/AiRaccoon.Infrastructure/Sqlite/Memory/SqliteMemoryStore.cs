@@ -382,10 +382,12 @@ public sealed partial class SqliteMemoryStore(
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        var result = await fileIngestor.IngestFileAsync(connection, projectId, path, context, cancellationToken)
+        // Defect B: re-ingesting a path must replace its chunk set, not add to it — a file that
+        // re-chunks to a different count would otherwise strand every index the new set does not
+        // overwrite, and search keeps serving content the file no longer has. Same transaction the
+        // watch digest uses, minus the fingerprint.
+        return await ReplaceForDirectIngestAsync(projectId, path, context, cancellationToken)
             .ConfigureAwait(false);
-        return result.RowsInserted;
     }
 
     public async Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
@@ -395,8 +397,20 @@ public sealed partial class SqliteMemoryStore(
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        return await fileIngestor.IngestDirectoryAsync(connection, projectId, path, context, cancellationToken)
+        var result = await fileIngestor.IngestDirectoryAsync(connection, projectId, path, context, cancellationToken)
             .ConfigureAwait(false);
+
+        // Defect B, directory leg: the walk ingests per file, so each walked file's stale chunks are
+        // pruned per file. Files the walk did not reach — gone from disk, newly ignored — keep their
+        // chunks here; removing those is the watch digest's job, which sees deletes and ignore
+        // transitions that a one-shot directory ingest cannot distinguish from "not walked this time".
+        foreach (var file in result.Files)
+        {
+            await PruneChunksNotIn(connection, projectId, file.Path, file.ChunkHashes, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return result.Indexed;
     }
 
     public async Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,

@@ -67,6 +67,17 @@ public sealed class CliSettingsBackendTests
     }
 
     [Fact]
+    public async Task AcquireAsync_WhenTheLauncherFindsNoUrl_ButCapturedStderr_IncludesItInTheMessage()
+    {
+        var launcher = new FakeBackendLauncher(new BackendResult(null, 3, "ai-raccoon: could not decrypt the bank"));
+
+        var error = await Should.ThrowAsync<SettingsServerUnavailableException>(() =>
+            CliSettingsBackend.AcquireAsync(launcher, Config(54219, "/tmp/unused"), TestContext.Current.CancellationToken));
+
+        error.Message.ShouldContain("could not decrypt the bank");
+    }
+
+    [Fact]
     public async Task AcquireAsync_WhenTheLauncherThrowsBackendStart_WrapsAsUnavailable()
     {
         var launcher = new FakeBackendLauncher(new BackendStartException("could not start it", new InvalidOperationException()));

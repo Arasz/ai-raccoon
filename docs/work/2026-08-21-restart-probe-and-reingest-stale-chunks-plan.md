@@ -134,7 +134,42 @@ Two ingest paths, one of which forgets to clear:
 Content-hash dedup hides it whenever the chunk boundaries happen to line up, which is
 why small fixtures never showed it.
 
-### Proposed fix
+### Fix as implemented (corrects the proposal below)
+
+**Ingest-then-prune, not delete-then-ingest.** `FileIngestor` now reports the chunk hashes it
+wrote *or rediscovered unchanged*, and the direct path deletes the complement for that exact
+path. The ingest keeps embedding **inline**, as this path always has, so it stays outside the
+prune's transaction — embedding runs the engine per chunk and holding the bank's write lock
+through it stalls another process's first open, which is exactly why the watch path defers.
+Only the prune takes the lock, for one DELETE. (Wrapping both in one transaction with
+`embedInline: false` was tried first and silently stopped `memory_ingest_file` from embedding at
+all — caught by `StructurePopulationTests`, which asserts `vec_entries` is non-empty after an
+ingest.) A crash between ingest and prune leaves the stale rows where today's code already
+leaves them, so the window costs nothing that is not already the status quo.
+
+Delete-then-ingest — what this plan originally proposed — was wrong for a reason the plan did
+not anticipate: it rewrites every row of an **unchanged** file, which re-queues its embeddings.
+`memory_ingest_directory` walks per file, so a no-op directory re-ingest would put the entire
+tree back to `pending` and hybrid search demotes pending rows — a large, silent search
+regression in exchange for fixing a smaller one. Ingest-then-prune leaves an unchanged file
+completely untouched (dedup confirms every hash, the complement is empty) and still removes
+every leftover of a previous chunking.
+
+No `watch_files` fingerprint is written on the direct path, as the plan required: the existing
+rollback/fingerprint tests assert that contract by inserting their own row, and writing one
+from the direct path breaks them.
+
+`memory_ingest_directory` gets the same treatment, as this plan required: the walk reports each
+walked file's chunk set and the store prunes per file. Files the walk did **not** reach — gone
+from disk, or newly ignored — keep their chunks. Removing those is the watch digest's job: it
+sees deletes and ignore transitions as events, whereas a one-shot directory ingest cannot tell
+"deleted" from "not walked this time".
+
+**Known gap, deliberately not fixed here:** the prune covers the memory corpus only. A code
+file whose chunk count shrinks can still strand `code_entries` rows. That needs the same
+hash-reporting from `ICodeIngestor` and is a separate change.
+
+### Original proposal (superseded)
 
 Route the direct path through the same delete-then-ingest transaction the watch path
 already uses, rather than adding a second cleanup. One mechanism, one place to be wrong.
@@ -187,12 +222,12 @@ bites when the stored source path is itself a directory, which the digest rename
 legs rely on deliberately. `IngestDirectoryAsync` walks per file, so routing each walked
 file through the shared core preserves per-file semantics without special-casing.
 
-**Ignore semantics must not move.** On the direct path an ignored file returns 0 chunks and
-does **not** delete; the digest path owns stale-chunk cleanup for ignored files. The
-delete-then-ingest must therefore sit *after* the ignore check and inside the
-not-ignored branch. Putting it before would make a direct ingest of a newly-ignored file
-purge its chunks — a behaviour change dressed as a bug fix, and one no existing test would
-catch. **B4 below pins it.**
+**Ignore semantics — this paragraph was WRONG and is kept only as the corrected claim.** It
+argued that an ignored file must keep its chunks and that purging them would be "a behaviour
+change dressed as a bug fix". The owner ruled the opposite and the source agrees: an ignored
+file must not be ingested AND must lose whatever it had stored
+(`WatchCatchUp.ReconcileIgnoredAsync`). Under ingest-then-prune this falls out for free — an
+ignored path confirms no hashes, so the complement is everything. **B4 below pins it.**
 
 ## Test plan (TDD, RED first)
 
@@ -205,7 +240,7 @@ catch. **B4 below pins it.**
 | B1 | Re-ingest the same path with content that chunks to a different count → only the new chunk set remains | the direct path never deletes |
 | B2 | Re-ingest one file in a directory → siblings survive | guards the fix against over-deleting by subtree |
 | B3 | Re-ingest identical content → no duplicate rows, hash unchanged | dedup must keep working |
-| B4 | Direct-ingest a file that `ai-raccoon.ignore` matches, after it was previously ingested → 0 chunks AND the existing chunks are still there | pins the ignore split: cleanup for ignored paths belongs to the digest path, not this one |
+| B4 | Direct-ingest a file that `ai-raccoon.ignore` matches, after it was previously ingested → 0 chunks AND the previously stored chunks are GONE | **corrected by the owner.** This plan originally asserted the opposite — that an ignored path keeps its chunks and the digest owns cleanup. That was wrong, and the codebase already disagreed with it: `WatchCatchUp.ReconcileIgnoredAsync` exists precisely to enqueue a Deleted for "a file fingerprinted before an ignore rule started matching it … so the digest's ignore gate removes its stale chunks". Ignoring a file is a statement that its content must not be searchable; leaving the chunks serves exactly the stale content this defect is about. |
 | B5 | Re-ingest a file with rows queued for embedding → the queue still points at the new chunks | the delete would otherwise drop queued work with the rows |
 
 A2 and A3 are the ones that make the retry claim falsifiable: without them the fix is

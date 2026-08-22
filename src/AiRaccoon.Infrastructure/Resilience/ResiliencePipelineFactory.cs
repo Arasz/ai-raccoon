@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using AiRaccoon.Infrastructure.Assets;
 using Polly;
 using Polly.Retry;
 
@@ -59,7 +60,7 @@ public static class ResiliencePipelineFactory
                     .Handle<HttpRequestException>()
                     .Handle<SocketException>()
                     .Handle<TimeoutException>()
-                    .Handle<Exception>(ex => ex.GetType().Name == "EmptyDownloadException")
+                    .Handle<EmptyDownloadException>()
                     .HandleResult(response => IsTransientHttpStatusCode(response.StatusCode)),
                 OnRetry = onRetry
             })

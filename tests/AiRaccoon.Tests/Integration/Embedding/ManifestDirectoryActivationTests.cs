@@ -25,11 +25,16 @@ public sealed class ManifestDirectoryActivationTests : IAsyncLifetime
         Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
             System.Text.Encoding.UTF8.GetBytes(content))).ToLowerInvariant();
 
+    private static string ShaOfFile(string path) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant();
+
     private static EmbeddingService Service() =>
         new(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(),
             new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
 
-    private static JsonObject Manifest(int dimensions = 384) => new()
+    // D1: the manifest now pins real bytes, not placeholder content — pass the sha256 of what is
+    // actually on disk at each path.
+    private static JsonObject Manifest(int dimensions = 384, string? vocabSha = null, string? onnxSha = null) => new()
     {
         ["manifestVersion"] = 1,
         ["model"] = "activation-test-model",
@@ -41,11 +46,11 @@ public sealed class ManifestDirectoryActivationTests : IAsyncLifetime
         ["tokenizer"] = new JsonObject
         {
             ["family"] = "bert-wordpiece",
-            ["files"] = new JsonArray(new JsonObject { ["path"] = "vocab.txt", ["sha256"] = ShaOf("vocab") })
+            ["files"] = new JsonArray(new JsonObject { ["path"] = "vocab.txt", ["sha256"] = vocabSha ?? ShaOf("vocab") })
         },
         ["onnx"] = new JsonObject
         {
-            ["files"] = new JsonArray(new JsonObject { ["path"] = "model.onnx", ["sha256"] = ShaOf("model") }),
+            ["files"] = new JsonArray(new JsonObject { ["path"] = "model.onnx", ["sha256"] = onnxSha ?? ShaOf("model") }),
             ["inputs"] = new JsonArray("input_ids", "attention_mask", "token_type_ids"),
             ["tokenEmbeddingsOutput"] = "last_hidden_state"
         },
@@ -73,9 +78,12 @@ public sealed class ManifestDirectoryActivationTests : IAsyncLifetime
         // path — loader, tokenizer factory, generator — runs end-to-end on known-good artifacts.
         var dir = Path.Combine(Path.GetTempPath(), "ai-raccoon-activation-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
-        File.Copy(BundledModel.ResolveVocabPath(), Path.Combine(dir, "vocab.txt"));
-        File.Copy(BundledModel.ResolveModelPath(), Path.Combine(dir, "model.onnx"));
-        File.WriteAllText(Path.Combine(dir, EmbeddingManifest.FileName), Manifest().ToJsonString());
+        var vocabPath = Path.Combine(dir, "vocab.txt");
+        var onnxPath = Path.Combine(dir, "model.onnx");
+        File.Copy(BundledModel.ResolveVocabPath(), vocabPath);
+        File.Copy(BundledModel.ResolveModelPath(), onnxPath);
+        File.WriteAllText(Path.Combine(dir, EmbeddingManifest.FileName),
+            Manifest(vocabSha: ShaOfFile(vocabPath), onnxSha: ShaOfFile(onnxPath)).ToJsonString());
 
         using var generator = Service().CreateGenerator(new EmbeddingSettings("local", dir, null, null));
 

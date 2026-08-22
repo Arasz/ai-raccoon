@@ -60,6 +60,7 @@ public sealed class EmbeddingManifestValidator : IEmbeddingManifestValidator
         ValidatePooling(manifest.Pooling, manifest.Onnx, errors);
         ValidateTokenizer(manifest.Tokenizer, isLocal, errors);
         ValidateOnnx(manifest.Onnx, isLocal, errors);
+        ValidateProvenanceFiles(manifest.ProvenanceFiles, errors);
 
         return errors;
     }
@@ -210,6 +211,31 @@ public sealed class EmbeddingManifestValidator : IEmbeddingManifestValidator
             if (!Sha256Pattern.IsMatch(file.Sha256 ?? string.Empty))
             {
                 errors.Add($"{fieldPath}[{i}].sha256: must be a 64-character hex SHA-256, got '{file.Sha256}'");
+            }
+        }
+    }
+
+    /// <summary>Optional (D2): absent means a pre-D2 manifest, not an error. When present, every
+    /// entry must be shaped like a pinned file — the field is not required to be non-empty, since
+    /// legacy manifests omit it entirely.</summary>
+    private static void ValidateProvenanceFiles(IReadOnlyList<ManifestFile>? files, List<string> errors)
+    {
+        if (files is null)
+        {
+            return;
+        }
+
+        for (var i = 0; i < files.Count; i++)
+        {
+            var file = files[i];
+            if (string.IsNullOrWhiteSpace(file.Path))
+            {
+                errors.Add($"provenanceFiles[{i}].path: must not be empty");
+            }
+
+            if (!Sha256Pattern.IsMatch(file.Sha256 ?? string.Empty))
+            {
+                errors.Add($"provenanceFiles[{i}].sha256: must be a 64-character hex SHA-256, got '{file.Sha256}'");
             }
         }
     }

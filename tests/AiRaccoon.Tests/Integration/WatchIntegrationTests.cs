@@ -628,11 +628,13 @@ public sealed class WatchIntegrationTests
     {
         private readonly bool _deleteDataRoot;
         private readonly SqliteConnectionFactory _factory;
+        private readonly WallClockBoundedPoller _poller;
 
         public Stack(string? name = null, DateTimeOffset? now = null, bool deleteDataRoot = true)
         {
             _deleteDataRoot = deleteDataRoot;
             Time = new FakeTimeProvider(now ?? FixedNow);
+            _poller = new WallClockBoundedPoller(Time);
             DataRoot = Path.Combine(Path.GetTempPath(), "ai-raccoon-watch-integration",
                 name ?? Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(DataRoot);
@@ -773,36 +775,14 @@ public sealed class WatchIntegrationTests
         ///     for OS event delivery — until the condition holds or either budget expires.
         ///     maxFakeSeconds bounds step count; maxRealSeconds is only a hang-stop for the real
         ///     OS-event/embedding work these arrange-phase polls wait on, so it stays generous.
+        ///     Delegates to <see cref="WallClockBoundedPoller" /> (plan Q1 / M7-QA F2), which also
+        ///     races each individual await against the remaining real-time budget so a blocked
+        ///     step fails fast instead of hanging the loop past maxRealSeconds.
         /// </summary>
-        public async Task<bool> StepUntilAsync(Func<Task<bool>> condition, CancellationToken cancellationToken,
-            int maxFakeSeconds = 60, int maxRealSeconds = 30)
-        {
-            var startedAt = DateTime.UtcNow;
-            var realDeadline = startedAt.AddSeconds(maxRealSeconds);
-            var fakeStart = Time.GetUtcNow();
-            var steps = 0;
-            while (!await condition())
-            {
-                var fakeSpent = Time.GetUtcNow() - fakeStart;
-                var fakeExpired = fakeSpent >= TimeSpan.FromSeconds(maxFakeSeconds);
-                var realExpired = DateTime.UtcNow >= realDeadline;
-                if (fakeExpired || realExpired)
-                {
-                    TestContext.Current.TestOutputHelper?.WriteLine(
-                        $"StepUntilAsync gave up after {steps} steps: " +
-                        $"{(fakeExpired ? "fake-time budget" : "real-time hang-stop")} expired " +
-                        $"(fake {fakeSpent.TotalSeconds:F1}s/{maxFakeSeconds}s, " +
-                        $"real {(DateTime.UtcNow - startedAt).TotalSeconds:F1}s/{maxRealSeconds}s)");
-                    return false;
-                }
-
-                steps++;
-                Time.Advance(TimeSpan.FromMilliseconds(100));
-                await Pipeline.TickOnceAsync(cancellationToken);
-                await Task.Delay(20, cancellationToken);
-            }
-
-            return true;
-        }
+        public Task<bool> StepUntilAsync(Func<Task<bool>> condition, CancellationToken cancellationToken,
+            int maxFakeSeconds = 60, int maxRealSeconds = 30) =>
+            _poller.StepUntilAsync(condition, Pipeline.TickOnceAsync, cancellationToken, maxFakeSeconds,
+                maxRealSeconds,
+                message => TestContext.Current.TestOutputHelper?.WriteLine(message));
     }
 }

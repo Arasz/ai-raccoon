@@ -519,6 +519,31 @@ public class ModelDownloadPlannerTests
         plan.VocabOffset.ShouldBe(1);
     }
 
+    /// <summary>
+    ///     The two #417 and #416 mechanisms must not silently combine. Special-token ids derived from
+    ///     the sp model's piece table are in SENTENCEPIECE numbering (&lt;unk&gt;=0, &lt;s&gt;=1); a
+    ///     fairseq-offset model needs them in ITS numbering (&lt;s&gt;=0, &lt;unk&gt;=3). Writing the
+    ///     former into a manifest that also carries vocabOffset 1 embeds the wrong bos and unk for
+    ///     every sequence — the same silent-wrong-embeddings failure the offset exists to fix, so it
+    ///     is refused rather than guessed at from the fairseq convention.
+    /// </summary>
+    [Fact]
+    public void AnXlmRobertaRepoWithoutAddedTokensDecoder_IsRefused_RatherThanMixingVocabularies()
+    {
+        var raw = BgeM3Raw();
+        raw["onnx/tokenizer_config.json"] = """
+            {"tokenizer_class": "XLMRobertaTokenizer", "bos_token": "<s>", "eos_token": "</s>",
+             "unk_token": "<unk>", "pad_token": "<pad>"}
+            """;
+
+        var ex = Should.Throw<ModelDownloadPlanException>(() =>
+            Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), raw, BgeM3Probe()));
+
+        ex.Message.ShouldContain("added_tokens_decoder");
+        ex.Message.ShouldContain("vocabOffset",
+            customMessage: "the refusal must name the conflict, not just the missing field");
+    }
+
     /// <summary>A plain sentencepiece model numbers its own pieces; shifting them would break it.</summary>
     [Fact]
     public void VocabOffset_ForANonFairseqConfig_IsZero()

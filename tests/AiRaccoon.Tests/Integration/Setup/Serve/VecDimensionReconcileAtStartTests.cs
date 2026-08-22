@@ -90,15 +90,32 @@ public sealed class VecDimensionReconcileAtStartTests : IDisposable
     }
 
     /// <summary>
+<<<<<<< HEAD
     ///     The hard-invariant guard (`cli-asks-the-server-acts`): every leaf CLI command type
     ///     except <see cref="ServeCommands" /> (the one path that IS becoming the server, not asking
     ///     one to act) must never resolve to an object graph reaching a live
     ///     <see cref="IEntryEmbedder" /> — the only thing the reconcile call can run through.
+=======
+    ///     The hard-invariant guard (`cli-asks-the-server-acts`), narrow by design: every leaf CLI
+    ///     command type except <see cref="ServeCommands" /> (the one path that IS becoming the
+    ///     server, not asking one to act) must never hold a live <see cref="IEntryEmbedder" /> as
+    ///     its OWN constructed field. This only covers the constructor-injected-field reachability
+    ///     vector — a reconcile-shaped member added to a PORT the CLI receives as a method argument
+    ///     instead (e.g. <c>IMemoryStore</c>, which <c>ConfigCommands</c> holds and threads into
+    ///     every leaf verb call) would slip past a field walk entirely, since the leaf command type
+    ///     never holds that port as a field. That vector is covered separately, and more directly, by
+    ///     <c>LayeringRulesTests.CliReachablePorts_ExposeNoReconcileOrVecDdlMember</c>, which asserts
+    ///     on the port's own member surface instead of an object graph.
+>>>>>>> origin/main
     ///     Mirrors <c>CliCommandsDoNotOpenTheBankTests</c>'s derive-from-the-DI-graph technique
     ///     rather than a hand-maintained list (`derive-or-delete-the-list`).
     /// </summary>
     [Fact]
+<<<<<<< HEAD
     public void NoLeafCommandTypeOtherThanServe_ReachesALiveEntryEmbedder()
+=======
+    public void NoLeafCommandTypeOtherThanServe_HoldsALiveEntryEmbedderAsAConstructedField()
+>>>>>>> origin/main
     {
         var leafCommandTypes = DeriveLeafCommandTypesFromTheCommandRegistration();
         leafCommandTypes.Length.ShouldBeGreaterThanOrEqualTo(8);
@@ -125,6 +142,60 @@ public sealed class VecDimensionReconcileAtStartTests : IDisposable
             $"only {nameof(ServeCommands)} may reach a live {nameof(IEntryEmbedder)} — offenders:\n{string.Join('\n', violations)}");
     }
 
+<<<<<<< HEAD
+=======
+    /// <summary>
+    ///     The positive control the rule above needs: proves <see cref="FindLiveEntryEmbedder" /> can
+    ///     actually find an embedder that IS there (planted as a field, exactly like
+    ///     <c>ServeCommands.nodeRunner.entryEmbedder</c>), not merely fail to find ones that aren't.
+    /// </summary>
+    [Fact]
+    public void FindLiveEntryEmbedder_DetectsAPlantedField()
+    {
+        var planted = new FixtureHoldingAnEntryEmbedder(new UnusedEntryEmbedderStub());
+
+        var path = FindLiveEntryEmbedder(planted);
+
+        path.ShouldNotBeNull();
+        path.ShouldContain(nameof(FixtureHoldingAnEntryEmbedder.Embedder));
+    }
+
+    private sealed class FixtureHoldingAnEntryEmbedder(IEntryEmbedder embedder)
+    {
+        public IEntryEmbedder Embedder { get; } = embedder;
+    }
+
+    private sealed class UnusedEntryEmbedderStub : IEntryEmbedder
+    {
+        public Task<EmbeddingConfig> ConfigureAsync(SqliteConnection connection, string provider, string? model,
+            string? baseUrl, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<EmbeddingConfig> StartMigrationAsync(SqliteConnection connection, string provider, string? model,
+            string? baseUrl, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<bool> DrainMigrationAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task ReconcileVecDimensionsAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task EmbedIfConfiguredAsync(SqliteConnection connection, long id, string value,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<int> EmbedPendingAsync(SqliteConnection connection, string projectId, int? limit,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<int> EmbedPendingBatchAsync(SqliteConnection connection, int limit,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<QueryVector> EmbedQueryAsync(SqliteConnection connection, string query,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<EmbeddingSettings> ReadSettingsAsync(SqliteConnection connection,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+>>>>>>> origin/main
     private static Type[] DeriveLeafCommandTypesFromTheCommandRegistration()
     {
         var configCommandsConstructor = typeof(ConfigCommands)

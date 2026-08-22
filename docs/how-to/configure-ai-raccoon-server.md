@@ -346,7 +346,16 @@ represent, so recreating it is a data-loss decision, not a schema decision — o
 with the bank in front of you.
 
 It opens the bank **read-only** and does not modify it, so it is safe to run against a live bank or
-a backup. Exit code is `0` when healthy and non-zero on a mismatch, so it composes into a script.
+a backup. Exit code is `0` when healthy and non-zero on a mismatch, so it composes into a script:
+
+| Exit code | Meaning |
+|---|---|
+| `0` | HEALTHY |
+| `1` | the encryption key could not be resolved |
+| `2` | the bank could not be opened read-only |
+| `19` | SHAPE MISMATCH — the bank's actual schema differs from this binary's DDL |
+| `20` | the bank's `user_version` is newer than this binary supports |
+| `22` | no bank file exists at the resolved path — distinct from HEALTHY, so a wrong `--data-root` is never mistaken for a healthy bank |
 
 If the bank is encrypted and the passphrase cannot be resolved, that is reported as a *read* failure
 and is distinguishable from a shape problem — a locked bank is not a broken one.
