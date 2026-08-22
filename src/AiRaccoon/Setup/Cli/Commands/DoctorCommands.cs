@@ -17,8 +17,8 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         var bankPath = bankConnectionFactory.BankPath;
         if (!File.Exists(bankPath))
         {
-            await streams.WriteOutputLineAsync("no bank to check");
-            return ExitCode.Success;
+            await streams.WriteErrorLineAsync($"ai-raccoon: doctor: no bank at {bankPath}");
+            return ExitCode.NoBank;
         }
 
         ResolvedKey resolvedKey;

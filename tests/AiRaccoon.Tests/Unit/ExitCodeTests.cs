@@ -15,6 +15,13 @@ public class ExitCodeTests
         ExitCode.PortInUse.ShouldBe(3);
     }
 
+    /// <summary>Delta review C3: distinguishes "no bank at the resolved path" from HEALTHY (0).</summary>
+    [Fact]
+    public void NoBank_IsTwentyTwo()
+    {
+        ExitCode.NoBank.ShouldBe(22);
+    }
+
     /// <summary>One code, one reason: a value shared by two names is a code that cannot be acted on.</summary>
     [Fact]
     public void EveryExitCode_IsDistinct()

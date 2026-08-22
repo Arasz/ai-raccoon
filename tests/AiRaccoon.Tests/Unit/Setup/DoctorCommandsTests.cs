@@ -36,13 +36,20 @@ public sealed class DoctorCommandsTests : IDisposable
 
     private DoctorCommands CreateDoctor(IEncryptionKeyResolver? resolver = null) => new(_factory, resolver ?? NullKeyProvider.Resolver(_options), NullLogger<DoctorCommands>.Instance);
 
+    /// <summary>
+    ///     Delta review C3: a missing bank at the resolved path must not read as HEALTHY (0) — a
+    ///     wrong `--data-root` would otherwise be indistinguishable from a healthy bank. Driven
+    ///     through argv (<see cref="Run" /> → <see cref="ConfigCommands" />), not the handler
+    ///     method directly.
+    /// </summary>
     [Fact]
-    public async Task Doctor_NoBankFile_ReportsNothingToCheckAndExitsZero()
+    public async Task NoBankAtTheResolvedPath_ExitsNonZeroAndNamesThePath()
     {
-        var (exit, outp, _) = await Run(CreateDoctor(), ["doctor"]);
+        var (exit, _, err) = await Run(CreateDoctor(), ["doctor"]);
 
-        exit.ShouldBe(0);
-        outp.ShouldContain("no bank");
+        exit.ShouldBe(ExitCode.NoBank);
+        exit.ShouldNotBe(ExitCode.Success);
+        err.ShouldContain(_factory.BankPath);
     }
 
     [Fact]

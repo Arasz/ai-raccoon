@@ -61,5 +61,9 @@ public static class ExitCode
     /// a script can tell "you mistyped" from "the repo/network misbehaved".</summary>
     public const int ModelDownloadFailed = 21;
 
+    /// <summary>`doctor` (delta review C3): no bank file exists at the resolved path — distinct
+    /// from HEALTHY (0), so a wrong `--data-root` cannot read as a healthy bank.</summary>
+    public const int NoBank = 22;
+
     public const int Success = 0;
 }

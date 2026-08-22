@@ -19,7 +19,14 @@ name: build
 on:
   push:
     branches: [main]
-  pull_request: {}
+  pull_request:
+    # `labeled` added (Q2, delta review fix plan) so applying `run-nightly-gates` triggers
+    # build-nightly-gates below without needing a new push. This re-triggers the whole workflow
+    # on every label change, including unrelated ones — build-fast/build-bdd/build-slow already
+    # tolerate redundant runs cheaply via the `changes` skip-logic above, so the extra cost is one
+    # more cheap pass-through, not a second full test run.
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch: {}
 
 permissions:
   contents: read
@@ -207,3 +214,36 @@ jobs:
           name: build-slow-dumps
           path: dumps/
           if-no-files-found: ignore
+
+  build-nightly-gates:
+    # Q2 (delta review fix plan, owner flag O1): nothing ran Speed=Nightly against a PR head.
+    # nightly.yml already has workflow_dispatch, but dispatching it runs the full unfiltered
+    # ~45-minute suite and files a red-nightly issue on failure (scripts/nightly-triage.py) — wrong
+    # for a PR's own red. This job runs only the Nightly-tagged tests, with no triage script, and
+    # is not a required status check (unlike build-fast/build-bdd/build-slow above) — it only runs
+    # when explicitly asked for, via the `run-nightly-gates` label or a manual dispatch, so it
+    # never adds cost to a PR that doesn't want it.
+    needs: changes
+    if: |
+      needs.changes.outputs.code == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+       contains(github.event.pull_request.labels.*.name, 'run-nightly-gates'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          # Pinned via global.json, not a floating 10.0.x. An unpinned SDK is a mutable
+          # dependency re-resolved on every run — the same hazard this workflow already
+          # avoids by pinning every action to a commit SHA.
+          global-json-file: global.json
+      - name: Build
+        run: mkdir -p .nupkg-local && dotnet build --nologo
+      - name: Nightly-tagged tests
+        # Speed=Nightly only. Deliberately does not call scripts/nightly-triage.py: that script's
+        # red-nightly issue is for the scheduled unattended backstop, not a PR the author is
+        # already looking at — a red here fails this check, full stop.
+        run: dotnet test --filter "Speed=Nightly" --no-build --nologo -v m
