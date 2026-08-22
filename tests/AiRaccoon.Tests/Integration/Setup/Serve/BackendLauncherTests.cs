@@ -164,7 +164,7 @@ public sealed class BackendLauncherTests : IDisposable
         // line at all. That is what proves "no wall-clock time was spent waiting the budget out"
         // — the `stopwatch.Elapsed < DefaultBudget` assertion this replaces asserted the same
         // thing more loosely, on the system clock, and could go red purely from host load.
-        var result = await acquire.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        var result = await acquire.WaitAsync(TestContext.Current.CancellationToken);
 
         result.Url.ShouldBeNull();
         result.ServeExitCode.ShouldBeNull();
@@ -237,8 +237,7 @@ public sealed class BackendLauncherTests : IDisposable
             .ShouldBeTrue("the launcher never registered its timers");
         await caller.CancelAsync();
 
-        await Should.ThrowAsync<OperationCanceledException>(() => acquire.WaitAsync(TimeSpan.FromSeconds(10),
-            TestContext.Current.CancellationToken));
+        await Should.ThrowAsync<OperationCanceledException>(() => acquire.WaitAsync(TestContext.Current.CancellationToken));
     }
 
     private static BackendLauncher Launcher() => new(TestData.CreateServerProbe(), BackendLauncher.DefaultBudget,

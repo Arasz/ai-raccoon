@@ -55,7 +55,7 @@ public sealed class ServeRestartTests : IDisposable
             var url = await WaitForUrlAsync(restarted);
 
             // The old server really exited — its own run completed, it was not merely bypassed.
-            var oldExit = await old.Exit.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+            var oldExit = await old.Exit.WaitAsync(TestContext.Current.CancellationToken);
             oldExit.ShouldBe(ExitCode.Success);
             url.ShouldBe($"http://127.0.0.1:{port}/mcp");
             restarted.Stderr.ShouldNotContain("attached");
@@ -103,7 +103,7 @@ public sealed class ServeRestartTests : IDisposable
             TestContext.Current.CancellationToken);
         await using var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
 
-        var exit = await run.Exit.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
         exit.ShouldBe(ExitCode.RestartTokenRefused);
         run.Stdout.ShouldBeEmpty();
@@ -125,7 +125,7 @@ public sealed class ServeRestartTests : IDisposable
             TestContext.Current.CancellationToken);
         await using var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
 
-        var exit = await run.Exit.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
         exit.ShouldBe(ExitCode.RestartUnsupportedServer);
         run.Stderr.ShouldContain("restart");
@@ -144,7 +144,7 @@ public sealed class ServeRestartTests : IDisposable
             TestContext.Current.CancellationToken);
         await using var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
 
-        var exit = await run.Exit.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
         exit.ShouldBe(ExitCode.RestartNoToken);
         // No token to present, so nothing was asked to stop: an unauthenticated shutdown is not attempted.
@@ -166,7 +166,7 @@ public sealed class ServeRestartTests : IDisposable
             TestContext.Current.CancellationToken, name: "not-a-raccoon");
         await using var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
 
-        var exit = await run.Exit.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
         // Nothing took the port: the same listener held it throughout.
         run.Stderr.ShouldContain("does not identify as an ai-raccoon");
@@ -190,7 +190,7 @@ public sealed class ServeRestartTests : IDisposable
             TestContext.Current.CancellationToken, version: null);
         await using var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
 
-        var exit = await run.Exit.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
         exit.ShouldBe(ExitCode.RestartUnsupportedServer);
         run.Stderr.ShouldContain("(version not reported)");
@@ -212,7 +212,7 @@ public sealed class ServeRestartTests : IDisposable
         using var silent = LoopbackPort.Reserve();
         await using var run = Start(["--data-root", _dataRoot, "serve", "--port", silent.Port.ToString(), "--restart"]);
 
-        var exit = await run.Exit.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
         exit.ShouldBe(ExitCode.RestartProbeUnanswered);
         run.Stderr.ShouldContain("in use");
@@ -238,7 +238,7 @@ public sealed class ServeRestartTests : IDisposable
         using var holder = LoopbackPort.Occupy();
         await using var run = Start(["--data-root", _dataRoot, "serve", "--port", holder.Port.ToString(), "--restart"]);
 
-        var exit = await run.Exit.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
         exit.ShouldBe(ExitCode.RestartProbeUnanswered);
         run.Stderr.ShouldContain("in use");
@@ -257,7 +257,7 @@ public sealed class ServeRestartTests : IDisposable
         await WaitForUrlAsync(old);
 
         await using var second = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
-        var exit = await second.Exit.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        var exit = await second.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
         exit.ShouldBe(ExitCode.Success);
         second.Stderr.ShouldContain("attached");

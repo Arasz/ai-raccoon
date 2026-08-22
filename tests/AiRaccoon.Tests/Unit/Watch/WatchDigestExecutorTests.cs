@@ -124,6 +124,34 @@ public sealed class WatchDigestExecutorTests
         stack.Memory.EmbedCalls.ShouldHaveSingleItem();
     }
 
+    /// <summary>
+    ///     The watcher raises Created/Changed for a DIRECTORY too. A directory is not a file that
+    ///     vanished: digesting its event must never take the delete-by-source-path cascade over the
+    ///     files inside it (which a sibling digest in the same batch may just have ingested).
+    /// </summary>
+    [Fact]
+    public async Task Digest_CreatedEventForAnExistingDirectory_DoesNotCascadeDeleteItsFiles()
+    {
+        using var dir = TempDir.New("digest-dir-event");
+        var sub = Path.Combine(dir.Path, "sub");
+        Directory.CreateDirectory(sub);
+        var file = Path.Combine(sub, "a.md");
+        await File.WriteAllTextAsync(file, "inside", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+        stack.Memory.OnDeletePath = stack.Store.RemoveFingerprint;
+        await Executor(stack).DigestAsync(Project, dir.Path, file, WatchEventKind.Created, null,
+            TestContext.Current.CancellationToken);
+
+        await Executor(stack).DigestAsync(Project, dir.Path, sub, WatchEventKind.Created, null,
+            TestContext.Current.CancellationToken);
+
+        stack.Memory.DeletedPaths.ShouldNotContain((Project, sub),
+            "a directory that exists is not a deleted file — its event must not cascade over its contents");
+        stack.Memory.Ingested.ShouldHaveSingleItem();
+        (await stack.Store.GetFileHashAsync(Project, file, TestContext.Current.CancellationToken)).ShouldNotBeNull();
+    }
+
     [Fact]
     public async Task Digest_DeleteOfNeverIngestedFile_IsSilentForMemory()
     {

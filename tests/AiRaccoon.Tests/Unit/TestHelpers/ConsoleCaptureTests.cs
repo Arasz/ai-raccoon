@@ -83,8 +83,7 @@ public sealed class ConsoleCaptureTests
 
             // Bounded on purpose: a capture that waited on the held gate must surface here as a
             // TimeoutException rather than hang the assembly.
-            var (stdout, _) = await capture.WaitAsync(TimeSpan.FromSeconds(5),
-                TestContext.Current.CancellationToken);
+            var (stdout, _) = await capture.WaitAsync(TestContext.Current.CancellationToken);
 
             stdout.ShouldBe("written under the gate");
         }

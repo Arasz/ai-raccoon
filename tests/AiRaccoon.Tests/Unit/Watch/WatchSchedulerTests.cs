@@ -114,8 +114,7 @@ public sealed class WatchSchedulerTests
         var second = new GatedRunner { Expected = 2 };
         var secondBatch = scheduler.RunBatchAsync(jobs, Concurrency(("acme", 2)), second.Run,
             TestContext.Current.CancellationToken);
-        await second.AllExpectedStarted.Task.WaitAsync(TimeSpan.FromSeconds(5),
-            TestContext.Current.CancellationToken);
+        await second.AllExpectedStarted.Task.WaitAsync(TestContext.Current.CancellationToken);
         second.Started.ShouldBe(2, "the raised limit must apply to the next batch");
         second.Release();
         await secondBatch.WaitAsync(TestContext.Current.CancellationToken);

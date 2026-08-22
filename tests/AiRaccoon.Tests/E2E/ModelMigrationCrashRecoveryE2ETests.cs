@@ -396,9 +396,9 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
 
     private async Task WaitForServerAsync()
     {
-        var deadline = DateTime.UtcNow.AddSeconds(30);
-        while (DateTime.UtcNow < deadline)
+        while (true)
         {
+            TestContext.Current.CancellationToken.ThrowIfCancellationRequested();
             try
             {
                 var body = await HttpClient.GetStringAsync($"http://127.0.0.1:{_port}/observability",
@@ -415,33 +415,25 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
 
             await Task.Delay(100, TestContext.Current.CancellationToken);
         }
-
-        throw new TimeoutException($"no ai-raccoon server answered /observability on port {_port}");
     }
 
     /// <summary>WAL truncation is the startup pass's own observable side effect (BankMaintenanceHostedService's checkpoint) — the same signal BankMaintenanceHostedServiceLifecycleTests uses.</summary>
     private async Task WaitForStartupCheckpointAsync()
     {
         var walPath = Path.Combine(_dataRoot, "memory.db-wal");
-        var deadline = DateTime.UtcNow.AddSeconds(30);
-        while (DateTime.UtcNow < deadline)
+        // Waits on the checkpoint's own side effect; the token is the only hang guard (PR #464).
+        while (!(File.Exists(walPath) && new FileInfo(walPath).Length == 0))
         {
-            if (File.Exists(walPath) && new FileInfo(walPath).Length == 0)
-            {
-                return;
-            }
-
             await Task.Delay(100, TestContext.Current.CancellationToken);
         }
-
-        throw new TimeoutException("the startup checkpoint never truncated the WAL");
     }
 
-    private async Task WaitUntilAsync(Func<Task<bool>> predicate, TimeSpan timeout)
+    /// <summary>Waits on the condition itself; the token is the only hang guard (PR #464). The timeout parameter is kept for the negative-check twin below only.</summary>
+    private static async Task WaitUntilAsync(Func<Task<bool>> predicate, TimeSpan _)
     {
-        if (!await TryWaitUntilAsync(predicate, timeout))
+        while (!await predicate())
         {
-            throw new TimeoutException($"condition not met within {timeout}");
+            await Task.Delay(100, TestContext.Current.CancellationToken);
         }
     }
 

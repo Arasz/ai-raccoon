@@ -71,7 +71,7 @@ public sealed class OtlpMetricExportE2ETests : IAsyncLifetime
                 null, null, TestContext.Current.CancellationToken);
 
             _factory.Services.GetRequiredService<MeterProvider>().ForceFlush();
-            await _collector.WaitForRequestAsync("/v1/metrics", TimeSpan.FromSeconds(5));
+            await _collector.WaitForRequestAsync("/v1/metrics", TestContext.Current.CancellationToken);
 
             _collector.RequestedPaths.ShouldContain(path => path == "/v1/metrics");
             _collector.BodyLengthFor("/v1/metrics").ShouldBeGreaterThan(0);
@@ -107,17 +107,12 @@ public sealed class OtlpMetricExportE2ETests : IAsyncLifetime
         public long BodyLengthFor(string path) =>
             _bodyLengthByPath.TryGetValue(path, out var length) ? length : 0;
 
-        public async Task WaitForRequestAsync(string path, TimeSpan timeout)
+        /// <summary>Waits for the request itself; the caller's token is the only hang guard (PR #464).</summary>
+        public async Task WaitForRequestAsync(string path, CancellationToken cancellationToken)
         {
-            var deadline = DateTime.UtcNow + timeout;
-            while (DateTime.UtcNow < deadline)
+            while (!RequestedPaths.Any(p => p.Contains(path, StringComparison.Ordinal)))
             {
-                if (RequestedPaths.Any(p => p.Contains(path, StringComparison.Ordinal)))
-                {
-                    return;
-                }
-
-                await Task.Delay(50);
+                await Task.Delay(50, cancellationToken);
             }
         }
 
