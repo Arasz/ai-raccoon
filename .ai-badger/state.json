@@ -4,6 +4,14 @@
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
     {
+      "id": "release-1-32-0",
+      "title": "Release 1.32.0: VERSION bump + checklist template adjusted for the post-delta wave + full manual checklist run (caught and fixed #466)",
+      "pr": 463,
+      "merged": true,
+      "date": "2026-08-22",
+      "summary": "VERSION 1.31.3 -> 1.32.0 (#463, release.yml cut v1.32.0; nuget publish unapproved per G1). Checklist template +5 items for the wave (doctor both states, model set code default end-to-end, kind=code discriminates on activation, doctor active model, docs gated), 1 narrowed, 1 deleted. Full run 28/28: first pass 23/3/2 — the two fails were a real blocker, #466: the real code-daemon model activated but every embed threw ArgumentOutOfRange and rows poisoned silently after 3 attempts; root cause (#467) OnnxEmbeddingGenerator pooled by the manifest's guess not the ONNX output's rank, present since 155f281e (#404) — #453 only made the model reachable by default; failed/abandoned embeds now log (EventIds 421-423; 416 renumbered to 418). After #467 merged, the three code-model items re-ran on two fresh roots: final 25 pass / 3 substituted / 0 fail. Also merged on the way: #464 (wall-clock timing gates replaced by deterministic assertions; Performance=Benchmark trait excluded from PR lanes — owner ruling: budgets only in a perf suite), #462 (doc drift). Findings against prior runs: 1.31.0's exit-18 mechanism and az-credential explanations were wrong; neither 1.31.0 nor #453 ever drove a live kind=code search after activating the real model. Filed #465 (search.adjustment unexported). Process: an unknown actor rewrote origin refs of two task branches during the day (pd-s9, release-1-32-0)."
+    },
+    {
       "id": "post-delta-next-steps",
       "title": "Post-delta next steps: S2 ADR-0089, S6a public-docs corpus, S9 default code model (#422), S4 H20 closed-by-moves, parity gate in nightly (one PR per WP)",
       "pr": 450,
@@ -268,7 +276,7 @@
       "summary": "Live test of the 7721 serve + hermes bridge against the real bank. 23/23 tools exercised on an isolated test project with zero residue verified; watch cycle proven end-to-end; metrics = memory_stats + queue meta + maintenance-stats (OTLP export off, /metrics 404). DB: 13,523 entries all embedded, 0 TTLs, 8 stale Active workspaces. Promotion queue: 998 bank-wide vs reserved ~200, borrowing, shared tier = 1 row, extraction propose-only. BUG (code+experiment): DeleteBySourcePath matches source_file not path, so the watch digest deletes manual memory_write rows citing a watched file (2/2 collateral victims in the test). Full report: docs/work/2026-08-09-ai-raccoon-mem-test.md."
     }
   ],
-  "next": "S6b — #414 history rewrite (owner executes; precondition: no pre-rewrite branch open, see #414 comment); then #436 code-corpus prune gap (cc or reassign); #459 PoolingDecision; owner ratifies ADR-0089 and bumps ai-badger VERSION for #424",
+  "next": "S6b — #414 history rewrite (owner-executed; no pre-rewrite branch open now that #460/#463 are merged — verify with gh pr list first); owner ratifies ADR-0089; owner bumps ai-badger VERSION for #424; #459 PoolingDecision (now adjacent to #467's rank-based pooling); #465 search.adjustment export; ParityGateTests p95 leg split; investigate the origin ref-rewriting actor; #436 prune gap",
   "filedNotStarted": [],
   "research": [],
   "stillTrue": [
