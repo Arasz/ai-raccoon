@@ -333,7 +333,7 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         // memory or code, so it is shown unconditionally like codeModel below.
         var threadsRaw = rows.GetValueOrDefault(EmbeddingSettingsKeys.Threads);
         await streams.WriteOutputLineAsync(threadsRaw is null
-            ? "threads: (unset — default max(1, cores/2))"
+            ? "threads: (unset — default max(1, logicalCores/2))"
             : $"threads: {threadsRaw}{(threadsRaw == "0" ? " (ORT default)" : "")}");
 
         // Independent of the memory engine (§3.3): shown even when no memory provider is

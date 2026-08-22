@@ -406,7 +406,7 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
         /// <summary>WP11-A/G16: embedding.threads didn't parse to a non-negative integer; the halved-core default is used instead.</summary>
         [LoggerMessage(EventId = 419, Level = LogLevel.Warning,
             Message = "Invalid embedding.threads setting '{Value}': expected a non-negative integer (0 = ORT default). "
-                      + "Using max(1, cores/2) instead.")]
+                      + "Using max(1, logicalCores/2) instead.")]
         public static partial void InvalidThreadsSetting(ILogger logger, string value);
     }
 

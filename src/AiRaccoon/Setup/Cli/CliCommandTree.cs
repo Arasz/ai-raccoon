@@ -207,7 +207,7 @@ internal static class CliCommandTree
         model.Add(show);
 
         model.Add(new Command("threads",
-            "ORT intra-op thread cap for local embedding sessions (0 = ORT default, unset = max(1, physicalCores/2)). " +
+            "ORT intra-op thread cap for local embedding sessions (0 = ORT default, unset = max(1, logicalCores/2)). " +
             "Takes effect on the next server restart — sessions are cached per engine fingerprint.")
         {
             new Argument<string>("n") { HelpName = "n" }

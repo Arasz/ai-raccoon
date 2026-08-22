@@ -234,7 +234,7 @@ public class SettingsCommandsTests
         var (exit, stdout, _) = await Run(["settings", "model", "show"], new FakeConfigStore());
 
         exit.ShouldBe(0);
-        stdout.ShouldContain("threads: (unset — default max(1, cores/2))");
+        stdout.ShouldContain("threads: (unset — default max(1, logicalCores/2))");
     }
 
     [Fact]
