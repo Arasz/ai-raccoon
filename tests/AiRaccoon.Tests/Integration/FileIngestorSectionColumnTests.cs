@@ -3,6 +3,7 @@ using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -25,6 +26,7 @@ namespace AiRaccoon.Tests.Integration;
 public class FileIngestorSectionColumnTests : IDisposable
 {
     private readonly SqliteConnection _conn;
+    private readonly EntryEmbedder _embedder;
     private readonly FileIngestor _ingestor;
     private readonly IModelMigrationLease _modelMigrationLease = Substitute.For<IModelMigrationLease>();
     private readonly string _testDir;
@@ -40,8 +42,10 @@ public class FileIngestorSectionColumnTests : IDisposable
         _conn = factory.OpenBankAsync(CancellationToken.None).GetAwaiter().GetResult();
 
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker())]);
-        _ingestor = new FileIngestor(matcher, new EntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider),
-            new SqliteMemorySourceStore(factory), TimeProvider.System, TestData.CreateEmbeddingService());
+        _embedder = new EntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider);
+        _ingestor = new FileIngestor(matcher, new SqliteMemorySourceStore(factory), TimeProvider.System,
+            TestData.CreateEmbeddingService(), NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance,
+            NullCodeIngestor.Instance, NullWatchStore.Instance, NullEmbedDrainPump.Instance);
 
         using var scopeCmd = _conn.CreateCommand();
         scopeCmd.CommandText = "INSERT INTO settings (key, value) VALUES (@key, @scope);";
@@ -50,8 +54,8 @@ public class FileIngestorSectionColumnTests : IDisposable
         scopeCmd.ExecuteNonQuery();
     }
 
-    /// <summary>heading_path is only written by <see cref="EntryEmbedder"/>'s inline embed, which is
-    /// a no-op with no engine configured (<see cref="EntryEmbedder.EmbedIfConfiguredAsync"/>).</summary>
+    /// <summary>heading_path is only written by an actual embed pass — a no-op with no engine
+    /// configured (<see cref="EntryEmbedder.EmbedIfConfiguredAsync"/>).</summary>
     private void ConfigureLocalEmbeddingProvider()
     {
         using var cmd = _conn.CreateCommand();
@@ -173,6 +177,9 @@ public class FileIngestorSectionColumnTests : IDisposable
         ConfigureLocalEmbeddingProvider();
 
         await _ingestor.IngestFileAsync(_conn, "acme", file, null, TestContext.Current.CancellationToken);
+        // heading_path is a side effect of an actual embed pass, not of ingest — ingest only
+        // leaves the row pending now; embed it directly here.
+        await _embedder.EmbedPendingBatchAsync(_conn, limit: 100, TestContext.Current.CancellationToken);
 
         var rows = new List<(string? Section, string? HeadingPath, string Value)>();
         await using var cmd = _conn.CreateCommand();

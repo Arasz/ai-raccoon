@@ -44,10 +44,12 @@ public sealed class SqliteMemoryStoreCodeDeleteTests : IDisposable
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker())]);
         var embedder = new EntryEmbedder(TestData.CreateEmbeddingService(), Substitute.For<IModelMigrationLease>(), timeProvider);
         var codeIngestor = new CodeIngestor(new CodeFileTypeMatcher(), new StubCodeChunker(), timeProvider);
-        var fileIngestor = new FileIngestor(matcher, embedder, sourceStore, timeProvider, TestData.CreateEmbeddingService(),
-            codeFileTypeMatcher: new CodeFileTypeMatcher(), codeIngestor: codeIngestor);
+        var pump = TestData.NewEmbedDrainPump();
+        var fileIngestor = new FileIngestor(matcher, sourceStore, timeProvider, TestData.CreateEmbeddingService(),
+            NullIgnoreRulesProvider.Instance, new CodeFileTypeMatcher(), codeIngestor,
+            NullWatchStore.Instance, pump);
         _store = new SqliteMemoryStore(_factory, sourceStore, fileIngestor, embedder, timeProvider,
-            NullLogger<SqliteMemoryStore>.Instance, new NoiseFilteringService([]), new SqliteSettingsStore(_factory));
+            NullLogger<SqliteMemoryStore>.Instance, new NoiseFilteringService([]), new SqliteSettingsStore(_factory), pump);
     }
 
     public void Dispose()
@@ -115,7 +117,8 @@ public sealed class SqliteMemoryStoreCodeDeleteTests : IDisposable
         var replaced = await _store.ReplaceIfFileChangedAsync("acme", file, newHash,
             TestContext.Current.CancellationToken);
 
-        replaced.ShouldBeTrue();
+        replaced.Replaced.ShouldBeTrue();
+        replaced.Corpus.ShouldBe(CorpusKind.Code, "a watched .cs file must signal the code corpus, not memory");
         var currentHashes = (await CodeHashesAsync(file)).ToArray();
         currentHashes.ShouldNotBeEmpty();
         currentHashes.ShouldNotContain(h => oldHashes.Contains(h));
@@ -134,7 +137,8 @@ public sealed class SqliteMemoryStoreCodeDeleteTests : IDisposable
         var replaced = await _store.ReplaceIfFileChangedAsync("acme", file, newHash,
             TestContext.Current.CancellationToken);
 
-        replaced.ShouldBeTrue();
+        replaced.Replaced.ShouldBeTrue();
+        replaced.Corpus.ShouldBe(CorpusKind.Memory, "a watched .md file must signal memory, not code");
         (await CountCodeAsync(file)).ShouldBe(0);
     }
 

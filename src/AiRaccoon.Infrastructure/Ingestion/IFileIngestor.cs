@@ -1,17 +1,12 @@
+using AiRaccoon.Core.Ingestion;
 using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Ingestion;
 
 /// <summary>
-///     One file's ingest outcome: rows written, and whether the watch digest may record a
-///     fingerprint for it. <see cref="FingerprintEligible" /> is false only when the file's ONLY
-///     matched corpus is code, the code chunker produced zero chunks (B1), AND the content is NOT
-///     empty/whitespace-only (S3) — a stand-in chunker (e.g. <c>NoOpCodeChunker</c>) must never let
-///     a file with real content settle into a fingerprinted, permanently hash-skipped state before
-///     a real chunker ever ran on it, but a genuinely empty/whitespace-only file chunks to zero
-///     rows FOREVER regardless of chunker quality, so it fingerprints like any other outcome —
-///     a memory match (regardless of row count), a mixed match, or no corpus matching the file at
-///     all — which all fingerprint exactly as before.
+///     One file's ingest outcome. <see cref="FingerprintEligible" /> is false only when the file's
+///     sole corpus is code, the chunker produced zero chunks and the content is not blank — a
+///     stand-in chunker must never fingerprint real content into a permanently hash-skipped state.
 /// </summary>
 /// <param name="ChunkHashes">
 ///     Every memory-corpus chunk hash this ingest wrote OR rediscovered unchanged — the file's
@@ -31,7 +26,14 @@ public readonly record struct FileIngestResult(
     int RowsInserted,
     bool FingerprintEligible,
     IReadOnlyList<string>? ChunkHashes = null,
-    IReadOnlyList<string>? CodeChunkHashes = null);
+    IReadOnlyList<string>? CodeChunkHashes = null)
+{
+    /// <summary>Which corpus this ingest actually wrote new rows to — <see cref="CorpusKind.Neither" />
+    /// when nothing was inserted (ignored/hidden/unrouted, or a rediscovered-unchanged file). One
+    /// ingest call only ever touches one corpus — routing is by file type, never both at once.</summary>
+    public CorpusKind WrittenCorpus =>
+        RowsInserted == 0 ? CorpusKind.Neither : CodeChunkHashes is not null ? CorpusKind.Code : CorpusKind.Memory;
+}
 
 /// <summary>One walked file's current memory-corpus chunk set, so the caller can prune the rest.</summary>
 public readonly record struct WalkedFile(string Path, IReadOnlyList<string> ChunkHashes);
@@ -42,11 +44,12 @@ public readonly record struct DirectoryIngestResult(int Indexed, IReadOnlyList<W
 public interface IFileIngestor
 {
     /// <summary>
-    ///     Set <paramref name="embedInline" /> false when the caller holds a write transaction: embedding
-    ///     runs the engine per chunk, and a lock held that long stalls another process's first bank open.
+    ///     Chunks and inserts <paramref name="path" />, leaving every row `embed_state = 'pending'` —
+    ///     the caller enqueues the corpus's embed-drain signal once it is safe to (after any
+    ///     wrapping transaction commits).
     /// </summary>
     Task<FileIngestResult> IngestFileAsync(SqliteConnection connection, string projectId, string path,
-        string? context, CancellationToken cancellationToken, bool embedInline = true);
+        string? context, CancellationToken cancellationToken);
 
     Task<DirectoryIngestResult> IngestDirectoryAsync(SqliteConnection connection, string projectId, string path,
         string? context, CancellationToken cancellationToken);

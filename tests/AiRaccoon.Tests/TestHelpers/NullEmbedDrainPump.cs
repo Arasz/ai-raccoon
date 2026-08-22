@@ -1,11 +1,12 @@
 using AiRaccoon.Core.EventPump;
 using AiRaccoon.Infrastructure.Embedding;
 
-namespace AiRaccoon.Infrastructure.Ingestion;
+namespace AiRaccoon.Tests.TestHelpers;
 
-/// <summary>Null object for callers that construct <see cref="FileIngestor" /> without an embed
-/// topic (test/legacy positional call sites) — every enqueue reports "dropped", never queues, and
-/// nothing ever drains it. Production always supplies the real shared pump.</summary>
+/// <summary>Test double for a test that constructs <see cref="AiRaccoon.Infrastructure.Ingestion.FileIngestor" />
+/// or <see cref="AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore" /> without caring about
+/// the embed topic — every enqueue reports "dropped", never queues, and nothing ever drains it.
+/// Production always supplies the real shared pump; this has no production use.</summary>
 public sealed class NullEmbedDrainPump : IEventPump<EmbedDrainRequest>
 {
     public static NullEmbedDrainPump Instance { get; } = new();

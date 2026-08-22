@@ -1,10 +1,15 @@
+using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Core.Memory.Filtering;
+using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
+using NSubstitute;
 using Shouldly;
 using Xunit;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
@@ -24,6 +29,7 @@ public sealed class StructurePopulationTests : IAsyncLifetime
 
     private readonly string _dataRoot = TestData.CreateTempRoot();
     private readonly FakeTimeProvider _clock = new(FixedNow);
+    private readonly IEventPump<EmbedDrainRequest> _pump = TestData.NewEmbedDrainPump();
     private SqliteConnectionFactory _factory = null!;
     private SqliteMemoryStore _store = null!;
 
@@ -33,8 +39,17 @@ public sealed class StructurePopulationTests : IAsyncLifetime
         _factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
-        _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), _clock,
-            TestData.CreateEmbeddingService());
+        var sourceStore = new SqliteMemorySourceStore(_factory);
+        var embeddings = TestData.CreateEmbeddingService();
+        var markdownChunker = TestData.RealMarkdownChunker();
+        var matcher = new FileTypeMatcher(
+            [new MarkdownFileTypeHandler(markdownChunker), new JsonFileTypeHandler(TestData.RealJsonChunker(markdownChunker))]);
+        var fileIngestor = new FileIngestor(matcher, sourceStore, _clock, embeddings,
+            NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
+            NullWatchStore.Instance, _pump);
+        var embedder = new EntryEmbedder(embeddings, Substitute.For<IModelMigrationLease>(), _clock);
+        _store = new SqliteMemoryStore(_factory, sourceStore, fileIngestor, embedder, _clock,
+            NullLogger<SqliteMemoryStore>.Instance, new NoiseFilteringService([]), new SqliteSettingsStore(_factory), _pump);
     }
 
     public ValueTask DisposeAsync()
@@ -70,6 +85,11 @@ public sealed class StructurePopulationTests : IAsyncLifetime
         var ingested = await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
 
         ingested.ShouldBe(1);
+        // Ingest only leaves the row pending and enqueues the signal; drain it explicitly to
+        // exercise the real embed pass this test is actually about.
+        await TestData.DrainEmbedTopicAsync(_factory, _pump,
+            new EntryEmbedder(TestData.CreateEmbeddingService(), Substitute.For<IModelMigrationLease>(), _clock),
+            cancellationToken: TestContext.Current.CancellationToken);
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         (await Scalar(connection, "SELECT count(*) FROM vec_entries")).ShouldBeGreaterThan(0,
             "content embedding pipeline must have run for the structure claim to mean anything");

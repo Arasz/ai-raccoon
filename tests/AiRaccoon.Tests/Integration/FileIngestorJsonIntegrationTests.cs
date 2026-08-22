@@ -1,11 +1,9 @@
 using AiRaccoon.Core.Ingestion;
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Time.Testing;
-using NSubstitute;
 using Xunit;
 
 namespace AiRaccoon.Tests.Integration;
@@ -16,9 +14,7 @@ public class FileIngestorJsonIntegrationTests : IDisposable
 {
     private readonly SqliteConnection _conn;
     private readonly FileIngestor _ingestor;
-    private readonly IModelMigrationLease _modelMigrationLease = Substitute.For<IModelMigrationLease>();
     private readonly string _testDir;
-    private readonly TimeProvider _timeProvider = new FakeTimeProvider();
 
     public FileIngestorJsonIntegrationTests()
     {
@@ -31,8 +27,9 @@ public class FileIngestorJsonIntegrationTests : IDisposable
 
         var sourceStore = new SqliteMemorySourceStore(factory);
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker()), new JsonFileTypeHandler(TestData.RealJsonChunker())]);
-        _ingestor = new FileIngestor(matcher, new EntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider), sourceStore, TimeProvider.System,
-            TestData.CreateEmbeddingService());
+        _ingestor = new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
+            NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
+            NullWatchStore.Instance, NullEmbedDrainPump.Instance);
 
         // Configure global scope to include testDir
         using var scopeCmd = _conn.CreateCommand();

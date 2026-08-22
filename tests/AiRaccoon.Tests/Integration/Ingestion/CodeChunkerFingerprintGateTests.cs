@@ -46,14 +46,15 @@ public sealed class CodeChunkerFingerprintGateTests : IDisposable
 
         var firstDigest = await store.ReplaceIfFileChangedAsync("acme", file, "unchanged-hash",
             TestContext.Current.CancellationToken);
-        firstDigest.ShouldBeTrue("no fingerprint on the file yet, so the first digest must run");
+        firstDigest.Replaced.ShouldBeTrue("no fingerprint on the file yet, so the first digest must run");
+        firstDigest.Corpus.ShouldBe(CorpusKind.Code, "Program.cs must route to the code corpus, not memory");
 
         var codeCount = await CountCodeEntriesAsync(provider, file);
         codeCount.ShouldBeGreaterThan(0, "the real CodeChunker must produce at least one chunk for non-empty code");
 
         var secondDigest = await store.ReplaceIfFileChangedAsync("acme", file, "unchanged-hash",
             TestContext.Current.CancellationToken);
-        secondDigest.ShouldBeFalse(
+        secondDigest.Replaced.ShouldBeFalse(
             "chunking succeeded and the fingerprint is now recorded (B1), so an unchanged hash hash-skips");
     }
 

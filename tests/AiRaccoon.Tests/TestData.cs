@@ -2,6 +2,7 @@ using AiRaccoon.Infrastructure.Embedding.Manifest;
 using System.Security.Cryptography;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.EventPump;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.Filtering;
@@ -17,6 +18,7 @@ using AiRaccoon.Infrastructure.Embedding.Download;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
@@ -75,14 +77,39 @@ public static class TestData
         var embedder = new EntryEmbedder(embeddings, modelMigrationLease ?? ModelMigrationLease, timeProvider);
         var matcher = new FileTypeMatcher(
             [new MarkdownFileTypeHandler(markdownChunker), new JsonFileTypeHandler(jsonChunker)]);
-        var codeFileTypeMatcher = codeChunker is null ? null : new CodeFileTypeMatcher();
-        var codeIngestor = codeChunker is null ? null : new CodeIngestor(new CodeFileTypeMatcher(), codeChunker, timeProvider);
-        var fileIngestor = new FileIngestor(matcher, embedder, sourceStore, timeProvider, embeddings,
-            ignoreRulesProvider: ignoreRulesProvider,
-            codeFileTypeMatcher: codeFileTypeMatcher, codeIngestor: codeIngestor);
+        // This helper's own documented contract is "omitted, the store behaves as a memory-only
+        // bank" — a fixed no-op pump, never a caller override; a test that needs a real one
+        // constructs FileIngestor/SqliteMemoryStore directly instead of through this convenience.
+        IEventPump<EmbedDrainRequest> pump = NullEmbedDrainPump.Instance;
+        var fileIngestor = codeChunker is null
+            ? new FileIngestor(matcher, sourceStore, timeProvider, embeddings,
+                ignoreRulesProvider ?? NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance,
+                NullCodeIngestor.Instance, NullWatchStore.Instance, pump)
+            : new FileIngestor(matcher, sourceStore, timeProvider, embeddings,
+                ignoreRulesProvider ?? NullIgnoreRulesProvider.Instance, new CodeFileTypeMatcher(),
+                new CodeIngestor(new CodeFileTypeMatcher(), codeChunker, timeProvider), NullWatchStore.Instance, pump);
         var noiseFilteringService = new NoiseFilteringService(noisePolicies ?? []);
         return new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService,
-            settings ?? new SqliteSettingsStore(factory));
+            settings ?? new SqliteSettingsStore(factory), pump);
+    }
+
+    /// <summary>
+    ///     Drains every embed-topic request currently queued the same way
+    ///     <see cref="EmbedDrainService" />'s own consumer would — one <c>DrainOnceAsync</c> pass per
+    ///     queued item — without starting the hosted service. The one place tests share this instead
+    ///     of hand-rolling a drain loop per file (a write leaves rows <c>pending</c> and enqueues;
+    ///     nothing embeds until this runs).
+    /// </summary>
+    public static async Task DrainEmbedTopicAsync(ISqliteConnectionFactory factory,
+        IEventPump<EmbedDrainRequest> pump, IEntryEmbedder entryEmbedder, ICodeEmbedder? codeEmbedder = null,
+        CancellationToken cancellationToken = default)
+    {
+        var service = new EmbedDrainService(pump, factory, entryEmbedder, codeEmbedder ?? new FakeCodeEmbedder(),
+            new SqliteSettingsStore(factory), TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
+        foreach (var request in pump.DrainUpTo(int.MaxValue))
+        {
+            await service.DrainOnceAsync(request, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>

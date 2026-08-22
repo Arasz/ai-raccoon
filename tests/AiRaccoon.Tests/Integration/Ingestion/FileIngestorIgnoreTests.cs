@@ -1,11 +1,9 @@
 using AiRaccoon.Core.Ingestion;
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Time.Testing;
-using NSubstitute;
 using Shouldly;
 using Xunit;
 
@@ -21,9 +19,7 @@ public sealed class FileIngestorIgnoreTests : IDisposable
 {
     private readonly SqliteConnection _conn;
     private readonly FileIngestor _ingestor;
-    private readonly IModelMigrationLease _modelMigrationLease = Substitute.For<IModelMigrationLease>();
     private readonly string _testDir;
-    private readonly TimeProvider _timeProvider = new FakeTimeProvider();
 
     public FileIngestorIgnoreTests()
     {
@@ -36,8 +32,9 @@ public sealed class FileIngestorIgnoreTests : IDisposable
 
         var sourceStore = new SqliteMemorySourceStore(factory);
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker())]);
-        _ingestor = new FileIngestor(matcher, new EntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider),
-            sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(), new IgnoreRulesProvider());
+        _ingestor = new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
+            new IgnoreRulesProvider(), NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
+            NullWatchStore.Instance, NullEmbedDrainPump.Instance);
 
         using var scopeCmd = _conn.CreateCommand();
         scopeCmd.CommandText = "INSERT INTO settings (key, value) VALUES (@key, @scope);";

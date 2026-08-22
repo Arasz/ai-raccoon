@@ -3,14 +3,12 @@ using System.Threading.Channels;
 namespace AiRaccoon.Core.EventPump;
 
 /// <summary>
-///     Bounded-channel pump: one instance per topic (docs/work/2026-08-22-post-delta-3-plan.md
-///     WP11-B1, owner ruling G17). The channel is built at its topic's fixed <see cref="PumpTopic.Ceiling" />
-///     with <see cref="BoundedChannelFullMode.Wait" />; capacity is enforced separately by an
-///     <see cref="Interlocked" /> reservation ahead of the channel — <see cref="TryWrite" /> is
-///     never called past that reservation — so <see cref="ApplyCapacity" /> can move the effective
-///     cap at runtime without rebuilding the channel. This is exactly
-///     <c>MeasurementBuffer</c>'s pre-extraction contract (Finding (c)): full → drop, counted,
-///     never block, never grow.
+///     Bounded-channel pump: one instance per topic (ADR-0091). Built at
+///     <see cref="PumpTopic.Ceiling" /> with <see cref="BoundedChannelFullMode.Wait" />; an
+///     <see cref="Interlocked" /> reservation ahead of the channel enforces the (possibly lower)
+///     effective capacity, so <see cref="ApplyCapacity" /> can move it at runtime without
+///     rebuilding the channel — full drops and counts (mirrors <c>MeasurementBuffer</c>'s
+///     contract), never blocks, never grows.
 /// </summary>
 public sealed class EventPump<T> : IEventPump<T>
 {

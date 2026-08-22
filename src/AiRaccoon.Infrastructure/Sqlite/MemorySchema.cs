@@ -581,14 +581,10 @@ internal static class MemorySchema
             command.CommandText = Ddl;
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
 
-            // S2: same cadence as the Ddl block above (only on a digest change, not every open —
-            // WP1/ADR-0075's whole point is a steady-state open pays four statements, not this
-            // block's ~40) — but NOT folded into the Ddl string itself: unlike every CREATE/DROP
-            // ... IF [NOT] EXISTS statement there, a bare ALTER TABLE ADD COLUMN is not idempotent
-            // under a race (two connections both detecting the SAME digest mismatch, e.g. the
-            // maintenance hosted service and the first real request opening a stale bank at once),
-            // so it stays its own step with its own column-existence check and a tolerated loss of
-            // that race (see EnsureCodeEmbedAttemptsColumnAsync).
+            // Not folded into the Ddl string: unlike CREATE/DROP ... IF [NOT] EXISTS there, a
+            // bare ALTER TABLE ADD COLUMN is not idempotent under two connections racing the same
+            // digest mismatch — its own step, with its own column-existence check (see
+            // EnsureCodeEmbedAttemptsColumnAsync).
             await EnsureCodeEmbedAttemptsColumnAsync(connection, cancellationToken).ConfigureAwait(false);
 
             var testHook = TestOnlyAfterDdlHookAsync.Value;

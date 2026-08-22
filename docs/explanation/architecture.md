@@ -305,11 +305,16 @@ the scope check, a memory-indexable file (`.md`/`.markdown`/`.txt`/`.json`) is s
 `.ts`, `.go`, `.rs`, … — the v1 list, `CodeExtensions`) routes instead to `CodeIngestor` and the
 code corpus (`code_entries`) — memory extensions always win on overlap, so a `.md` file inside a
 code directory still lands in `entries`. Anything neither pipeline claims, or hidden, is silently
-skipped in both. Each new memory chunk is embedded immediately through `EntryEmbedder` when an
-engine is configured — no extension-host hook sits on this path (that pipeline was removed
-entirely, ADR-0016); without an engine the chunk stays `pending` for `memory_embed_pending` to
-pick up later. The chunker uses the o200k_base tokenizer with code-fence-aware splitting and an
-overlay window for context continuity between chunks.
+skipped in both. Every new memory or code chunk lands `embed_state = 'pending'` — no chunk is
+embedded inline as part of ingest, whether or not an engine is configured (`FileIngestor` does
+not hold an embedder reference at all). The caller enqueues the corpus's `EmbedDrainRequest` on
+the shared embed topic once it is safe to (after any wrapping transaction commits), and
+`EmbedDrainService`'s single background reader drains it (ADR-0076's outbox, ADR-0091's pump). A
+write is searchable via FTS5 immediately; the vector modality follows once that drain pass runs
+— no extension-host hook sits on this path either (that pipeline was removed entirely, ADR-0016).
+`memory_embed_pending` remains the operator-initiated direct drain for whatever a passive poll
+has not yet reached. The chunker uses the o200k_base tokenizer with code-fence-aware splitting
+and an overlay window for context continuity between chunks.
 
 **Chunk bounds** are clamped to the configured embedding engine's maximum input
 tokens: 256 for the bundled all-MiniLM-L6-v2, 8191 for OpenAI-compatible models.

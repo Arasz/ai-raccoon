@@ -45,9 +45,9 @@ internal static partial class ToolRefusals
         // update'); a plain InvalidOperationException still means the asset is genuinely missing
         // and stays unmapped (docs/reference/agent-memory-server.md Error shapes).
         [typeof(BundledModelInstallReplacedException)] = "embedding-install-replaced",
-        // WP5 (§3.3/§12.2 H5): a configured code engine whose manifest/model files fail to
-        // load — a genuine misconfiguration, so code searches refuse actionably instead of
-        // silently degrading like the unconfigured case (memory tools are unaffected).
+        // A configured code engine whose manifest/model files fail to load is a genuine
+        // misconfiguration (docs/work/2026-08-21-code-search-implementation-plan.md §12.2 H5):
+        // refuse rather than silently degrade like the unconfigured case.
         [typeof(CodeEngineUnloadableException)] = "code-engine-unloadable",
         // Moved out of DirectThrowPrefixes by docs/adr/0065: the consent gate now lives in
         // ShareExtractService, so it raises a domain exception instead of a bare McpException.

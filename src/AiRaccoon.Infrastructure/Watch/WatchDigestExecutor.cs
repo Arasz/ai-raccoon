@@ -84,15 +84,11 @@ public sealed class WatchDigestExecutor(
         // Delete + re-ingest + fingerprint are one transaction in the store: the pre-check above is
         // only a cheap filter, and a concurrent process either loses the race and skips or, on a
         // crash mid-digest, rolls back — the file is never left chunkless behind a matching hash.
-        var replaced = await store.ReplaceIfFileChangedAsync(projectId, normalized, hash, cancellationToken)
+        var replaceResult = await store.ReplaceIfFileChangedAsync(projectId, normalized, hash, cancellationToken)
             .ConfigureAwait(false);
-        if (replaced)
-        {
-            // WP11-B2: signal the embed topic instead of draining inline and unbounded — the rows
-            // stay embed_state='pending' (the durable outbox, ADR-0076) until EmbedDrainService's
-            // single reader gets to them.
-            embedDrainPump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Memory));
-        }
+        // Signals whichever corpus the replace actually wrote to; rows stay embed_state='pending'
+        // (the durable outbox, ADR-0076) until EmbedDrainService's single reader drains them.
+        embedDrainPump.SignalWritten(replaceResult.Corpus);
 
         await watchStore.UpdateLastChangeAsync(projectId, normalizedWatch, Now(), cancellationToken)
             .ConfigureAwait(false);

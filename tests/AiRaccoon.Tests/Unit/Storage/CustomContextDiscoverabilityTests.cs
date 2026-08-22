@@ -3,6 +3,7 @@ using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -41,11 +42,13 @@ public sealed class CustomContextDiscoverabilityTests : IDisposable
     private SqliteMemoryStore CreateStore()
     {
         var embedder = new EntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider);
-        return new SqliteMemoryStore(_factory, new SqliteMemorySourceStore(_factory),
-            new FileIngestor(new FileTypeMatcher([]), embedder, new SqliteMemorySourceStore(_factory),
-                new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService()),
+        var fileIngestor = new FileIngestor(new FileTypeMatcher([]), new SqliteMemorySourceStore(_factory),
+            new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService(),
+            NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
+            NullWatchStore.Instance, NullEmbedDrainPump.Instance);
+        return new SqliteMemoryStore(_factory, new SqliteMemorySourceStore(_factory), fileIngestor,
             embedder, new FakeTimeProvider(FixedNow), NullLogger<SqliteMemoryStore>.Instance,
-            new NoiseFilteringService([]), new SqliteSettingsStore(_factory));
+            new NoiseFilteringService([]), new SqliteSettingsStore(_factory), NullEmbedDrainPump.Instance);
     }
 
     [Fact]
