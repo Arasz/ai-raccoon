@@ -842,7 +842,7 @@ point, not exercised in v1.
 ```
 src/AiRaccoon/              Thin MCP server — tool definitions, transport, DI
   Tools/MemoryTools.cs      10 [McpServerTool] methods, no business logic
-                            (27 tools in all, across the nine Tools/*.cs classes)
+                            (28 tools in all, across the ten Tools/*.cs classes)
   Tools/PerformanceTools.cs memory_performance — thin over MetricsReportService (ADR-0065)
   Access/MemoryAccessGuard  Enforces access modes at the tool boundary
   Setup/McpServerSetup.cs   --transport CLI flag → stdio/HTTP host selection

@@ -57,6 +57,7 @@ internal sealed class ConfigCommands(
                 ["model", "download"] => await modelDownload.RunAsync(parsedCliArgs, cliInput.Options.DataRoot, streams, ctx),
                 ["settings", "model", "reset"] => await settings.ModelResetAsync(store, streams, ctx),
                 ["settings", "model", "show"] => await settings.ModelShowAsync(store, streams, ctx),
+                ["settings", "model", "threads"] => await settings.ModelThreadsSetAsync(parsedCliArgs, store, streams, ctx),
                 ["settings", "model", "code", "reset"] => await settings.ModelCodeResetAsync(store, streams, ctx),
                 ["settings", "retrieval", "alpha", "set"] => await settings.RetrievalAlphaSetAsync(parsedCliArgs, store, streams, ctx),
                 ["settings", "retrieval", "alpha", "show"] => await settings.RetrievalAlphaShowAsync(store, streams, ctx),

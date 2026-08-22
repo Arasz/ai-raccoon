@@ -38,6 +38,7 @@ public class SettingsCommandTreeTests
         ("settings access list", ["settings", "access", "list"]),
         ("settings model reset", ["settings", "model", "reset"]),
         ("settings model show", ["settings", "model", "show"]),
+        ("settings model threads", ["settings", "model", "threads", "5"]),
         ("settings model code reset", ["settings", "model", "code", "reset"]),
         ("settings retrieval alpha set", ["settings", "retrieval", "alpha", "set", "0.5"]),
         ("settings retrieval alpha show", ["settings", "retrieval", "alpha", "show"]),
