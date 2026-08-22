@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using AiRaccoon.Core.Access;
+using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Infrastructure.Workspace;
 using JetBrains.Annotations;
 using ModelContextProtocol.Server;
 

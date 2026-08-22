@@ -4,9 +4,6 @@ using Dapper;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 
-/// <summary>One-shot orphan report for `ai-raccoon extract prune` (ADR-0023): rows PruneOrphansAsync found (and, with apply, removed) per project.</summary>
-public sealed record PromotionQueueOrphanReport(int TotalOrphans, IReadOnlyDictionary<string, int> PerProject);
-
 /// <summary>Propose-tier persistence in the memory.db promotion_queue table; never synced (waiting rows are per-machine by design).</summary>
 public sealed class SqlitePromotionQueueStore(
     ISqliteConnectionFactory factory,
