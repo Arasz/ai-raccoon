@@ -39,7 +39,7 @@ internal static class CliSettingsBackend
         }
 
         var executable = BackendLaunchArguments.Executable() ??
-            throw new SettingsServerUnavailableException("ai-raccoon: the running executable path is unknown");
+            throw new SettingsServerUnavailableException($"ai-raccoon: {BackendLaunchArguments.UnavailableExecutableMessage(config)}");
 
         BackendResult acquired;
         try
@@ -55,7 +55,8 @@ internal static class CliSettingsBackend
         {
             throw new SettingsServerUnavailableException(
                 $"ai-raccoon: no settings server at {ServerProbe.EndpointFor(config.Port)} " +
-                $"(serve exit {acquired.ServeExitCode?.ToString(CultureInfo.InvariantCulture) ?? "none"})");
+                $"(serve exit {acquired.ServeExitCode?.ToString(CultureInfo.InvariantCulture) ?? "none"})" +
+                (acquired.ServeStderr is { } stderr ? $" — stderr: {stderr}" : string.Empty));
         }
 
         var tokenFile = new McpTokenFile(config.Options.DataRoot);
