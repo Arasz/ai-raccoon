@@ -39,9 +39,11 @@ internal static class RetrievalTuningSets
     }
 
     /// <summary>
-    ///     What generated the document, from the expectedSource prefix: 'docs' is the reviewed
-    ///     project's own tree, 'ai-badger' is the vendored framework. Measured on the corpus:
-    ///     those are the only two generators docs-memory.db carries. // TODO(S6a): re-measure
+    ///     What generated the document, from the expectedSource prefix: 'docs' is this project's
+    ///     own documentation tree, 'ai-badger' is the vendored framework. Measured on
+    ///     docs-memory.db 2026-08-22: those are the only two generators it carries — 109 source
+    ///     files under docs/, 87 under .ai-badger/, plus 3 at the repository root
+    ///     (README/CLAUDE/HERMES, which the expectedSource prefixes do not address).
     /// </summary>
     public static string Family(string expectedSource)
     {
