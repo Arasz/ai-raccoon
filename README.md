@@ -30,6 +30,7 @@ flowchart LR
 ```
 
 ## What's new
+- **1.32.1 fixes three things the 1.32.0 post-publish check found: the downloaded code model's manifest now says `model-output` (no more `[417]` on every load, and a wrong manifest is repaired at activation), the server answers code-engine activation refusals with a 400 and the reason instead of a bare 500 (the CLI prints it), and `sync add s3 --region` no longer redirects a custom endpoint to amazonaws.com.** (1.32.1) [#470](https://github.com/Arasz/ai-raccoon/issues/470) · [#472](https://github.com/Arasz/ai-raccoon/issues/472) · [#484](https://github.com/Arasz/ai-raccoon/issues/484)
 - **The default code model now installs with one command — `ai-raccoon model set code default` downloads and activates `faxenoff/code-daemon-embed-v1`, and code chunks use its real 512-token window instead of a mistaken 126-token cap.** (1.32.0) [#422](https://github.com/Arasz/ai-raccoon/issues/422) · [#453](https://github.com/Arasz/ai-raccoon/pull/453)
 - **Cloud snapshots are authenticity-checked (HMAC) before attach, and model activation verifies sha256 pins.** An encrypted bank synced by ≥1.31 cannot be pulled by <1.31; upgrade both ends of an encrypted sync pair together. (1.31.0) [#431](https://github.com/Arasz/ai-raccoon/pull/431) · [#429](https://github.com/Arasz/ai-raccoon/pull/429)
 - **A second corpus indexes your code, searchable via `memory_search kind=code` — never synced, never mixed with memory.** (1.30.0) [Feature](docs/features/code-corpus/) · [ADR-0085](docs/adr/0085-a-second-code-only-corpus-in-the-same-bank.md)
