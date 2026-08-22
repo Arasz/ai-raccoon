@@ -20,7 +20,12 @@ namespace AiRaccoon.Tests.Integration;
 public sealed class QueryConstructionTests : IDisposable
 {
     private const string ProjectId = "ai-raccoon"; // matches PROJECT_ID in scripts/src/corpus_config.py
-    private const string Adr0070File = "docs:adr:0070-documentation-structure-and-trust-model.md";
+    private const string IdentifierAdrFile = "docs:adr:0075-only-the-server-writes-to-the-bank.md";
+
+    // The bare number, not "ADR-0070": on this corpus an ADR's own heading reads "0075. Only the server writes to the bank", and the file never contains the string
+    // "ADR-0070" — only OTHER ADRs citing it do. Querying the prefixed form measured the citation
+    // graph, not identifier retrieval.
+    private const string IdentifierQuery = "0075";
     private const int RankCutoff = 5;
     private const int SearchLimit = 10;
 
@@ -94,17 +99,15 @@ public sealed class QueryConstructionTests : IDisposable
     [Fact]
     public async Task AndPrimary_UnderMatchedRows_DocumentsKnownRankRegression()
     {
-        await EnsureModelAsync();
-        var results = (await _store.SearchAsync(new SearchQuery(
-            ProjectId, "How does the project handle data erasure?", SearchScope.Project,
-            Limit: 30, MinRelativeScore: 0.0, RrfK: 60, FtsWeight: 1, VectorWeight: 0), TestContext.Current.CancellationToken)).Results;
-        var rank = FirstFileRank([.. results.Select(r => r.Hash)],
-            FileLevel("docs:adr:0067-registry-driven-erasure-with-runtime-verification.md"));
-        rank.ShouldNotBeNull("A6's AND primary matches only ADR-0068 rows; the OR fallback must restore ADR-0067");
-        rank.Value.ShouldBe(8,
-            "known regression (WP3b): previously ranked <= 5 within the FTS-only top 5; now pinned at " +
-            "exactly rank 8 (Limit widened to 30 only to observe it) -- see " +
-            "docs/work/2026-08-14-retrieval-rank-regressions.md; invert when WP3b lands");
+        Assert.Skip("ai-raccoon#454: this pinned a jsaa-corpus-specific measurement — the query " +
+                    "'How does the project handle data erasure?', whose AND primary matched only " +
+                    "ADR-0068 rows, with ADR-0067 restored at exactly rank 8. Both ADRs and the " +
+                    "query belong to the corpus that left HEAD at ADR-0090, and no equivalent " +
+                    "under-matched pair has been measured on the public corpus yet. Skipped rather " +
+                    "than re-pinned to an invented number: an assertion never seen red on this " +
+                    "corpus is not a gate (.ai-badger/invariants/prove-the-check-fails.md). The " +
+                    "OR-fallback TRIGGER is still gated by AndPrimary_ZeroMatch_RetriesWithOrFallback.");
+        await Task.CompletedTask;
     }
 
     /// <summary>A provably zero-matching AND primary must retry with the OR fallback (results equal the OR-only expression).</summary>
@@ -125,22 +128,22 @@ public sealed class QueryConstructionTests : IDisposable
     ///     path at rank ≤5; Q1 (full question) and Q3 (content-only) return results.
     /// </summary>
     [Fact]
-    public async Task DiagnosticTriplet_FtsOnly_AnswersAdr0070WithinTop5()
+    public async Task DiagnosticTriplet_FtsOnly_AnswersIdentifierAdrWithinTop5()
     {
         await EnsureModelAsync();
-        var adr0070 = FileLevel(Adr0070File);
+        var identifierAdr = FileLevel(IdentifierAdrFile);
 
-        var q2 = await TopHashesAsync("ADR-0070", 1, 0, TestContext.Current.CancellationToken);
-        var q2Rank = FirstFileRank(q2, adr0070);
+        var q2 = await TopHashesAsync(IdentifierQuery, 1, 0, TestContext.Current.CancellationToken);
+        var q2Rank = FirstFileRank(q2, identifierAdr);
         q2Rank.ShouldNotBeNull("Q2 'ADR-0070' must find a chunk of the ADR-0070 file in the FTS-only top-5");
         q2Rank.Value.ShouldBeLessThanOrEqualTo(RankCutoff,
-            "Q2 'ADR-0070' must answer at FTS-only rank ≤5 (plan C gate, Wave 1.4)");
+            $"Q2 '{IdentifierQuery}' must answer at FTS-only rank <= {RankCutoff} (plan C gate, Wave 1.4)");
 
-        foreach (var (id, text) in new[] { ("Q1", "What is ADR-0070 about?"), ("Q3", "documentation structure trust model") })
+        foreach (var (id, text) in new[] { ("Q1", "What is ADR-0075 about?"), ("Q3", "only the server writes to the bank") })
         {
             var results = await TopHashesAsync(text, 1, 0, TestContext.Current.CancellationToken);
             results.ShouldNotBeEmpty($"{id} must return results on the FTS-only path");
-            _output.WriteLine($"{id} '{text}': {results.Count} FTS-only hits, ADR-0070 file rank {FirstFileRank(results, adr0070)?.ToString() ?? "miss"}");
+            _output.WriteLine($"{id} '{text}': {results.Count} FTS-only hits, identifier ADR file rank {FirstFileRank(results, identifierAdr)?.ToString() ?? "miss"}");
         }
     }
 
@@ -235,56 +238,27 @@ public sealed class QueryConstructionTests : IDisposable
         var queries = LoadQueries();
         var hashMap = _hashMap;
 
-        // Re-pinned 2026-08-06 to the re-pinned corpus (9397bbef; see
-        // docs/work/archive/2026-08-06-baseline-repin-new-corpus.md): A6 and C2 are dropped
-        // from this comparison; C5's baseline is re-pinned to 5.
-        var wave0 = new Dictionary<string, int>(StringComparer.Ordinal)
+        // Measured on the public docs corpus, 2026-08-22 (ADR-0090). These are this corpus's
+        // OWN baseline, not a port: the previous table recorded ranks against the private jsaa
+        // corpus and a "WP3b known regression" band that has no counterpart here, because there
+        // is no earlier measurement on this corpus to have regressed from. Ceilings, so an
+        // improvement never goes red; a slide does.
+        var baseline = new Dictionary<string, int>(StringComparer.Ordinal)
         {
-            ["A1"] = 2, ["A2"] = 1, ["A3"] = 1, ["A4"] = 2, ["A5"] = 1,
-            ["A7"] = 1, ["C1"] = 1, ["C5"] = 5
+            ["A1"] = 3, ["A2"] = 1, ["A3"] = 4, ["A4"] = 1, ["A5"] = 1,
+            ["A7"] = 1, ["C1"] = 3, ["C5"] = 3
         };
 
-        // Known-regressed ids (WP3b, 2026-08-14): exact observed rank on the denser corpus,
-        // replacing the wave0 ceiling for these ids only.
-        //
-        // A1 joined them when the section column's FTS weight dropped to 4 (docs/adr/0044).
-        // Its expected file now ranks 3 behind chunks of docs/explanation/frontend-architecture.md,
-        // one of which is the section "3. The gluestack -> shadcn/ui pivot" whose text reads
-        // "gluestack.io ... was evaluated and rejected. This section states the evidence plainly."
-        // That is a correct answer to A1's question. The pin records the measured rank; the real
-        // defect is that scripts/baseline-queries.json admits one expectedSource per query, so a
-        // question with two right answers must score one of them as a miss (ADR-0044 Consequences).
-        var knownRegressed = new Dictionary<string, (int Best, int Worst)>(StringComparer.Ordinal)
-        {
-            ["A1"] = (3, 3),
-            ["A3"] = (2, 3),
-            ["A7"] = (3, 3)
-        };
-
-        foreach (var (id, wave0Rank) in wave0)
+        foreach (var (id, baselineRank) in baseline)
         {
             var query = queries.First(q => q.Id == id);
             var top5 = await TopHashesAsync(query.Query, 1, 1, TestContext.Current.CancellationToken);
             var rank = FirstFileRank(top5, FileLevel(query.ExpectedSource!));
             _output.WriteLine($"{id} hybrid top-5: {string.Join(", ", top5.Select(h => hashMap.FirstOrDefault(p => p.Value == h).Key ?? h))}");
-            rank.ShouldNotBeNull($"{id} must still find its expected file (Wave 0 rank {wave0Rank})");
-
-            if (knownRegressed.TryGetValue(id, out var regressed))
-            {
-                // A band, not an exact value: ranks come out of RRF fusion over near-tied
-                // candidates, and the two platforms order those ties differently — A3 measures 3 on
-                // macOS and 2 on Linux CI (2026-08-14). The band is still tight enough that any
-                // movement outside it goes red in either direction, which is what the pin is for.
-                rank!.Value.ShouldBeInRange(regressed.Best, regressed.Worst,
-                    $"known regression (WP3b): {id} was Wave 0 rank <= {wave0Rank}, now pinned to " +
-                    $"{regressed.Best}..{regressed.Worst} across platforms -- see " +
-                    "docs/work/2026-08-14-retrieval-rank-regressions.md; invert when WP3b lands");
-            }
-            else
-            {
-                rank.Value.ShouldBeLessThanOrEqualTo(wave0Rank,
-                    $"{id} must not regress vs Wave 0 rank {wave0Rank} (plan C gate a), now {rank}");
-            }
+            rank.ShouldNotBeNull($"{id} must find its expected file (baseline rank {baselineRank})");
+            rank.Value.ShouldBeLessThanOrEqualTo(baselineRank,
+                $"{id} must not regress past its measured baseline rank {baselineRank} on the public " +
+                $"docs corpus (ADR-0090), now {rank}");
         }
 
         // A1/A4 rank flips are same-knowledge alternatives from the dual-vector structure
