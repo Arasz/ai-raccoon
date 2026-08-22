@@ -13,10 +13,11 @@ namespace AiRaccoon.Infrastructure.Watch;
 ///     Replace-by-path digest: hash-skip (SHA-256 of normalized path + content), delete-by-source-path,
 ///     re-digest through the existing ingest path, rename = remove old path + digest new path with
 ///     overwrite (docs/plans/file-watcher-implementation.md D2). File gone → chunks removed.
-///     `ai-raccoon.ignore` (docs/work/2026-08-21-code-search-implementation-plan.md §2.1/§5.3): an
-///     ignored path is never fingerprinted or chunked — stale chunks and any stale fingerprint are
-///     removed instead; the ignore file itself is never matched against its own rules, and an edit
-///     to it (including its deletion) triggers a full re-scan of the watch.
+///     Excluded paths are never fingerprinted or chunked — stale chunks and any stale fingerprint
+///     are removed instead: a hidden or deny-set segment below the watch root (ADR-0086 §6, the same
+///     rule the catch-up enumeration applies) or an `ai-raccoon.ignore` match
+///     (docs/work/2026-08-21-code-search-implementation-plan.md §2.1/§5.3). The ignore file itself is
+///     never matched, and an edit to it (including its deletion) triggers a full re-scan of the watch.
 /// </summary>
 public sealed class WatchDigestExecutor(
     IMemoryStore store,
@@ -50,22 +51,15 @@ public sealed class WatchDigestExecutor(
             return;
         }
 
-        if (!isIgnoreFile)
+        if (!isIgnoreFile && await IsExcludedAsync(projectId, normalizedWatch, normalized, cancellationToken)
+                .ConfigureAwait(false))
         {
-            var ignoreRules = await ignoreRulesProvider.LoadAsync(normalizedWatch, cancellationToken)
-                .ConfigureAwait(false);
-            if (ignoreRules.HasRules && IsIgnored(ignoreRules, normalizedWatch, normalized))
-            {
-                // Never fingerprinted (a later un-ignore must not hash-skip on unchanged content),
-                // never chunked — only stale chunks from before the ignore rule existed are cleaned.
-                // DeleteSourcePathAsync already cascades the fingerprint delete for this exact path
-                // (MemorySql.DeleteWatchFilesByProjectPathCascade) — a second, separate
-                // DeleteFileHashAsync call here was a dead no-op repeating the same row delete.
-                await store.DeleteSourcePathAsync(projectId, normalized, cancellationToken).ConfigureAwait(false);
-                await watchStore.UpdateLastChangeAsync(projectId, normalizedWatch, Now(), cancellationToken)
-                    .ConfigureAwait(false);
-                return;
-            }
+            // Never fingerprinted (a later un-exclude must not hash-skip on unchanged content),
+            // never chunked — only stale chunks from before the rule started matching are cleaned.
+            // DeleteSourcePathAsync already cascades the fingerprint delete for this exact path
+            // (MemorySql.DeleteWatchFilesByProjectPathCascade).
+            await DeletePathAsync(projectId, normalizedWatch, normalized, cancellationToken).ConfigureAwait(false);
+            return;
         }
 
         var content = await File.ReadAllTextAsync(normalized, cancellationToken).ConfigureAwait(false);
@@ -105,8 +99,22 @@ public sealed class WatchDigestExecutor(
         string.Equals(Path.GetFileName(normalizedPath), IgnoreRulesProvider.FileName, StringComparison.Ordinal) &&
         IngestPath.PathComparer.Equals(Path.GetDirectoryName(normalizedPath), normalizedWatch);
 
-    private static bool IsIgnored(IgnoreRules rules, string root, string path) =>
-        rules.IsIgnored(Path.GetRelativePath(root, path), isDirectory: false);
+    /// <summary>The digest's gate: the enumeration's hidden/deny-set rule first (#494 — an event
+    /// under an agent worktree must be skipped exactly like the walk skips it), then the watch
+    /// root's `ai-raccoon.ignore` rules.</summary>
+    private async Task<bool> IsExcludedAsync(string projectId, string normalizedWatch, string normalized,
+        CancellationToken cancellationToken)
+    {
+        if (WatchDenySet.Excludes(normalizedWatch, normalized))
+        {
+            return true;
+        }
+
+        var ignoreRules = await ignoreRulesProvider.LoadAsync(normalizedWatch, cancellationToken)
+            .ConfigureAwait(false);
+        return ignoreRules.HasRules &&
+               ignoreRules.IsIgnored(Path.GetRelativePath(normalizedWatch, normalized), isDirectory: false);
+    }
 
     /// <summary>SHA-256 over the normalized path concatenated with the full file content (docs/plans/file-watcher-implementation.md R5).</summary>
     public static string ComputeHash(string normalizedPath, string content) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedPath + content)));

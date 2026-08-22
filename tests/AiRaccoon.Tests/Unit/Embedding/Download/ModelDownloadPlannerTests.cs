@@ -366,8 +366,16 @@ public class ModelDownloadPlannerTests
         ex.Message.ShouldContain("added_tokens_decoder");
     }
 
+    /// <summary>
+    ///     Issue #459: BAAI/bge-m3 ships 1_Pooling/config.json saying CLS, but its ONNX graph
+    ///     ALSO bakes its own pooled output (sentence_embedding) beside the real token-level
+    ///     output (token_embeddings). The graph's own vector is what the engine actually reads
+    ///     without re-pooling, so it outranks the repo's sentence-transformers flags — CLS
+    ///     happening to reproduce the same vector for bge-m3 is luck, not a promise the planner
+    ///     can rely on for every model.
+    /// </summary>
     [Fact]
-    public void Pooling_FromSentenceTransformersLayout()
+    public void Pooling_GraphBakedOutput_OutranksSentenceTransformersFlags()
     {
         var tree = BgeM3Tree().Append(PoolingConfig).Append(Modules).ToList();
         var raw = BgeM3Raw();
@@ -376,8 +384,52 @@ public class ModelDownloadPlannerTests
 
         var plan = Planner().BuildPlan("BAAI/bge-m3", "main", tree, raw, BgeM3Probe());
 
+        plan.PoolingMode.ShouldBe(PoolingMode.ModelOutput);
+        plan.Normalization.ShouldBe(NormalizationMode.L2);
+        plan.PoolingProvenance.ShouldBe("onnx-graph");
+        plan.EmbeddingOutput.ShouldBe("sentence_embedding");
+        plan.TokenEmbeddingsOutput.ShouldBe("token_embeddings");
+    }
+
+    /// <summary>Fallback pin: when the graph has no second, distinctly-named pooled output, the
+    /// repo's sentence-transformers flags still decide the mode (#459 negative control).</summary>
+    [Fact]
+    public void Pooling_FromSentenceTransformersLayout_WhenGraphHasNoSecondPooledOutput()
+    {
+        var tree = BgeM3Tree().Append(PoolingConfig).Append(Modules).ToList();
+        var raw = BgeM3Raw();
+        raw["1_Pooling/config.json"] = """{"word_embedding_dimension": 1024, "pooling_mode_cls_token": true, "pooling_mode_mean_tokens": false}""";
+        raw["modules.json"] = """[{"idx": 0, "name": "1_Pooling", "path": "", "type": "sentence_transformers.models.Pooling"}, {"idx": 1, "name": "2_Normalize", "path": "", "type": "sentence_transformers.models.Normalize"}]""";
+        var probe = BgeM3Probe() with { OutputNames = ["token_embeddings"] };
+
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", tree, raw, probe);
+
         plan.PoolingMode.ShouldBe(PoolingMode.Cls);
         plan.Normalization.ShouldBe(NormalizationMode.L2);
+        plan.PoolingProvenance.ShouldBe("sentence-transformers");
+    }
+
+    /// <summary>
+    ///     Review fix (#459 PR #496): a SOLE output literally named <c>sentence_embedding</c> is
+    ///     the #470/#475 sole-output shape, not a second, distinctly-named pooled output beside a
+    ///     real token-level one — <c>SelectTokenEmbeddingsOutput</c>'s fallback and
+    ///     <c>SelectEmbeddingOutput</c>'s exact-name match must not collide on the same single
+    ///     name. The ST flags still decide here; #475's rank-2 repair (download-time
+    ///     <c>PoolingFromGraph</c> / activation-time <c>ManifestPoolingRepair</c>) is what actually
+    ///     corrects this shape once the graph's real rank confirms it.
+    /// </summary>
+    [Fact]
+    public void Pooling_SoleOutputNamedSentenceEmbedding_DoesNotOverrideSentenceTransformersFlags()
+    {
+        var tree = BgeM3Tree().Append(PoolingConfig).Append(Modules).ToList();
+        var raw = BgeM3Raw();
+        raw["1_Pooling/config.json"] = """{"word_embedding_dimension": 1024, "pooling_mode_cls_token": true, "pooling_mode_mean_tokens": false}""";
+        raw["modules.json"] = """[{"idx": 0, "name": "1_Pooling", "path": "", "type": "sentence_transformers.models.Pooling"}, {"idx": 1, "name": "2_Normalize", "path": "", "type": "sentence_transformers.models.Normalize"}]""";
+        var probe = BgeM3Probe() with { OutputNames = ["sentence_embedding"] };
+
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", tree, raw, probe);
+
+        plan.PoolingMode.ShouldBe(PoolingMode.Cls);
         plan.PoolingProvenance.ShouldBe("sentence-transformers");
     }
 

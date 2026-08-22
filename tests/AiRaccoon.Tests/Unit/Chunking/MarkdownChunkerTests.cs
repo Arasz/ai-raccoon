@@ -143,6 +143,20 @@ public class MarkdownChunkerTests
     }
 
     [Fact]
+    public void Split_HeadingWouldDangleAtChunkTail_DefersHeadingToNextChunk()
+    {
+        // Issue #489: the greedy pack lets a heading line squeeze into the tail of a chunk even
+        // though none of its own section's content fits alongside it — that chunk then gets
+        // mislabeled with the NEXT section's heading. A heading must open the chunk that holds
+        // its content, never end the previous one empty-handed.
+        var text = "# Title\n\n## Section A\nAAAA\n\n## Section B\nBBBB\n";
+
+        var chunks = new MarkdownChunker(CharCount).Chunk(text, 41);
+
+        chunks.ShouldBe(["# Title\n\n## Section A\nAAAA\n\n", "## Section B\nBBBB\n"]);
+    }
+
+    [Fact]
     public void Split_IdenticalInput_ProducesIdenticalChunks()
     {
         var text = "aaaa\nbbbb\ncccc\ndddd\n";
