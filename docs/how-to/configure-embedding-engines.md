@@ -102,6 +102,12 @@ directory as usual.
 
 Downloading never activates: `model set local` is always the explicit next step.
 
+Activation re-checks the pins, not just the manifest: every pinned tokenizer/ONNX file is
+re-hashed against the bytes on disk, so a file swapped in place after download (manifest
+untouched) is refused rather than silently embedded. The non-LFS provenance files
+(`config.json`, `tokenizer_config.json`) are pinned into the manifest the same way and
+covered by the same check.
+
 ### Recipe 5: Activate the code corpus's embedding engine
 
 The code corpus (`kind=code`/`kind=both` search) has its **own** embedding engine,
