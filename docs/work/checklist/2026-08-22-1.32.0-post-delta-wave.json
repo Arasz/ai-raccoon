@@ -16,12 +16,25 @@
     },
     "findings-against-prior-runs": [
         {
-            "_example": "Delete this example. One entry per thing an earlier run got wrong \u2014 a verdict, a reason, or a step that could not have failed. A checklist that can only describe the current build cannot report that the last checklist lied.",
-            "prior-run": "",
-            "prior-claim": "",
-            "what-is-actually-true": "",
-            "evidence": "",
-            "so-what": ""
+            "prior-run": "docs/work/checklist/2026-08-22-1.31.0-full-product.json, item 'cli-exit-codes-nobank-and-settings-error'",
+            "prior-claim": "\"point at a dead port\" (the item's own suggested live method for exit 23, and by extension the mechanism the run used to explain exit 18) causes a settings command to fail with SettingsServerUnavailable (18) rather than SettingsServerError (23).",
+            "what-is-actually-true": "A genuinely dead/unbound explicit port (nothing listening, confirmed via lsof before dialing) does NOT produce any error at all -- CliSettingsBackend.AcquireAsync always reuses-or-auto-starts a backend on that port (BackendLauncher[633] 'starting the backend on port N'), and the command completes with exit 0. Exit 18 is produced by a different mechanism entirely: dialing a port already occupied by another data-root's live server, where the token file for your data-root doesn't match the one that server expects.",
+            "evidence": "Two independent dead-port trials (ports 58421, 58433) both auto-started cleanly, exit 0, confirmed via lsof before and ps/log after. One incidental collision with the machine's own live 7721 server (from omitting --port) produced exit 18 with the exact message 'the backend at http://127.0.0.1:7721/mcp is listening but .../mcp-token holds no token -- a serve on another data root may own port 7721'.",
+            "so-what": "A future lane following the item's literal suggested method ('point at a dead port') on any non-7721 port will get exit 0, not 18 or 23. Exit 18 specifically requires colliding with another data-root's OCCUPIED port -- which lanes must never deliberately do to port 7721 anyway. Does not change either run's pass/substituted verdict; the prior run's reasoning for why 18 (not 23) resulted was about the wrong mechanism."
+        },
+        {
+            "prior-run": "docs/work/checklist/2026-08-22-1.31.0-full-product.json, item 'sync-blob-hmac-authenticity'",
+            "prior-claim": "\"No cloud or scratch object-storage backend reachable\" / \"az CLI present but not configured with usable credentials/a scratch bucket for this run.\"",
+            "what-is-actually-true": "The az CLI on this machine is genuinely, currently authenticated -- az account show returns a live, valid identity and subscription with no prompt or error. The credentials are fully usable; what's missing is a designated SCRATCH storage account/container for ai-raccoon sync testing, not working authentication.",
+            "evidence": "az account show -> exit 0, user araszkiewiczrafal@gmail.com, subscription 'Base Azure subscription', state Enabled, no re-auth needed.",
+            "so-what": "The substitution verdict is unaffected (still substituted, same test class), but a future lane should not read the prior wording as 'az isn't logged in here' -- it is. The gap is provisioning a scratch container against the user's real personal subscription, which needs the user's explicit sign-off, not something either run should do unilaterally."
+        },
+        {
+            "prior-run": "docs/work/checklist/2026-08-22-1.31.0-full-product.json, item 'code-model-activation-and-refusal' (and its own PR #453's evidence section)",
+            "prior-claim": "The 1.31.0 run's own corrected verdict, and PR #453's own PR-body evidence, both treat 'downloaded faxenoff/code-daemon-embed-v1@main to <dir> ... code embedding engine set to local (<dir>); the code-reindex maintenance job will re-embed pending rows' as proof the default code model now works end-to-end (#422 resolved).",
+            "what-is-actually-true": "The download and the settings write both genuinely succeed with a correctly-gated manifest (dims 768, ctx 512, sha256 pins verified byte-for-byte). But the code-reindex job that is supposed to then embed the pending row FAILS every time on 1.32.0, reproduced independently on two scratch roots with two unrelated languages (Python, TypeScript): embed_attempts hits the 3-attempt cap and the row is permanently excluded from selection, still 'pending' forever. A kind=code search against the activated engine returns a hard 'code-engine-unloadable: ... Specified argument was out of the range of valid values' error, not a code hit and not even the not-configured warning.",
+            "evidence": "See this run's own 'code-model-one-command-install' and 'code-search-discriminates-on-engine-activation' items for full command/evidence trails, reproduced on two independent scratch roots.",
+            "so-what": "Neither the 1.31.0 run nor PR #453's own evidence section actually drove a real kind=code search or checked embed_state after activating the real flagship model -- both stopped at 'the settings write succeeded' / 'the job will re-embed'. This run is the first to actually wait for the drain and check the result, and it fails. #422's own stated done-criterion (a working default code search) is NOT met on 1.32.0 despite the CLI/gate fix landing correctly. STOP-and-report regression, not fixed in this release-cut PR."
         }
     ],
     "items": [
@@ -227,99 +240,99 @@
             "item": "ai-raccoon-ignore-live",
             "expected-result": "An ai-raccoon.ignore in the ingest root excludes matching files from BOTH corpora on directory ingest (0 chunks; verify a .cs and a .md are both excluded); a bare directory name excludes its subtree; explicit memory_ingest_file of an ignored path returns 0 chunks. Negative control: a non-ignored sibling ingests normally.",
             "anchor": "ADR-0086; plan \u00a72.1",
-            "command": "",
-            "evidence": "",
-            "observed-result": "",
-            "status": "",
-            "accepted": null,
-            "acceptance-reason": ""
+            "command": "ai-raccoon.ignore = '*.secret.cs\\nignored.md\\nexcluded_dir\\n' at ignoreroot/, holding thing.secret.cs (code), ignored.md (memory), excluded_dir/nested.py (code, nested), kept_dir/kept.md (control) ; ai-raccoon --data-root <DR> --port 0 serve ; ai-raccoon --data-root <DR> --port <p> settings ingest scope add laneC <ignoreroot> ; memory_ingest_directory(laneC, ignoreroot) via MCP client ; sqlite3 ?mode=ro entries/code_entries ; memory_ingest_file(laneC, ignored.md) ; memory_ingest_file(laneC, thing.secret.cs)",
+            "evidence": "directory ingest -> {\"scanned\":1}. sqlite3 ?mode=ro: entries WHERE source_file LIKE '%ignoreroot%' -> exactly 1 row (kept_dir/kept.md, hash b8326b34...2f8a7, value length 75 bytes -- non-empty real content). code_entries WHERE source_file LIKE '%ignoreroot%' -> 0 rows. Explicit memory_ingest_file(ignored.md) -> {\"indexed\":0}. memory_ingest_file(thing.secret.cs) -> {\"indexed\":0}. Both responses isError:false (0 is a legitimate exclusion, not a refusal).",
+            "observed-result": "The ignore file excludes matching files from both corpora on directory walk (glob match *.secret.cs, exact-name match ignored.md, bare directory-name subtree exclusion for the nested excluded_dir/nested.py code file), and the same rule applies to explicit single-file ingest of an ignored path. The non-ignored sibling ingested normally with real, non-empty content.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "All four clauses verified live in one continuous fixture against 1.32.0; negative control confirmed with content length, not just row presence."
         },
         {
             "item": "watch-overlap-prune-and-reject",
             "expected-result": "memory_watch_add of a path nested inside an existing watch is REJECTED naming the covering watch; adding a broader watch over an existing narrower one prunes the narrower (result lists it); equal-path re-add is an idempotent no-op reporting absorbedBy.",
             "anchor": "ADR-0086; plan \u00a72.2",
-            "command": "",
-            "evidence": "",
-            "observed-result": "",
-            "status": "",
-            "accepted": null,
-            "acceptance-reason": ""
+            "command": "ai-raccoon --data-root <DR> --port 0 serve ; settings ingest scope add laneC <work> ; settings watch enable laneC true ; memory_watch_add(laneC, work/watchdir) ; memory_watch_add(laneC, work/watchdir/nested_sub) [nested] ; memory_watch_add(laneC, work) [broader] ; memory_watch_add(laneC, work) again [equal re-add] ; memory_watch_status(laneC)",
+            "evidence": "initial add -> {\"path\":\".../work/watchdir\",\"pruned\":[]}.\nnested -> isError:true 'watch-overlap: Path '.../work/watchdir/nested_sub' is already covered by watch '.../work/watchdir'.'\nbroader -> {\"path\":\".../work\",\"pruned\":[\".../work/watchdir\"]}.\nequal re-add -> {\"path\":\".../work\",\"pruned\":[],\"absorbedBy\":\".../work\"}.\nmemory_watch_status after all four calls -> exactly ONE watch registered, path=.../work, state=Healthy (confirms the pruned narrower watch is really gone, not just omitted from the pruned[] list by coincidence).",
+            "observed-result": "All three overlap rules behave exactly as specified, and the post-state (watch_status) independently confirms the pruned watch is actually removed, not merely reported as pruned.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "All three overlap shapes exercised live in sequence, plus a secondary-observable check (watch_status row count) that the prior run's evidence did not include."
         },
         {
             "item": "code-ingestion-with-default-model",
             "expected-result": "Out-of-box experience: on a FRESH scratch bank with NO code engine configured and the default bundled memory model, memory_ingest_directory over a small mixed tree (.md + .cs) embeds the memory docs (bundled model), chunks the code files to embed_state='pending' via the bundled counting tokenizer, kind=code returns FTS-only hits carrying the engine-not-configured warning, and kind=both returns both sections. Negative control: a deny-set path (e.g. bin/) and an ai-raccoon.ignore'd file appear in NEITHER corpus.",
             "anchor": "ADR-0085/0087; plan \u00a73.3 always-ingest",
-            "command": "",
-            "evidence": "",
-            "observed-result": "",
-            "status": "",
-            "accepted": null,
-            "acceptance-reason": ""
+            "command": "TRULY fresh data-root (mkdir -p on an empty dir, verified empty before 'serve' created memory.db) ; tree/{src/calculator.cs, src/notes.md, bin/build_output.dll, ai-raccoon.ignore=secret_config.md, secret_config.md} ; settings ingest scope add laneC <tree> ; sqlite3 settings WHERE key LIKE 'embedding%' (confirm empty) ; memory_ingest_directory(laneC, tree) ; sqlite3 entries/code_entries ; memory_search kind=code (query 'Calculator Add Multiply namespace') ; memory_search kind=both (same query)",
+            "evidence": "settings table: 0 rows matching 'embedding%' before ingest (zero model configuration, confirmed not just assumed).\ningest -> {\"scanned\":2} (calculator.cs + notes.md only).\nentries: notes.md, embed_state='pending', embedding IS NULL=1. code_entries: calculator.cs, embed_state='pending', embedding IS NULL=1.\nnegative control: 0 rows in either table for bin/%% or secret_config%.\nkind=code -> results:[], warning=\"code engine not configured -- FTS5-only results; run 'ai-raccoon model set code default' to download and activate the default code embedding model\", code:[1 hit, calculator.cs, lineStart:1, lineEnd:7].\nkind=both -> results:[1 hit, notes.md, FTS match on 'Calculator'], warning: same as above, code:[1 hit, calculator.cs] -- BOTH sections non-empty simultaneously.",
+            "observed-result": "Matches ADR-0063's actual scope (bundled-model resolution governs chunking/token-counting only, NOT embedding activation): the memory doc stays embed_state='pending' with NULL embedding, identically to the code corpus, until a provider is explicitly configured. Everything else holds: correct chunking, correct warnings, correct kind=code/kind=both envelope shapes, correct deny-set (bin/) and ignore (secret_config.md) exclusion.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Re-derived fresh against 1.32.0, independently confirming the same behavior and wording-imprecision the prior run flagged (not inherited -- reproduced from scratch with settings-table proof of zero configuration)."
         },
         {
             "item": "watch-per-repo-root",
             "expected-result": "Registering a watch on a scratch REPO ROOT (containing .git/, node_modules/, src/ with code+md): enumeration skips .git and node_modules entirely (zero rows from them, both corpora); src/ feeds both corpora; adding a nested watch inside the repo is rejected naming the covering watch; a live edit to a src file digests into BOTH corpora and the replace prunes the file's superseded chunks.",
             "anchor": "ADR-0086; plan \u00a72.3 repo-watch-by-default",
-            "command": "",
-            "evidence": "",
-            "observed-result": "",
-            "status": "",
-            "accepted": null,
-            "acceptance-reason": ""
+            "command": "git init a real repo at reporoot/ (git config + commit) with node_modules/junkpkg/{index.js,README.md} and src/{greeter.py,notes.md} ; ai-raccoon --data-root <DR> --port 0 serve ; settings ingest scope add laneC <reporoot> ; settings watch enable laneC true ; memory_watch_add(laneC, reporoot) ; poll memory_watch_status until Healthy ; sqlite3 entries/code_entries WHERE source_file LIKE '%reporoot%' ; memory_watch_add(laneC, reporoot/src) [nested] ; recorded old hashes ; edited both src/greeter.py and src/notes.md ; polled sqlite3 hashes every 3s until both changed",
+            "evidence": "watch_add -> pruned:[]. watch_status reached state:Healthy after ~3s (first poll).\nentries for reporoot: exactly 1 row, src/notes.md. code_entries for reporoot: exactly 1 row, src/greeter.py. 0 rows from node_modules or .git in EITHER table (COUNT query, not just absence in a LIMIT'd listing).\nnested watch on reporoot/src -> isError:true 'watch-overlap: ... already covered by watch '.../reporoot'.'\nLive edit: notes.md hash 4cfcc10d...b7862d -> 05df237c...73ac8c8 (digested within one 3s poll). greeter.py hash a69f0017...9a0dc -> ad396a43...d27679 (same poll). AFTER edit: entries/code_entries for these files each still exactly 1 row (COUNT=1), with the NEW hash only; COUNT of rows matching either OLD hash = 0 in both tables.",
+            "observed-result": "All four clauses verified live: .git/node_modules enumeration-skip is total (zero rows by COUNT, both corpora); src/ feeds both corpora; nested-watch rejection names the covering watch; a live edit digests into both corpora within ~3s with the old chunk hash fully pruned (COUNT=0), not left stale alongside the new one.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Every claim independently exercised live with a real committed git repo and real watcher timing (polled to Healthy and to post-edit digest, never assumed instantaneous); pruning proven by COUNT of the old hash, not just 'still 1 row'."
         },
         {
             "item": "direct-reingest-prunes-stale-chunks",
             "expected-result": "memory_ingest_file of a file (N chunks), then modifying it so it chunks to a different count and re-ingesting: the superseded chunks are GONE (search no longer returns removed content; chunk set matches the new content exactly). Negative control: a sibling ingested file's chunks are untouched.",
             "anchor": "PR #420 (ingest-then-prune)",
-            "command": "",
-            "evidence": "",
-            "observed-result": "",
-            "status": "",
-            "accepted": null,
-            "acceptance-reason": ""
+            "command": "memory_ingest_file(laneC, direct/sextant.md) [310-word, 8-section doc] ; memory_ingest_file(laneC, direct/companion.md) [sibling control] ; sqlite3 entries chunk_index/hash before ; overwrote sextant.md with unrelated 27-word content ; memory_ingest_file(laneC, direct/sextant.md) again ; sqlite3 entries for both files after ; memory_search for old sextant vocabulary",
+            "evidence": "Before: sextant.md 2 rows (chunk_index 0,1/2, hashes 1dacf0db...506fd7 and 1f953dab...3ea12). companion.md 1 row (hash 129a89b3...014628).\nAfter re-ingest: sextant.md exactly 1 row (chunk_index 0/1, hash 8c5e958b...67bc58f) -- both old hashes GONE (COUNT=0 for either old hash). companion.md STILL exactly 1 row, SAME hash 129a89b3...014628, byte-identical.\nmemory_search returned only the new sextant chunk (hash 8c5e958b...) -- neither old hash appears. (Caveat: the replacement content incidentally echoed a few old vocabulary words in an explanatory sentence, so this search leg alone is not clean proof of absence -- the authoritative proof is the sqlite3 COUNT=0 on the exact old hashes.)",
+            "observed-result": "The direct memory_ingest_file path prunes superseded chunks on re-ingest of the same source path (chunk count changed 2->1, both old hashes provably gone). A sibling file's chunks are provably untouched (identical hash, not just unchanged count).",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Both the pruning (COUNT=0 on old hashes, exact chunk_index/total_chunks match) and the negative control (sibling byte-identical hash) verified live on 1.32.0; the sqlite3 hash-count evidence is unambiguous even though the search-leg wording overlapped incidentally."
         },
         {
             "item": "activation-sha256-pin-verification",
             "expected-result": "Tampering a model file AFTER its manifest was generated (flip one byte) makes model set refuse at activation, naming the sha256 pin mismatch; restoring the byte activates cleanly.",
             "anchor": "PR #429",
-            "command": "",
-            "evidence": "",
-            "observed-result": "",
-            "status": "",
-            "accepted": null,
-            "acceptance-reason": ""
+            "command": "Copied the REAL bundled model files from the installed 1.32.0 tool store (~/.dotnet/tools/.store/ai-raccoon/1.32.0/.../Models/{model_qint8_arm64.onnx,vocab.txt}) into a scratch fixture dir ; hand-authored ai-raccoon.manifest.json (bert-wordpiece, 384-dim, mean pooling) with real sha256 of those exact files ; model set local <fixture> (baseline) ; flipped 1 byte in model.onnx at offset 1000 ; model set local <fixture> again ; restored the byte ; model set local <fixture> a third time",
+            "evidence": "Real bundled-file hashes verified BEFORE fixture use: model 4278337f...902474, vocab 07eced37...992038a3 -- EXACT match to the hardcoded constants in src/AiRaccoon.Infrastructure/Embedding/BundledModel.cs, confirming these are the real production bundled files.\nbaseline -> 'embedding engine set to local (.../shapin-model); re-embedding in the background' (exit 0).\ntamper -> shasum changes to d1e3ecf7...ba11c. model set local -> exit 15: \"Manifest '...' pins 'model.onnx' to sha256 4278337f...902474, but the file on disk hashes to d1e3ecf7...ba11c. ... re-run 'ai-raccoon model download' to restore a clean copy.\"\nrestore -> shasum back to 4278337f...902474. model set local -> 'embedding engine set to local (...); re-embedding in the background' (exit 0) again. Follow-up doctor -> status: HEALTHY.",
+            "observed-result": "Real sha256 pins over real, working, production bundled model files (verified byte-identical to the installed tool's own shipped copy by hash): tampering causes an actionable refusal naming the exact expected-vs-actual hash, and restoring the byte returns to clean activation with a healthy bank afterward.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Not synthetic placeholder hashes -- the fixture files are byte-for-byte the actual 1.32.0-installed bundled model, confirmed by hash match against the source-code-pinned constants before use."
         },
         {
             "item": "cli-exit-codes-nobank-and-settings-error",
             "expected-result": "CLI command against a nonexistent bank exits 22 (NoBank); a settings-channel server error exits 23 (SettingsServerError), distinct from usage-error exits. Drive 23 live if a failing server can be arranged cheaply (e.g. point at a dead port); otherwise substituted naming the exit-code test class.",
             "anchor": "PR #433, #426",
-            "command": "",
-            "evidence": "",
-            "observed-result": "",
-            "status": "",
-            "accepted": null,
-            "acceptance-reason": ""
+            "command": "ai-raccoon --data-root <truly-nonexistent-dir> doctor ; echo $? ; ai-raccoon --data-root <fresh-dir> --port 58421 --transport http settings watch list ; ai-raccoon --data-root <another-nonexistent-dir> --port 58433 --transport http settings watch list [re-derivation of 'dead port'] ; dotnet test --filter FullyQualifiedName~SettingsChannelExitCodeTests",
+            "evidence": "doctor against nonexistent bank -> exit 22.\nTwo independent explicit dead ports (58421, 58433, confirmed unbound via lsof beforehand) BOTH auto-started a fresh backend (BackendLauncher[633]) and returned exit 0 -- a genuinely dead, unbound explicit port never produces an error; CliSettingsBackend.AcquireAsync always reuses-or-spawns a backend.\nSeparately, incidentally: omitting --port dialed the machine's pre-existing server on default port 7721, producing 'the backend at http://127.0.0.1:7721/mcp is listening but .../mcp-token holds no token -- a serve on another data root may own port 7721', exit 18 -- a PORT-OWNED-BY-ANOTHER-DATA-ROOT case, not a dead-port case.\ndotnet test --filter SettingsChannelExitCodeTests -> Passed! 2/2.",
+            "observed-result": "NoBank(22) verified live. SettingsServerError(23) requires an actual running server answering 5xx, not cheaply arrangeable live; substituted per the item's own fallback. The item's suggested method ('point at a dead port') does not, in 1.32.0, ever reach an error state on an explicit non-7721 port -- it silently auto-starts a backend (exit 0); exit 18 is produced by a different mechanism (an occupied port with a mismatched token).",
+            "status": "substituted",
+            "accepted": true,
+            "acceptance-reason": "22 accepted as a live pass. 23 substituted, naming SettingsChannelExitCodeTests.cs (2/2 passed). See findings-against-prior-runs for the corrected cause of exit 18."
         },
         {
             "item": "sync-blob-hmac-authenticity",
             "expected-result": "A pushed snapshot blob is framed header+tag and a tampered blob is REFUSED before attach (HMAC verification). Live only if cloud/scratch-backend credentials are available in this run; otherwise substituted naming the SyncService HMAC integration tests.",
             "anchor": "PR #431",
-            "command": "",
-            "evidence": "",
-            "observed-result": "",
-            "status": "",
-            "accepted": null,
-            "acceptance-reason": ""
+            "command": "env | grep -iE '^(AWS_|AZURE_|S3_)' ; which aws az ; az account show ; dotnet test --filter FullyQualifiedName~SyncServiceRemoteBlobTests",
+            "evidence": "No AWS_*/AZURE_*/S3_* env vars. No 'aws' CLI. 'az' CLI IS present AND authenticated: 'az account show' succeeds (exit 0) with a live identity -- user araszkiewiczrafal@gmail.com, subscription 'Base Azure subscription', state Enabled -- the user's real personal Azure subscription, no scratch storage account/container designated for ai-raccoon sync testing.\ndotnet test --filter SyncServiceRemoteBlobTests -> Passed! 6/6, including ATamperedRemoteBlob_IsRefusedBeforeQuickCheckOrAttach and ADowngradeToAHeaderlessBlob_..._IsRefused.",
+            "observed-result": "A usable Azure identity exists on this machine, but no scratch storage backend is provisioned for this checklist run, and provisioning one against the user's real personal subscription is out of scope for a manual verification pass. No live push/tamper/refuse round trip was attempted.",
+            "status": "substituted",
+            "accepted": true,
+            "acceptance-reason": "Substituted, naming SyncServiceRemoteBlobTests.cs (6/6 passed), which exercises exactly the item's contract: header+tag framing, tamper-before-attach refusal, headerless-downgrade-after-a-tag-seen refusal. See findings-against-prior-runs for the corrected cause (credentials work; no scratch container, not 'not configured with usable credentials')."
         },
         {
             "item": "observability-event-ids",
             "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
-            "command": "",
-            "evidence": "",
-            "observed-result": "",
-            "status": "",
-            "accepted": null,
-            "acceptance-reason": ""
+            "command": "grep -rhoE '\\[[0-9]{2,4}\\]' across every serve.log this lane produced plus directly-observed terminal output from the CLI-spawned backends used for items 6/7 ; resolved each id + category against docs/reference/logging-event-ids.md",
+            "evidence": "Ids emitted, with category: AiRaccoon.Hosting.Watchdog.IdleWatchdog[610]; AiRaccoon.Infrastructure.Maintenance.BankMaintenanceHostedService[510]; AiRaccoon.Infrastructure.Maintenance.MaintenanceJobRunner[525] (per-job, x~90 across five servers); AiRaccoon[672] (settings wrote ingest.scope.laneC / watch.enabled.laneC -- key-only per ADR-0075, value never logged, confirmed); AiRaccoon.Tools.ToolRefusals[910] (fired 3x by my own refused MCP calls: watching-disabled, watch-overlap x2, path-outside-scope); AiRaccoon.Hosting.Proxy.BackendLauncher[633] (starting the backend on port N, observed directly for ports 58311/58421/58433). Microsoft.Hosting.Lifetime[14] correctly excluded as a framework id, absent from the AiRaccoon table.",
+            "observed-result": "610->IdleWatchdog.cs, 510->BankMaintenanceHostedService.cs, 525->MaintenanceJobRunner.cs, 672->SettingsEndpoint.cs (key-only confirmed), 910->ToolRefusals.cs, 633->BackendLauncher.cs -- all six ids present and correctly described by the reference table, log-line content matching each row's stated purpose.",
+            "status": "pass",
+            "accepted": true,
+            "acceptance-reason": "Only ids actually emitted by this lane's own commands were checked; every one resolves cleanly with matching content, including id 633 (BackendLauncher) which the prior 1.31.0 run's observability item did not report."
         }
     ]
 }
