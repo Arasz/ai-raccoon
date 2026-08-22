@@ -147,6 +147,42 @@ public sealed class CodeEmbedderTests : IAsyncLifetime
     }
 
     /// <summary>
+    ///     WP12-A: rows arrive from MemorySql.SelectAllPendingCodeForEmbed in id order. Sorting by
+    ///     length before the BatchSize slice keeps each generator call length-homogeneous, so ONNX
+    ///     pads to that call's own max instead of the whole run's max.
+    /// </summary>
+    [Fact]
+    public async Task EmbedPendingBatchAsync_MixedLengthRows_SortsByLengthBeforeBatching()
+    {
+        var fake = new FakeCodeEmbeddingService();
+        var embedder = new CodeEmbedder(fake, NullLogger<CodeEmbedder>.Instance);
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await ActivateCodeModelAsync(connection, "/models/code-daemon-embed-v1");
+
+        var values = new List<string>();
+        for (var id = 1; id <= 64; id++)
+        {
+            // Alternating short/long lengths, all distinct, so id order != length order.
+            var length = id % 2 == 0 ? 2000 + id : 50 + id;
+            var value = new string('a', length);
+            values.Add(value);
+            await SeedPendingCodeRowAsync(connection, id, "acme", value);
+        }
+
+        var processed = await embedder.EmbedPendingBatchAsync(connection, 64, TestContext.Current.CancellationToken);
+
+        processed.ShouldBe(64);
+        fake.Calls.Count.ShouldBe(2);
+        var sortedByLength = values.OrderBy(v => v.Length).ToList();
+        fake.Calls[0].ShouldBe(sortedByLength.Take(32).ToList(), ignoreOrder: true,
+            "batch 1 must be exactly the 32 shortest rows");
+        fake.Calls[1].ShouldBe(sortedByLength.Skip(32).ToList(), ignoreOrder: true,
+            "batch 2 must be exactly the remaining 32 rows");
+        var states = await connection.QueryAsync<string>("SELECT embed_state FROM code_entries ORDER BY id");
+        states.ShouldAllBe(s => s == "embedded", "every row must be marked embedded exactly once");
+    }
+
+    /// <summary>
     ///     S1: a batch's SELECT reads the pending rows under one engine, but generation (here, the
     ///     fake's <see cref="FakeCodeEmbeddingService.OnGenerateAsync" /> hook — the same window a
     ///     real engine call occupies) races a real activation to a NEW engine before the per-row
@@ -302,12 +338,16 @@ public sealed class CodeEmbedderTests : IAsyncLifetime
             new { key, value });
 
     private static async Task SeedPendingCodeRowAsync(SqliteConnection connection, long id, string projectId) =>
+        await SeedPendingCodeRowAsync(connection, id, projectId, $"class Sample{id} {{ }}");
+
+    private static async Task SeedPendingCodeRowAsync(SqliteConnection connection, long id, string projectId,
+        string value) =>
         await connection.ExecuteAsync(
             """
             INSERT INTO code_entries (id, hash, path, value, source_file, line_start, line_end, project_id, created_at, updated_at)
             VALUES (@id, @hash, @path, @value, @path, 1, 1, @projectId, 1, 1)
             """,
-            new { id, hash = $"hash-{id}", path = $"src/File{id}.cs", value = $"class Sample{id} {{ }}", projectId });
+            new { id, hash = $"hash-{id}", path = $"src/File{id}.cs", value, projectId });
 
     /// <summary>A row whose value matches a FakeCodeEmbeddingService.PoisonValues entry.</summary>
     private static async Task SeedPoisonCodeRowAsync(SqliteConnection connection, long id, string projectId) =>
