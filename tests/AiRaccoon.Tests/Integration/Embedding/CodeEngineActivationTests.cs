@@ -40,7 +40,8 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
     {
         var options = new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
-        _store = new SqliteCodeEngineStore(_factory, TestData.CreateEmbeddingService(), TestData.CreateManifestLoader());
+        _store = new SqliteCodeEngineStore(_factory, TestData.CreateEmbeddingService(), TestData.CreateManifestLoader(),
+            TestData.CreateManifestPoolingRepair());
         return ValueTask.CompletedTask;
     }
 
@@ -117,6 +118,34 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
         (await ReadSettingAsync(EmbeddingSettingsKeys.CodeEngine)).ShouldBeNull();
         (await ReadCodeEmbedStateAsync(1)).ShouldBe("embedded",
             "the invalidate step itself must roll back too -- the row must be untouched");
+    }
+
+    /// <summary>
+    ///     #470: a manifest whose pooling mode its own graph makes unappliable is corrected HERE,
+    ///     where invalidation is already unconditional — and before the fingerprint is taken, so the
+    ///     rewrite does not read as a second engine change on the code-reindex job's next poll.
+    /// </summary>
+    [Fact]
+    public async Task ActivateCodeEngineAsync_ManifestPoolingTheGraphCannotApply_IsRepairedBeforeTheFingerprintIsTaken()
+    {
+        var dir = Path.Combine(_dataRoot, "code-model-unappliable-pooling");
+        TestData.SeedCodeManifestDirectory(dir);
+        TestData.WriteManifestPooling(dir, PoolingMode.Cls, "last_hidden_state");
+        var store = new SqliteCodeEngineStore(_factory, TestData.CreateEmbeddingService(),
+            TestData.CreateManifestLoader(),
+            TestData.CreateManifestPoolingRepair(TestData.GraphWithOutputRanks(("last_hidden_state", 2))));
+
+        var config = await store.ActivateCodeEngineAsync(dir, TestContext.Current.CancellationToken);
+
+        var manifest = new EmbeddingManifestSerializer()
+            .Deserialize(await File.ReadAllTextAsync(Path.Combine(dir, EmbeddingManifest.FileName),
+                TestContext.Current.CancellationToken));
+        manifest.Pooling.Mode.ShouldBe(PoolingMode.ModelOutput);
+        manifest.Onnx.EmbeddingOutput.ShouldBe("last_hidden_state");
+        config.Engine.ShouldBe(
+            TestData.CreateEmbeddingService().EngineFingerprint("local", Path.GetFullPath(dir), null),
+            "the recorded fingerprint must be the REPAIRED manifest's — otherwise the code-reindex " +
+            "job's next poll sees a changed engine and re-embeds the whole corpus a second time");
     }
 
     [Fact]

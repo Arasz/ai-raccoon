@@ -12,6 +12,7 @@ using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Infrastructure.Assets;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Embedding.Download;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -302,6 +303,36 @@ public static class TestData
         File.WriteAllText(Path.Combine(dir, "model.onnx"), "model");
         File.Copy(RepoFile("tests/AiRaccoon.Tests/Resources/ManifestFixtures/code-daemon-embed-v1.json"),
             Path.Combine(dir, EmbeddingManifest.FileName));
+    }
+
+    /// <summary>Rewrites a seeded manifest's pooling block — the shape `model download` wrote
+    /// before it read the graph's output rank (#470): a token-level mode plus the output name.</summary>
+    public static void WriteManifestPooling(string dir, PoolingMode mode, string tokenEmbeddingsOutput)
+    {
+        var serializer = new EmbeddingManifestSerializer();
+        var path = Path.Combine(dir, EmbeddingManifest.FileName);
+        var manifest = serializer.Deserialize(File.ReadAllText(path));
+        File.WriteAllText(path, serializer.Serialize(manifest with
+        {
+            Pooling = new PoolingManifest(mode, new PoolingOutputNames(string.Empty, tokenEmbeddingsOutput)),
+            Onnx = manifest.Onnx with { EmbeddingOutput = null, TokenEmbeddingsOutput = tokenEmbeddingsOutput }
+        }));
+    }
+
+    /// <summary>A real <see cref="IManifestPoolingRepair" /> over a stand-in graph; the default
+    /// graph declares no outputs, so a manifest that already tells the truth is left alone.</summary>
+    public static IManifestPoolingRepair CreateManifestPoolingRepair(IOnnxSmokeTester? graph = null) =>
+        new ManifestPoolingRepair(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator(),
+            graph ?? GraphWithOutputRanks(), NullLogger<ManifestPoolingRepair>.Instance);
+
+    /// <summary>An ONNX graph that loads and declares the given output ranks — the injectable half
+    /// of every rank-driven decision (#470), so no test needs a real multi-hundred-MB graph.</summary>
+    public static IOnnxSmokeTester GraphWithOutputRanks(params (string Output, int Rank)[] ranks) =>
+        new FakeGraph(ranks.ToDictionary(r => r.Output, r => r.Rank, StringComparer.Ordinal));
+
+    private sealed class FakeGraph(IReadOnlyDictionary<string, int> ranks) : IOnnxSmokeTester
+    {
+        public IReadOnlyDictionary<string, int> Verify(string onnxPath) => ranks;
     }
 
     /// <summary>Locates a repo-relative file by walking up from the test output directory.</summary>

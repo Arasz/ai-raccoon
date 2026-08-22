@@ -60,7 +60,8 @@ public sealed class CodeCorpusFeatureContext : IDisposable
         Store = ComposeStore();
         CodeSearch = new SqliteCodeSearchService(Factory, CodeEmbedder);
         CodeEngineStore = new SqliteCodeEngineStore(Factory, FakeEmbeddingService,
-            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
+            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
+            TestData.CreateManifestPoolingRepair());
         SearchQuality = new SqliteSearchQualityService(Factory, NullLogger<SqliteSearchQualityService>.Instance);
         ReindexJob = new CodeReindexJob(CodeEmbedder);
 
