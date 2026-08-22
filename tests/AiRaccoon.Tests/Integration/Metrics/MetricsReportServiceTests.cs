@@ -52,7 +52,7 @@ public sealed class MetricsReportServiceTests : IDisposable
     }
 
     /// <summary>
-    ///     WP10/S1 restates this: the report now always carries the eight search-phase series plus
+    ///     WP10/S1 restates this: the report now always carries the search-phase series plus
     ///     the measured total alongside whatever tools are asked for, so a quiet bank's series count
     ///     is toolNames.Count plus SeriesNames.Count — every one of them still at count zero.
     /// </summary>

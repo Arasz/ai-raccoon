@@ -800,4 +800,20 @@ internal static class MemorySql
                                                  WHERE project_id = @projectId AND workspace_id IS NULL
                                                    AND path = @path
                                                  """;
+
+    // #436, code-corpus leg of Defect B: same predicate as DeleteCodeBySourcePath (path or
+    // subtree prefix) — inert for a single file, since no sibling file's path can equal
+    // "<this file>/…", so a single-file re-ingest cannot reach a sibling.
+    public const string DeleteCodeChunksForPathExcept = """
+                                                        DELETE FROM code_entries
+                                                        WHERE project_id = @projectId
+                                                          AND (path = @path OR path LIKE @pathPrefix ESCAPE '\')
+                                                          AND hash NOT IN @keep
+                                                        """;
+
+    public const string DeleteAllCodeChunksForPath = """
+                                                     DELETE FROM code_entries
+                                                     WHERE project_id = @projectId
+                                                       AND (path = @path OR path LIKE @pathPrefix ESCAPE '\')
+                                                     """;
 }

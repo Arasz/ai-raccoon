@@ -111,7 +111,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
     }
 
     /// <summary>
-    ///     AC1: a memory_search results in nine series measurements (eight phases plus the measured
+    ///     AC1: a memory_search results in ten series measurements (nine phases plus the measured
     ///     total) — enqueued synchronously (G4 forbids only the *table* write, never enqueueing) and
     ///     reaching the `metrics` table once flushed, each carrying the query hash and this call's
     ///     own correlation id, and no query text anywhere in the row (SqliteMetricsStore's save-time

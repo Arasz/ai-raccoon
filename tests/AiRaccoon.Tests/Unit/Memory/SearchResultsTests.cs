@@ -49,10 +49,12 @@ public sealed class SearchResultsTests
 
     /// <summary>
     ///     F11 (owner ruling): SearchTimings.PhaseNames is an explicit declaration, not reflection
-    ///     over TimeSpan properties — a ninth phase means editing PhaseNames/Phases() AND this
+    ///     over TimeSpan properties — a tenth phase means editing PhaseNames/Phases() AND this
     ///     literal, deliberately. Total is deliberately excluded (docs/plans/2026-08-17-search-phase-attribution.md
     ///     §2.2): it is a measured member of the record, not a decomposition entry, so summing
-    ///     PhaseNames can never double-count it.
+    ///     PhaseNames can never double-count it. `search.adjustment` (#465) names the ninth measured
+    ///     phase, which used to have no exported series at all; `search.affinity` stays bound to
+    ///     Merge rather than being renamed, so stored metric rows under that name are not orphaned.
     /// </summary>
     [Fact]
     public void PhaseNames_OneEntryPerDecomposedPhase_PrefixedWithSearch()
@@ -60,7 +62,7 @@ public sealed class SearchResultsTests
         SearchTimings.PhaseNames.ShouldBe(
         [
             "search.open", "search.embed", "search.fts", "search.vector",
-            "search.fusion", "search.affinity", "search.snippets", "search.bump"
+            "search.fusion", "search.affinity", "search.adjustment", "search.snippets", "search.bump"
         ]);
     }
 
@@ -96,6 +98,7 @@ public sealed class SearchResultsTests
             ("search.vector", TimeSpan.FromMilliseconds(4)),
             ("search.fusion", TimeSpan.FromMilliseconds(5)),
             ("search.affinity", TimeSpan.FromMilliseconds(6)),
+            ("search.adjustment", TimeSpan.FromMilliseconds(7)),
             ("search.snippets", TimeSpan.FromMilliseconds(8)),
             ("search.bump", TimeSpan.FromMilliseconds(9))
         ]);

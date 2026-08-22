@@ -81,7 +81,8 @@ public sealed partial class SqliteMemoryStore
             .IngestFileAsync(connection, projectId, path, context, cancellationToken)
             .ConfigureAwait(false);
 
-        await PruneChunksNotIn(connection, projectId, path, ingestResult.ChunkHashes ?? [], cancellationToken)
+        await PruneChunksNotIn(connection, projectId, path, ingestResult.ChunkHashes ?? [],
+                ingestResult.CodeChunkHashes, cancellationToken)
             .ConfigureAwait(false);
         return ingestResult.RowsInserted;
     }
@@ -91,10 +92,13 @@ public sealed partial class SqliteMemoryStore
     ///     embed-queue capture/restore comes along because the delete fires
     ///     <c>promotion_queue_entries_ad</c> (ADR-0023); <c>RestoreQueueRowsStillBacked</c> restores
     ///     only rows a surviving entry still backs, so a pruned chunk's queue row correctly goes
-    ///     with it.
+    ///     with it. `code_entries` has no promotion-queue trigger, so its leg needs no such dance.
+    ///     <paramref name="keepCode" /> null (#436) means the ingest has no trustworthy code-corpus
+    ///     chunk set to prune by — never a stand-in chunker's zero chunks read as "delete
+    ///     everything" — so the code leg is skipped entirely rather than run with an empty keep list.
     /// </summary>
     private async Task PruneChunksNotIn(SqliteConnection connection, string projectId, string path,
-        IReadOnlyList<string> keep, CancellationToken cancellationToken)
+        IReadOnlyList<string> keep, IReadOnlyList<string>? keepCode, CancellationToken cancellationToken)
     {
         await connection.ExecuteAsync(
                 new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
@@ -111,6 +115,18 @@ public sealed partial class SqliteMemoryStore
                     ? Def(MemorySql.DeleteAllChunksForPath, new { projectId, path }, cancellationToken)
                     : Def(MemorySql.DeleteChunksForPathExcept, new { projectId, path, keep }, cancellationToken))
                 .ConfigureAwait(false);
+            if (keepCode is not null)
+            {
+                var codeParams = new
+                {
+                    projectId, path, pathPrefix = LikePattern.Escape(path) + "/%", keep = keepCode
+                };
+                await connection.ExecuteAsync(keepCode.Count == 0
+                        ? Def(MemorySql.DeleteAllCodeChunksForPath, codeParams, cancellationToken)
+                        : Def(MemorySql.DeleteCodeChunksForPathExcept, codeParams, cancellationToken))
+                    .ConfigureAwait(false);
+            }
+
             await connection.ExecuteAsync(Def(MemorySql.RestoreQueueRowsStillBacked, null, cancellationToken))
                 .ConfigureAwait(false);
             await connection.ExecuteAsync(

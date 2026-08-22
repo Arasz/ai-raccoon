@@ -77,6 +77,10 @@ public sealed class FileIngestor(
     ///     rows for real content must not let the watch digest settle into treating the file as
     ///     done, but a genuinely empty/whitespace-only file chunks to zero rows FOREVER regardless
     ///     of chunker quality — refusing to fingerprint it would re-ingest it on every poll forever.
+    ///     #436: <see cref="FileIngestResult.CodeChunkHashes" /> follows the chunker's actual chunk
+    ///     count, not whether any row was freshly inserted, so a fully rediscovered (deduped) file
+    ///     still reports its real, non-empty current chunk set. It stays null (no prune) exactly
+    ///     when the zero-chunk/non-whitespace S3 guard applies.
     /// </summary>
     private async Task<FileIngestResult> IngestAsCodeAsync(SqliteConnection connection, string projectId, string path,
         CancellationToken cancellationToken)
@@ -88,9 +92,14 @@ public sealed class FileIngestor(
 
         var result = await _codeIngestor.IngestFileAsync(connection, projectId, path, cancellationToken)
             .ConfigureAwait(false);
-        return result.Rows > 0
-            ? new FileIngestResult(result.Rows, true)
-            : new FileIngestResult(0, result.ContentWhitespaceOnly);
+        if (result.ChunkHashes is { Count: > 0 })
+        {
+            return new FileIngestResult(result.Rows, true, CodeChunkHashes: result.ChunkHashes);
+        }
+
+        return result.ContentWhitespaceOnly
+            ? new FileIngestResult(0, true, CodeChunkHashes: result.ChunkHashes ?? [])
+            : new FileIngestResult(0, false, CodeChunkHashes: null);
     }
 
     /// <summary>
