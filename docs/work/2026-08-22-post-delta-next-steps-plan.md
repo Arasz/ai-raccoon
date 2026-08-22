@@ -1,6 +1,58 @@
-# Plan — post-delta next steps (rev 2, MoE-reviewed)
+# Plan — post-delta next steps (rev 4, MoE-reviewed, verdicts ingested, handoff-ready)
 
-**Date:** 2026-08-22 · **Base:** main `771f7762` (delta fix PRs #424–#434, docs #438, rulings #439 merged; v1.30.1 released; PR #440 → 1.31.0 in flight) · **Status:** rev 3 — gate ANSWERED 6/6 APPROVE (`2026-08-22-delta-open-items-feedback.md`); G2/G4/G6 notes folded; #437 merged (S10 done); continuation ledger: `2026-08-22-post-delta-continuation-plan.md`
+**Date:** 2026-08-22 · **Base:** main `771f7762` (delta fix PRs #424–#434, docs #438, rulings #439 merged; v1.30.1 released; PR #440 → 1.31.0 in flight) · **Status:** rev 4 — gate ANSWERED 6/6 APPROVE (`2026-08-22-delta-open-items-feedback.md`); all follow-through executed; §"Session handoff" below is the fresh-session entry point · Ledger issue: **#443** · Lifecycle park issue: **#444**
+
+## Session handoff — read this first in a fresh session
+
+**Everything decided is executed or recorded; what remains is the work queue below.** State as of
+main `e2421a7d` (2026-08-22 ~10:30 local):
+
+**Done and landed:**
+- All eleven delta fix PRs #424–#434 merged + doc audit #438; full dispatched CI green on the
+  merged tree; task `delta-plan-implementation` FINISHED in the tracker.
+- Owner gate G1–G6 answered **6/6 APPROVE** (`2026-08-22-delta-open-items-feedback.md`);
+  ratifications + notes recorded in `.ai-badger/status-notes.json` § `post-delta`.
+- Continuation ledger `2026-08-22-post-delta-continuation-plan.md`, tracked by issue **#443**.
+- 1.29.0 lifecycle failure parked per G6 note → issue **#444** (priority on second occurrence).
+- #435: condition-outcome evidence + closure recommendation posted (comment on the issue);
+  owner closes or objects.
+- #437 merged (engine contract gates); #416/#420/#423 merged earlier; S1's compat sentence is on
+  #440's branch verbatim (encrypted-banks-only wording).
+
+**The work queue for the next session, in order:**
+1. **S2 — project-identity ADR** (G2 APPROVE; architect lane). Owner design input is BINDING and
+   recorded in G2's feedback notes + status-notes: guidv7 token, `get-project-id-token` tool, CLI
+   generate + one-way raw→guid convert, accident-prevention threat model (same-machine trusted),
+   old ids warn-but-work, storage instructions + auto-gitignore; the ADR must ANSWER the owner's
+   open question: "can each project still enumerate the DB until it is not encrypted?" (Current
+   truth: yes — the mcp-token authenticates the bank, not the project.) Scope constraints in §S2.
+2. **S6a — #414 immediate half** (G5 APPROVE): synthetic fixture replacing `jsaa-memory.db` in the
+   5+ consuming tests + csproj, delete from HEAD, suite green. Any PR.
+3. **Parity-gate wiring** (ledger row): set `AIRACCOON_POOLING_PARITY_MODEL_DIR` in the nightly
+   leg; record one run where `GraphPooledOutputParityTests` actually executes.
+4. **S4 — H20 placement rule** (G4 APPROVE): after #440 merges; predicate + pre-declared RED set
+   in §S4.
+5. **S6b — #414 history rewrite**: ONLY after no pre-rewrite branch is open (#440 last) and after
+   #405's checklist-completion broadcast; owner executes the force-push (hook-blocked for agents).
+
+**Waiting on outside events:**
+- **#440 (1.31.0)**: #405's checklist (Lane P) mid-run; merge follows its report; then #405
+  broadcasts. **Owner's G1 note: NO publish for now** — the auto-cut release waits unapproved at
+  the production gate; do not chase the approval.
+- **#436** (code-corpus prune gap): accepted by ai-raccoon-cc, NOT started, cc's session wrapped;
+  design brief in §S8. cc's next session picks it up, or reassign.
+- **Gate feedback file**: already ingested; the form (`2026-08-22-delta-open-items-review.html`)
+  needs no further watching.
+
+**Known working-tree oddity in the main checkout (not this plan's doing):** uncommitted
+modifications to `.idea/.idea.AiRaccoon/.idea/ai-raccoon-scripts.iml` (pre-existing) and
+`.ai-badger/skills/ai-raccoon-manual-checklist/templates/checklist-template.json` (likely the
+#405 session's live checklist run). Leave both alone; surface to the owner if they persist after
+#440 closes.
+
+**Coordination facts:** peer sessions were #405 (release lane, still active) and ai-raccoon-cc
+(wrapped). Broadcast-on-main-move is the standing rule. Merges of session PRs may use `--admin`
+past the same-account review gate — standing policy per code-mem gate P1 (APPROVE).
 **Sources:** `docs/work/2026-08-21-delta-review-fix-plan.md` (implemented, closed) · `docs/work/2026-08-22-delta-open-items-review.html` (owner gate G1–G6, feedback pending) · `docs/work/2026-08-22-code-mem-owner-gate-feedback.md` (8/8 APPROVE) · cross-session input from #405 and ai-raccoon-cc · MoE review 2026-08-22 (architect + code-reviewer, both opus)
 
 Items marked **[gated: Gn]** proceed only per the owner's verdict on that card. Everything else has
