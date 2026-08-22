@@ -1,9 +1,12 @@
 using System.Security.Cryptography;
+using AiRaccoon.Core.Memory.Code;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
+using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
@@ -63,6 +66,66 @@ public sealed class DoctorCommandsTests : IDisposable
 
         exit.ShouldBe(0);
         outp.ShouldContain("HEALTHY");
+    }
+
+    /// <summary>
+    ///     #422: a fresh install's code corpus is stored but unsearchable-by-meaning, and nothing
+    ///     said so anywhere. doctor is where someone looks when search feels wrong, so it reports
+    ///     the code engine's state and — when there isn't one — the exact command that installs it.
+    /// </summary>
+    [Fact]
+    public async Task Doctor_NoCodeEngine_SaysNotConfigured_AndNamesTheInstallCommand()
+    {
+        await using (await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+        }
+
+        var (_, outp, _) = await Run(CreateDoctor(), ["doctor"]);
+
+        outp.ShouldContain("code engine: not configured");
+        outp.ShouldContain(CodeEngineSetup.DefaultModelCommand);
+    }
+
+    [Fact]
+    public async Task Doctor_ConfiguredCodeEngine_NamesTheModelAndItsDirectory()
+    {
+        var modelDir = Path.Combine(_dataRoot, "models", "faxenoff__code-daemon-embed-v1");
+        Directory.CreateDirectory(modelDir);
+        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await connection.ExecuteAsync(new CommandDefinition(MemorySql.UpsertSetting,
+                new { key = EmbeddingSettingsKeys.CodeModel, value = modelDir },
+                cancellationToken: TestContext.Current.CancellationToken));
+        }
+
+        var (_, outp, _) = await Run(CreateDoctor(), ["doctor"]);
+
+        outp.ShouldContain("code engine:");
+        outp.ShouldContain(modelDir);
+        outp.ShouldNotContain("code engine: not configured");
+    }
+
+    /// <summary>
+    ///     The count is the whole point of reporting it: rows sit `pending` forever with no engine,
+    ///     and that is legitimate rather than an error, so nothing else in the product ever mentions
+    ///     them. A number here is how someone learns the corpus is waiting on a model.
+    /// </summary>
+    [Fact]
+    public async Task Doctor_ReportsHowManyCodeRowsArePending()
+    {
+        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                """
+                INSERT INTO code_entries (hash, path, value, source_file, line_start, line_end, project_id, created_at, updated_at)
+                VALUES ('h1', 'src/A.cs', 'a', 'src/A.cs', 1, 2, 'acme', 1, 1),
+                       ('h2', 'src/B.cs', 'b', 'src/B.cs', 1, 2, 'acme', 1, 1)
+                """, cancellationToken: TestContext.Current.CancellationToken));
+        }
+
+        var (_, outp, _) = await Run(CreateDoctor(), ["doctor"]);
+
+        outp.ShouldContain("code rows pending: 2");
     }
 
     /// <summary>The exact GH #357 repro: an `entries` table already exists with a narrower shape before doctor ever touches it.</summary>

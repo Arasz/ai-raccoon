@@ -4,7 +4,7 @@
   "source": { "repo": "faxenoff/code-daemon-embed-v1", "revision": "main" },
   "provider": "local",
   "dimensions": 768,
-  "contextWindowTokens": 128,
+  "contextWindowTokens": 512,
   "normalization": "l2",
   "requiresTokenTypeIds": false,
   "pooling": {

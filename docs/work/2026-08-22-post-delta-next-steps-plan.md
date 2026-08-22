@@ -217,13 +217,26 @@ premises source-verified by the MoE facts lane.
 **Owner:** cc next session, or reassigned by d6 if needed sooner. **Acceptance:** per the brief;
 PR merged after pulling main past #440. **Not in progress — do not record it as such.**
 
-### S9 — #422 ONNX token-cap re-measurement (code-mem gate D1, APPROVE — dropped by rev 1)
-Re-measure the bundled/downloaded ONNX graphs' true token cap; the S4 activation gate and the
-chunk budget follow the measurement (the chunker-budget-vs-real-512-ctx question of #422).
-**Owner:** d6 (dotnet-engineer lane). **Acceptance:** measurement recorded on #422 with method;
-activation gate + budget constants updated to follow it (or recorded as already correct); tests
-pinning the budget relationship RED-first if constants change. **Trigger:** after #440 merges
-(shares the embedding surface the checklist exercises).
+### S9 — #422 ONNX token-cap re-measurement — **DONE (extracted by owner 2026-08-22, delivered as PR #453)**
+Re-measured against the real weights, not `config.json` and not the spike note: the graph's
+`position_embeddings.weight` is `[514, 768]`, positions start at `padding_idx + 1`, **512 tokens
+run and 513 fails** on the position-embedding `Gather`, and content past token 128 measurably
+changes the pooled vector (cosine 0.854 / 0.868, where a truncating graph would give 1.000000).
+The spike's "128-token hard cap" was the HF repo manifest's `max_tokens`, never a graph limit.
+Method + numbers posted on #422.
+
+**What followed the measurement:** `CodeChunker.DefaultBudget` 126 → 510, derived from
+`EmbeddingService.MaxManifestChunkTokens` instead of restated; the S4 activation gate now refuses a
+manifest *narrower* than the chunker's budget rather than requiring exact equality (the equality is
+what made the flagship model unactivatable); the how-to's "edit `contextWindowTokens` to 128"
+workaround is deleted. RED-first pins in `CodeManifestBudgetGuardTests`, `CodeEngineActivationTests`
+and a new env-gated `CodeModelGraphWindowTests`. Fresh-install activation proven by a live run.
+
+**Scope the owner added on extraction, also delivered in #453:** `doctor` reports the code engine's
+state and pending-row count; `ai-raccoon model set code default` downloads and activates the default
+code model in one command; that one command string is quoted verbatim by the search warning, doctor,
+the (new) MCP server instructions, the `memory_search` description, the how-to and an upstream
+ai-badger skill PR.
 
 ### S10 — PR #437 disposition (engine contract gates) — **DONE (owner-instructed merge, 9d1c90f7)**
 Merged by owner instruction (rebase, --admin per P1 policy) before a seam review was needed;

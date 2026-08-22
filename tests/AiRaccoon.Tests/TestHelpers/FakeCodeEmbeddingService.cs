@@ -1,3 +1,4 @@
+using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using Microsoft.Extensions.AI;
 
@@ -52,7 +53,15 @@ public sealed class FakeCodeEmbeddingService : IEmbeddingService
 
     public string TrimQueryToWindow(EmbeddingSettings settings, string query) => TrimOverride?.Invoke(query) ?? query;
 
-    public int ResolveChunkBudgetFor(EmbeddingSettings settings) => 126;
+    /// <summary>
+    ///     Derived from the chunker, not restated (#422: this fake held its own copy of the old 126
+    ///     and quietly failed every activation scenario when the real budget moved).
+    ///     <see cref="ChunkBudgetOverride" /> is how a test drives the narrower-than-the-chunker
+    ///     refusal on purpose.
+    /// </summary>
+    public int? ChunkBudgetOverride { get; set; }
+
+    public int ResolveChunkBudgetFor(EmbeddingSettings settings) => ChunkBudgetOverride ?? CodeChunker.DefaultBudget;
 
     public int ResolveDimensions(EmbeddingSettings settings) => 768;
 

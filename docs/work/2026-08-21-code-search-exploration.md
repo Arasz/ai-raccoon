@@ -41,7 +41,7 @@ full 2026-08-21), `config.json`, `tokenizer_config.json`, `manifest.json`, and a
 |---|---|---|
 | Shape | 46.8M params, 4-layer XLM-RoBERTa (strided-truncated from multilingual-e5-base 12L), hidden 768, 12 heads, vocab 22,739 SentencePiece unigram, 514 position embeddings | READ (card) |
 | Output | 768-dim, mask-mean-pooled AND L2-normalized **inside the ONNX graph** — output `[B, 768]` ready to use, no pooling code | VERIFIED (spike: L2 = 1.000000) |
-| Context | hard 128-token cap — the graph does not truncate; truncation is the caller's job | VERIFIED (spike: 520-token input embedded happily; must truncate at serving time) |
+| Context | ~~hard 128-token cap~~ **512** — see Amendments (2026-08-22): the graph's position table is `[514, 768]`, 512 runs and 513 fails; the 128 is the repo manifest's `max_tokens`, not a graph limit | **CORRECTED 2026-08-22** (was: VERIFIED (spike: 520-token input embedded happily)) |
 | Symmetry | no `query:`/`passage:` prefix; queries and documents encoded identically | READ (card) |
 | Inputs/outputs | `input_ids` + `attention_mask`, both int64 `[B, seq]`; one output (misleadingly named `last_hidden_state`, actually the pooled vector) | VERIFIED (spike) |
 | Special token ids | card: raw-SentencePiece indexing `pad=0 unk=1 bos=2 eos=3`; `config.json` says `bos=0 eos=2 pad=1` (stale copy from the e5 base — **the card wins**) | VERIFIED (spike: `<s>`→2, `</s>`→3, `<pad>`→0, `<unk>`→1) |
@@ -430,3 +430,30 @@ flowchart TD
   `src/AiRaccoon/Tools/MemoryTools.cs:98-187` (memory_search surface)
 - Prerequisite plan: `docs/work/2026-08-21-arbitrary-embedding-models-plan.md` (task
   `support-for-other-embedding-models`, rev 2) — D1/D3/D5/D6/D7, WP1–WP4
+
+## Amendments
+
+### 2026-08-22 — the "128-token hard cap" is wrong (issue #422, PR #453)
+
+**What was wrong:** this document's §1 facts table recorded code-daemon-embed-v1's context as a
+"hard 128-token cap", graded VERIFIED. It is not a property of the ONNX graph. The 128 is the HF
+repo's own `manifest.json` `max_tokens` — the model author's serving recommendation. The row's own
+evidence cell already contradicted its verdict, citing "520-token input embedded happily" as proof
+of a hard cap.
+
+**Measured 2026-08-22** against the real weights (method and full output on issue #422):
+
+| | Recorded here | Measured |
+|---|---|---|
+| Graph token cap | hard 128 | **512** — `position_embeddings.weight` is `[514, 768]`, positions start at `padding_idx + 1 = 2`; 512 runs, 513 fails on the position-embedding `Gather` |
+| Tokens past 128 | ignored (implied) | **attended** — cosine 0.854 between two 300-token sequences sharing only their first 128 tokens; 0.868 between a sequence and its own 128-token prefix. A truncating graph would give 1.000000 for both |
+| 520-token input | "embedded happily" | **fails** — the spike's 520 was not 520 token ids |
+
+**What it changed:** everything downstream that read `126` as the code chunk budget. `CodeChunker.DefaultBudget`
+is now 510 (`min(510, 512 − 2)`), and the activation gate refuses a *narrower* manifest rather than
+a merely different one — that equality is what made the flagship model unactivatable (#422). Every
+`126` and `128` elsewhere in this document is historical and reads as such; it has not been rewritten.
+
+**Still open, deliberately:** whether 510-token code chunks *retrieve* better than 126-token ones is
+a separate question this measurement does not answer — the model card recommends short units. That
+belongs to the retrieval-eval lane, not to a graph measurement.

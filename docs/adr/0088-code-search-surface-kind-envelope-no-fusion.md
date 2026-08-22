@@ -21,7 +21,7 @@ the two legs ever fuse into one ranked list.
 1. **`kind: "memory" | "code" | "both"`, default `"memory"`.** Normalized like `scope`
    (lowercased, rejected fail-fast): `invalid-params: Invalid kind 'x': expected memory, code,
    or both.` `QueryGuard` and `QueryLengthGuard` apply identically regardless of `kind`; the
-   code section's query is additionally trimmed to the 126-token manifest window
+   code section's query is additionally trimmed to the manifest window (510 tokens — see Amendments)
    (`TrimQueryToWindow`), with its own code-budget warning distinct from the memory 254-token
    warning.
 2. **Wire shape — `results` (the existing key) and `code` (new).** `kind=memory` serializes the
@@ -85,3 +85,14 @@ the two legs ever fuse into one ranked list.
 Extends ADR-0006 (parameter provenance pattern) and depends on ADR-0085 (the corpus this search
 surface reaches) and ADR-0087 (the drain that determines when code vectors are actually
 searchable versus FTS5-only).
+
+## Amendments
+
+### 2026-08-22 — the code window in Decision 1 is 510, not 126 (issue #422, PR #453)
+
+Decision 1 above said "the 126-token manifest window". That number came from an exploration note
+claiming code-daemon-embed-v1's ONNX graph caps at 128 tokens; the graph accepts 512 and fails at
+513 (measurement on issue #422). The trim is 510 — `min(510, ctx − reservation)` for the model's
+real window. **Scope of this amendment: Decision 1's number only.** Everything else in this ADR —
+the `kind` parameter, the `results`/`code` envelope, the no-fusion ruling, the empty-section
+behaviour for `scope=shared` — is unchanged and still in force.

@@ -2,6 +2,7 @@ using AiRaccoon.Infrastructure.Embedding.Manifest;
 using System.CommandLine;
 using System.Net.Http;
 using AiRaccoon.Infrastructure.Assets;
+using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Infrastructure.Embedding.Download;
 
 namespace AiRaccoon.Setup.Cli.Commands;
@@ -37,6 +38,29 @@ internal sealed class ModelDownloadCommands(
         var dryRun = parseResult.GetValue<bool>("--dry-run");
         var yes = parseResult.GetValue<bool>("--yes");
 
+        var request = new ModelDownloadRequest(repoId, revision, targetDir, explicitFiles, dryRun, yes,
+            message => PromptConfirm(streams, message));
+        return await ExecuteAsync(request, streams, activationHint: true, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     #422: the download half of <c>model set code default</c>. Same service, same pins, same
+    ///     target-directory convention as <c>model download</c> — it just knows the repo id, so a
+    ///     fresh install never has to.
+    /// </summary>
+    public Task<int> DownloadDefaultCodeModelAsync(string targetDir, StandardStreams streams,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            new ModelDownloadRequest(CodeEngineSetup.DefaultModelRepoId, "main", targetDir,
+                Confirm: message => PromptConfirm(streams, message)),
+            // No "activate it next" hint: this call IS the download half of an activating verb, and
+            // pointing at 'model set local' here would send the reader at the MEMORY engine.
+            streams, activationHint: false, cancellationToken);
+
+    private async Task<int> ExecuteAsync(ModelDownloadRequest request, StandardStreams streams,
+        bool activationHint, CancellationToken cancellationToken)
+    {
+        var (repoId, revision, targetDir, dryRun) = (request.RepoId, request.Revision, request.TargetDirectory, request.DryRun);
         var http = httpClientFactory.CreateClient();
         var service = new ModelDownloadService(
             new HfTreeClient(http, endpoint ?? "https://huggingface.co"),
@@ -48,8 +72,6 @@ internal sealed class ModelDownloadCommands(
             new EmbeddingManifestSerializer(),
             new EmbeddingManifestValidator(),
             vocabularyReader ?? new SentencePieceVocabularyReader());
-        var request = new ModelDownloadRequest(repoId, revision, targetDir, explicitFiles, dryRun, yes,
-            message => PromptConfirm(streams, message));
 
         try
         {
@@ -62,7 +84,7 @@ internal sealed class ModelDownloadCommands(
 
             await streams.WriteOutputLineAsync(
                 $"downloaded {repoId}@{revision} to {targetDir} ({result.DownloadedFiles.Count} file(s)); {AiRaccoon.Infrastructure.Embedding.Manifest.EmbeddingManifest.FileName} written. " +
-                $"Activate with 'ai-raccoon model set local {targetDir}'. " +
+                (activationHint ? $"Activate with 'ai-raccoon model set local {targetDir}'. " : string.Empty) +
                 "Trust note: the SHA-256 pins were captured from Hugging Face's LFS oids before download — the first pin trusts the channel once; registry pins are the reviewed tier (plan D8).");
             return ExitCode.Success;
         }
