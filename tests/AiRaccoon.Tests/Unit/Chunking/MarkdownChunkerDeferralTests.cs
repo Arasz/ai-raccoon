@@ -315,119 +315,71 @@ public class MarkdownChunkerDeferralTests
     }
 
     // ---------------------------------------------------------------------------------------
-    // Documented limitations — not fixed here; pinned so a future fix is a deliberate decision
+    // #549/#550 shapes the deferral rule cannot reach — the label is fixed one layer up, by
+    // ChunkWithHeadings (docs/adr/0048): a chunk that only opens a section claims none, and the
+    // section's body chunks carry its path however the text was cut.
     // ---------------------------------------------------------------------------------------
 
     [Fact]
-    public void Split_OversizedFenceRightAfterAHeading_LeavesTheHeadingAloneInItsChunk_KnownLimitation549()
+    public void ChunkWithHeadings_HugeLineRightAfterAHeading_BodyChunksCarryTheSectionTheHeadingOpened()
     {
-        // #549 (BREAK-2, pre-existing, not fixed here). The greedy pack stops right after a
-        // heading when the next unit (here an oversized fence) cannot fit beside it, and
-        // DeferOpenSection cannot move the heading — it is the chunk's first new unit, correctly
-        // protected against non-progress. The result is a chunk labelled by a section it only
-        // opens, the same user-visible symptom class #538 targeted, for an input class neither fix
-        // reaches.
-        var code = string.Join("\n", Enumerable.Range(0, 12).Select(i => $"code line {i} of the block"));
-        var text = $"# Title\n\n## Section A\nAAAA\n\n## Section B\n```\n{code}\n```\n";
-
-        var chunks = new MarkdownChunker(CharCount).Chunk(text, 120);
-
-        chunks.ShouldContain("## Section B\n");
-    }
-
-    [Fact]
-    public void Split_HugeLineRightAfterAHeading_SplitsItsBodyIntoHeaderlessChunks_KnownLimitation549()
-    {
-        // #549 (BREAK-2 variant, pre-existing, not fixed here). Same root cause as the fence case
-        // above, reached through AddUnitOrSplit's mid-word long-line fallback instead of a fence:
-        // the greedy pack stops right after "## Section A" because the 200-char line does not fit
-        // beside it. Item 1's contentful-unit guard now refuses to strand "## Section A" alone
-        // (deferring it would leave only "# Title", itself not contentful) — the heading stays
-        // merged with Title instead — but the section's actual body still lands in later chunks
-        // that carry no heading at all, so their section resolves to null (same symptom class,
-        // one call-path over).
+        // #549: the 200-char line cannot sit beside "## Section A", so the text is cut mid-word
+        // into headerless chunks; their label comes from the heading context, not their text.
         var text = "# Title\n\n## Section A\n" + new string('x', 200) + "\n";
 
-        var chunks = new MarkdownChunker(CharCount).Chunk(text, 30);
+        var chunks = new MarkdownChunker(CharCount).ChunkWithHeadings(text, 30);
 
-        chunks.ShouldNotContain("## Section A\n");
-        chunks.ShouldContain(chunk => HeadingPathParser.Parse(chunk).Length == 0 && chunk.Contains('x'));
+        chunks.Where(c => c.Text.Contains('x')).ShouldAllBe(c => c.HeadingPath == "Title > Section A");
+        chunks.Where(c => c.Text.Contains('x')).ShouldAllBe(c => c.Sections.SequenceEqual(new[] { "Section A" }));
     }
 
     [Fact]
-    public void Split_ProvenanceHeaderThenOversizedFirstSection_StillEmitsAHeaderOnlyChunk_KnownLimitation549()
+    public void ChunkWithHeadings_ProvenanceHeaderThenOversizedFirstSection_HeaderOnlyChunkClaimsNoSection()
     {
-        // #549 (BREAK-2 variant, pre-existing). Looks like BREAK-1 at first ('## Source:' is a
-        // heading to the chunker but metadata to HeadingPathParser), but the root cause is
-        // BREAK-2's: the headers alone ("## Source: …\n\n# Title\n\n") already consume the whole
-        // budget, so no packing arrangement — deferred or not — can fit any of Title's body beside
-        // it. Item 1's guard correctly refuses to defer "# Title" here (nothing contentful would be
-        // lost, but nothing contentful would be gained either — the next chunk still starts fresh),
-        // yet chunk 0 stays header-only and chunk 1 carries the body with a null section.
+        // #549: the headers alone exhaust the budget, so chunk 0 stays header-only. It claims no
+        // section; the body chunk carries Title.
         var text = "## Source: docs/manual.md\n\n# Title\n\nLINE1\nLINE2\nLINE3\nLINE4\n";
 
-        var chunks = new MarkdownChunker(CharCount).Chunk(text, 40);
+        var chunks = new MarkdownChunker(CharCount).ChunkWithHeadings(text, 40);
 
-        chunks[0].ShouldBe("## Source: docs/manual.md\n\n# Title\n\n");
-        HasNoBodyText(chunks[0]).ShouldBeTrue();
-        HeadingPathParser.Parse(chunks[1]).Length.ShouldBe(0, "the body chunk carries no heading of its own");
+        chunks[0].Text.ShouldBe("## Source: docs/manual.md\n\n# Title\n\n");
+        chunks[0].Sections.ShouldBeEmpty();
+        chunks[1].HeadingPath.ShouldBe("Title");
     }
 
     [Fact]
-    public void Split_UnderANonCharTokenizer_TightBudgetStillStrandsBodyInAHeaderlessChunk_KnownLimitation549()
+    public void ChunkWithHeadings_UnderANonCharTokenizer_StrandedBodyStillCarriesItsSection()
     {
-        // #549 (BREAK-2 variant, pre-existing). Same root cause as the test above, under a
-        // non-linear tokenizer (docs/adr/0036): the fix must not depend on CharCount's linearity,
-        // and it doesn't — the limitation reproduces identically.
+        // #549 under a non-linear tokenizer (docs/adr/0036): the label must not depend on
+        // CharCount's linearity.
         var text = "# Title\n\n## Section A\nAAAA words here\n\n## Section B\nBBBB more words\nCCCC yet more\n";
 
-        var chunks = new MarkdownChunker(WordPieces).Chunk(text, 14, 0, WordPieces);
+        var chunks = new MarkdownChunker(WordPieces).ChunkWithHeadings(text, 14, 0, WordPieces);
 
-        chunks.ShouldAllBe(chunk => WordPieces(chunk) <= 14);
-        chunks.ShouldContain(chunk => HasNoBodyText(chunk));
+        chunks.ShouldAllBe(c => WordPieces(c.Text) <= 14);
+        chunks.Where(c => c.Text.Contains("BBBB") || c.Text.Contains("CCCC"))
+            .ShouldAllBe(c => c.Sections.SequenceEqual(new[] { "Section B" }));
+        chunks.Where(c => !HasNoBodyText(c.Text)).ShouldAllBe(c => c.Sections.Count > 0);
     }
 
     [Fact]
-    public void Split_OverlayNearlyFillingTheBudget_CanLabelAChunkWithASectionItOnlyOpens_KnownLimitation550()
+    public void ChunkWithHeadings_HeadingOnlyDocument_EmitsItsHeadingsWithoutClaimingASection()
     {
-        // #550 (BREAK-4, pre-existing, not fixed here). When the overlay is large enough that only
-        // one new unit fits and that unit is a heading, the "never defer the first new unit" guard
-        // protects it and the chunk is labelled by a section whose content is entirely elsewhere.
-        // Not reachable at the production 48/512 overlay ratio (E5 in QA-REVIEW.md and the
-        // production-shaped sweep show zero hits); a seam at an unrealistic overlay/maxTokens
-        // ratio, not a release blocker.
-        var text = "# Title\n\n## Section A\nAAAA\n\n## Section B\nBBBB\nCCCC\n";
-
-        var chunks = new MarkdownChunker(CharCount).Chunk(text, 20, 19);
-
-        var labelledWithNoBody = chunks
-            .Select(chunk => (chunk, path: HeadingPathParser.Parse(chunk)))
-            .Where(x => x.path.Length > 0)
-            .Any(x => HasNoBodyText(x.chunk));
-        labelledWithNoBody.ShouldBeTrue("the overlay-ratio seam is expected to still produce a label-holds-no-content chunk (#550)");
-    }
-
-    [Fact]
-    public void Split_HeadingOnlyDocument_StillEmitsAContentFreeChunk_KnownLimitation550()
-    {
-        // #550 (BREAK-5, pre-existing). A heading-only document has no body units anywhere, so
-        // remainingHasContent is false for every candidate deferral in the chunk (the only units
-        // left behind by removing any one heading are other headings) — every deferral is refused
-        // and the chunk that greedily packs first is emitted whole, headings and all, with no body.
-        // The contentful-unit guard (item 1) happens to have collapsed the one-chunk-per-heading
-        // fan-out this case used to produce, but the chunk is still content-free.
+        // #550: a document that is only headings has nothing to label; its chunk is emitted
+        // (the text exists) but claims no section — it is not a lie, just a heading list.
         var text = "# H1\n# H2\n# H3\n# H4\n# H5\n# H6\n";
 
-        var chunks = new MarkdownChunker(CharCount).Chunk(text, 25, 10);
+        var chunks = new MarkdownChunker(CharCount).ChunkWithHeadings(text, 25, 10);
 
-        chunks.ShouldContain(chunk => HasNoBodyText(chunk));
+        chunks.ShouldAllBe(c => c.Sections.Count == 0);
+        chunks.ShouldAllBe(c => c.HeadingPath.Length == 0);
     }
 
     [Theory]
     [InlineData(1)]
     [InlineData(2)]
     [InlineData(3)]
-    public void Split_AtDegenerateBudgets_TerminatesAndStaysWithinBudget_KnownLimitation550(int maxTokens)
+    public void Split_AtDegenerateBudgets_TerminatesAndStaysWithinBudget(int maxTokens)
     {
         // #550 (BREAK-6, pre-existing, low severity, not fixed here). Splitting terminates and
         // stays within budget at a budget below one line, but the de-fence/line-split fallback
