@@ -206,3 +206,23 @@ contract or to `EventPump<T>`'s existing topics. `TryEnqueue`'s never-blocks gua
   edits through the extraction (PR #490 body), which is the evidence this ADR treats as proof that
   `TryEnqueue`-only is behaviour-identical to the pre-extraction `ConcurrentQueue` contract
   (ADR-0074), not merely similar to it.
+
+## Amendment (2026-08-23) — G1/post-delta-4: the consumer re-signals its own topic on a full row budget
+
+The "no drain-until-empty loop … without a separate owner ruling (G20)" line above is answered:
+`docs/work/2026-08-23-post-delta-4-plan.md` WP1, owner ruling **G1** (APPROVE), is that ruling.
+`EmbedDrainService.DrainOnceAsync` (`EmbedDrainService.cs:104-143`) now re-enqueues its own
+`EmbedDrainRequest` when a pass drains rows `>= rowsPerRun` (`:126-129`) — a full row budget means
+the backlog may not be empty, and `EmbedPendingBatchAsync` on both corpora counts only rows whose
+UPDATE landed (PR #530 review, finding F1: this was already true for `CodeEmbedder` and made true
+for `EntryEmbedder` in the same round), so the re-signal is real progress and cannot spin once a
+corpus is actually exhausted. This is **not** the rejected drain-until-empty loop: the consumer
+still takes exactly one queued item per iteration (Decision 4 stands — coalescing key, single
+reader, bounded-per-signal budget all unchanged), it just no longer waits out the 15s on-demand poll
+between passes when the prior pass proved there was more to do.
+
+Line references into `EmbedDrainService.cs` elsewhere in this ADR have drifted with that edit and
+the class doc rewrite that went with it: the "channel is a wake-up" quote (Decision 4) is now at
+`:29-33`, not `:33-35`; `PumpCeiling`/`PumpCapacity` are now at `:46,49`, not `:41,44`; the
+`ExecuteAsync` loop is now `:57-101`, not `:60-104`. `EventPump.cs`'s own line references are
+untouched — WP1 does not edit that file.
