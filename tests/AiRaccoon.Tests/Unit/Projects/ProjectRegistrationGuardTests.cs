@@ -2,6 +2,7 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Projects;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
 
@@ -43,10 +44,47 @@ public sealed class ProjectRegistrationGuardTests
     public async Task ALegacyRawTextIdWithRows_IsAllowedAndWarns()
     {
         var registry = new FakeProjectRegistry { RowsFor = { "jsaa" } };
-        var guard = NewGuard(registry);
+        var logger = new FakeLogger<ProjectRegistrationGuard>();
+        var guard = new ProjectRegistrationGuard(registry, logger);
 
         // Does not throw — a raw-text id the bank already holds rows for keeps working.
         await guard.EnsureAsync("jsaa", AccessRequirement.Write, TestContext.Current.CancellationToken);
+
+        logger.Collector.GetSnapshot().ShouldContain(r =>
+            r.Id.Name == "LegacyProjectIdAccepted",
+            "the first write through a legacy id warns");
+    }
+
+    /// <summary>The docs row promises a ONE-time warning; the guard is a singleton, so the second
+    /// write through the same id stays silent (the warned-set dedupes per process).</summary>
+    [Fact]
+    public async Task ASecondWriteThroughTheSameLegacyId_DoesNotWarnAgain()
+    {
+        var registry = new FakeProjectRegistry { RowsFor = { "jsaa" } };
+        var logger = new FakeLogger<ProjectRegistrationGuard>();
+        var guard = new ProjectRegistrationGuard(registry, logger);
+
+        await guard.EnsureAsync("jsaa", AccessRequirement.Write, TestContext.Current.CancellationToken);
+        await guard.EnsureAsync("jsaa", AccessRequirement.Write, TestContext.Current.CancellationToken);
+        await guard.EnsureAsync("jsaa", AccessRequirement.Destructive, TestContext.Current.CancellationToken);
+
+        logger.Collector.GetSnapshot()
+            .Count(r => r.Id.Name == "LegacyProjectIdAccepted")
+            .ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task TwoDifferentLegacyIds_EachWarnOnce()
+    {
+        var registry = new FakeProjectRegistry { RowsFor = { "jsaa", "other-legacy" } };
+        var logger = new FakeLogger<ProjectRegistrationGuard>();
+        var guard = new ProjectRegistrationGuard(registry, logger);
+
+        await guard.EnsureAsync("jsaa", AccessRequirement.Write, TestContext.Current.CancellationToken);
+        await guard.EnsureAsync("other-legacy", AccessRequirement.Write, TestContext.Current.CancellationToken);
+        await guard.EnsureAsync("jsaa", AccessRequirement.Write, TestContext.Current.CancellationToken);
+
+        logger.Collector.GetSnapshot().Count(r => r.Id.Name == "LegacyProjectIdAccepted").ShouldBe(2);
     }
 
     /// <summary>The #546-review open question: a code-only legacy project (rows in code_entries,

@@ -11,6 +11,10 @@ namespace AiRaccoon.Projects;
 public sealed partial class ProjectRegistrationGuard(IProjectRegistry registry, ILogger<ProjectRegistrationGuard> logger)
     : IProjectRegistrationGuard
 {
+    // The docs promise a ONE-time warning per legacy id; the guard is a singleton, so this set
+    // makes that true per process rather than per call.
+    private readonly HashSet<string> warnedLegacyIds = [];
+
     /// <inheritdoc />
     public async Task EnsureAsync(string projectId, AccessRequirement requirement,
         CancellationToken cancellationToken = default)
@@ -34,7 +38,10 @@ public sealed partial class ProjectRegistrationGuard(IProjectRegistry registry, 
             throw new UnregisteredProjectException(projectId);
         }
 
-        Log.LegacyProjectIdAccepted(logger, projectId);
+        if (warnedLegacyIds.Add(projectId))
+        {
+            Log.LegacyProjectIdAccepted(logger, projectId);
+        }
     }
 
     internal static partial class Log

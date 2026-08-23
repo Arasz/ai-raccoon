@@ -9,7 +9,9 @@ public interface IToolGate
 
     /// <summary>
     ///     Rejects a blank project id, canonicalizes it (ADR-0089 decision 2), throws access-denied
-    ///     when the mode is too low, and returns the canonical id for the caller to carry downstream.
+    ///     when the mode is too low, and refuses an unregistered id on a write/destructive call
+    ///     with <c>project-not-registered</c> (decision 3 — reads pass through untouched). Returns
+    ///     the canonical id for the caller to carry downstream.
     /// </summary>
     Task<string> RequireAsync(string? projectId, AccessRequirement requirement, string toolName,
         CancellationToken cancellationToken);

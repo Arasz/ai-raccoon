@@ -138,7 +138,21 @@ public sealed class ToolGateTests
     }
 
     [Fact]
-    public async Task RequireAsync_WhenTheRegistrationGuardRefuses_PropagatesTheExceptionBeforeTheAccessCheck()
+    public async Task RequireAsync_WhenTheAccessGuardRefuses_DoesNotReachTheRegistrationGuard()
+    {
+        // Registration is checked AFTER access: an unauthorized caller must not be able to
+        // distinguish "unregistered" from "registered" from the refusal shape (ADR-0089 review).
+        var (guard, _, _, registration, gate) = NewStack();
+        guard.Refuse = true;
+
+        await Should.ThrowAsync<AccessDeniedException>(() =>
+            gate.RequireAsync("acme", AccessRequirement.Write, "memory_write", TestContext.Current.CancellationToken));
+
+        registration.Calls.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task RequireAsync_WhenTheRegistrationGuardRefuses_PropagatesAfterAccessPassed()
     {
         var (guard, _, _, registration, gate) = NewStack();
         registration.Refuse = true;
@@ -146,12 +160,14 @@ public sealed class ToolGateTests
         await Should.ThrowAsync<UnregisteredProjectException>(() =>
             gate.RequireAsync("acme", AccessRequirement.Write, "memory_write", TestContext.Current.CancellationToken));
 
-        guard.Calls.ShouldBeEmpty();
+        guard.Calls.ShouldBe([("acme", AccessRequirement.Write, "memory_write")],
+            "access passed first; only then did the registration refusal fire");
     }
 
     private sealed class RecordingGuard : IMemoryAccessGuard
     {
         public List<(string ProjectId, AccessRequirement Requirement, string ToolName)> Calls { get; } = [];
+        public bool Refuse { get; set; }
 
         public Task<AccessMode> ResolveAsync(string projectId, CancellationToken cancellationToken = default) =>
             Task.FromResult(AccessMode.Full);
@@ -160,6 +176,11 @@ public sealed class ToolGateTests
             CancellationToken cancellationToken = default)
         {
             Calls.Add((projectId, requirement, toolName));
+            if (Refuse)
+            {
+                throw new AccessDeniedException($"{toolName} requires mode full (current rw)");
+            }
+
             return Task.CompletedTask;
         }
     }

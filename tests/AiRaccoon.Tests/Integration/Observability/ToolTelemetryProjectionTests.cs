@@ -99,6 +99,15 @@ public sealed class ToolTelemetryProjectionTests : IAsyncLifetime
         try
         {
             await using var client = await TelemetryServerHost.ConnectAsync(port, cancellationToken);
+
+            // memory_share_extract is a write-path call (promote writes under each named id), so
+            // both ids must be registered or the new project-not-registered refusal shadows the
+            // telemetry behavior this test pins.
+            foreach (var projectId in new[] { "acme", "widget" })
+            {
+                await TelemetryServerHost.SeedProjectRegistrationAsync(_dataRoot, projectId, cancellationToken);
+            }
+
             foreach (var mode in new[] { "propose", "promote" })
             {
                 var result = await client.CallToolAsync("memory_share_extract",

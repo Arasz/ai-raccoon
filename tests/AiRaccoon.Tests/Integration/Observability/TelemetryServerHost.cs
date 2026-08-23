@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Access;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
@@ -45,5 +46,18 @@ internal static class TelemetryServerHost
         var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), TimeProvider.System,
             TestData.CreateEmbeddingService());
         await store.SetSettingAsync(AccessModePolicy.ProjectSettingKey(projectId), mode, cancellationToken);
+    }
+
+    /// <summary>Registers a project id directly (ADR-0089) — a write-path tool refuses an unregistered one before its own logic runs.</summary>
+    public static async Task SeedProjectRegistrationAsync(string dataRoot, string projectId,
+        CancellationToken cancellationToken)
+    {
+        var options = TestData.CreateInfrastructureOptions(dataRoot);
+        var factory = new SqliteConnectionFactory(options,
+            new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
+                [new EnvEncryptionKeyProvider()]));
+        var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), TimeProvider.System,
+            TestData.CreateEmbeddingService());
+        await ((IProjectRegistry)store).RegisterAsync(projectId, null, cancellationToken);
     }
 }
