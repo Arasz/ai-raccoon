@@ -4,11 +4,9 @@ using AiRaccoon.Core.Memory;
 namespace AiRaccoon.Setup.Cli.Commands;
 
 /// <summary>
-///     `repair reingest` handler: a thin client over <see cref="IRepairStore" /> (ADR-0075 amendment)
+///     `repair reingest` handler: a thin client over <see cref="IRepairStore" />
 ///     — the report is scanned server-side and never opens the bank from the CLI process; --apply
-///     commits a request the server applies, rather than writing here. Its own top-level operation,
-///     not a maintenance-job subcommand in the CLI sense — same explicit-only constraint as
-///     `repair chunk-index`.
+///     commits a request the server applies, rather than writing here.
 /// </summary>
 public sealed class ReingestRepairCommands(IRepairStore repair)
 {

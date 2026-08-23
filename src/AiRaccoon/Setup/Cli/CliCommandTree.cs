@@ -155,7 +155,8 @@ internal static class CliCommandTree
             new Command("set",
                 "Sets the engine and re-embeds the bank. Blocks all reads and writes until done — minutes on a large bank")
             {
-                new Command("local", "Embeds in-process with the bundled ONNX model; optional path overrides it") { new Argument<string?>("path") { HelpName = "path", Arity = ArgumentArity.ZeroOrOne } },
+                new Command("local", "Embeds in-process with the bundled ONNX model; optional path overrides it")
+                    { new Argument<string?>("path") { HelpName = "path", Arity = ArgumentArity.ZeroOrOne } },
                 new Command("openai", "Routes through an OpenAI-compatible endpoint; key via --api-key (persisted in settings)")
                 {
                     new Argument<string>("model") { HelpName = "model-id" }, new Argument<string?>("base-url") { HelpName = "url", Arity = ArgumentArity.ZeroOrOne },
@@ -164,7 +165,7 @@ internal static class CliCommandTree
                 },
                 new Command("code", "Code corpus embedding engine (local only in v1); configuration is under 'settings model code'")
                 {
-                    // #422: `default` deliberately downloads AND activates, and it sits under
+                    // `default` deliberately downloads AND activates, and it sits under
                     // `model set` — the activating family — so `model download`'s "never activates"
                     // contract is untouched. A hint that needs a second command with a path the
                     // reader has to construct is a hint nobody follows, and this string is quoted
@@ -174,21 +175,20 @@ internal static class CliCommandTree
                         "<data-root>/models/ if it is not already there, then ACTIVATES it — unlike 'model download', " +
                         "which never activates. Re-running it against an already-downloaded directory only re-activates."),
                     new Command("local",
-                        "Activates a manifest directory for the code corpus and invalidates its embedded rows to 'pending' " +
-                        "(§3.3 D-E9, one transaction — no re-embed here, the code-reindex maintenance job drains it). " +
-                        "Refuses a manifest whose dimensions are not 768: vec_code is fixed float[768] and has no " +
-                        "dimension-reconcile phase, unlike 'model set local'.")
+                        "Activates a manifest directory for the code corpus and invalidates its embedded rows to 'pending'. " +
+                        "Refuses a manifest whose dimensions are not 768: vec_code is fixed float[768].")
                     {
                         new Argument<string>("dir") { HelpName = "dir" }
                     }
                 }
             },
             new Command("download",
-                "Downloads a Hugging Face embedding model into <data-root>/models/<slug> with SHA-256 pins from the LFS oids (plan D4/D8): resolves the tree, verifies every file, writes ai-raccoon.manifest.json. Does NOT activate — 'model set local <dir>' is the explicit next step.")
+                "Downloads a Hugging Face embedding model into <data-root>/models/<slug> with SHA-256 pins. Does NOT activate — 'model set local <dir>' is the next step.")
             {
                 new Argument<string>("repo-id") { HelpName = "repo-id" },
                 new Option<string>("--revision") { Description = "Revision to resolve (default main)", HelpName = "revision" },
-                new Option<string[]>("--file") { Description = "Download this repo-relative file instead of auto-selecting onnx/model.onnx (repeatable; external-data siblings are still enumerated)", HelpName = "path" },
+                new Option<string[]>("--file")
+                    { Description = "Download this repo-relative file instead of auto-selecting onnx/model.onnx (repeatable; external-data siblings are still enumerated)", HelpName = "path" },
                 new Option<string>("--dir") { Description = "Target directory (default <data-root>/models/<slug>)", HelpName = "path" },
                 new Option<bool>("--dry-run") { Description = "Resolve and print files, sizes and SHA-256 pins without downloading anything" },
                 new Option<bool>("--yes") { Description = "Skip the size confirmation for downloads larger than 500 MB" }
@@ -233,7 +233,7 @@ internal static class CliCommandTree
         };
         retrieval.Add(alpha);
         var fusion = new Command("fusion",
-            "No-fusion-regression reorder (docs/adr/0078): keeps a result from ranking below where its best single modality put it. OFF by default and unproven — 'fusion enable' arms it and starts recording how it differs from the baseline.")
+            "No-fusion-regression reorder: keeps a result from ranking below where its best single modality put it. OFF by default — 'fusion enable' arms it and starts recording how it differs from the baseline.")
         {
             new Command("enable", "Arms the reorder and its evidence collection (not the default)"),
             new Command("disable", "Back to the baseline fusion (the default)")
@@ -311,13 +311,13 @@ internal static class CliCommandTree
     private static Command NoiseCommand() =>
         new("noise", "Rejected-write training data. Rejection is CONFIGURED under 'settings noise'.")
         {
-            new Command("entries", "Summarizes noise_entries — the training-data source for a future noise learner (ADR-0029/ADR-0039)")
+            new Command("entries", "Summarizes noise_entries — the training-data source for a future noise learner")
         };
 
     private static Command QueryGuardCommand()
     {
         var queryGuard = new Command("queryguard",
-            "Read-path query guard (docs/adr/0040): refuses a memory_search query that is itself machine output (e.g. a pasted background-process notification) and annotates one that merely contains log-like content. Armed by default — 'queryguard disable' is how you disarm it.")
+            "Read-path query guard: refuses a memory_search query that is itself machine output (e.g. a pasted background-process notification) and annotates one that merely contains log-like content. Armed by default — 'queryguard disable' is how you disarm it.")
         {
             new Command("enable", "Arms the read-path query guard (the default)"),
             new Command("disable", "Disarms the read-path query guard — every query runs untouched, even ones a policy would otherwise refuse or annotate")
@@ -330,7 +330,7 @@ internal static class CliCommandTree
         };
         queryGuard.Add(shadow);
         var structural = new Command("structural",
-            "Structural detector (docs/adr/0041): a learned, vocabulary-free third input to the warn tier. Off by default — it only ever adds an annotation, never a refusal.")
+            "Structural detector: a learned, vocabulary-free third input to the warn tier. Off by default — it only ever adds an annotation, never a refusal.")
         {
             new Command("enable", "Arms the structural detector"),
             new Command("disable", "Disarms the structural detector (the default)"),
@@ -395,44 +395,36 @@ internal static class CliCommandTree
         unset.Aliases.Add("reset");
         unset.Aliases.Add("remove");
         encryption.Add(unset);
-        encryption.Add(new Command("migrate", "Rekeys a bank still encrypted under the pre-ADR-0012 key derivation (ADR-0012)"));
+        encryption.Add(new Command("migrate", "Rekeys a bank still encrypted under the old key derivation"));
         return encryption;
     }
 
     /// <summary>
-    ///     Explicit-only repair operations (GH #371), reaching the server entirely (ADR-0075
-    ///     amendment): the report is scanned server-side, and --apply commits a request the
-    ///     maintenance loop's on-demand job applies — never a clock-scheduled run, and never a write
-    ///     from the CLI process. An operator invokes these by hand; nothing here runs unattended.
+    ///     Explicit repair jobs the server runs on its own maintenance cycle. The CLI only asks for
+    ///     the job; it never writes the bank.
     /// </summary>
     private static Command RepairCommand() =>
-        new("repair", "Explicit-only repair operations, reaching the server entirely. Nothing here runs unattended — every repair is invoked by hand.")
+        new("repair", "Fixes bank-state drift by asking the server to repair it. chunk-index fixes wrong chunk positions; reingest re-processes files a chunker change made unreproducible.")
         {
             new Command("chunk-index",
-                "Re-derives chunk_index/total_chunks per source_file from the document itself, instead of the row-insertion order an older binary may have left behind (GH #371). " +
-                "A source_file that no longer exists gets chunk_index = -1 (position unknown), never a guess. Pure UPDATE — never inserts or deletes a row. Reports by default (scanned " +
-                "server-side); --apply requests the server apply it on its next maintenance poll (~15s).")
+                "Use this when chunk positions drifted from document order. Reports by default; --apply asks the server to fix them.")
             {
-                new Option<bool>("--apply") { Description = "Requests the server reposition the values instead of only reporting them" }
+                new Option<bool>("--apply") { Description = "Ask the server to fix the positions on its next maintenance poll (~15s)" }
             },
             new Command("reingest",
-                "Re-ingests source files chunk-index repair could only mark chunk_index = -1 for — a chunker change made their stored rows unreproducible by hash. " +
-                "Deletes and re-inserts each file's chunks (never a memory_write row that merely cites the path, never a file that no longer exists) and discards their per-row " +
-                "metadata (rating, access_count, last_accessed_at) in the process — a re-chunk moves boundaries, so there is no 1:1 row to carry it onto. Reports by default (scanned " +
-                "server-side); --apply requests the server apply it and drain the resulting embeddings, both on its next maintenance poll (~15s) — the CLI never writes the bank itself.")
+                "Use this when a chunker change makes stored chunks unreproducible. Reports by default; --apply asks the server to re-ingest them.")
             {
-                new Option<bool>("--apply") { Description = "Requests the server perform the reingest instead of only reporting what it would do" }
+                new Option<bool>("--apply") { Description = "Ask the server to re-ingest the files on its next maintenance poll (~15s)" }
             }
         };
 
     /// <summary>
-    ///     Verifies the bank's schema shape (tables/columns/indexes) against what this binary's DDL
-    ///     produces and reports — it never repairs (GH #357). An operation, not settings-backed
-    ///     configuration, so it stays top level like `watch`/`extract`/`noise`/`encryption`/`serve`.
+    ///     Checks the bank for schema/version drift without changing it. Use this when a bank looks
+    ///     mismatched or a search result feels wrong.
     /// </summary>
     private static Command DoctorCommand() =>
         new("doctor",
-            "Verifies the bank's schema shape (tables, columns, indexes) against what this binary expects, and reports. Never repairs — run after a suspected aborted migration, hand-edited bank, or partial restore.");
+            "Shows the bank schema/version, code engine state, and embedding settings without changing the bank. Use this when a bank looks mismatched or a search result feels wrong.");
 
     private static Command ScopeCommand(string description) =>
         new("scope", description)
@@ -467,7 +459,8 @@ internal static class CliCommandTree
         {
             new Command("enable", "Enables or disables watching for a target (configuration only — does not register a watch; use memory_watch_add to register)")
                 { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<bool>("enabled") { HelpName = "true|false", Arity = ArgumentArity.ExactlyOne } },
-            new Command("disable", "Alias for enable … false") { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<bool>("enabled") { HelpName = "true|false", Arity = ArgumentArity.ExactlyOne } },
+            new Command("disable", "Alias for enable … false")
+                { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<bool>("enabled") { HelpName = "true|false", Arity = ArgumentArity.ExactlyOne } },
             new Command("concurrency", "Sets the watcher concurrency (1..16, default 4)")
                 { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<int>("value") { HelpName = "1..16" } },
             new Command("remove", "Removes all watch config rows for a target") { new Argument<string>("target") { HelpName = "project-id|*" } }
@@ -483,7 +476,7 @@ internal static class CliCommandTree
         new("extract", "Shared-extraction operations. The service is CONFIGURED under 'settings extract'.")
         {
             new Command("prune",
-                    "Reports promotion_queue rows orphaned before the entries-delete trigger existed (ADR-0023) — a candidate whose backing entry is gone. Reports per-project counts by default; --apply removes them. Idempotent.")
+                    "Reports promotion_queue rows whose backing entry is gone. Reports per-project counts by default; --apply removes them. Idempotent.")
                 { new Option<bool>("--apply") { Description = "Removes the orphaned rows instead of only reporting them" } }
         };
 

@@ -4,7 +4,7 @@ using Microsoft.Data.Sqlite;
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>
-///     Read-only schema-shape verification (GH #357): `CREATE ... IF NOT EXISTS` silently no-ops
+///     Read-only schema-shape verification: `CREATE ... IF NOT EXISTS` silently no-ops
 ///     against an object that already exists with a different shape, so <see cref="MemorySchema.EnsureAsync" />
 ///     proves existence, never shape. Compares <paramref name="bank" /> against the real
 ///     <c>Ddl</c> applied to a throwaway in-memory bank — never a hand-maintained second copy of
@@ -114,8 +114,7 @@ internal static class SchemaDoctor
         return findings;
     }
 
-    private static string Describe(ColumnShape column) =>
-        $"{column.Type}{(column.NotNull ? " NOT NULL" : "")}{(column.IsPrimaryKey ? " PRIMARY KEY" : "")}";
+    private static string Describe(ColumnShape column) => $"{column.Type}{(column.NotNull ? " NOT NULL" : "")}{(column.IsPrimaryKey ? " PRIMARY KEY" : "")}";
 
     private static async Task<IReadOnlyDictionary<string, ColumnShape>> ColumnsAsync(SqliteConnection connection, string table,
         CancellationToken cancellationToken)

@@ -10,10 +10,9 @@ using Microsoft.Data.Sqlite;
 namespace AiRaccoon.Setup.Cli.Commands;
 
 /// <summary>
-///     `doctor` (GH #357): verifies the bank's schema shape and reports — it never repairs. Reads
+///     `doctor`: verifies the bank's schema shape and reports — it never repairs. Reads
 ///     the bank read-only, exactly like <c>OpenSnapshotReadOnly</c> (AppRegistrations.cs), so it
-///     never runs <c>MemorySchema.EnsureAsync</c> against the very bank it is inspecting (ADR-0075
-///     sanctions the CLI reading the bank directly; never writing).
+///     never runs <c>MemorySchema.EnsureAsync</c> against the very bank it is inspecting.
 /// </summary>
 public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnectionFactory, IEncryptionKeyResolver keyResolver, ILogger<DoctorCommands> logger)
 {
@@ -93,6 +92,8 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
                     await streams.WriteOutputLineAsync($"  - {finding.ObjectName}: {finding.Detail}");
                 }
 
+                await streams.WriteOutputLineAsync(
+                    "remedy: start the server (ai-raccoon serve) — it repairs the schema on every open");
                 return ExitCode.SchemaVerificationFailed;
         }
     }
@@ -183,12 +184,6 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         await connection.QuerySingleOrDefaultAsync<string?>(new CommandDefinition(
             "SELECT value FROM settings WHERE key = @key", new { key }, cancellationToken: cancellationToken));
 
-    /// <summary>Null <paramref name="Directory" /> is "no code engine configured".</summary>
-    private sealed record CodeEngineState(string? Model, string? Directory, long? PendingRows);
-
-    /// <summary>#522: what `embedding.threads` currently resolves to, and why (an explicit setting vs the halved-core default).</summary>
-    private sealed record EmbeddingThreadsState(int Threads, string Source);
-
     /// <summary>Mirrors AppRegistrations.OpenSnapshotReadOnly, aimed at the live bank instead of a sync snapshot: open, enable extensions, load vec0 — never EnsureAsync.</summary>
     private static async Task<SqliteConnection> OpenBankReadOnlyAsync(string bankPath, string? passphrase, CancellationToken cancellationToken)
     {
@@ -208,6 +203,12 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         connection.LoadVector();
         return connection;
     }
+
+    /// <summary>Null <paramref name="Directory" /> is "no code engine configured".</summary>
+    private sealed record CodeEngineState(string? Model, string? Directory, long? PendingRows);
+
+    /// <summary>#522: what `embedding.threads` currently resolves to, and why (an explicit setting vs the halved-core default).</summary>
+    private sealed record EmbeddingThreadsState(int Threads, string Source);
 
     private static partial class Log
     {

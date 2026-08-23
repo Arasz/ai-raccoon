@@ -36,11 +36,8 @@ public class CliCommandTreeTests
             .Children.OfType<Command>().Single(c => c.Name == name);
 
     /// <summary>
-    ///     `repair reingest --help` used to say "a running server drains it automatically... with no
-    ///     server running, nothing drains it — run memory_embed_pending by hand" — enshrining the
-    ///     defect this ADR-0075 amendment fixes: the CLI wrote the bank directly whenever no server
-    ///     happened to be running, and advertised that as the normal manual path. `--apply` now only
-    ///     ever requests the server apply it (ADR-0075 amendment); the help text must say that, and
+    ///     `repair reingest --help` must describe requesting the server, not a manual fallback.
+    ///     `--apply` only ever requests the server apply it; the help text must say that, and
     ///     must not advertise a CLI-only manual fallback as the normal case.
     /// </summary>
     [Fact]
@@ -66,6 +63,28 @@ public class CliCommandTreeTests
 
         reingestApply.Description.ShouldNotBeNull().ShouldContain("server");
         chunkIndexApply.Description.ShouldNotBeNull().ShouldContain("server");
+    }
+
+    [Fact]
+    public void RepairAndDoctorHelpText_IsSelfContainedAndShort()
+    {
+        var repair = CommandAt("repair");
+        var chunkIndex = repair.Children.OfType<Command>().Single(c => c.Name == "chunk-index");
+        var reingest = repair.Children.OfType<Command>().Single(c => c.Name == "reingest");
+        var doctor = CommandAt("doctor");
+
+        foreach (var description in new[] { repair.Description, chunkIndex.Description, reingest.Description, doctor.Description })
+        {
+            var value = description!;
+            value.ShouldNotContain("ADR-");
+            value.ShouldNotContain("GH #");
+            value.ShouldNotContain("memory_embed_pending");
+            value.Length.ShouldBeLessThan(220);
+        }
+
+        chunkIndex.Description!.ShouldContain("Use this when");
+        reingest.Description!.ShouldContain("Use this when");
+        doctor.Description!.ShouldContain("without changing the bank");
     }
 
     [Fact]
