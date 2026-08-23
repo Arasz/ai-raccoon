@@ -22,7 +22,7 @@ public sealed class ToolGate(IMemoryAccessGuard access, IPromotionQueue queue, I
             await migrations.HasOpenModelMigrationAsync(cancellationToken).ConfigureAwait(false))
         {
             throw new ModelMigrationInProgressException(
-                "ai-raccoon: a model migration is in progress; try again once it finishes");
+                $"ai-raccoon: a model migration is in progress; try again once it finishes ({toolName})");
         }
     }
 

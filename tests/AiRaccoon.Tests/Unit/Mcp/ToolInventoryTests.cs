@@ -111,13 +111,24 @@ public class ToolInventoryTests
     public void EveryTool_NamesTheProjectIdParameter()
     {
         var offenders = new List<string>();
+        var gateCallsByMethodInClass = new Dictionary<string, Dictionary<string, bool>>(StringComparer.Ordinal);
 
         foreach (var (type, method, _) in ToolMethods())
         {
             var namesParameter = method.GetParameters()
                 .Select(p => p.Name)
                 .Any(n => n is "projectId" or "projectIds");
-            var gatesOnIt = MethodBodyCallsRequireAsync(type.Name, method.Name);
+
+            if (!gateCallsByMethodInClass.TryGetValue(type.Name, out var gateCallsByMethod))
+            {
+                gateCallsByMethod = RequireAsyncCallsByMethod(type.Name);
+                gateCallsByMethodInClass[type.Name] = gateCallsByMethod;
+            }
+
+            if (!gateCallsByMethod.TryGetValue(method.Name, out var gatesOnIt))
+            {
+                throw new InvalidOperationException($"Could not locate {type.Name}.{method.Name} in its source file.");
+            }
 
             if (namesParameter != gatesOnIt)
             {
@@ -130,8 +141,8 @@ public class ToolInventoryTests
             + string.Join("; ", offenders));
     }
 
-    /// <summary>Whether a tool method's body (read from its own source file) calls gate.RequireAsync.</summary>
-    private static bool MethodBodyCallsRequireAsync(string className, string methodName)
+    /// <summary>Every [McpServerTool] method's name in a class's source file, mapped to whether its body calls gate.RequireAsync — one read and one parse per class file.</summary>
+    private static Dictionary<string, bool> RequireAsyncCallsByMethod(string className)
     {
         var text = File.ReadAllText(RepoFile($"src/AiRaccoon/Tools/{className}.cs"));
         var attributeStarts = Regex.Matches(text, @"\[McpServerTool[^\]]*\]")
@@ -139,18 +150,19 @@ public class ToolInventoryTests
             .Order()
             .ToList();
 
+        var result = new Dictionary<string, bool>(StringComparer.Ordinal);
         foreach (var start in attributeStarts)
         {
             var end = attributeStarts.FirstOrDefault(i => i > start, text.Length);
             var region = text[start..end];
             var nameMatch = Regex.Match(region, @"public\s+(?:async\s+)?[\w<>?,\s\[\]]+\s+(\w+)\s*\(");
-            if (nameMatch.Success && nameMatch.Groups[1].Value == methodName)
+            if (nameMatch.Success)
             {
-                return region.Contains("gate.RequireAsync(", StringComparison.Ordinal);
+                result[nameMatch.Groups[1].Value] = region.Contains("gate.RequireAsync(", StringComparison.Ordinal);
             }
         }
 
-        throw new InvalidOperationException($"Could not locate {className}.{methodName} in its source file.");
+        return result;
     }
 
     /// <summary>The server reference doc lists all MCP tools — its tool count heading must track the registry, not go stale.</summary>
