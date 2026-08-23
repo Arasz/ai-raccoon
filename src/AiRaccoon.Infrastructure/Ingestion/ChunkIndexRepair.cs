@@ -52,7 +52,7 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddin
 
             var rows = (await connection.QueryAsync<GroupRow>(new CommandDefinition(
                     $"""
-                     SELECT id AS Id, hash AS Hash, chunk_index AS ChunkIndex
+                     SELECT id AS Id, hash AS Hash, chunk_index AS ChunkIndex, section AS Section
                      FROM entries
                      WHERE source_file = @sourceFile AND ({MemorySql.ContextKeyExpression("")}) = @ctx
                      """, new { sourceFile = group.SourceFile, ctx = group.Ctx }, cancellationToken: cancellationToken))
@@ -81,8 +81,11 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddin
 
                 if (apply)
                 {
+                    // An unreproduced row's section is unknown, not gone (Copilot round 5,
+                    // comment 3838133861) — keep what it already had rather than clearing it.
+                    var section = newIndex < 0 ? row.Section : scan.SectionById[row.Id];
                     await connection.ExecuteAsync(new CommandDefinition(MemorySql.SetChunkPosition,
-                            new { id = row.Id, chunkIndex = newIndex, totalChunks }, cancellationToken: cancellationToken))
+                            new { id = row.Id, chunkIndex = newIndex, totalChunks, section }, cancellationToken: cancellationToken))
                         .ConfigureAwait(false);
                 }
             }
@@ -108,5 +111,7 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddin
         public string Hash { get; set; } = "";
 
         public long ChunkIndex { get; set; }
+
+        public string? Section { get; set; }
     }
 }

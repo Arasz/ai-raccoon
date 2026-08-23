@@ -223,7 +223,7 @@ public sealed class FileIngestor(
         var bucket = EntryBucket.For(resolvedContext, projectId);
         var (chunkMaxTokens, chunkOverlayTokens, chunkCountTokens) = await ChunkSizeForAsync(connection, cancellationToken)
             .ConfigureAwait(false);
-        var chunks = handler.Chunker.Chunk(content, chunkMaxTokens, chunkOverlayTokens, chunkCountTokens);
+        var chunks = handler.Chunker.ChunkWithHeadings(content, chunkMaxTokens, chunkOverlayTokens, chunkCountTokens);
         var hashes = new List<string>(chunks.Count);
         if (chunks.Count == 0)
         {
@@ -244,14 +244,13 @@ public sealed class FileIngestor(
         var inserted = 0;
         for (var ordinal = 0; ordinal < chunks.Count; ordinal++)
         {
-            var chunk = chunks[ordinal];
+            var chunk = chunks[ordinal].Text;
             var hash = ContentHash.Of(path, chunk);
             hashes.Add(hash);
             // SourcePathQuery ANDs a "file#section" anchor against the FTS {source_file section}
-            // columns, so a chunk with a null section can never satisfy one. Derived from the
-            // chunk's own heading rather than left null; heading_path carries the full trail and
-            // the anchor only ever names its leaf.
-            var section = HeadingSection(chunk);
+            // columns; the chunker reports the heading path in force at each chunk (docs/adr/0048,
+            // #549), and the anchor only ever names its leaf.
+            var section = chunks[ordinal].SectionLabel();
             var existingId = await connection.ExecuteScalarAsync<long?>(
                     Def(MemorySql.SelectChunkIdByPathAndHashInBucket,
                         new
@@ -302,7 +301,7 @@ public sealed class FileIngestor(
 
             var chunkId = existingId.Value;
             await connection.ExecuteAsync(
-                    Def(MemorySql.SetChunkPosition, new { id = chunkId, chunkIndex = ordinal, totalChunks = chunks.Count },
+                    Def(MemorySql.SetChunkPosition, new { id = chunkId, chunkIndex = ordinal, totalChunks = chunks.Count, section },
                         cancellationToken))
                 .ConfigureAwait(false);
         }
@@ -440,20 +439,4 @@ public sealed class FileIngestor(
     private static CommandDefinition Def(string sql, object? parameters = null,
         CancellationToken cancellationToken = default) =>
         new(sql, parameters, cancellationToken: cancellationToken);
-
-    /// <summary>The leaf of the chunk's heading trail, or null when it has no heading.</summary>
-    private static string? HeadingSection(string chunk)
-    {
-        var headingPath = HeadingPathParser.Parse(chunk);
-        if (string.IsNullOrWhiteSpace(headingPath))
-        {
-            return null;
-        }
-
-        // HeadingPathParser joins on " > ", so the bare '>' is not a separator: a heading carrying
-        // one of its own ("<!-- REQUIRED -->") would otherwise end the split on an empty segment.
-        var lastSeparator = headingPath.LastIndexOf(" > ", StringComparison.Ordinal);
-        var leaf = (lastSeparator < 0 ? headingPath : headingPath[(lastSeparator + 3)..]).Trim();
-        return leaf.Length == 0 ? null : leaf;
-    }
 }
