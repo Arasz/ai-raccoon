@@ -104,6 +104,35 @@ public sealed class FileIngestorIgnoreTests : IDisposable
             "the ancestor watch root's ignore file must exclude sub/skip/** from a walk of sub/");
     }
 
+    /// <summary>
+    ///     B1 (PR #532 review): a walk root's OWN ignore file must still be honored even when an
+    ///     ancestor scope entry admits it and carries no ignore file of its own —
+    ///     <see cref="ResolveIgnoreRootAsync" />'s ancestor resolution must never suppress the
+    ///     walk root's own `ai-raccoon.ignore` (docs/reference/agent-memory-server.md:283-284,
+    ///     docs/features/code-corpus/code-corpus.feature:73).
+    /// </summary>
+    [Fact]
+    public async Task IngestDirectoryAsync_WalkRootOwnIgnoreFile_TakesPrecedenceOverAncestorScopeEntry()
+    {
+        var subDir = Path.Combine(_testDir, "src");
+        Directory.CreateDirectory(subDir);
+        // No ai-raccoon.ignore at _testDir (the admitting scope entry) — only at the walk root.
+        await File.WriteAllTextAsync(Path.Combine(subDir, IgnoreRulesProvider.FileName), "secret.md\n",
+            TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Combine(subDir, "secret.md"), "# do not index",
+            TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Combine(subDir, "keep.md"), "# index me",
+            TestContext.Current.CancellationToken);
+
+        await _ingestor.IngestDirectoryAsync(_conn, "test_project", subDir, null,
+            TestContext.Current.CancellationToken);
+
+        var paths = SelectSourceFiles();
+        paths.ShouldContain(Path.Combine(subDir, "keep.md"));
+        paths.ShouldNotContain(Path.Combine(subDir, "secret.md"),
+            "the walk root's own ignore file must win even when the ancestor scope entry has none");
+    }
+
     private FileIngestor CreateIngestorWithWatchStore(IWatchStore watchStore)
     {
         var sourceStore = new SqliteMemorySourceStore(_factory);
