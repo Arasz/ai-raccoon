@@ -67,38 +67,60 @@ public sealed partial class ManifestPoolingRepair(
             return false;
         }
 
-        // #470: the sole output the manifest names as token-level already serves both roles.
+        // #470: the sole output the manifest names as token-level already serves both roles —
+        // every embed already reads it either way, so the correction changes no vector.
         if (!string.IsNullOrWhiteSpace(tokenOutput) && GraphPools(ranks, tokenOutput))
         {
-            return WriteRepair(manifestPath, manifest, tokenOutput, manifest.Pooling.OutputNames?.TokenEmbeddings ?? tokenOutput);
+            var repaired = Repaired(manifest, tokenOutput, manifest.Pooling.OutputNames?.TokenEmbeddings ?? tokenOutput);
+            if (!WriteManifest(manifestPath, repaired, out var reason))
+            {
+                Log.PoolingModeNotRepaired(logger, manifestPath, reason!);
+                return false;
+            }
+
+            Log.PoolingModeRepaired(logger, manifest.Model, SchemaName(manifest.Pooling.Mode), tokenOutput, manifestPath);
+            return true;
         }
 
         // #497: a distinctly-named embeddingOutput the graph itself pools, beside a token-level
-        // output that stays genuinely token-level — both names are left exactly as they are.
+        // output that stays genuinely token-level (rank 3) — every embed until now read THAT
+        // output, so the correction switches which tensor is read and changes the vectors.
         if (!string.IsNullOrWhiteSpace(embeddingOutput) && embeddingOutput != tokenOutput && GraphPools(ranks, embeddingOutput))
         {
-            return WriteRepair(manifestPath, manifest, embeddingOutput, tokenOutput ?? embeddingOutput);
+            var repaired = Repaired(manifest, embeddingOutput, tokenOutput ?? embeddingOutput);
+            if (!WriteManifest(manifestPath, repaired, out var reason))
+            {
+                Log.DistinctPoolingModeNotRepaired(logger, manifestPath, tokenOutput ?? embeddingOutput, reason!);
+                return false;
+            }
+
+            Log.DistinctPoolingModeRepaired(logger, manifest.Model, SchemaName(manifest.Pooling.Mode), embeddingOutput, tokenOutput ?? embeddingOutput, manifestPath);
+            return true;
         }
 
         return false;
     }
 
-    /// <summary>Writes the repaired manifest: <paramref name="embeddingOutputName" /> becomes
+    /// <summary>The rewritten manifest: <paramref name="embeddingOutputName" /> becomes
     /// <c>onnx.embeddingOutput</c>, <paramref name="outputNamesTokenEmbeddings" /> becomes
     /// <c>pooling.outputNames.tokenEmbeddings</c>. Shared by both repair shapes.</summary>
-    private bool WriteRepair(string manifestPath, EmbeddingManifest manifest, string embeddingOutputName, string outputNamesTokenEmbeddings)
-    {
-        var repaired = manifest with
+    private static EmbeddingManifest Repaired(EmbeddingManifest manifest, string embeddingOutputName, string outputNamesTokenEmbeddings) =>
+        manifest with
         {
             Pooling = new PoolingManifest(PoolingMode.ModelOutput,
                 new PoolingOutputNames(embeddingOutputName, outputNamesTokenEmbeddings)),
             Onnx = manifest.Onnx with { EmbeddingOutput = embeddingOutputName }
         };
 
+    /// <summary>Validates then writes <paramref name="repaired" /> in place; <paramref name="failureReason" />
+    /// names why on a false return. Shared by both repair shapes — each call site logs its own
+    /// truthful message with the id its shape owns.</summary>
+    private bool WriteManifest(string manifestPath, EmbeddingManifest repaired, out string? failureReason)
+    {
         var errors = validator.Validate(repaired);
         if (errors.Count > 0)
         {
-            Log.PoolingModeNotRepaired(logger, manifestPath, string.Join("; ", errors));
+            failureReason = string.Join("; ", errors);
             return false;
         }
 
@@ -120,11 +142,11 @@ public sealed partial class ManifestPoolingRepair(
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             Delete(temporaryPath);
-            Log.PoolingModeNotRepaired(logger, manifestPath, ex.Message);
+            failureReason = ex.Message;
             return false;
         }
 
-        Log.PoolingModeRepaired(logger, manifest.Model, SchemaName(repaired.Pooling.Mode), embeddingOutputName, manifestPath);
+        failureReason = null;
         return true;
     }
 
@@ -162,19 +184,51 @@ public sealed partial class ManifestPoolingRepair(
 
     public static partial class Log
     {
-        /// <summary>#470: the manifest the download wrote before it read the rank, corrected once.</summary>
-        [LoggerMessage(EventId = 424, Level = LogLevel.Information,
+        /// <summary>#470: the manifest's sole output already served both roles, corrected once.
+        /// Relocated from 424 (2026-08-23, #497/#504 review): a second, truthful pair was needed
+        /// for the #497 shape below, and the gate forbids a second block per owner.</summary>
+        [LoggerMessage(EventId = 429, Level = LogLevel.Information,
             Message = "Model '{Model}' pools inside its own ONNX graph, so its manifest's pooling mode "
                       + "'{Pooling}' could never be applied: '{Manifest}' now says 'model-output' with "
                       + "embeddingOutput '{Output}'. Embedding is unchanged — the vectors this engine "
                       + "produced before and after this correction are the same.")]
         public static partial void PoolingModeRepaired(ILogger logger, string model, string pooling, string output, string manifest);
 
-        /// <summary>The correction could not be written; event 417 keeps firing on every load until it can.</summary>
-        [LoggerMessage(EventId = 425, Level = LogLevel.Warning,
+        /// <summary>The #470-shape correction could not be written; event 417 keeps firing on every
+        /// load until it can (relocated from 425, same review as above).</summary>
+        [LoggerMessage(EventId = 430, Level = LogLevel.Warning,
             Message = "Manifest '{Manifest}' declares a pooling mode its own ONNX graph makes unappliable "
                       + "and could not be corrected: {Reason}. Embedding is unaffected (the graph's own "
                       + "vector is used), but event 417 will warn on every load until the file is fixed.")]
         public static partial void PoolingModeNotRepaired(ILogger logger, string manifest, string reason);
+
+        /// <summary>
+        ///     #497: unlike 429's sole-output shape, every embed until now read
+        ///     <paramref name="tokenOutput" /> (a genuine, still-token-level tensor) under the wrong
+        ///     mode — the correction switches the read to the graph's own pooled
+        ///     <paramref name="output" />, a DIFFERENT tensor, so existing vectors change and the
+        ///     engine's fingerprint change (D7, ADR-0084) will re-embed.
+        /// </summary>
+        [LoggerMessage(EventId = 431, Level = LogLevel.Information,
+            Message = "Model '{Model}' also pools '{Output}' beside its genuine token-level output "
+                      + "'{TokenOutput}': pooling mode '{Pooling}' was applied on every embed, but over "
+                      + "'{TokenOutput}', not the graph's own pooled vector. '{Manifest}' now says "
+                      + "'model-output' with embeddingOutput '{Output}' — this reads a different tensor, "
+                      + "so existing vectors change and a re-embed follows.")]
+        public static partial void DistinctPoolingModeRepaired(ILogger logger, string model, string pooling, string output, string tokenOutput, string manifest);
+
+        /// <summary>
+        ///     #497: unlike 430, event 417 only fires when the output actually read is itself
+        ///     rank-2 — here it stays <paramref name="tokenOutput" />, a genuine rank-3 tensor, so
+        ///     417 never catches this and a failed correction is silently permanent.
+        /// </summary>
+        [LoggerMessage(EventId = 432, Level = LogLevel.Warning,
+            Message = "Manifest '{Manifest}' names a distinctly-pooled output beside its genuine "
+                      + "token-level output '{TokenOutput}', but the correction could not be written: "
+                      + "{Reason}. Event 417 will NOT warn about this — it only fires when the output "
+                      + "actually read is itself rank-2, and '{TokenOutput}' is not — so the wrong "
+                      + "pooling mode is now silently permanent until the manifest is fixed by hand or "
+                      + "the model is re-downloaded.")]
+        public static partial void DistinctPoolingModeNotRepaired(ILogger logger, string manifest, string tokenOutput, string reason);
     }
 }

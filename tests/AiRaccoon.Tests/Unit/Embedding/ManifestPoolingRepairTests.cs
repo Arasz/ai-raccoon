@@ -51,8 +51,12 @@ public sealed class ManifestPoolingRepairTests : IDisposable
         new EmbeddingManifestValidator().Validate(after).ShouldBeEmpty();
 
         var record = _logger.Collector.GetSnapshot().ShouldHaveSingleItem();
-        record.Id.Id.ShouldBe(424);
+        record.Id.Id.ShouldBe(429);
         record.Level.ShouldBe(LogLevel.Information);
+        // The ORIGINAL mode, not the new one — the message's literal 'model-output' text already
+        // carries the new mode, and a regression here silently duplicated it into this field too.
+        record.StructuredState!.Single(kv => kv.Key == "Pooling").Value.ShouldBe("cls");
+        record.StructuredState!.Single(kv => kv.Key == "Output").Value.ShouldBe("last_hidden_state");
     }
 
     [Fact]
@@ -67,14 +71,15 @@ public sealed class ManifestPoolingRepairTests : IDisposable
         _logger.Collector.GetSnapshot().ShouldBeEmpty();
     }
 
-    /// <summary>A manifest already telling the truth is never rewritten — the fingerprint it feeds
-    /// must not move on every activation.</summary>
     /// <summary>
     ///     #497: a manifest downloaded before #496 already names a distinct
     ///     <c>onnx.embeddingOutput</c> (the planner always name-selected it, independent of
     ///     pooling mode) — the graph's real rank on THAT output, not just
     ///     <c>tokenEmbeddingsOutput</c>, must repair the mode. Both names are left exactly as they
     ///     already are; only <c>pooling.mode</c> and <c>pooling.outputNames.embedding</c> change.
+    ///     Every embed until now read <c>tokenOutput</c> under the wrong mode (a genuine,
+    ///     still-token-level tensor) — the correction switches the read to a DIFFERENT tensor, so
+    ///     this earns its own EventId pair (431/432): 429's "vectors are the same" is false here.
     /// </summary>
     [Fact]
     public void Repair_DistinctEmbeddingOutputGraphPoolsItself_RepairsThePoolingMode()
@@ -93,8 +98,14 @@ public sealed class ManifestPoolingRepairTests : IDisposable
         new EmbeddingManifestValidator().Validate(after).ShouldBeEmpty();
 
         var record = _logger.Collector.GetSnapshot().ShouldHaveSingleItem();
-        record.Id.Id.ShouldBe(424);
+        record.Id.Id.ShouldBe(431);
         record.Level.ShouldBe(LogLevel.Information);
+        // The ORIGINAL mode, and the token-level output that was actually read under it — proves
+        // this event's own claim (vectors change) rather than reusing 429's (vectors are the same).
+        record.StructuredState!.Single(kv => kv.Key == "Pooling").Value.ShouldBe("cls");
+        record.StructuredState!.Single(kv => kv.Key == "Output").Value.ShouldBe("sentence_embedding");
+        record.StructuredState!.Single(kv => kv.Key == "TokenOutput").Value.ShouldBe("token_embeddings");
+        record.Message.ShouldNotContain("vectors this engine", customMessage: "429's identical-vectors claim is false for this shape");
     }
 
     /// <summary>Negative control (#497): a stale/wrong <c>embeddingOutput</c> name whose graph rank
@@ -111,6 +122,28 @@ public sealed class ManifestPoolingRepairTests : IDisposable
 
         File.ReadAllText(Path.Combine(_dir, EmbeddingManifest.FileName)).ShouldBe(before);
         _logger.Collector.GetSnapshot().ShouldBeEmpty();
+    }
+
+    /// <summary>#497's write-failure pair (432): unlike 430, event 417 never catches this failure
+    /// (the output actually read, <c>token_embeddings</c>, is genuinely rank-3), so the message
+    /// must say so rather than reuse 430's "417 will warn on every load" claim.</summary>
+    [Fact]
+    public void Repair_DistinctEmbeddingOutputNotWritable_WarnsThatNothingElseWillCatchIt()
+    {
+        TestData.SeedCodeManifestDirectory(_dir);
+        TestData.WriteManifestPooling(_dir, PoolingMode.Cls, "token_embeddings", "sentence_embedding");
+        var path = Path.Combine(_dir, EmbeddingManifest.FileName);
+        var before = File.ReadAllText(path);
+        File.SetAttributes(path, FileAttributes.ReadOnly);
+
+        Repair(("token_embeddings", 3), ("sentence_embedding", 2)).Repair(_dir).ShouldBeFalse();
+
+        File.SetAttributes(path, FileAttributes.Normal);
+        File.ReadAllText(path).ShouldBe(before);
+        var record = _logger.Collector.GetSnapshot().ShouldHaveSingleItem();
+        record.Id.Id.ShouldBe(432);
+        record.Level.ShouldBe(LogLevel.Warning);
+        record.Message.ShouldContain("will NOT warn");
     }
 
     [Fact]
@@ -138,7 +171,7 @@ public sealed class ManifestPoolingRepairTests : IDisposable
         File.SetAttributes(path, FileAttributes.Normal);
         File.ReadAllText(path).ShouldBe(before);
         var record = _logger.Collector.GetSnapshot().ShouldHaveSingleItem();
-        record.Id.Id.ShouldBe(425);
+        record.Id.Id.ShouldBe(430);
         record.Level.ShouldBe(LogLevel.Warning);
     }
 
@@ -156,7 +189,7 @@ public sealed class ManifestPoolingRepairTests : IDisposable
 
         File.ReadAllText(Path.Combine(_dir, EmbeddingManifest.FileName)).ShouldBe(before);
         var record = _logger.Collector.GetSnapshot().ShouldHaveSingleItem();
-        record.Id.Id.ShouldBe(425);
+        record.Id.Id.ShouldBe(430);
         record.Level.ShouldBe(LogLevel.Warning);
         record.Message.ShouldContain("unsupported opset");
     }
