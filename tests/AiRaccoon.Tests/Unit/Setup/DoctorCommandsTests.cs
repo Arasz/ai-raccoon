@@ -150,6 +150,7 @@ public sealed class DoctorCommandsTests : IDisposable
     [Fact]
     public async Task Doctor_UnsetThreadsSetting_ReportsTheHalvedCoreDefault()
     {
+        // Opening once creates the bank; no threads setting is written.
         await using (await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
         {
         }
