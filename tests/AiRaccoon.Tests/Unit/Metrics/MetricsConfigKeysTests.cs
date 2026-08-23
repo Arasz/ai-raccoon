@@ -105,7 +105,8 @@ public sealed class MetricsConfigKeysTests
     [Fact]
     public void WriteAndSearchQueryMetricNames_AreTheFixedContract()
     {
-        MetricsConfigKeys.ReplaceLockMsMetricName.ShouldBe("write.replace.lock_ms");
+        MetricsConfigKeys.ReplaceWaitMsMetricName.ShouldBe("write.replace.wait_ms");
+        MetricsConfigKeys.ReplaceHeldMsMetricName.ShouldBe("write.replace.held_ms");
         MetricsConfigKeys.ReplaceRowsMetricName.ShouldBe("write.replace.rows");
         MetricsConfigKeys.QueryTruncatedTokensMetricName.ShouldBe("search.query.truncated_tokens");
     }

@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Metrics;
 using AiRaccoon.Core.Observability;
 using AiRaccoon.Infrastructure.Maintenance;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -12,8 +14,8 @@ namespace AiRaccoon.Infrastructure.Metrics;
 ///     WP3): on every tick, drains the buffer and batch-writes it. Only when that batch was
 ///     non-empty, it also records its own flush duration, batch size and cumulative drop count
 ///     directly to the store (F7 owner ruling: no self-metrics for an empty run) — never through the
-///     buffer, so it cannot recurse by construction. A failed write is logged and never retried
-///     within the same pass.
+///     buffer, so it cannot recurse by construction. A batch write retries a transient BUSY/LOCKED
+///     failure (WP12 Fix C) before it is logged and dropped, un-retried, for the pass.
 /// </summary>
 public sealed partial class MetricsFlusher(
     IMeasurementBuffer buffer,
@@ -116,6 +118,12 @@ public sealed partial class MetricsFlusher(
         }
     }
 
+    /// <summary>Attempts, at most: the first counts as an attempt too, so this is the retry ceiling, not a retry count.</summary>
+    internal const int MaxSaveAttempts = 3;
+
+    /// <summary>Short and bounded — a convoy on the write lock clears in milliseconds, not seconds; TimeProvider-driven so tests never wait on the real clock.</summary>
+    private static readonly TimeSpan SaveRetryDelay = TimeSpan.FromMilliseconds(50);
+
     private async Task<Exception?> TrySaveBatchAsync(IReadOnlyList<Measurement> batch, CancellationToken cancellationToken)
     {
         if (batch.Count == 0)
@@ -123,20 +131,34 @@ public sealed partial class MetricsFlusher(
             return null;
         }
 
-        try
+        for (var attempt = 1; attempt <= MaxSaveAttempts; attempt++)
         {
-            await store.SaveBatchAsync(batch, cancellationToken).ConfigureAwait(false);
-            return null;
+            try
+            {
+                await store.SaveBatchAsync(batch, cancellationToken).ConfigureAwait(false);
+                return null;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (SqliteException ex) when (ex.SqliteErrorCode is 5 or 6 && attempt < MaxSaveAttempts)
+            {
+                // SQLITE_BUSY / SQLITE_LOCKED: the same write-lock convoy WP12 shortens elsewhere.
+                // Retried silently — only the final failure (below) is worth a log line.
+                await Task.Delay(SaveRetryDelay, timeProvider, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Log.FlushFailed(logger, ex, batch.Count);
+                return ex;
+            }
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            Log.FlushFailed(logger, ex, batch.Count);
-            return ex;
-        }
+
+        // Unreachable: MaxSaveAttempts >= 1 guarantees the loop above always returns or throws on
+        // its own final iteration (the BUSY/LOCKED catch guard is false there, so it falls through
+        // to the general catch above).
+        throw new UnreachableException();
     }
 
     /// <summary>

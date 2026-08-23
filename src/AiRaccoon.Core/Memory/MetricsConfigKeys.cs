@@ -61,7 +61,8 @@ public static class MetricsConfigKeys
     /// <summary>Prefix for embed-drain pass series (WP11): <c>drain.&lt;corpus&gt;.rows</c> and <c>drain.&lt;corpus&gt;.duration_ms</c>, bank-wide self-metrics like job.*.</summary>
     public const string DrainMetricPrefix = "drain.";
 
-    /// <summary>Prefix for write-path series (WP11): today just <c>write.replace.lock_ms</c> and <c>write.replace.rows</c>.</summary>
+    /// <summary>Prefix for write-path series (WP11/WP12): <c>write.replace.wait_ms</c>,
+    /// <c>write.replace.held_ms</c> and <c>write.replace.rows</c>.</summary>
     public const string WriteMetricPrefix = "write.";
 
     /// <summary>Prefix for query-time series (WP11): today just <c>search.query.truncated_tokens</c>.</summary>
@@ -81,8 +82,11 @@ public static class MetricsConfigKeys
     /// <summary>The <c>drain.&lt;corpus&gt;.duration_ms</c> series name for one embed-drain pass.</summary>
     public static string DrainDurationMetricName(string corpus) => $"{DrainMetricPrefix}{corpus}.duration_ms";
 
-    /// <summary>Replace-by-path's write-lock hold time, per transaction (EventId 899 recorded as a measurement).</summary>
-    public const string ReplaceLockMsMetricName = $"{WriteMetricPrefix}replace.lock_ms";
+    /// <summary>Replace-by-path's time spent waiting for the write lock, per transaction (WP12; EventId 899 recorded as a measurement).</summary>
+    public const string ReplaceWaitMsMetricName = $"{WriteMetricPrefix}replace.wait_ms";
+
+    /// <summary>Replace-by-path's write-lock hold time, per transaction — the chunker never runs inside it (WP12; EventId 899 recorded as a measurement).</summary>
+    public const string ReplaceHeldMsMetricName = $"{WriteMetricPrefix}replace.held_ms";
 
     /// <summary>Rows a replace-by-path transaction wrote, per transaction.</summary>
     public const string ReplaceRowsMetricName = $"{WriteMetricPrefix}replace.rows";
