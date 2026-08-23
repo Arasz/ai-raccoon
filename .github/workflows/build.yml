@@ -66,7 +66,9 @@ jobs:
 
           # Mirrors the paths this workflow used to trigger on. Anything not
           # matched here (docs/**, *.md, etc.) is treated as safe to skip.
-          CODE_REGEX='^src/.*\.cs$|^tests/.*\.cs$|\.csproj$|\.sln$|(^|/)Directory\.Build\.props$|(^|/)Directory\.Packages\.props$|\.feature$|\.onnx$|^nuget\.config$|^scripts/verify-tool-package\.py$|^\.github/workflows/build\.yml$'
+          # docs/ subdirs are included because 8 test files read docs at runtime
+          # via TestData.RepoFile — a docs-only PR that breaks one must go red (#541).
+          CODE_REGEX='^src/.*\.cs$|^tests/.*\.cs$|\.csproj$|\.sln$|(^|/)Directory\.Build\.props$|(^|/)Directory\.Packages\.props$|\.feature$|\.onnx$|^nuget\.config$|^scripts/verify-tool-package\.py$|^\.github/workflows/build\.yml$|^docs/adr/|^docs/reference/|^docs/how-to/|^docs/plans/'
 
           if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BASE" 2>/dev/null; then
             echo "No usable base commit (new branch or force-push); treating as a code change."
