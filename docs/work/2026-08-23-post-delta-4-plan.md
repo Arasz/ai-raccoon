@@ -39,7 +39,8 @@ the corrected number.
    Scheduling this against live lanes is what made #511's numbers unusable.
 7. **Wave 4, strictly last:** **WP9** — #493 and #519 (83 call sites across 73 files; it conflicts
    with every open PR that adds a test).
-8. Close the session: update `.ai-badger/state.json` and `status-notes.json`, and hand session 5 the
+8. **WP11** — log-only values (899 replace-lock ms/rows, 1003 drain rows per corpus, 426 truncated tokens) recorded through `IMeasurementRecorder` and the OTLP background meter, surfaced by `memory_performance` (owner extension 2026-08-23; ungated; file-disjoint from 6a).
+9. Close the session: update `.ai-badger/state.json` and `status-notes.json`, and hand session 5 the
    plan from item 3.
 
 **Dropped / moved by the gate.** **WP5 is DROPPED** (G7 REJECT — record as a standing ruling).
