@@ -23,7 +23,24 @@ dotnet, mcp, python, github, ai-raccoon
 - code review, quality gates, PR review → `code-reviewer`
 - C#/.NET implementation, MCP tools, backend work → `dotnet-engineer`
 
-## Verifiers
+## Reasoning-model dispatch
+
+When dispatching to a reasoning model (opus, o-series, Claude extended
+thinking, DeepSeek-R1), adjust the prompt:
+
+- **State goals and success criteria only** — strip prescriptive step-by-step
+  plans, CoT scaffolding, and few-shot examples. These constrain the model's
+  internal search and reduce quality.
+- **Keep the system prompt short** — elaborate prompts constrain reasoning
+  model search space (Anthropic). Prefer "what done looks like" over "how to
+  get there."
+- **Use API parameters for depth control** — `reasoning_effort` (OpenAI) or
+  `thinking_budget_tokens` (Anthropic) instead of prompt-side "think harder."
+
+For standard instruction-tuned models (sonnet, flash), the existing
+prescriptive persona descriptions are appropriate.
+
+## Verifiers @@
 
 - `build`: `dotnet build`
 - `test`: `dotnet test`

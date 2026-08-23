@@ -1,8 +1,16 @@
 {
-    "lastUpdated": "2026-08-23T14:48:19.073923+02:00",
+    "lastUpdated": "2026-08-23T19:45:00.000000+02:00",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "research-based-refactor",
+      "title": "Research-based refactor: synthesized prompt-engineering research, audited 22 invariants against evidence, implemented Wave 1 changes (third-person framing, escalation rules, humanization, reasoning-model dispatch)",
+      "pr": null,
+      "merged": false,
+      "date": "2026-08-23",
+      "summary": "Read and synthesized 4 research documents (persona-prompt research parts 1-2, xiaomi synthesis, humanization research). Produced docs/research/research-synthesis-report.md with evidence-graded audit of all 22 invariants (all WS or S, none folklore), 10 identified gaps, and 10 prioritized changes. Implemented Wave 1 (TDD): code-reviewer.md gained third-person framing + escalation rules; delegation.md gained reasoning-model dispatch guidance; documentation.instructions.md gained humanization rules. CLAUDE.md tiering (22→7 invariants) blocked by protected-file guard — needs scaffold approval. Tests: tests/test_context_refactor.py 6/6 GREEN."
+    },
     {
         "id": "clean-readme",
         "title": "README cleanup: what-s-new history doc, humanizer pass, mermaid/table refresh, code-corpus guide",

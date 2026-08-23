@@ -6,80 +6,6 @@ C# .NET 10 MCP server exposing agent memory management over sqlite-memory: proje
 > Stacks: dotnet, mcp, python, github, ai-raccoon
 > Scaffolded by ai-badger 0.134.1. Source of truth for this file: `.ai-badger/HERMES.md`.
 
-## Non-negotiable invariants
-
-- **Ask if a simpler shape would do** — Before calling any design or change finished, ask whether it is over-engineered and what the simpler version would look like.
-  → `.ai-badger/invariants/ask-if-simpler.md`
-
-- **Check the source, not your own reasoning** — Re-read the docs, the data and the code before stating a fact about them — those are what go stale, get misremembered, or change under you.
-  → `.ai-badger/invariants/check-sources-not-yourself.md`
-
-- **Derive the list, or delete it** — A hand-maintained list meant to mirror something else — the gates on disk, the copies of a helper, the skills in the catalog — drifts the moment someone adds to one side and not the other, and nothing notices because nothing compares them.
-  → `.ai-badger/invariants/derive-or-delete-the-list.md`
-
-- **Guard clauses over hand-rolled null checks** — Prefer a dedicated guard/throw-helper for argument validation over hand-rolled `x ?? throw ...` or ad hoc `if (x == null) throw` blocks — a guard reads as intent, not boilerplate, and keeps the exception type/message consistent across the codebase.
-  → `.ai-badger/invariants/guard-clauses.md`
-
-- **Measure only when the measurement pays** — Run your own benchmark or experiment when the time it costs is repaid by the decision it settles, and not otherwise.
-  → `.ai-badger/invariants/measure-when-it-pays.md`
-
-- **Minimal comments** — Keep doc comments to 1-3 lines stating the contract, not the provenance or rationale — point at an ADR or spec doc for the "why" instead of writing an essay inline.
-  → `.ai-badger/invariants/minimal-comments.md`
-
-- **No hand-rolled crypto or security orchestration** — Never implement security/cryptographic orchestration yourself — key derivation, token signing, session/cookie protection, encryption-at-rest schemes.
-  → `.ai-badger/invariants/no-hand-rolled-crypto.md`
-
-- **No hardcoded secrets** — No credentials, connection strings, API keys, or tokens in tracked files, examples, or fixtures.
-  → `.ai-badger/invariants/no-hardcoded-secrets.md`
-
-- **Run what you changed; the pipeline runs the rest** — Run the build and the tests your change touches, and let the pipeline run everything else — a full local sweep buys no coverage the pipeline does not already have and spends the same time twice.
-  → `.ai-badger/invariants/pipeline-runs-the-rest.md`
-
-- **Plain names** — Name things with the simplest accurate word — variables, functions, types, files, folders, flags.
-  → `.ai-badger/invariants/plain-names.md`
-
-- **One PR per task** — Every unit of work ends in a pull request; never push directly to the main/trunk branch.
-  → `.ai-badger/invariants/pr-per-task.md`
-
-- **Done means proven** — Every unit of planned work carries its acceptance criteria and the gate that checks them, named before the work starts.
-  → `.ai-badger/invariants/proof-of-done.md`
-
-- **A check you have not seen fail is not a check** — Put the defect a gate, test or acceptance criterion exists to catch in front of it, watch it go red, take the defect away and watch it go green — a check that has only ever passed is indistinguishable from one whose comparison can produce a single answer that looks like success.
-  → `.ai-badger/invariants/prove-the-check-fails.md`
-
-- **Screaming architecture** — Organize folders and modules by domain/business concept, not by generic technical bucket.
-  → `.ai-badger/invariants/screaming-architecture.md`
-
-- **Small commits, early draft PR** — Commit one coherent work package at a time and push often.
-  → `.ai-badger/invariants/small-commits-early-draft-pr.md`
-
-- **Route state transitions through a state machine** — Where a domain object has explicit states, make the declared transitions the only way it moves between them, and record what triggered each move.
-  → `.ai-badger/invariants/state-transitions-through-a-machine.md`
-
-- **TDD is mandatory** — Write a failing, behavior-focused test before any production code change.
-  → `.ai-badger/invariants/tdd-mandatory.md`
-
-- **Tests are designed before they are written, and judged after** — Green is the floor, not the evidence: a test list comes out of the acceptance criteria before the first test is written (`design-tests`, each row naming the failure mode it targets and the mutation that proves it real), and a change that adds or alters tests is not done until something other than its author has run `review-tests` and asked whether that suite could have gone red.
-  → `.ai-badger/invariants/tests-are-designed-and-reviewed.md`
-
-- **Releases are traceable** — Every release records the version it went out at and what changed in it, using whatever version marker and release notes this project already keeps.
-  → `.ai-badger/invariants/traceable-releases.md`
-
-- **Clean layering** — Keep the domain/pure-logic layer free of framework, persistence, HTTP, and third-party-SDK dependencies.
-  → `.ai-badger/invariants/clean-architecture-layering.md`
-
-- **High-performance logging** — Use a nested static partial `Log` class with static `[LoggerMessage]`-attributed methods (taking `ILogger` as a parameter, with an explicit `EventId`) instead of calling `logger.LogInformation(...)`/`LogError(...)` etc. directly — it avoids boxing/allocation on the hot path and keeps event ids centrally discoverable.
-  → `.ai-badger/invariants/high-performance-logging.md`
-
-- **Static classes: extensions, constants, and pure functions only** — Static classes are allowed for extensions, constants, and pure functions — no state, no I/O, no injectable dependencies.
-  → `.ai-badger/invariants/static-classes.md`
-
-- **MCP stays thin** — An MCP server maps its tools 1:1 onto the backend REST/API surface and holds no business logic of its own.
-  → `.ai-badger/invariants/mcp-thin.md`
-
-- **Pin actions to a commit SHA; declare least-privilege permissions** — Every third-party GitHub Action referenced in a workflow is pinned to a full commit SHA, never a tag or branch — a mutable tag is remote code you re-fetch on every run, not a fixed dependency.
-  → `.ai-badger/invariants/pin-actions-to-sha.md`
-
 ## Commands
 
 - `build`: `dotnet build`
@@ -95,6 +21,8 @@ Before editing matching files, read the applicable scoped instruction file:
 - `**/*.py` → `.ai-badger/instructions/python.instructions.md`
 - `**/.github/workflows/*.yml,**/.github/workflows/*.yaml` → `.ai-badger/instructions/github-actions.instructions.md`
 
+Additional invariants load contextually via these paths — see `.ai-badger/invariants/` for the full set.
+
 ## Agent delegation
 
 - architecture, design decisions, project structure → `architect`
@@ -102,41 +30,6 @@ Before editing matching files, read the applicable scoped instruction file:
 - code review, quality gates, PR review → `code-reviewer`
 - C#/.NET implementation, MCP tools, backend work → `dotnet-engineer`
 - Every dispatch names its `model` — the delegation map is `.ai-badger/delegation.md`.
-
-## Hermes-specific guidance
-
-This project is configured for Hermes Agent. The `.ai-badger/` directory is the source of truth
-for all agent configuration.
-
-### Skills
-
-Framework skills live under `.ai-badger/skills/`. Load them in-session with `/skill <name>` or
-preload with `hermes -s <name>`. Key skills:
-
-- `task` — task orchestration: TDD, PR flow, review loop, token tracking
-- `prompt-markers` — `h:`, `f:`, `e:`, `q:`, `i!:` prefix markers (see below)
-
-### Memory
-
-Hermes persistent memory is available. Use it to save durable facts about the project:
-user preferences, environment details, recurring conventions. Do NOT save transient
-task progress or TODOs — use `session_search` for that.
-
-### Subagent delegation
-
-Use `delegate_task` for parallel subtasks. The `task` skill adapts its orchestration
-pattern for Hermes: plan with `role='orchestrator'`, implement with leaf agents.
-Prefer `delegate_task` over spawning separate `hermes` processes for quick subtasks.
-
-### Context file discovery
-
-Hermes reads project context files in priority order (first match wins):
-1. `.hermes.md` / `HERMES.md` — walks parents to git root
-2. `AGENTS.md` — cwd only
-3. `CLAUDE.md` — cwd only
-
-This file (HERMES.md) is at priority 1 and is the authoritative project context for
-Hermes agents working in this repo.
 
 ## Prompt markers
 
@@ -204,7 +97,33 @@ those IDs. Capture visual evidence with `browser_take_screenshot`. Monitor API c
 or complex interactions, execute custom Playwright scripts with `browser_run_code_unsafe`.
 Each tool's own description covers the rest.
 
+## Non-negotiable invariants
 
+These 8 rules are always loaded. The full set (22 rules) lives in `.ai-badger/invariants/` and loads contextually via path-specific instructions.
+
+- **TDD is mandatory** — Write a failing, behavior-focused test before any production code change.
+  → `.ai-badger/invariants/tdd-mandatory.md`
+
+- **Done means proven** — Every unit of planned work carries its acceptance criteria and the gate that checks them, named before the work starts.
+  → `.ai-badger/invariants/proof-of-done.md`
+
+- **Check the source, not your own reasoning** — Re-read the docs, the data and the code before stating a fact about them — those are what go stale, get misremembered, or change under you.
+  → `.ai-badger/invariants/check-sources-not-yourself.md`
+
+- **Use platform security APIs** — Always use the platform's built-in security and crypto APIs. Implementing key derivation, token signing, or encryption-at-rest yourself introduces vulnerabilities.
+  → `.ai-badger/invariants/no-hand-rolled-crypto.md`
+
+- **Store secrets outside tracked files** — Keep credentials, connection strings, API keys, and tokens in environment variables, secret managers, or user-scoped config — never in tracked code, examples, or fixtures.
+  → `.ai-badger/invariants/no-hardcoded-secrets.md`
+
+- **Clean layering** — Keep the domain/pure-logic layer free of framework, persistence, HTTP, and third-party-SDK dependencies.
+  → `.ai-badger/invariants/clean-architecture-layering.md`
+
+- **Plain names** — Name things with the simplest accurate word — variables, functions, types, files, folders, flags.
+  → `.ai-badger/invariants/plain-names.md`
+
+- **Ask if a simpler shape would do** — Before calling any design or change finished, ask whether it is over-engineered and what the simpler version would look like.
+  → `.ai-badger/invariants/ask-if-simpler.md`
 
 ## Framework
 
