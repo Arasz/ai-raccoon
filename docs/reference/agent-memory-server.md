@@ -16,16 +16,18 @@ watches, watch_files, FTS5, vec0, sync_meta, and sync_tombstones — live in
 starts clean with the new native schema. A re-hash + re-embed migration path is
 deferred to a deployment that needs it (D11).
 
-## Tools (28)
+## Tools (29)
 
 Every tool requires `projectId` (camelCase — all parameters are camelCase), except
-`memory_promotion_list` where it is optional. Writes land in `project:<id>` by
-default; naming a `workspaceId` routes them into that workspace's isolated context.
+`memory_promotion_list` where it is optional, and `project_id_token_get`, which mints
+one and so takes none. Writes land in `project:<id>` by default; naming a `workspaceId`
+routes them into that workspace's isolated context.
 
 10 memory tools (including `memory_get`, ADR-0035), 4 workspace tools, 3 watch tools,
 2 promotion tools, 2 share tools, 2 sweep tools (`memory_sweep`, `memory_set_ttl`),
 2 search-feedback tools (`memory_record_followthrough`, `memory_record_grade`),
-1 sync tool, 1 performance tool (`memory_performance`), 1 code tool (`code_get`).
+1 sync tool, 1 performance tool (`memory_performance`), 1 code tool (`code_get`),
+1 project tool (`project_id_token_get`, ADR-0089 — mints and registers a new project id).
 `memory_configure` and `memory_set_structure_alpha` were removed by the CLI-config
 refactor: configuration is no longer an MCP tool — the CLI verbs are the single
 config channel (see [Command-line options](#command-line-options)).
@@ -60,6 +62,7 @@ config channel (see [Command-line options](#command-line-options)).
 | `memory_promotion_discard`     | `projectId`, `hash?`                                                                                                                                        | `{discarded: n}`                                                                                   |
 | `memory_performance`           | `projectId`, `windowMinutes?=180`, `bucketMinutes?=1`                                                                                                       | `{generatedAt, window, bucket, bucketCount, series: [{tool, count, p50, p95, p99, min, max, buckets: [{start, count, average}]}]}` |
 | `code_get`                     | `projectId`, `hash`                                                                                                                                         | `{hash, value, path, lineStart, lineEnd}`                                                          |
+| `project_id_token_get`         | `name?`                                                                                                                                                     | `{projectId, instructions}`                                                                        |
 
 ### Notes on the less obvious tools
 
@@ -948,7 +951,7 @@ source of truth; a test cross-checks this table against it.
 | `invalid-params` | FluentValidation rejected the request (missing/blank `projectId`, invalid `scope`, out-of-range `limit`, etc.) | `invalid-params: project_id is required` |
 | `invalid-argument` | A call's JSON argument shape doesn't match the tool's declared parameter type (e.g. a scalar where an array is declared), a required parameter is missing, or a present-but-blank value fails a guard clause — caught at argument-binding time or by a guard clause at the top of the tool method, before its logic runs. Mapped from `JsonException`, `ArgumentException` and `ArgumentNullException`. `ArgumentOutOfRangeException` is deliberately **not** mapped: it is how .NET reports the server's own index arithmetic going wrong, so refusing it would mute Error-level alerting and tell the caller to retry an argument that was never at fault | `invalid-argument: The JSON value could not be converted to System.String[]. Path: $ \| LineNumber: 0 \| BytePositionInLine: 5.` |
 | `confirm-required` | `memory_share_extract` called with `autoPromote=true` but `confirm` not set to `true` — an explicit enable gate for a promotion that shares data across all listed projects | `confirm-required: autoPromote shares candidates with ALL projects — pass confirm=true to enable` |
-| `model-migration-in-progress` | Every bank operation is refused for the duration of an embedding-model migration (`model set`, ADR-0076) — a bank whose rows are half old-model and half new-model vectors is not detectably broken, it just retrieves worse, so the migration locks the bank rather than serving through it | `model-migration-in-progress: ai-raccoon: a model migration is in progress; try again once it finishes` |
+| `model-migration-in-progress` | Every bank operation is refused for the duration of an embedding-model migration (`model set`, ADR-0076) — a bank whose rows are half old-model and half new-model vectors is not detectably broken, it just retrieves worse, so the migration locks the bank rather than serving through it | `model-migration-in-progress: ai-raccoon: a model migration is in progress; try again once it finishes (memory_write)` |
 | `embedding-install-replaced` | The bundled embedding model/vocab could not be resolved because the install this server process started from (`AppContext.BaseDirectory`) no longer exists on disk — replaced or removed out from under a still-running server (e.g. `dotnet tool update` moving the outgoing version into `.store/.stage` and deleting it; already-mapped assemblies keep the process serving MCP calls even though its own install root is gone). A plain `InvalidOperationException` from the same lookup still means the asset is genuinely missing next to a live install and stays unmapped — only this replaced-install case is refused, because only a restart fixes it | `embedding-install-replaced: Bundled embedding model 'model_qint8_arm64.onnx' could not be resolved: the install this server started from ('<dir>') no longer exists, likely replaced by a tool update (e.g. 'dotnet tool update'). Restart the MCP server (or its host) to pick up the new install.` |
 | `code-engine-unloadable` | A code engine IS configured (`embedding.codeModel`) but its manifest or model/tokenizer files fail to load at search time (missing files, a dimension mismatch, a corrupt asset) — distinct from "no engine configured" (which degrades to FTS5-only silently, no refusal). Affects `memory_search kind=code/both` only; `kind=memory` is unaffected, since the memory and code engines are independent settings rows | `code-engine-unloadable: The configured code engine at '<dir>' could not be loaded: <detail> Run 'ai-raccoon model set code local <dir>' to reconfigure it, or clear it with 'ai-raccoon settings model code reset'.` |
 

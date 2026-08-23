@@ -13,9 +13,8 @@ namespace AiRaccoon.Tools;
 /// </summary>
 public sealed class ToolGate(IMemoryAccessGuard access, IPromotionQueue queue, IModelMigrationStore? migrations = null) : IToolGate
 {
-    /// <summary>Refuses while a migration is open, then rejects a blank project id, then throws access-denied when the mode is too low.</summary>
-    public async Task RequireAsync(string? projectId, AccessRequirement requirement, string toolName,
-        CancellationToken cancellationToken)
+    /// <summary>Refuses while a migration is open. Nothing else — the check a tool with no project yet can still make.</summary>
+    public async Task RequireBankAvailableAsync(string toolName, CancellationToken cancellationToken)
     {
         // Optional so every existing two-argument fake construction across the test suite keeps
         // compiling; production DI always resolves the real IModelMigrationStore (RegisterStores).
@@ -23,8 +22,15 @@ public sealed class ToolGate(IMemoryAccessGuard access, IPromotionQueue queue, I
             await migrations.HasOpenModelMigrationAsync(cancellationToken).ConfigureAwait(false))
         {
             throw new ModelMigrationInProgressException(
-                "ai-raccoon: a model migration is in progress; try again once it finishes");
+                $"ai-raccoon: a model migration is in progress; try again once it finishes ({toolName})");
         }
+    }
+
+    /// <summary>Refuses while a migration is open, then rejects a blank project id, then throws access-denied when the mode is too low.</summary>
+    public async Task RequireAsync(string? projectId, AccessRequirement requirement, string toolName,
+        CancellationToken cancellationToken)
+    {
+        await RequireBankAvailableAsync(toolName, cancellationToken).ConfigureAwait(false);
 
         if (string.IsNullOrWhiteSpace(projectId))
         {

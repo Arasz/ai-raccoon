@@ -53,6 +53,7 @@ public sealed class McpToolContractTests : IAsyncLifetime
                                             memory_workspace_discard(projectId:string!, workspaceId:string!)
                                             memory_workspace_status(projectId:string!, workspaceId:string!)
                                             memory_write(projectId:string!, content:string!, workspaceId:string|null?, agentId:string|null?, context:string|null?, sourceFile:string|null?, section:string|null?)
+                                            project_id_token_get(name:string|null?)
                                             """;
 
     private readonly string _dataRoot = TestData.CreateTempRoot("mcp-contract-tests");

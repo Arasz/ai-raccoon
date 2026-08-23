@@ -11,13 +11,16 @@ namespace AiRaccoon.Infrastructure.Ingestion;
 /// <summary>
 ///     What re-chunking one source file with the current chunker found. <see cref="PositionById" />
 ///     maps every given row's id to its document position, or -1 when this chunker does not
-///     reproduce its content hash. <see cref="FileUsable" /> is false when the source file is
-///     missing, unreadable, or has no matching handler — every row then maps to -1 without a
+///     reproduce its content hash. <see cref="SectionById" /> maps every given row's id to the
+///     section the current chunker reports for it (docs/adr/0048, #549), or null when it holds no
+///     section or its position is unknown. <see cref="FileUsable" /> is false when the source file
+///     is missing, unreadable, or has no matching handler — every row then maps to -1/null without a
 ///     document position ever being computed, and <see cref="TotalChunks" />/<see cref="Content" />
 ///     are empty/zero.
 /// </summary>
 public sealed record ChunkPositionScan(
-    bool FileUsable, string Content, int TotalChunks, IReadOnlyDictionary<long, int> PositionById);
+    bool FileUsable, string Content, int TotalChunks,
+    IReadOnlyDictionary<long, int> PositionById, IReadOnlyDictionary<long, string?> SectionById);
 
 /// <summary>
 ///     Shared chunk-position detection (GH #371): re-chunks a source file with the current chunker
@@ -34,29 +37,33 @@ public sealed class ChunkPositionScanner(IFileTypeMatcher fileTypeMatcher, IEmbe
     {
         if (!fileTypeMatcher.TryGetHandler(sourceFile, out var handler) || !TryReadFile(sourceFile, out var content))
         {
-            return new ChunkPositionScan(false, "", 0, rows.ToDictionary(row => row.Id, _ => -1));
+            return new ChunkPositionScan(false, "", 0, rows.ToDictionary(row => row.Id, _ => -1),
+                rows.ToDictionary(row => row.Id, _ => (string?)null));
         }
 
-        var chunks = handler.Chunker.Chunk(content, maxTokens, overlayTokens, countTokens);
+        var chunks = handler.Chunker.ChunkWithHeadings(content, maxTokens, overlayTokens, countTokens);
         var byHash = rows.ToDictionary(row => row.Hash, row => row.Id, StringComparer.Ordinal);
-        var byId = new Dictionary<long, int>(rows.Count);
+        var positionById = new Dictionary<long, int>(rows.Count);
+        var sectionById = new Dictionary<long, string?>(rows.Count);
         for (var ordinal = 0; ordinal < chunks.Count; ordinal++)
         {
-            var hash = ContentHash.Of(sourceFile, chunks[ordinal]);
+            var hash = ContentHash.Of(sourceFile, chunks[ordinal].Text);
             if (byHash.TryGetValue(hash, out var id))
             {
-                byId[id] = ordinal;
+                positionById[id] = ordinal;
+                sectionById[id] = chunks[ordinal].SectionLabel();
             }
         }
 
         // A row this pass's re-chunk did not reproduce (stale content, a boundary shift) has no
-        // document position to report — unknown, not a guess.
-        foreach (var row in rows.Where(row => !byId.ContainsKey(row.Id)))
+        // document position or section to report — unknown, not a guess.
+        foreach (var row in rows.Where(row => !positionById.ContainsKey(row.Id)))
         {
-            byId[row.Id] = -1;
+            positionById[row.Id] = -1;
+            sectionById[row.Id] = null;
         }
 
-        return new ChunkPositionScan(true, content, chunks.Count, byId);
+        return new ChunkPositionScan(true, content, chunks.Count, positionById, sectionById);
     }
 
     /// <summary>The same resolution the ingest path uses, read from the same settings (mirrors <see cref="Ingestion.ChunkBackfill" />'s BudgetAsync).</summary>

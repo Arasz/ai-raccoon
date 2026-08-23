@@ -10,8 +10,7 @@ public static class HeadingPathParser
     {
         ArgumentNullException.ThrowIfNull(markdown);
 
-        var stack = new List<(int Level, string Text)>();
-        var path = "";
+        var stack = new HeadingStack();
         var inFence = false;
 
         foreach (var rawLine in markdown.Split('\n'))
@@ -63,34 +62,19 @@ public static class HeadingPathParser
                 continue;
             }
 
-            if (level == 1)
-            {
-                text = IdentifierSegment(text);
-            }
-
-            while (stack.Count > 0 && stack[^1].Level >= level)
-            {
-                stack.RemoveAt(stack.Count - 1);
-            }
-
-            stack.Add((level, text));
-            path = string.Join(" > ", stack.Select(h => h.Text));
+            stack.Push(level, text);
         }
 
-        return path;
+        return stack.Path;
     }
 
-    private static string IdentifierSegment(string headingText)
+    /// <summary>The leaf of a " > "-joined heading path — what a `file#section` anchor names; "" when empty.
+    /// The bare '>' is not a separator: a heading may carry one of its own ("<!-- REQUIRED -->").</summary>
+    public static string Leaf(string headingPath)
     {
-        foreach (var separator in new[] { ':', '—', '|' })
-        {
-            var index = headingText.IndexOf(separator);
-            if (index > 0)
-            {
-                return headingText[..index].Trim();
-            }
-        }
+        ArgumentNullException.ThrowIfNull(headingPath);
 
-        return headingText;
+        var lastSeparator = headingPath.LastIndexOf(" > ", StringComparison.Ordinal);
+        return (lastSeparator < 0 ? headingPath : headingPath[(lastSeparator + 3)..]).Trim();
     }
 }

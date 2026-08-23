@@ -102,6 +102,9 @@ public sealed class PerformanceToolsTests
         public AccessRequirement? LastRequirement { get; private set; }
         public string? LastToolName { get; private set; }
 
+        public Task RequireBankAvailableAsync(string toolName, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
         public Task RequireAsync(string? projectId, AccessRequirement requirement, string toolName,
             CancellationToken cancellationToken)
         {
