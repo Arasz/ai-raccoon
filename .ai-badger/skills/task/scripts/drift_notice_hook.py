@@ -38,6 +38,7 @@ except ImportError:  # pragma: no cover - a missing logger must never break a ho
 
 COMPONENT = "drift_notice_hook"
 
+
 # The hook payload, kept so every record can name the project it came from. An unattributed
 # record pools into every project's analysis; see `call-behaviorist`.
 _PAYLOAD: Dict[str, Any] = {}
@@ -50,7 +51,6 @@ def _debug(event: str, **fields) -> None:
     root = fields.pop("project", None) or resolve_project_root(_PAYLOAD)
     debug_log.log_event(COMPONENT, event, project=str(root) if root else None, **fields)
 
-
 def _bootstrap_lib() -> Path:
     """Put the framework's engine/ and tooling/ on sys.path and return its root.
 
@@ -60,7 +60,6 @@ def _bootstrap_lib() -> Path:
     (ADR-0009). Duplicated verbatim in every entry point because locating badger_lib is
     what it is for.
     """
-
     def is_root(path):
         return ((path / "schemas").is_dir() and (path / "features").is_dir()
                 and (path / "engine" / "badger_lib.py").is_file())

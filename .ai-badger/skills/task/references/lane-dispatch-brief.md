@@ -1,9 +1,12 @@
 # The lane dispatch brief
 
-A template for the prompt you hand a subagent that owns one unit of work end to end — a "lane". Copy the shape, fill the bracketed slots, delete what does not apply. Every heading below is load-bearing: each one exists because a lane that
-was not told this got it wrong.
+A template for the prompt you hand a subagent that owns one unit of work end to end — a "lane".
+Copy the shape, fill the bracketed slots, delete what does not apply. Every heading below is
+load-bearing: each one exists because a lane that was not told this got it wrong.
 
-The brief is written so the lane can improve on it. You are dispatching an agent that can read the code, not a script that cannot — say what you believe and how confident you are, and let the lane correct you.
+The brief is written so the lane can improve on it. You are dispatching an agent that can read
+the code, not a script that cannot — say what you believe and how confident you are, and let the
+lane correct you.
 
 ---
 
@@ -54,19 +57,32 @@ The brief is written so the lane can improve on it. You are dispatching an agent
 
 ## Why each part is there
 
-**Verify before fixing.** Findings arrive from reviews and greps that never ran the code. A lane that treats the finding as settled will "fix" a non-defect and add a test that pins the wrong behaviour.
+**Verify before fixing.** Findings arrive from reviews and greps that never ran the code. A lane
+that treats the finding as settled will "fix" a non-defect and add a test that pins the wrong
+behaviour.
 
-**Evaluate, do not execute.** The dispatcher usually knows less about the file than the lane will in ten minutes. A brief that demands compliance throws that away; most lanes that were allowed to disagree produced something better than the
-brief asked for.
+**Evaluate, do not execute.** The dispatcher usually knows less about the file than the lane will
+in ten minutes. A brief that demands compliance throws that away; most lanes that were allowed to
+disagree produced something better than the brief asked for.
 
-**RED output pasted.** "I wrote a failing test first" is unfalsifiable in a report. The pasted failure is the only version of that claim anyone can check.
+**RED output pasted.** "I wrote a failing test first" is unfalsifiable in a report. The pasted
+failure is the only version of that claim anyone can check.
 
-**Break every gate you add.** A gate that has only ever passed may be incapable of failing. Make it fail before you trust it.
+**Break every gate you add.** A gate that has only ever passed may be incapable of failing. Make
+it fail before you trust it.
 
-**Version assigned at dispatch.** Lanes running concurrently against one repo collide on the version file and the release notes index. Assigning it centrally makes the collision impossible rather than merely unlikely.
+**Version assigned at dispatch.** Lanes running concurrently against one repo collide on the
+version file and the release notes index. Assigning it centrally makes the collision impossible
+rather than merely unlikely.
 
-**Ownership stated explicitly.** Two lanes editing one file at once is the most expensive recoverable mistake in a parallel wave. Naming the boundary — including what is *not* owned — costs one line.
+**Ownership stated explicitly.** Two lanes editing one file at once is the most expensive
+recoverable mistake in a parallel wave. Naming the boundary — including what is *not* owned —
+costs one line.
 
-**Sub-agents capped, with a model.** Uncapped depth burns budget invisibly and makes the run impossible to attribute. A named model per dispatch is what makes the model mix readable afterwards.
+**Sub-agents capped, with a model.** Uncapped depth burns budget invisibly and makes the run
+impossible to attribute. A named model per dispatch is what makes the model mix readable
+afterwards.
 
-**Evidence per criterion, hypotheses labelled.** A report that says "all criteria met" is not a report. Separating what was proven from what was believed is what makes the next lane's brief accurate.
+**Evidence per criterion, hypotheses labelled.** A report that says "all criteria met" is not a
+report. Separating what was proven from what was believed is what makes the next lane's brief
+accurate.

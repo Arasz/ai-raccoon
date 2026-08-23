@@ -20,16 +20,15 @@ metadata:
 
 ## Prerequisites
 
-The index itself is JSON — no dependency needed to read, tag, intent, or list it. PyYAML is only needed to read a project's not-yet-migrated legacy `mcp-tools.yaml`:
-
+The index itself is JSON — no dependency needed to read, tag, intent, or list it. PyYAML is
+only needed to read a project's not-yet-migrated legacy `mcp-tools.yaml`:
 ```bash
 python3 -m pip install pyyaml   # also in $AI_BADGER/engine/requirements.txt
 ```
+Without it, a legacy-YAML-only project falls back to a stricter built-in parser and, if that
+can't safely read the file, refuses with a hint rather than a traceback (see `migrate` below).
 
-Without it, a legacy-YAML-only project falls back to a stricter built-in parser and, if that can't safely read the file, refuses with a hint rather than a traceback (see `migrate` below).
-
-Manage `.ai-badger/mcp-tools.json` — a machine-readable index that maps every MCP server tool to tags (for filtering) and intent (for semantic matching). The index feeds the `ai_badger_hooks.py` plugin's `pre_llm_call` hook, which injects
-relevant tool recommendations into every LLM turn.
+Manage `.ai-badger/mcp-tools.json` — a machine-readable index that maps every MCP server tool to tags (for filtering) and intent (for semantic matching). The index feeds the `ai_badger_hooks.py` plugin's `pre_llm_call` hook, which injects relevant tool recommendations into every LLM turn.
 
 ## Overview
 
@@ -39,16 +38,18 @@ MCP servers expose 40+ tools per server. Agents scan ALL tool definitions in the
 2. **Intent description** for semantic disambiguation ("Compile the solution" vs "List project run configs")
 3. **Hook-driven recommendation** — the `pre_llm_call` hook loads the index, extracts domain keywords from the user's message, and injects top-N matching tools as a context hint
 
-Tags and intents come from three places, in descending authority — and each entry records which one spoke, in an `origin` field:
+Tags and intents come from three places, in descending authority — and each entry records which
+one spoke, in an `origin` field:
 
-| `origin`    | source                                                      | survives `update`?                              |
-|-------------|-------------------------------------------------------------|-------------------------------------------------|
-| `manual`    | you, via `mcp-index tag` / `mcp-index intent`               | **yes** — a human outranks both                 |
-| `catalog`   | `features/<stack>/mcp/<server>/tools.json` in the framework | refreshed from the catalog                      |
-| `heuristic` | `_auto_tags` guessing from the tool name                    | replaced as soon as the catalog covers the tool |
+| `origin` | source | survives `update`? |
+|---|---|---|
+| `manual` | you, via `mcp-index tag` / `mcp-index intent` | **yes** — a human outranks both |
+| `catalog` | `features/<stack>/mcp/<server>/tools.json` in the framework | refreshed from the catalog |
+| `heuristic` | `_auto_tags` guessing from the tool name | replaced as soon as the catalog covers the tool |
 
-The catalog is a curation library, not a completeness claim: it applies to a server however that server arrived (project `.mcp.json`, user-global config, a plugin, a cloud connector), and the heuristics are the last resort for the servers
-it does not know.
+The catalog is a curation library, not a completeness claim: it applies to a server however that
+server arrived (project `.mcp.json`, user-global config, a plugin, a cloud connector), and the
+heuristics are the last resort for the servers it does not know.
 
 ## When to Use
 
@@ -86,9 +87,11 @@ python3 .ai-badger/skills/mcp-index/scripts/mcp_index.py init --target <project-
 python3 .ai-badger/skills/mcp-index/scripts/mcp_index.py init --target <project-root> --host hermes
 ```
 
-Asks the host CLIs for their MCP servers (see *Where the server list comes from* below), describes each tool from the catalog where it can and by name heuristics otherwise, seeds a server the listing named without tool detail from the
-catalog (see `update`), records each server's
-`status`, and writes `.ai-badger/mcp-tools.json`. Prints which listing answered and which sources were skipped, then how many tools were tagged as `general` and which servers reported no tools.
+Asks the host CLIs for their MCP servers (see *Where the server list comes from* below), describes
+each tool from the catalog where it can and by name heuristics otherwise, seeds a server the
+listing named without tool detail from the catalog (see `update`), records each server's
+`status`, and writes `.ai-badger/mcp-tools.json`. Prints which listing answered and which sources
+were skipped, then how many tools were tagged as `general` and which servers reported no tools.
 
 **Completion criterion:** `.ai-badger/mcp-tools.json` exists with all current MCP tools indexed.
 
@@ -98,14 +101,21 @@ catalog (see `update`), records each server's
 python3 .ai-badger/skills/mcp-index/scripts/mcp_index.py update --target <project-root>
 ```
 
-Adds new tools, marks vanished ones with `status: removed` (preserving their curation), adds new MCP servers, and restates every server's `status`. **Preserves manually-set tags and intents on existing tools**; a tool the catalog describes
-is re-described from it unless `origin` is `manual`, and the tools that changed are printed by name. Takes `--host` like `init`.
+Adds new tools, marks vanished ones with `status: removed` (preserving their curation), adds new
+MCP servers, and restates every server's `status`. **Preserves manually-set tags and intents on
+existing tools**; a tool the catalog describes is re-described from it unless `origin` is `manual`,
+and the tools that changed are printed by name. Takes `--host` like `init`.
 
-A listing that carries **no tool detail at all** (every source but `hermes mcp list --json`) cannot tell "this server is gone" from "this is another host's listing", so a source it does not name is **left untouched** — same status, same
-tools — and named in the output. Only a listing that carries tools can move a source to `absent` and its tools to `removed`.
+A listing that carries **no tool detail at all** (every source but `hermes mcp list --json`) cannot
+tell "this server is gone" from "this is another host's listing", so a source it does not name is
+**left untouched** — same status, same tools — and named in the output. Only a listing that carries
+tools can move a source to `absent` and its tools to `removed`.
 
-A server such a listing **does** name is **seeded from the mcp catalog**: the catalog stands in for a host that declined to enumerate, so a curated server is not stranded with `tools: {}`. The seed is a floor, never an override — an
-existing entry wins whatever its `origin`, a `removed` tool stays removed, an uncatalogued server stays empty, and a listing that carries tool detail is taken as the whole truth even when it reports none.
+A server such a listing **does** name is **seeded from the mcp catalog**: the catalog stands in for
+a host that declined to enumerate, so a curated server is not stranded with `tools: {}`. The seed
+is a floor, never an override — an existing entry wins whatever its `origin`, a `removed` tool
+stays removed, an uncatalogued server stays empty, and a listing that carries tool detail is taken
+as the whole truth even when it reports none.
 
 **Completion criterion:** All current MCP tools appear in the index; removed tools have `status: removed`.
 
@@ -155,29 +165,36 @@ python3 .ai-badger/skills/mcp-index/scripts/mcp_index.py list --untagged --targe
 python3 .ai-badger/skills/mcp-index/scripts/mcp_index.py migrate --target <project-root>
 ```
 
-Converts a legacy `.ai-badger/mcp-tools.yaml` to `.ai-badger/mcp-tools.json`, preserving every curated tag and intent. A no-op (exit 0) if the project already has `mcp-tools.json`. Any other write command (`init`/`update`/`tag`/`intent`)
-migrates a legacy file the same way as a side effect — `migrate` exists for a project that only wants the conversion, without also running
-`init`/`update` against a live MCP source. The old file is renamed to `mcp-tools.yaml.migrated`, never deleted.
+Converts a legacy `.ai-badger/mcp-tools.yaml` to `.ai-badger/mcp-tools.json`, preserving every
+curated tag and intent. A no-op (exit 0) if the project already has `mcp-tools.json`. Any other
+write command (`init`/`update`/`tag`/`intent`) migrates a legacy file the same way as a side
+effect — `migrate` exists for a project that only wants the conversion, without also running
+`init`/`update` against a live MCP source. The old file is renamed to `mcp-tools.yaml.migrated`,
+never deleted.
 
 If PyYAML is absent and the legacy file falls outside the built-in parser's verified subset,
 `migrate` refuses rather than risk a silently wrong conversion, and prints two remedies:
-install PyYAML and re-run, or regenerate via `mcp-index init --from-json` (which loses curated tags and intents — stated so the cost is explicit before choosing it).
+install PyYAML and re-run, or regenerate via `mcp-index init --from-json` (which loses curated
+tags and intents — stated so the cost is explicit before choosing it).
 
-**Completion criterion:** `.ai-badger/mcp-tools.json` exists with the same tools, tags, and intents the legacy file had; `.ai-badger/mcp-tools.yaml.migrated` exists.
+**Completion criterion:** `.ai-badger/mcp-tools.json` exists with the same tools, tags, and
+intents the legacy file had; `.ai-badger/mcp-tools.yaml.migrated` exists.
 
 ## Where the server list comes from
 
-`hermes mcp list --json` — the source this skill was built on — **no longer exists**: the installed hermes answers `error: unrecognized arguments: --json` (measured 2026-07, issue #188). `init` and
+`hermes mcp list --json` — the source this skill was built on — **no longer exists**: the installed
+hermes answers `error: unrecognized arguments: --json` (measured 2026-07, issue #188). `init` and
 `update` therefore ask three sources in order and take the first that lists a server:
 
-| order | source                   | what it carries                                                                                              |
-|-------|--------------------------|--------------------------------------------------------------------------------------------------------------|
-| 1     | `hermes mcp list --json` | server names **and their tools** — the only listing that can                                                 |
-| 2     | `claude mcp list`        | every server, plus a reachability phrase per server; no tools. Health-checks each server first (~14s for 17) |
-| 3     | `hermes mcp list`        | server names and an enabled flag, from the text table; no tools                                              |
+| order | source | what it carries |
+|---|---|---|
+| 1 | `hermes mcp list --json` | server names **and their tools** — the only listing that can |
+| 2 | `claude mcp list` | every server, plus a reachability phrase per server; no tools. Health-checks each server first (~14s for 17) |
+| 3 | `hermes mcp list` | server names and an enabled flag, from the text table; no tools |
 
-`--host hermes` or `--host claude` restricts the chain to one CLI — use it when the other is slow, noisy, or listing the wrong project's servers. `--from-json <document>` skips the hosts entirely and reads a saved `hermes mcp list --json`
-document.
+`--host hermes` or `--host claude` restricts the chain to one CLI — use it when the other is slow,
+noisy, or listing the wrong project's servers. `--from-json <document>` skips the hosts entirely and
+reads a saved `hermes mcp list --json` document.
 
 ### `--discover` — ask each server for its own tools
 
@@ -188,10 +205,14 @@ to `init` or `update` and every server the listing left unenumerated is asked di
 python3 .ai-badger/skills/mcp-index/scripts/mcp_index.py init --target <project-root> --discover
 ```
 
-It is opt-in because it costs one connection per server (measured: 11 servers, ~20s, 128 tools recovered from a listing that carried none). A server hermes does not have in its own config — a plugin- or connector-provided one — cannot be
-tested; it keeps `tools_known` False, is named in the output, and falls back to the catalog seed. `hermes mcp test` **exits 0 even when it fails**, so only its printed `Tools discovered` block is treated as an answer.
+It is opt-in because it costs one connection per server (measured: 11 servers, ~20s, 128 tools
+recovered from a listing that carried none). A server hermes does not have in its own config — a
+plugin- or connector-provided one — cannot be tested; it keeps `tools_known` False, is named in
+the output, and falls back to the catalog seed. `hermes mcp test` **exits 0 even when it fails**,
+so only its printed `Tools discovered` block is treated as an answer.
 
-If no source answers, both commands **refuse** and print what each one said — a missing CLI, a non-zero exit with its error line, or an empty listing. They never write a half-index.
+If no source answers, both commands **refuse** and print what each one said — a missing CLI, a
+non-zero exit with its error line, or an empty listing. They never write a half-index.
 
 > Status meanings: read references/status.md if `update` reports a status other than `ok` (or when a silent server needs explaining).
 
@@ -199,20 +220,23 @@ If no source answers, both commands **refuse** and print what each one said — 
 
 ## Gotchas
 
-1. **Auto-tagging covers only ~60% of tools.** Expect 10-20 tools tagged as `[general]` after `init`. Curate them with `mcp-index tag`, or — better, if the server is worth describing for every project — add its `tools.json` to the
-   framework's mcp catalog.
-2. **The first `update` after upgrading rewrites heuristic tags.** Any tool the catalog describes gets the curated tags and intent, because an entry with no `origin` cannot be told apart from a guess. Tools curated with `mcp-index tag`/
-   `intent` from now on are marked `manual` and left alone.
+1. **Auto-tagging covers only ~60% of tools.** Expect 10-20 tools tagged as `[general]` after `init`. Curate them with `mcp-index tag`, or — better, if the server is worth describing for every project — add its `tools.json` to the framework's mcp catalog.
+2. **The first `update` after upgrading rewrites heuristic tags.** Any tool the catalog describes gets the curated tags and intent, because an entry with no `origin` cannot be told apart from a guess. Tools curated with `mcp-index tag`/`intent` from now on are marked `manual` and left alone.
 3. **Index goes stale after adding MCP servers.** Run `mcp-index update` after every `hermes mcp add` or `hermes mcp remove`.
 4. **Tags aren't free-form.** Use only tags from the taxonomy. `mcp-index tag` rejects unknown tags.
 5. **Intent field is for disambiguation, not documentation.** A 10-30 word sentence beats a paragraph. Write it to answer: "why would I pick this tool over a sibling with the same tags?"
 6. **The `list` filter uses substring matching on tool names.** Avoid naming tools with names that are substrings of each other in tests.
 7. **`--target` is required.** The script does not default to `.` — always pass `--target <path>`.
-8. **The two hosts name the same server differently.** `claude mcp list` decorates a server with where it routes it from — `plugin:<plugin>:<server>` for a plugin-provided server,
-   `claude.ai <Name>` for a connector — where `hermes mcp list` prints the bare name. A source keeps whatever the host called it, so switching `--host` adds sources rather than renaming them, and the sources the new listing cannot speak for
-   are left untouched rather than removed. The **mcp catalog** does reach through the decoration: a listing name is matched against the decorated name first and the undecorated server second, so `plugin:ai-badger:code-review-graph` picks up
-   `features/common/mcp/code-review-graph/tools.json`. Curating a specific plugin's copy is possible — set `"server": "plugin:<plugin>:<server>"` in its `tools.json` and the exact key wins — because two plugins may ship same-named servers,
-   which is also why the bare name is never rewritten.
+8. **The two hosts name the same server differently.** `claude mcp list` decorates a server with
+   where it routes it from — `plugin:<plugin>:<server>` for a plugin-provided server,
+   `claude.ai <Name>` for a connector — where `hermes mcp list` prints the bare name. A source keeps
+   whatever the host called it, so switching `--host` adds sources rather than renaming them, and the
+   sources the new listing cannot speak for are left untouched rather than removed. The **mcp
+   catalog** does reach through the decoration: a listing name is matched against the decorated name
+   first and the undecorated server second, so `plugin:ai-badger:code-review-graph` picks up
+   `features/common/mcp/code-review-graph/tools.json`. Curating a specific plugin's copy is possible
+   — set `"server": "plugin:<plugin>:<server>"` in its `tools.json` and the exact key wins — because
+   two plugins may ship same-named servers, which is also why the bare name is never rewritten.
 
 ## Verification Checklist
 

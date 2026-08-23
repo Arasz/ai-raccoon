@@ -55,10 +55,20 @@ def is_export_graph(tool_name) -> bool:
 
 
 def _sanitize_segment(value: str) -> str:
-    """Keep [A-Za-z0-9._-]; substitute '_' for everything else (session ids may hold ':', '/', ' ')."""
-    return "".join(
-        ch if ch.isascii() and (ch.isalnum() or ch in "._-") else "_" for ch in value
+    """Keep [A-Za-z0-9._-]; substitute '_' for everything else (session ids may hold ':', '/', ' ').
+
+    Guards dot-only traversal segments: '.' -> '_' and '..' -> '__'.
+    """
+    if not value:
+        return ""
+    sanitized = "".join(
+        ch if ch.isascii() and (ch.isalnum() or ch in "._-") else "_" for ch in str(value)
     )
+    if sanitized == ".":
+        return "_"
+    if sanitized == "..":
+        return "__"
+    return sanitized
 
 
 def _now_slug() -> str:

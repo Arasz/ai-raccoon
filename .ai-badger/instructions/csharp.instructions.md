@@ -7,8 +7,7 @@ applyTo: '**/*.cs,**/*.csproj,Directory.Build.props,Directory.Packages.props'
 
 - Use nullable reference types and the C# language version configured by `Directory.Build.props`.
 - Write a failing, behavior-focused xUnit test before each production behavior change. Use descriptive test names and a fluent assertion library (e.g. Shouldly).
-- Use braces for every conditional and loop. Prefer `extension` members, explicit construction where the target type is not on the same line, and a guard-clause helper (e.g. `CommunityToolkit.Diagnostics`) for argument validation rather
-  than hand-rolled `if (x is null) throw` blocks.
+- Use braces for every conditional and loop. Prefer `extension` members, explicit construction where the target type is not on the same line, and a guard-clause helper (e.g. `CommunityToolkit.Diagnostics`) for argument validation rather than hand-rolled `if (x is null) throw` blocks.
 - Keep validators (e.g. FluentValidation) nested inside the validated type and use camel-case JSON property paths.
 - Use nested source-generated `[LoggerMessage]` methods rather than direct `ILogger` calls.
 - Keep NuGet versions centralized (e.g. `Directory.Packages.props`); never pin a `Version` on an individual `PackageReference`.

@@ -239,7 +239,7 @@ class McpTools:
                 parts.append(f"global: {prereq['global']['install']}")
             self.ctx.notes.append(
                 "prerequisite — " + "; ".join(parts) + ". ai-badger declares the server, it "
-                                                       "does not install it."
+                "does not install it."
             )
 
     def fill_mcp_described(self) -> None:

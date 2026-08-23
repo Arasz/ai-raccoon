@@ -182,6 +182,8 @@ metadata:
 > Foundation). Their A–F letter grades are deliberately **not** carried: a band
 > invites arguing about the grade instead of fixing the finding.
 
+When the diff adds or changes test files, this screen is the floor — delegate the depth pass to `review-tests` (persona `qa`, or the stack's `qa-backend`/`qa-frontend`), which runs the mutations rather than reasoning about them.
+
 ### 3.2 Repository & Contract Tests
 
 - [ ] **Repository interfaces have contract tests** — not just in-memory fakes.

@@ -44,7 +44,7 @@ def parse_hermes_text_listing(stdout: str) -> List[Server]:
     for line in stdout.splitlines():
         line = line.strip()
         if (not line or line.startswith("MCP Servers") or line.startswith("─")
-            or line.startswith("Name")):
+                or line.startswith("Name")):
             continue
         parts = line.split()
         if len(parts) >= 4 and ("enabled" in line or "disabled" in line):

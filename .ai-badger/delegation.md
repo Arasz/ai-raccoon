@@ -1,6 +1,6 @@
 # Delegation map — AiRaccoon
 
-> Scaffolded by ai-badger 0.132.0. Regenerated on every scaffold; do not edit.
+> Scaffolded by ai-badger 0.134.1. Regenerated on every scaffold; do not edit.
 
 ## Stacks
 
@@ -12,7 +12,9 @@ dotnet, mcp, python, github, ai-raccoon
 - `code-reviewer` — Independent quality and security gate — OWASP Top 10 (plus OWASP LLM Top 10 when an LLM-integration surface is present) review scoped to a targeted plan (pick the 3-5 relevant risk categories for the diff, not a blanket checklist), two-pass performance/anti-pattern analysis, and adversarial verification of AI-generated claims. Lane: opus.
 - `delegator` — Work-routing lead for long, multi-package sessions — decomposes a task into independently verifiable packages, dispatches each to the persona and model lane that fits it, and does only integration, arbitration and gate-running itself. Lane: opus.
 - `dotnet-engineer` — Default implementation engineer for .NET codebases — writes and edits C# across the project's layers, TDD-first (failing test before code), SOLID-minded, matching existing conventions (validation library idioms, guard-clause helpers, source-generated logging, current-generation C# features). Lane: sonnet.
-- `test-engineer` — Testing specialist — designs test strategy, writes failing tests first, plans phased test coverage (leaf types unmocked → mid-layer with leaf mocks → top-layer), audits test quality/coverage gaps, and enforces edit-boundary discipline between test files and production code. Lane: sonnet.
+- `qa` — Test-quality authority — designs a suite from acceptance criteria before anyone writes it, and audits an existing suite for whether it can fail at all. Lane: opus.
+- `qa-backend` — QA for .NET server-side code — the qa persona's judgment applied with this stack's runner, isolation tooling and blind spots: xUnit v3 parallelism and traits, TimeProvider/FakeTimeProvider, Testcontainers and emulator-gated lanes, WebApplicationFactory, Stryker and ArchUnitNET false-negatives. Lane: opus.
+- `test-engineer` — Testing specialist — designs test strategy, writes failing tests first, plans phased test coverage (leaf types unmocked → mid-layer with leaf mocks → top-layer), and enforces edit-boundary discipline between test files and production code. Lane: sonnet.
 
 ## Routing (config.json personaRouting)
 

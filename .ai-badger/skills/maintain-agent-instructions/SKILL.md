@@ -56,8 +56,10 @@ script instead of by eye — if the project records this decision as an ADR, lin
    node .ai-badger/skills/maintain-agent-instructions/scripts/check-agent-drift.mjs
    ```
 
-   Both scripts are `#!/usr/bin/env node` and import only `node:fs` / `node:path` — Node 18+, no bundler, no dependencies. Run them from the project root; they read `process.cwd()` and
-   `AGENT_INSTRUCTIONS_DIR` (default `.ai-badger/agent-instructions`). Adjust the path prefix if the skill was scaffolded elsewhere.
+   Both scripts are `#!/usr/bin/env node` and import only `node:fs` / `node:path` — Node 18+,
+   no bundler, no dependencies. Run them from the project root; they read `process.cwd()` and
+   `AGENT_INSTRUCTIONS_DIR` (default `.ai-badger/agent-instructions`). Adjust the path prefix
+   if the skill was scaffolded elsewhere.
 
 3. If both pass, report success.
 4. If either fails:
@@ -83,7 +85,8 @@ Scripts are small deterministic helpers. They should:
 - avoid LLM calls,
 - avoid network calls,
 - read the agent-instructions model (path resolved via `AGENT_INSTRUCTIONS_DIR`, default
-  `.ai-badger/agent-instructions`; read `references/agent-instruction-model.md` **when writing a script that reads the model**),
+  `.ai-badger/agent-instructions`; read `references/agent-instruction-model.md` **when writing a
+  script that reads the model**),
 - report precise file/rule failures,
 - exit non-zero on errors,
 - keep warnings separate from errors,

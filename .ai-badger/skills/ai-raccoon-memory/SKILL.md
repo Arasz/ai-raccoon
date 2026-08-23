@@ -72,9 +72,12 @@ low-rated entries; shared entries are exempt.
 - `memory_embed_pending`: omit `limit` to process all pending entries.
 - `memory_delete_context` requires full access mode.
 - A `memory_search` result (`kind=code` or `kind=both`) carrying a warning starting
-  `code engine not configured` means its code section is FTS5 keyword matches only — semantic code hits are missing, not absent; don't read it as a complete answer. Tell the user, once per session, verbatim: run
-  `ai-raccoon model set code default` (downloads and activates the default code embedding model, ~187 MB, one-off) — don't repeat the hint on later searches in the same session. Don't re-run the search hoping for vector results: nothing
-  changes until that command runs.
+  `code engine not configured` means its code section is FTS5 keyword matches only — semantic
+  code hits are missing, not absent; don't read it as a complete answer. Tell the user, once
+  per session, verbatim: run `ai-raccoon model set code default` (downloads and activates the
+  default code embedding model, ~187 MB, one-off) — don't repeat the hint on later searches in
+  the same session. Don't re-run the search hoping for vector results: nothing changes until
+  that command runs.
 
 ## 7. Bulk ops
 

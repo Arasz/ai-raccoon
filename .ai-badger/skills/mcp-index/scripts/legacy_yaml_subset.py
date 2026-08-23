@@ -90,7 +90,7 @@ def _logical_lines(text: str) -> list[tuple[int, str]]:
         if logical:
             prev_indent, _ = logical[-1]
             if (indent == prev_indent + 2 and not content.startswith("- ")
-                and not _KEY_RE.match(content)):
+                    and not _KEY_RE.match(content)):
                 is_continuation = True
         if is_continuation:
             prev_indent, prev_content = logical[-1]
@@ -176,7 +176,7 @@ def _escape_double_quoted(text: str) -> str:
 
 
 def _parse_mapping(lines: list[tuple[int, str]], pos: int,
-                   indent: int) -> tuple[dict, int]:
+                    indent: int) -> tuple[dict, int]:
     """Parse `key: value` / `key:` (+ nested block) entries at exactly `indent`."""
     result: dict[str, Any] = {}
     while pos < len(lines):
@@ -200,7 +200,7 @@ def _parse_mapping(lines: list[tuple[int, str]], pos: int,
 
 
 def _parse_nested_value(lines: list[tuple[int, str]], pos: int,
-                        parent_indent: int) -> tuple[Any, int]:
+                         parent_indent: int) -> tuple[Any, int]:
     """The block under a bare `key:` line: a same-indent sequence or a deeper mapping."""
     if pos < len(lines):
         next_indent, next_content = lines[pos]
@@ -212,7 +212,7 @@ def _parse_nested_value(lines: list[tuple[int, str]], pos: int,
 
 
 def _parse_sequence(lines: list[tuple[int, str]], pos: int,
-                    indent: int) -> tuple[list, int]:
+                     indent: int) -> tuple[list, int]:
     """Parse `- ...` items at exactly `indent`."""
     items: list[Any] = []
     while pos < len(lines):

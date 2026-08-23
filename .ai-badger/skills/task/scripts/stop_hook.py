@@ -43,6 +43,7 @@ SESSION_END_EVENT = "SessionEnd"
 MAX_BLOCKS_PER_SESSION = 8
 BLOCK_COUNTS_KEY = "stopBlocks"
 
+
 # The hook payload, kept so every record can name the project it came from. An unattributed
 # record pools into every project's analysis; see `call-behaviorist`.
 _PAYLOAD: dict = {}

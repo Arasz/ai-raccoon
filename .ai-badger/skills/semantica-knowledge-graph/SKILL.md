@@ -17,7 +17,7 @@ metadata:
 
 # semantica-knowledge-graph
 
-Semantica is a session-scoped knowledge graph MCP server (MIT, v0.6.5+). Every MCP invocation shares one in-memory graph — entities, relationships, and decisions accumulate within a session but do not survive a process restart.
+Semantica is a session-scoped knowledge graph MCP server (MIT, v0.6.5+). In-memory graph state accumulates within a session but dies on process exit.
 
 ## When NOT to Use
 
@@ -34,7 +34,7 @@ Semantica is a session-scoped knowledge graph MCP server (MIT, v0.6.5+). Every M
 4. Cite decision id in commits or PRs for traceability
 
 ### 2. Entity extraction
-- **Option 2 (Agent-Guided — Primary)**: Use LLM reasoning to extract domain concepts and call `add_entity` + `add_relationship`. Zero extra dependencies, instantaneous, zero cold-start.
+- **Option 2 (Agent-Guided — Primary)**: Use LLM reasoning to extract domain concepts and call `add_entity` + `add_relationship`. Instantaneous, zero dependencies.
 - **For Code Structures**: Use `code-review-graph` MCP tools (`semantic_search_nodes_tool`, `find_callers`, `find_dependents`) for code symbol graphs.
 - **Option 1 (Native Local ML)**: Optional `extract_entities` / `extract_relations` via PyTorch/HuggingFace (`pip install torch transformers`). Degrades if ML deps missing.
 - Verify with `get_graph_summary()`.
@@ -45,11 +45,11 @@ Semantica is a session-scoped knowledge graph MCP server (MIT, v0.6.5+). Every M
 3. `find_precedents(scenario="...")` → check prior patterns
 
 ### 4. Graph export & AiRaccoon persistence pattern
-To prevent data loss from Semantica's ephemeral in-memory process:
+To prevent data loss from Semantica's ephemeral process:
 1. **Export auto-saves per session**: Call `export_graph(format="json")`. The export hook auto-saves each result to `.semantica/<session>.json` — per-session and timestamped, so parallel sessions and subagents never collide.
 2. **Watch the directory once**: The `ai-raccoon-memory` skill registers a one-time directory watch on `.semantica/` via `memory_watch_add(projectId, <absolute path to .semantica>)`; re-adding is a no-op.
-3. **Structural JSON Integration**: AiRaccoon ingests every new `.semantica/` file, parses node/edge hierarchies and decision outcomes, and embeds them into its persistent SQLite memory bank (`memory.db`).
-4. **Cross-Session Retrieval**: In future sessions, `memory_search` in AiRaccoon returns both textual decision rationale AND exact structural JSON graph relations.
+3. **Structural JSON Integration**: AiRaccoon ingests every `.semantica/` file, parses graphs and decisions, and embeds them into its persistent SQLite memory bank (`memory.db`).
+4. **Cross-Session Retrieval**: `memory_search` in AiRaccoon returns both textual decision rationale and structural JSON graph relations.
 5. **`.semantica/` is local staging**: gitignore `.semantica/` in the consumer repo — the durable record lives in ai-raccoon memory, not the repo.
 
 ## Escalation by result
@@ -73,8 +73,9 @@ To prevent data loss from Semantica's ephemeral in-memory process:
 - **Upstream export bug (0.6.5/0.6.6)**: `export_graph(format="json")` errors
   (`JSONExporter.export() missing ... 'file_path'`) — fixed after 0.6.6; until then the
   hook skips the dump; graph tools work; `check.py` probes and warns.
-- **All agents auto-save**: export autosave is wired for Hermes (plugin), Claude Code
-  (PostToolUse), Copilot (postToolUse) — every `export_graph` result lands in `.semantica/`.
+- **All agents auto-save and nudge**: export autosave is wired for Hermes (plugin),
+  Claude Code (PostToolUse), Copilot (postToolUse) — every `export_graph` result lands in
+  `.semantica/`. The once-per-session export guidance nudge is active across all three hosts.
 
 ## Verification Checklist
 

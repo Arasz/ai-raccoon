@@ -10,7 +10,7 @@
       ]
     },
     "hermes": {
-        "command": "${HOME}/.local/bin/hermes",
+      "command": "${HOME}/.local/bin/hermes",
       "args": [
         "mcp",
         "serve"
@@ -20,13 +20,13 @@
       ]
     },
     "ai-raccoon": {
-        "command": "${HOME}/.dotnet/tools/ai-raccoon",
+      "command": "${HOME}/.dotnet/tools/ai-raccoon",
       "tools": [
         "*"
       ]
     },
     "semantica": {
-        "command": "${HOME}/.local/bin/semantica-mcp",
+      "command": "${HOME}/.local/bin/semantica-mcp",
       "tools": [
         "*"
       ]
@@ -35,15 +35,15 @@
       "url": "http://127.0.0.1:64482/stream",
       "type": "http"
     },
-      "playwright": {
-          "command": "npx",
-          "args": [
-              "-y",
-              "@playwright/mcp@latest"
-          ],
-          "tools": [
-              "*"
-          ]
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest"
+      ],
+      "tools": [
+        "*"
+      ]
     }
   }
 }

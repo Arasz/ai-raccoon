@@ -20,12 +20,12 @@ function readJson(filePath) {
 }
 
 function readText(relativePath) {
-    const absolute = path.join(root, relativePath);
-    const {size} = statSync(absolute);
-    if (size > MAX_SCAN_BYTES) {
-        throw new Error(`${relativePath} is too large to scan (${size} bytes)`);
-    }
-    return readFileSync(absolute, "utf8");
+  const absolute = path.join(root, relativePath);
+  const { size } = statSync(absolute);
+  if (size > MAX_SCAN_BYTES) {
+    throw new Error(`${relativePath} is too large to scan (${size} bytes)`);
+  }
+  return readFileSync(absolute, "utf8");
 }
 
 // A model is data, and these two limits keep a bad one from becoming a hang rather than an
@@ -37,35 +37,35 @@ const MAX_SCAN_BYTES = 1_000_000;
 // cap above never sees it, and it backtracks catastrophically against a non-matching input
 // (review B16). Node has no regex timeout, so such a pattern is refused rather than run.
 function quantifiesAGroup(pattern) {
-    let inClass = false;
-    for (let i = 0; i < pattern.length; i += 1) {
-        const ch = pattern[i];
-        if (ch === "\\") {
-            i += 1;
-        } else if (inClass) {
-            inClass = ch !== "]";
-        } else if (ch === "[") {
-            inClass = true;
-        } else if (ch === ")" && "*+?{".includes(pattern[i + 1])) {
-            return true;
-        }
+  let inClass = false;
+  for (let i = 0; i < pattern.length; i += 1) {
+    const ch = pattern[i];
+    if (ch === "\\") {
+      i += 1;
+    } else if (inClass) {
+      inClass = ch !== "]";
+    } else if (ch === "[") {
+      inClass = true;
+    } else if (ch === ")" && "*+?{".includes(pattern[i + 1])) {
+      return true;
     }
-    return false;
+  }
+  return false;
 }
 
 function compilePattern(pattern, flags) {
-    if (typeof pattern !== "string" || pattern.length > MAX_PATTERN_LENGTH) {
-        throw new Error(`pattern too long (over ${MAX_PATTERN_LENGTH} chars); simplify it`);
-    }
-    if (quantifiesAGroup(pattern)) {
-        throw new Error(`nested quantifier in pattern ${pattern}: a quantified group backtracks `
-            + `catastrophically; rewrite it without a quantifier after ")"`);
-    }
-    return new RegExp(pattern, flags);
+  if (typeof pattern !== "string" || pattern.length > MAX_PATTERN_LENGTH) {
+    throw new Error(`pattern too long (over ${MAX_PATTERN_LENGTH} chars); simplify it`);
+  }
+  if (quantifiesAGroup(pattern)) {
+    throw new Error(`nested quantifier in pattern ${pattern}: a quantified group backtracks `
+      + `catastrophically; rewrite it without a quantifier after ")"`);
+  }
+  return new RegExp(pattern, flags);
 }
 
 function matchesAny(text, patterns) {
-    return patterns.some((pattern) => compilePattern(pattern, "is").test(text));
+  return patterns.some((pattern) => compilePattern(pattern, "is").test(text));
 }
 
 function parseHeadingSpec(heading) {
@@ -134,7 +134,7 @@ const model = existsSync(modelPath) ? readJson(modelPath) : undefined;
 if (!model) {
   errors.push(`Missing ${path.join(modelDir, "model.json")}`);
 } else {
-    try {
+  try {
   if (model.version !== 1) {
     errors.push(`Unsupported model version: ${model.version}`);
   }
@@ -248,14 +248,14 @@ if (!model) {
       }
     }
   }
-    } catch (error) {
-        // A guard rejection is a reported failure, not a stack trace.
-        guardFailure = error.message;
-    }
+  } catch (error) {
+    // A guard rejection is a reported failure, not a stack trace.
+    guardFailure = error.message;
+  }
 }
 
 if (guardFailure) {
-    errors.push(guardFailure);
+  errors.push(guardFailure);
 }
 
 if (warnings.length > 0) {

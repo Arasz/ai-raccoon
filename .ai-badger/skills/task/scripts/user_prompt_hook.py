@@ -36,6 +36,7 @@ except ImportError:  # pragma: no cover - a missing logger must never break a ho
 
 COMPONENT = "task_user_prompt_hook"
 
+
 # The hook payload, kept so every record can name the project it came from. An unattributed
 # record pools into every project's analysis; see `call-behaviorist`.
 _PAYLOAD: dict = {}

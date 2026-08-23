@@ -218,11 +218,31 @@ def _live_lane_pids() -> List[int]:
     return pids
 
 
+def _safe_session(session_id: Optional[str]) -> str:
+    """Session id made filesystem-safe; empty string is not a valid marker.
+
+    Keeps [A-Za-z0-9._-]; substitutes '_' for everything else.
+    Guards dot-only traversal segments: '.' -> '_' and '..' -> '__'.
+    """
+    if not session_id:
+        return ""
+    sanitized = "".join(
+        ch if ch.isascii() and (ch.isalnum() or ch in "._-") else "_" for ch in str(session_id)
+    )
+    if sanitized == ".":
+        return "_"
+    if sanitized == "..":
+        return "__"
+    return sanitized
+
+
 def _denials_path(session_id: Optional[str], command: str) -> Optional[Path]:
     """Counter file for this (session, exact command) pair, or None when unaddressable."""
     if MARKER_DIR is None or not session_id:
         return None
-    safe = str(session_id).replace("/", "_").replace("\\", "_")
+    safe = _safe_session(session_id)
+    if not safe:
+        return None
     digest = hashlib.sha256(command.encode("utf-8")).hexdigest()[:32]
     return MARKER_DIR / f"{safe}.{digest}.denials"
 

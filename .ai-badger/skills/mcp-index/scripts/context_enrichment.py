@@ -33,10 +33,20 @@ MAX_HINT_CHARS = 300
 # rather than imported, since this module must not depend on debug_log (see module docstring).
 MAX_TOP_CANDIDATES_CHARS = 200
 
+NUDGE_LINE = (
+    "[ai-badger] Semantica is configured: record key decisions via record_decision and "
+    "call export_graph(format=json) before finishing — dumps auto-save to .semantica/ "
+    "and are indexed."
+)
+
+SEMANTICA_NUDGE_DIR = Path.home() / ".ai-badger" / "semantica-nudge"
+
 __all__ = [
     "COVERAGE_TERM_CAP",
     "DEFAULT_COVERAGE_THRESHOLD",
     "TOP_N",
+    "NUDGE_LINE",
+    "SEMANTICA_NUDGE_DIR",
     "find_relevant_tools",
     "tokenize",
     "load_mcp_index",
@@ -46,6 +56,11 @@ __all__ = [
     "format_top_candidates",
     "tags_for_display",
     "build_hint",
+    "semantica_indexed",
+    "sanitize_path_segment",
+    "semantica_nudge_marker_path",
+    "semantica_nudge_already_shown",
+    "record_semantica_nudge_shown",
 ]
 
 
@@ -140,7 +155,7 @@ def tags_for_display(tool_name: str, index: Dict[str, Any]) -> List[str]:
 
 
 def build_hint(ranked: List[Tuple[str, float]], index: Dict[str, Any],
-               max_chars: int = MAX_HINT_CHARS) -> str:
+                max_chars: int = MAX_HINT_CHARS) -> str:
     """The `[ai-badger] Relevant MCP tools: ...` line, tags included unless that overflows."""
     tools_str = ", ".join(
         f"{name} ({', '.join(tags_for_display(name, index))})" for name, _ in ranked[:TOP_N]
@@ -150,3 +165,72 @@ def build_hint(ranked: List[Tuple[str, float]], index: Dict[str, Any],
         return hint
     tools_str_short = ", ".join(name for name, _ in ranked[:TOP_N])
     return f"[ai-badger] Relevant MCP tools: {tools_str_short}"
+
+
+def semantica_indexed(index: Optional[Dict[str, Any]]) -> bool:
+    """True when any index source's last ':' token is 'semantica' (bare or decorated)."""
+    return any(
+        (source.get("name") or "").rsplit(":", 1)[-1] == "semantica"
+        for source in (index or {}).get("sources", [])
+    )
+
+
+def sanitize_path_segment(value: Optional[str]) -> str:
+    """Sanitize a string into a filesystem-safe single path segment.
+
+    Keeps [A-Za-z0-9._-]; substitutes '_' for everything else.
+    Guards dot-only traversal segments: '.' -> '_' and '..' -> '__'.
+    Returns empty string for None or empty inputs.
+    """
+    if not value:
+        return ""
+    sanitized = "".join(
+        ch if ch.isascii() and (ch.isalnum() or ch in "._-") else "_" for ch in str(value)
+    )
+    if sanitized == ".":
+        return "_"
+    if sanitized == "..":
+        return "__"
+    return sanitized
+
+
+def _safe_session(session_id: Optional[str]) -> str:
+    """Session id made filesystem-safe; empty string is not a valid marker."""
+    return sanitize_path_segment(session_id)
+
+
+def semantica_nudge_marker_path(
+    session_id: Optional[str],
+    base_dir: Optional[Path] = None,
+) -> Path:
+    """The nudge marker file for a session (empty path when no session id)."""
+    safe = _safe_session(session_id)
+    if not safe:
+        return Path("")
+    target_dir = base_dir if base_dir is not None else SEMANTICA_NUDGE_DIR
+    return target_dir / safe
+
+
+def semantica_nudge_already_shown(
+    session_id: Optional[str],
+    base_dir: Optional[Path] = None,
+) -> bool:
+    """True when the session was already nudged for Semantica (marker exists)."""
+    path = semantica_nudge_marker_path(session_id, base_dir=base_dir)
+    return path.is_file() if path.name else False
+
+
+def record_semantica_nudge_shown(
+    session_id: Optional[str],
+    base_dir: Optional[Path] = None,
+) -> bool:
+    """Touch the semantica nudge marker; False on a missing session id or IO failure."""
+    path = semantica_nudge_marker_path(session_id, base_dir=base_dir)
+    if not path.name:
+        return False
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+        return True
+    except OSError:
+        return False

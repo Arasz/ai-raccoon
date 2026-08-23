@@ -1,148 +1,148 @@
 {
-    "_note": "Copy to docs/work/checklist/<yyyy-mm-dd>-<subject>.json. Never fill this file in place. status is pass|fail|skipped|substituted; substituted means checked by a different instrument than the item names, and its reason must say which. accepted stays null until a human answers it, so an unfinished run is visibly unfinished. Delete any item whose feature no longer exists rather than skipping it.",
-    "run": {
-        "date": "",
-        "branch": "",
-        "commit": "",
-        "data-root": "",
-        "note": "A scratch --data-root, never ~/.ai-raccoon."
+  "_note": "Copy to docs/work/checklist/<yyyy-mm-dd>-<subject>.json. Never fill this file in place. status is pass|fail|skipped|substituted; substituted means checked by a different instrument than the item names, and its reason must say which. accepted stays null until a human answers it, so an unfinished run is visibly unfinished. Delete any item whose feature no longer exists rather than skipping it.",
+  "run": {
+    "date": "",
+    "branch": "",
+    "commit": "",
+    "data-root": "",
+    "note": "A scratch --data-root, never ~/.ai-raccoon."
+  },
+  "derived": {
+    "version": "",
+    "mcp-tool-count": "",
+    "mcp-prompt-count": "",
+    "note": "Produced by scripts/derive-facts.py at run time, never typed from memory or a previous run."
+  },
+  "findings-against-prior-runs": [
+    {
+      "_example": "Delete this example. One entry per thing an earlier run got wrong — a verdict, a reason, or a step that could not have failed. A checklist that can only describe the current build cannot report that the last checklist lied.",
+      "prior-run": "",
+      "prior-claim": "",
+      "what-is-actually-true": "",
+      "evidence": "",
+      "so-what": ""
+    }
+  ],
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
     },
-    "derived": {
-        "version": "",
-        "mcp-tool-count": "",
-        "mcp-prompt-count": "",
-        "note": "Produced by scripts/derive-facts.py at run time, never typed from memory or a previous run."
+    {
+      "item": "server-lifecycle",
+      "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
     },
-    "findings-against-prior-runs": [
-        {
-            "_example": "Delete this example. One entry per thing an earlier run got wrong — a verdict, a reason, or a step that could not have failed. A checklist that can only describe the current build cannot report that the last checklist lied.",
-            "prior-run": "",
-            "prior-claim": "",
-            "what-is-actually-true": "",
-            "evidence": "",
-            "so-what": ""
-        }
-    ],
-    "items": [
-        {
-            "item": "build-and-install-global-package",
-            "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
-            "command": "",
-            "evidence": "",
-            "observed-result": "",
-            "status": "",
-            "accepted": null,
-            "acceptance-reason": ""
-        },
-        {
-            "item": "server-lifecycle",
-            "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
-            "command": "",
-            "evidence": "",
-            "observed-result": "",
-            "status": "",
-            "accepted": null,
-            "acceptance-reason": ""
-        },
-        {
-            "item": "memory-write-stores-and-reports-truthfully",
-            "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
-            "command": "",
-            "evidence": "",
-            "observed-result": "",
-            "status": "",
-            "accepted": null,
-            "acceptance-reason": ""
-        },
-        {
-            "item": "memory-search-hybrid-retrieval",
-            "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking",
-            "command": "",
-            "evidence": "",
-            "observed-result": "",
-            "status": "",
-            "accepted": null,
-            "acceptance-reason": ""
-        },
-        {
-            "item": "memory-get-returns-content-by-hash",
-            "expected-result": "memory_get returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
-            "command": "",
-            "evidence": "",
-            "observed-result": "",
-            "status": "",
-            "accepted": null,
-            "acceptance-reason": ""
-        },
-        {
-            "item": "source-path-anchor-resolves-its-chunk",
-            "expected-result": "a `file#section` query returns that exact chunk within the production result window",
-            "command": "",
-            "evidence": "",
-            "observed-result": "",
-            "status": "",
-            "accepted": null,
-            "acceptance-reason": ""
-        },
-        {
-            "item": "write-path-noise-filtering",
-            "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
-            "command": "",
-            "evidence": "",
-            "observed-result": "",
-            "status": "",
-            "accepted": null,
-            "acceptance-reason": ""
-        },
-        {
-            "item": "read-path-query-guard",
-            "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
-            "command": "",
-            "evidence": "",
-            "observed-result": "",
-            "status": "",
-            "accepted": null,
-            "acceptance-reason": ""
-        },
-        {
-            "item": "file-watch-status",
-            "expected-result": "memory_watch_status lists live registrations and their sync state",
-            "command": "",
-            "evidence": "",
-            "observed-result": "",
-            "status": "",
-            "accepted": null,
-            "acceptance-reason": ""
-        },
-        {
-            "item": "promotion-queue-state",
-            "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately",
-            "command": "",
-            "evidence": "",
-            "observed-result": "",
-            "status": "",
-            "accepted": null,
-            "acceptance-reason": ""
-        },
-        {
-            "item": "full-mcp-surface",
-            "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
-            "command": "",
-            "evidence": "",
-            "observed-result": "",
-            "status": "",
-            "accepted": null,
-            "acceptance-reason": ""
-        },
-        {
-            "item": "observability-event-ids",
-            "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
-            "command": "",
-            "evidence": "",
-            "observed-result": "",
-            "status": "",
-            "accepted": null,
-            "acceptance-reason": ""
-        }
-    ]
+    {
+      "item": "memory-write-stores-and-reports-truthfully",
+      "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "memory-search-hybrid-retrieval",
+      "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "memory-get-returns-content-by-hash",
+      "expected-result": "memory_get returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "source-path-anchor-resolves-its-chunk",
+      "expected-result": "a `file#section` query returns that exact chunk within the production result window",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "write-path-noise-filtering",
+      "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "read-path-query-guard",
+      "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "file-watch-status",
+      "expected-result": "memory_watch_status lists live registrations and their sync state",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "promotion-queue-state",
+      "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "full-mcp-surface",
+      "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "observability-event-ids",
+      "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    }
+  ]
 }

@@ -41,7 +41,7 @@ class GeneratedConfigRecords:
         for rec in prior:
             path, destination = rec.get("path"), rec.get("destination")
             if isinstance(path, str) and isinstance(destination, str) \
-                and (self.target / path).exists():
+                    and (self.target / path).exists():
                 merged[(path, destination)] = rec
         merged.update(self._records)
         return [merged[key] for key in sorted(merged)]

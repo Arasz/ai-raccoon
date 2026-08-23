@@ -81,7 +81,7 @@ def _debug(event: str, **fields: Any) -> None:
 
 
 def _record_retrieval(context_enrichment: Any, project: Optional[str], query: str,
-                      index: Dict[str, Any], ranked) -> None:
+                       index: Dict[str, Any], ranked) -> None:
     """Record what the BM25 retrieval did — mirrors ai_badger_hooks.py's `_record_retrieval`.
 
     `no_terms` is not `gate`: when the tokenizer yields no usable terms, no candidate is ever
@@ -116,10 +116,6 @@ def main() -> int:
     """Read the hook payload from stdin and emit additionalContext when something recommends."""
     payload = json.load(sys.stdin)
     _PAYLOAD.update(payload)
-    prompt = payload.get("prompt", "")
-    if not prompt:
-        _debug("skip", reason="no_prompt")
-        return 0
     context_enrichment = _load_context_enrichment()
     if context_enrichment is None:
         _debug("skip", reason="matcher_unavailable")
@@ -129,22 +125,41 @@ def main() -> int:
                else (payload.get("cwd") or None))
 
     index = context_enrichment.load_mcp_index(project)
+    prompt = payload.get("prompt", "")
     if index is None:
-        event = "legacy" if context_enrichment.has_legacy_unmigrated_index(project) else "absent"
-        query_key = debug_log.KEY_QUERY if debug_log else "q"
-        _debug(event, project=project, **{query_key: prompt})
+        if prompt:
+            event = "legacy" if context_enrichment.has_legacy_unmigrated_index(project) else "absent"
+            query_key = debug_log.KEY_QUERY if debug_log else "q"
+            _debug(event, project=project, **{query_key: prompt})
+        else:
+            _debug("skip", reason="no_prompt")
         return 0
 
-    ranked = context_enrichment.find_relevant_tools(prompt, index, top_n=context_enrichment.TOP_N)
-    _record_retrieval(context_enrichment, project, prompt, index, ranked)
-    if not ranked:
+    parts: list[str] = []
+    session_id = payload.get("session_id") or payload.get("sessionId")
+
+    # Semantica once-per-session export nudge (issue #418)
+    if context_enrichment.semantica_indexed(index):
+        if not context_enrichment.semantica_nudge_already_shown(session_id):
+            context_enrichment.record_semantica_nudge_shown(session_id)
+            parts.append(context_enrichment.NUDGE_LINE)
+
+    # MCP tool index recommendations
+    if prompt:
+        ranked = context_enrichment.find_relevant_tools(prompt, index, top_n=context_enrichment.TOP_N)
+        _record_retrieval(context_enrichment, project, prompt, index, ranked)
+        if ranked:
+            parts.append(context_enrichment.build_hint(ranked, index))
+
+    if not parts:
+        if not prompt:
+            _debug("skip", reason="no_prompt")
         return 0
 
-    hint = context_enrichment.build_hint(ranked, index)
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "UserPromptSubmit",
-            "additionalContext": hint,
+            "additionalContext": "\n".join(parts),
         }
     }))
     return 0

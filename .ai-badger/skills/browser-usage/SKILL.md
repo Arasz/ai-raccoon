@@ -17,8 +17,9 @@ metadata:
 
 # browser-usage
 
-Universal browser automation and verification skill using Playwright MCP (`@playwright/mcp`). Operates on structured accessibility tree snapshots and element reference tokens (`[ref=eN]`), enabling reliable interaction, inspection, and
-end-to-end verification without vision models.
+Universal browser automation and verification skill using Playwright MCP (`@playwright/mcp`).
+Operates on structured accessibility tree snapshots and element reference tokens (`[ref=eN]`),
+enabling reliable interaction, inspection, and end-to-end verification without vision models.
 
 ## When NOT to Use
 
@@ -28,7 +29,8 @@ end-to-end verification without vision models.
 
 ## Core Architecture: Text-First Accessibility Snapshots
 
-Playwright MCP operates primarily on the browser's accessibility tree rather than raw pixel coordinates or fragile CSS selectors:
+Playwright MCP operates primarily on the browser's accessibility tree rather than raw pixel
+coordinates or fragile CSS selectors:
 
 1. **Snapshot**: `browser_snapshot` returns a hierarchical text tree of interactive and semantic elements:
    ```text
@@ -40,8 +42,10 @@ Playwright MCP operates primarily on the browser's accessibility tree rather tha
        - link "Senior .NET Engineer" [ref=e22]
        - text: "Remote · Posted 2 days ago"
    ```
-2. **Interact by Ref**: Tools accept the `ref` identifier directly (e.g. `ref="e12"` or `element="e12"`), resolving precisely to the underlying DOM node without brittle selector guessing.
-3. **Inspect**: Visual evidence (`browser_take_screenshot`), network logs (`browser_network_requests`), and console streams (`browser_console_messages`) supplement the accessibility model.
+2. **Interact by Ref**: Tools accept the `ref` identifier directly (e.g. `ref="e12"` or `element="e12"`),
+   resolving precisely to the underlying DOM node without brittle selector guessing.
+3. **Inspect**: Visual evidence (`browser_take_screenshot`), network logs (`browser_network_requests`),
+   and console streams (`browser_console_messages`) supplement the accessibility model.
 
 ## Primary Workflows
 
@@ -69,19 +73,23 @@ browser_press_key(key="Enter")
 
 ### 3. Verification and Assertions
 
-- **Wait for State Changes**: `browser_wait_for(text="Application submitted successfully")` or wait for element state transitions.
+- **Wait for State Changes**: `browser_wait_for(text="Application submitted successfully")` or
+  wait for element state transitions.
 - **Find Elements**: `browser_find(query="Save changes")` locates matching accessibility nodes.
-- **Visual Capture**: `browser_take_screenshot(path="artifacts/dashboard.png")` records full-page or element screenshots for verification evidence.
+- **Visual Capture**: `browser_take_screenshot(path="artifacts/dashboard.png")` records full-page
+  or element screenshots for verification evidence.
 
 ### 4. Network and Diagnostic Inspection
 
 - **Console Logs**: `browser_console_messages()` inspects runtime errors, warnings, and unhandled exceptions.
 - **Network Traffic**: `browser_network_requests()` lists all HTTP calls made since page load.
-- **Request Inspection**: `browser_network_request(request_id=12)` fetches headers, status codes, query params, request bodies, and response payloads to verify API contract adherence.
+- **Request Inspection**: `browser_network_request(request_id=12)` fetches headers, status codes,
+  query params, request bodies, and response payloads to verify API contract adherence.
 
 ### 5. Multi-Tab, Responsive, and Dialog Management
 
-- **Responsive Testing**: `browser_resize(width=390, height=844)` switches to mobile viewports to test drawer menus and responsive layouts.
+- **Responsive Testing**: `browser_resize(width=390, height=844)` switches to mobile viewports
+  to test drawer menus and responsive layouts.
 - **Tabs**: `browser_tabs(action="list")`, `browser_tabs(action="create", url="...")`,
   `browser_tabs(action="select", tab_id=1)` manages multi-page workflows.
 - **Dialogs**: `browser_handle_dialog(action="accept")` or `browser_handle_dialog(action="dismiss")`
@@ -89,7 +97,9 @@ browser_press_key(key="Enter")
 
 ### 6. Complex Scripts (`browser_run_code_unsafe`)
 
-When multi-step logic requires tight feedback loops (e.g. measuring dynamic DOM layout, evaluating custom predicates, or running assertions across multiple elements), execute custom Playwright code directly in the server process:
+When multi-step logic requires tight feedback loops (e.g. measuring dynamic DOM layout, evaluating
+custom predicates, or running assertions across multiple elements), execute custom Playwright code
+directly in the server process:
 
 ```javascript
 async (page) => {
@@ -101,12 +111,14 @@ async (page) => {
 
 ## Configuration & Server Execution
 
-- **Headed vs Headless**: Runs headed by default for live observation. Use `--headless` in CI or headless environments.
-- **Browser Engines**: Supports `--browser=chrome`, `--browser=firefox`, `--browser=webkit`, or `--browser=msedge`.
+- **Headed vs Headless**: Runs headed by default for live observation. Use `--headless` in CI or
+  headless environments.
+- **Browser Engines**: Supports `--browser=chrome`, `--browser=firefox`, `--browser=webkit`,
+  or `--browser=msedge`.
 - **User Profiles**:
-    - *Persistent* (default): Preserves login cookies and localStorage in per-workspace cache dirs.
-    - *Isolated*: `--isolated` starts fresh sessions. State can be restored via `--storage-state`.
-    - *Extension*: `--extension` connects directly to existing browser tabs via the Playwright Extension.
+  - *Persistent* (default): Preserves login cookies and localStorage in per-workspace cache dirs.
+  - *Isolated*: `--isolated` starts fresh sessions. State can be restored via `--storage-state`.
+  - *Extension*: `--extension` connects directly to existing browser tabs via the Playwright Extension.
 - **Standalone Server**: `npx @playwright/mcp@latest --port 8931` serves over HTTP endpoint
   `http://localhost:8931/mcp`.
 

@@ -61,7 +61,7 @@ class StatusLineWiring:
         settings, note = cg.read_json_mapping(Path.home() / ".claude" / "settings.json")
         if settings is None:
             self.ctx.notes.append(f"{note} (no delegate read from it — a user-level status "
-                                  f"line, if any, will stop rendering)")
+                              f"line, if any, will stop rendering)")
             return None
         entry = settings.get("statusLine")
         return entry.get("command") if isinstance(entry, dict) else None
@@ -77,7 +77,7 @@ class StatusLineWiring:
             return
         if not (self.ctx.aib / "skills" / CAPTURE_SCRIPT).is_file():
             self.ctx.notes.append("statusline capture not wired — the 'task' skill, which owns "
-                                  "the capture script, is not scaffolded")
+                              "the capture script, is not scaffolded")
             return
 
         settings_path = self.ctx.target / ".claude" / "settings.json"
@@ -125,7 +125,7 @@ class StatusLineWiring:
         record, record_note = cg.read_json_mapping(record_path)
         if record is None:
             self.ctx.notes.append(f"{record_note} (statusline capture left wired — the renderer "
-                                  "it displaced cannot be read back)")
+                              "it displaced cannot be read back)")
             return
 
         delegate = record.get("command")
