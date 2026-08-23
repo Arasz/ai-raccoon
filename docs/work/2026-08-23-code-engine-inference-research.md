@@ -629,8 +629,17 @@ python -m venv onnxenv && ./onnxenv/bin/pip install onnx onnxruntime sympy
 #   SessionOptions.LogSeverityLevel = ORT_LOGGING_LEVEL_VERBOSE
 ```
 
-The probe scripts (`probe.cs`, `coreml.cs`, `inspect_onnx.py`, `matmul_inputs.py`, `quantize.py`,
-`prep_quant.py`, `ort_optimize.py`, `parity.py`) live in this session's scratchpad and are not
-committed — everything they do is described above. The derived int8 artifact
-(`e00cf954…e7d660`, 47,034,766 B) is in the scratchpad and is **not** committed; wave 3 should
-re-derive it from §4.2 rather than trust a file it did not build.
+**The probe scripts are committed**, at
+[`docs/work/scripts/2026-08-23-code-engine-inference/`](scripts/2026-08-23-code-engine-inference/)
+with a README mapping each one to the section it produces: `probe.cs` (§1.1), `coreml.cs` (§3.1/§3.2,
+backend as an argument so both rows reproduce), `inspect_onnx.py` (§2/§4), `matmul_inputs.py` (§4.1),
+`ort_optimize.py` and `quantize.py` (§4.2), `parity.py` (§4.3). "Every figure carries its command" is
+not met by a command naming a file nobody else has.
+
+Both were re-run from the committed location and reproduce exactly: `coreml.cs … neuralnetwork`
+returns `partitions: 32 … nodes: 197 … supported: 104` with `maxAbsDelta 1.919E-005`, and `parity.py`
+returns `0.957656 / 0.964204 / 0.969362` at seq 64 — the §3.1 and §4.3 figures to six decimals.
+**[measured]**
+
+The derived int8 artifact (`e00cf954…e7d660`, 47,034,766 B) is deliberately **not** committed; wave 3
+re-derives it from §4.2 in about five seconds rather than trusting a file it did not build.
