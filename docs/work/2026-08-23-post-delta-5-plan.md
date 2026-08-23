@@ -70,6 +70,15 @@ the same-pass sweep ordering) are in session 4's §Review (f). **#455 is last**,
   a new `src/AiRaccoon/Setup/Cli/Commands/ProjectCommands.cs`, and its line in
   `Commands/CommandsRegistration.cs`. **No `project` node exists today** — `git grep '"project"' --
   src/AiRaccoon/Setup/Cli/` is empty, so this is all new surface.
+- **Plus the CLI-side `IProjectRegistry` wiring, carried here from session 4's 6a** (see
+  `docs/work/2026-08-23-wp6-adr-0089-implementation-plan.md` §6a "Not in 6a"). 6a registers
+  `IProjectRegistry` in the **server** graph only (`Setup/AppRegistrations.cs:304`); the CLI graph
+  reaches the bank through `AppRunner.cs:227`'s `AddSingleton<T>(lazyServerStore)` lines, backed by
+  `LazyServerSettingsStore`, which implements its eight interfaces by forwarding through
+  `InnerAsync` (probe-and-start the server, ADR-0075 §5.1). Adding `IProjectRegistry` there is
+  **three forwarding members plus an `AsProjectRegistry` cast helper — not one line**, and both
+  verbs need it. **Budget it in this WP's first commit rather than discovering it mid-implementation;**
+  nothing before 6d resolves `IProjectRegistry` from the CLI graph, which is why 6a deferred it.
 - **The part nobody should discover late — decision 7.** `convert` must re-derive the stored vec0
   `ctx` values, not only `project_id`. `ctx` is written once by trigger at insert time —
   `MemorySql.ContextKeyExpression` (`MemorySql.cs:705-714`) for the memory corpus

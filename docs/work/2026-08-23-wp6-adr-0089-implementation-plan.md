@@ -224,10 +224,14 @@ the canonical project id, and every one of the **28 call sites across 10 tool cl
 
 - **`ShareTools.cs:57-61`** builds `ShareExtractRequest` from the raw `projectIds` at `:57`, **before**
   the per-id `RequireAsync` loop at `:60`, and `shareExtract.RunAsync(request, …)` then reads the raw
-  ids — assigning the loop's result changes nothing. **Fix:** collect the canonical ids in the loop
-  and build the request *after* it; `WrapAsync(request.MetaProjectId…)` then gets it for free.
+  ids — assigning the loop's result changes nothing. The loop reads `request.ProjectIds` *and*
+  `request.Promotes`, so the request cannot simply be built after it. **Fix:** leave the construction
+  where it is, collect the canonical ids in the loop, then
+  `request = request with { ProjectIds = [.. canonicalIds] };` — it is a `sealed record`
+  (`ShareExtract.cs:10`) whose `MetaProjectId` (`:28`) derives from `ProjectIds`, so
+  `WrapAsync(request.MetaProjectId, …)` at `:67` carries the canonical form for free.
 - **`PromotionTools.cs:39-45`** gates inside `if (projectId is not null)` while
-  `queue.ListAsync(projectId, …)` (`:48`) and `gate.WrapAsync(projectId, …)` sit **outside** it, so a
+  `queue.ListAsync(projectId, …)` (`:49`) and `gate.WrapAsync(projectId, …)` sit **outside** it, so a
   local declared in the branch cannot reach them. **Fix:** declare the canonical local before the
   `if`, initialised to `projectId`, and reassign inside the branch.
 
@@ -237,9 +241,17 @@ pass it while still writing the raw string. Instead:
 `tests/AiRaccoon.Tests/Integration/Projects/CanonicalProjectIdReachesStorageTests.cs` — class
 `CanonicalProjectIdReachesStorageTests`, `[Trait(Category, Integration)] [Trait(Speed, Fast)]`.
 Register one guidv7; through each **write-capable** tool in turn, write under a *re-spelled* form
-(upper-case, `{braced}`). Assert the bank holds **one** project not two, `entries.project_id` and the
-vec0 `ctx` both carry the lowercase `D` form, and a `memory_search` with the re-spelled id finds those
-rows. **Behavioural RED today.** `memory_share_extract` and `memory_promotion_list` are named cases.
+(upper-case, `{braced}`). Assert the bank holds **one** project not two, that `entries.project_id`
+carries the lowercase `D` form, and that a `memory_search` with the re-spelled id finds those rows.
+**Behavioural RED today.** `memory_share_extract` and `memory_promotion_list` are named cases.
+
+**The vec0 assertion needs care — `ctx` is not the project id.** For the memory corpus `ctx` is
+`ContextKeyExpression`'s *composed* key (only `vec_code` stores the raw id, `MemorySchema.cs:487`),
+and a `vec_entries` row exists only once the entry is **embedded**. So drain first — the fake
+embedder / `memory_embed_pending` path the existing integration tests use — then assert a **non-zero**
+vec row count and `ctx == MemorySql.ContextKeyFor(ContextNaming.ProjectContext(canonical), canonical)`,
+the shape `MemorySchemaVersionTests.cs:238` already asserts. Copy it rather than inventing one:
+skipping the drain gives zero rows and a test that passes by finding nothing.
 
 **Commit 2 — the refusal.**
 
@@ -262,8 +274,7 @@ rows. **Behavioural RED today.** `memory_share_extract` and `memory_promotion_li
   `request.Promotes ? Write : Read`, so for `memory_share_extract` the refusal is **per call, not per
   tool** — an unregistered id in `projectIds` is refused only on the promoting path.
 - **The test.** *No registry row **AND** no rows under `ProjectRows.Of()`* → refuse, guid or not.
-  `Of()`, not `Scope()`: `Scope()` omits `project_id`, so it is true for any populated bank and the
-  refusal would never fire (see 6a).
+  `Of()`, never `Scope()` — see 6a for why `Scope()` makes this always-true.
 - **Warn-but-work.** Passes the second half only (rows, no registration) → proceed, log once. The
   WP6 brief says *"old raw-text ids that ARE registered warn-but-work"*; the ADR and the owner's #448
   fold both say **rows**, not registration. Follow the ADR.
@@ -315,8 +326,8 @@ through `ToolRefusals.Log.ToolRefused` (910).
 `docs/reference/logging-event-ids.md` (433). **`docs/adr/0046-*`**: a one-line cross-reference —
 ADR-0089's registry answers "which projects exist", `ProjectRows` keeps answering "which rows
 belong". The ADR's §Membership argues it; ADR-0046 is where a reader looks first.
-**`docs/adr/README.md`: no change** — no amendment is needed for 6a/6b/6c as planned. It *is* needed
-if the owner orders the back-fill (deviation 2) or relaxes decision 2 (open question 1).
+**`docs/adr/README.md`: no change** — an amendment is needed only if the owner orders the back-fill
+(deviation 2) or relaxes decision 2 (§"One amendment the owner may decline").
 
 ## Collisions and ordering — strictly serial
 
