@@ -1,5 +1,5 @@
 <meta charset="utf-8">
-<title>Post-delta session 4 — ten decisions — review</title>
+<title>Post-delta session 4 — nine decisions — review</title>
 
 <!--
   Refinement review form. Fill in CONFIG and DECISIONS below; nothing else needs editing.
@@ -15,9 +15,9 @@
 
 <script>
   var CONFIG = {
-      "title": "Post-delta session 4 — ten decisions",
-      "subtitle": "Owner gate · 2026-08-23 · G1–G3 are part 3's unanswered G20–G22, re-derived against the tree as merged — two of the three headline numbers moved",
-      "source": "docs/work/2026-08-23-post-delta-4-plan.md § Owner gate (G1–G10) + § Review",
+      "title": "Post-delta session 4 — nine decisions",
+      "subtitle": "Owner gate · 2026-08-23 (plan rev 1.1) · G1–G3 are part 3's unanswered G20–G22, re-derived against the tree as merged — two of the three headline numbers moved. G5 was withdrawn into WP4 as an ungated fix; G6–G10 keep their ids.",
+      "source": "docs/work/2026-08-23-post-delta-4-plan.md § Owner gate (G1–G4, G6–G10) + § Review",
       "outName": "2026-08-23-post-delta-4-feedback.md",
       "expectedDir": "/Users/arasz/RiderProjects/ai-raccoon/docs/work",
       "storageKey": "refinement:2026-08-23-post-delta-4:v1"
@@ -61,7 +61,7 @@
           "placeholder": "Notes — e.g. which arms to include, or skip one"
       },
       {
-          "group": "New — the two calls from merged PR #524",
+          "group": "New — the call from merged PR #524",
           "id": "G4",
           "claim": "One rendering of the resolved thread count across every surface",
           "detail": [
@@ -72,23 +72,13 @@
           "placeholder": "Notes — doctor's shape everywhere, or keep the digit"
       },
       {
-          "id": "G5",
-          "claim": "EventId 428 logs Threads as an integer, with the display string as its own field",
-          "detail": [
-              "<code>EmbeddingService.cs:434-436</code> declares <code>EmbeddingSessionCreated(ILogger logger, string threads, string source)</code> — <code>threads</code> is a <strong>string</strong>, fed <code>ThreadCountDisplay(...)</code>. So a structured sink receives <code>\"5\"</code> for a cap of five and <code>\"ORT default\"</code> for zero, in the same field. Nothing can aggregate, alert or chart on it, which is most of the reason the event was added (#522).",
-              "The fix is <code>int threads</code> plus, if you want the words kept, a third parameter — the template already has two placeholders and gaining a third breaks no consumer, since nothing consumes it yet. <strong>Recommendation: approve — <code>int Threads</code> plus a separate <code>{Source}</code></strong>, and let <code>0</code> mean ORT's default in the <em>documentation</em> (<code>docs/reference/logging-event-ids.md</code>) rather than in the value."
-          ],
-          "why": "<b>An observability field that cannot be aggregated is a comment with an EventId</b> — cheapest to fix before anything is built on the string shape.",
-          "placeholder": "Notes — int + separate source field, or leave it"
-      },
-      {
           "group": "Scope — what session 4 actually contains",
           "id": "G6",
           "claim": "What \"job-line counters\" means: three shapes, and #477 asks for the largest",
           "detail": [
-              "Part 3 scoped WP12-C as <em>\"the EventId 525 'ran in N ms' message gains rows, batches, elapsed\"</em>. Two things it did not know. First, <strong>the signature cannot carry a count</strong>: <code>IMaintenanceJob.RunAsync</code> returns <code>ValueTask&lt;bool&gt;</code> (<code>IMaintenanceJob.cs:25</code>) and that bool has a documented scheduling meaning (<code>:20-23</code>, \"created rows that still need embedding\" → sweep again). A row count needs <code>ValueTask&lt;MaintenanceJobResult&gt;</code> across the interface, its <strong>seven</strong> implementations, and <code>MaintenanceJobOutcome</code> (<code>MaintenanceJobRunner.cs:9</code>).",
+              "Part 3 scoped WP12-C as <em>\"the EventId 525 'ran in N ms' message gains rows, batches, elapsed\"</em>. Two things it did not know. First, <strong>the signature cannot carry a count</strong>: <code>IMaintenanceJob.RunAsync</code> returns <code>ValueTask&lt;bool&gt;</code> (<code>IMaintenanceJob.cs:25</code>) and that bool has a documented scheduling meaning (<code>:20-23</code>, \"created rows that still need embedding\" → sweep again). A row count needs <code>ValueTask&lt;MaintenanceJobResult&gt;</code> across the interface, its <strong>ten implementations in seven files</strong> (<code>MaintenanceJobs.cs</code> alone holds four), and <code>MaintenanceJobOutcome</code> (<code>MaintenanceJobRunner.cs:9</code>).",
               "Second, <strong>#477 asks for something else entirely</strong> — verbatim: <em>\"MaintenanceJobRunner records job.&lt;jobName&gt;.duration_ms (histogram) and job.&lt;jobName&gt;.rows (gauge …) through IMeasurementRecorder under the self-metrics project id, and SelfMetricNames lists them so memory_performance shows one series per job.\"</em> That is a metrics series, not three integers on a log line.",
-              "<strong>And the cheap answer may already be shipped.</strong> EventId <strong>1003</strong> already logs <em>\"Embed drain pass finished for {Corpus}: {Rows} row(s)\"</em> every pass (<code>EmbedDrainService.cs:161-163</code>). The drain is 99.66 % of the clock, so the hot path's row count is <em>already</em> observable; what 525 lacks is counts for six jobs that are not on the hot path — and the gap #477 was filed for (\"5k rows pending for an hour with no way to observe progress\") is the hot-path one. <strong>Recommendation: shape (iii) or nothing.</strong> If job observability is worth the work, #477 as written reaches <code>memory_performance</code> where you would actually look; shape (ii) changes seven files to improve a log line nobody greps. If it is not worth it this session, <strong>park #477 with a comment naming EventId 1003</strong> and drop WP3."
+              "<strong>And the cheap answer may already be shipped.</strong> EventId <strong>1003</strong> already logs <em>\"Embed drain pass finished for {Corpus}: {Rows} row(s)\"</em> every pass (<code>EmbedDrainService.cs:161-163</code>). The drain is 99.66 % of the clock, so the hot path's row count is <em>already</em> observable; what 525 lacks is counts for six jobs that are not on the hot path — and the gap #477 was filed for (\"5k rows pending for an hour with no way to observe progress\") is the hot-path one. <strong>Recommendation: shape (iii) or nothing.</strong> If job observability is worth the work, #477 as written reaches <code>memory_performance</code> where you would actually look; shape (ii) changes ten implementations across seven files to improve a log line nobody greps. If it is not worth it this session, <strong>park #477 with a comment naming EventId 1003</strong> and drop WP3."
           ],
           "why": "<b>The predecessor's WP12-C and the issue it cites are two different pieces of work</b>, and a third option may already be shipped.",
           "placeholder": "Notes — (i) park with a comment / (ii) EventId 525 + interface change / (iii) #477 as written"
@@ -99,7 +89,7 @@
           "detail": [
               "<strong>The premise is true.</strong> Both <code>RunAsync</code> bodies really are one line: <code>PendingEmbedJob.cs:47-51</code> and <code>CodeReindexJob.cs:44-48</code> each do a bare <code>TryEnqueue</code> and return <code>ValueTask.FromResult(false)</code>. Part 3 recorded your ruling that Option B is <em>\"the real fix\"</em> and that #517 took Option A only because the blast radius was disproportionate <strong>to a settings-key task</strong>.",
               "<strong>What the enumeration found: RunAsync is not what these classes are for.</strong> (1) <code>CodeReindexJob.HasWorkAsync</code> (<code>:37-41</code>) is <strong>not side-effect-free</strong> — it calls <code>ReconcileFingerprintAsync</code> first, which is what invalidates code rows to <code>pending</code> when a manifest changes in place on disk (<code>CodeReindexJobTests.cs:161-187</code>). (2) <code>HasWorkAsync</code> is the <strong>only durable recovery path</strong> for a coalesced or dropped pump signal: the 15 s poll passes the whole job list to <code>RunDueAsync</code> with no filtering (<code>BankMaintenanceHostedService.cs:151-183</code>) and <code>HasWorkAsync</code> reads <code>embed_state='pending'</code> directly — ADR-0076's \"the channel is a wake-up, not the record\" made real, pinned by <code>EmbedDrainServiceTests.CoalescedSignal_IsRecoveredByTheNextPoll</code>. (3) <code>PendingEmbedJob</code> is registered <strong>last</strong> on purpose so rows an earlier job leaves pending are swept in the same pass — <em>\"chunk-backfill produced 13,578 of them on a real bank\"</em> (<code>AppRegistrations.cs:158-163</code>), pinned by <code>EmbedSweepAfterJobsTests</code>.",
-              "<strong>And the cost is 49 distinct files</strong> (16 src, 13 tests, 20 docs plus a live checklist template), including four user-facing strings a class-name grep never finds and <strong>ADR-0091, whose entire subject is these two jobs' shape</strong> and which would need an amendment, not a line edit. <strong>Recommendation: decline, and close the follow-up with the plan's §Review (f) as its record.</strong> A one-line <code>RunAsync</code> on a job whose value is <code>HasWorkAsync</code> is not a smell, it is the right shape. If what actually bothers you is the misleading <code>ValueTask&lt;bool&gt;</code> return, <strong>G6 shape (ii)</strong> is where to fix that. Approve anyway and it becomes the session's largest item after WP6 — say so and WP6 or WP10 slips to pay for it."
+              "<strong>And the cost is ~50 live files</strong> — 16 src (enumerated and verified), 15 tests, 16 non-dated docs, 3 <code>.ai-badger</code>. The count depends on the grep, which is itself the finding: a strict class-name grep (<code>git grep -l \"PendingEmbedJob\|CodeReindexJob\"</code>) returns <strong>42</strong> and <em>understates</em> the work, because four live sites name the job by its <code>JobName</code> string in user-facing text; the union (adding <code>pending-embed\|code-reindex</code>) returns <strong>72</strong>, of which <strong>22</strong> are dated <code>docs/work/*</code> records a change would not touch. Included: <strong>ADR-0091, whose entire subject is these two jobs' shape</strong>, which needs an amendment rather than a line edit. <strong>Recommendation: decline, and close the follow-up with the plan's §Review (f) as its record.</strong> A one-line <code>RunAsync</code> on a job whose value is <code>HasWorkAsync</code> is not a smell, it is the right shape. If what actually bothers you is the misleading <code>ValueTask&lt;bool&gt;</code> return, <strong>G6 shape (ii)</strong> is where to fix that. Approve anyway and it becomes the session's largest item after WP6 — say so and WP6 or WP10 slips to pay for it."
           ],
           "why": "<b>The thing being called dead code is a one-line method on an object whose other method carries three guarantees</b> — deleting it means re-implementing and re-proving all three, for no behaviour change.",
           "placeholder": "Notes — decline (recommended) / approve anyway / fix the return type instead"
@@ -119,7 +109,7 @@
           "claim": "Which filed issues ride along: #485, #493, #497, #504, #519",
           "detail": [
               "All five are OPEN and all five are small. <strong>#485</strong> (directory walk strands <code>code_entries</code>; the single-file leg shipped in #481) edits the <strong>same method</strong> as G2, so folding it into WP2 costs nothing and splitting it costs a second PR on <code>IngestDirectoryAsync</code>. <strong>#497</strong> (the bge-m3 pooling repair never checks <code>EmbeddingOutput</code>'s rank, so anyone who downloaded before #496 stays wrong) and <strong>#504</strong> (rank-based output selection; two untested name shapes) are the same file family and pair into one strand.",
-              "<strong>#493</strong> (<code>PerformanceTools</code> lists six phases; <code>PhaseNames</code> has nine) is a <em>derive-or-delete-the-list</em> violation in our own code — the fix is to stop enumerating. <strong>#519</strong> (<code>TestData.CreateMemoryStore:86,89</code> still defaults two deps to Null objects) is your own #518 ruling left unenforced, but it rewrites ~74 call sites and conflicts with every open PR that adds a test. Also found while researching this plan and unfiled: <code>docs/reference/logging-event-ids.md:53</code> claims EventIds <strong>517-519</strong> exist on <code>BankMaintenanceHostedService</code> — they do not (its Log class declares 510-516 and 520-524). One-line doc fix, folded in rather than filed as a seventh issue.",
+              "<strong>#493</strong> (<code>PerformanceTools</code> lists six phases; <code>PhaseNames</code> has nine) is a <em>derive-or-delete-the-list</em> violation in our own code — the fix is to stop enumerating. <strong>#519</strong> (<code>TestData.CreateMemoryStore:86,89</code> still defaults two deps to Null objects) is your own #518 ruling left unenforced, but it rewrites <strong>83 call sites across 77 files</strong> and conflicts with every open PR that adds a test. Also found while researching this plan and unfiled: <code>docs/reference/logging-event-ids.md:53</code> claims EventIds <strong>517-519</strong> exist on <code>BankMaintenanceHostedService</code> — they do not (its Log class declares 510-516 and 520-524). One-line doc fix, folded in rather than filed as a seventh issue.",
               "<strong>Recommendation: take all five — #485 into WP2, #497+#504 as WP8, #493+#519 as WP9 — and run WP9 last</strong>, when no other lane has an open PR adding tests. Drop any of them and that WP shrinks; drop #519 and nothing else moves."
           ],
           "why": "<b>Four of the five cost hours, not days</b>, and two (#485, #497) are live defects a user can hit. #519 is the one with a scheduling cost rather than a work cost.",
@@ -127,13 +117,13 @@
       },
       {
           "id": "G10",
-          "claim": "WP10 (#455) still runs LAST, now that the drift is measured",
+          "claim": "WP10 (#455): keep it LAST, or promote it to unblock the S6b history rewrite",
           "detail": [
-              "Your ruling of 2026-08-22 ~19:38 was that #455 runs last so nothing else moves the corpus under it. Measured today: the branch <code>task/pd3-455-public-benchmark-corpus</code> @ <code>ea174faf</code> (draft <strong>#499</strong>, OPEN) is 5 commits ahead of merge-base <code>a747da1a</code>; main has moved <strong>20 commits / 137 files</strong> since; and the <strong>intersection of the two changed-file sets is empty</strong> — none of the branch's 11 files has been touched on main.",
-              "So the feared cost of waiting (a growing conflict) is, today, <strong>zero</strong>. The remaining costs of waiting are calendar and the fact that the S6b history rewrite is blocked behind it. The remaining cost of promoting it is that the parity/retrieval gate must run in the foreground while other lanes are live — exactly the contention that made #511's measurements unusable. <strong>Recommendation: keep it last, as ruled</strong> — the collision risk is nil either way and the foreground gate wants a quiet machine. But if the S6b rewrite is what you want soonest, promoting #455 to first is now cheap, and G8's \"6a+6b+6c only\" is what pays for it."
+              "<strong>The real alternative first: promote #455 and unblock the S6b history rewrite.</strong> It is the last thing standing between you and a one-pass <code>filter-repo</code> over all three private-prose paths, and it has been parked for a day. Promoting it is now cheap, because the drift risk that justified parking it has been measured and is gone: the branch <code>task/pd3-455-public-benchmark-corpus</code> @ <code>ea174faf</code> (draft <strong>#499</strong>, OPEN) is 5 commits ahead of merge-base <code>a747da1a</code>; main has moved <strong>20 commits / 137 files</strong> since; and the <strong>intersection of the two changed-file sets is empty</strong> — none of the branch's 11 files has been touched on main.",
+              "So the feared cost of waiting (a growing conflict) is <strong>zero</strong>. What promoting it costs instead is that the parity/retrieval gate must run in the foreground while other lanes are live — exactly the contention that made #511's measurements unusable — and G8's \"6a+6b+6c only\" is what pays for the calendar. Your ruling of 2026-08-22 ~19:38 was that #455 runs last so nothing else moves the corpus under it, and on this evidence it still holds on its merits. <strong>Recommendation: keep it last</strong> — the collision risk is nil either way and the foreground gate wants a quiet machine. Promote it only if unblocking S6b is what you want soonest; that is now a real option, not a hypothetical."
           ],
           "why": "<b>#455 is the last thing standing between you and the one-pass history rewrite</b> over all three private-prose paths, and it has been parked for a day.",
-          "placeholder": "Notes — keep last (recommended) / promote to first"
+          "placeholder": "Notes — keep last (recommended) / promote to first to unblock S6b"
       }
   ];
 </script>
