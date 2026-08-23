@@ -35,8 +35,14 @@ public readonly record struct FileIngestResult(
         RowsInserted == 0 ? CorpusKind.Neither : CodeChunkHashes is not null ? CorpusKind.Code : CorpusKind.Memory;
 }
 
-/// <summary>One walked file's current memory-corpus chunk set, so the caller can prune the rest.</summary>
-public readonly record struct WalkedFile(string Path, IReadOnlyList<string> ChunkHashes);
+/// <summary>
+///     One walked file's current chunk set(s), so the caller can prune the rest.
+///     <paramref name="CodeChunkHashes" /> follows <see cref="FileIngestResult.CodeChunkHashes" />'s
+///     null-vs-empty contract (#485): null means the code chunker's zero chunks are not trustworthy
+///     enough to prune by.
+/// </summary>
+public readonly record struct WalkedFile(string Path, IReadOnlyList<string> ChunkHashes,
+    IReadOnlyList<string>? CodeChunkHashes = null);
 
 /// <summary>A directory walk's outcome: files indexed, plus each walked file's current chunk set.</summary>
 public readonly record struct DirectoryIngestResult(int Indexed, IReadOnlyList<WalkedFile> Files);

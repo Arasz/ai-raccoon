@@ -78,15 +78,29 @@ public sealed class FileIngestor(
 
         var result = await codeIngestor.IngestFileAsync(connection, projectId, path, cancellationToken)
             .ConfigureAwait(false);
+        var codeChunkHashes = ResolveCodeChunkHashes(result);
         if (result.ChunkHashes is { Count: > 0 })
         {
-            return new FileIngestResult(result.Rows, true, CodeChunkHashes: result.ChunkHashes);
+            return new FileIngestResult(result.Rows, true, CodeChunkHashes: codeChunkHashes);
         }
 
         return result.ContentWhitespaceOnly
-            ? new FileIngestResult(0, true, CodeChunkHashes: result.ChunkHashes ?? [])
-            : new FileIngestResult(0, false, CodeChunkHashes: null);
+            ? new FileIngestResult(0, true, CodeChunkHashes: codeChunkHashes)
+            : new FileIngestResult(0, false, CodeChunkHashes: codeChunkHashes);
     }
+
+    /// <summary>
+    ///     The null-vs-empty <see cref="CodeIngestResult.ChunkHashes" /> contract (S3, #485): a
+    ///     non-empty set is the file's current chunk set; a legitimately empty
+    ///     (whitespace-only-content) result is an empty set to prune by; a stand-in chunker's zero
+    ///     chunks on real content is untrustworthy and must not be pruned by, so it resolves to null.
+    /// </summary>
+    private static IReadOnlyList<string>? ResolveCodeChunkHashes(CodeIngestResult result) =>
+        result.ChunkHashes is { Count: > 0 }
+            ? result.ChunkHashes
+            : result.ContentWhitespaceOnly
+                ? result.ChunkHashes ?? []
+                : null;
 
     /// <summary>
     ///     The `ai-raccoon.ignore` root for a single-file ingest or a directory walk's root: the
@@ -149,6 +163,7 @@ public sealed class FileIngestor(
                         .ConfigureAwait(false);
                     indexed += codeResult.Rows;
                     codeRowsWritten |= codeResult.Rows > 0;
+                    walked.Add(new WalkedFile(file, [], ResolveCodeChunkHashes(codeResult)));
                 }
 
                 continue;
