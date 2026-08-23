@@ -311,6 +311,14 @@ config channel (see [Command-line options](#command-line-options)).
   Maintenance-job series (`job.<name>.duration_ms` on every completed run, `job.<name>.rows` for a
   job that reports an outstanding-row count) are bank-wide, not project-scoped, so they only
   appear in the whole-bank self-metrics report — same surface as `metrics.dropped` (#477).
+  Three more series recorded as measurements beside their log line (WP11, "log-values-as-metrics"):
+  `drain.<memory|code>.rows` and `drain.<memory|code>.duration_ms` (an embed-drain pass, EventId
+  1003) and `search.query.truncated_tokens` (a search query trimmed to the embedding window,
+  EventId 426) are bank-wide like `job.*` — neither a drain pass nor the embedding engine's
+  query-trim path has a project id to record under. `write.replace.lock_ms` and
+  `write.replace.rows` (a replace-by-path transaction's held write-lock time and row count,
+  EventId 899) are project-scoped, recorded under the writing project's own id, and so appear in
+  an ordinary project's report the same way a tool series does.
 
 ### Unknown-id rule
 
