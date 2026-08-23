@@ -1,9 +1,12 @@
-# Plan — post-delta session 4 (rev 1.1 — review round 1 folded; gate pending)
+# Plan — post-delta session 4 (rev 2.0 — gate answered 9/9; lanes open)
 
 **Date:** 2026-08-23 · **Base:** main `72e15088` (`VERSION` = 1.33.0; one open PR, draft #499) ·
-**Status:** rev 1.1 — **gate pending** (ox-alpha review round 1 on PR #526 folded in; four blocking
-findings and five nits applied — see the change log at the end of §Review). Nothing gated starts
-before the owner rules ·
+**Status:** rev 2.0 — **gate answered 9/9** (`docs/work/2026-08-23-post-delta-4-feedback.md`,
+2026-08-23 05:32Z): G1–G4 APPROVE, **G6 APPROVE "3"** (shape (iii) — #477 as written), **G7 REJECT
+"dont delete"** (WP5 dropped; the two jobs stay — standing ruling), **G8 APPROVE "3 now, 2 later —
+create plan for the next session before starting"**, **G9 APPROVE "all"**, **G10 APPROVE "move it to
+the next session"**. Review round 1 (PR #526) folded at rev 1.1. **Lanes open** — see §Re-review for
+what the answers changed and which wave dispatches first ·
 **Task:** `post-delta-4` · **Lane:** architect (plan + gate), Opus.
 
 **What this session inherits**, from `docs/work/2026-08-22-post-delta-3-plan.md` rev 1.4: WP12-B/C/D/E
@@ -16,26 +19,32 @@ never arrived), WP10 (ADR-0089, approved at G15, not started), WP11-C follow-up 
 the predecessor. Where the predecessor and the tree disagree, §Review says so and the gate card carries
 the corrected number.
 
-## Session todo
+## Session todo — execution order (rev 2.0)
 
-1. Open the draft PR carrying this plan; generate the owner gate form from §*Owner gate* (G1–G4, G6–G10).
-2. Fold the gate answers into rev 2.0; architect re-reviews before any gated WP opens.
-3. **WP4** — #524 follow-ups: one thread-count rendering (G4) + EventId 428 `Threads` as an int
-   (ungated, *fix-what-you-find*).
-4. **WP1** — WP12-B: the embed drain re-signals itself on a full row budget (G1).
-5. **WP2** — the directory walk: ancestor ignore root (WP12-D) **and** the `code_entries` prune
-   leg (#485), one PR on `IngestDirectoryAsync` (G2, G9).
-6. **WP5** — WP11-C Option B: drop the enqueue-only `PendingEmbedJob`/`CodeReindexJob` (G7 —
-   the review recommends declining; the WP exists only if the owner overrules). **Before WP3**: WP3
-   shape (ii) touches every `IMaintenanceJob` and WP5 deletes two of them.
-7. **WP3** — job-run counters: rows/batches on the run record (G6, shaped by #477).
-8. **WP7** — WP12-E research: quantized / CoreML inference for the code engine (G3; architect).
-9. **WP8** — model-manifest repair pair: #497 and #504, one `ModelDownloadPlanner` strand (G9).
-10. **WP9** — small filed issues: #519 (`TestData` optional Null defaults), #493 (PerformanceTools
-    description drift) and the EventId 517-519 doc drift found today (G9).
-11. **WP6** — ADR-0089 implementation, five PRs (G8).
-12. **WP10 — #455 re-derived corpus, queries and parity golden. LAST**, per the standing owner
-    ruling; resume `task/pd3-455-public-benchmark-corpus` @ `ea174faf`, draft #499 (G10).
+1. Fold the gate answers into this revision and re-review the affected designs (**done** — §Re-review).
+2. **Wave 1, five code lanes in parallel** (file-disjoint, verified in §Sequencing):
+   **WP1** drain re-signal · **WP2** ignore root + #485 prune · **WP3** #477 job metrics ·
+   **WP4** #524 rendering + EventId 428 · **WP8** #497 + #504 manifest repairs.
+3. **In parallel with wave 1, architect lane:** write `docs/work/2026-08-23-post-delta-5-plan.md`
+   — carry-over: ADR-0089 **parts 4–5** (CLI `project id generate|convert`; storage guidance +
+   `ai-raccoon.ignore`), **#455 LAST** (branch `task/pd3-455-public-benchmark-corpus` @ `ea174faf`,
+   draft #499), the owner's S6b rewrite behind it, and anything session 4 does not finish.
+   **G8 makes this a hard precondition: WP6 does not open until this document exists.**
+4. **In parallel with wave 1, architect lane:** WP7's *desk* half — ORT/CoreML/ADR-0049 reading and
+   the ADR draft skeleton. **Its measured arms do not run yet** (see item 6).
+5. **Wave 2, after wave 1 merges and item 3 exists:** **WP6** — ADR-0089 parts 1–3, serial:
+   **6a** `projects` table + registration write path → then **6b** `project_id_token_get` and
+   **6c** the unregistered-id refusal.
+6. **Wave 3, quiet machine, no other lane running:** WP7's measured arms (S3–S5 protocol).
+   Scheduling this against live lanes is what made #511's numbers unusable.
+7. **Wave 4, strictly last:** **WP9** — #493 and #519 (83 call sites across 73 files; it conflicts
+   with every open PR that adds a test).
+8. Close the session: update `.ai-badger/state.json` and `status-notes.json`, and hand session 5 the
+   plan from item 3.
+
+**Dropped / moved by the gate.** **WP5 is DROPPED** (G7 REJECT — record as a standing ruling).
+**WP10 (#455) is MOVED to session 5** (G10) and stays LAST there. **ADR-0089 parts 4–5 are MOVED to
+session 5** (G8).
 
 ---
 
@@ -321,7 +330,7 @@ that took effect (#522)`, **MERGED**, branch `fix/522-log-embedding-threads`.
 |---|---|
 | **B1** blast radius | §Review (f) + G7 state both greps: strict **42** (understates — four `JobName`-string sites), union **72**, minus **22** dated `docs/work` = **~50 live**. DECLINE stands |
 | **B2** implementations | **Ten in seven files** in §Review (d), WP3, G6; reconciled with "eight of the ten remain" in (f) |
-| **B3** ordering | Todo 6/7 swapped — **WP5 before WP3** |
+| **B3** ordering | Todo 6/7 swapped — WP5 before WP3 *(superseded at rev 2.0: G7 dropped WP5)* |
 | **B4** proof-of-done | WP10 gained scope/files/acceptance/**gate commands**/lane; WP6 gained a lane + *"no `6x` PR opens until the implementation plan defines its gate"*; `Acceptance` added to WP3/4/5/8 |
 | **N5–N9** | `MemoryTools.cs:191`; `FileIngestorIgnoreTests` **(extend)** + path; `EmbedDrainServiceTests.cs:181` (**two** sites — one survived the first pass); **83 call sites / 73 files**; §Review (a) reworded — the poll *still paces* at one pass per 15 s |
 | **Gate shape** | **G5 withdrawn** into WP4 (ungated); G6–G10 ids unchanged (**nine cards**); **G10 leads with the promote-#455 alternative** |
@@ -356,7 +365,9 @@ that took effect (#522)`, **MERGED**, branch `fix/522-log-embedding-threads`.
 
 Each row's gate is the question it waits on; **ungated** means it may start once rev 2.0 exists.
 
-### WP1 — WP12-B: the drain re-signals itself on a full row budget **[G1]**
+### WP1 — WP12-B: the drain re-signals itself on a full row budget
+
+**Status: OPEN — G1 APPROVE.** Wave 1.
 
 - **Scope / files.** `src/AiRaccoon.Infrastructure/Embedding/EmbedDrainService.cs` **only** —
   `DrainOnceAsync` `:115-121` gains the re-enqueue, the class doc `:22-24` is rewritten to state the
@@ -370,7 +381,9 @@ Each row's gate is the question it waits on; **ungated** means it may start once
 - **Lane.** dotnet-engineer / Sonnet. **Collisions.** Shares `EmbedDrainService.cs` with **WP5** —
   run WP1 first (WP5 deletes producers, WP1 edits the consumer).
 
-### WP2 — the directory walk: ancestor ignore root + the `code_entries` prune leg **[G2, G9]**
+### WP2 — the directory walk: ancestor ignore root + the `code_entries` prune leg
+
+**Status: OPEN — G2 APPROVE, G9 APPROVE "all".** Both legs ship in one PR, as recommended. Wave 1.
 
 - **Scope / files.** `src/AiRaccoon.Infrastructure/Ingestion/FileIngestor.cs` `IngestDirectoryAsync`
   (`:125-…`) and its `SqliteMemoryStore` caller. Two changes in one PR because they are the same
@@ -391,7 +404,11 @@ Each row's gate is the question it waits on; **ungated** means it may start once
   If G2 says *docs only*, this WP shrinks to (ii) plus one line in
   `docs/reference/agent-memory-server.md`.
 
-### WP3 — job-run counters **[G6, shaped by #477]**
+### WP3 — job-run metrics (#477 as written)
+
+**Status: OPEN — G6 APPROVE, note "3" = shape (iii).** Shapes (i) and (ii) are off the table; the
+deliverable is the `IMeasurementRecorder` series reachable from `memory_performance`. **G7's REJECT
+changes this WP's blast radius — see §Re-review.** Wave 1.
 
 - **Scope depends on G6.** Three shapes, smallest first: **(i)** nothing new — EventId 1003 already
   carries `{Rows}` for the drain; close #477 as covered for the hot path. **(ii)** EventId 525 gains
@@ -410,10 +427,14 @@ Each row's gate is the question it waits on; **ungated** means it may start once
   and no code changes.
 - **Gate command.** `dotnet test --filter "FullyQualifiedName~MaintenanceJobRunner|FullyQualifiedName~Metrics" --nologo -v m`,
   plus `docs/reference/logging-event-ids.md` updated if 525's template changes.
-- **Lane.** dotnet-engineer / Sonnet. **Collisions.** Shape (ii) touches every `IMaintenanceJob`,
-  which **WP5 deletes two of** — run WP5 first if both are approved.
+- **Lane.** dotnet-engineer / Sonnet. **Collisions — none (rev 2.0).** WP5 is dropped, so nothing
+  else opens `IMaintenanceJob` or its implementations this session, and **route (a) does not touch
+  them either**. This WP owns `MaintenanceJobRunner.cs` and the `Metrics/` tree for wave 1. The rev
+  1.1 dependency "run WP5 first" is void.
 
-### WP4 — #524 follow-ups: one rendering, one numeric field **[G4; the EventId 428 int is ungated]**
+### WP4 — #524 follow-ups: one rendering, one numeric field
+
+**Status: OPEN — G4 APPROVE**; the EventId 428 `int` rides along ungated. Both items, one PR. Wave 1.
 
 - **Two items, one PR.** The rendering choice is **G4**. The EventId 428 `Threads`-as-a-string fix
   rides along **ungated** (*fix-what-you-find*): nothing consumes the field yet, so a mixed-type
@@ -432,7 +453,18 @@ Each row's gate is the question it waits on; **ungated** means it may start once
 - **Lane.** dotnet-engineer / Sonnet. **Ungated on files** — no other WP touches these. Smallest
   item here; run it first as the session's warm-up.
 
-### WP5 — WP11-C Option B: drop the enqueue-only jobs **[G7 — recommendation is now DECLINE]**
+### WP5 — WP11-C Option B: drop the enqueue-only jobs — **DROPPED**
+
+**Status: DROPPED — G7 REJECT, owner's words: _"dont delete"_.**
+
+**Recorded as a standing ruling, not a deferral.** `PendingEmbedJob` and `CodeReindexJob` stay.
+A one-line `RunAsync` on a job whose value is `HasWorkAsync` is the accepted shape here, and the three
+guarantees enumerated in §Review (f) — the fingerprint reconcile, the coalesced-signal recovery path,
+and the same-pass sweep ordering — are the reason. **Do not re-propose this without new evidence that
+speaks to those three.** The WP12/WP11-C follow-up item is closed; §Review (f) is its record, and
+`.ai-badger/state.json` should drop it from `next` at session close.
+
+<details><summary>The design that would have been built, kept for the record</summary>
 
 - **Scope, if approved.** Delete `PendingEmbedJob` and `CodeReindexJob`; the on-demand poll enqueues
   both corpora from a new small component that must **also** carry `CodeReindexJob.HasWorkAsync`'s
@@ -451,10 +483,13 @@ Each row's gate is the question it waits on; **ungated** means it may start once
   **Collisions.** `EmbedDrainService.cs` (after **WP1**), `AppRegistrations.cs`,
   `BankMaintenanceHostedService.cs`, every `IMaintenanceJob` (before **WP3** shape ii), and
   `docs/features/code-corpus/code-corpus.feature`.
-- **If G7 declines**, this WP disappears and §Review (f) is its record — the two classes stay, and
-  the one-line `RunAsync` is the correct shape for a job whose value is `HasWorkAsync`.
 
-### WP7 — WP12-E: quantized / CoreML inference for the code engine **[G3]**
+</details>
+
+### WP7 — WP12-E: quantized / CoreML inference for the code engine
+
+**Status: OPEN — G3 APPROVE.** Split across waves: **desk half in wave 1**, **measured arms in wave 3
+on a quiet machine** (§Re-review explains why this changed).
 
 - **Scope.** No production file. Output: one dated research record under `docs/work/` plus an ADR
   draft (an ADR-0049 amendment if an arm wins).
@@ -466,7 +501,9 @@ Each row's gate is the question it waits on; **ungated** means it may start once
   production edit and no engine swap** — the record ends in a recommendation.
 - **Lane.** architect / Opus. **No file collision.** Runs in parallel with everything.
 
-### WP8 — model-manifest repair pair: #497 and #504 **[G9]**
+### WP8 — model-manifest repair pair: #497 and #504
+
+**Status: OPEN — G9 APPROVE "all".** Wave 1.
 
 - **Scope / files.** `src/AiRaccoon.Infrastructure/Embedding/Download/ModelDownloadPlanner.cs` and
   `ManifestPoolingRepair`. One strand, two commits: #497 (repair also checks `EmbeddingOutput`'s
@@ -482,7 +519,9 @@ Each row's gate is the question it waits on; **ungated** means it may start once
 - **Gate command.** `dotnet test --filter "FullyQualifiedName~ModelDownloadPlanner|FullyQualifiedName~ManifestPooling" --nologo -v m`
 - **Lane.** dotnet-engineer / Sonnet. **No collision** with any other WP.
 
-### WP9 — small filed issues: #519 and #493 **[G9]**
+### WP9 — small filed issues: #519 and #493
+
+**Status: OPEN — G9 APPROVE "all".** **Wave 4, strictly last.**
 
 - **#519** — `tests/AiRaccoon.Tests/TestData.cs:86,89`: remove the two optional Null-object defaults,
   make every caller pass its double explicitly — **83 call sites across 73 files**
@@ -506,7 +545,21 @@ Each row's gate is the question it waits on; **ungated** means it may start once
 - **Lane.** dotnet-engineer / Sonnet. **Collisions.** #519 touches 73 test files — run it when no
   other lane has an open PR adding tests, i.e. **late**, or it conflicts with everything.
 
-### WP6 — ADR-0089 implementation, five PRs **[G8]**
+### WP6 — ADR-0089 implementation: parts 1–3 this session
+
+**Status: OPEN for 6a/6b/6c — G8 APPROVE, note _"3 now, 2 later - create plan for the next session
+before starting"_. 6d and 6e are MOVED to session 5.** Wave 2, and **blocked on the session-5 plan
+existing** (todo item 3).
+
+**Which three, and why that trio.** **6a** (the `projects` table + registration write path), **6b**
+(`project_id_token_get`, which mints *and* registers) and **6c** (the refusal of an unregistered id).
+This is the smallest set that is coherent in production: 6c is the whole point of the ADR — the
+accident it removes — but **6c without 6b is a trap**, because it refuses unregistered ids while
+leaving no supported way to register one, so a new project becomes uncreatable. 6a is the substrate
+both need. Shipping 6a+6b without 6c would be the opposite failure: new surface that changes nothing.
+**6d** (CLI `project id generate|convert`) is convenience over a tool that already exists, and **6e**
+(storage guidance + the `ai-raccoon.ignore` entry) is documentation — both are additive, neither is
+load-bearing, and both are the right things to carry.
 
 Sized in §Review (e), with the file list and the `6a → 6b/6c → 6d`, `6e ∥` ordering. **The largest
 item in the session**; G8 asks whether all five parts run now or only `6a`+`6b`+`6c`.
@@ -521,7 +574,13 @@ item in the session**; G8 asks whether all five parts run now or only `6a`+`6b`+
   legacy id the bank knows keeps working with a warning, a legacy id it does not know is refused, an
   unregistered guidv7 is refused.
 
-### WP10 — #455: the re-derived corpus, queries and parity golden. **LAST** **[G10]**
+### WP10 — #455: the re-derived corpus, queries and parity golden — **MOVED to session 5**
+
+**Status: MOVED — G10 APPROVE, owner's words: _"- move it to the next session"_.** It stays **LAST**
+there. The scope, files, acceptance and gate commands below are complete and carry over verbatim into
+`docs/work/2026-08-23-post-delta-5-plan.md`; nothing about them needs re-deriving, and §Review (g)'s
+measurement (5 commits ahead of `a747da1a`, main +20 commits/137 files, **zero file collisions**) is
+the evidence that waiting stays cheap. **The owner's S6b history rewrite moves with it.**
 
 - **Scope.** Resume `task/pd3-455-public-benchmark-corpus` @ `ea174faf` (draft #499). Merge
   `origin/main` in first — **20 commits of drift, zero file collisions** (§Review (g)) — re-run the
@@ -547,26 +606,39 @@ pass.
 
 ---
 
-## Sequencing
+## Sequencing — four waves (rev 2.0, WP5 dropped and WP10 moved out)
 
-**In parallel from rev 2.0** (no shared files): **WP4**, **WP7** (research, no files), **WP8**.
+**Wave 1 — five code lanes plus two architect lanes, all at once.** Verified file-disjoint:
 
-**The maintenance/embed chain, strictly serial:** **WP1** (`EmbedDrainService` consumer) → **WP5**
-(delete the two producer jobs) → **WP3** shape (ii)/(iii). If G6 picks shape (i), WP3 disappears and
-the chain is WP1 → WP5. If G7 declines, WP5 disappears and it is WP1 → WP3.
+| Lane | WP | Files it owns for the wave |
+|---|---|---|
+| dotnet-engineer / Sonnet | **WP1** | `Embedding/EmbedDrainService.cs` |
+| dotnet-engineer / Sonnet | **WP2** | `Ingestion/FileIngestor.cs` (+ its `SqliteMemoryStore` caller) |
+| dotnet-engineer / Sonnet | **WP3** | `Maintenance/MaintenanceJobRunner.cs`, `Core/Metrics/*`, `Infrastructure/Metrics/*`, `MetricsConfigKeys.cs` |
+| dotnet-engineer / Sonnet | **WP4** | `Embedding/EmbeddingService.cs`, `Cli/Commands/SettingsCommands.cs`, `Cli/Commands/DoctorCommands.cs` |
+| dotnet-engineer / Sonnet | **WP8** | `Embedding/Download/ModelDownloadPlanner.cs`, `ManifestPoolingRepair` |
+| architect / Opus | **session-5 plan** | `docs/work/2026-08-23-post-delta-5-plan.md` (new file) |
+| architect / Opus | **WP7 desk half** | no source file |
 
-**The ingestion strand, alone:** **WP2** owns `FileIngestor.cs` for the session — independent of that
-chain, since #518 made the pump a required dep and the two files stopped sharing a producer.
+No two of those touch the same file. The one shared *test* surface is `tests/…/TestData.cs`, which
+nobody edits until wave 4.
 
-**WP6 (ADR-0089)** is its own strand (`6a → 6b/6c → 6d`, `6e` parallel) touching `MemorySchema.cs`,
-`MemoryTools.cs`, `ToolGate.cs`, `CliCommandTree.cs` — none of which another WP opens. **Calendar
-risk, not collision risk.** **WP9** runs **late**: #519 rewrites 83 call sites and conflicts with any
-open PR that adds a test. **WP10 (#455) is last**, then the owner's S6b.
+**Wave 2 — WP6, serial, gated on the session-5 plan existing (G8).** `6a` (`MemorySchema.cs`,
+`MemorySql.cs`, a new `Projects/` store) → then `6b` (`MemoryTools.cs`) and `6c` (`ToolGate.cs` /
+`IMemoryAccessGuard`), which are disjoint from each other and may run in parallel once `6a` merges.
+None of these files is opened by any wave-1 lane.
 
-**Shared-file map.** `EmbedDrainService.cs` → WP1 then WP5; `IMaintenanceJob` + implementations →
-WP5 then WP3(ii); `FileIngestor.cs` → WP2 only; `EmbeddingService.cs`/`SettingsCommands.cs`/
-`DoctorCommands.cs` → WP4 only; `ModelDownloadPlanner.cs` → WP8 only; `TestData.cs` → WP9 only. **No
-two parallel WPs touch the same file.**
+**Wave 3 — WP7's measured arms, alone on a quiet machine.** Not a file collision: a *measurement*
+collision. See §Re-review.
+
+**Wave 4 — WP9, strictly last.** #519 rewrites **83 call sites across 73 files**, so it conflicts with
+every wave-1 and wave-2 PR that adds a test. #493 and the `logging-event-ids.md:53` doc fix ride with it.
+
+**Shared-file map (rev 2.0).** `EmbedDrainService.cs` → WP1 only (WP5 is dropped, so it has no second
+owner). `MaintenanceJobRunner.cs` + `Metrics/` → WP3 only. `FileIngestor.cs` → WP2 only.
+`EmbeddingService.cs`/`SettingsCommands.cs`/`DoctorCommands.cs` → WP4 only. `ModelDownloadPlanner.cs`
+→ WP8 only. `MemorySchema.cs`/`MemoryTools.cs`/`ToolGate.cs` → WP6 only, in wave 2.
+`tests/…/TestData.cs` → WP9 only, in wave 4. **No two concurrent WPs touch the same file.**
 
 ---
 
@@ -574,11 +646,11 @@ two parallel WPs touch the same file.**
 
 | Item | The session prepares | Strictly yours |
 |---|---|---|
-| S6b (#414 rewrite) | Nothing new — part 3 shipped the runbook (#473) + `scripts/verify-history-scrubbed.py` | Lifting the push guard, running `filter-repo` over all three paths, re-planting refs, telling every session to re-clone. **After WP10** |
+| S6b (#414 rewrite) | Nothing new — part 3 shipped the runbook (#473) + `scripts/verify-history-scrubbed.py` | Lifting the push guard, running `filter-repo` over all three paths, re-planting refs, telling every session to re-clone. **Moves to session 5 with WP10 (G10); it sits behind #455 there** |
 | 1.33.0 publish | Nothing — `VERSION` is already 1.33.0 on main | The production-environment approval on the publish job |
 | `~/.claude/settings.json` soft-deny | The exact patterns, in #474 §5.2 | Editing the file. An agent must not touch it |
 | #479 force-pushes | Nothing — the investigation is merged | Confirming or denying the IDE/shell hypothesis |
-| The gate below | This plan and the form | The nine answers |
+| The gate below | This plan and the form | **Answered 9/9 on 2026-08-23** — nothing outstanding |
 
 ---
 
@@ -597,211 +669,154 @@ two parallel WPs touch the same file.**
   than filing a third ticket.
 - **A repo-wide private-prose scanner** and **further review-loop automation.** Unchanged from part 3.
 
+**Moved out by the gate, not by this section** — these are scheduled, not abandoned: ADR-0089 **parts
+4–5** (G8) and **#455 plus the S6b rewrite behind it** (G10) all go to session 5, and the session-5
+plan (todo item 3) is where they land. **Dropped outright:** WP5 (G7 REJECT) — a ruling, not a park.
+
 ---
 
-## Owner gate — decisions only you can make
+## Re-review — what the answers changed (architect, rev 2.0)
 
-**Nine cards** — `G1`–`G4` and `G6`–`G10`. **G5 (EventId 428 `Threads` as an int) is withdrawn and
-folded into WP4, ungated**: review round 1 observed it offers no real trade-off, since nothing consumes
-the field yet, so it is a *fix-what-you-find* defect rather than a decision. The remaining ids are
-unchanged from rev 1.0, so any answer already drafted still lines up. Each card says what becomes true
-if you approve, carries the number behind it, and ends in a recommendation. **G1–G3 are part 3's
-G20–G22, re-numbered and corrected against the tree as merged** — read them again even if you had made
-up your mind, because two of the three headline numbers moved.
+The plan promised *"architect re-reviews the plan before any gated WP opens."* Five findings; two
+change a WP's design, and one changes the schedule.
 
-### Carried from part 3 (re-derived)
+**1. G6 shape (iii) needs far less than the plan implied — and G7's REJECT is why.** Rev 1.1 said
+shape (iii)'s row count would force `IMaintenanceJob.RunAsync` → `ValueTask<MaintenanceJobResult>`
+across **ten implementations in seven files**. Re-reading the runner, **half of #477 needs no job
+change at all**: `duration_ms` is already computed there — `Stopwatch.GetTimestamp()` at
+`MaintenanceJobRunner.cs:71`, `Stopwatch.GetElapsedTime(started)` at `:94` — so the histogram is a
+recorder call on data the runner already holds. Only `job.<name>.rows` needs a count, and **#477's own
+wording leaves the escape hatch open**: *"gauge, **where a job reports a count**"*. So WP3 has two
+routes, and G7 decides between them:
 
-**G1 — The embed drain re-signals itself while the backlog is non-empty, instead of waiting out the
-15 s poll.** *(was G20)*
-*Detail.* Unchanged in substance and in payoff: 1,762 rows drained end to end at **1.66 rows/s**
-(1,061.3 s) while a clean 150 s window measured **2.347 rows/s** — ~29 % of the drain's wall clock
-is not inference, of which **207 s (19.5 %)** is 13.8 poll gaps at 15 s. The bound stays
-(`embedding.threads`, measured: cap 5 → 2.347 rows/s at 124–140 % CPU; cap 0 → 1.902; cap 1 → 0.213);
-only the idle goes.
-*What changed since the card was written.* The mechanism is now inside `EmbedDrainService.cs`, which
-#507/#517 merged: `rowsPerRun` is read from `ISettingsStore` on **every** pass (`:107-109`, default
-128, ceiling 4096) and the drained count already sits in a local at `:111`. The change is three
-lines plus a doc rewrite — `if (drained >= rowsPerRun) pump.TryEnqueue(request);` — and the topic
-coalesces on record equality, so a re-signal for an already-queued corpus is a no-op. **The RED test
-named in part 3 was wrong**: `EmbedDrainService` takes no `TimeProvider` (its ctor is `:32-40`), so
-the test uses no clock at all — one signal, a fake embedder returning a full budget twice, assert
-the `Drains` counter reaches 3. Also note the class doc at `:22-24` currently promises the opposite
-in prose and must be rewritten in the same commit.
-*Why it matters.* A fifth of every code re-index is a timer, not work, and the component to change
-now exists.
-*Recommendation.* **Approve**, sequenced before WP5 (which deletes the producers). The cheaper first
-move still stands and needs no code: set `maintenance.embed-rows-per-run.global` to 512 and 13.8
-gaps become 3.4.
+- **Route (a), recommended — no interface change.** The gauge means *outstanding rows* and the runner
+  reads it (or the job's existing `HasWorkAsync` query surfaces it). Touches `MaintenanceJobRunner.cs`,
+  `MetricsConfigKeys.cs` and the recorder wiring. **Zero of the ten implementations change.**
+- **Route (b) — the interface change.** Carries a real per-run count, and touches all ten.
 
-**G2 — Directory ingest resolves its ignore root the way single-file ingest already does.**
-*(was G21 — and its headline number was wrong.)*
-*Detail — the correction first.* Part 3's card said `memory_ingest_directory` on `src/` would
-enumerate **379 MB of `bin`/`obj`**. It would not. `FileIngestor.cs:400`'s `IsHidden(root, path)` is
-`WatchDenySet.Excludes(root, path)` and its own doc at `:397-398` names the set:
-*node_modules/bin/obj/.git/.venv/__pycache__/dist/build/target*. That filter runs unconditionally at
-`:133`, with or without an ignore file. This repo's `ai-raccoon.ignore` header says the same. Build
-output has never entered the corpus. (For the record the number is now **1.8 GB** against 2.0 MB of
-`.cs` — it just is not the argument.)
-*Detail — what is actually broken.* `IngestDirectoryAsync` loads rules from the **walk root**
-(`:131`), while `IngestFileAsync` first calls `ResolveIgnoreRootAsync` (`:46`, body `:97-121`) —
-containing watch → admitting scope entry → parent. So an ignore file at an **ancestor** of the walk
-root is honoured for one file and ignored for a directory. Concretely: point it at `src/` and the
-root ignore file's `src/AiRaccoon/Models/` rule never loads, so **`vocab.txt` (231,508 B) is ingested
-as a memory document** — `.txt` is memory-owned (`CodeExtensions.cs:6`). Real, verified, and ~1,600×
-smaller than the card claimed. Note also that this is *ancestor resolution*, **not** nested
-discovery: `IgnoreRulesProvider` reads exactly one file at whatever root it is given (`:91-96`), so
-an `ai-raccoon.ignore` *below* the walk root still does nothing after this change.
-*Why it matters.* It is a real correctness gap between two entry points into the same pipeline — but
-the cost you were asked to weigh (a behaviour change that can silently drop rows on the next
-re-ingest) is unchanged while the benefit shrank by three orders of magnitude.
-*Recommendation.* **Approve the code fix, folded into the same PR as #485** (both edit
-`IngestDirectoryAsync`; two PRs on one method is the waste). The documentation-only option is now
-genuinely competitive — say so if you prefer it and WP2 shrinks to #485 plus one line.
+**G7 makes route (b) actively awkward.** #477 names `code-reindex` as the example series
+(*"rows embedded / still pending"*), but post-#517 `CodeReindexJob` **embeds nothing** — it enqueues
+(`CodeReindexJob.cs:44-48`). Because G7 keeps both jobs, route (b) would add a count field that **two
+of the ten jobs can never populate**, on the very job the issue names. Route (a) sidesteps that: the
+*embedded* count for the hot path is already on EventId **1003** (`EmbedDrainService.cs:161-163`), and
+the *pending* count is a query. **WP3's brief takes route (a); if the lane finds it cannot express the
+series that way, it stops and reports rather than expanding into ten files.**
 
-**G3 — A time-boxed research item on quantized / CoreML inference for the code engine.** *(was G22 —
-and both arms turn out to be cheaper than the card assumed.)*
-*Detail.* The lever is unchanged: `InferenceSession.Run` is **99.6 %** of drain wall, every ranked
-fix shaves 10–20 %, and at the best cap the drain uses ~140 % of 1,000 % available CPU — ~7× headroom
-no batching reaches. What is new is that neither arm is speculative. **CoreML is already in the box:**
-the pinned `Microsoft.ML.OnnxRuntime` **1.29.0** (`Directory.Packages.props:34`) ships
-`runtimes/osx-arm64/native/libonnxruntime.dylib` exporting
-`_OrtSessionOptionsAppendExecutionProvider_CoreML`, and the managed assembly carries the matching
-P/Invoke — verified with `nm`, not assumed. No new package, no version bump; the arm costs a
-`SessionOptions` call. **And int8 is not new here either:** the bundled *memory* model is already
-`model_qint8_arm64.onnx` (23 MB) with 48 `MatMulInteger` ops (ADR-0049 `:55`). The code engine
-(`code-daemon-embed-v1`, 768-dim) is the fp32 outlier. So this is applying a shipped pattern to a
-second model, not opening a new one.
-*The constraint, unchanged.* ADR-0049 binds both arms: they change the arithmetic path, so stored
-vectors, the parity golden and `MiniLmGoldenVectorTests` are downstream. The experiment is one run of
-#508's S3–S5 protocol per arm (restart, re-activate all 1,762 rows, fixed 150 s window, rows/s + `top`
-CPU) against fp32-CPU / int8 / CoreML, plus a vector-drift check against fp32.
-*Why it matters.* Without it, WP12 tops out at ~a third off a seventeen-minute drain and nobody can
-say whether that is the ceiling or the floor.
-*Recommendation.* **Approve as research only** — architect lane, one dated record plus an ADR draft,
-**no production edit and no engine swap** until you rule on what it finds.
+**2. WP3's collisions and order, re-stated.** With WP5 dropped, nothing else opens
+`IMaintenanceJob` or its implementations this session, so **WP3 no longer waits on anything** and
+moves from "after WP5" into **wave 1**. Under route (a) it owns `MaintenanceJobRunner.cs` and the
+`Metrics/` tree, which no other WP touches. The rev 1.1 sequencing line "WP1 → WP5 → WP3" is void.
 
-### New — the call from merged PR #524
+**3. WP7 must not run beside the other lanes — a measurement collision, not a file one.** G3 approved
+a WP whose method is a fixed 150-second throughput window, into a session that now runs five code
+lanes at once. **That is exactly what invalidated #511**: six windows under 5–7 concurrent lanes,
+same-binary variance 2.8×, aggregate ~30 % slower on an unchanged branch. WP7's *desk* half (the ORT
+1.29.0 / CoreML EP facts, ADR-0049, the draft skeleton) has no such constraint and runs in wave 1; its
+**measured arms move to wave 3, alone**. Neither the plan nor the gate card said this, and it would
+have produced unusable numbers.
 
-**G4 — One rendering of the resolved thread count across every surface.**
-*Detail.* The same stored `0` prints three ways today. `settings model show`:
-`threads: 0 (ORT default)` (`SettingsCommands.cs:337`). `settings model threads 0`'s confirmation:
-`embedding threads set to 0 (ORT default); …` (`:298`). `doctor`:
-`embedding threads: ORT default (setting)` (`DoctorCommands.cs:73`, via
-`EmbeddingService.ThreadCountDisplay` `:310-311`). The parenthesis means different things: on the
-first two it explains the digit, on doctor it names the **source** (`setting` vs `halved-core
-default`, `ThreadCountSource` `:305-306`). #524 introduced doctor's shape and did not reconcile the
-others.
-*Why it matters.* Three spellings of one value is how a support answer becomes "which command did
-you run?". This is small enough to be free and only gets more expensive as surfaces multiply.
-*Recommendation.* **Adopt doctor's shape everywhere: `<value-or-"ORT default"> (<source>)`,** with
-`ThreadCountDisplay`/`ThreadCountSource` as the single pair of helpers all three call. Say the word
-if you would rather keep the digit visible (`0 (ORT default, from setting)`) — either is fine, one
-of them has to win.
+**4. WP2 and WP4 are unchanged.** WP2 keeps both legs — the ancestor ignore root (G2) and #485's
+`code_entries` prune (G9 "all") — in one PR on `IngestDirectoryAsync`, as recommended and approved;
+the two RED tests and the no-regression leg stand. WP4 keeps both items in one PR: the rendering
+choice (G4) and the EventId 428 `int` (ungated).
 
-### Scope
+**5. Two scheduling consequences worth naming.** G10 moving #455 out and G8 deferring 6d/6e both
+freed calendar, so session 4 is smaller at *both* ends than the plan sized it — wave 2 is unlikely to
+be the squeeze G8 was protecting against. And **G8 inverts a dependency**: WP6 is now gated on a
+document that does not exist, which makes the session-5 plan a wave-1 deliverable rather than a
+closing chore. It is scheduled that way.
 
-**G6 — What "job-line counters" means: three shapes, and #477 asks for the largest.**
-*Detail.* Part 3 scoped WP12-C as *"the EventId 525 'ran in N ms' message gains rows, batches,
-elapsed"*. Two things it did not know. First, **the signature cannot carry a count**:
-`IMaintenanceJob.RunAsync` returns `ValueTask<bool>` (`IMaintenanceJob.cs:25`) and that bool has a
-documented scheduling meaning (`:20-23`, "created rows that still need embedding" → sweep again). A
-row count needs `ValueTask<MaintenanceJobResult>` across the interface, its **ten implementations in
-seven files** (`MaintenanceJobs.cs` alone holds four), and `MaintenanceJobOutcome`
-(`MaintenanceJobRunner.cs:9`). Second, **#477 asks for
-something else entirely** — verbatim: *"`MaintenanceJobRunner` records `job.<jobName>.duration_ms`
-(histogram) and `job.<jobName>.rows` (gauge …) through `IMeasurementRecorder` under the self-metrics
-project id, and `SelfMetricNames` lists them so `memory_performance` shows one series per job."*
-*And the cheap answer may already be shipped.* EventId **1003** already logs
-`"Embed drain pass finished for {Corpus}: {Rows} row(s)"` every pass
-(`EmbedDrainService.cs:161-163`). The drain is 99.66 % of the clock, so the hot path's row count is
-**already observable**. What 525 lacks is counts for six jobs that are not on the hot path.
-*Why it matters.* The gap #477 was filed for ("5k rows pending for an hour with no way to observe
-progress except raw SQLite") is closed by EventId 1003 for the case that actually hurt. Shapes (ii)
-and (iii) buy coverage of the quiet jobs, at the price of an interface change or a metrics series.
-*Recommendation.* **Shape (iii) or nothing.** If job observability is worth the work, `#477` as
-written is the version that reaches `memory_performance` where you would actually look; shape (ii)
-changes ten implementations across seven files to improve a log line nobody greps. If it is not worth it this session, **park
-#477 with a comment naming EventId 1003** and drop WP3.
+### First wave to dispatch — lane briefs
 
-**G7 — WP11-C Option B: delete `PendingEmbedJob`/`CodeReindexJob`. **I now recommend declining, and
-the reason is new evidence, not a change of taste.**
-*Detail — the premise is true.* Both `RunAsync` bodies really are one line:
-`PendingEmbedJob.cs:47-51` and `CodeReindexJob.cs:44-48` each do a bare `TryEnqueue` and return
-`ValueTask.FromResult(false)`. Part 3 recorded your ruling that Option B is *"the real fix"* and
-that #517 only took Option A because the blast radius was disproportionate **to a settings-key
-task**.
-*Detail — what the enumeration found.* `RunAsync` is not what these classes are for. **(1)**
-`CodeReindexJob.HasWorkAsync` (`:37-41`) is **not side-effect-free** — it calls
-`ReconcileFingerprintAsync` first, which is what invalidates code rows to `pending` when a manifest
-changes in place on disk (`CodeReindexJobTests.cs:161-187`). **(2)** `HasWorkAsync` is the **only
-durable recovery path** for a coalesced or dropped pump signal: the 15 s poll passes the whole job
-list to `RunDueAsync` with no filtering (`BankMaintenanceHostedService.cs:151-183`) and
-`HasWorkAsync` reads `embed_state='pending'` directly — that is ADR-0076's "the channel is a wake-up,
-not the record" made real, pinned by `EmbedDrainServiceTests.CoalescedSignal_IsRecoveredByTheNextPoll`.
-**(3)** `PendingEmbedJob` is registered **last** on purpose so rows an earlier job leaves pending are
-swept in the same pass — *"chunk-backfill produced 13,578 of them on a real bank"*
-(`AppRegistrations.cs:158-163`), pinned by `EmbedSweepAfterJobsTests`. And the cost is **~50 live
-files** — 16 src (enumerated and verified), 15 tests, 16 non-dated docs, 3 `.ai-badger`. A strict
-class-name grep returns 42 and **understates** it, because four live sites name the job by its
-`JobName` string in user-facing text; the union grep returns 72, of which 22 are dated `docs/work/*`
-records. Included: **ADR-0091, whose entire subject is these two jobs' shape**, which needs an
-amendment rather than a line edit.
-*Why it matters.* The thing being called dead code is a one-line method on an object whose other
-method carries three guarantees. Deleting the object to delete the one-liner means re-implementing
-all three somewhere else and re-proving them — for no behaviour change at all.
-*Recommendation.* **Decline, and close the follow-up with §Review (f) as its record.** A one-line
-`RunAsync` on a job whose value is `HasWorkAsync` is not a smell, it is the right shape. If what
-actually bothers you is the misleading `ValueTask<bool>` return, **G6 shape (ii)** is where to fix
-that. Approve anyway and it becomes the session's largest item after WP6 — say so and WP6 or WP10
-slips to pay for it.
+Five code lanes (dotnet-engineer / **Sonnet**; reviewer code-reviewer / **Opus**, never the
+implementer) plus two architect / **Opus** lanes. Each lane's full brief is its WP section; the
+load-bearing inputs are:
 
-**G8 — ADR-0089 (WP6): all five parts this session, or the registry and the refusal only.**
-*Detail.* The ADR is **Accepted** (`0089-….md:5`, ratified at part 3's G2) and still entirely
-unimplemented — `project_id_token_get` has zero matches in `src`/`tests`, and there is no `projects`
-table. §Review (e) sizes it at five PRs with the files named: **6a** table + registration write path
-(`MemorySchema.cs`'s unconditional `Ddl` block, **no `CurrentVersion` bump** — it stays 10, per
-ADR-0086); **6b** the `project_id_token_get` tool; **6c** the refusal of an unregistered id — *the
-risk-bearing part*, because every existing caller passes a raw id today and the compatibility rule
-is "no registry row **and** no existing rows"; **6d** CLI `project id generate|convert`; **6e**
-storage guidance plus the `ai-raccoon.ignore` entry (**not** `.gitignore` — you reversed that in the
-#448 review). `6a → 6b/6c → 6d` serialise; `6e` is parallel.
-*Why it matters.* This is the biggest item in the session and the only one that competes with WP10
-(#455) for calendar. Half of it (6a/6b) is inert new surface; the value lands at **6c**, which is
-also the part that can refuse a real user's write.
-*Recommendation.* **6a + 6b + 6c this session, 6d + 6e next** — the refusal is the whole point and
-the CLI is convenience on top of a tool that already exists. Approve all five if you would rather
-not leave it half-landed; say so and WP10 slips.
+| WP | Files | RED test (seen failing first) | Gate command | Collides with |
+|---|---|---|---|---|
+| **WP1** | `Embedding/EmbedDrainService.cs` only (`DrainOnceAsync:115-121`; rewrite the class doc `:22-24`, which promises the opposite) | `EmbedDrainContinuousTests` (**new class — needs class-level traits**): fake `ICodeEmbedder` returns exactly `rowsPerRun` twice then 0; **one** `TryEnqueue`; assert `Drains` reaches 3. **No `TimeProvider`** — the service takes none. Red today: stops at 1 | `dotnet test --filter "FullyQualifiedName~EmbedDrain\|FullyQualifiedName~EventPump" --nologo -v m` | nothing |
+| **WP2** | `Ingestion/FileIngestor.cs` `IngestDirectoryAsync` (`:131` load root, `:133` filter args) + its `SqliteMemoryStore` caller | `FileIngestorIgnoreTests` **(extend — exists at `tests/…/Integration/Ingestion/FileIngestorIgnoreTests.cs:18`)**: `skip/` row count 0. Plus `DirectIngestReplacesStaleChunksTests` (extend): 0 stranded `code_entries` after a directory re-ingest of a shrunk file | `dotnet test --filter "FullyQualifiedName~FileIngestor\|FullyQualifiedName~DirectIngest" --nologo -v m` | nothing |
+| **WP3** | `Maintenance/MaintenanceJobRunner.cs`, `MetricsConfigKeys.cs`, recorder wiring. **Route (a) — do not change `IMaintenanceJob`** | `MaintenanceJobRunnerTests`: a completed job run records `job.<name>.duration_ms`; a job with outstanding rows records `job.<name>.rows`; a not-due job records **neither**. Red today: no series exists | `dotnet test --filter "FullyQualifiedName~MaintenanceJobRunner\|FullyQualifiedName~Metrics" --nologo -v m` | nothing |
+| **WP4** | `Embedding/EmbeddingService.cs:310-311,434-436`, `Cli/Commands/SettingsCommands.cs:298,337`, `Cli/Commands/DoctorCommands.cs:73`, `docs/reference/logging-event-ids.md` | All three surfaces print the same phrase for one stored `0`; EventId 428's `Threads` state value is an `int`. Red today on both | `dotnet test --filter "FullyQualifiedName~SettingsCommands\|FullyQualifiedName~Doctor\|FullyQualifiedName~ThreadResolution" --nologo -v m` | nothing |
+| **WP8** | `Embedding/Download/ModelDownloadPlanner.cs`, `ManifestPoolingRepair` | A pre-#496 bge-m3 manifest is left uncorrected by the repair today; both untested two-output name shapes fail before the fix | `dotnet test --filter "FullyQualifiedName~ModelDownloadPlanner\|FullyQualifiedName~ManifestPooling" --nologo -v m` | nothing |
 
-**G9 — Which filed issues ride along: #485, #493, #497, #504, #519.**
-*Detail.* All five are OPEN and small. **#485** (directory walk strands `code_entries`; the single-file
-leg shipped in #481) edits the **same method** as G2, so folding it into WP2 costs nothing while
-splitting it costs a second PR on `IngestDirectoryAsync`. **#497** (the bge-m3 pooling repair never
-checks `EmbeddingOutput`'s rank, so anyone who downloaded before #496 stays wrong) and **#504**
-(rank-based output selection, two untested name shapes) are the same file family and pair into one
-strand. **#493** (`PerformanceTools` lists six phases; `PhaseNames` has nine) is a
-*derive-or-delete-the-list* violation in our own code. **#519** (`TestData.CreateMemoryStore:86,89`)
-is your own #518 ruling left unenforced, but it rewrites **83 call sites across 73 files** and
-conflicts with every open PR that adds a test.
-*Why it matters.* Four of the five cost hours, not days, and two of them (#485, #497) are live
-defects a user can hit. #519 is the one with a scheduling cost rather than a work cost.
-*Recommendation.* **Take all five: #485 into WP2, #497+#504 as WP8, #493+#519 as WP9 — and run WP9
-last**, when no other lane has an open PR adding tests. Drop any of them and the WP shrinks; drop
-#519 and nothing else moves.
+Architect lanes: **the session-5 plan** (`docs/work/2026-08-23-post-delta-5-plan.md` — ADR-0089 parts
+4–5, #455 LAST + S6b behind it, session-4 spillover) and **WP7's desk half**. Both are documents; both
+block nothing in wave 1, and the first one **blocks wave 2**.
 
-**G10 — WP10 (#455) still runs LAST, now that the drift is measured.**
-*Detail.* **The real alternative first: promote #455 and unblock the S6b history rewrite.** It is the
-last thing standing between you and a one-pass `filter-repo` over all three private-prose paths, and it
-has been parked for a day. Promoting it is now cheap, because the drift risk that justified parking it
-has been measured and is gone. Measured today: the branch `task/pd3-455-public-benchmark-corpus` @ `ea174faf` (draft
-**#499**, OPEN) is 5 commits ahead of merge-base `a747da1a`; main has moved **20 commits / 137 files**
-since; and the **intersection of the two changed-file sets is empty** — none of the branch's 11
-files has been touched on main. So the feared cost of waiting (a growing conflict) is **zero**. What
-promoting it costs instead is that the parity/retrieval gate must run in the foreground while other
-lanes are live — exactly the contention that made #511's measurements unusable — and G8's
-"6a+6b+6c only" is what pays for the calendar. Your ruling of 2026-08-22 ~19:38 was that #455 runs last
-so nothing else moves the corpus under it, and on this evidence it still holds on its merits.
-*Why it matters.* #455 is the last thing standing between you and the one-pass history rewrite over
-all three private-prose paths, and it has been parked for a day.
-*Recommendation.* **Keep it last** — the collision risk is nil either way and the foreground gate wants
-a quiet machine. Promote it only if unblocking S6b is what you want soonest; that is now a real option,
-not a hypothetical.
+---
+
+## Owner gate — **ANSWERED 9/9, 2026-08-23** (`docs/work/2026-08-23-post-delta-4-feedback.md`)
+
+| id | Verdict | Owner's note | Effect |
+|---|---|---|---|
+| **G1** | APPROVE | — | WP1 OPEN, wave 1 |
+| **G2** | APPROVE | — | WP2 OPEN, wave 1 (folded with #485 as recommended) |
+| **G3** | APPROVE | — | WP7 OPEN — desk half wave 1, measured arms wave 3 |
+| **G4** | APPROVE | — | WP4 OPEN, wave 1 |
+| **G6** | APPROVE | *"3"* | Shape **(iii)** — #477 as written. WP3 OPEN, wave 1 |
+| **G7** | **REJECT** | *"dont delete"* | **WP5 DROPPED**; the two jobs stay — standing ruling |
+| **G8** | APPROVE | *"3 now, 2 later - create plan for the next session before starting"* | WP6 = 6a/6b/6c, wave 2, **blocked on the session-5 plan**; 6d/6e → session 5 |
+| **G9** | APPROVE | *"all"* | #485 → WP2; #497+#504 → WP8; #493+#519 → WP9 |
+| **G10** | APPROVE | *"- move it to the next session"* | **WP10 MOVED to session 5**, still LAST; S6b moves with it |
+
+**The nine cards are spent.** They were the asking device; the evidence behind every one of them is
+in §Review with file:line, and the verdicts are in
+`docs/work/2026-08-23-post-delta-4-feedback.md`. What a later session needs is what each answer
+*binds*, so that is what this records.
+
+**G1 — APPROVE.** The embed drain re-signals itself while the backlog is non-empty.
+`EmbedDrainService.cs` only; the 15 s poll (`BankMaintenanceHostedService.cs:79`) is not edited. The
+bound stays `embedding.threads`; only the idle goes. Expected recovery: the **207 s (19.5 %)** of poll
+gaps in a 1,061 s drain. Binding detail: the RED test uses **no clock** — the service takes no
+`TimeProvider`.
+
+**G2 — APPROVE.** Directory ingest resolves its ignore root like single-file ingest
+(`ResolveIgnoreRootAsync`). Approved on the **corrected** basis: the 379 MB bin/obj claim was false
+(`WatchDenySet` already excludes them, `FileIngestor.cs:397-400`); the real harm is ancestor ignore
+rules going unapplied — e.g. `src/AiRaccoon/Models/vocab.txt`, 231,508 B, ingested as a memory
+document. It is **ancestor resolution, not nested discovery**: an `ai-raccoon.ignore` *below* the walk
+root still does nothing. Folded with #485 in one PR, as recommended.
+
+**G3 — APPROVE, research only.** Three arms on #508's S3–S5 protocol: fp32 CPU, int8, CoreML EP.
+**No production edit and no engine swap** until the owner rules on what it finds. Two facts that
+de-risk it: the CoreML EP ships in the pinned `Microsoft.ML.OnnxRuntime` **1.29.0** osx-arm64 dylib
+(`_OrtSessionOptionsAppendExecutionProvider_CoreML`, verified with `nm`), and the bundled *memory*
+model is already int8 (`model_qint8_arm64.onnx`, ADR-0049 `:55`). ADR-0049 binds both arms: they
+change the arithmetic path, so the parity golden and `MiniLmGoldenVectorTests` are downstream.
+
+**G4 — APPROVE.** One rendering of the resolved thread count across `settings model show`, the
+`settings model threads` confirmation and `doctor`, from one pair of helpers
+(`ThreadCountDisplay`/`ThreadCountSource`). Recommended shape: `<value-or-"ORT default"> (<source>)`.
+
+**G6 — APPROVE, note "3" = shape (iii).** #477 as written: `job.<name>.duration_ms` and
+`job.<name>.rows` through `IMeasurementRecorder`, listed in `MetricsConfigKeys`, visible from
+`memory_performance`. Shapes (i) (park it) and (ii) (EventId 525 + an interface change) are rejected
+by that choice. **§Re-review finding 1 constrains how**: route (a), no `IMaintenanceJob` change.
+
+**G7 — REJECT, owner's words: _"dont delete"_. A standing ruling.** `PendingEmbedJob` and
+`CodeReindexJob` stay. The one-line `RunAsync` is the accepted shape for a job whose value is
+`HasWorkAsync`, and the three guarantees in §Review (f) — the fingerprint reconcile
+(`CodeReindexJob.cs:37-41`), the coalesced-signal recovery path
+(`EmbedDrainServiceTests.cs:181`, ADR-0076) and the same-pass sweep ordering
+(`AppRegistrations.cs:158-163`) — are why. **Do not re-propose without new evidence addressing those
+three.** ADR-0091 stands unamended. The WP11-C follow-up is closed.
+
+**G8 — APPROVE, note _"3 now, 2 later - create plan for the next session before starting"_.**
+WP6 ships **6a + 6b + 6c** (registry table, `project_id_token_get`, unregistered-id refusal) — the
+trio justified in WP6's own section: 6c is the value, 6c without 6b is a trap, 6a is the substrate.
+**6d** (CLI) and **6e** (docs + `ai-raccoon.ignore`, *not* `.gitignore`) move to session 5. The
+"before starting" clause is a hard precondition: **`docs/work/2026-08-23-post-delta-5-plan.md` must
+exist before the first `6x` PR opens.** ADR-0089 constraints that still bind: the table goes in the
+unconditional `Ddl` block with **no `CurrentVersion` bump** (stays 10), and 6c's compatibility rule is
+"no registry row **and** no existing rows".
+
+**G9 — APPROVE, note _"all"_.** All five filed issues ride: **#485** → WP2 (same method),
+**#497 + #504** → WP8 (same file family), **#493 + #519** → WP9. #519 is 83 call sites across 73
+files, which is why WP9 is wave 4 rather than wave 1.
+
+**G10 — APPROVE, note _"- move it to the next session"_.** WP10 (#455) moves to session 5 entirely
+and stays **LAST** there; the owner's S6b history rewrite moves with it and sits behind it. §Review
+(g)'s measurement — 5 commits ahead of `a747da1a`, main +20 commits/137 files, **zero file
+collisions** — is the standing evidence that waiting stays cheap, and it should be re-derived, not
+re-quoted, when session 5 opens.
