@@ -1,7 +1,7 @@
-# Plan — post-delta session 4 (rev 2.1 — gate answered 9/9; wave 1 merged; WP11 added (owner extension))
+# Plan — post-delta session 4 (rev 2.2 — gate answered 9/9; wave 1 merged; WP11 + WP12 added (owner extensions))
 
 **Date:** 2026-08-23 · **Base:** main `72e15088` (`VERSION` = 1.33.0; one open PR, draft #499) ·
-**Status:** rev 2.1 — **gate answered 9/9** (`docs/work/2026-08-23-post-delta-4-feedback.md`,
+**Status:** rev 2.2 — **gate answered 9/9** (`docs/work/2026-08-23-post-delta-4-feedback.md`,
 2026-08-23 05:32Z): G1–G4 APPROVE, **G6 APPROVE "3"** (shape (iii) — #477 as written), **G7 REJECT
 "dont delete"** (WP5 dropped; the two jobs stay — standing ruling), **G8 APPROVE "3 now, 2 later —
 create plan for the next session before starting"**, **G9 APPROVE "all"**, **G10 APPROVE "move it to
@@ -40,7 +40,11 @@ the corrected number.
 7. **Wave 4, strictly last:** **WP9** — #493 and #519 (83 call sites across 73 files; it conflicts
    with every open PR that adds a test).
 8. **WP11** — log-only values (899 replace-lock ms/rows, 1003 drain rows per corpus, 426 truncated tokens) recorded through `IMeasurementRecorder` and the OTLP background meter, surfaced by `memory_performance` (owner extension 2026-08-23; ungated; file-disjoint from 6a).
-9. Close the session: update `.ai-badger/state.json` and `status-notes.json`, and hand session 5 the
+9. **WP12** — `database is locked` (SQLITE_BUSY 5) storm in the live server, owner extension
+   2026-08-23: the watch-digest replace chunks the file **inside** its `BEGIN IMMEDIATE`; move the
+   ingest out of the lock, batch the drain's row marks, retry the metrics flush. **After #548
+   merges** (same files). See §WP12.
+10. Close the session: update `.ai-badger/state.json` and `status-notes.json`, and hand session 5 the
    plan from item 3.
 
 **Dropped / moved by the gate.** **WP5 is DROPPED** (G7 REJECT — record as a standing ruling).
@@ -627,6 +631,85 @@ pass.
 **Gate.** `dotnet build AiRaccoon.slnx` (0 warnings) · `dotnet test tests/AiRaccoon.Tests --filter "FullyQualifiedName~EmbedDrain|FullyQualifiedName~MetricsReport|FullyQualifiedName~ReplaceLock|FullyQualifiedName~QueryTruncation|FullyQualifiedName~BackgroundTelemetry|FullyQualifiedName~LoggerMessageEventId|FullyQualifiedName~GateCoverage" --nologo -v m`.
 
 **Lane.** dotnet-engineer / Sonnet; reviewer code-reviewer / Opus. **Collisions:** none with 6a (`SqliteMemoryStore.Projects.cs` is a different partial); `EmbedDrainService.cs` is free after #530. Ungated (owner-directed).
+
+### WP12 — `database is locked`: the write lock is held through the chunker (owner extension, 2026-08-23)
+
+**Symptom (owner's live log, 2026-08-23):** `SQLite Error 5: 'database is locked'` from four
+different writers — `EntryEmbedder.EmbedAsync` (drain row marks, EventId 1005),
+`SqliteMetricsStore.SaveBatchAsync` (970, batch of 11 dropped), `ExtractionHostedService` (503, whose pass failed inside
+`SqlitePromotionQueueStore.EvictVictimAsync` — a `DELETE … RETURNING`), `MaintenanceJobRunner.RunDueAsync` (513, the ledger upsert) — interleaved
+with 899 lines of 300–4700 ms.
+
+**Diagnosis (checked against the code and the machine, not reasoned):**
+
+1. **One process holds the bank.** `lsof` shows only `ai-raccoon serve` (pid 93044) on
+   `~/.ai-raccoon/memory.db{,-wal,-shm}`; the ~25 `ai-raccoon --quiet` stdio instances the agent
+   sessions spawn are proxies and never open it. The contention is **intra-process**: the server's
+   own writers on SQLite's single write lock, `busy_timeout = 5000`
+   (`SqliteConnectionFactory.cs:295-299, 347`).
+2. **The holder is the watch-digest replace.** `SqliteMemoryStore.Replace.cs:171-250`
+   `ReplaceCoreAsync`: `BEGIN IMMEDIATE` → guard → delete → **`fileIngestor.IngestFileAsync`**
+   (file read, markdown/code chunking, hashing, inserts) → fingerprint → `COMMIT`. The chunker runs
+   under the bank's write lock. `ReplaceForDirectIngestAsync` (`:79-92`) already does it the other
+   way round — ingest autocommit, then a one-DELETE `PruneChunksNotIn` transaction — and its own doc
+   comment says why. `WatchScheduler.cs:10` fans out **4** replaces at once, so they convoy on the
+   lock; any fifth writer waits the full 5 s and fails. Every trace in the log is a victim of that
+   convoy, not a cause.
+3. **899 conflates waiting with holding.** `heldFrom` is stamped **before** `BEGIN IMMEDIATE`
+   (`Replace.cs:178-181`), so "held the write lock for 4672.8 ms (0 row(s))" was the guard declining
+   after ~4.6 s of *waiting*. Fixed inside WP11 (#548 round 2): `write.replace.wait_ms` +
+   `write.replace.held_ms`, 899's message carries both.
+4. **Secondary pressure.** The drain marks 128 rows with 128 autocommit `MarkEmbedded` writes per
+   pass (`EntryEmbedder.cs:302`) — 128 lock acquisitions interleaved with the convoy, and a BUSY
+   mid-batch throws away the inference already done for the rest of the batch (rows stay pending,
+   re-embedded next pass). `MetricsFlusher.TrySaveBatchAsync` drops the batch on the first BUSY.
+   Checkpoint `TRUNCATE` runs with a 250 ms busy timeout (benign, defers); VACUUM is days-cadence
+   (rare, but holds the lock for the whole rewrite — out of scope here).
+
+**Fix — the simplest shape that removes the holder:**
+
+- **A. Chunk outside the lock.** `ReplaceCoreAsync` becomes: cheap unlocked guard read → ingest
+  (autocommit rows, `embed_state = 'pending'`, exactly like the direct-ingest path) → short
+  `BEGIN IMMEDIATE` { guard re-check (authoritative; a racing digest that lost re-chunked for
+  nothing but writes nothing twice — `PruneChunksNotIn` keeps by hash) → prune-not-in for both
+  corpora → queue-row restore → fingerprint → `COMMIT` }. Readers see old+new chunks for the prune
+  window instead of a chunkless file — the trade the direct-ingest path already made. If the lane
+  finds `FileIngestor` can split cleanly into *prepare chunks* / *write rows* so the insert also
+  happens inside the short transaction, that is the better shape; choose and record in the PR.
+- **B. Batch the drain's marks.** One `BEGIN IMMEDIATE` per inference batch (`BatchSize` rows) in
+  `EntryEmbedder.EmbedAsync`, commit after the batch's `MarkEmbedded`s: 128 acquisitions → 1–4, and a
+  BUSY now loses at most one batch's inference, not the pass. Inference stays outside the transaction.
+- **C. Retry the metrics flush.** `MetricsFlusher` retries a BUSY/LOCKED batch with a short bounded
+  backoff (3 attempts) before dropping; the drop line stays for the final failure. No new EventId
+  unless a retry line is wanted — then register it.
+- **Not in this WP (session-5 gate):** an in-process single-writer gate (a FIFO async mutex in the
+  connection factory around write transactions) and raising `busy_timeout`; both mask the symptom
+  the fix above removes and both touch every writer.
+
+**RED tests (no wall-clock assertions):**
+
+- `ReplaceHoldsTheLockOnlyForTheWriteTests` (Integration/Storage): a `FileIngestor` double whose
+  `IngestFileAsync` blocks on a `TaskCompletionSource` — while it is blocked, a second connection's
+  `BEGIN IMMEDIATE` must **succeed** (today it throws SQLITE_BUSY after the timeout; shorten
+  `busy_timeout` on the probe connection to keep the RED fast). Release, assert the file's rows,
+  fingerprint and pruned chunks are exactly the post-replace state.
+- `DigestConvoyDoesNotStarveTheDrainTests` (Integration, Slow): concurrency-4 digest over four
+  files whose chunking is slowed by the same double, with `EmbedPendingBatchAsync` running
+  concurrently — zero `SqliteException` with `SqliteErrorCode == 5` across the run.
+- `EntryEmbedderMarksABatchInOneTransactionTests`: a connection spy counts `BEGIN`/`COMMIT`
+  pairs per `EmbedAsync` of `2 × BatchSize` rows → exactly 2 (today 0 — autocommit).
+- `MetricsFlusherRetriesBusyTests`: a store double throwing `SqliteException(5)` twice then
+  succeeding → batch saved, not dropped; three times → dropped with 970 logged once.
+
+**Acceptance:** every RED above seen failing then green; `dotnet build` 0 warnings; the gate filter
+`ReplaceHoldsTheLock|DigestConvoy|EntryEmbedderMarksABatch|MetricsFlusherRetries|Replace|FileIngestor|EmbedDrain|WatchPipeline|CodeIngestor|LoggerMessageEventId`
+green; `docs/reference/agent-memory-server.md` watch-digest paragraph and
+`docs/how-to/read-performance-metrics.md` (`write.replace.held_ms` now bounded by the write, not the
+chunker) updated. **Proof on the live bank is the owner's**: after the release, `write.replace.held_ms`
+p95 in `memory_performance` should drop to the insert cost and the 1005/970/503/513 BUSY lines stop.
+
+**Sequencing:** after #548 (WP11) merges — same files (`Replace.cs`, `EmbedDrainService.cs`,
+`MetricsFlusher.cs`). One lane, dotnet-engineer, Sonnet; Opus review. **Lane:** `task/pd4-wp12-lock-held-through-chunker`.
 
 ## Sequencing — four waves (rev 2.0, WP5 dropped and WP10 moved out)
 
