@@ -69,7 +69,7 @@ public sealed class HeldOutRetrievalGateTests : IDisposable
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
-            PinnedQueryVectors.EmbeddingService());
+            PinnedQueryVectors.EmbeddingService(), null, null, null, null, null, null, null);
 
         (_, _fileHashes) = CorpusHashMap.Build(dbPath,
             BaselineQueryCatalog.Load().Where(q => q.ExpectedSource is not null).Select(q => q.ExpectedSource!));

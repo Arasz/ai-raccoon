@@ -45,7 +45,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
         var options = TestData.CreateInfrastructureOptions(_dataRoot);
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
-            new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, TestData.CreateEmbeddingService());
+            new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
 
         _canonical = Guid.CreateVersion7().ToString("D");
         _respelled = $"{{{_canonical.ToUpperInvariant()}}}"; // braced, upper-case — a re-spelling ProjectId.TryCanonicalize must fold back down

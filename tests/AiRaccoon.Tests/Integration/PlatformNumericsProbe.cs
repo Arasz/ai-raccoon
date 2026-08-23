@@ -111,7 +111,7 @@ public sealed class PlatformNumericsProbe : IDisposable
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(),
-            new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService());
+            new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
 
         var scores = new List<double>();
         foreach (var query in LoadQueries().Where(q => GateQueryIds.Contains(q.Id) && q.ExpectedSource is not null))

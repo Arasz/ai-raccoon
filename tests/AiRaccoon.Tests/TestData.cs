@@ -68,13 +68,13 @@ public static class TestData
         IMarkdownChunker markdownChunker,
         TimeProvider timeProvider,
         IEmbeddingService embeddings,
-        IModelMigrationLease? modelMigrationLease = null,
-        IJsonChunker? jsonChunker = null,
-        IEnumerable<INoiseFilterPolicy>? noisePolicies = null,
-        ISettingsStore? settings = null,
-        ICodeChunker? codeChunker = null,
-        IIgnoreRulesProvider? ignoreRulesProvider = null,
-        IMeasurementRecorder? measurements = null)
+        IModelMigrationLease? modelMigrationLease,
+        IJsonChunker? jsonChunker,
+        IEnumerable<INoiseFilterPolicy>? noisePolicies,
+        ISettingsStore? settings,
+        ICodeChunker? codeChunker,
+        IIgnoreRulesProvider? ignoreRulesProvider,
+        IMeasurementRecorder? measurements)
     {
         jsonChunker ??= RealJsonChunker(markdownChunker);
         var embedder = new EntryEmbedder(embeddings, modelMigrationLease ?? ModelMigrationLease, timeProvider);

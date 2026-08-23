@@ -34,7 +34,7 @@ public sealed class ReplaceLockMetricsTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
-            TestData.CreateEmbeddingService(), measurements: _measurements);
+            TestData.CreateEmbeddingService(), measurements: _measurements, modelMigrationLease: null, jsonChunker: null, noisePolicies: null, settings: null, codeChunker: null, ignoreRulesProvider: null);
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);

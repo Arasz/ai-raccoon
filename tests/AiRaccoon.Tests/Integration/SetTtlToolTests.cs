@@ -31,7 +31,7 @@ public sealed class SetTtlToolTests : IDisposable
         var options = TestData.CreateInfrastructureOptions(_dataRoot);
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _store = TestData.CreateMemoryStore(factory,
-            NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), _clock, TestData.CreateEmbeddingService());
+            NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), _clock, TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
         var guard = new MemoryAccessGuard(_store);
         _tools = new SweepTools(
             new SweepService(_store, _clock),

@@ -43,7 +43,7 @@ public sealed class ChunkBudgetIsEngineAwareTests : IAsyncLifetime
             NoOpMeasurementRecorder.Instance, TimeProvider.System);
         var clock = new FakeTimeProvider(FixedNow);
         _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), clock,
-            embeddings);
+            embeddings, null, null, null, null, null, null, null);
         await TestData.ConfigureAndDrainEmbeddingAsync(_store, factory, embeddings,
             "local", null, null, TestContext.Current.CancellationToken, clock);
     }

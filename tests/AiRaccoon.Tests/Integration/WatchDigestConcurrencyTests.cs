@@ -180,7 +180,7 @@ public sealed class WatchDigestConcurrencyTests
             Factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
             var time = new FakeTimeProvider(FixedNow);
             Memory = TestData.CreateMemoryStore(Factory,
-                NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(Factory), Gate, time, TestData.CreateEmbeddingService());
+                NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(Factory), Gate, time, TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
             WatchStore = new WatchStore(Factory);
             Executor = new WatchDigestExecutor(Memory, WatchStore, time, new IgnoreRulesProvider(),
                 new Lazy<IWatchScanInitiator>(() => new NoOpWatchScanInitiator()), TestData.NewEmbedDrainPump());

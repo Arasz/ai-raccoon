@@ -83,7 +83,7 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
         Resolver = new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
             [new StubEnvProvider(EnvPassphrase), new BitwardenEncryptionKeyProvider(runner)]);
         Bank = new SqliteConnectionFactory(options, Resolver);
-        ConfigStore = TestData.CreateMemoryStore(Bank, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(Bank), new StubChunker(), TimeProvider, TestData.CreateEmbeddingService());
+        ConfigStore = TestData.CreateMemoryStore(Bank, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(Bank), new StubChunker(), TimeProvider, TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
     }
 
     /// <summary>Directory holding the fake bws script + key fixtures (installed lazily by <see cref="InstallFakeBws"/>).</summary>

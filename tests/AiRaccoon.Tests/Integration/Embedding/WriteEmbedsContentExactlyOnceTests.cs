@@ -47,7 +47,7 @@ public sealed class WriteEmbedsContentExactlyOnceTests : IAsyncLifetime
         var clock = new FakeTimeProvider(FixedNow);
         var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), clock,
-            embeddings);
+            embeddings, null, null, null, null, null, null, null);
         await TestData.ConfigureAndDrainEmbeddingAsync(store, _factory, embeddings,
             "local", null, null, TestContext.Current.CancellationToken, clock);
 

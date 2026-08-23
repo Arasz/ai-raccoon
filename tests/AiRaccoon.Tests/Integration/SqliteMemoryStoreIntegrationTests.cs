@@ -37,7 +37,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
-            TestData.CreateEmbeddingService());
+            TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
         _workspaces = new WorkspaceService(_store, new SqliteWorkspaceStore(_factory), new FakeTimeProvider(FixedNow));
         _queue = new SqlitePromotionQueueStore(_factory, new FakeTimeProvider(FixedNow));
     }
@@ -473,7 +473,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         await ScopeDataRootAsync();
         var storeWithNoOpChunker = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
-            TestData.CreateEmbeddingService(), codeChunker: new NoOpCodeChunker(NullLogger<NoOpCodeChunker>.Instance));
+            TestData.CreateEmbeddingService(), modelMigrationLease: null, jsonChunker: null, noisePolicies: null, settings: null, codeChunker: new NoOpCodeChunker(NullLogger<NoOpCodeChunker>.Instance), ignoreRulesProvider: null, measurements: null);
 
         var first = await storeWithNoOpChunker.ReplaceIfFileChangedAsync(
             "acme", file, "unchanged-hash", TestContext.Current.CancellationToken);
@@ -488,7 +488,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
 
         var storeWithRealChunker = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
-            TestData.CreateEmbeddingService(), codeChunker: new StubCodeChunker());
+            TestData.CreateEmbeddingService(), modelMigrationLease: null, jsonChunker: null, noisePolicies: null, settings: null, codeChunker: new StubCodeChunker(), ignoreRulesProvider: null, measurements: null);
 
         var third = await storeWithRealChunker.ReplaceIfFileChangedAsync(
             "acme", file, "unchanged-hash", TestContext.Current.CancellationToken);

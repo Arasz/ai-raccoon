@@ -102,7 +102,7 @@ public sealed class SqliteMemoryStoreNoiseEntryTests : IDisposable
     {
         var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
-            TestData.CreateEmbeddingService(), noisePolicies: [new HermesProcessNoisePolicy()]);
+            TestData.CreateEmbeddingService(), noisePolicies: [new HermesProcessNoisePolicy()], modelMigrationLease: null, jsonChunker: null, settings: null, codeChunker: null, ignoreRulesProvider: null, measurements: null);
 
         var entry = await store.WriteAsync(new MemoryWriteRequest("proj-1", RejectedContent), TestContext.Current.CancellationToken);
         entry.Stored.ShouldBeFalse();

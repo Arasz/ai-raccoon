@@ -36,7 +36,7 @@ public sealed class SqliteRepairStoreTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _memoryStore = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
-            TestData.CreateEmbeddingService());
+            TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]);
         _store = new SqliteRepairStore(_factory, matcher, TestData.CreateEmbeddingService(), _memoryStore, new FakeTimeProvider(FixedNow));
     }

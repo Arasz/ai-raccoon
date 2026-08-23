@@ -53,7 +53,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
         // does not exist, so nothing but the assertions themselves can touch the metrics table.
         var sourceStore = new SqliteMemorySourceStore(_factory);
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, sourceStore,
-            TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService());
+            TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
         var recorder = new MetricsRecorder(_buffer, NullLogger<MetricsRecorder>.Instance);
         _tools = BuildTools(recorder);
     }

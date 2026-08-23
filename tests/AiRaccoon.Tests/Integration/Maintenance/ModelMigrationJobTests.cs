@@ -38,7 +38,7 @@ public sealed class ModelMigrationJobTests : IAsyncLifetime
         _time = new FakeTimeProvider(FixedNow);
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), _time,
-            TestData.CreateEmbeddingService());
+            TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
 
         _otherModelPath = Path.Combine(Path.GetTempPath(), "ai-raccoon-custom-model", Guid.NewGuid().ToString("N"),
             BundledModel.ModelFileName);

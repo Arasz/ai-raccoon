@@ -69,7 +69,7 @@ public sealed class SourceAffinitySweepTests : IDisposable
         // sweeps (docs/adr/0049, docs/adr/0050). The corpus vectors in docs-memory.db were already
         // fixed; the query vector was the one un-pinned input.
         _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
-            PinnedQueryVectors.EmbeddingService());
+            PinnedQueryVectors.EmbeddingService(), null, null, null, null, null, null, null);
 
         // Derives structured-path -> hash directly from the regenerated corpus (WP4b,
         // docs/plans/2026-08-14-code-quality-improvement-plan.md) instead of the retired

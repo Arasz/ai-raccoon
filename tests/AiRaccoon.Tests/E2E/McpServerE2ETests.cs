@@ -261,7 +261,7 @@ public class McpServerE2ETests : IAsyncLifetime
             new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
                 [new EnvEncryptionKeyProvider()]));
         var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), TimeProvider.System,
-            TestData.CreateEmbeddingService());
+            TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
         var exit = await TestData.CreateConfigCommands(store, settings: new SettingsCommands(), sync: new SyncCommands(),
                 modelMigrations: store)
             .RunAsync(parsed, new StandardStreams(TextReader.Null, stdout, stderr), CancellationToken.None);

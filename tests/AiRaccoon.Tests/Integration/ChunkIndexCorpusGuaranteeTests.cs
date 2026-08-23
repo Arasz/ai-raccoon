@@ -44,7 +44,7 @@ public sealed class ChunkIndexCorpusGuaranteeTests : IDisposable
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(factory), chunker, new FakeTimeProvider(DateTimeOffset.UtcNow),
-            TestData.CreateEmbeddingService());
+            TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
         await store.SetSettingAsync(IngestScopeKeys.ScopeProject(ProjectId), IngestScopeKeys.Serialize([docsRoot]),
             TestContext.Current.CancellationToken);
 
