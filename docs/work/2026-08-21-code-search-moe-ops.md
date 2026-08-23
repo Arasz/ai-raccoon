@@ -231,7 +231,7 @@ Existing banks can hold nested watches (old versions allowed them — no overlap
 
 | # | Risk | Evidence / mitigation | Grade |
 |---|---|---|---|
-| 1 | **Model provenance** — single author, 66 downloads, 2 weeks old, MIT | Registry pin: committed SHA-256 pin for `faxenoff/code-daemon-embed-v1` (engine plan D8 pattern; `BundledResource.IsVerified`); first download TOFU pin re-verified on every load; **eval before any default flip**; A/B vs `jinaai/jina-embeddings-v2-base-code` (154 MB int8, 768-dim, Apache-2.0, 396k downloads — the established fallback). Never PTQ the INT8 QAT artifact (card-measured hit@1 .200→.133) | READ + MEASURED (exploration §1/§1.1/§6.1) |
+| 1 | **Model provenance** — single author, 66 downloads, 2 weeks old, MIT | Registry pin: committed SHA-256 pin for `faxenoff/code-daemon-embed-v1` (engine plan D8 pattern; `BundledResource.IsVerified`); first download TOFU pin re-verified on every load; **eval before any default flip**; A/B vs `jinaai/jina-embeddings-v2-base-code` (154 MB int8, 768-dim, Apache-2.0, 396k downloads — the established fallback). ~~Never PTQ the INT8 QAT artifact~~ — the artifact we run is **fp32**, so PTQ is permitted; the card's hit@1 .200→.133 is the cost to weigh, not a prohibition **CORRECTED 2026-08-23** (fp32, not INT8 — see Amendments) | READ + MEASURED (exploration §1/§1.1/§6.1) |
 | 2 | **Chunker quality without AST** | v1 line-range heuristics approximate function boundaries; eval settles it — the eval set must include a Python repo (indentation-based splitting is the weak case, exploration §6.2); tree-sitter symbol extraction is the v2 lever if nDCG fails | READ (exploration §6.2) |
 | 3 | **Throughput** — 56 texts/s on M4 CPU (spike) | 10k-unit repo ≈ 3 min initial index; watch deltas in seconds. Initial index of a large repo is the only real wait; document expected wall time in the how-to; 700k-unit repos are the GPU/OpenVINO story, not local default | MEASURED (spike, exploration §1/§6.3) |
 | 4 | **187 MB download, ~50 MB resident** | Under the 500 MB `--yes` threshold; disk-space check exists in the download verb (engine plan D4); two sessions in-process (23 MB MiniLM + ~50 MB code) is fine | READ (engine plan D4) |
@@ -314,3 +314,36 @@ Run against a **bank copy** first, then a real repo:
 - **H3 (HYPOTHESIS):** initial-index wall time on user repos tracks the spike's 56 texts/s — real repos vary; P5 measures on the eval repos.
 - **H4 (HYPOTHESIS):** the existing outbox/lease machinery expresses a per-corpus code drain without new machinery — engineer lane verifies in P1/P4.
 - **H5 (HYPOTHESIS):** the digest-gate Ddl rerun is safe on banks with in-flight sync state — the rerun is additive-only CREATE IF NOT EXISTS, but a sync test on a mid-cycle bank copy is in G1.
+
+## Amendments
+
+### 2026-08-23 — the shipped code model is fp32, not INT8 QAT (WP7 desk half, PR #536)
+
+**What was wrong:** this document records `faxenoff/code-daemon-embed-v1` as an INT8
+quantization-aware-trained artifact in its §4 risk table, where it is carried forward as a live ops constraint. The file AiRaccoon downloads and runs is **fp32**.
+
+**Measured 2026-08-23** by loading the artifact that
+`model download faxenoff/code-daemon-embed-v1` places on disk — 187,286,767 B, sha256
+`57bcfc6aed11ea239d01f2b124f2f948456f2284ad6e2c4744452509c9c25ca9`, the value pinned in that
+directory's own `ai-raccoon.manifest.json`:
+
+| | Recorded here | Measured |
+|---|---|---|
+| Weights | INT8, QAT, Q/DQ nodes carry trained scales | **fp32** — 70 initializers, **all `FLOAT`**, 46,801,920 elements = 187,207,680 raw bytes |
+| Quantized ops | implied throughout | **zero** `QuantizeLinear`, `DequantizeLinear`, `MatMulInteger` or `QGemm` in 373 nodes |
+| Why 187 MB reads as int8 | — | it does not: 46.8M parameters x 4 bytes **is** 187 MB. A 46.8M-parameter int8 graph would be ~47 MB — which is exactly what quantizing this one produces |
+
+Reproduced independently during review of PR #536.
+
+**What it changes:** the model card's *"never PTQ the INT8 QAT artifact"* warning refers to a
+**different file** (`model_int8qdt.onnx`) than the one we run, so it does not forbid quantizing the
+fp32 graph we actually have. It remains a live warning about what quantization costs this model
+family's retrieval — hit@1 .200 -> .133 — and WP7's desk half measured a fp32-vs-int8 cosine of
+**0.964** (against a 0.9999 negative control), which points the same way. **Nothing shipped
+changes:** the engine has always been running this fp32 graph, so every throughput and
+resident-size figure taken against it stands; only the label was wrong.
+
+**Not rewritten:** figures elsewhere in this document that merely *label* the model INT8 while
+reporting something else measured correctly are historical and read as such.
+
+**Full record:** `docs/work/2026-08-23-code-engine-inference-research.md` §2.

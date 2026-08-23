@@ -11,7 +11,7 @@ or code-only tools?
 **Useful: yes, with two conditions.** The model is a purpose-built dense channel for a hybrid
 retriever over short code units and short keyword-bag queries — the exact architecture
 AiRaccoon already runs for memory. A spike in this worktree proved it runs in the current
-stack (OnnxRuntime 1.29.0 CPU, `Microsoft.ML.Tokenizers` SentencePiece, 187 MB INT8 ONNX,
+stack (OnnxRuntime 1.29.0 CPU, `Microsoft.ML.Tokenizers` SentencePiece, 187 MB ~~INT8~~ **fp32** ONNX,
 unit-norm 768-dim output, discriminates related from unrelated code, ~56 texts/s on this M4).
 The conditions: (1) the engine-generalization work already planned in
 `support-for-other-embedding-models` (manifest-driven tokenizer/pooling/dims) is a hard
@@ -45,8 +45,8 @@ full 2026-08-21), `config.json`, `tokenizer_config.json`, `manifest.json`, and a
 | Symmetry | no `query:`/`passage:` prefix; queries and documents encoded identically | READ (card) |
 | Inputs/outputs | `input_ids` + `attention_mask`, both int64 `[B, seq]`; one output (misleadingly named `last_hidden_state`, actually the pooled vector) | VERIFIED (spike) |
 | Special token ids | card: raw-SentencePiece indexing `pad=0 unk=1 bos=2 eos=3`; `config.json` says `bos=0 eos=2 pad=1` (stale copy from the e5 base — **the card wins**) | VERIFIED (spike: `<s>`→2, `</s>`→3, `<pad>`→0, `<unk>`→1) |
-| Weights | INT8 from quantization-aware training (Q/DQ nodes carry trained scales); **do not run PTQ/calibration over it** — card measured hit@1 .200 → .133 | READ (card warning) |
-| Artifact | `model_int8qdt.onnx` 187,490,530 B (repo's own manifest: dim 768, max_tokens 128, int8); `sentencepiece.bpe.model` 626,759 B; fp8 variant (64 MB) exists for GPU | MEASURED (HF tree API) |
+| Weights | ~~INT8 from quantization-aware training (Q/DQ nodes carry trained scales)~~ **fp32 — 70 initializers, all `FLOAT`, zero quantized ops**; the *"do not run PTQ/calibration over it"* warning (card-measured hit@1 .200 → .133) is about the repo's `model_int8qdt.onnx`, not this file | **CORRECTED 2026-08-23** (was: READ (card warning)) |
+| Artifact | the file we download and run is **`model.onnx`, 187,286,767 B, fp32** (sha256 `57bcfc6a…c25ca9`); `model_int8qdt.onnx` 187,490,530 B is a *different* repo file we do not select; `sentencepiece.bpe.model` 626,759 B; fp8 variant (64 MB) exists for GPU | **CORRECTED 2026-08-23** (was: MEASURED (HF tree API) — which read the repo tree, not the artifact) |
 | License / provenance | MIT; single author `faxenoff`, 66 downloads, 0 likes, repo created ~2026-08-05 | MEASURED (HF API) |
 | Design fit | trained to be the *dense half of a hybrid retriever* on training queries imitating real captured agent traffic — short keyword bags, behaviour descriptions, identifier fragments; listwise-KL distillation from Qwen3-Reranker-4B (the card claims a runtime reranker measured net-negative on top of it) | READ (card) |
 | Throughput (card) | TensorRT RTX 5060: 5,464–72,587 texts/s by bucket; OpenVINO Intel Core Ultra: CPU 237–702, iGPU 420–1,092, NPU 169–565 texts/s | READ (card) |
@@ -78,7 +78,7 @@ leaderboard (archersama.github.io/coir), all read 2026-08-21.
 
 | Model | Params | Dims | Ctx | ONNX shipped | License | Provenance | Fit for AiRaccoon |
 |---|---|---|---|---|---|---|---|
-| **faxenoff/code-daemon-embed-v1** | 46.8M | 768 | **128 hard cap** | yes (INT8 QAT 187 MB) | MIT | 66 dl / 0 likes / 2 weeks | purpose-built hybrid dense channel, agent-style queries, rerank distilled — but unproven |
+| **faxenoff/code-daemon-embed-v1** | 46.8M | 768 | **128 hard cap** | yes (~~INT8 QAT~~ **fp32** 187 MB) **CORRECTED 2026-08-23** (fp32, not INT8 — see Amendments) | MIT | 66 dl / 0 likes / 2 weeks | purpose-built hybrid dense channel, agent-style queries, rerank distilled — but unproven |
 | **jinaai/jina-embeddings-v2-base-code** | 161M | 768 | 8192 (ALiBi) | yes (int8 154 MB) | Apache-2.0 | 396k dl / 143 likes | established, 30 languages, symmetric, no prefix; generic code embeddings, not agent-query-trained |
 | nomic-ai/CodeRankEmbed | 137M | 768 | 8192 | **no** (safetensors) | MIT | 414k dl / 77 likes | CoIR-competitive; needs ONNX export + `tokenizer-json` family (deferred in engine plan) |
 | codesage/codesage-small-v2 | ~130M | 1024 | 2048 | no | Apache-2.0 | 1.3k dl | CoIR strong (large-v2 64.18 avg); no ONNX, dims 1024 |
@@ -457,3 +457,34 @@ a merely different one — that equality is what made the flagship model unactiv
 **Still open, deliberately:** whether 510-token code chunks *retrieve* better than 126-token ones is
 a separate question this measurement does not answer — the model card recommends short units. That
 belongs to the retrieval-eval lane, not to a graph measurement.
+
+### 2026-08-23 — the shipped code model is fp32, not INT8 QAT (WP7 desk half, PR #536)
+
+**What was wrong:** this document records `faxenoff/code-daemon-embed-v1` as an INT8
+quantization-aware-trained artifact in its §1 facts table (`Weights`, `Artifact`) and its model-comparison table. The file AiRaccoon downloads and runs is **fp32**.
+
+**Measured 2026-08-23** by loading the artifact that
+`model download faxenoff/code-daemon-embed-v1` places on disk — 187,286,767 B, sha256
+`57bcfc6aed11ea239d01f2b124f2f948456f2284ad6e2c4744452509c9c25ca9`, the value pinned in that
+directory's own `ai-raccoon.manifest.json`:
+
+| | Recorded here | Measured |
+|---|---|---|
+| Weights | INT8, QAT, Q/DQ nodes carry trained scales | **fp32** — 70 initializers, **all `FLOAT`**, 46,801,920 elements = 187,207,680 raw bytes |
+| Quantized ops | implied throughout | **zero** `QuantizeLinear`, `DequantizeLinear`, `MatMulInteger` or `QGemm` in 373 nodes |
+| Why 187 MB reads as int8 | — | it does not: 46.8M parameters x 4 bytes **is** 187 MB. A 46.8M-parameter int8 graph would be ~47 MB — which is exactly what quantizing this one produces |
+
+Reproduced independently during review of PR #536.
+
+**What it changes:** the model card's *"never PTQ the INT8 QAT artifact"* warning refers to a
+**different file** (`model_int8qdt.onnx`) than the one we run, so it does not forbid quantizing the
+fp32 graph we actually have. It remains a live warning about what quantization costs this model
+family's retrieval — hit@1 .200 -> .133 — and WP7's desk half measured a fp32-vs-int8 cosine of
+**0.964** (against a 0.9999 negative control), which points the same way. **Nothing shipped
+changes:** the engine has always been running this fp32 graph, so every throughput and
+resident-size figure taken against it stands; only the label was wrong.
+
+**Not rewritten:** figures elsewhere in this document that merely *label* the model INT8 while
+reporting something else measured correctly are historical and read as such.
+
+**Full record:** `docs/work/2026-08-23-code-engine-inference-research.md` §2.

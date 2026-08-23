@@ -31,7 +31,7 @@ per-file sha256s (D7), `ai-raccoon model download <repo-id>` verb (D4/D8), `embe
 row (D2). This plan does not re-litigate those decisions; it builds on their contracts.
 
 **Code model (verified by spike, exploration §1):** `faxenoff/code-daemon-embed-v1` — 768-dim,
-INT8 QAT ONNX 187 MB, sentencepiece tokenizer (`<s>`=2 `</s>`=3 `<pad>`=0 `<unk>`=1), pooling +
+~~INT8 QAT~~ **fp32** ONNX 187 MB **CORRECTED 2026-08-23** (fp32, not INT8 — see Amendments), sentencepiece tokenizer (`<s>`=2 `</s>`=3 `<pad>`=0 `<unk>`=1), pooling +
 L2 fused in the graph → `pooling.mode = model-output`, 128-token hard cap → chunk budget **126**
 (ctx−2), symmetric (no query prefix), MIT. A/B candidate: `jinaai/jina-embeddings-v2-base-code`
 (768-dim, Apache-2.0, ONNX int8 154 MB; pooling shape unverified — parity probe gates its arm).
@@ -346,8 +346,9 @@ precondition, GREEN assertion, home, kind. RED-witness logistics: QA §5.
 
 ## 8. Risks (condensed; full table in ops §4)
 
-Model provenance (registry pin + eval-before-default + jina A/B; never PTQ the INT8 QAT
-artifact), chunker quality without AST (Python repo in eval-set + span-overlap measure;
+Model provenance (registry pin + eval-before-default + jina A/B; ~~never PTQ the INT8 QAT
+artifact~~ — the artifact we run is **fp32**, so PTQ is permitted; the card's hit@1 .200 → .133
+figure stands as the cost to weigh, not a prohibition **CORRECTED 2026-08-23** (fp32, not INT8 — see Amendments)), chunker quality without AST (Python repo in eval-set + span-overlap measure;
 tree-sitter v2 lever), throughput 56 texts/s (incremental watch deltas; initial index of a
 large repo is the only wait; dependency trees excluded by deny set), sync push leakage (fixed
 by DROP-strip, both-paths test), re-embed blocking memory (impossible by design — no outbox,
@@ -547,3 +548,34 @@ on issue #422; the source document carries its own amendment.
 and `SqliteCodeEngineStore.ActivateCodeEngineAsync` refuses a manifest *narrower* than the chunker's
 budget instead of requiring exact equality with it. Every `126` and `128` in the body text above is
 historical.
+
+### 2026-08-23 — the shipped code model is fp32, not INT8 QAT (WP7 desk half, PR #536)
+
+**What was wrong:** this document records `faxenoff/code-daemon-embed-v1` as an INT8
+quantization-aware-trained artifact in its §1 model line and its condensed risk list. The file AiRaccoon downloads and runs is **fp32**.
+
+**Measured 2026-08-23** by loading the artifact that
+`model download faxenoff/code-daemon-embed-v1` places on disk — 187,286,767 B, sha256
+`57bcfc6aed11ea239d01f2b124f2f948456f2284ad6e2c4744452509c9c25ca9`, the value pinned in that
+directory's own `ai-raccoon.manifest.json`:
+
+| | Recorded here | Measured |
+|---|---|---|
+| Weights | INT8, QAT, Q/DQ nodes carry trained scales | **fp32** — 70 initializers, **all `FLOAT`**, 46,801,920 elements = 187,207,680 raw bytes |
+| Quantized ops | implied throughout | **zero** `QuantizeLinear`, `DequantizeLinear`, `MatMulInteger` or `QGemm` in 373 nodes |
+| Why 187 MB reads as int8 | — | it does not: 46.8M parameters x 4 bytes **is** 187 MB. A 46.8M-parameter int8 graph would be ~47 MB — which is exactly what quantizing this one produces |
+
+Reproduced independently during review of PR #536.
+
+**What it changes:** the model card's *"never PTQ the INT8 QAT artifact"* warning refers to a
+**different file** (`model_int8qdt.onnx`) than the one we run, so it does not forbid quantizing the
+fp32 graph we actually have. It remains a live warning about what quantization costs this model
+family's retrieval — hit@1 .200 -> .133 — and WP7's desk half measured a fp32-vs-int8 cosine of
+**0.964** (against a 0.9999 negative control), which points the same way. **Nothing shipped
+changes:** the engine has always been running this fp32 graph, so every throughput and
+resident-size figure taken against it stands; only the label was wrong.
+
+**Not rewritten:** figures elsewhere in this document that merely *label* the model INT8 while
+reporting something else measured correctly are historical and read as such.
+
+**Full record:** `docs/work/2026-08-23-code-engine-inference-research.md` §2.

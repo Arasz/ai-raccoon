@@ -23,8 +23,9 @@ Every figure below carries the command that produced it and a tag:
   weight sits behind a `Transpose`. A three-step recipe does produce a genuine 47 MB / 25
   `MatMulInteger` artifact, and that artifact's vectors sit at **cos ≈ 0.964** against fp32 on a
   smoke corpus. That is not a drop-in.
-- **Two documents in this repo state the opposite of the graph.** `docs/work/2026-08-21-code-search-exploration.md:14,48,49,81`
-  calls the shipped code model "INT8 QAT". It is fp32 — all 70 initializers are `FLOAT`. §2 below.
+- **Five dated work documents state the opposite of the graph.** They call the shipped code model
+  "INT8 QAT". It is fp32 — all 70 initializers are `FLOAT`. The **published** docs are clean, so the
+  blast radius is bounded to `docs/work/`. Corrected in place, dated, in §2 below.
 
 Nothing here is a throughput number. Throughput is wave 3's job, on a quiet machine, and §6 names
 its protocol and its pass/fail lines **before** it runs.
@@ -90,17 +91,25 @@ before the call, not after it.
 
 ## 2. Correction: the shipped code model is fp32, not INT8 QAT
 
-The plan's §Review (c) says the code engine is "the fp32 outlier". Three other documents say it is
-INT8:
+The plan's §Review (c) says the code engine is "the fp32 outlier". **Five** dated work documents say
+it is INT8 — the list derived by `grep -rn 'INT8 QAT\|int8 QAT' docs/` plus a broader `INT8` sweep of
+the same five files, not assembled by hand:
 
-- `docs/work/2026-08-21-code-search-exploration.md:14` — *"187 MB INT8 ONNX"*
-- `:48` — *"INT8 from quantization-aware training (Q/DQ nodes carry trained scales); **do not run
-  PTQ/calibration over it** — card measured hit@1 .200 → .133"*
-- `:49` — *"`model_int8qdt.onnx` 187,490,530 B"*
-- `:81` — *"yes (INT8 QAT 187 MB)"*
-- `docs/work/2026-08-21-code-search-moe-ops.md:234` carries the PTQ warning forward into the risk table.
+| File | Lines | What it says |
+|---|---|---|
+| `docs/work/2026-08-21-code-search-exploration.md` | `:14`, `:48`, `:49`, `:81` | *"187 MB INT8 ONNX"*; *"INT8 from quantization-aware training (Q/DQ nodes carry trained scales); **do not run PTQ/calibration over it** — card measured hit@1 .200 → .133"*; *"`model_int8qdt.onnx` 187,490,530 B"*; *"yes (INT8 QAT 187 MB)"* |
+| `docs/work/2026-08-21-code-search-implementation-plan.md` | `:34`, `:349` | *"INT8 QAT ONNX 187 MB"*; *"never PTQ the INT8 QAT artifact"* — carried as a **live constraint** in the condensed risk list |
+| `docs/work/2026-08-21-code-search-moe-ops.md` | `:234` | the same PTQ prohibition, in the §4 risk table |
+| `docs/work/2026-08-21-code-search-moe-architecture.md` | `:21` | *"768-dim INT8 QAT ONNX 187 MB"*, quoting the exploration record |
+| `docs/work/2026-08-21-code-search-moe-engineer.md` | `:32` | *"768-dim INT8 QAT ONNX 187 MB"*, in a row graded **"Code model (verified)"** |
 
-**The plan is right and the exploration doc is wrong about the artifact we run.** Loading the file
+**The published docs are clean, and that bounds the blast radius.** `docs/reference/agent-memory-server.md:159,874,881`,
+`docs/how-to/configure-embedding-engines.md:14,31`, `docs/explanation/agent-memory-architecture.md:42`
+and `README.md:140` mention int8 **only** in connection with the bundled *MiniLM memory* model
+(`model_qint8_arm64.onnx`, ~23 MB), which is correct. No user-facing document has ever described the
+code model as quantized. **[measured]** — `grep -rn 'int8\|INT8' docs/reference/ docs/explanation/ docs/how-to/ README.md`.
+
+**The plan is right and all five work documents are wrong about the artifact we run.** Loading the file
 `model download faxenoff/code-daemon-embed-v1` actually places on disk
 (`<scratch>/codemodel/model.onnx`, 187,286,767 B, sha256
 `57bcfc6aed11ea239d01f2b124f2f948456f2284ad6e2c4744452509c9c25ca9` — the value pinned in that
@@ -127,9 +136,17 @@ Two consequences:
    a different file (`model_int8qdt.onnx`, per `:49`) than the one AiRaccoon downloads and runs. It
    remains a **warning about what quantization does to this model family's retrieval** — hit@1
    .200 → .133 is a 33 % relative loss — and §4.3 measures something consistent with it.
-2. **The exploration doc's four INT8 claims are stale or wrong and should be corrected**, per
-   *fix-what-you-find*. They are not corrected here: that document is a dated record of what was
-   believed on 2026-08-21, and this record is the correction. **[unverified]** whether the HF repo
+2. **All five documents are corrected in place, dated**, per *fix-what-you-find* — not left for a
+   follow-up and not rewritten silently. The repo already has the pattern for exactly this, in
+   exactly this file: `docs/work/2026-08-21-code-search-exploration.md:44` reads
+   `~~hard 128-token cap~~ **512** … **CORRECTED 2026-08-22**`, backed by an `## Amendments` section
+   at `:434` and mirrored by an amendment in `docs/adr/0088-…md:88-97`. *"Dated records are not
+   edited"* is **not** this project's convention, so this record follows the one that is: each
+   drifted line gets a struck-through in-place marker reading **CORRECTED 2026-08-23**, and each of
+   the five files gets one dated `## Amendments` entry (three of them needed the section created).
+   The two documents carrying *"never PTQ the INT8 QAT artifact"* as a **live ops constraint**
+   (`implementation-plan.md:349`, `moe-ops.md:234`) are the ones that most needed it: that
+   prohibition was gating a decision on a file we do not run. **[unverified]** whether the HF repo
    still hosts a separate `model_int8qdt.onnx` and whether `ModelDownloadPlanner` could ever select
    it — worth one check before wave 3, because if the repo already ships a QAT int8 artifact then
    the int8 arm is *"download the other file"* and §4's recipe is unnecessary.
