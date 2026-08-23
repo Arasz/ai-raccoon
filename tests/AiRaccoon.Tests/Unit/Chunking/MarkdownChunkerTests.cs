@@ -203,6 +203,21 @@ public class MarkdownChunkerTests
     }
 
     [Fact]
+    public void Split_HeadingIsSoleNewUnitWithNoContentOfItsOwn_StaysToLabelTheChunk_ProgressGuarantee()
+    {
+        // Progress guarantee: if a chunk's only new unit is a heading with nothing of its own
+        // (its section is empty, or already fully packed elsewhere), deferring it would remove
+        // every new unit and could never terminate. The "not the chunk's first new unit" guard
+        // keeps this heading in place, so it stays to label the chunk.
+        var text = "# Title\nAAAA\n\n## OnlyHeading\n";
+
+        var chunks = new MarkdownChunker(CharCount).Chunk(text, 15);
+
+        chunks.ShouldContain(chunk => chunk == "## OnlyHeading\n");
+        HeadingPathParser.Parse(chunks[^1]).ShouldBe("OnlyHeading");
+    }
+
+    [Fact]
     public void Split_SectionEndsExactlyAtChunkBoundary_IsNotOverDeferred()
     {
         // Seam in the #538 fix: DeferOpenSection decided "cut" by looking at units[cursor] alone.
@@ -236,6 +251,64 @@ public class MarkdownChunkerTests
         chunks[0].ShouldBe("# Title\n\n## Section A\nAAAA\n\n");
         chunks[0].ShouldNotContain("## Section B");
         HeadingPathParser.Parse(chunks[0]).ShouldBe("Title > Section A");
+    }
+
+    [Fact]
+    public void Split_DeferralWouldLeaveOnlyBlankNewUnits_IsRefusedRatherThanEmitAWhitespaceChunk()
+    {
+        // Gate finding on the #538 fix: deferring a cut heading could strip a chunk down to a
+        // single leading blank unit — "\n" — which FileIngestor has no filter for, so it becomes
+        // an entries row with a whitespace value and shifts every sibling's chunk_index. A
+        // deferral must never leave the chunk without a non-blank new unit; refuse it instead.
+        var text = "# T\n\n## A\nAAAAAAAA\n\n## B\nBBBB\nCCCC\nDDDD\n";
+
+        var chunks = new MarkdownChunker(CharCount).Chunk(text, 19);
+
+        chunks.ShouldAllBe(chunk => chunk.Trim().Length > 0, string.Join(" | ", chunks));
+    }
+
+    [Fact]
+    public void Split_CutAtASubHeading_DoesNotDeferBecauseHeadingPathParserIgnoresLevelsAboveTwo()
+    {
+        // HeadingPathParser discards heading levels > 2 (docs/adr/0004) and skips the "## Source:"
+        // provenance header, so a chunk boundary landing right after a "###" heading must not be
+        // read as a cut section — deferring on it would shrink the chunk without changing its
+        // label. Only the nearest level-1/2 heading (here "## Parent", which fits entirely before
+        // the next level-2 heading) governs the deferral decision.
+        var text = "# Title\n\n## Parent\nParentBody\n\n### Sub\n\n## NextSection\nNextBody\n";
+
+        var chunks = new MarkdownChunker(CharCount).Chunk(text, 39);
+
+        chunks[0].ShouldBe("# Title\n\n## Parent\nParentBody\n\n### Sub\n");
+        chunks[0].ShouldContain("### Sub");
+    }
+
+    [Fact]
+    public void Split_SourceProvenanceHeaderAtChunkTail_DoesNotDefer()
+    {
+        // The ingest provenance header ('## Source: <path>') is metadata HeadingPathParser
+        // explicitly skips (docs/adr/0004) — DeferOpenSection must not treat it as a section
+        // opener either, or a chunk boundary landing near one shrinks the chunk for no label
+        // change.
+        var text = "# Title\nBody1\n\n## Source: /a/b/c.md\nBody2\nBody3\n";
+
+        var chunks = new MarkdownChunker(CharCount).Chunk(text, 43);
+
+        chunks[0].ShouldContain("## Source: /a/b/c.md");
+    }
+
+    [Fact]
+    public void Split_ProvenanceHeaderCascade_DoesNotStripChunk0ToJustTheHeader()
+    {
+        // The exact cascade the gate found: the "## Source:" header, once correctly excluded from
+        // triggering its own deferral, no longer needs item 1's whitespace-chunk guard to save it
+        // from "# Title" repeatedly deferring back onto it — chunk 0 must keep real content.
+        var text = "## Source: /a/b/c.md\n\n# Title\n\n## A\nAAAA\nBBBB\n\n## B\nCCCC\n";
+
+        var chunks = new MarkdownChunker(CharCount).Chunk(text, 44);
+
+        chunks[0].ShouldNotBe("## Source: /a/b/c.md\n\n");
+        chunks.ShouldAllBe(chunk => chunk.Trim().Length > 0, string.Join(" | ", chunks));
     }
 
     [Fact]

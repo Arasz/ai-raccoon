@@ -109,33 +109,15 @@ public sealed class MarkdownChunker : IMarkdownChunker
         return (chunkUnits, c);
     }
 
-    /// <summary>
-    ///     A heading line must open the chunk that holds its section's content, not end the previous
-    ///     one empty-handed (#489, generalized by #538): the LAST heading among this chunk's new
-    ///     units defers, along with everything after it, whenever its section is actually cut by the
-    ///     chunk boundary. Two cases decide that:
-    ///     <list type="bullet">
-    ///         <item>The heading has no content of its own in this chunk (only blank lines, if
-    ///         anything, follow it before the chunk ends) — it always defers, matching #489's
-    ///         original tail-heading rule, so a chunk is never labelled by a heading that holds none
-    ///         of its own content.</item>
-    ///         <item>The heading has real content in this chunk — it defers only when a real (not
-    ///         blank) unit follows the chunk boundary and that unit is not itself a heading. A blank
-    ///         line is its own unit, and markdown normally has one before the next heading, so blank
-    ///         units past the boundary are skipped before asking what comes next: otherwise a section
-    ///         that ends exactly at the boundary would be misread as cut and deferred whole.</item>
-    ///     </list>
-    ///     The heading is never deferred when it is the chunk's first new unit; deferring it then
-    ///     would make no forward progress and would defer forever a section too long to fit in any
-    ///     one chunk.
-    /// </summary>
+    /// <summary>A heading opens the chunk holding its section; a cut section defers whole
+    /// (docs/adr/0048, #538 amendment).</summary>
     private static int DeferOpenSection(List<Unit> chunkUnits, int newUnitCount, List<Unit> units, int cursor)
     {
         var newStart = chunkUnits.Count - newUnitCount;
         var i = -1;
         for (var idx = chunkUnits.Count - 1; idx > newStart; idx--)
         {
-            if (IsHeadingUnit(chunkUnits[idx]))
+            if (IsSectionOpenerUnit(chunkUnits[idx]))
             {
                 i = idx;
                 break;
@@ -163,18 +145,30 @@ public sealed class MarkdownChunker : IMarkdownChunker
             return 0;
         }
 
-        var removeCount = chunkUnits.Count - i;
-        if (newUnitCount - removeCount < 1)
+        // A deferral must leave at least one contentful new unit behind, or the chunk collapses to
+        // whitespace or a lone provenance header (neither is indexable) — refuse it instead.
+        var remainingHasContent = false;
+        for (var idx = newStart; idx < i; idx++)
+        {
+            if (IsContentfulUnit(chunkUnits[idx]))
+            {
+                remainingHasContent = true;
+                break;
+            }
+        }
+
+        if (!remainingHasContent)
         {
             return 0;
         }
 
+        var removeCount = chunkUnits.Count - i;
         chunkUnits.RemoveRange(i, removeCount);
         return removeCount;
     }
 
     /// <summary>Skips blank-only units past the chunk boundary before asking whether real content
-    /// follows: only a real, non-heading unit proves the section continues past the boundary.</summary>
+    /// follows: only a real, non-opener unit proves the section continues past the boundary.</summary>
     private static bool SectionContinuesPastChunk(List<Unit> units, int cursor)
     {
         var idx = cursor;
@@ -183,7 +177,7 @@ public sealed class MarkdownChunker : IMarkdownChunker
             idx++;
         }
 
-        return idx < units.Count && !IsHeadingUnit(units[idx]);
+        return idx < units.Count && !IsSectionOpenerUnit(units[idx]);
     }
 
     private static List<Unit> BuildOverlay(List<Unit>? previousUnits, int overlayTokens)
@@ -457,7 +451,33 @@ public sealed class MarkdownChunker : IMarkdownChunker
 
     private static bool IsHeadingUnit(Unit unit) => unit.Lines.Count == 1 && IsHeadingLine(unit.Lines[0]);
 
+    /// <summary>The headings DeferOpenSection may cut a section on: levels 1-2, never the ingest
+    /// "## Source:" provenance header — the same headings HeadingPathParser keeps (docs/adr/0004).</summary>
+    private static bool IsSectionOpenerUnit(Unit unit)
+    {
+        if (!IsHeadingUnit(unit))
+        {
+            return false;
+        }
+
+        var trimmed = unit.Lines[0].TrimStart();
+        var level = 0;
+        while (level < trimmed.Length && trimmed[level] == '#')
+        {
+            level++;
+        }
+
+        return level <= 2 && !IsSourceProvenanceUnit(unit);
+    }
+
+    private static bool IsSourceProvenanceUnit(Unit unit) =>
+        unit.Lines.Count == 1 && unit.Lines[0].TrimStart().StartsWith("## Source:", StringComparison.OrdinalIgnoreCase);
+
     private static bool IsBlankUnit(Unit unit) => unit.Lines.Count == 1 && string.IsNullOrWhiteSpace(unit.Lines[0]);
+
+    /// <summary>A unit worth leaving behind after a deferral: neither blank nor a provenance
+    /// header, both invisible to HeadingPathParser and neither one real, indexable content.</summary>
+    private static bool IsContentfulUnit(Unit unit) => !IsBlankUnit(unit) && !IsSourceProvenanceUnit(unit);
 
     /// <summary>ATX heading, levels 1-6 (a bare '#' or '#Text' does not count) — same shape HeadingPathParser parses.</summary>
     private static bool IsHeadingLine(string line)
