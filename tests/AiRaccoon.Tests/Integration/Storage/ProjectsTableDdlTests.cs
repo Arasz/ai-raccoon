@@ -78,11 +78,18 @@ public sealed class ProjectsTableDdlTests
 
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
 
-        var columns = (await connection.QueryAsync<string>(new CommandDefinition(
-                "SELECT name FROM pragma_table_info('projects')",
+        var columns = (await connection.QueryAsync<(string Name, string Type, long IsRequired, long Pk)>(new CommandDefinition(
+                """SELECT name AS Name, type AS Type, "notnull" AS IsRequired, pk AS Pk FROM pragma_table_info('projects')""",
                 cancellationToken: TestContext.Current.CancellationToken)))
-            .ToHashSet(StringComparer.Ordinal);
-        columns.ShouldBe(["id", "name", "created_at"], ignoreOrder: true);
+            .ToDictionary(c => c.Name, StringComparer.Ordinal);
+
+        columns.Keys.ShouldBe(["id", "name", "created_at"], ignoreOrder: true);
+        columns["id"].Type.ShouldBe("TEXT");
+        columns["id"].Pk.ShouldBe(1L, "id must be the primary key — RegisterAsync's ON CONFLICT(id) depends on it");
+        columns["name"].Type.ShouldBe("TEXT");
+        columns["name"].IsRequired.ShouldBe(0L, "name is optional — never an identifier (ADR-0089 decision 5)");
+        columns["created_at"].Type.ShouldBe("INTEGER");
+        columns["created_at"].IsRequired.ShouldBe(1L, "created_at is required");
     }
 
     private static async Task<int> ReadUserVersionAsync(SqliteConnection connection) =>

@@ -6,7 +6,10 @@ namespace AiRaccoon.Core.Projects;
 /// </summary>
 public interface IProjectRegistry
 {
-    /// <summary>Registers <paramref name="projectId" /> (canonicalized first), idempotently.</summary>
+    /// <summary>
+    ///     Registers <paramref name="projectId" /> (canonicalized first), idempotently. First-write-wins:
+    ///     re-registering an already-registered id leaves the existing row's <paramref name="name" /> untouched.
+    /// </summary>
     Task RegisterAsync(string projectId, string? name, CancellationToken cancellationToken = default);
 
     /// <summary>True when the canonical form of <paramref name="projectId" /> has a registry row.</summary>

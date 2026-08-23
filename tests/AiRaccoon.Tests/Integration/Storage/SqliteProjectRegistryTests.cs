@@ -52,6 +52,15 @@ public sealed class SqliteProjectRegistryTests : IDisposable
         (await _registry.IsRegisteredAsync(GuidV7, TestContext.Current.CancellationToken)).ShouldBeTrue();
     }
 
+    /// <summary>Pins "from the injected TimeProvider, never DateTimeOffset.UtcNow" — a wall-clock read would not match FixedNow.</summary>
+    [Fact]
+    public async Task RegisterAsync_StampsCreatedAtFromTheInjectedTimeProvider()
+    {
+        await _registry.RegisterAsync(GuidV7, "acme", TestContext.Current.CancellationToken);
+
+        (await ReadCreatedAtAsync(GuidV7)).ShouldBe(FixedNow.ToUnixTimeSeconds());
+    }
+
     [Fact]
     public async Task RegisterAsync_IsIdempotentForTheSameId()
     {
@@ -59,6 +68,8 @@ public sealed class SqliteProjectRegistryTests : IDisposable
         await _registry.RegisterAsync(GuidV7, "renamed", TestContext.Current.CancellationToken);
 
         (await CountProjectRowsAsync(GuidV7)).ShouldBe(1L, "a second registration of the same id must not insert a second row");
+        (await ReadProjectNameAsync(GuidV7)).ShouldBe("acme",
+            "ON CONFLICT DO NOTHING is first-write-wins: the second registration's name is silently discarded");
     }
 
     [Fact]
@@ -118,6 +129,22 @@ public sealed class SqliteProjectRegistryTests : IDisposable
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         return await connection.ExecuteScalarAsync<long>(new CommandDefinition(
             "SELECT count(*) FROM projects WHERE id = @canonicalId",
+            new { canonicalId }, cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    private async Task<string?> ReadProjectNameAsync(string canonicalId)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+            "SELECT name FROM projects WHERE id = @canonicalId",
+            new { canonicalId }, cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    private async Task<long> ReadCreatedAtAsync(string canonicalId)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT created_at FROM projects WHERE id = @canonicalId",
             new { canonicalId }, cancellationToken: TestContext.Current.CancellationToken));
     }
 }
