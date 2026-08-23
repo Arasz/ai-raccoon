@@ -99,7 +99,8 @@ public sealed class SearchFixtureBank : IAsyncDisposable
         var factory = new SqliteConnectionFactory(options, new NoopEncryptionKeyResolver());
         var sourceStore = new SqliteMemorySourceStore(factory);
         var embeddingService = new EmbeddingService(NullLogger<EmbeddingService>.Instance, new LocalTokenizer(),
-            new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
+            new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
+            Substitute.For<IMeasurementRecorder>(), TimeProvider.System);
         var countTokens = new TokenCount(new O200kTokenizer().CountTokens);
         var markdownChunker = new MarkdownChunker(countTokens);
         var fileTypeMatcher = new FileTypeMatcher([

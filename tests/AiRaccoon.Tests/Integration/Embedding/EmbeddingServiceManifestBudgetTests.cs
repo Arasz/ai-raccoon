@@ -65,7 +65,8 @@ public sealed class EmbeddingServiceManifestBudgetTests
 
     private static EmbeddingService Service() =>
         new(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(),
-            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
+            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
+            NoOpMeasurementRecorder.Instance, TimeProvider.System);
 
     [Fact]
     public void ResolveChunkBudgetFor_BundledLocal_Stays254()
@@ -106,7 +107,8 @@ public sealed class EmbeddingServiceManifestBudgetTests
         var dir = WriteManifestDir(Manifest(vocabSha: ShaOfFile(vocab)), ("vocab.txt", File.ReadAllText(vocab)), ("model.onnx", "model"));
         var hasher = new CountingFileHasher();
         var service = new EmbeddingService(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(),
-            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator(), hasher));
+            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator(), hasher),
+            NoOpMeasurementRecorder.Instance, TimeProvider.System);
         var settings = new EmbeddingSettings("local", dir, null, null);
 
         for (var i = 0; i < 5; i++)

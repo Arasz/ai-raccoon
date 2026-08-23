@@ -258,7 +258,8 @@ public static class TestData
 
     /// <summary>EmbeddingService with a null logger — the constructor requires a real <see cref="ILogger{TCategoryName}"/> now that it is DI-registered, so tests that don't care about logging use this.</summary>
     public static EmbeddingService CreateEmbeddingService() => new(NullLogger<EmbeddingService>.Instance, new LocalTokenizer(),
-        new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
+        new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
+        NoOpMeasurementRecorder.Instance, TimeProvider.System);
 
     /// <summary>
     ///     Bootstraps the pinned sentencepiece fixture (tests/AiRaccoon.Tests/Resources/tokenizers/manifest.json)

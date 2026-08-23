@@ -29,7 +29,8 @@ public sealed class CodeManifestBudgetGuardTests
         var dir = WriteManifestDir(128);
         var service = new EmbeddingService(new FakeLogger<EmbeddingService>(), new LocalTokenizer(),
             new EmbeddingTokenizerFactory(),
-            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
+            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
+            NoOpMeasurementRecorder.Instance, TimeProvider.System);
 
         var budget = service.ResolveChunkBudgetFor(new EmbeddingSettings("local", dir, null, null));
 
@@ -50,7 +51,8 @@ public sealed class CodeManifestBudgetGuardTests
         var dir = SeedFixtureManifestDir();
         var service = new EmbeddingService(new FakeLogger<EmbeddingService>(), new LocalTokenizer(),
             new EmbeddingTokenizerFactory(),
-            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
+            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
+            NoOpMeasurementRecorder.Instance, TimeProvider.System);
 
         var derived = service.ResolveChunkBudgetFor(new EmbeddingSettings("local", dir, null, null));
 
