@@ -40,9 +40,9 @@ public sealed class EmbedDrainContinuousTests : IDisposable
         new(pump, _factory, new NoOpEntryEmbedder(), code, new SqliteSettingsStore(_factory),
             TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
 
-    /// <summary>One signal drains a backlog of N·budget rows in N passes: the first two passes
-    /// each consume exactly the full row budget and re-signal themselves; the third finds fewer
-    /// rows than the budget and stops.</summary>
+    /// <summary>For a clean backlog (an exact multiple of the row budget), one signal drains it in
+    /// N passes: the first two passes each consume exactly the full row budget and re-signal
+    /// themselves; the third finds fewer rows than the budget and stops.</summary>
     [Fact]
     public async Task FullBudgetPasses_ReSignalUntilTheBacklogRunsOut()
     {
@@ -52,7 +52,7 @@ public sealed class EmbedDrainContinuousTests : IDisposable
         var service = NewService(pump, code);
 
         using var cts = new CancellationTokenSource();
-        var run = service.StartAsync(cts.Token);
+        await service.StartAsync(cts.Token);
         pump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Code)).ShouldBeTrue();
 
         (await service.Drains.WaitAsync(3, SignalTimeout, TestContext.Current.CancellationToken)).ShouldBeTrue(
@@ -61,12 +61,12 @@ public sealed class EmbedDrainContinuousTests : IDisposable
         code.Calls.ShouldBe([
             BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun,
             BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun,
-            0
-        ]);
+            BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun
+        ], "the row budget passed as `limit` is re-read and re-applied on every pass, including the one that returns fewer rows than it asked for");
         pump.EnqueuedCount.ShouldBe(3, "the original signal plus one self re-signal per full-budget pass");
         pump.CoalescedCount.ShouldBe(0, "each self re-signal fires only after the prior item was taken, so nothing collides");
-        run.IsFaulted.ShouldBeFalse();
         await service.StopAsync(TestContext.Current.CancellationToken);
+        service.ExecuteTask!.IsFaulted.ShouldBeFalse("a per-pass exception must never fault the hosted service");
     }
 
     /// <summary>A pass that returns fewer rows than the budget must not re-signal — the backlog is
@@ -79,33 +79,103 @@ public sealed class EmbedDrainContinuousTests : IDisposable
         var service = NewService(pump, code);
 
         using var cts = new CancellationTokenSource();
-        var run = service.StartAsync(cts.Token);
+        await service.StartAsync(cts.Token);
         pump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Code)).ShouldBeTrue();
 
         (await service.Drains.WaitAsync(1, SignalTimeout, TestContext.Current.CancellationToken)).ShouldBeTrue();
 
         pump.DrainUpTo(1).ShouldBeEmpty("a partial-budget pass must not queue its own next signal");
         pump.EnqueuedCount.ShouldBe(1);
-        run.IsFaulted.ShouldBeFalse();
         await service.StopAsync(TestContext.Current.CancellationToken);
+        service.ExecuteTask!.IsFaulted.ShouldBeFalse("a per-pass exception must never fault the hosted service");
     }
 
+    /// <summary>
+    ///     F2 (review round on #530): the plan's acceptance bullet "a re-signal for an
+    ///     already-queued corpus coalesces" needs the deterministic case that actually exercises
+    ///     it, not just a negative assertion that it never happened. The fake enqueues the SAME
+    ///     corpus mid-drain — from inside <see cref="ICodeEmbedder.EmbedPendingBatchAsync" />,
+    ///     after the request has already been taken off the pump but before the pass returns — so
+    ///     when <c>DrainOnceAsync</c>'s own full-budget re-signal fires afterward, it finds that
+    ///     request already queued and coalesces against it instead of queueing a second one.
+    /// </summary>
+    [Fact]
+    public async Task ReSignalForAnAlreadyQueuedCorpus_Coalesces()
+    {
+        var pump = TestData.NewEmbedDrainPump();
+        var request = new EmbedDrainRequest(EmbedCorpus.Code);
+        var code = new SelfEnqueuingCodeEmbedder(pump, request, BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun);
+        var service = NewService(pump, code);
+
+        using var cts = new CancellationTokenSource();
+        await service.StartAsync(cts.Token);
+        pump.TryEnqueue(request).ShouldBeTrue();
+
+        (await service.Drains.WaitAsync(1, SignalTimeout, TestContext.Current.CancellationToken)).ShouldBeTrue();
+
+        pump.EnqueuedCount.ShouldBe(2, "the initial signal plus the fake's own mid-drain enqueue for the same corpus");
+        pump.CoalescedCount.ShouldBe(1,
+            "the production re-signal for that already-queued corpus must coalesce, not queue a second item");
+        await service.StopAsync(TestContext.Current.CancellationToken);
+        service.ExecuteTask!.IsFaulted.ShouldBeFalse("a per-pass exception must never fault the hosted service");
+    }
+
+    /// <summary>Returns a scripted sequence of row counts, one per call (the last value repeats
+    /// past the end). <see cref="Calls" /> pins the <c>limit</c> each call actually received, not
+    /// what this fake chose to return.</summary>
     private sealed class SequencedCodeEmbedder(params int[] rowsSequence) : ICodeEmbedder
     {
+        private readonly Lock _gate = new();
         private int _next;
 
         public List<int> Calls { get; } = [];
 
         public Task<int> EmbedPendingBatchAsync(SqliteConnection connection, int limit, CancellationToken cancellationToken)
         {
-            var rows = _next < rowsSequence.Length ? rowsSequence[_next] : rowsSequence[^1];
-            _next++;
-            lock (Calls)
+            int rows;
+            lock (_gate)
             {
-                Calls.Add(rows);
+                rows = _next < rowsSequence.Length ? rowsSequence[_next] : rowsSequence[^1];
+                _next++;
+                Calls.Add(limit);
             }
 
             return Task.FromResult(rows);
+        }
+
+        public Task<QueryVector> EmbedQueryAsync(SqliteConnection connection, string query,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<bool> HasPendingWorkAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<bool> ReconcileFingerprintAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
+    /// <summary>Enqueues <paramref name="request" /> itself, once, mid-call, then returns a full
+    /// budget — sets up the window for <c>DrainOnceAsync</c>'s own re-signal to coalesce against
+    /// it. Every later call returns 0.</summary>
+    private sealed class SelfEnqueuingCodeEmbedder(IEventPump<EmbedDrainRequest> pump, EmbedDrainRequest request,
+        int rowsPerRun) : ICodeEmbedder
+    {
+        private readonly Lock _gate = new();
+        private bool _enqueued;
+
+        public Task<int> EmbedPendingBatchAsync(SqliteConnection connection, int limit, CancellationToken cancellationToken)
+        {
+            lock (_gate)
+            {
+                if (_enqueued)
+                {
+                    return Task.FromResult(0);
+                }
+
+                _enqueued = true;
+            }
+
+            pump.TryEnqueue(request);
+            return Task.FromResult(rowsPerRun);
         }
 
         public Task<QueryVector> EmbedQueryAsync(SqliteConnection connection, string query,
