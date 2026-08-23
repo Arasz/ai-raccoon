@@ -102,7 +102,7 @@ public sealed class EmbedSweepAfterJobsTests : IDisposable
         new(_factory, _time, _probe.Telemetry, new FakeLogger<BankMaintenanceHostedService>(),
             NoOpNoiseEntryStore.Instance, new SqlitePromotionQueueStore(_factory, _time),
             new SqliteSearchQualityService(_factory, NullLogger<SqliteSearchQualityService>.Instance),
-            new MaintenanceJobRunner(_time, NullLogger<MaintenanceJobRunner>.Instance), jobs);
+            new MaintenanceJobRunner(_time, new NoOpMeasurementRecorder(), NullLogger<MaintenanceJobRunner>.Instance), jobs);
 
     /// <summary>Stands in for chunk-backfill: writes a real pending row directly, the same shape a chunker's INSERT leaves.</summary>
     private sealed class PendingCreatingJob(string projectId) : IMaintenanceJob

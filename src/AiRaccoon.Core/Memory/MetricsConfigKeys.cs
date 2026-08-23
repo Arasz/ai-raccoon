@@ -42,4 +42,19 @@ public static class MetricsConfigKeys
     /// <summary>The measurement names MetricsFlusher writes directly to the store on every flush pass.</summary>
     public static readonly IReadOnlyList<string> SelfMetricNames =
         ["metrics.flush.duration_ms", "metrics.flush.batch_size", "metrics.dropped"];
+
+    /// <summary>
+    ///     Prefix for maintenance-job series (WP3, #477): <c>job.&lt;name&gt;.duration_ms</c> on every
+    ///     completed run, <c>job.&lt;name&gt;.rows</c> where the runner can read an outstanding-row
+    ///     count. Job names live in <c>AiRaccoon.Infrastructure.Maintenance</c>, which this project
+    ///     cannot reference, so callers derive series names from a job name rather than this class
+    ///     holding a hand-maintained list of them.
+    /// </summary>
+    public const string JobMetricPrefix = "job.";
+
+    /// <summary>The <c>job.&lt;name&gt;.duration_ms</c> series name for one maintenance job.</summary>
+    public static string JobDurationMetricName(string jobName) => $"{JobMetricPrefix}{jobName}.duration_ms";
+
+    /// <summary>The <c>job.&lt;name&gt;.rows</c> series name for one maintenance job.</summary>
+    public static string JobRowsMetricName(string jobName) => $"{JobMetricPrefix}{jobName}.rows";
 }

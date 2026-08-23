@@ -183,6 +183,40 @@ public sealed class MetricsReportServiceTests : IDisposable
     }
 
     /// <summary>
+    ///     Review B2 (#477): job.* series are dynamic (one per maintenance job, defined in the
+    ///     Infrastructure layer this project cannot reference) — discovered by prefix from what is
+    ///     actually recorded, not a hand-maintained name list (derive-or-delete).
+    /// </summary>
+    [Fact]
+    public async Task GetReportAsync_TheSelfMetricsProjectId_SurfacesJobSeries()
+    {
+        await SeedAsync("job.pending-embed.duration_ms", 42, FixedNow - TimeSpan.FromMinutes(1), MetricsConfigKeys.SelfMetricsProjectId);
+        await SeedAsync("job.code-reindex.rows", 5, FixedNow - TimeSpan.FromMinutes(1), MetricsConfigKeys.SelfMetricsProjectId);
+
+        var report = await _service.GetReportAsync(MetricsConfigKeys.SelfMetricsProjectId, [],
+            TimeSpan.FromHours(1), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
+
+        var duration = report.Series.Single(s => s.Tool == "job.pending-embed.duration_ms");
+        duration.Count.ShouldBe(1);
+        duration.Max.ShouldBe(42.0);
+        var rows = report.Series.Single(s => s.Tool == "job.code-reindex.rows");
+        rows.Count.ShouldBe(1);
+        rows.Max.ShouldBe(5.0);
+    }
+
+    /// <summary>Mirrors the self-metrics isolation gate (finding 5): a bank-wide job series must never leak into an ordinary project's report either.</summary>
+    [Fact]
+    public async Task GetReportAsync_OrdinaryProject_NeverSeesJobSeries()
+    {
+        await SeedAsync("job.pending-embed.duration_ms", 42, FixedNow - TimeSpan.FromMinutes(1), MetricsConfigKeys.SelfMetricsProjectId);
+
+        var report = await _service.GetReportAsync("acme", ["memory_search"],
+            TimeSpan.FromHours(1), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
+
+        report.Series.ShouldNotContain(s => s.Tool == "job.pending-embed.duration_ms");
+    }
+
+    /// <summary>
     ///     WP10: the report carries the search-phase series alongside the tool series, reading them
     ///     back from the same `metrics` table WP3's writer fills — the phase names must not be
     ///     filtered out of the SQL query the same way a hand-written tool-only list would drop them.

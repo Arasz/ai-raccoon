@@ -177,8 +177,7 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         }
 
         return await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-            "SELECT COUNT(*) FROM code_entries WHERE embed_state = 'pending'",
-            cancellationToken: cancellationToken));
+            MemorySql.CountPendingCodeEmbed, cancellationToken: cancellationToken));
     }
 
     private static async Task<string?> ReadSettingAsync(SqliteConnection connection, string key,
