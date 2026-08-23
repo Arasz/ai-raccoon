@@ -28,12 +28,12 @@ public sealed class SweepTools(
         bool dryRun = true,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, dryRun ? AccessRequirement.Read : AccessRequirement.Destructive, TnMemorySweep, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, dryRun ? AccessRequirement.Read : AccessRequirement.Destructive, TnMemorySweep, cancellationToken);
 
         var threshold = await knobs.GetSweepThresholdAsync(cancellationToken);
-        var outcome = await sweeper.SweepAsync(projectId, threshold, dryRun, cancellationToken);
+        var outcome = await sweeper.SweepAsync(canonical, threshold, dryRun, cancellationToken);
         var result = new SweepResult(outcome.Candidates, outcome.DeletedHashes);
-        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
         return envelope;
     }
 
@@ -54,10 +54,10 @@ public sealed class SweepTools(
         int? ttlDays = null,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Destructive, TnMemorySetTtl, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Destructive, TnMemorySetTtl, cancellationToken);
 
-        var result = await knobs.SetEntryTtlAsync(projectId, hash, ttlDays, cancellationToken);
-        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        var result = await knobs.SetEntryTtlAsync(canonical, hash, ttlDays, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
         return envelope;
     }
 

@@ -27,12 +27,12 @@ public sealed class ShareTools(
         string hash,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryShare, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryShare, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
-        var entry = await store.ShareAsync(projectId, hash, cancellationToken);
+        var entry = await store.ShareAsync(canonical, hash, cancellationToken);
         var result = new ShareResult(true, entry.Entry.Context);
-        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
         return envelope;
     }
 
@@ -55,14 +55,16 @@ public sealed class ShareTools(
         CancellationToken cancellationToken = default)
     {
         var request = new ShareExtractRequest(projectIds ?? [], mode, limit, includeTtlRows, autoPromote, confirm);
+        var canonicalIds = new List<string>(request.ProjectIds.Count);
         foreach (var projectId in request.ProjectIds)
         {
-            await gate.RequireAsync(projectId,
+            canonicalIds.Add(await gate.RequireAsync(projectId,
                     request.Promotes ? AccessRequirement.Write : AccessRequirement.Read,
                     TnMemoryShareExtract, cancellationToken)
-                .ConfigureAwait(false);
+                .ConfigureAwait(false));
         }
 
+        request = request with { ProjectIds = [.. canonicalIds] };
         var result = await shareExtract.RunAsync(request, cancellationToken).ConfigureAwait(false);
         return await gate.WrapAsync(request.MetaProjectId, result, cancellationToken);
     }

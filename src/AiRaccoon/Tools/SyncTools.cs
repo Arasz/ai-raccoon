@@ -26,14 +26,14 @@ public sealed class SyncTools(
         [Description("The project id.")] string projectId,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemorySync, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemorySync, cancellationToken);
 
         // Reads the configured objectKey override, if any — SyncService owns both the
         // IsConfigured decision and the default objectKey naming convention now.
         var syncSettings = await syncFactory.ReadOptionsAsync(cancellationToken);
-        var result = await sync.MemorySyncAsync(projectId, syncSettings.ObjectKey, cancellationToken);
+        var result = await sync.MemorySyncAsync(canonical, syncSettings.ObjectKey, cancellationToken);
         var syncResult = new SyncToolResult(result.Sent, result.Received, result.Reindexed);
-        var envelope = await gate.WrapAsync(projectId, syncResult, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, syncResult, cancellationToken);
         return envelope;
     }
 

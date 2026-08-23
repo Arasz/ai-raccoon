@@ -36,9 +36,10 @@ public sealed class PromotionTools(
             throw new McpException("invalid-params: limit must be at least 1");
         }
 
+        var canonical = projectId;
         if (projectId is not null)
         {
-            await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryPromotionList, cancellationToken);
+            canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryPromotionList, cancellationToken);
         }
         else if (!allProjects)
         {
@@ -46,9 +47,9 @@ public sealed class PromotionTools(
                 "invalid-params: projectId is required unless allProjects=true; pass projectId to scope the listing, or allProjects=true to explicitly list every project's queue");
         }
 
-        var rows = await queue.ListAsync(projectId, limit, cancellationToken);
+        var rows = await queue.ListAsync(canonical, limit, cancellationToken);
         var result = new PromotionListResult([.. rows.Select(r => ToView(r, includeFullValue))]);
-        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
         return envelope;
     }
 
@@ -70,11 +71,11 @@ public sealed class PromotionTools(
         string? hash = null,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryPromotionDiscard, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryPromotionDiscard, cancellationToken);
 
-        var discarded = await queue.DiscardAsync(projectId, hash, cancellationToken);
+        var discarded = await queue.DiscardAsync(canonical, hash, cancellationToken);
         var result = new PromotionDiscardResult(discarded);
-        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
         return envelope;
     }
 

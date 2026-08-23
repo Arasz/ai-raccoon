@@ -24,13 +24,13 @@ public sealed class CodeTools(ICodeSearchService codeSearch, IToolGate gate)
         string hash,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Read, TnCodeGet, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnCodeGet, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
-        var entry = await codeSearch.GetAsync(projectId, hash, cancellationToken)
-                    ?? throw new UnknownHashException(hash, projectId);
+        var entry = await codeSearch.GetAsync(canonical, hash, cancellationToken)
+                    ?? throw new UnknownHashException(hash, canonical);
         var result = new CodeGetResult(entry.Hash, entry.Value, entry.Path, entry.LineStart, entry.LineEnd);
-        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
         return envelope;
     }
 
