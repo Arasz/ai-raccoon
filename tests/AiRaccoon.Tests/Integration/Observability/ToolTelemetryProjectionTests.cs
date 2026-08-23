@@ -133,6 +133,15 @@ public sealed class ToolTelemetryProjectionTests : IAsyncLifetime
             .ShouldBe(new ToolTelemetry.ToolProject("acme", null));
     }
 
+    /// <summary>
+    ///     The mint tool has no project yet, so it gets a bounded sentinel like "multi"/"all" —
+    ///     never the minted id itself, which would be unbounded cardinality on the counter.
+    /// </summary>
+    [Fact]
+    public void ProjectIdTokenGet_ProjectsUnderTheNoneSentinel() =>
+        ToolTelemetry.Projections["project_id_token_get"](null)
+            .ShouldBe(new ToolTelemetry.ToolProject(ToolTelemetry.NoProjectId, null));
+
     private static bool DeclaresProjectId(JsonElement inputSchema) =>
         inputSchema.ValueKind == JsonValueKind.Object
         && inputSchema.TryGetProperty("properties", out var properties)

@@ -4,6 +4,9 @@ namespace AiRaccoon.Tools;
 
 public interface IToolGate
 {
+    /// <summary>Refuses while a model migration is open — the one check a tool with no project yet can still make.</summary>
+    Task RequireBankAvailableAsync(string toolName, CancellationToken cancellationToken);
+
     /// <summary>Rejects a blank project id, then throws access-denied when the mode is too low.</summary>
     Task RequireAsync(string? projectId, AccessRequirement requirement, string toolName,
         CancellationToken cancellationToken);
