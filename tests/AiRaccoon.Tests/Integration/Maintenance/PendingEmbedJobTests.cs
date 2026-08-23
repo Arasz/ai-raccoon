@@ -102,6 +102,24 @@ public sealed class PendingEmbedJobTests : IDisposable
         queued.Corpus.ShouldBe(EmbedCorpus.Memory);
     }
 
+    /// <summary>WP3 (#477), review B1: PendingEmbedJob opts into IReportsOutstandingRows so the runner can record `job.pending-embed.rows`.</summary>
+    [Fact]
+    public async Task CountOutstandingRowsAsync_ReturnsThePendingRowCount()
+    {
+        await SeedPendingRowsAsync(3);
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+
+        (await NewJob().CountOutstandingRowsAsync(connection, TestContext.Current.CancellationToken)).ShouldBe(3L);
+    }
+
+    [Fact]
+    public async Task CountOutstandingRowsAsync_NoPendingRows_IsZero()
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+
+        (await NewJob().CountOutstandingRowsAsync(connection, TestContext.Current.CancellationToken)).ShouldBe(0L);
+    }
+
     private async Task SeedPendingRowsAsync(int count)
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);

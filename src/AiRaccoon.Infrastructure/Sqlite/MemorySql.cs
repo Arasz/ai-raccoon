@@ -322,6 +322,10 @@ internal static class MemorySql
     public const string HasPendingEmbed =
         "SELECT EXISTS(SELECT 1 FROM entries WHERE embed_state = 'pending' LIMIT 1)";
 
+    /// <summary>Bank-wide pending-row COUNT sibling of <see cref="HasPendingEmbed" /> — PendingEmbedJob.CountOutstandingRowsAsync (WP3, #477), only called once per completed run, not on every 15s poll, so counting the whole backlog is affordable here.</summary>
+    public const string CountPendingEmbed =
+        "SELECT COUNT(*) FROM entries WHERE embed_state = 'pending'";
+
     // Sets all four embed-transition columns together (docs/plans/2026-08-08-search-knn-perf.md
     // §3.6): a chunk with no heading writes heading_path = '' — never NULL, since NULL means "not
     // yet processed" and the vec_structure_au trigger guards on IS NOT NULL.
