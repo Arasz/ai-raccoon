@@ -610,6 +610,11 @@ internal static class MemorySchema
             // EnsureCodeEmbedAttemptsColumnAsync).
             await EnsureCodeEmbedAttemptsColumnAsync(connection, cancellationToken).ConfigureAwait(false);
 
+            // Legacy tombstones can outlive the schema change that introduced project_id. The Ddl
+            // digest is the gate for this repair, so a stale bank gets normalized once without
+            // making the steady-state fast path pay for it.
+            await EnsureSyncTombstonesProjectScopedAsync(connection, cancellationToken).ConfigureAwait(false);
+
             var testHook = TestOnlyAfterDdlHookAsync.Value;
             if (testHook is not null)
             {
@@ -625,11 +630,6 @@ internal static class MemorySchema
         // Runs on every open, version or not, same shape as above: one indexed sqlite_master read,
         // write only when the stored trigger body still needs the H4 scope guard.
         await EnsurePromotionQueueTriggerScopeGuardAsync(connection, cancellationToken).ConfigureAwait(false);
-
-        // Project-scoped tombstones are fixed in-place, not through a version ladder: legacy rows
-        // without a project_id are still repaired on every open, and the Ddl digest makes the
-        // table shape reach stale banks without bumping CurrentVersion.
-        await EnsureSyncTombstonesProjectScopedAsync(connection, cancellationToken).ConfigureAwait(false);
 
         // Runs on every open, version or not (orchestrator ruling, S7): no-overlapping-watches was
         // originally a one-time v11 ladder step; demoted to an unconditional, ungated step in the

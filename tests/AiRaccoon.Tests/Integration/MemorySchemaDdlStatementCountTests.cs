@@ -34,13 +34,14 @@ public sealed class MemorySchemaDdlStatementCountTests
     }
 
     /// <summary>
-    ///     58 = the pre-code-corpus 42 plus the corpus's Ddl (code_entries/code_fts/vec_code,
+    ///     64 = the pre-code-corpus 42 plus the corpus's Ddl (code_entries/code_fts/vec_code,
     ///     trigger families, indexes, and the idx_code_entries_path DROP), plus 1 for the
-    ///     ADR-0089 <c>projects</c> table, plus 1 for the WP12 <c>watch_digest_claims</c> table —
-    ///     re-derived from the trace, per-statement provenance on the assert below.
+    ///     ADR-0089 <c>projects</c> table, plus 1 for the WP12 <c>watch_digest_claims</c> table,
+    ///     plus the project-scoped tombstone repair (legacy rows cleared and deduped when the
+    ///     sync schema digest changes on a stale bank).
     /// </summary>
     [Fact]
-    public async Task EnsureAsync_WhenTheDigestIsStale_RunsTheFiftyEightStatementDdlBlock()
+    public async Task EnsureAsync_WhenTheDigestIsStale_RunsTheSixtyFourStatementDdlBlock()
     {
         await using var connection = await OpenAsync();
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
@@ -56,8 +57,10 @@ public sealed class MemorySchemaDdlStatementCountTests
         // promotion_queue_prune_requests, +14 the code corpus (ADR-0085: code_entries + code_fts +
         // vec_code, their trigger families, indexes, and the idx_code_entries_path DROP), +1 the
         // ADR-0089 projects table, +1 the WP12 watch_digest_claims table (SqliteMemoryStore.ReplaceCoreAsync's
-        // chunk-once claim, now that the chunker runs outside the write lock).
-        CountDdl(statements).ShouldBe(58, Report(statements));
+        // chunk-once claim, now that the chunker runs outside the write lock), +6 for the project-scoped
+        // tombstone repair (legacy rows require a null/blank cleanup and duplicate-prune before the
+        // project-scoped PK/index can be made authoritative on stale banks).
+        CountDdl(statements).ShouldBe(64, Report(statements));
     }
 
     private static async Task<List<string>> TraceAsync(SqliteConnection connection)
