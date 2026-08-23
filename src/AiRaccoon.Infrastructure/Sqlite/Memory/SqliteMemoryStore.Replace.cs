@@ -178,32 +178,15 @@ public sealed partial class SqliteMemoryStore
     }
 
     /// <summary>A stale claim (its holder crashed mid-chunk and never released it) can be reclaimed after this long.</summary>
-    private static readonly TimeSpan ClaimStaleAfter = TimeSpan.FromMinutes(5);
+    internal static readonly TimeSpan ClaimStaleAfter = TimeSpan.FromMinutes(5);
 
     /// <summary>
-    ///     Replace-by-path (WP12 Fix A): chunking runs OUTSIDE the write lock, exactly like
-    ///     <see cref="ReplaceForDirectIngestAsync" /> — a cheap unlocked <paramref name="guard" />
-    ///     read decides whether to bother at all, then (when a <paramref name="guard" /> exists,
-    ///     i.e. the watch digest, never the unconditional repair) a short claim transaction decides
-    ///     which of two racing replaces on the same path gets to chunk it —
-    ///     <see cref="MemorySql.TryClaimWatchDigest" />; the fingerprint alone cannot gate this,
-    ///     since it is not written until everything else is done. The loser declines without ever
-    ///     calling the chunker. The claim's winner runs
-    ///     <see cref="IFileIngestor.IngestFileAsync" /> autocommit (file read, chunk, hash, insert;
-    ///     rows left `embed_state = 'pending'`), then a short prune-and-fingerprint transaction:
-    ///     the delete of whatever the ingest did not account for, the fingerprint write, and
-    ///     releasing the claim.
-    ///     <para>
-    ///         Traded against the old delete-then-ingest shape: a reader can see the file's old AND
-    ///         new chunks during the short window between the ingest's autocommit and the prune's
-    ///         commit, instead of never seeing it chunkless — the same trade
-    ///         <see cref="ReplaceForDirectIngestAsync" />'s own doc comment already made. A crash or a
-    ///         forced-failure mid-prune leaves both old and new chunks in place rather than rolling
-    ///         the ingest back too, since the ingest is no longer part of that transaction.
-    ///     </para>
-    ///     The guard is each caller's own decision (<see cref="ReplaceIfFileChangedAsync" /> passes
-    ///     one, <see cref="ReplaceAsync" /> passes none); this method knows nothing about
-    ///     fingerprints.
+    ///     Replace-by-path (WP12 Fix A): the chunker runs OUTSIDE the write lock (ingest-then-prune,
+    ///     same shape as <see cref="ReplaceForDirectIngestAsync" />), gated by an unlocked
+    ///     <paramref name="guard" /> then a claim transaction that lets only one of two racing
+    ///     replaces on the same path chunk it (<see cref="MemorySql.TryClaimWatchDigest" /> — the
+    ///     fingerprint alone can't gate this, it's written last). See <see cref="PruneAsync" />'s
+    ///     doc comment for the trade against the old delete-then-ingest shape.
     /// </summary>
     private async Task<ReplaceCoreResult> ReplaceCoreAsync(string projectId, string path,
         string? fileHash, Func<SqliteConnection, Task<bool>>? guard, string? context, bool fingerprint,
@@ -218,11 +201,14 @@ public sealed partial class SqliteMemoryStore
             return new ReplaceCoreResult(false, 0, CorpusKind.Neither);
         }
 
+        // Tracked explicitly, not re-derived from `guard is not null`: the catch below must
+        // release only a claim THIS call actually won, never one still held by whichever call did.
+        var ownsClaim = false;
         if (guard is not null)
         {
-            var claimed = await TryClaimChunkerAsync(connection, projectId, path, guard, cancellationToken)
+            ownsClaim = await TryClaimChunkerAsync(connection, projectId, path, guard, cancellationToken)
                 .ConfigureAwait(false);
-            if (!claimed)
+            if (!ownsClaim)
             {
                 // Another replace on this exact path already owns the chunk — its own commit
                 // (fingerprint + released claim) will make the target state durable. Chunking here
@@ -251,7 +237,7 @@ public sealed partial class SqliteMemoryStore
                 await PruneAsync(connection, projectId, path, ingestResult.ChunkHashes ?? [],
                         ingestResult.CodeChunkHashes, cancellationToken)
                     .ConfigureAwait(false);
-                if (guard is not null)
+                if (ownsClaim)
                 {
                     await connection.ExecuteAsync(Def(MemorySql.ReleaseWatchDigestClaim,
                             new { projectId, path }, cancellationToken))
@@ -291,15 +277,22 @@ public sealed partial class SqliteMemoryStore
                 throw;
             }
         }
-        catch when (guard is not null)
+        catch when (ownsClaim)
         {
-            // The claim must never outlive a failed chunk/prune — otherwise every later replace of
-            // this path declines forever, thinking someone else still owns it (ClaimStaleAfter is
-            // the crash-only backstop for this same release, not the fast path).
-            await using var release = await factory.OpenBankAsync(CancellationToken.None).ConfigureAwait(false);
-            await release.ExecuteAsync(Def(MemorySql.ReleaseWatchDigestClaim, new { projectId, path },
-                    CancellationToken.None))
-                .ConfigureAwait(false);
+            // Best-effort: the ORIGINAL failure below must propagate, never one from this cleanup
+            // (e.g. a release that itself hits BUSY) — ClaimStaleAfter reclaims a leaked claim later.
+            try
+            {
+                await using var release = await factory.OpenBankAsync(CancellationToken.None).ConfigureAwait(false);
+                await release.ExecuteAsync(Def(MemorySql.ReleaseWatchDigestClaim, new { projectId, path },
+                        CancellationToken.None))
+                    .ConfigureAwait(false);
+            }
+            catch (Exception releaseEx)
+            {
+                Log.ClaimReleaseFailed(logger, path, releaseEx);
+            }
+
             throw;
         }
     }
@@ -378,6 +371,10 @@ public sealed partial class SqliteMemoryStore
 
     private static partial class Log
     {
+        [LoggerMessage(EventId = 898, Level = LogLevel.Warning,
+            Message = "Releasing the watch-digest chunk claim for {Path} failed; it will self-heal after ClaimStaleAfter")]
+        public static partial void ClaimReleaseFailed(ILogger logger, string path, Exception exception);
+
         [LoggerMessage(EventId = 899, Level = LogLevel.Information,
             Message = "Replace-by-path waited {WaitMs:F1} ms for the write lock and held it {HeldMs:F1} ms "
                       + "({Rows} row(s) written)")]

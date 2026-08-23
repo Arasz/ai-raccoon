@@ -323,14 +323,15 @@ config channel (see [Command-line options](#command-line-options)).
   transaction, EventId 899) are project-scoped, recorded under the writing project's own id, and
   so appear in an ordinary project's report the same way a tool series does. `wait_ms` is time
   spent waiting for `BEGIN IMMEDIATE` to return; `held_ms` is time from there to
-  `COMMIT`/`ROLLBACK`. WP12 moved the chunker (file read, chunk, hash, insert) entirely before the
-  lock is requested, so `held_ms` now reflects the write itself — the prune-and-fingerprint tail —
-  not the chunker; a slow chunker under contention now shows up as `wait_ms`, not `held_ms`. The
-  authoritative guard re-check that runs once the lock is held can still decline (a rare race
-  between two replaces on the same path): that path records `rows = 0` with a real `held_ms`,
-  the same `0` the EventId 899 log line reports there. The common no-race decline (fingerprint
-  already matches) is checked BEFORE the lock is ever requested and records nothing at all — there
-  is no wait or held time to report.
+  `COMMIT`/`ROLLBACK`. WP12 moved the chunker (file read, chunk, hash, insert) OUTSIDE the write
+  lock — only a short claim transaction (decides which of two racing replaces on the same path
+  chunks it) and the prune-and-fingerprint transaction still hold it, each a few statements long
+  — so `held_ms` reflects the write itself, never the chunker; a slow chunker under contention now
+  shows up as `wait_ms`, not `held_ms`. The claim transaction's own authoritative guard re-check
+  can decline (a rare race between two replaces on the same path): that path records `rows = 0`
+  with a real `held_ms`, the same `0` the EventId 899 log line reports there. The common no-race
+  decline (fingerprint already matches) is checked in an unlocked read before the claim transaction
+  and records nothing at all — there is no wait or held time to report.
 
 ### Unknown-id rule
 

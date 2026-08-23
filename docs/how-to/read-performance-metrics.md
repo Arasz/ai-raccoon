@@ -78,12 +78,13 @@ A few things worth knowing before reading a report:
     be trimmed (EventId 426, WP11).
   - `write.replace.wait_ms`, `write.replace.held_ms` and `write.replace.rows` for a
     replace-by-path transaction (EventId 899, WP11/WP12): `wait_ms` is time spent waiting for
-    `BEGIN IMMEDIATE` to return, `held_ms` is time from there to `COMMIT`/`ROLLBACK` — chunking now
-    runs before the lock is ever requested (WP12 Fix A), so `held_ms` reflects the write itself, not
-    the chunker. **A race-losing replace records `rows = 0` with a real `held_ms`** — the guard's
-    authoritative re-check under the lock still takes and releases it even when it declines; the
-    common no-race decline (fingerprint unchanged) never reaches the lock at all and records
-    nothing.
+    `BEGIN IMMEDIATE` to return, `held_ms` is time from there to `COMMIT`/`ROLLBACK` — the chunker
+    itself runs OUTSIDE the write lock (WP12 Fix A); only the claim transaction (decides which of
+    two racing replaces on the same path chunks it) and the prune/fingerprint transaction hold it,
+    each a few statements long, so `held_ms` reflects the write, not the chunker. **A race-losing
+    replace records `rows = 0` with a real `held_ms`** — the claim transaction's own authoritative
+    re-check still takes and releases the lock even when it declines; the common no-race decline
+    (fingerprint unchanged) never reaches the lock at all and records nothing.
 
   `job.*`, `drain.*` and `search.query.*` are bank-wide — none of a maintenance job, an
   embed-drain pass, or the embedding engine's query-trim path has a project id — so they only
