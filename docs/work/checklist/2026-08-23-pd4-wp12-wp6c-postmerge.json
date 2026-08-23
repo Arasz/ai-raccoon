@@ -1,0 +1,168 @@
+{
+    "run": {
+        "date": "2026-08-23",
+        "branch": "origin/main (post-merge verification)",
+        "commit": "50e5cdeb (squash-merge of #565; includes 31f19a45 = #564)",
+        "data-root": "/tmp/airaccoon-checklist-pd4 (scratch, never ~/.ai-raccoon)",
+        "note": "Post-merge manual testing of #564 (WP12 lock-held-through-chunker) and #565 (WP6c unregistered refusal) plus regression pass. Automated gates: all 5 CI lanes green on both merges."
+    },
+    "derived": {
+        "version": "1.33.2",
+        "mcp-tool-count": "29",
+        "mcp-prompt-count": "2",
+        "note": "Produced by scripts/derive-facts.py at run time, never typed from memory or a previous run."
+    },
+    "findings-against-prior-runs": [],
+    "items": [
+        {
+            "item": "#564-a: replace-by-path no longer holds the write lock through the chunker",
+            "expected-result": "While a slow chunker is still running inside ReplaceAsync, another connection can take the write lock and commit — the lock is held only for the short claim + prune-and-fingerprint transactions (ReplaceHoldsTheLockOnlyForTheWriteTests.ReplaceAsync_WhileTheChunkerIsStillRunning_TheWriteLockIsFreeForAnotherConnection, new in 31f19a45)",
+            "command": "git show origin/main:tests/AiRaccoon.Tests/Integration/Storage/ReplaceHoldsTheLockOnlyForTheWriteTests.cs; dotnet test --filter ReplaceHoldsTheLockOnlyForTheWriteTests on merged tree (build-slow lane, run 32635389641)",
+            "evidence": "Test asserts a second connection's BEGIN IMMEDIATE succeeds while the chunker task is still incomplete: '[Fact] ReplaceAsync_WhileTheChunkerIsStillRunning_TheWriteLockIsFreeForAnotherConnection' passed in build-slow (2m37s, PASS) and locally on the worktree before push (76/76 gate run)",
+            "observed-result": "Chunker runs outside the write lock; concurrent writers proceed",
+            "status": "pass",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "#564-b: watch-digest claim decides which racing replace chunks (Fix A)",
+            "expected-result": "Two replaces racing the same path chunk exactly once via watch_digest_claims; a crashed claim holder's row is reclaimed after ClaimStaleAfter=5min, a fresher foreign claim declines without touching it (WatchDigestClaimTests, new in 31f19a45/64d4c337)",
+            "command": "git show origin/main:tests/AiRaccoon.Tests/Integration/Storage/WatchDigestClaimTests.cs; MemorySchema.cs DDL block for watch_digest_claims; build-slow lane",
+            "evidence": "Three tests green: 'ClaimOlderThanStaleAfter_IsReclaimedAndChunks', 'ClaimFresherThanStaleAfter_Declines', 'WhenTheGuardThrowsBeforeClaiming_LeavesAForeignClaimUntouched'; DDL: CREATE TABLE IF NOT EXISTS watch_digest_claims (project_id, path, claimed_at, PRIMARY KEY(project_id,path)) with stale-after upsert",
+            "observed-result": "Racing replaces chunk once; leaked claims self-heal after 5 min",
+            "status": "pass",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "#564-c: catch-path release never masks the original failure (round-3 review fix)",
+            "expected-result": "If the catch-path DELETE of a claim hits BUSY, EventId 898 logs ClaimReleaseFailed ('it will self-heal after ClaimStaleAfter') and the ORIGINAL exception propagates; ownership gated on explicit ownsClaim flag set only when TryClaimChunkerAsync succeeded",
+            "command": "grep -n 'ownsClaim\\|EventId = 898' src/AiRaccoon.Infrastructure/Sqlite/Memory/SqliteMemoryStore.Replace.cs @ origin/main",
+            "evidence": "Line 206: var ownsClaim = false; line 209: ownsClaim = await TryClaimChunkerAsync(...); line 280: catch when (ownsClaim) with inner try/catch logging EventId 898 then rethrowing original; doc line 898-900 block in logging-event-ids.md documents the placement rationale",
+            "observed-result": "Original failure always surfaces; claim leak self-heals",
+            "status": "pass",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "#564-d: embed drain marks batches in one transaction per batch (Fix B)",
+            "expected-result": "EntryEmbedder.EmbedAsync wraps each BatchSize sub-batch's MarkEmbedded writes in one BEGIN IMMEDIATE/COMMIT; inference stays outside; blob conversion moved BEFORE BEGIN IMMEDIATE so the lock covers UPDATEs only; a failure in batch 2 rolls back only batch 2 (EntryEmbedderMarksABatchInOneTransactionTests)",
+            "command": "grep -n 'Converted before BEGIN IMMEDIATE' -A2 src/.../EntryEmbedder.cs @ origin/main; EntryEmbedderMarksABatchInOneTransactionTests.EmbedAsync_FailureInsideTheSecondBatch_RollsBackOnlyThatBatch",
+            "evidence": "Comment at line 304-305: 'Converted before BEGIN IMMEDIATE (WP12 review): the vector-to-blob copy is CPU work, not part of the write'; rollback-isolation test green in build-slow",
+            "observed-result": "Drain write locks are short and batch-scoped; BUSY cost bounded to one batch",
+            "status": "pass",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "#564-e: metrics flush retries transient BUSY (Fix C)",
+            "expected-result": "MetricsFlusher.SaveBatchAsync retries a BUSY/LOCKED failure up to MaxSaveAttempts=3 with a 50ms TimeProvider-driven delay before logging and dropping the batch for that pass (MetricsFlusherRetriesBusyTests, new)",
+            "command": "git show 31f19a45 -- src/AiRaccoon.Infrastructure/Metrics/MetricsFlusher.cs | grep retry block; Unit/Metrics/MetricsFlusherRetriesBusyTests.cs",
+            "evidence": "Code: MaxSaveAttempts = 3, SaveRetryDelay = 50ms, loop 'for attempt 1..MaxSaveAttempts' around SaveBatchAsync catching SqliteException BUSY/LOCKED; test file present and green in build-fast lane (3332 passed)",
+            "observed-result": "Transient lock contention no longer silently drops metric batches",
+            "status": "pass",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "#564-f: write.replace.wait_ms / held_ms / rows metric split",
+            "expected-result": "MetricsConfigKeys defines ReplaceWaitMsMetricName='write.replace.wait_ms' and ReplaceHeldMsMetricName='write.replace.held_ms' (+ .rows); wait_ms = time waiting for BEGIN IMMEDIATE, held_ms = BEGIN-to-COMMIT/ROLLBACK, chunker never included; docs/how-to/read-performance-metrics.md documents the split including the race-loser rows=0 case; covered by MetricsReportServiceTests + ReplaceLockMetricsTests + MetricsConfigKeysTests",
+            "command": "git show origin/main:src/AiRaccoon.Core/Memory/MetricsConfigKeys.cs lines 85-92; docs/how-to/read-performance-metrics.md lines 79-85; CI lanes build-fast/build-slow",
+            "evidence": "Constants verified at named lines with WP12/EventId-899 doc comments; how-to states 'held_ms reflects the write, not the chunker. A race-losing replace records rows = 0 with a real held_ms'; three test classes reference the split names and all lanes PASS",
+            "observed-result": "New series defined, recorded under project scope, documented, tested",
+            "status": "pass",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "#564-g: digest convoy does not starve the drain",
+            "expected-result": "Four concurrent digests with an artificially slowed chunker never drive a concurrent drain into BUSY failures (DigestConvoyDoesNotStarveTheDrainTests.FourConcurrentDigests_WithASlowChunker_NeverStarveAConcurrentDrainIntoBusy, new in 31f19a45) — this is the original defect scenario of WP12 (#477 diagnosis)",
+            "command": "git show origin/main:tests/.../DigestConvoyDoesNotStarveTheDrainTests.cs line 55; build-slow lane result",
+            "evidence": "Test name matches the defect scenario verbatim; build-slow PASS on head 678505e1 and c71bb7ae runs",
+            "observed-result": "The reported database-is-locked starvation is fixed and pinned",
+            "status": "pass",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "#565-a: access checked BEFORE registration (refusal-shape probe closed)",
+            "expected-result": "ToolGate.RequireAsync order: migration -> blank-id -> canonicalize -> access.EnsureAsync -> registration.EnsureAsync; an unauthorized (mode-ro) caller receives access-denied even for an unregistered id — registration status is not observable from the refusal shape",
+            "command": "sed -n 44,56p src/AiRaccoon/Tools/ToolGate.cs @ origin/main; ToolGateTests.RequireAsync_WhenTheAccessGuardRefuses_DoesNotReachTheRegistrationGuard",
+            "evidence": "Lines 53-54 show access.EnsureAsync first, registration.EnsureAsync second; unit test asserts registration.Calls empty when access refuses — green in local gate (76/76) and CI",
+            "observed-result": "Check order fixed; probe vector closed",
+            "status": "pass",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "#565-b: canonical id carried to storage across tool classes",
+            "expected-result": "RequireAsync returns Task<string> (canonical id); all nine tool classes carry it to storage calls (spot-checked Watch/Memory/Share); ShareExtract rebuilds its request with canonical ids before RunAsync",
+            "command": "grep RequireAsync/canonical in WatchTools.cs @ origin/main; round-1 review verified-passes list (nine classes spot-checked)",
+            "evidence": "WatchTools.cs:27-31 shows canonical flowing into AddAsync AND WrapAsync; CanonicalProjectIdReachesStorageTests (181 lines) green in build-slow",
+            "observed-result": "Decision 2 plumbing complete",
+            "status": "pass",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "#565-c: legacy-id warning fires ONCE per id per process",
+            "expected-result": "ProjectRegistrationGuard warns (EventId 433) on the FIRST write through an unregistered-but-has-rows id only; warnedLegacyIds HashSet guarded by warnedGate lock (singleton DI lifetime, concurrent tool calls); pinned by ProjectRegistrationGuardTests (first-warns, second-silent, two-ids-each-once, code-only-legacy-asserts-warning)",
+            "command": "sed -n 14-48p src/AiRaccoon/Projects/ProjectRegistrationGuard.cs @ origin/main; dotnet test --filter ProjectRegistrationGuardTests (local, post-fix)",
+            "evidence": "warnedGate lock object at line 16, lock(warnedGate){ Add+log } at 42; 4 warning-behavior tests green locally (23/23 ToolGate+Guard run) after the thread-safety fix 47d30b7d",
+            "observed-result": "One-time contract honored and race-free",
+            "status": "pass",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "#565-d: project-not-registered error shape documented and mapped",
+            "expected-result": "ToolRefusals maps UnregisteredProjectException -> prefix 'project-not-registered' at Information level; docs/reference/agent-memory-server.md Error-shapes table has the row naming project_id_token_get as the remedy; reads are never refused",
+            "command": "grep UnregisteredProjectException src/AiRaccoon/Tools/ToolRefusals.cs @ origin/main; grep project-not-registered docs/reference/agent-memory-server.md @ origin/main",
+            "evidence": "Mapping at ToolRefusals.cs:46; table row present: 'A write/destructive call named a projectId with no registry row and no existing rows either (ADR-0089) — reads are never refused… Call project_id_token_get to mint and register'",
+            "observed-result": "Doc/test suite cross-check holds (ToolRefusalsTests green)",
+            "status": "pass",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "#565-e: IProjectRegistrationGuard XML crefs resolve (CS1574 risk)",
+            "expected-result": "Interface doc references IMemoryAccessGuard.EnsureAsync and UnregisteredProjectException via using directives (AiRaccoon.Access, AiRaccoon.Core.Projects), not fragile fully-qualified crefs; build clean under TreatWarningsAsErrors",
+            "command": "cat src/AiRaccoon/Projects/IProjectRegistrationGuard.cs @ origin/main (commit c71bb7ae); full solution build",
+            "evidence": "Usings at lines 1-3; bare <see cref=\"IMemoryAccessGuard.EnsureAsync\"/> and <see cref=\"UnregisteredProjectException\"/>; dotnet build 0 warnings 0 errors on the merge commit and on c71bb7ae",
+            "observed-result": "Copilot Autofix's fully-qualified form replaced with using-based resolution; compiles clean",
+            "status": "pass",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "regression: event-id registry count matches measured source",
+            "expected-result": "docs/reference/logging-event-ids.md declares exactly the number of [LoggerMessage] methods in src/ (LoggerMessageEventIdTests.DocumentedCount_MatchesTheMeasuredCount); count is 168 after #564's 898 and #565's 433",
+            "command": "grep '**168**' docs/reference/logging-event-ids.md @ origin/main; dotnet test --filter LoggerMessageEventIdTests (local on merged branch, before final push)",
+            "evidence": "Doc line 12 reads 'Measured directly against src/ on this branch: **168** [LoggerMessage]-attributed methods … zero duplicates'; local test run: Passed! Failed: 0, Passed: 5 after the count bump commit",
+            "observed-result": "Derived-list invariant held through two merges (caught red once: 167 vs 168 — fixed in 678505e1)",
+            "status": "pass",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "regression: schema DDL statement-count pin survives new table",
+            "expected-result": "MemorySchemaDdlStatementCountTests updated 57->58 for watch_digest_claims and passes — the DDL pin did not silently absorb an off-by-one",
+            "command": "git show d12aa2f3 (test(schema): bump DDL statement count 57->58); build-slow lane",
+            "evidence": "Commit d12aa2f3 message and diff adjust the pin alongside the new table; build-slow PASS",
+            "observed-result": "Pin maintained honestly",
+            "status": "pass",
+            "accepted": null,
+            "acceptance-reason": ""
+        },
+        {
+            "item": "regression: full CI matrix green on both merged heads",
+            "expected-result": "changes, build-fast, build-bdd, build-slow all SUCCESS on the #564 merge head (as PR #564 checks) and on #565 heads 7ff18177/678505e1/c71bb7ae",
+            "command": "gh pr view 565 --json statusCheckRollup; gh pr checks 565",
+            "evidence": "Final: changes PASS 7s, build-fast PASS 3m47s (3332 passed/1 skipped), build-bdd PASS 1m36s, build-slow PASS 2m37s, nightly SKIPPED (by design outside nightly schedule)",
+            "observed-result": "No lane regression from either merge",
+            "status": "pass",
+            "accepted": null,
+            "acceptance-reason": ""
+        }
+    ]
+}
