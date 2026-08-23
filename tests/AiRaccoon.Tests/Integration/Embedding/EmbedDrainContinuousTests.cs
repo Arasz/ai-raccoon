@@ -6,7 +6,9 @@ using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
 
@@ -36,9 +38,10 @@ public sealed class EmbedDrainContinuousTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    private EmbedDrainService NewService(IEventPump<EmbedDrainRequest> pump, ICodeEmbedder code) =>
+    private EmbedDrainService NewService(IEventPump<EmbedDrainRequest> pump, ICodeEmbedder code,
+        ILogger<EmbedDrainService>? logger = null) =>
         new(pump, _factory, new NoOpEntryEmbedder(), code, new SqliteSettingsStore(_factory),
-            TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
+            TestTelemetry.None, logger ?? NullLogger<EmbedDrainService>.Instance);
 
     /// <summary>For a clean backlog (an exact multiple of the row budget), one signal drains it in
     /// N passes: the first two passes each consume exactly the full row budget and re-signal
@@ -118,6 +121,32 @@ public sealed class EmbedDrainContinuousTests : IDisposable
             "the production re-signal for that already-queued corpus must coalesce, not queue a second item");
         await service.StopAsync(TestContext.Current.CancellationToken);
         service.ExecuteTask!.IsFaulted.ShouldBeFalse("a per-pass exception must never fault the hosted service");
+    }
+
+    /// <summary>
+    ///     NIT from the same review round: the self re-signal's <c>TryEnqueue</c> result was
+    ///     dropped, so a re-signal that coalesces (or, in principle, is capacity-dropped) left no
+    ///     trace. Same scenario as <see cref="ReSignalForAnAlreadyQueuedCorpus_Coalesces" />, plus
+    ///     the debug-level log.
+    /// </summary>
+    [Fact]
+    public async Task SelfReSignal_NotQueued_LogsAtDebug()
+    {
+        var pump = TestData.NewEmbedDrainPump();
+        var request = new EmbedDrainRequest(EmbedCorpus.Code);
+        var code = new SelfEnqueuingCodeEmbedder(pump, request, BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun);
+        var logger = new FakeLogger<EmbedDrainService>();
+        var service = NewService(pump, code, logger);
+
+        using var cts = new CancellationTokenSource();
+        await service.StartAsync(cts.Token);
+        pump.TryEnqueue(request).ShouldBeTrue();
+
+        (await service.Drains.WaitAsync(1, SignalTimeout, TestContext.Current.CancellationToken)).ShouldBeTrue();
+
+        logger.Collector.GetSnapshot().Count(r => r.Level == LogLevel.Debug && r.Message.Contains("re-signal", StringComparison.Ordinal))
+            .ShouldBe(1, "the dropped self re-signal must be visible, not silently swallowed");
+        await service.StopAsync(TestContext.Current.CancellationToken);
     }
 
     /// <summary>Returns a scripted sequence of row counts, one per call (the last value repeats
