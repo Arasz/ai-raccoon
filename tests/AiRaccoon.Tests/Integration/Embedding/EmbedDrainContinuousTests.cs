@@ -98,13 +98,13 @@ public sealed class EmbedDrainContinuousTests : IDisposable
 
         public Task<int> EmbedPendingBatchAsync(SqliteConnection connection, int limit, CancellationToken cancellationToken)
         {
-            lock (Calls)
-            {
-                Calls.Add(limit);
-            }
-
             var rows = _next < rowsSequence.Length ? rowsSequence[_next] : rowsSequence[^1];
             _next++;
+            lock (Calls)
+            {
+                Calls.Add(rows);
+            }
+
             return Task.FromResult(rows);
         }
 
