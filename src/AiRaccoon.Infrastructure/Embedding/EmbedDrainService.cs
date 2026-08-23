@@ -19,9 +19,12 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///         Loop: wait for a signal, take exactly one queued request (releasing its coalesce key so a
 ///         signal arriving mid-drain queues its own fresh pass), open a connection, drain up to the
 ///         bank's <see cref="BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal" /> rows for that
-///         corpus, loop (WP11-C; default 128, re-read on every pass). It never re-enqueues itself
-///         when rows remain — a large backlog drains over several signals (the 15s on-demand poll
-///         plus one per digest/ingest), not in one inference-pool-saturating burst.
+///         corpus (WP11-C; default 128, re-read on every pass). A pass that consumes the full row
+///         budget re-signals its own corpus (WP1, docs/work/2026-08-23-post-delta-4-plan.md) so the
+///         next pass runs immediately instead of waiting out the 15s on-demand poll — a full budget
+///         is real progress (<c>EmbedPendingBatchAsync</c> counts only rows whose UPDATE landed), so
+///         the re-signal cannot spin once the backlog is actually exhausted. A partial pass does not
+///         re-signal.
 ///     </para>
 ///     <para>
 ///         The channel is a wake-up, not the record: <c>embed_state = 'pending'</c> (ADR-0076) is
@@ -117,6 +120,16 @@ public sealed partial class EmbedDrainService(
                 pass.NoteWork();
             }
 
+            // A full row budget means the backlog may not be empty — EmbedPendingBatchAsync counts
+            // only rows whose UPDATE landed, so this is real progress and cannot spin once the
+            // corpus is actually exhausted. Re-signal instead of waiting out the 15s poll (WP1).
+            if (drained >= rowsPerRun && !pump.TryEnqueue(request))
+            {
+                // Already queued (coalesced) or, in principle, capacity-dropped — either way the
+                // 15s poll still recovers it off the durable outbox, but this is worth seeing.
+                Log.SelfReSignalNotQueued(logger, request.Corpus);
+            }
+
             pass.Succeeded();
             Log.DrainFinished(logger, request.Corpus, drained);
         }
@@ -172,5 +185,9 @@ public sealed partial class EmbedDrainService(
         [LoggerMessage(EventId = 1006, Level = LogLevel.Warning,
             Message = "Invalid maintenance.embed-rows-per-run.global setting '{Value}': expected a positive integer, at most {Max}. Falling back to the default or clamped value.")]
         public static partial void InvalidRowsPerRunSetting(ILogger logger, string value, int max);
+
+        [LoggerMessage(EventId = 1007, Level = LogLevel.Debug,
+            Message = "Embed drain's self re-signal for {Corpus} did not enqueue (already queued, or the pump is full); the next poll recovers it")]
+        public static partial void SelfReSignalNotQueued(ILogger logger, EmbedCorpus corpus);
     }
 }

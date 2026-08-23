@@ -322,6 +322,10 @@ internal static class MemorySql
     public const string HasPendingEmbed =
         "SELECT EXISTS(SELECT 1 FROM entries WHERE embed_state = 'pending' LIMIT 1)";
 
+    /// <summary>Bank-wide pending-row COUNT sibling of <see cref="HasPendingEmbed" /> — PendingEmbedJob.CountOutstandingRowsAsync (WP3, #477), only called once per completed run, not on every 15s poll, so counting the whole backlog is affordable here.</summary>
+    public const string CountPendingEmbed =
+        "SELECT COUNT(*) FROM entries WHERE embed_state = 'pending'";
+
     // Sets all four embed-transition columns together (docs/plans/2026-08-08-search-knn-perf.md
     // §3.6): a chunk with no heading writes heading_path = '' — never NULL, since NULL means "not
     // yet processed" and the vec_structure_au trigger guards on IS NOT NULL.
@@ -371,6 +375,13 @@ internal static class MemorySql
     /// or a permanently-poisoned row would keep this (and therefore the 15s on-demand poll) true forever.</summary>
     public const string HasPendingCodeEmbed =
         "SELECT EXISTS(SELECT 1 FROM code_entries WHERE embed_state = 'pending' AND embed_attempts < 3 LIMIT 1)";
+
+    /// <summary>Bank-wide pending code-row count — CodeReindexJob.CountOutstandingRowsAsync (WP3, #477) and `doctor`'s
+    /// code-engine report (DoctorCommands.CountPendingCodeRowsAsync) share this one query. Unlike HasPendingCodeEmbed,
+    /// this does NOT exclude embed_attempts >= 3 poison rows — both callers want the literal pending count, not the
+    /// drain-eligible subset, so a quarantined row still shows up here.</summary>
+    public const string CountPendingCodeEmbed =
+        "SELECT COUNT(*) FROM code_entries WHERE embed_state = 'pending'";
 
     /// <summary>Bank-wide (not project-scoped) pending code rows for the code-reindex drain — mirrors SelectAllPendingForEmbed.
     /// S2: the same MaxEmbedAttempts exclusion as HasPendingCodeEmbed (see its own remark on the literal 3) — a
