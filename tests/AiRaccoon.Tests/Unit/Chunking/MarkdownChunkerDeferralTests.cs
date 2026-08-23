@@ -389,4 +389,19 @@ public class MarkdownChunkerDeferralTests
 
         chunks.ShouldAllBe(chunk => CharCount(chunk) <= maxTokens);
     }
+
+    [Fact]
+    public void Split_SectionWhoseOnlyTailIsASubHeading_StillDefersAsHavingNoContentOfItsOwn()
+    {
+        // Copilot round 4: a "###" line or a "## Source:" line after the opener is not content, so
+        // the opener has nothing of its own and defers like a bare heading (#489 rule).
+        // Chunk 0's budget (35) ends right after "### Sub\n\n"; the next unit is "## C", so the
+        // section does not continue past the chunk — only the no-content-of-its-own rule can defer it.
+        var text = "# T\n\n## A\nAAAA\nAAAA\n\n## B\n### Sub\n\n## C\nCCCC\n";
+
+        var chunks = new MarkdownChunker(CharCount).Chunk(text, 35);
+
+        chunks[0].ShouldBe("# T\n\n## A\nAAAA\nAAAA\n\n");
+        chunks[1].ShouldStartWith("## B\n### Sub\n");
+    }
 }

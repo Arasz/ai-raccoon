@@ -234,7 +234,7 @@ public sealed class MarkdownChunker : IMarkdownChunker
         var headingHasOwnContent = false;
         for (var idx = i + 1; idx < chunkUnits.Count; idx++)
         {
-            if (!IsBlankUnit(chunkUnits[idx]))
+            if (IsContentfulUnit(chunkUnits[idx]))
             {
                 headingHasOwnContent = true;
                 break;
