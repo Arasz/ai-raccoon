@@ -433,6 +433,40 @@ public class ModelDownloadPlannerTests
         plan.PoolingProvenance.ShouldBe("sentence-transformers");
     }
 
+    /// <summary>
+    ///     #504: a two-output graph naming the pooled output FIRST
+    ///     (<c>[sentence_embedding, &lt;tail&gt;]</c>) must not let the unrecognized tail steal the
+    ///     pooled role — before this fix, <c>SelectTokenEmbeddingsOutput</c>'s naive
+    ///     <c>FirstOrDefault</c> fallback picked <c>sentence_embedding</c> itself as the token-level
+    ///     output, so the two names came out swapped.
+    /// </summary>
+    [Fact]
+    public void Pooling_TwoOutputs_SentenceEmbeddingNamedFirst_TailIsTheTokenLevelOutput()
+    {
+        var probe = BgeM3Probe() with { OutputNames = ["sentence_embedding", "hidden_states"] };
+
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), probe);
+
+        plan.EmbeddingOutput.ShouldBe("sentence_embedding");
+        plan.TokenEmbeddingsOutput.ShouldBe("hidden_states");
+    }
+
+    /// <summary>
+    ///     #504's other named shape — a recognized token-level name plus an unrecognized,
+    ///     non-embedding-looking tail (<c>[token_embeddings, &lt;tail&gt;]</c>) — pins the existing
+    ///     <c>outputs[^1]</c> fallback as the pooled output. Untested before this fix, not broken.
+    /// </summary>
+    [Fact]
+    public void Pooling_TwoOutputs_TokenEmbeddingsNamedFirst_TailIsThePooledOutput()
+    {
+        var probe = BgeM3Probe() with { OutputNames = ["token_embeddings", "pooler_output"] };
+
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), probe);
+
+        plan.TokenEmbeddingsOutput.ShouldBe("token_embeddings");
+        plan.EmbeddingOutput.ShouldBe("pooler_output");
+    }
+
     [Fact]
     public void Pooling_Placeholder_WhenSentenceTransformersLayoutAbsent()
     {

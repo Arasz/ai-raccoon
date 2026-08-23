@@ -522,6 +522,19 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
             }
         }
 
+        // #504: with an unrecognized name and more than one output, never fall back to a name
+        // that looks like the graph's own pooled output — that is SelectEmbeddingOutput's role,
+        // and picking it here swaps the two outputs (e.g. [sentence_embedding, <tail>]).
+        if (outputs.Count > 1)
+        {
+            var nonPooledLooking = outputs.FirstOrDefault(n =>
+                n != "sentence_embedding" && !n.Contains("embedding", StringComparison.OrdinalIgnoreCase));
+            if (nonPooledLooking is not null)
+            {
+                return nonPooledLooking;
+            }
+        }
+
         return outputs.FirstOrDefault() ?? string.Empty;
     }
 
