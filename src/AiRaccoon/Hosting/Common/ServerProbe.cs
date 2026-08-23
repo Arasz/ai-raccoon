@@ -10,7 +10,8 @@ namespace AiRaccoon.Hosting.Common;
 
 /// <summary>
 ///     Recognizes an ai-raccoon MCP server on an endpoint: POST /mcp with an MCP Accept header and a
-///     non-JSON body; recognized iff status ∈ {400,401,405,406} and the body mentions jsonrpc.
+///     non-JSON body; recognized iff the status is not transient (5xx/408/429 are retried) and the
+///     body mentions jsonrpc — any other status counts, the status set is not checked (#539).
 ///     Uses Polly v8 resilience pipeline with exponential backoff and random jitter.
 /// </summary>
 public sealed class ServerProbe : IServerProbe
