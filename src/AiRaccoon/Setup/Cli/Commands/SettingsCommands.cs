@@ -295,8 +295,9 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         }
 
         await store.SetSettingAsync(EmbeddingSettingsKeys.Threads, threads.ToString(CultureInfo.InvariantCulture), cancellationToken);
-        var suffix = threads == 0 ? " (ORT default)" : "";
-        await streams.WriteOutputLineAsync($"embedding threads set to {threads}{suffix}; takes effect on the next server restart");
+        // G4: the same phrase doctor and `model show` render for the same stored value.
+        await streams.WriteOutputLineAsync(
+            $"embedding threads set to {EmbeddingService.ThreadCountDisplay(threads)} ({EmbeddingService.ThreadCountSource(raw)}); takes effect on the next server restart");
         return 0;
     }
 
@@ -330,11 +331,14 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         }
 
         // Independent of provider (WP11-A/G16): the ORT thread cap applies to any local session,
-        // memory or code, so it is shown unconditionally like codeModel below.
+        // memory or code, so it is shown unconditionally like codeModel below. G4: the resolved
+        // count and its source, in the same phrase doctor and `model threads` render.
         var threadsRaw = rows.GetValueOrDefault(EmbeddingSettingsKeys.Threads);
-        await streams.WriteOutputLineAsync(threadsRaw is null
-            ? "threads: (unset — default max(1, logicalCores/2))"
-            : $"threads: {threadsRaw}{(threadsRaw == "0" ? " (ORT default)" : "")}");
+        var resolvedThreads = EmbeddingService.TryParseThreadsSetting(threadsRaw, out var explicitThreads)
+            ? explicitThreads
+            : EmbeddingService.HalvedCoreThreadDefault(Environment.ProcessorCount);
+        await streams.WriteOutputLineAsync(
+            $"threads: {EmbeddingService.ThreadCountDisplay(resolvedThreads)} ({EmbeddingService.ThreadCountSource(threadsRaw)})");
 
         // Independent of the memory engine (§3.3): shown even when no memory provider is
         // configured, since the code corpus can be activated on its own.
