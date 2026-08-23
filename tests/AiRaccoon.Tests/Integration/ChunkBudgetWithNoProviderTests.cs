@@ -40,7 +40,7 @@ public sealed class ChunkBudgetWithNoProviderTests : IAsyncLifetime
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
-            new EmbeddingService(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()), NoOpMeasurementRecorder.Instance, TimeProvider.System));
+            new EmbeddingService(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()), NoOpMeasurementRecorder.Instance, TimeProvider.System), null, null, null, null, null, null, null);
 
         // Deliberately NOT configured: this is the ingest-then-configure order the defect lives in.
     }

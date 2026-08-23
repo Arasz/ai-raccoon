@@ -34,7 +34,7 @@ public sealed class SqliteMemoryStoreChunkingTests : IAsyncLifetime
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         var clock = new FakeTimeProvider(FixedNow);
         _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), clock,
-            TestData.CreateEmbeddingService());
+            TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
         _openAi = await FakeEmbeddingEndpoint.StartAsync(TestContext.Current.CancellationToken);
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
         await TestData.ConfigureAndDrainEmbeddingAsync(_store, factory, TestData.CreateEmbeddingService(),

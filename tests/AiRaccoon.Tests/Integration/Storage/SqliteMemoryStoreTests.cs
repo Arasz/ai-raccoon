@@ -41,7 +41,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock,
-            TestData.CreateEmbeddingService());
+            TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
@@ -1113,7 +1113,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     {
         var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
-            TestData.CreateEmbeddingService(), noisePolicies: [new HermesProcessNoisePolicy()]);
+            TestData.CreateEmbeddingService(), modelMigrationLease: null, jsonChunker: null, noisePolicies: [new HermesProcessNoisePolicy()], settings: null, codeChunker: null, ignoreRulesProvider: null, measurements: null);
 
         var entry = await store.WriteAsync(new MemoryWriteRequest("acme", HermesNoiseContent),
             TestContext.Current.CancellationToken);
@@ -1134,7 +1134,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     {
         var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
-            TestData.CreateEmbeddingService(), noisePolicies: [new HermesProcessNoisePolicy()]);
+            TestData.CreateEmbeddingService(), modelMigrationLease: null, jsonChunker: null, noisePolicies: [new HermesProcessNoisePolicy()], settings: null, codeChunker: null, ignoreRulesProvider: null, measurements: null);
         await store.SetSettingAsync(NoiseConfigKeys.EnabledGlobal, "false", TestContext.Current.CancellationToken);
 
         var entry = await store.WriteAsync(new MemoryWriteRequest("acme", HermesNoiseContent),

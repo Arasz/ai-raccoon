@@ -38,7 +38,7 @@ public sealed class MemoryStorePathCascadeEscapeTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), new SingleChunkChunker(),
-            new FakeTimeProvider(new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero)), TestData.CreateEmbeddingService());
+            new FakeTimeProvider(new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero)), TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);

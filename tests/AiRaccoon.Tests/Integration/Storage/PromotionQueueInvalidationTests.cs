@@ -40,7 +40,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
         };
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _clock = new FakeTimeProvider(FixedNow);
-        _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, TestData.CreateEmbeddingService());
+        _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
         _queueStore = new SqlitePromotionQueueStore(_factory, _clock);
     }
 

@@ -80,7 +80,7 @@ internal sealed class TableCorpusBank : IAsyncDisposable
         var clock = new FakeTimeProvider(FixedNow);
         var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(factory), chunker, clock,
-            TestData.CreateEmbeddingService());
+            TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
 
         var ensured = await TestData.CreateBundledModel().EnsureAsync(cancellationToken);
         if (!ensured.AllPresent)

@@ -35,7 +35,7 @@ public sealed class SharedWriteIsAPromotionRequestTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(),
-            new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService());
+            new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
         // A recording queue, not the real graph: this gate is about what the WRITE path decides.
         // That a proposed candidate persists is PromotionQueueService's own contract and its tests.
         _writes = new MemoryWriteService(store, _queue);

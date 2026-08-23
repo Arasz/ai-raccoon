@@ -51,7 +51,7 @@ public sealed class RelativeScoreFloorTests : IDisposable
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
-            TestData.CreateEmbeddingService());
+            TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);

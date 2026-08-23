@@ -60,7 +60,7 @@ public sealed class GoldenMemorySearchResponseTests : IAsyncLifetime
         _settings = new SqliteSettingsStore(factory);
         _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(factory), new StubChunker(), clock,
-            TestData.CreateEmbeddingService(), settings: _settings);
+            TestData.CreateEmbeddingService(), modelMigrationLease: null, jsonChunker: null, noisePolicies: null, settings: _settings, codeChunker: null, ignoreRulesProvider: null, measurements: null);
         _openAi = await FakeEmbeddingEndpoint.StartAsync(TestContext.Current.CancellationToken);
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
         await TestData.ConfigureAndDrainEmbeddingAsync(_store, factory, TestData.CreateEmbeddingService(),

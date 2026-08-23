@@ -44,7 +44,7 @@ public sealed class SweepCodeCorpusNonInterferenceTests : IDisposable
         _bankPath = factory.BankPath;
         _time = new FakeTimeProvider(FixedNow);
         _store = TestData.CreateMemoryStore(factory,
-            new FakeLogger<SqliteMemoryStore>(), new SqliteMemorySourceStore(factory), new SingleChunkChunker(), _time, TestData.CreateEmbeddingService());
+            new FakeLogger<SqliteMemoryStore>(), new SqliteMemorySourceStore(factory), new SingleChunkChunker(), _time, TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
         _service = new SweepHostedService(_store, new SweepService(_store, _time), _time,
             TestTelemetry.None, new FakeLogger<SweepHostedService>());
     }

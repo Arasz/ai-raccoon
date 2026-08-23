@@ -42,7 +42,7 @@ public sealed class CodeIngestReplacesStaleChunksTests : IDisposable
     private SqliteMemoryStore CreateStore(AiRaccoon.Core.Chunking.ICodeChunker codeChunker) =>
         TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
-            TestData.CreateEmbeddingService(), ignoreRulesProvider: new IgnoreRulesProvider(), codeChunker: codeChunker);
+            TestData.CreateEmbeddingService(), ignoreRulesProvider: new IgnoreRulesProvider(), codeChunker: codeChunker, modelMigrationLease: null, jsonChunker: null, noisePolicies: null, settings: null, measurements: null);
 
     private Task ScopeDataRootAsync() =>
         _store.SetSettingAsync(IngestScopeKeys.ScopeGlobal, IngestScopeKeys.Serialize([_dataRoot]),

@@ -77,7 +77,7 @@ public sealed class ModelMigrationCheckStatementCountTests
             var factory = new OpenCountingConnectionFactory(real);
             var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance,
                 new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), TimeProvider.System,
-                TestData.CreateEmbeddingService());
+                TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
 
             // Warm-up: ensure the schema before measuring, matching MemorySchemaDdlStatementCountTests'
             // and the WP5 docs' own convention — the digest-stale first-open cost is a one-time,

@@ -33,7 +33,7 @@ public sealed class RatingBumpConsistencyTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(),
-            new FakeTimeProvider(Now), TestData.CreateEmbeddingService());
+            new FakeTimeProvider(Now), TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);

@@ -57,7 +57,7 @@ public sealed class DocsCorpusRegenerationTool(ITestOutputHelper output)
             var clock = new FakeTimeProvider(new DateTimeOffset(2026, 8, 22, 0, 0, 0, TimeSpan.Zero));
             var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance,
                 new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(),
-                clock, TestData.CreateEmbeddingService());
+                clock, TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
 
             await TestData.ConfigureAndDrainEmbeddingAsync(store, factory, TestData.CreateEmbeddingService(),
                 "local", null, null, cancellationToken, clock);

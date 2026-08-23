@@ -36,7 +36,7 @@ public sealed class DirectIngestReplacesStaleChunksTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
-            TestData.CreateEmbeddingService(), ignoreRulesProvider: new IgnoreRulesProvider());
+            TestData.CreateEmbeddingService(), ignoreRulesProvider: new IgnoreRulesProvider(), modelMigrationLease: null, jsonChunker: null, noisePolicies: null, settings: null, codeChunker: null, measurements: null);
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
@@ -207,5 +207,5 @@ public sealed class DirectIngestReplacesStaleChunksTests : IDisposable
         TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
             TestData.CreateEmbeddingService(), ignoreRulesProvider: new IgnoreRulesProvider(),
-            codeChunker: new StubCodeChunker());
+            codeChunker: new StubCodeChunker(), modelMigrationLease: null, jsonChunker: null, noisePolicies: null, settings: null, measurements: null);
 }

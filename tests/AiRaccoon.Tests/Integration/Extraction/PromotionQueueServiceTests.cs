@@ -41,7 +41,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
         };
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _clock = new FakeTimeProvider(FixedNow);
-        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, TestData.CreateEmbeddingService());
+        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
         var queueStore = new SqlitePromotionQueueStore(_factory, _clock);
         _metrics = new RecordingMetrics();
         _service = new PromotionQueueService(queueStore, store, new UniformCountEvictionPolicy(),
@@ -176,7 +176,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
     [Fact]
     public async Task Promote_SharesTopNFromTheQueue_AndDrains()
     {
-        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, TestData.CreateEmbeddingService());
+        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
         // Queue candidates are committed entries by construction (propose extracts from the
         // project context), so the hashes must exist there for ShareAsync.
         var low = await store.WriteAsync(new MemoryWriteRequest("acme", "low fact"),
@@ -207,7 +207,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
     [Fact]
     public async Task Promote_SkipsAlreadySharedValues_AndDrainsThemToo()
     {
-        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, TestData.CreateEmbeddingService());
+        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
         var dup = await store.WriteAsync(new MemoryWriteRequest("acme", "shared  fact"),
             TestContext.Current.CancellationToken);
         var fresh = await store.WriteAsync(new MemoryWriteRequest("acme", "fresh fact"),
@@ -421,7 +421,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
     [Fact]
     public async Task Sweep_DropsQueueRowsForTheEntriesItDeleted_AndLeavesTheRest()
     {
-        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, TestData.CreateEmbeddingService());
+        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
         var doomed = await store.WriteAsync(
             new MemoryWriteRequest("acme", "doomed entry"),
             TestContext.Current.CancellationToken);

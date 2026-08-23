@@ -38,7 +38,7 @@ public sealed class ConfigureAndDrainEmbeddingAsyncClockTests : IAsyncLifetime
         _clock = new FakeTimeProvider(FixedNow);
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), _clock,
-            TestData.CreateEmbeddingService());
+            TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
     }
 
     public ValueTask DisposeAsync()

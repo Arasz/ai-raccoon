@@ -700,7 +700,7 @@ public sealed class WatchIntegrationTests
                 new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
                 NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
             Memory = TestData.CreateMemoryStore(_factory, new FakeLogger<SqliteMemoryStore>(_logs), new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), Time,
-                TestData.CreateEmbeddingService(), codeChunker: codeChunker);
+                TestData.CreateEmbeddingService(), codeChunker: codeChunker, modelMigrationLease: null, jsonChunker: null, noisePolicies: null, settings: null, ignoreRulesProvider: null, measurements: null);
             WatchStore = new WatchStore(_factory);
             ScanGuard = new WatchScanGuard();
             EmbedDrainPump = TestData.NewEmbedDrainPump();

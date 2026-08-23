@@ -31,7 +31,7 @@ public sealed class SearchParametersResolutionTests : IDisposable
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
-            TestData.CreateEmbeddingService());
+            TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
@@ -184,7 +184,7 @@ public sealed class SearchParametersResolutionTests : IDisposable
         var counting = new CountingConnectionFactory(_factory);
         var store = TestData.CreateMemoryStore(counting, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
-            TestData.CreateEmbeddingService());
+            TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
         await store.WriteAsync(new MemoryWriteRequest("acme", "one connection for the whole search"), ct);
         counting.Reset();
 

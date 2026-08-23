@@ -83,7 +83,7 @@ public sealed class RrfParameterSweepTests : IDisposable
         // it sweeps (docs/adr/0049, docs/adr/0050). The corpus vectors in docs-memory.db were
         // already fixed; the query vector was the one un-pinned input.
         _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
-            PinnedQueryVectors.EmbeddingService());
+            PinnedQueryVectors.EmbeddingService(), null, null, null, null, null, null, null);
 
         // CorpusHashMap, not a private copy. The copy this replaced compared heading_path to the
         // '#section' suffix verbatim, while CorpusHashMap slugifies it ("Alternatives considered"

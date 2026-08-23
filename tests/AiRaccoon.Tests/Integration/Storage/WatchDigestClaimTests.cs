@@ -47,7 +47,7 @@ public sealed class WatchDigestClaimTests : IDisposable
         var ct = TestContext.Current.CancellationToken;
         var time = new FakeTimeProvider(FixedNow);
         var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
-            new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), time, TestData.CreateEmbeddingService());
+            new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), time, TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
         var file = Path.Combine(_dataRoot, "guard-throws.md");
         await File.WriteAllTextAsync(file, "content for the guard-throws test", ct);
         await store.SetSettingAsync(IngestScopeKeys.ScopeGlobal, IngestScopeKeys.Serialize([_dataRoot]), ct);
@@ -86,7 +86,7 @@ public sealed class WatchDigestClaimTests : IDisposable
         var ct = TestContext.Current.CancellationToken;
         var time = new FakeTimeProvider(FixedNow);
         var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
-            new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), time, TestData.CreateEmbeddingService());
+            new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), time, TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
         var file = Path.Combine(_dataRoot, "stale-claim.md");
         await File.WriteAllTextAsync(file, "content for the stale-claim reclaim test", ct);
         await store.SetSettingAsync(IngestScopeKeys.ScopeGlobal, IngestScopeKeys.Serialize([_dataRoot]), ct);
@@ -107,7 +107,7 @@ public sealed class WatchDigestClaimTests : IDisposable
         var ct = TestContext.Current.CancellationToken;
         var time = new FakeTimeProvider(FixedNow);
         var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
-            new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), time, TestData.CreateEmbeddingService());
+            new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), time, TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
         var file = Path.Combine(_dataRoot, "fresh-claim.md");
         await File.WriteAllTextAsync(file, "content for the fresh-claim decline test", ct);
         await store.SetSettingAsync(IngestScopeKeys.ScopeGlobal, IngestScopeKeys.Serialize([_dataRoot]), ct);
