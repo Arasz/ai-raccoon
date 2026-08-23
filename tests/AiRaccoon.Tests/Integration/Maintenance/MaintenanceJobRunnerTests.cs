@@ -324,6 +324,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
 
         await Runner(recorder).RunDueAsync(connection, [job], TestContext.Current.CancellationToken);
 
+        recorder.Recorded.Count.ShouldBe(2, "the same pass records both duration and rows — not one or the other");
         var rows = recorder.Recorded.Single(m => m.Name == "job.rows-job.rows");
         rows.Kind.ShouldBe(MeasurementKind.Gauge);
         rows.Value.ShouldBe(7);
