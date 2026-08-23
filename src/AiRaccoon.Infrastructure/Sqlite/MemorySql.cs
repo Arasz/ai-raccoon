@@ -409,6 +409,21 @@ internal static class MemorySql
     public const string IncrementCodeEmbedAttempts =
         "UPDATE code_entries SET embed_attempts = embed_attempts + 1 WHERE id = @id RETURNING embed_attempts";
 
+    // ---- projects (ADR-0089) ----
+
+    public const string InsertProject = """
+                                        INSERT INTO projects (id, name, created_at)
+                                        VALUES (@id, @name, @createdAt)
+                                        ON CONFLICT(id) DO NOTHING
+                                        """;
+
+    public const string ProjectIsRegistered = "SELECT count(*) FROM projects WHERE id = @projectId";
+
+    // ProjectRows.Of(), never Scope(): Scope() carries no project_id, so a Scope()-only predicate
+    // is true for any project- or custom-scoped row in the whole bank, defeating the per-project
+    // answer this query exists to give (ADR-0089 §"Use Of(), never Scope()").
+    public static readonly string ProjectHasRows = $"SELECT count(*) FROM entries WHERE {ProjectRows.Of()}";
+
     // ---- model_migration (ADR-0076) ----
 
     public const string SelectModelMigration =

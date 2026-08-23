@@ -11,6 +11,7 @@ using AiRaccoon.Core.Memory.Filtering.Policies;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Metrics;
 using AiRaccoon.Core.Observability;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Chunking;
@@ -302,6 +303,9 @@ public static partial class AppRegistrations
             // ADR-0076: same instance as IMemoryStore — split out for the same reason ISettingsStore
             // was (ADR-0075), so the CLI can route model-set through the server independently.
             services.AddSingleton<IModelMigrationStore>(sp => sp.GetRequiredService<SqliteMemoryStore>());
+            // ADR-0089: same instance as IMemoryStore, same reason as IModelMigrationStore above.
+            // Server graph only — the CLI graph's wiring is carried to post-delta-5 §WP1.
+            services.AddSingleton<IProjectRegistry>(sp => sp.GetRequiredService<SqliteMemoryStore>());
             // §3.3 D-E9: a store of its own, not another SqliteMemoryStore constructor parameter —
             // same ADR-0075 reason the two registrations above are split out.
             services.AddRequiredSingleton<ICodeEngineStore, SqliteCodeEngineStore>();
