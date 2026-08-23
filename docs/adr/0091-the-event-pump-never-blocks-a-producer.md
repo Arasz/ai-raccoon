@@ -211,8 +211,8 @@ contract or to `EventPump<T>`'s existing topics. `TryEnqueue`'s never-blocks gua
 
 The "no drain-until-empty loop … without a separate owner ruling (G20)" line above is answered:
 `docs/work/2026-08-23-post-delta-4-plan.md` WP1, owner ruling **G1** (APPROVE), is that ruling.
-`EmbedDrainService.DrainOnceAsync` (`EmbedDrainService.cs:104-143`) now re-enqueues its own
-`EmbedDrainRequest` when a pass drains rows `>= rowsPerRun` (`:126-129`) — a full row budget means
+`EmbedDrainService.DrainOnceAsync` (`EmbedDrainService.cs:104-145`) now re-enqueues its own
+`EmbedDrainRequest` when a pass drains rows `>= rowsPerRun` (`:126-131`) — a full row budget means
 the backlog may not be empty, and `EmbedPendingBatchAsync` on both corpora counts only rows whose
 UPDATE landed (PR #530 review, finding F1: this was already true for `CodeEmbedder` and made true
 for `EntryEmbedder` in the same round), so the re-signal is real progress and cannot spin once a

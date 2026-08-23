@@ -144,7 +144,7 @@ public sealed class EmbedDrainContinuousTests : IDisposable
 
         (await service.Drains.WaitAsync(1, SignalTimeout, TestContext.Current.CancellationToken)).ShouldBeTrue();
 
-        logger.Collector.GetSnapshot().Count(r => r.Level == LogLevel.Debug && r.Message.Contains("re-signal", StringComparison.Ordinal))
+        logger.Collector.GetSnapshot().Count(r => r.Id.Id == 1007)
             .ShouldBe(1, "the dropped self re-signal must be visible, not silently swallowed");
         await service.StopAsync(TestContext.Current.CancellationToken);
     }
