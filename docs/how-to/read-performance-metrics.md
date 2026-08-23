@@ -65,17 +65,37 @@ A few things worth knowing before reading a report:
   tool inventory plus `SearchTimings.SeriesNames` — the nine `memory_search` phases and the
   measured `search.total` — so a tool or phase nothing has called yet still appears, at
   `count: 0`, rather than being silently omitted.
-- **Maintenance-job series ARE discovered, by prefix, and only in the self-metrics report.**
-  `job.<name>.duration_ms` on every completed maintenance-job run, `job.<name>.rows` for a job
-  that reports an outstanding-row count (#477) — `<name>` is dynamic (one per job), so these are
-  found with a `name LIKE 'job.%'` query over the requested window rather than a fixed list, and
-  only appear when you ask for the whole-bank self-metrics project id (see below), never a
-  `count: 0` placeholder if that job never ran in the window.
+- **Four series families are discovered by prefix, scoped to whatever project id you ask
+  `memory_performance` for** (`MetricsConfigKeys.InternalSeriesPrefixes`: `job.`, `drain.`,
+  `write.`, `search.query.`) — no `count: 0` placeholder if nothing in that family was recorded
+  for that project in the window, unlike the fixed tool/phase list above.
+  - `job.<name>.duration_ms` on every completed maintenance-job run, `job.<name>.rows` for a job
+    that reports an outstanding-row count (#477) — `<name>` is dynamic (one per job).
+  - `drain.<memory|code>.rows` and `drain.<memory|code>.duration_ms` for an embed-drain pass
+    (EventId 1003, WP11).
+  - `search.query.truncated_tokens` — how many tokens a search query ran OVER the embedding
+    window (`tokens - maxTokens`, not how many survived or were dropped) for a query that had to
+    be trimmed (EventId 426, WP11).
+  - `write.replace.lock_ms` and `write.replace.rows` for a replace-by-path transaction's held
+    write-lock time and row count (EventId 899, WP11). **`0 rows = a declined/no-op replace** — a
+    fingerprint-gated replace whose stored hash already matched skips the re-ingest but still
+    takes and releases the write lock, so `lock_ms` is real even when `rows` is `0`; this is the
+    same 0 the log line (EventId 899) already reports at that branch, not a separate computation,
+    so it is kept rather than filtered out.
+
+  `job.*`, `drain.*` and `search.query.*` are bank-wide — none of a maintenance job, an
+  embed-drain pass, or the embedding engine's query-trim path has a project id — so they only
+  ever appear when you ask for the whole-bank self-metrics project id (see below). `write.*` is
+  recorded under the WRITING project's own real id, so it surfaces in an ordinary project's report
+  the same way a tool series does. `lock_ms` is currently wait-for-the-lock plus held-time
+  combined (`WP12` is expected to split those apart — see the note in
+  [`agent-memory-server.md`](../reference/agent-memory-server.md)).
 - **A quiet window is an empty series, never an error.** Asking about a bank with no traffic in
   the requested window is a well-formed answer ("nothing happened"), not a failure.
 - **The report is project-scoped**, with one exception: passing the reserved
   `__self_metrics__` project id returns the bank-wide series instead — `metrics.dropped`,
-  `metrics.flush.*`, and the `job.*` series above. There is still no per-tenant whole-bank view
+  `metrics.flush.*`, and the bank-wide `job.*`/`drain.*`/`search.query.*` series above. There is
+  still no per-tenant whole-bank view
   (deferred — see [the implementation plan](../plans/2026-08-15-performance-metrics-implementation.md), item D6).
 - **`windowMinutes` / `bucketMinutes`** override the defaults. A `bucketMinutes` wider than
   `windowMinutes` is never rejected — it clamps to the window and the series returns one averaged

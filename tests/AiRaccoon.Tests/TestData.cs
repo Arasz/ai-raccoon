@@ -71,7 +71,8 @@ public static class TestData
         IEnumerable<INoiseFilterPolicy>? noisePolicies = null,
         ISettingsStore? settings = null,
         ICodeChunker? codeChunker = null,
-        IIgnoreRulesProvider? ignoreRulesProvider = null)
+        IIgnoreRulesProvider? ignoreRulesProvider = null,
+        IMeasurementRecorder? measurements = null)
     {
         jsonChunker ??= RealJsonChunker(markdownChunker);
         var embedder = new EntryEmbedder(embeddings, modelMigrationLease ?? ModelMigrationLease, timeProvider);
@@ -90,7 +91,7 @@ public static class TestData
                 new CodeIngestor(new CodeFileTypeMatcher(), codeChunker, timeProvider), NullWatchStore.Instance, pump);
         var noiseFilteringService = new NoiseFilteringService(noisePolicies ?? []);
         return new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService,
-            settings ?? new SqliteSettingsStore(factory), pump);
+            settings ?? new SqliteSettingsStore(factory), pump, measurements ?? NoOpMeasurementRecorder.Instance);
     }
 
     /// <summary>
@@ -105,7 +106,8 @@ public static class TestData
         CancellationToken cancellationToken = default)
     {
         var service = new EmbedDrainService(pump, factory, entryEmbedder, codeEmbedder ?? new FakeCodeEmbedder(),
-            new SqliteSettingsStore(factory), TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
+            new SqliteSettingsStore(factory), NoOpMeasurementRecorder.Instance, TimeProvider.System,
+            TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
         foreach (var request in pump.DrainUpTo(int.MaxValue))
         {
             await service.DrainOnceAsync(request, cancellationToken).ConfigureAwait(false);
@@ -256,7 +258,8 @@ public static class TestData
 
     /// <summary>EmbeddingService with a null logger — the constructor requires a real <see cref="ILogger{TCategoryName}"/> now that it is DI-registered, so tests that don't care about logging use this.</summary>
     public static EmbeddingService CreateEmbeddingService() => new(NullLogger<EmbeddingService>.Instance, new LocalTokenizer(),
-        new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
+        new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
+        NoOpMeasurementRecorder.Instance, TimeProvider.System);
 
     /// <summary>
     ///     Bootstraps the pinned sentencepiece fixture (tests/AiRaccoon.Tests/Resources/tokenizers/manifest.json)
@@ -571,6 +574,8 @@ public sealed class NoOpCodeSearchService : ICodeSearchService
 /// <summary>Discards every measurement — for tests that need an <see cref="IMeasurementRecorder" /> but do not assert on it.</summary>
 public sealed class NoOpMeasurementRecorder : IMeasurementRecorder
 {
+    public static NoOpMeasurementRecorder Instance { get; } = new();
+
     public void Record(Measurement measurement)
     {
     }

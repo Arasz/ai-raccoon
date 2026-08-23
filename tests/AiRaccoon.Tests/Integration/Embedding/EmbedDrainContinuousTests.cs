@@ -41,7 +41,8 @@ public sealed class EmbedDrainContinuousTests : IDisposable
     private EmbedDrainService NewService(IEventPump<EmbedDrainRequest> pump, ICodeEmbedder code,
         ILogger<EmbedDrainService>? logger = null) =>
         new(pump, _factory, new NoOpEntryEmbedder(), code, new SqliteSettingsStore(_factory),
-            TestTelemetry.None, logger ?? NullLogger<EmbedDrainService>.Instance);
+            NoOpMeasurementRecorder.Instance, TimeProvider.System, TestTelemetry.None,
+            logger ?? NullLogger<EmbedDrainService>.Instance);
 
     /// <summary>For a clean backlog (an exact multiple of the row budget), one signal drains it in
     /// N passes: the first two passes each consume exactly the full row budget and re-signal

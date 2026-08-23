@@ -30,7 +30,8 @@ public sealed class ManifestDirectoryActivationTests : IAsyncLifetime
 
     private static EmbeddingService Service() =>
         new(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(),
-            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
+            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
+            NoOpMeasurementRecorder.Instance, TimeProvider.System);
 
     // D1: the manifest now pins real bytes, not placeholder content — pass the sha256 of what is
     // actually on disk at each path.

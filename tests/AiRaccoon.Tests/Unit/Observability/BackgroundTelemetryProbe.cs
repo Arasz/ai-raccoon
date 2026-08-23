@@ -14,6 +14,7 @@ internal sealed class BackgroundTelemetryProbe : IDisposable
     private readonly ActivityListener _listener;
     private readonly MetricCollector<double> _durations;
     private readonly MetricCollector<long> _passes;
+    private readonly MetricCollector<long> _rows;
     private readonly List<Activity> _spans = [];
     private readonly Lock _gate = new();
 
@@ -22,6 +23,7 @@ internal sealed class BackgroundTelemetryProbe : IDisposable
         Telemetry = new BackgroundTelemetry();
         _durations = new MetricCollector<double>(Telemetry.Meter, OtlpNames.BackgroundPassDuration);
         _passes = new MetricCollector<long>(Telemetry.Meter, OtlpNames.BackgroundPasses);
+        _rows = new MetricCollector<long>(Telemetry.Meter, OtlpNames.BackgroundPassRows);
         _listener = new ActivityListener
         {
             // Reference-equality on the probe's own ActivitySource, not the source NAME: every
@@ -63,11 +65,14 @@ internal sealed class BackgroundTelemetryProbe : IDisposable
 
     public IReadOnlyList<CollectedMeasurement<long>> Passes => _passes.GetMeasurementSnapshot();
 
+    public IReadOnlyList<CollectedMeasurement<long>> Rows => _rows.GetMeasurementSnapshot();
+
     public void Dispose()
     {
         _listener.Dispose();
         _durations.Dispose();
         _passes.Dispose();
+        _rows.Dispose();
         Telemetry.Dispose();
     }
 }

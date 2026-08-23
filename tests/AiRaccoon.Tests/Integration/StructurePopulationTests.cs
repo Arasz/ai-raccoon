@@ -49,7 +49,8 @@ public sealed class StructurePopulationTests : IAsyncLifetime
             NullWatchStore.Instance, _pump);
         var embedder = new EntryEmbedder(embeddings, Substitute.For<IModelMigrationLease>(), _clock);
         _store = new SqliteMemoryStore(_factory, sourceStore, fileIngestor, embedder, _clock,
-            NullLogger<SqliteMemoryStore>.Instance, new NoiseFilteringService([]), new SqliteSettingsStore(_factory), _pump);
+            NullLogger<SqliteMemoryStore>.Instance, new NoiseFilteringService([]), new SqliteSettingsStore(_factory), _pump,
+            NoOpMeasurementRecorder.Instance);
     }
 
     public ValueTask DisposeAsync()

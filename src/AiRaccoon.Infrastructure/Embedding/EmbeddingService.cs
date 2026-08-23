@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Metrics;
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using System.ClientModel;
 using System.Collections.Concurrent;
@@ -20,7 +21,8 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     per-file sha256s — is part of the local fingerprint, so re-downloaded weights re-embed).
 /// </summary>
 public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, ILocalTokenizer localTokenizer,
-    ITokenizerFactory tokenizerFactory, IEmbeddingManifestLoader manifestDescriptor, ISettingsStore? settingsStore = null)
+    ITokenizerFactory tokenizerFactory, IEmbeddingManifestLoader manifestDescriptor, IMeasurementRecorder measurements,
+    TimeProvider timeProvider, ISettingsStore? settingsStore = null)
     : IEmbeddingService
 {
     public const string DefaultOpenAiEndpoint = "https://api.openai.com/v1";
@@ -146,6 +148,7 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
 
             var trimmed = TokenBudget.Trim(query, manifestBudget.Value, tokenizer.CountTokens);
             Log.QueryTrimmedToWindow(_logger, tokens, manifestBudget.Value, trimmed.Length, query.Length);
+            RecordQueryTruncationMetric(tokens, manifestBudget.Value);
             return trimmed;
         }
 
@@ -157,8 +160,20 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
 
         var bundledTrimmed = TokenBudget.Trim(query, OnnxEmbeddingGenerator.MaxContentTokens, localTokenizer.CountTokens);
         Log.QueryTrimmedToWindow(_logger, bundledTokens, OnnxEmbeddingGenerator.MaxContentTokens, bundledTrimmed.Length, query.Length);
+        RecordQueryTruncationMetric(bundledTokens, OnnxEmbeddingGenerator.MaxContentTokens);
         return bundledTrimmed;
     }
+
+    /// <summary>
+    ///     WP11 (log-values-as-metrics): EventId 426's "tokens exceeded the window" value, recorded
+    ///     beside the log line above — same values, not a second computation. Bank-wide (like
+    ///     job.*/drain.*): TrimQueryToWindow has no project id to record under (see
+    ///     <see cref="EntryEmbedder.EmbedQueryAsync" />/<see cref="ICodeEmbedder.EmbedQueryAsync" />).
+    /// </summary>
+    private void RecordQueryTruncationMetric(int tokens, int maxTokens) =>
+        measurements.Record(new Measurement(MetricsConfigKeys.QueryTruncatedTokensMetricName,
+            MeasurementKind.Histogram, tokens - maxTokens, "count", timeProvider.GetUtcNow(),
+            MetricsConfigKeys.SelfMetricsProjectId));
 
     /// <summary>
     ///     Static bundled-default budget (254 local / window for others), kept for legacy callers.

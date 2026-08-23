@@ -32,7 +32,8 @@ internal static class SearchTimingsHarness
             NullCodeIngestor.Instance, NullWatchStore.Instance, NullEmbedDrainPump.Instance);
         return new SqliteMemoryStore(factory, new SqliteMemorySourceStore(factory), fileIngestor,
             embedder, timeProvider, NullLogger<SqliteMemoryStore>.Instance,
-            new NoiseFilteringService([]), new SqliteSettingsStore(factory), NullEmbedDrainPump.Instance);
+            new NoiseFilteringService([]), new SqliteSettingsStore(factory), NullEmbedDrainPump.Instance,
+            NoOpMeasurementRecorder.Instance);
     }
 
     /// <summary>
