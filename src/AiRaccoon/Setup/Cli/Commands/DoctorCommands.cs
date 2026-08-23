@@ -54,12 +54,13 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         {
             var report = await SchemaDoctor.DiagnoseAsync(connection, cancellationToken);
             var code = await ReadCodeEngineStateAsync(connection, cancellationToken);
-            return await ReportAsync(bankPath, report, code, streams);
+            var threads = await ReadEmbeddingThreadsStateAsync(connection, cancellationToken);
+            return await ReportAsync(bankPath, report, code, threads, streams);
         }
     }
 
     private static async Task<int> ReportAsync(string bankPath, SchemaDoctorReport report,
-        CodeEngineState code, StandardStreams streams)
+        CodeEngineState code, EmbeddingThreadsState threads, StandardStreams streams)
     {
         await streams.WriteOutputLineAsync($"ai-raccoon doctor: {bankPath}");
         await streams.WriteOutputLineAsync($"user_version: {report.StoredVersion} (this binary: {report.CurrentVersion})");
@@ -67,6 +68,9 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         await streams.WriteOutputLineAsync(code.Directory is null
             ? $"code engine: not configured — run '{CodeEngineSetup.DefaultModelCommand}' to enable semantic code search"
             : $"code engine: {code.Model} ({code.Directory})");
+        // #522: what `embedding.threads` resolves to, via EmbeddingService's own resolver.
+        await streams.WriteOutputLineAsync(
+            $"embedding threads: {EmbeddingService.ThreadCountDisplay(threads.Threads)} ({threads.Source})");
         await streams.WriteOutputLineAsync(
             $"code rows pending: {code.PendingRows?.ToString(CultureInfo.InvariantCulture) ?? "unreadable"}");
         await streams.WriteOutputLineAsync("doctor verifies schema shape only; it never repairs a bank");
@@ -122,6 +126,27 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         }
     }
 
+    /// <summary>#522: what `embedding.threads` resolves to, guarded like <see cref="ReadCodeEngineStateAsync" /> — a shape mismatch must never become doctor's own exit code.</summary>
+    private static async Task<EmbeddingThreadsState> ReadEmbeddingThreadsStateAsync(SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var raw = await TableExistsAsync(connection, "settings", cancellationToken)
+                ? await ReadSettingAsync(connection, EmbeddingSettingsKeys.Threads, cancellationToken)
+                : null;
+            var threads = EmbeddingService.TryParseThreadsSetting(raw, out var explicitThreads)
+                ? explicitThreads
+                : EmbeddingService.HalvedCoreThreadDefault(Environment.ProcessorCount);
+            return new EmbeddingThreadsState(threads, EmbeddingService.ThreadCountSource(raw));
+        }
+        catch (SqliteException)
+        {
+            return new EmbeddingThreadsState(EmbeddingService.HalvedCoreThreadDefault(Environment.ProcessorCount),
+                EmbeddingService.ThreadCountSource(null));
+        }
+    }
+
     private static async Task<bool> TableExistsAsync(SqliteConnection connection, string table,
         CancellationToken cancellationToken) =>
         await connection.ExecuteScalarAsync<long>(new CommandDefinition(
@@ -163,6 +188,9 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
 
     /// <summary>Null <paramref name="Directory" /> is "no code engine configured".</summary>
     private sealed record CodeEngineState(string? Model, string? Directory, long? PendingRows);
+
+    /// <summary>#522: what `embedding.threads` currently resolves to, and why (an explicit setting vs the halved-core default).</summary>
+    private sealed record EmbeddingThreadsState(int Threads, string Source);
 
     /// <summary>Mirrors AppRegistrations.OpenSnapshotReadOnly, aimed at the live bank instead of a sync snapshot: open, enable extensions, load vec0 — never EnsureAsync.</summary>
     private static async Task<SqliteConnection> OpenBankReadOnlyAsync(string bankPath, string? passphrase, CancellationToken cancellationToken)
