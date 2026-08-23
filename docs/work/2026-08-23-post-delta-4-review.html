@@ -1,0 +1,600 @@
+<meta charset="utf-8">
+<title>Post-delta session 4 — nine decisions — review</title>
+
+<!--
+  Refinement review form. Fill in CONFIG and DECISIONS below; nothing else needs editing.
+
+  Works unchanged as (a) a local file:// page and (b) a published Artifact. It deliberately has
+  no <!doctype>/<html>/<head>/<body>: the Artifact publisher supplies those, and a browser
+  synthesises them for a local file. The <meta charset> is first in the byte stream so the local
+  file decodes as UTF-8 (the sniffer scans the first 1024 bytes wherever the tag sits).
+
+  Dependency-free on purpose: the Artifact CSP blocks every external host and a file:// page has
+  no server. No CDN, no fonts, no fetch.
+-->
+
+<script>
+  var CONFIG = {
+      "title": "Post-delta session 4 — nine decisions",
+      "subtitle": "Owner gate · 2026-08-23 (plan rev 1.1) · G1–G3 are part 3's unanswered G20–G22, re-derived against the tree as merged — two of the three headline numbers moved. G5 was withdrawn into WP4 as an ungated fix; G6–G10 keep their ids.",
+      "source": "docs/work/2026-08-23-post-delta-4-plan.md § Owner gate (G1–G4, G6–G10) + § Review",
+      "outName": "2026-08-23-post-delta-4-feedback.md",
+      "expectedDir": "/Users/arasz/RiderProjects/ai-raccoon/docs/work",
+      "storageKey": "refinement:2026-08-23-post-delta-4:v1"
+  };
+
+  // One object per decision. `detail` and `why` accept inline HTML (<code>, <strong>, <em>).
+  // group starts a new section heading; omit it to stay in the current section.
+  var DECISIONS = [
+      {
+          "group": "Carried from part 3, re-derived — read these again even if you had made up your mind",
+          "id": "G1",
+          "claim": "The embed drain re-signals itself while the backlog is non-empty, instead of waiting out the 15 s poll (was G20)",
+          "detail": [
+              "Substance and payoff unchanged: 1,762 rows drained end to end at <strong>1.66 rows/s</strong> (1,061.3 s) while a clean 150 s window measured <strong>2.347 rows/s</strong> — ~29 % of the drain's wall clock is not inference, of which <strong>207 s (19.5 %)</strong> is 13.8 poll gaps at 15 s. The bound stays (<code>embedding.threads</code>: cap 5 → 2.347 rows/s at 124–140 % CPU; cap 0 → 1.902; cap 1 → 0.213); only the idle goes.",
+              "<strong>What changed since the card was written.</strong> The mechanism now lives in <code>EmbedDrainService.cs</code>, merged by #507/#517: <code>rowsPerRun</code> is re-read from <code>ISettingsStore</code> on <em>every</em> pass (<code>:107-109</code>, default 128, ceiling 4096) and the drained count already sits in a local at <code>:111</code>. The change is three lines plus a doc rewrite — <code>if (drained &gt;= rowsPerRun) pump.TryEnqueue(request);</code> — and the topic coalesces on record equality, so a re-signal for an already-queued corpus is a no-op.",
+              "<strong>The RED test named in part 3 was wrong.</strong> <code>EmbedDrainService</code> takes no <code>TimeProvider</code> (its constructor is <code>:32-40</code>), so the test uses no clock at all: one signal, a fake embedder returning a full budget twice, assert the <code>Drains</code> counter reaches 3. Note also that the class doc at <code>:22-24</code> currently promises the <em>opposite</em> in prose and must be rewritten in the same commit. <strong>Recommendation: approve</strong>, sequenced before WP5. The cheaper first move still stands and needs no code: set <code>maintenance.embed-rows-per-run.global</code> to 512 and 13.8 gaps become 3.4."
+          ],
+          "why": "<b>A fifth of every code re-index is a timer, not work</b>, and the component to change now exists.",
+          "placeholder": "Notes — e.g. just bump rows-per-run to 512 first, or keep some pacing"
+      },
+      {
+          "id": "G2",
+          "claim": "Directory ingest resolves its ignore root the way single-file ingest already does (was G21 — and its headline number was wrong)",
+          "detail": [
+              "<strong>The correction first.</strong> Part 3's card said <code>memory_ingest_directory</code> on <code>src/</code> would enumerate <strong>379 MB of bin/obj</strong>. It would not. <code>FileIngestor.cs:400</code>'s <code>IsHidden(root, path)</code> is <code>WatchDenySet.Excludes(root, path)</code>, and its doc at <code>:397-398</code> names the set: <em>node_modules/bin/obj/.git/.venv/__pycache__/dist/build/target</em>. That filter runs unconditionally at <code>:133</code>, with or without an ignore file. <strong>Build output has never entered the corpus.</strong> (For the record the number is now 1.8 GB against 2.0 MB of .cs — it just is not the argument.)",
+              "<strong>What is actually broken.</strong> <code>IngestDirectoryAsync</code> loads rules from the <strong>walk root</strong> (<code>:131</code>), while <code>IngestFileAsync</code> first calls <code>ResolveIgnoreRootAsync</code> (<code>:46</code>, body <code>:97-121</code>) — containing watch → admitting scope entry → parent. So an ignore file at an <strong>ancestor</strong> of the walk root is honoured for one file and ignored for a directory. Concretely: point it at <code>src/</code> and the root ignore file's <code>src/AiRaccoon/Models/</code> rule never loads, so <strong><code>vocab.txt</code> (231,508 B) is ingested as a memory document</strong> — <code>.txt</code> is memory-owned (<code>CodeExtensions.cs:6</code>). Real and verified, and ~1,600× smaller than the card claimed.",
+              "Note this is <em>ancestor resolution</em>, <strong>not</strong> nested discovery: <code>IgnoreRulesProvider</code> reads exactly one file at whatever root it is given (<code>:91-96</code>), so an <code>ai-raccoon.ignore</code> <em>below</em> the walk root still does nothing after this change. The cost you were asked to weigh is unchanged (a behaviour change that can silently drop rows on the next re-ingest) while the benefit shrank by three orders of magnitude. <strong>Recommendation: approve the code fix, folded into the same PR as #485</strong> — both edit <code>IngestDirectoryAsync</code>, and two PRs on one method is the waste. The documentation-only option is now genuinely competitive; say so and WP2 shrinks to #485 plus one line."
+          ],
+          "why": "<b>A real correctness gap between two entry points into the same pipeline</b> — but the number that motivated it does not survive contact with the code.",
+          "placeholder": "Notes — code fix (folded with #485) vs docs-only line"
+      },
+      {
+          "id": "G3",
+          "claim": "A time-boxed research item on quantized / CoreML inference for the code engine (was G22 — both arms turn out cheaper than assumed)",
+          "detail": [
+              "The lever is unchanged: <code>InferenceSession.Run</code> is <strong>99.6 %</strong> of drain wall, every ranked fix shaves 10–20 %, and at the best cap the drain uses ~140 % of 1,000 % available CPU — ~7× headroom no batching reaches. What is new is that neither arm is speculative.",
+              "<strong>CoreML is already in the box.</strong> The pinned <code>Microsoft.ML.OnnxRuntime</code> <strong>1.29.0</strong> (<code>Directory.Packages.props:34</code>) ships <code>runtimes/osx-arm64/native/libonnxruntime.dylib</code> exporting <code>_OrtSessionOptionsAppendExecutionProvider_CoreML</code>, and the managed assembly carries the matching P/Invoke — verified with <code>nm</code>, not assumed. No new package, no version bump; the arm costs a <code>SessionOptions</code> call. <strong>And int8 is not new here either:</strong> the bundled <em>memory</em> model is already <code>model_qint8_arm64.onnx</code> (23 MB) with 48 <code>MatMulInteger</code> ops (ADR-0049 <code>:55</code>). The code engine (<code>code-daemon-embed-v1</code>, 768-dim) is the fp32 outlier — so this applies a shipped pattern to a second model rather than opening a new one.",
+              "<strong>The constraint, unchanged.</strong> ADR-0049 binds both arms: they change the arithmetic path, so stored vectors, the parity golden and <code>MiniLmGoldenVectorTests</code> are downstream. The experiment is one run of #508's S3–S5 protocol per arm (restart, re-activate all 1,762 rows, fixed 150 s window, rows/s + <code>top</code> CPU) against fp32-CPU / int8 / CoreML, plus a vector-drift check against the fp32 vectors. <strong>Recommendation: approve as research only</strong> — architect lane, one dated record plus an ADR draft, <strong>no production edit and no engine swap</strong> until you rule on what it finds."
+          ],
+          "why": "<b>Without it, WP12 tops out at roughly a third off a seventeen-minute drain</b> and nobody can say whether that is the ceiling or the floor.",
+          "placeholder": "Notes — e.g. which arms to include, or skip one"
+      },
+      {
+          "group": "New — the call from merged PR #524",
+          "id": "G4",
+          "claim": "One rendering of the resolved thread count across every surface",
+          "detail": [
+              "The same stored <code>0</code> prints three ways today. <code>settings model show</code>: <strong><code>threads: 0 (ORT default)</code></strong> (<code>SettingsCommands.cs:337</code>). The <code>settings model threads 0</code> confirmation: <code>embedding threads set to 0 (ORT default); …</code> (<code>:298</code>). <code>doctor</code>: <strong><code>embedding threads: ORT default (setting)</code></strong> (<code>DoctorCommands.cs:73</code>, via <code>EmbeddingService.ThreadCountDisplay</code> <code>:310-311</code>).",
+              "The parenthesis means different things: on the first two it explains the digit, on doctor it names the <strong>source</strong> (<code>setting</code> vs <code>halved-core default</code>, <code>ThreadCountSource</code> <code>:305-306</code>). #524 introduced doctor's shape and did not reconcile the others. <strong>Recommendation: adopt doctor's shape everywhere — <code>&lt;value-or-\"ORT default\"&gt; (&lt;source&gt;)</code></strong>, with <code>ThreadCountDisplay</code>/<code>ThreadCountSource</code> as the single pair of helpers all three call. Say the word if you would rather keep the digit visible (<code>0 (ORT default, from setting)</code>) — either is fine, one of them has to win."
+          ],
+          "why": "<b>Three spellings of one value</b> is how a support answer becomes \"which command did you run?\". Free now, more expensive as surfaces multiply.",
+          "placeholder": "Notes — doctor's shape everywhere, or keep the digit"
+      },
+      {
+          "group": "Scope — what session 4 actually contains",
+          "id": "G6",
+          "claim": "What \"job-line counters\" means: three shapes, and #477 asks for the largest",
+          "detail": [
+              "Part 3 scoped WP12-C as <em>\"the EventId 525 'ran in N ms' message gains rows, batches, elapsed\"</em>. Two things it did not know. First, <strong>the signature cannot carry a count</strong>: <code>IMaintenanceJob.RunAsync</code> returns <code>ValueTask&lt;bool&gt;</code> (<code>IMaintenanceJob.cs:25</code>) and that bool has a documented scheduling meaning (<code>:20-23</code>, \"created rows that still need embedding\" → sweep again). A row count needs <code>ValueTask&lt;MaintenanceJobResult&gt;</code> across the interface, its <strong>ten implementations in seven files</strong> (<code>MaintenanceJobs.cs</code> alone holds four), and <code>MaintenanceJobOutcome</code> (<code>MaintenanceJobRunner.cs:9</code>).",
+              "Second, <strong>#477 asks for something else entirely</strong> — verbatim: <em>\"MaintenanceJobRunner records job.&lt;jobName&gt;.duration_ms (histogram) and job.&lt;jobName&gt;.rows (gauge …) through IMeasurementRecorder under the self-metrics project id, and SelfMetricNames lists them so memory_performance shows one series per job.\"</em> That is a metrics series, not three integers on a log line.",
+              "<strong>And the cheap answer may already be shipped.</strong> EventId <strong>1003</strong> already logs <em>\"Embed drain pass finished for {Corpus}: {Rows} row(s)\"</em> every pass (<code>EmbedDrainService.cs:161-163</code>). The drain is 99.66 % of the clock, so the hot path's row count is <em>already</em> observable; what 525 lacks is counts for six jobs that are not on the hot path — and the gap #477 was filed for (\"5k rows pending for an hour with no way to observe progress\") is the hot-path one. <strong>Recommendation: shape (iii) or nothing.</strong> If job observability is worth the work, #477 as written reaches <code>memory_performance</code> where you would actually look; shape (ii) changes ten implementations across seven files to improve a log line nobody greps. If it is not worth it this session, <strong>park #477 with a comment naming EventId 1003</strong> and drop WP3."
+          ],
+          "why": "<b>The predecessor's WP12-C and the issue it cites are two different pieces of work</b>, and a third option may already be shipped.",
+          "placeholder": "Notes — (i) park with a comment / (ii) EventId 525 + interface change / (iii) #477 as written"
+      },
+      {
+          "id": "G7",
+          "claim": "WP11-C Option B: delete PendingEmbedJob/CodeReindexJob — I now recommend DECLINING, on new evidence",
+          "detail": [
+              "<strong>The premise is true.</strong> Both <code>RunAsync</code> bodies really are one line: <code>PendingEmbedJob.cs:47-51</code> and <code>CodeReindexJob.cs:44-48</code> each do a bare <code>TryEnqueue</code> and return <code>ValueTask.FromResult(false)</code>. Part 3 recorded your ruling that Option B is <em>\"the real fix\"</em> and that #517 took Option A only because the blast radius was disproportionate <strong>to a settings-key task</strong>.",
+              "<strong>What the enumeration found: RunAsync is not what these classes are for.</strong> (1) <code>CodeReindexJob.HasWorkAsync</code> (<code>:37-41</code>) is <strong>not side-effect-free</strong> — it calls <code>ReconcileFingerprintAsync</code> first, which is what invalidates code rows to <code>pending</code> when a manifest changes in place on disk (<code>CodeReindexJobTests.cs:161-187</code>). (2) <code>HasWorkAsync</code> is the <strong>only durable recovery path</strong> for a coalesced or dropped pump signal: the 15 s poll passes the whole job list to <code>RunDueAsync</code> with no filtering (<code>BankMaintenanceHostedService.cs:151-183</code>) and <code>HasWorkAsync</code> reads <code>embed_state='pending'</code> directly — ADR-0076's \"the channel is a wake-up, not the record\" made real, pinned by <code>EmbedDrainServiceTests.CoalescedSignal_IsRecoveredByTheNextPoll</code>. (3) <code>PendingEmbedJob</code> is registered <strong>last</strong> on purpose so rows an earlier job leaves pending are swept in the same pass — <em>\"chunk-backfill produced 13,578 of them on a real bank\"</em> (<code>AppRegistrations.cs:158-163</code>), pinned by <code>EmbedSweepAfterJobsTests</code>.",
+              "<strong>And the cost is ~50 live files</strong> — 16 src (enumerated and verified), 15 tests, 16 non-dated docs, 3 <code>.ai-badger</code>. The count depends on the grep, which is itself the finding: a strict class-name grep (<code>git grep -l \"PendingEmbedJob\|CodeReindexJob\"</code>) returns <strong>42</strong> and <em>understates</em> the work, because four live sites name the job by its <code>JobName</code> string in user-facing text; the union (adding <code>pending-embed\|code-reindex</code>) returns <strong>72</strong>, of which <strong>22</strong> are dated <code>docs/work/*</code> records a change would not touch. Included: <strong>ADR-0091, whose entire subject is these two jobs' shape</strong>, which needs an amendment rather than a line edit. <strong>Recommendation: decline, and close the follow-up with the plan's §Review (f) as its record.</strong> A one-line <code>RunAsync</code> on a job whose value is <code>HasWorkAsync</code> is not a smell, it is the right shape. If what actually bothers you is the misleading <code>ValueTask&lt;bool&gt;</code> return, <strong>G6 shape (ii)</strong> is where to fix that. Approve anyway and it becomes the session's largest item after WP6 — say so and WP6 or WP10 slips to pay for it."
+          ],
+          "why": "<b>The thing being called dead code is a one-line method on an object whose other method carries three guarantees</b> — deleting it means re-implementing and re-proving all three, for no behaviour change.",
+          "placeholder": "Notes — decline (recommended) / approve anyway / fix the return type instead"
+      },
+      {
+          "id": "G8",
+          "claim": "ADR-0089 (WP6): all five parts this session, or the registry and the refusal only",
+          "detail": [
+              "The ADR is <strong>Accepted</strong> (<code>0089-….md:5</code>, ratified at part 3's G2) and still entirely unimplemented — <code>project_id_token_get</code> has zero matches in <code>src</code>/<code>tests</code>, and there is no <code>projects</code> table. Sized at five PRs with the files named: <strong>6a</strong> table + registration write path (<code>MemorySchema.cs</code>'s unconditional <code>Ddl</code> block, <strong>no CurrentVersion bump</strong> — it stays 10, per ADR-0086); <strong>6b</strong> the <code>project_id_token_get</code> tool; <strong>6c</strong> the refusal of an unregistered id; <strong>6d</strong> CLI <code>project id generate|convert</code>; <strong>6e</strong> storage guidance plus the <code>ai-raccoon.ignore</code> entry (<strong>not</strong> <code>.gitignore</code> — you reversed that in the #448 review).",
+              "<strong>6c is the risk-bearing part</strong>, because every existing caller passes a raw id today and the compatibility rule is \"no registry row <strong>and</strong> no existing rows\". <code>6a → 6b/6c → 6d</code> serialise; <code>6e</code> is parallel. This is the biggest item in the session and the only one competing with WP10 (#455) for calendar. Half of it (6a/6b) is inert new surface; the value lands at 6c, which is also the part that can refuse a real user's write. <strong>Recommendation: 6a + 6b + 6c this session, 6d + 6e next</strong> — the refusal is the whole point and the CLI is convenience on top of a tool that already exists. Approve all five if you would rather not leave it half-landed; say so and WP10 slips."
+          ],
+          "why": "<b>The largest item in the session</b>, and the only one that competes with #455 for calendar rather than for files.",
+          "placeholder": "Notes — 6a+6b+6c only (recommended) / all five / park entirely"
+      },
+      {
+          "id": "G9",
+          "claim": "Which filed issues ride along: #485, #493, #497, #504, #519",
+          "detail": [
+              "All five are OPEN and all five are small. <strong>#485</strong> (directory walk strands <code>code_entries</code>; the single-file leg shipped in #481) edits the <strong>same method</strong> as G2, so folding it into WP2 costs nothing and splitting it costs a second PR on <code>IngestDirectoryAsync</code>. <strong>#497</strong> (the bge-m3 pooling repair never checks <code>EmbeddingOutput</code>'s rank, so anyone who downloaded before #496 stays wrong) and <strong>#504</strong> (rank-based output selection; two untested name shapes) are the same file family and pair into one strand.",
+              "<strong>#493</strong> (<code>PerformanceTools</code> lists six phases; <code>PhaseNames</code> has nine) is a <em>derive-or-delete-the-list</em> violation in our own code — the fix is to stop enumerating. <strong>#519</strong> (<code>TestData.CreateMemoryStore:86,89</code> still defaults two deps to Null objects) is your own #518 ruling left unenforced, but it rewrites <strong>83 call sites across 73 files</strong> and conflicts with every open PR that adds a test. Also found while researching this plan and unfiled: <code>docs/reference/logging-event-ids.md:53</code> claims EventIds <strong>517-519</strong> exist on <code>BankMaintenanceHostedService</code> — they do not (its Log class declares 510-516 and 520-524). One-line doc fix, folded in rather than filed as a seventh issue.",
+              "<strong>Recommendation: take all five — #485 into WP2, #497+#504 as WP8, #493+#519 as WP9 — and run WP9 last</strong>, when no other lane has an open PR adding tests. Drop any of them and that WP shrinks; drop #519 and nothing else moves."
+          ],
+          "why": "<b>Four of the five cost hours, not days</b>, and two (#485, #497) are live defects a user can hit. #519 is the one with a scheduling cost rather than a work cost.",
+          "placeholder": "Notes — which to take, which to leave filed"
+      },
+      {
+          "id": "G10",
+          "claim": "WP10 (#455): keep it LAST, or promote it to unblock the S6b history rewrite",
+          "detail": [
+              "<strong>The real alternative first: promote #455 and unblock the S6b history rewrite.</strong> It is the last thing standing between you and a one-pass <code>filter-repo</code> over all three private-prose paths, and it has been parked for a day. Promoting it is now cheap, because the drift risk that justified parking it has been measured and is gone: the branch <code>task/pd3-455-public-benchmark-corpus</code> @ <code>ea174faf</code> (draft <strong>#499</strong>, OPEN) is 5 commits ahead of merge-base <code>a747da1a</code>; main has moved <strong>20 commits / 137 files</strong> since; and the <strong>intersection of the two changed-file sets is empty</strong> — none of the branch's 11 files has been touched on main.",
+              "So the feared cost of waiting (a growing conflict) is <strong>zero</strong>. What promoting it costs instead is that the parity/retrieval gate must run in the foreground while other lanes are live — exactly the contention that made #511's measurements unusable — and G8's \"6a+6b+6c only\" is what pays for the calendar. Your ruling of 2026-08-22 ~19:38 was that #455 runs last so nothing else moves the corpus under it, and on this evidence it still holds on its merits. <strong>Recommendation: keep it last</strong> — the collision risk is nil either way and the foreground gate wants a quiet machine. Promote it only if unblocking S6b is what you want soonest; that is now a real option, not a hypothetical."
+          ],
+          "why": "<b>#455 is the last thing standing between you and the one-pass history rewrite</b> over all three private-prose paths, and it has been parked for a day.",
+          "placeholder": "Notes — keep last (recommended) / promote to first to unblock S6b"
+      }
+  ];
+</script>
+
+<style>
+  :root {
+    --ink: #141a21; --paper: #eef2f5; --surface: #f8fafb; --sunk: #e4eaef;
+    --line: #cbd5dd; --grey: #56626e; --dim: #7d8894;
+    --warn: #a8503a; --live: #12707c; --flag: #8a6a1f; --ok: #2f6d4f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #e6ecf2; --paper: #0f141a; --surface: #161d25; --sunk: #10161c;
+      --line: #2b3742; --grey: #9aa7b4; --dim: #6f7c89;
+      --warn: #d98467; --live: #4fc3cf; --flag: #d7b45a; --ok: #6fbf95;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #e6ecf2; --paper: #0f141a; --surface: #161d25; --sunk: #10161c;
+    --line: #2b3742; --grey: #9aa7b4; --dim: #6f7c89;
+    --warn: #d98467; --live: #4fc3cf; --flag: #d7b45a; --ok: #6fbf95;
+  }
+  :root[data-theme="light"] {
+    --ink: #141a21; --paper: #eef2f5; --surface: #f8fafb; --sunk: #e4eaef;
+    --line: #cbd5dd; --grey: #56626e; --dim: #7d8894;
+    --warn: #a8503a; --live: #12707c; --flag: #8a6a1f; --ok: #2f6d4f;
+  }
+
+  body {
+    margin: 0; padding: clamp(1.5rem,4vw,3rem) 1.1rem 11rem;
+    background: var(--paper); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 54rem; margin: 0 auto; display: flex; flex-direction: column; gap: 2.5rem; }
+  .mono, h1, h2, .tag, .verdict-opt, .btn, .did { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; }
+
+  header { display: flex; flex-direction: column; gap: .8rem; }
+  .tag { font-size: .72rem; letter-spacing: .15em; text-transform: uppercase; color: var(--dim); }
+  h1 { margin: 0; font-size: clamp(1.5rem,4vw,2.2rem); line-height: 1.15; letter-spacing: -.03em; font-weight: 600; text-wrap: balance; }
+  .lede { margin: 0; max-width: 62ch; color: var(--grey); }
+  h2 {
+    margin: 0 0 -.6rem; font-size: .76rem; letter-spacing: .15em; text-transform: uppercase;
+    color: var(--dim); font-weight: 600; padding-bottom: .5rem; border-bottom: 1px solid var(--line);
+  }
+
+  .d { background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: .85rem; }
+  .d.answered { border-left: 3px solid var(--ok); }
+  .d-head { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: baseline; }
+  .did { font-size: .74rem; letter-spacing: .1em; font-weight: 600; color: var(--live); white-space: nowrap; }
+  .d-claim { font-weight: 600; font-size: 1.02rem; flex: 1 1 18rem; }
+  .d-body { margin: 0; color: var(--grey); font-size: .94rem; }
+  .d-body + .d-body { margin-top: -.35rem; }
+  .d-body strong { color: var(--ink); font-weight: 600; }
+  code { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; font-size: .87em; background: var(--sunk); border: 1px solid var(--line); border-radius: 3px; padding: .06em .32em; }
+  .why { border-left: 3px solid var(--flag); background: var(--sunk); padding: .6rem .85rem; border-radius: 0 4px 4px 0; font-size: .9rem; color: var(--grey); }
+  .why b { color: var(--ink); }
+
+  fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .55rem; }
+  legend { padding: 0; font-size: .74rem; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); font-family: ui-monospace, Menlo, monospace; }
+  .verdicts { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .verdict-opt { position: relative; }
+  .verdict-opt input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .verdict-opt span {
+    display: inline-block; cursor: pointer; user-select: none;
+    border: 1px solid var(--line); background: var(--paper); border-radius: 3px;
+    padding: .32rem .7rem; font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; color: var(--grey);
+  }
+  .verdict-opt input:focus-visible + span { outline: 2px solid var(--live); outline-offset: 2px; }
+  .verdict-opt input:checked + span[data-v="approve"] { background: var(--ok);   border-color: var(--ok);   color: var(--paper); }
+  .verdict-opt input:checked + span[data-v="change"]  { background: var(--flag); border-color: var(--flag); color: var(--paper); }
+  .verdict-opt input:checked + span[data-v="reject"]  { background: var(--warn); border-color: var(--warn); color: var(--paper); }
+  .verdict-opt input:checked + span[data-v="defer"]   { background: var(--grey); border-color: var(--grey); color: var(--paper); }
+
+  textarea {
+    width: 100%; box-sizing: border-box; resize: vertical; min-height: 3.2rem;
+    background: var(--paper); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 4px; padding: .55rem .7rem; font: inherit; font-size: .93rem; line-height: 1.5;
+  }
+  textarea:focus-visible { outline: 2px solid var(--live); outline-offset: 1px; border-color: var(--live); }
+  textarea::placeholder { color: var(--dim); }
+
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--surface); border-top: 1px solid var(--line); padding: .7rem 1.1rem; display: flex; flex-wrap: wrap; gap: .5rem .9rem; align-items: center; justify-content: center; }
+  .count { font-size: .85rem; color: var(--grey); font-variant-numeric: tabular-nums; }
+  .btn { cursor: pointer; border: 1px solid var(--live); background: var(--live); color: var(--paper); border-radius: 3px; padding: .45rem 1rem; font-size: .76rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; }
+  .btn.secondary { background: transparent; color: var(--live); }
+  .btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* The status line is the whole point of the fallback chain: it names the mechanism used and
+     where the bytes went. Never let a save be silent. */
+  #status { flex-basis: 100%; text-align: center; font-size: .86rem; color: var(--grey); margin: 0; }
+  #status.ok   { color: var(--ok); }
+  #status.warn { color: var(--flag); }
+  #status.bad  { color: var(--warn); }
+  #status code { font-size: .85em; }
+
+  .out { display: flex; flex-direction: column; gap: .6rem; }
+  .out textarea { min-height: 14rem; font-family: ui-monospace, Menlo, monospace; font-size: .84rem; }
+  .hint { font-size: .85rem; color: var(--dim); margin: 0; }
+  .path { word-break: break-all; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="tag" id="hdr-sub"></div>
+    <h1 id="hdr-title"></h1>
+    <p class="lede">
+      Rule on each item and add a note where it matters. Answers save in this browser as you type,
+      so you can leave and come back.
+    </p>
+    <p class="lede" id="hdr-stale"><strong>Reviewed something else in this browser before?</strong>
+      Press <b>Clear all</b> first — local pages share one storage area, and a stale answer that
+      looks like a fresh one is the failure mode this form exists to prevent.</p>
+    <p class="lede" id="hdr-src"></p>
+  </header>
+
+  <div id="cards"></div>
+
+  <div class="out" id="out" hidden>
+    <p class="hint" id="outHint">Select all and copy, then paste this back into the conversation.</p>
+    <textarea id="outText" readonly aria-label="Generated feedback"></textarea>
+  </div>
+</div>
+
+<div class="bar">
+  <span class="count" id="count"></span>
+  <button class="btn" id="save" type="button">Save feedback</button>
+  <button class="btn secondary" id="copy" type="button">Copy feedback</button>
+  <button class="btn secondary" id="show" type="button">Show as text</button>
+  <button class="btn secondary" id="clear" type="button">Clear all</button>
+  <p id="status" role="status" aria-live="polite"></p>
+</div>
+
+<script>
+  var VERDICTS = ["approve", "change", "reject", "defer"];
+
+  document.getElementById("hdr-title").textContent = CONFIG.title;
+  document.getElementById("hdr-sub").textContent = CONFIG.subtitle;
+  document.title = CONFIG.title;
+  if (CONFIG.source) {
+    document.getElementById("hdr-src").innerHTML = "Full document: <code>" + esc(CONFIG.source) + "</code>";
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  /* ---- render ---- */
+  var host = document.getElementById("cards");
+  var currentGroup = null;
+  DECISIONS.forEach(function (d) {
+    if (d.group && d.group !== currentGroup) {
+      currentGroup = d.group;
+      var h = document.createElement("h2");
+      h.textContent = d.group;
+      host.appendChild(h);
+    }
+    var card = document.createElement("div");
+    card.className = "d";
+    card.dataset.id = d.id;
+
+    var head = document.createElement("div");
+    head.className = "d-head";
+    var idSpan = document.createElement("span");
+    idSpan.className = "did";
+    idSpan.textContent = d.id;
+    var claimSpan = document.createElement("span");
+    claimSpan.className = "d-claim";
+    claimSpan.textContent = d.claim || "";
+    head.appendChild(idSpan);
+    head.appendChild(claimSpan);
+    card.appendChild(head);
+
+    (d.detail || []).forEach(function (p) {
+      var el = document.createElement("p");
+      el.className = "d-body";
+      el.innerHTML = p;
+      card.appendChild(el);
+    });
+
+    if (d.why) {
+      var why = document.createElement("div");
+      why.className = "why";
+      why.innerHTML = d.why;
+      card.appendChild(why);
+    }
+
+    var fs = document.createElement("fieldset");
+    var lg = document.createElement("legend");
+    lg.textContent = "Verdict";
+    fs.appendChild(lg);
+    var holder = document.createElement("div");
+    holder.className = "verdicts";
+    VERDICTS.forEach(function (v) {
+      var label = document.createElement("label");
+      label.className = "verdict-opt";
+      var input = document.createElement("input");
+      input.type = "radio";
+      input.name = "v-" + d.id;
+      input.value = v;
+      var span = document.createElement("span");
+      span.dataset.v = v;
+      span.textContent = v;
+      label.appendChild(input);
+      label.appendChild(span);
+      holder.appendChild(label);
+    });
+    fs.appendChild(holder);
+    card.appendChild(fs);
+
+    var ta = document.createElement("textarea");
+    ta.placeholder = d.placeholder || "Notes";
+    ta.setAttribute("aria-label", d.id + " notes");
+    card.appendChild(ta);
+
+    host.appendChild(card);
+  });
+
+  var cards = Array.prototype.slice.call(document.querySelectorAll(".d"));
+
+  /* ---- state ---- */
+  function state() {
+    var out = {};
+    cards.forEach(function (card) {
+      var id = card.dataset.id;
+      var picked = card.querySelector('input[name="v-' + id + '"]:checked');
+      var note = card.querySelector("textarea").value.trim();
+      if (picked || note) { out[id] = { verdict: picked ? picked.value : "", note: note }; }
+    });
+    return out;
+  }
+
+  function paint() {
+    var s = state();
+    cards.forEach(function (c) { c.classList.toggle("answered", !!(s[c.dataset.id] && s[c.dataset.id].verdict)); });
+    var n = Object.keys(s).filter(function (k) { return s[k].verdict; }).length;
+    document.getElementById("count").textContent = n + " of " + cards.length + " answered";
+  }
+
+  function save() {
+    try { localStorage.setItem(CONFIG.storageKey, JSON.stringify(state())); } catch (e) { /* private mode */ }
+    paint();
+  }
+
+  function load() {
+    var raw;
+    try { raw = localStorage.getItem(CONFIG.storageKey); } catch (e) { return; }
+    if (!raw) { return; }
+    var s;
+    try { s = JSON.parse(raw); } catch (e) { return; }
+    cards.forEach(function (card) {
+      var e = s[card.dataset.id];
+      if (!e) { return; }
+      if (e.verdict) {
+        var input = card.querySelector('input[name="v-' + card.dataset.id + '"][value="' + e.verdict + '"]');
+        if (input) { input.checked = true; }
+      }
+      if (e.note) { card.querySelector("textarea").value = e.note; }
+    });
+  }
+
+  /* ---- markdown (see references/result-template.md) ---- */
+  function markdownNote(note) {
+    return note.split("\n").map(function (line) { return "> " + line; }).join("\n");
+  }
+
+  function markdown() {
+    var s = state();
+    var lines = [];
+    var answered = cards.filter(function (c) { return s[c.dataset.id] && s[c.dataset.id].verdict; });
+    lines.push("# Refinement feedback — " + CONFIG.title);
+    lines.push("");
+    lines.push("<!-- refinement-form: " + CONFIG.storageKey +
+               " · saved " + new Date().toISOString() +
+               " · answered " + answered.length + "/" + cards.length + " -->");
+    if (CONFIG.source) { lines.push(""); lines.push("Source document: `" + CONFIG.source + "`"); }
+    lines.push("");
+
+    cards.forEach(function (card) {
+      var id = card.dataset.id;
+      var e = s[id];
+      if (!e || !e.verdict) { return; }
+      lines.push("## " + id + " — " + card.querySelector(".d-claim").textContent.trim());
+      lines.push("");
+      lines.push("**Verdict:** " + e.verdict.toUpperCase());
+      lines.push("");
+      lines.push("**Notes:**");
+      lines.push("");
+      lines.push(e.note ? markdownNote(e.note) : "_(none)_");
+      lines.push("");
+      lines.push("---");
+      lines.push("");
+    });
+
+    var missing = cards.filter(function (c) { return !(s[c.dataset.id] && s[c.dataset.id].verdict); });
+    lines.push("## Not answered");
+    lines.push("");
+    if (missing.length) {
+      missing.forEach(function (c) {
+        var e = s[c.dataset.id];
+        lines.push("- " + c.dataset.id + " — " + c.querySelector(".d-claim").textContent.trim() +
+                   (e && e.note ? " (note only, no verdict)" : ""));
+        if (e && e.note) { lines.push(""); lines.push(e.note.split("\n").map(function (line) {
+          return "  > " + line;
+        }).join("\n")); lines.push(""); }
+      });
+    } else {
+      lines.push("_(none — every item has a verdict)_");
+    }
+    lines.push("");
+    lines.push("<!-- end refinement feedback -->");
+    return lines.join("\n");
+  }
+
+  /* ---- status ---- */
+  var statusEl = document.getElementById("status");
+  function report(kind, html) {
+    statusEl.className = kind;
+    statusEl.innerHTML = html;
+  }
+
+  function revealText(hint) {
+    var out = document.getElementById("out");
+    document.getElementById("outText").value = markdown();
+    document.getElementById("outHint").textContent = hint || "Select all and copy, then paste this back into the conversation.";
+    out.hidden = false;
+    out.scrollIntoView({ block: "nearest" });
+  }
+
+  /* ---- remembered output directory -------------------------------------------------
+     A file:// page cannot discover its own folder, and startIn takes only the
+     WellKnownDirectory enum (a path throws TypeError) — so the folder cannot be preset.
+     What CAN be done: grant the directory ONCE, persist the FileSystemDirectoryHandle in
+     IndexedDB (which works on file://), and write silently on every later save. Handles
+     survive reload; the permission does not, so it is re-requested inside the click
+     handler, where a user gesture is available. Net effect: one dialog ever, not one per
+     save. Choose the folder holding this HTML file and the picker never returns. */
+  var DB = "refinement-fs", STORE = "handles", KEY = CONFIG.storageKey + ":dir";
+
+  function idb(mode, fn) {
+    return new Promise(function (resolve, reject) {
+      var open = indexedDB.open(DB, 1);
+      open.onupgradeneeded = function () { open.result.createObjectStore(STORE); };
+      open.onerror = function () { reject(open.error); };
+      open.onsuccess = function () {
+        var tx = open.result.transaction(STORE, mode);
+        var rq = fn(tx.objectStore(STORE));
+        rq.onsuccess = function () { resolve(rq.result); };
+        rq.onerror = function () { reject(rq.error); };
+      };
+    });
+  }
+
+  var loadDir = function () { return idb("readonly", function (s) { return s.get(KEY); }).catch(function () { return null; }); };
+  var saveDir = function (h) { return idb("readwrite", function (s) { return s.put(h, KEY); }).catch(function () { return null; }); };
+
+  /// Writes into a granted directory. Returns false if permission is refused or gone.
+  async function writeInto(dir, text) {
+    var opts = { mode: "readwrite" };
+    if ((await dir.queryPermission(opts)) !== "granted"
+        && (await dir.requestPermission(opts)) !== "granted") { return false; }
+    var fh = await dir.getFileHandle(CONFIG.outName, { create: true });
+    var w = await fh.createWritable();
+    await w.write(text);
+    await w.close();
+    return true;
+  }
+
+  /* ---- save chain: remembered dir -> directory grant -> download -> clipboard -> textarea ----
+     Verified on Chrome 150 (file://): the File System Access API is exposed and is a secure
+     context, but throws SecurityError unless called inside the click handler. Firefox and
+     WebKit do not expose it at all and fall straight through to the download. */
+  document.getElementById("save").addEventListener("click", async function () {
+    var text = markdown();
+
+    if (typeof window.showDirectoryPicker === "function") {
+      try {
+        // 1a) Already granted a folder in a previous session — write with no dialog at all.
+        var dir = await loadDir();
+        if (dir && await writeInto(dir, text)) {
+          report("ok", "Saved <code>" + esc(CONFIG.outName) + "</code> to the folder you granted earlier — no dialog needed.");
+          return;
+        }
+
+        // 1b) First save (or the grant was revoked): ask once, then remember it forever.
+        dir = await window.showDirectoryPicker({ id: "refinement-out", mode: "readwrite" });
+        if (await writeInto(dir, text)) {
+          await saveDir(dir);
+          report("ok", "Saved <code>" + esc(CONFIG.outName) + "</code> to <code>" + esc(dir.name) +
+            "</code>. That folder is remembered — later saves write straight there.");
+          return;
+        }
+        report("warn", "Write permission was refused — nothing was written.");
+        return;
+      } catch (err) {
+        if (err && err.name === "AbortError") {
+          // Cancelled on purpose. Do NOT fall through to a download the reviewer didn't ask for.
+          report("warn", "Save cancelled — nothing was written.");
+          return;
+        }
+        report("warn", "Direct save failed (" + esc(err && err.name) + "). Falling back to a download…");
+      }
+    }
+
+    // 2) a[download] — lands in the browser's download folder, NOT next to this file.
+    try {
+      var blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = CONFIG.outName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+      report("warn", "Download initiated for <code>" + esc(CONFIG.outName) + "</code> to your <b>browser's download folder</b> — " +
+        "this is <b>not</b> next to this page." +
+        (CONFIG.expectedDir ? " Move it to <code class=\"path\">" + esc(CONFIG.expectedDir) + "</code>, or tell the agent where it is." : ""));
+      revealText("The download was initiated. If it did not appear, copy this generated feedback manually.");
+      return;
+    } catch (err2) {
+      report("warn", "Download failed (" + esc(err2 && err2.name) + "). Trying the clipboard…");
+    }
+
+    // 3) clipboard
+    try {
+      await navigator.clipboard.writeText(text);
+      report("ok", "Copied to the clipboard — paste it back into the conversation.");
+      revealText("Also shown below, in case the paste goes wrong.");
+      return;
+    } catch (err3) {
+      // 4) always-visible textarea — the guaranteed way out
+      revealText("Could not save or copy automatically. Select all of this and copy it manually.");
+      report("bad", "Automatic save and copy both failed. The full feedback is in the box above — copy it by hand.");
+    }
+  });
+
+  document.getElementById("copy").addEventListener("click", async function (ev) {
+    var btn = ev.currentTarget;
+    try {
+      await navigator.clipboard.writeText(markdown());
+      btn.textContent = "Copied";
+      report("ok", "Copied to the clipboard — paste it back into the conversation.");
+    } catch (e) {
+      revealText("Clipboard access was refused. Select all of this and copy it manually.");
+      report("warn", "Clipboard refused — the text is in the box above.");
+    }
+    setTimeout(function () { btn.textContent = "Copy feedback"; }, 2200);
+  });
+
+  document.getElementById("show").addEventListener("click", function () {
+    revealText();
+    document.getElementById("outText").focus();
+    document.getElementById("outText").select();
+  });
+
+  document.getElementById("clear").addEventListener("click", function () {
+    cards.forEach(function (card) {
+      var picked = card.querySelector('input[name="v-' + card.dataset.id + '"]:checked');
+      if (picked) { picked.checked = false; }
+      card.querySelector("textarea").value = "";
+    });
+    document.getElementById("out").hidden = true;
+    report("", "Cleared. Nothing saved in this browser for this review.");
+    save();
+  });
+
+  document.addEventListener("input", save);
+  document.addEventListener("change", save);
+
+  load();
+  paint();
+</script>
