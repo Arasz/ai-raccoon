@@ -199,6 +199,55 @@ public class FileIngestorSectionColumnTests : IDisposable
         rows.Skip(1).ShouldContain(row => row.Section == "Residual offset");
     }
 
+    /// <summary>
+    ///     Issue #538 (a #489 residual, the shape found by the 1.33.0 release checklist): #489 only
+    ///     handed a heading back to the next chunk when it dangled bare at the tail. Here the budget
+    ///     instead runs out a few body lines *after* the heading, so the heading plus those lines
+    ///     stayed at chunk 0's tail and the whole chunk got labelled with a section that is mostly
+    ///     absent from it — `manual.md#tide-correction` resolved nothing on the live bank.
+    /// </summary>
+    [Fact]
+    public async Task IngestFileAsync_SectionContinuesPastChunkTail_LabelsChunksWithTheirOwnSection()
+    {
+        var file = Path.Combine(_testDir, "manual.md");
+        var tideCorrection =
+            "Before any reading is trusted, the quadrant is set on a leveled bench and its bubble is checked " +
+            "against the reference mark until it stops drifting. The technician records the ambient temperature, " +
+            "the humidity, and the exact orientation of the bench relative to true north, because thermal " +
+            "expansion of the brass arm can itself introduce a reading error that looks identical to a genuine " +
+            "offset. A log entry is made for every session: date, operator initials, bench serial number, and " +
+            "the three consecutive bubble readings taken a minute apart.";
+        var line1 = "A quadrant that always reads a little too high or too low by the same fixed amount has a residual offset, and once that steady error is discovered and logged, it is subtracted automatically from every later reading so the same defect is never diagnosed twice.";
+        var line2 = "The offset is found by comparing the instrument against a known star at a well-documented altitude, on a night when refraction tables are considered reliable, and the difference between the observed and the almanac value becomes the correction constant.";
+        var line3 = "That constant is engraved on a small brass tag riveted to the pivot screw housing, dated and initialed by whoever ran the comparison, and every subsequent user checks the tag before trusting a sight.";
+        var line4 = "A constant left unchecked for too long drifts as the instrument ages, so the calibration is repeated on a fixed schedule rather than only when a reading looks suspicious, because a suspicious reading is often the first symptom of a problem that has been quietly growing for months.";
+        await File.WriteAllTextAsync(file,
+            $"# Harbor Manual\n\n## Tide Correction\n\n{tideCorrection}\n\n## Boat Registry Cleanup\n\n{line1}\n{line2}\n{line3}\n{line4}\n",
+            TestContext.Current.CancellationToken);
+        ConfigureLocalEmbeddingProvider();
+
+        await _ingestor.IngestFileAsync(_conn, "acme", file, null, TestContext.Current.CancellationToken);
+        await _embedder.EmbedPendingBatchAsync(_conn, limit: 100, TestContext.Current.CancellationToken);
+
+        var rows = new List<(string? Section, string? HeadingPath, string Value)>();
+        await using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "SELECT section, heading_path, value FROM entries WHERE source_file = @p ORDER BY chunk_index";
+        cmd.Parameters.AddWithValue("@p", file);
+        await using var reader = await cmd.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+        while (await reader.ReadAsync(TestContext.Current.CancellationToken))
+        {
+            rows.Add((reader.IsDBNull(0) ? null : reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetString(1),
+                reader.GetString(2)));
+        }
+
+        rows.Count.ShouldBeGreaterThanOrEqualTo(2, "the fixture is sized to split across at least two chunks");
+        rows[0].Value.ShouldNotContain("## Boat Registry Cleanup");
+        rows[0].Section.ShouldBe("Tide Correction");
+        rows[0].HeadingPath.ShouldBe("Harbor Manual > Tide Correction");
+        rows[1].Value.TrimStart().ShouldStartWith("## Boat Registry Cleanup");
+        rows.Skip(1).ShouldContain(row => row.Section == "Boat Registry Cleanup");
+    }
+
     [Fact]
     public async Task IngestFileAsync_HeadingContainingAngleBracket_StillPopulatesSection()
     {
