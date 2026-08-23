@@ -63,8 +63,8 @@ public class SyncServiceTests : IDisposable
                           CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, agent_id TEXT NULL,
                               name TEXT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL, closed_at INTEGER NULL);
                           CREATE TABLE IF NOT EXISTS sync_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-                          CREATE TABLE IF NOT EXISTS sync_tombstones (hash TEXT NOT NULL, scope TEXT NOT NULL,
-                              deleted_at INTEGER NOT NULL, PRIMARY KEY (hash, scope));
+                          CREATE TABLE IF NOT EXISTS sync_tombstones (project_id TEXT NOT NULL, hash TEXT NOT NULL, scope TEXT NOT NULL,
+                              deleted_at INTEGER NOT NULL, PRIMARY KEY (project_id, hash, scope));
                           CREATE TABLE IF NOT EXISTS memory_source (
                               id INTEGER PRIMARY KEY,
                               source_type TEXT NOT NULL,
@@ -275,8 +275,8 @@ public class SyncServiceTests : IDisposable
 
             await using var tomb = conn.CreateCommand();
             tomb.CommandText = """
-                               INSERT INTO sync_tombstones (hash, scope, deleted_at)
-                               VALUES ('will-delete', 'project', 100)
+                               INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at)
+                               VALUES ('acme', 'will-delete', 'project', 100)
                                """;
             await tomb.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
@@ -321,7 +321,7 @@ public class SyncServiceTests : IDisposable
         await using (var remote = await CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
         {
             await using var tomb = remote.CreateCommand();
-            tomb.CommandText = "INSERT INTO sync_tombstones (hash, scope, deleted_at) VALUES ('h2', 'project', 1)";
+            tomb.CommandText = "INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at) VALUES ('acme', 'h2', 'project', 1)";
             await tomb.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
@@ -355,6 +355,64 @@ public class SyncServiceTests : IDisposable
 
         survivors.Select(s => s.Hash).ShouldBe(["h1", "h3"]);
         survivors.Select(s => (s.ChunkIndex, s.TotalChunks)).ShouldBe([(0L, 2L), (1L, 2L)]);
+    }
+
+    [Fact]
+    public async Task MemorySync_TombstoneFromRemote_IsProjectScoped()
+    {
+        var cloud = new FakeCloudStore();
+
+        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        {
+            await using var insert = conn.CreateCommand();
+            insert.CommandText = """
+                                INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
+                                VALUES ('shared-hash', 'acme.md', 'acme content', 'project', 'acme', 1, 1),
+                                       ('shared-hash', 'other.md', 'other content', 'project', 'other', 2, 2)
+                                """;
+            await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var remotePath = Path.Combine(_dataRoot, "remote.db");
+        await using (var remote = await CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
+        {
+            await using var tomb = remote.CreateCommand();
+            tomb.CommandText = """
+                              INSERT INTO sync_tombstones (hash, scope, project_id, deleted_at)
+                              VALUES ('shared-hash', 'project', 'acme', 1)
+                              """;
+            await tomb.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        cloud.Set("test-object", await File.ReadAllBytesAsync(remotePath, TestContext.Current.CancellationToken));
+
+        var service = new SyncService(cloud,
+            ct => CreateAndOpenAsync(BankPath, ct),
+            OpenSnapshotAsync,
+            async (path, ct) =>
+            {
+                var c = new SqliteConnection($"Data Source={path}");
+                await c.OpenAsync(ct);
+                return c;
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+
+        await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+
+        await using (var conn = new SqliteConnection($"Data Source={BankPath}"))
+        {
+            await conn.OpenAsync(TestContext.Current.CancellationToken);
+            await using var count = conn.CreateCommand();
+            count.CommandText = "SELECT COUNT(*) FROM entries WHERE hash = 'shared-hash' AND project_id = 'acme'";
+            var acmeCountScalar = await count.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+            acmeCountScalar.ShouldNotBeNull();
+            ((long)acmeCountScalar).ShouldBe(0, "A tombstone for one project must not delete another project's same-hash row.");
+
+            await using var otherCount = conn.CreateCommand();
+            otherCount.CommandText = "SELECT COUNT(*) FROM entries WHERE hash = 'shared-hash' AND project_id = 'other'";
+            var otherScalar = await otherCount.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+            otherScalar.ShouldNotBeNull();
+            ((long)otherScalar).ShouldBe(1, "The same hash in a different project must survive a remote delete scoped to another project.");
+        }
     }
 
     [Fact]

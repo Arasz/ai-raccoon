@@ -734,7 +734,7 @@ public sealed partial class SqliteMemoryStore(
             {
                 await connection.ExecuteAsync(
                         Def(MemorySql.UpsertTombstone,
-                            new { hash, scope = rowScope, deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
+                            new { projectId, hash, scope = rowScope, deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
                             cancellationToken))
                     .ConfigureAwait(false);
             }

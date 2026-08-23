@@ -43,15 +43,16 @@ internal static class MemorySchema
     ///     <see cref="MigrateToV3Async" />/<see cref="MigrateToV4Async" />/<see cref="MigrateToV5Async" />/<see cref="MigrateToV6Async" />/
     ///     <see cref="MigrateToV7Async" />/<see cref="MigrateToV8Async" />/
     ///     <see cref="MigrateToV9Async" />/
-    ///     <see cref="MigrateToV10Async" /> (ADR-0011). Not every schema
-    ///     change needs a ladder step: a trigger body replacement that is safely re-runnable on every
-    ///     open belongs in the unconditional <see cref="Ddl" /> instead (ADR-0023 amendment) — the
-    ///     ladder is for changes that need guarded, one-time work. The no-overlapping-watches prune
-    ///     (originally a v11 ladder step) was demoted to an unconditional, ungated, every-open step
-    ///     (<see cref="PruneOverlappingWatchesAsync" />, orchestrator ruling) — no version bump, since
-    ///     its own logic is idempotent and it must reach fresh banks too.
+    ///     <see cref="MigrateToV10Async" /> (ADR-0011). Not every schema change needs a ladder
+    ///     step: a trigger body replacement that is safely re-runnable on every open belongs in the
+    ///     unconditional <see cref="Ddl" /> instead (ADR-0023 amendment) — the ladder is for changes
+    ///     that need guarded, one-time work. The project-scoped tombstone repair and the
+    ///     no-overlapping-watches prune are both in-place repairs, not ladder steps, so this stays at
+    ///     v10 until a true one-time migration lands.
     /// </summary>
     internal const int CurrentVersion = 10;
+
+    private const int DefaultEmbeddingDimension = 384;
 
     /// <summary>
     ///     The promotion_queue_entries_ad body (ADR-0023, amended by H4 and again by ADR-0046):
@@ -59,16 +60,14 @@ internal static class MemorySchema
     ///     one definition ShareAsync resolves through.
     /// </summary>
     private static readonly string PromotionQueueTriggerDdl = $"""
-                                                    CREATE TRIGGER IF NOT EXISTS promotion_queue_entries_ad AFTER DELETE ON entries BEGIN
-                                                        DELETE FROM promotion_queue
-                                                        WHERE project_id = OLD.project_id AND hash = OLD.hash
-                                                          AND NOT EXISTS (SELECT 1 FROM entries e
-                                                                          WHERE e.project_id = OLD.project_id AND e.hash = OLD.hash
-                                                                            AND {ProjectRows.Scope("e.")});
-                                                    END;
-                                                    """;
-
-    private const int DefaultEmbeddingDimension = 384;
+                                                               CREATE TRIGGER IF NOT EXISTS promotion_queue_entries_ad AFTER DELETE ON entries BEGIN
+                                                                   DELETE FROM promotion_queue
+                                                                   WHERE project_id = OLD.project_id AND hash = OLD.hash
+                                                                     AND NOT EXISTS (SELECT 1 FROM entries e
+                                                                                     WHERE e.project_id = OLD.project_id AND e.hash = OLD.hash
+                                                                                       AND {ProjectRows.Scope("e.")});
+                                                               END;
+                                                               """;
 
     // workspace_id carries its own FK to workspaces and a CHECK enforcing "workspace XOR
     // committed scope": an entry is either workspace-scratch or one of shared/project/custom, never both.
@@ -243,10 +242,11 @@ internal static class MemorySchema
                                           CREATE INDEX IF NOT EXISTS idx_noise_entries_expires_at ON noise_entries(expires_at);
 
                                           CREATE TABLE IF NOT EXISTS sync_tombstones (
+                                              project_id TEXT NOT NULL,
                                               hash TEXT NOT NULL,
                                               scope TEXT NOT NULL,
                                               deleted_at INTEGER NOT NULL,
-                                              PRIMARY KEY (hash, scope)
+                                              PRIMARY KEY (project_id, hash, scope)
                                           );
 
                                           -- File-watcher feature: persisted watch registrations and per-path
@@ -610,6 +610,11 @@ internal static class MemorySchema
             // EnsureCodeEmbedAttemptsColumnAsync).
             await EnsureCodeEmbedAttemptsColumnAsync(connection, cancellationToken).ConfigureAwait(false);
 
+            // Legacy tombstones can outlive the schema change that introduced project_id. The Ddl
+            // digest is the gate for this repair, so a stale bank gets normalized once without
+            // making the steady-state fast path pay for it.
+            await EnsureSyncTombstonesProjectScopedAsync(connection, cancellationToken).ConfigureAwait(false);
+
             var testHook = TestOnlyAfterDdlHookAsync.Value;
             if (testHook is not null)
             {
@@ -927,6 +932,59 @@ internal static class MemorySchema
             .ConfigureAwait(false);
 
     /// <summary>
+    ///     Legacy tombstones are repaired in-place: the Ddl block defines them as project-scoped, and
+    ///     any stale rows lacking a project id are cleaned up without bumping <see cref="CurrentVersion" />.
+    /// </summary>
+    private static async Task EnsureSyncTombstonesProjectScopedAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'sync_tombstones'",
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false) > 0;
+        if (!hasTable)
+        {
+            return;
+        }
+
+        var columns = (await connection.QueryAsync<string>(
+                new CommandDefinition(
+                    "SELECT name FROM pragma_table_info('sync_tombstones')",
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false)).ToHashSet(StringComparer.Ordinal);
+
+        if (!columns.Contains("project_id"))
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "ALTER TABLE sync_tombstones ADD COLUMN project_id TEXT NULL",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+
+        await connection.ExecuteAsync(
+                new CommandDefinition(
+                    """
+                    DELETE FROM sync_tombstones
+                    WHERE project_id IS NULL OR project_id = '';
+
+                    DELETE FROM sync_tombstones
+                    WHERE rowid NOT IN (
+                        SELECT MIN(rowid)
+                        FROM sync_tombstones
+                        GROUP BY project_id, hash, scope
+                    );
+                    """,
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+
+        await connection.ExecuteAsync(
+                new CommandDefinition(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_sync_tombstones_project_identity ON sync_tombstones(project_id, hash, scope)",
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
     ///     Unconditional, ungated, every-open no-overlapping-watches prune (orchestrator ruling, S7:
     ///     demoted from a one-time v11 ladder step — see <see cref="CurrentVersion" />'s doc comment).
     ///     Per-project outermost-watch prune, resolved through <see cref="WatchOverlapResolver" />,
@@ -1008,16 +1066,6 @@ internal static class MemorySchema
 
         return new WatchOverlapPruneResult([.. toPrune.Select(t => t.Pruned)], warnings);
     }
-
-    private sealed record WatchRow(string ProjectId, string Path, long CreatedAt);
-
-    /// <summary>One project's watch-overlap resolution failed on this bank open and was skipped —
-    /// its watches are left untouched rather than risk failing the whole bank open (S8).</summary>
-    internal sealed record WatchOverlapPruneWarning(string ProjectId, string Reason);
-
-    /// <summary>The unconditional no-overlapping-watches prune step's outcome for one bank open.</summary>
-    internal sealed record WatchOverlapPruneResult(
-        IReadOnlyList<PrunedWatch> Pruned, IReadOnlyList<WatchOverlapPruneWarning> Warnings);
 
     /// <summary>
     ///     S2: adds code_entries.embed_attempts if it is missing — additive, no ladder step, same
@@ -1763,4 +1811,15 @@ internal static class MemorySchema
             ? int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture)
             : DefaultEmbeddingDimension;
     }
+
+    private sealed record WatchRow(string ProjectId, string Path, long CreatedAt);
+
+    /// <summary>One project's watch-overlap resolution failed on this bank open and was skipped —
+    /// its watches are left untouched rather than risk failing the whole bank open (S8).</summary>
+    internal sealed record WatchOverlapPruneWarning(string ProjectId, string Reason);
+
+    /// <summary>The unconditional no-overlapping-watches prune step's outcome for one bank open.</summary>
+    internal sealed record WatchOverlapPruneResult(
+        IReadOnlyList<PrunedWatch> Pruned,
+        IReadOnlyList<WatchOverlapPruneWarning> Warnings);
 }
