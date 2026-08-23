@@ -323,7 +323,7 @@ that took effect (#522)`, **MERGED**, branch `fix/522-log-embedding-threads`.
 | **B2** implementations | **Ten in seven files** in §Review (d), WP3, G6; reconciled with "eight of the ten remain" in (f) |
 | **B3** ordering | Todo 6/7 swapped — **WP5 before WP3** |
 | **B4** proof-of-done | WP10 gained scope/files/acceptance/**gate commands**/lane; WP6 gained a lane + *"no `6x` PR opens until the implementation plan defines its gate"*; `Acceptance` added to WP3/4/5/8 |
-| **N5–N9** | `MemoryTools.cs:191`; `FileIngestorIgnoreTests` **(extend)** + path; `EmbedDrainServiceTests.cs:181` (**two** sites — one survived the first pass); **83 call sites / 77 files**; §Review (a) reworded — the poll *still paces* at one pass per 15 s |
+| **N5–N9** | `MemoryTools.cs:191`; `FileIngestorIgnoreTests` **(extend)** + path; `EmbedDrainServiceTests.cs:181` (**two** sites — one survived the first pass); **83 call sites / 73 files**; §Review (a) reworded — the poll *still paces* at one pass per 15 s |
 | **Gate shape** | **G5 withdrawn** into WP4 (ungated); G6–G10 ids unchanged (**nine cards**); **G10 leads with the promote-#455 alternative** |
 ---
 
