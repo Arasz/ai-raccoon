@@ -16,7 +16,7 @@ flowchart LR
     subgraph Core ["AiRaccoon Core Stack"]
         Proxy["ai-raccoon (Proxy)"]
         Server["ai-raccoon serve (HTTP Backend)"]
-        Store[("SQLite memory.db\nFTS5 + vec0 + Workspace + Shared")]
+        Store[("SQLite memory.db\nFTS5 + vec0 + Workspace + Shared + Code")]
         
         Agent <-->|JSON-RPC| Proxy
         Proxy <-->|Loopback :7721| Server
@@ -30,32 +30,16 @@ flowchart LR
 ```
 
 ## What's new
-- **`project_id_token_get` mints and registers a project id (ADR-0089); `memory_performance` now reports the maintenance-job, embed-drain, replace-lock and query-truncation series.** (1.33.2) [#563](https://github.com/Arasz/ai-raccoon/pull/563) · [#535](https://github.com/Arasz/ai-raccoon/pull/535) · [#548](https://github.com/Arasz/ai-raccoon/pull/548)
-- **Two knobs bound the embedding engine — `settings model threads <n>` and `settings maintenance embed-rows-per-run <n>` — and `doctor` shows the effective thread count.** (1.33.0) [ADR-0091](docs/adr/0091-the-event-pump-never-blocks-a-producer.md)
-- **The default code model installs with one command — `ai-raccoon model set code default`.** (1.32.0) [#453](https://github.com/Arasz/ai-raccoon/pull/453)
-- **Cloud snapshots are authenticity-checked (HMAC) before attach, and model activation verifies sha256 pins.** (1.31.0) [#431](https://github.com/Arasz/ai-raccoon/pull/431) · [#429](https://github.com/Arasz/ai-raccoon/pull/429)
-- **A second corpus indexes your code, searchable via `memory_search kind=code` — never synced, never mixed with memory.** (1.30.0) [Feature](docs/features/code-corpus/) · [ADR-0085](docs/adr/0085-a-second-code-only-corpus-in-the-same-bank.md)
-- **Bring your own embedding model: manifest-driven engines, `ai-raccoon model download`, sentencepiece support.** (1.29.0) [ADR-0084](docs/adr/0084-arbitrary-embedding-models-are-manifest-described.md)
-- **Every search parameter is now configurable — per call and per bank — no rebuild needed.** (1.28.0) [ADR-0083](docs/adr/0083-search-parameters-unified-source.md)
-- **The CLI no longer opens the bank itself — `noise entries` and `watch registered` reach the server too, completing the single-writer rule.** (1.27.0) [ADR-0075](docs/adr/0075-only-the-server-writes-to-the-bank.md)
-- **A repair now finishes on its own — it embeds what it re-ingested, instead of leaving it unsearchable.** (1.26.0) [ADR-0075](docs/adr/0075-only-the-server-writes-to-the-bank.md)
-- **The memory now measures its own performance, and you can ask it.** (1.20.0) [ADR-0074](docs/adr/0074-a-capped-buffer-satisfies-the-channel-rule-and-reshapes-g4.md) · [How-to](docs/how-to/read-performance-metrics.md)
-- **A long memory_write now matches on the chunk it stored, not the first page of the document.** (1.19.1) [ADR-0073](docs/adr/0073-a-write-embeds-the-chunk-it-stored.md)
-- **The bank now compacts itself, and repairs entries too long to be searchable.** (1.17.0) [ADR-0070](docs/adr/0070-maintenance-is-a-list-of-jobs-with-a-ledger.md)
-- **A long `memory_write` is now searchable across its whole length.** (1.15.0) [ADR-0064](docs/adr/0064-memory-write-chunks-like-everything-else.md)
-- **Naming `shared` on a write asks for promotion instead of bypassing review.** (1.15.0) [ADR-0067](docs/adr/0067-naming-shared-asks-for-promotion.md)
-- **Workspaces no longer require `full`.** (1.13.0) [ADR-0052](docs/adr/0052-the-workspace-lifecycle-is-a-write-not-a-destruction.md)
-- **SECURITY — a delete could name another project, and wipe the shared tier.** (1.13.0) [ADR-0051](docs/adr/0051-a-context-never-names-another-project.md)
-- **BREAKING — `memory_search`'s `minScore` is now `minRelativeScore`, and defaults to off.** (1.12.0) [ADR-0047](docs/adr/0047-relative-score-floor.md)
-- **Section-anchored search works, and ranking improved with it.** (1.12.0) [ADR-0044](docs/adr/0044-section-fts-weight.md)
-- **Noise filtering, rebuilt around what could be measured.** (1.12.0) [ADR-0040](docs/adr/0040-read-path-query-guard.md)
-- **Honest write outcomes and one explicit TTL path.** (1.12.0) [ADR-0032](docs/adr/0032-truthful-write-outcome.md) · [ADR-0034](docs/adr/0034-explicit-ttl-is-authoritative.md)
-- **Semantic promotion classifier removed.** (1.11.0) [Why it was removed](docs/work/2026-08-13-fixing-zero-shot-promotion-classifier.md)
-- **Semantic Noise Filtering & Real-time TTLs.** (1.9.0) [ADR-0029](docs/adr/0029-pre-write-noise-filtering.md) · [ADR-0030](docs/adr/0030-realtime-heuristic-ttl.md)
-- **FileType Handlers & Native JSON Support.** (1.8.0) [ADR-0027](docs/adr/0027-extensible-file-type-handlers-and-json-support.md)
-- **Search-Quality Metric System.** (1.7.0) [Plan](docs/plans/2026-08-11-search-quality-metric-plan.md)
-- **Persistent Propose Queue Discards.** (1.6.5) [ADR-0026](docs/adr/0026-persistent-discards-and-shared-exclusion.md)
-- **Always-On HTTP Proxy.** (1.6.0) [ADR-0020](docs/adr/0020-always-on-http-stdio-proxy.md)
+
+- **`project_id_token_get` mints and registers a project id.** (1.33.2) [ADR-0089](docs/adr/0089-the-project-id-is-a-guidv7-and-that-is-not-access-control.md)
+- **`memory_performance` now reports the maintenance-job, embed-drain, replace-lock and query-truncation series.** (1.33.2) [ADR-0091](docs/adr/0091-the-event-pump-never-blocks-a-producer.md)
+- **Two knobs bound the embedding engine.** `settings model threads <n>` caps ORT intra-op threads; `settings maintenance embed-rows-per-run <n>` sets the per-tick drain. `doctor` shows the effective thread count. (1.33.0) [ADR-0091](docs/adr/0091-the-event-pump-never-blocks-a-producer.md)
+- **The default code model installs with one command.** `ai-raccoon model set code default` downloads and activates `faxenoff/code-daemon-embed-v1` (187 MB, 768-dim) into `<data-root>/models/`. Re-running against an already-downloaded directory only re-activates. (1.32.0) [How-to](docs/how-to/configure-embedding-engines.md#recipe-5-activate-the-code-corpuss-embedding-engine)
+- **Cloud snapshots are authenticity-checked (HMAC) before attach, and model activation verifies sha256 pins.** (1.31.0)
+- **A second corpus indexes your code, searchable via `memory_search kind=code`.** Never synced, never mixed with memory. Watches and file ingest feed it automatically; `code_get` reads a chunk's full source by hash. (1.30.0) [Feature](docs/features/code-corpus/) · [ADR-0085](docs/adr/0085-a-second-code-only-corpus-in-the-same-bank.md)
+- **Bring your own embedding model.** Manifest-driven engines, `ai-raccoon model download` with SHA-256 pin verification, sentencepiece tokenizer support. (1.29.0) [ADR-0084](docs/adr/0084-arbitrary-embedding-models-are-manifest-described.md) · [How-to](docs/how-to/configure-embedding-engines.md)
+
+> 📜 **Older releases:** See [What's new history](docs/reference/whats-new-history.md) for highlights from 1.6.0 through 1.28.0.
 
 ---
 
@@ -90,6 +74,10 @@ mindmap
       FTS5 Lexical
       vec0 Vector KNN
       RRF Fusion
+    Code Corpus
+      24 Source Extensions
+      kind=code / kind=both
+      code_get by Hash
     Workspace Sandboxes
       Isolated Outbox
       Consolidate / Discard
@@ -108,6 +96,7 @@ mindmap
 |---|---|---|
 | **Scope Partitioning** | Local banks in `~/.ai-raccoon` or `<project>/.ai-raccoon`, partitioned by `project:<id>` | [Capabilities Overview](docs/explanation/agent-memory-capabilities.md#storage-architecture--scope-partitioning) |
 | **Hybrid Search** | Reciprocal Rank Fusion (RRF) combining keyword and vector semantic search | [Search Pipeline Guide](docs/explanation/agent-memory-capabilities.md#hybrid-search-pipeline-fts5--vec0--rrf) |
+| **Code Corpus** | A second, code-only corpus searchable via `memory_search kind=code` or `kind=both`; 24 source-file extensions; never synced, never mixed with memory | [Code Corpus Feature](docs/features/code-corpus/) · [ADR-0085](docs/adr/0085-a-second-code-only-corpus-in-the-same-bank.md) |
 | **Workspace Sandboxes** | Isolated edit outboxes with explicit consolidation or discard | [Workspace Guide](docs/explanation/agent-memory-capabilities.md#workspace-sandbox-context-lifecycle) |
 | **Shared Tier** | Elevated cross-project facts exempt from degradation sweeps | [Shared Tier Guide](docs/explanation/agent-memory-capabilities.md#propose--shared-promotion-tier) |
 | **Memory Degradation** | Retrieval-based rating boost with automated background TTL sweeps | [Degradation Guide](docs/explanation/agent-memory-capabilities.md#memory-rating-and-degradation-sweep-reaper) |
@@ -134,12 +123,13 @@ ai-raccoon serve              # Long-lived daemon with idle watchdog and loopbac
 
 ## Embeddings
 
-AiRaccoon supports in-process ONNX models and remote OpenAI-compatible backends:
+AiRaccoon supports in-process ONNX models and remote OpenAI-compatible backends. The memory and code corpora use independent engines.
 
 | Engine | Model | Latency | Benchmark MRR |
 |---|---|---|---|
 | **Local (Default)** | Bundled `all-MiniLM-L6-v2` (int8) | ~9 ms | 0.836 |
 | **Remote OpenAI** | `text-embedding-3-small` / Ollama | ~25-120 ms | 0.854 - 0.858 |
+| **Code Corpus** | `faxenoff/code-daemon-embed-v1` (768-dim, fp32) | local | separate corpus |
 
 > 📖 **Setup & Benchmarks:** See [Configure embedding engines](docs/how-to/configure-embedding-engines.md) and [Embedding Benchmark Data](docs/reference/embedding-benchmark.md).
 
@@ -165,7 +155,7 @@ ai-raccoon serve observability trace      # Capture dotnet-trace spans
 src/AiRaccoon/                 # Thin MCP Server (Tool handlers)
 src/AiRaccoon.Core/            # Pure Domain (Memory logic, RRF, Workspace, Rating)
 src/AiRaccoon.Infrastructure/  # SQLite Store, Embeddings, S3/Azure Sync
-tests/AiRaccoon.Tests/         # xunit.v3 test suite (1100+ tests)
+tests/AiRaccoon.Tests/         # xunit.v3 test suite (~3700 tests)
 ```
 
 > 📖 **Deep Dive:** Read [Architecture Explanation](docs/explanation/architecture.md).
