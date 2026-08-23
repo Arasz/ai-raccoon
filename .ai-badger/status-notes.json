@@ -192,5 +192,13 @@
     "WP12-A (length-sorted batches) measured NEGATIVE: six 150 s windows, branch never faster than main (aggregate ~30 % slower) under 5–7 concurrent lanes; same-binary variance 2.8x. Closed #511 unmerged; revisit only on an isolated machine.",
     "Owner rulings this session: no optional nullable ctor params with Null-object defaults (Null objects explicit in DI/tests); embedInline gone, not flagged; no Task.FromResult(false) job shapes (ValueTask now, Option B = drop the enqueue-only jobs is the real fix, carried); minimal comments — no provenance essays; lanes must commit early and push every commit (usage-limit kills lost work twice).",
     "Release 1.33.0 ships the perf work; release.yml auto-cuts on a VERSION change with --generate-notes, README gets one bold line per release; nuget publish waits on the owner's production approval. Owner instruction 2026-08-23: after publish, start post-delta-4 in the same session."
+  ],
+  "release-1.33.1-checklist": [
+    "Checklist lanes: four parallel sonnet test-engineer subagents, one scratch --data-root each against ONE installed binary, fragments merged by the orchestrator; the orchestrator's value was the seam review (the anchor finding came from re-driving a 'substituted' item after a memory_search hit on ADR-0003).",
+    "file#section anchors are only observable with vectorWeight=0 — with the vector leg on every query answers, so five runs could not tell the anchor from a keyword coincidence; the template item now says so.",
+    "Exit 23 live recipe: fake HTTP server answering POST /mcp with 400 + a body containing 'jsonrpc' (ProbeVerdict.Answered, BackendLauncher attaches) and 500 on /settings*, plus a copied mcp-token in the scratch root.",
+    "The 'exit 1' the four new template items originally claimed was never true (ExitCode.InvalidArgument = 15); the run items observed 15 and declined to flag it — a template fact pinned by hand, caught by the opus review.",
+    "ox-alpha VERDICT reviews are per-PR agents dispatched by the post-delta session; nothing watches comment patterns, so a PR opened by another session gets none unless asked. The fast '[ox-alpha review] round N … APPROVED' comments are a separate automation keyed on @pd4-*/@post-delta-4 tags and are not a merge signal.",
+    "Direct-to-main incident 703ee3d4: the Bash tool's cwd silently resets to the main checkout after a cd into the scratchpad; use git -C <worktree> for every git command."
   ]
 }
