@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Projects;
 
 namespace AiRaccoon.Projects;
@@ -11,8 +12,16 @@ public sealed partial class ProjectRegistrationGuard(IProjectRegistry registry, 
     : IProjectRegistrationGuard
 {
     /// <inheritdoc />
-    public async Task EnsureAsync(string projectId, CancellationToken cancellationToken = default)
+    public async Task EnsureAsync(string projectId, AccessRequirement requirement,
+        CancellationToken cancellationToken = default)
     {
+        // Reads are allowed unconditionally; skip the registry/rows lookups entirely — the same
+        // shape as MemoryAccessGuard.EnsureAsync's early return for AccessRequirement.Read.
+        if (requirement == AccessRequirement.Read)
+        {
+            return;
+        }
+
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
 
         if (await registry.IsRegisteredAsync(projectId, cancellationToken).ConfigureAwait(false))

@@ -47,11 +47,7 @@ public sealed class ToolGate(
 
         var canonical = ProjectId.Canonicalize(projectId);
 
-        if (requirement != AccessRequirement.Read)
-        {
-            await registration.EnsureAsync(canonical, cancellationToken).ConfigureAwait(false);
-        }
-
+        await registration.EnsureAsync(canonical, requirement, cancellationToken).ConfigureAwait(false);
         await access.EnsureAsync(canonical, requirement, toolName, cancellationToken).ConfigureAwait(false);
         return canonical;
     }

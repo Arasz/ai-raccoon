@@ -43,6 +43,10 @@ The schema already partitions this way — `uq_entries_committed_bucket` is decl
 `ProjectRows` exposes the predicate (`Of`, `Scope`) and the tie-break (`CommittedFirst`). Every
 site above now composes from it.
 
+**Cross-reference (ADR-0089):** the `projects` registry answers a different question —
+*which projects exist* — from `ProjectRows`' *which rows belong to a project*. ADR-0089 adds no
+`projects` join to any site above; its own §Membership argues this in full.
+
 **`ProjectRowsSingleDefinitionTests` compares the copies**: it scans `src/` for a hand-rolled
 `scope = 'project'` and fails on any that is not one of two declared exceptions — the context-key
 `CASE` (which maps a row to its display context) and the per-context search filter (which builds

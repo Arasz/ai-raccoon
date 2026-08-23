@@ -117,28 +117,24 @@ public sealed class ToolGateTests
         queue.LastMetaProject.ShouldBeNull();
     }
 
-    /// <summary>ADR-0089: Read never touches the registration guard; Write/Destructive do, with the canonical id.</summary>
-    [Fact]
-    public async Task RequireAsync_ForRead_NeverCallsTheRegistrationGuard()
-    {
-        var (_, _, _, registration, gate) = NewStack();
-
-        await gate.RequireAsync("acme", AccessRequirement.Read, "memory_get", TestContext.Current.CancellationToken);
-
-        registration.Calls.ShouldBeEmpty();
-    }
-
+    /// <summary>
+    ///     ADR-0089: the registration guard is called for every requirement, carrying the canonical
+    ///     id — same shape as the access guard. The guard itself decides whether Read is exempt
+    ///     (ProjectRegistrationGuardTests), not ToolGate.
+    /// </summary>
     [Theory]
+    [InlineData(AccessRequirement.Read)]
     [InlineData(AccessRequirement.Write)]
     [InlineData(AccessRequirement.Destructive)]
-    public async Task RequireAsync_ForWriteOrDestructive_CallsTheRegistrationGuard_WithTheCanonicalId(
+    public async Task RequireAsync_CallsTheRegistrationGuard_WithTheCanonicalIdAndTheRequirement(
         AccessRequirement requirement)
     {
         var (_, _, _, registration, gate) = NewStack();
 
         await gate.RequireAsync("{ACME}", requirement, "memory_write", TestContext.Current.CancellationToken);
 
-        registration.Calls.ShouldBe(["{ACME}"]); // "{ACME}" is not a guid, so ProjectId.TryCanonicalize passes it through unchanged
+        // "{ACME}" is not a guid, so ProjectId.TryCanonicalize passes it through unchanged.
+        registration.Calls.ShouldBe([("{ACME}", requirement)]);
     }
 
     [Fact]
@@ -182,12 +178,12 @@ public sealed class ToolGateTests
 
     private sealed class RecordingRegistrationGuard : IProjectRegistrationGuard
     {
-        public List<string> Calls { get; } = [];
+        public List<(string ProjectId, AccessRequirement Requirement)> Calls { get; } = [];
         public bool Refuse { get; set; }
 
-        public Task EnsureAsync(string projectId, CancellationToken cancellationToken = default)
+        public Task EnsureAsync(string projectId, AccessRequirement requirement, CancellationToken cancellationToken = default)
         {
-            Calls.Add(projectId);
+            Calls.Add((projectId, requirement));
             if (Refuse)
             {
                 throw new UnregisteredProjectException(projectId);

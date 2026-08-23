@@ -1,5 +1,6 @@
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using System.Security.Cryptography;
+using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Ingestion;
@@ -550,7 +551,8 @@ public sealed class NeverMigratingStore : IModelMigrationStore
 /// <summary>Stub <see cref="IProjectRegistrationGuard"/> for tests that construct a <see cref="ToolGate"/> directly and do not exercise ADR-0089's registration refusal.</summary>
 public sealed class AllowingRegistrationGuard : IProjectRegistrationGuard
 {
-    public Task EnsureAsync(string projectId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task EnsureAsync(string projectId, AccessRequirement requirement, CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
 }
 
 /// <summary>No-op implementation of <see cref="ISearchQualityService"/> for unit tests that construct <see cref="MemoryTools"/> directly.</summary>

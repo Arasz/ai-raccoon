@@ -141,7 +141,8 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
             {
                 new BundledModelInstallReplacedException("embedding model", "model_qint8_arm64.onnx", "/replaced/install/dir"),
                 "embedding-install-replaced"
-            }
+            },
+            { new UnregisteredProjectException("acme"), "project-not-registered" }
         };
 
     /// <summary>
