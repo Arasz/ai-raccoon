@@ -86,14 +86,30 @@ public sealed partial class SqliteMemoryStore
             .IngestFileAsync(connection, projectId, path, context, cancellationToken)
             .ConfigureAwait(false);
 
+        await PruneChunksNotIn(connection, projectId, path, ingestResult.ChunkHashes ?? [],
+                ingestResult.CodeChunkHashes, cancellationToken)
+            .ConfigureAwait(false);
+
+        embedDrainPump.SignalWritten(ingestResult.WrittenCorpus);
+        return ingestResult.RowsInserted;
+    }
+
+    /// <summary>
+    ///     Deletes what the ingest did not account for, holding the write lock only for that (its own
+    ///     short <c>BEGIN IMMEDIATE</c>/<c>COMMIT</c> around <see cref="PruneAsync" />) — the shape
+    ///     every caller but <see cref="ReplaceCoreAsync" /> wants. <see cref="ReplaceCoreAsync" />
+    ///     instead calls <see cref="PruneAsync" /> directly, inside its own already-open transaction,
+    ///     since it has more to do (guard re-check, fingerprint) under the same lock.
+    /// </summary>
+    private async Task PruneChunksNotIn(SqliteConnection connection, string projectId, string path,
+        IReadOnlyList<string> keep, IReadOnlyList<string>? keepCode, CancellationToken cancellationToken)
+    {
         await connection.ExecuteAsync(
                 new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
             .ConfigureAwait(false);
         try
         {
-            await PruneChunksNotIn(connection, projectId, path, ingestResult.ChunkHashes ?? [],
-                    ingestResult.CodeChunkHashes, cancellationToken)
-                .ConfigureAwait(false);
+            await PruneAsync(connection, projectId, path, keep, keepCode, cancellationToken).ConfigureAwait(false);
             await connection.ExecuteAsync(
                     new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
@@ -105,9 +121,6 @@ public sealed partial class SqliteMemoryStore
                 .ConfigureAwait(false);
             throw;
         }
-
-        embedDrainPump.SignalWritten(ingestResult.WrittenCorpus);
-        return ingestResult.RowsInserted;
     }
 
     /// <summary>
@@ -121,7 +134,7 @@ public sealed partial class SqliteMemoryStore
     ///     chunk set to prune by — never a stand-in chunker's zero chunks read as "delete
     ///     everything" — so the code leg is skipped entirely rather than run with an empty keep list.
     /// </summary>
-    private async Task PruneChunksNotIn(SqliteConnection connection, string projectId, string path,
+    private async Task PruneAsync(SqliteConnection connection, string projectId, string path,
         IReadOnlyList<string> keep, IReadOnlyList<string>? keepCode, CancellationToken cancellationToken)
     {
         await connection.ExecuteAsync(Def(MemorySql.CreateQueueRestoreTable, null, cancellationToken))
@@ -165,7 +178,7 @@ public sealed partial class SqliteMemoryStore
     ///     runs autocommit (file read, chunk, hash, insert; rows left `embed_state = 'pending'`), and
     ///     only the short prune-and-fingerprint tail takes <c>BEGIN IMMEDIATE</c>: the guard's
     ///     authoritative re-check (a racing replace that lost re-chunked for nothing, but
-    ///     <see cref="PruneChunksNotIn" /> keeps by hash so it writes nothing twice), the delete of
+    ///     <see cref="PruneAsync" /> keeps by hash so it writes nothing twice), the delete of
     ///     whatever the ingest did not account for, and the fingerprint write.
     ///     <para>
     ///         Traded against the old delete-then-ingest shape: a reader can see the file's old AND
@@ -208,7 +221,7 @@ public sealed partial class SqliteMemoryStore
         try
         {
             // Authoritative re-check under the lock: a racing replace that lost re-chunked for
-            // nothing above, but writes nothing twice (PruneChunksNotIn keeps the rows it just
+            // nothing above, but writes nothing twice (PruneAsync keeps the rows it just
             // rediscovered, since the winner's own ingest already produced the same hashes).
             if (guard is not null && !await guard(connection).ConfigureAwait(false))
             {
@@ -221,7 +234,7 @@ public sealed partial class SqliteMemoryStore
                 return new ReplaceCoreResult(false, 0, CorpusKind.Neither);
             }
 
-            await PruneChunksNotIn(connection, projectId, path, ingestResult.ChunkHashes ?? [],
+            await PruneAsync(connection, projectId, path, ingestResult.ChunkHashes ?? [],
                     ingestResult.CodeChunkHashes, cancellationToken)
                 .ConfigureAwait(false);
             // B1: a code-only file a stand-in chunker (e.g. NoOpCodeChunker) produced zero rows for

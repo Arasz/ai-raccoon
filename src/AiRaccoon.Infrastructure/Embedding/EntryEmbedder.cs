@@ -301,6 +301,9 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
             var headingPaths = batch.Select(r => HeadingPathParser.Parse(r.Value)).ToList();
             var structure = await EmbedDistinctHeadingsAsync(generator, headingPaths, cancellationToken)
                 .ConfigureAwait(false);
+            // Converted before BEGIN IMMEDIATE (WP12 review): the vector-to-blob copy is CPU work,
+            // not part of the write — the lock is for the UPDATE statements only.
+            var embeddingBlobs = result.Select(r => EmbeddingBlob.ToBytes(r.Vector)).ToList();
 
             await connection.ExecuteAsync(
                     new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
@@ -315,7 +318,7 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
                             new
                             {
                                 id = batch[i].Id,
-                                embedding = EmbeddingBlob.ToBytes(result[i].Vector),
+                                embedding = embeddingBlobs[i],
                                 headingPath,
                                 structureEmbedding
                             },
