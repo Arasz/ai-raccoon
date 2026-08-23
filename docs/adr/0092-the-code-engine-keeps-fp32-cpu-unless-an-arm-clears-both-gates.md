@@ -5,8 +5,9 @@ Date: 2026-08-23
 Status: **Draft** — the decision shape only. The throughput numbers this record turns on do not
 exist yet: post-delta-4 **WP7**'s measured arms run in wave 3, alone on a quiet machine, and G3
 approved research only — *"no production edit and no engine swap until the owner rules on what it
-finds"*. Every `<TBD>` below is filled from that run. Not yet listed in `docs/adr/README.md`; it is
-added there when this leaves Draft.
+finds"*. Every `<TBD>` below is filled from that run. It **is** listed in `docs/adr/README.md` from the
+moment the file exists — `AdrIndexTests.Index_ListsEveryAdrOnDisk` enforces that with no status
+exemption, and the row opens "**Draft**" so the index stays honest about what this is.
 
 **Evidence:** `docs/work/2026-08-23-code-engine-inference-research.md` (desk half — CoreML
 availability, graph inventory, quantization recipe, parity smoke test, and the gate thresholds
