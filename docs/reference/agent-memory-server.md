@@ -282,8 +282,9 @@ config channel (see [Command-line options](#command-line-options)).
   `path-not-found:` / `watch-overlap:` tool errors; watch failures never fail the server.
 - **`ai-raccoon.ignore`:** an optional gitignore-subset exclude file at the root of a watched
   directory (or a `memory_ingest_directory` call's root) — `<root>/ai-raccoon.ignore`, one file
-  per root, never discovered in subdirectories. An explicit `memory_ingest_file` call has no walk
-  root of its own, so it resolves one: the containing registered watch if the path falls under
+  per root, never discovered in subdirectories; a `memory_ingest_directory` root without its own
+  file falls back to the same ancestor resolution as a single-file ingest. An explicit
+  `memory_ingest_file` call has no walk root of its own, so it resolves one: the containing registered watch if the path falls under
   one, else the ingest-scope allowlist entry that admits it, else the file's own parent directory
   as a last resort — and the same rule applies whether the file routes to memory or to the code
   corpus. Syntax: `*` (one path segment), `**` (zero or
