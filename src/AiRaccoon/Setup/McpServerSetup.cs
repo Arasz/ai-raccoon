@@ -77,6 +77,7 @@ internal static partial class McpServerSetup
             .WithTools<WatchTools>()
             .WithTools<QualityTools>()
             .WithTools<PerformanceTools>()
+            .WithTools<ProjectTools>()
             .WithPrompts<MemoryPrompts>();
         return builder.Build();
     }
@@ -175,6 +176,7 @@ internal static partial class McpServerSetup
                 .WithTools<WatchTools>()
                 .WithTools<QualityTools>()
                 .WithTools<PerformanceTools>()
+                .WithTools<ProjectTools>()
                 .WithPrompts<MemoryPrompts>();
     }
 
