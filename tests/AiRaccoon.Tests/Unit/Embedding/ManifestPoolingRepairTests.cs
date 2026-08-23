@@ -167,6 +167,8 @@ public sealed class ManifestPoolingRepairTests : IDisposable
         record.Message.ShouldContain("will NOT warn");
     }
 
+    /// <summary>A manifest already telling the truth is never rewritten — the fingerprint it feeds
+    /// must not move on every activation.</summary>
     [Fact]
     public void Repair_ManifestAlreadySaysModelOutput_LeavesItAlone()
     {
