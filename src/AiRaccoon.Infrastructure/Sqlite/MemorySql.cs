@@ -184,8 +184,8 @@ internal static class MemorySql
                                                        """;
 
     public const string UpsertTombstone =
-        "INSERT INTO sync_tombstones (hash, scope, deleted_at) VALUES (@hash, @scope, @deletedAt) " +
-        "ON CONFLICT(hash, scope) DO UPDATE SET deleted_at = excluded.deleted_at";
+        "INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at) VALUES (@projectId, @hash, @scope, @deletedAt) " +
+        "ON CONFLICT(project_id, hash, scope) DO UPDATE SET deleted_at = excluded.deleted_at";
 
     // Mirror delete/rename: removes committed chunks of the source path and its subtree (directory
     // delete cascades; workspace scratch is transient and stays), plus per-path watch fingerprints

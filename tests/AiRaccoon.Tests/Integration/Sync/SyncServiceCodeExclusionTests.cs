@@ -131,6 +131,13 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
             "fts5 shadow tables for code_fts must not survive the strip either.");
     }
 
+    private static void AssertNoMachineLocalTables(List<string> tables)
+    {
+        tables.ShouldNotContain("workspaces");
+        tables.ShouldNotContain("promotion_queue");
+        tables.ShouldNotContain("promotion_queue_prune_requests");
+    }
+
     // --- Push path 1: local snapshot (SyncService.cs ~:74) -------------------------------------
 
     [Fact]
@@ -152,6 +159,41 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
         await File.WriteAllBytesAsync(pulledPath, pulled.Data, TestContext.Current.CancellationToken);
 
         AssertNoCodeTables(await TableNamesAsync(pulledPath, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Sync_LocalPush_DropsMachineLocalTablesFromSnapshot()
+    {
+        var cloud = new FakeCloudStore();
+        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        {
+            await using var workspace = conn.CreateCommand();
+            workspace.CommandText = """
+                                    INSERT INTO workspaces (id, project_id, status, created_at)
+                                    VALUES ('ws-1', 'acme', 'Active', 1)
+                                    """;
+            await workspace.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+
+            await using var queue = conn.CreateCommand();
+            queue.CommandText = """
+                                INSERT INTO promotion_queue (project_id, hash, path, value, source_file, score, reasons, scorer_version, created_at, updated_at)
+                                VALUES ('acme', 'queue-hash', 'doc.md', 'queued value', 'doc.md', 1.0, '[]', 0, 1, 1)
+                                """;
+            await queue.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var service = new SyncService(cloud, ct => CreateAndOpenAsync(BankPath, ct), OpenSnapshot(), OpenReadOnly(),
+            TimeProvider.System, NullLogger<SyncService>.Instance);
+        await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+
+        var pulled = await cloud.PullAsync("test-object", TestContext.Current.CancellationToken);
+        pulled.ShouldNotBeNull();
+        var pulledPath = Path.Combine(_dataRoot, "pulled-local-machine-tables.db");
+        await File.WriteAllBytesAsync(pulledPath, pulled.Data, TestContext.Current.CancellationToken);
+
+        var tables = await TableNamesAsync(pulledPath, TestContext.Current.CancellationToken);
+        AssertNoCodeTables(tables);
+        AssertNoMachineLocalTables(tables);
     }
 
     /// <summary>
@@ -388,8 +430,8 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
                           CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, agent_id TEXT NULL,
                               name TEXT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL, closed_at INTEGER NULL);
                           CREATE TABLE IF NOT EXISTS sync_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-                          CREATE TABLE IF NOT EXISTS sync_tombstones (hash TEXT NOT NULL, scope TEXT NOT NULL,
-                              deleted_at INTEGER NOT NULL, PRIMARY KEY (hash, scope));
+                          CREATE TABLE IF NOT EXISTS sync_tombstones (project_id TEXT NOT NULL, hash TEXT NOT NULL, scope TEXT NOT NULL,
+                              deleted_at INTEGER NOT NULL, PRIMARY KEY (project_id, hash, scope));
                           CREATE TABLE IF NOT EXISTS memory_source (
                               id INTEGER PRIMARY KEY,
                               source_type TEXT NOT NULL,

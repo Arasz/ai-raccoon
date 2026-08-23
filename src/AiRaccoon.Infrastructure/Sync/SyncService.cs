@@ -310,7 +310,9 @@ public partial class SyncService(
                                                WHERE r.workspace_id IS NULL
                                                  AND NOT EXISTS (
                                                      SELECT 1 FROM sync_tombstones t
-                                                     WHERE t.hash = r.hash AND t.scope = COALESCE(r.scope, 'workspace')
+                                                     WHERE t.hash = r.hash
+                                                       AND t.scope = COALESCE(r.scope, 'workspace')
+                                                       AND t.project_id = r.project_id
                                                  )
                                                """;
                     received += await mergeEntries.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
@@ -361,8 +363,8 @@ public partial class SyncService(
                 await using (var mergeTombstones = conn.CreateCommand())
                 {
                     mergeTombstones.CommandText = """
-                                                  INSERT OR IGNORE INTO sync_tombstones (hash, scope, deleted_at)
-                                                  SELECT hash, scope, deleted_at FROM remote.sync_tombstones
+                                                  INSERT OR IGNORE INTO sync_tombstones (project_id, hash, scope, deleted_at)
+                                                  SELECT project_id, hash, scope, deleted_at FROM remote.sync_tombstones
                                                   """;
                     await mergeTombstones.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
@@ -372,8 +374,8 @@ public partial class SyncService(
                 {
                     applyTombstones.CommandText = """
                                                   DELETE FROM entries
-                                                  WHERE (hash, COALESCE(scope, 'workspace'))
-                                                      IN (SELECT hash, scope FROM remote.sync_tombstones)
+                                                  WHERE (hash, COALESCE(scope, 'workspace'), project_id)
+                                                      IN (SELECT hash, scope, project_id FROM remote.sync_tombstones)
                                                   """;
                     await applyTombstones.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
@@ -471,6 +473,13 @@ public partial class SyncService(
         await using var delSettings = snap.CreateCommand();
         delSettings.CommandText = "DELETE FROM settings";
         await delSettings.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+        foreach (var table in new[] { "workspaces", "promotion_queue", "promotion_queue_prune_requests" })
+        {
+            await using var dropTable = snap.CreateCommand();
+            dropTable.CommandText = $"DROP TABLE IF EXISTS {table}";
+            await dropTable.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
 
         // IF EXISTS: a snapshot opened via openSnapshot never ran EnsureAsync, so a bank that
         // predates the code corpus produces a snapshot with none of these tables — a bare DROP

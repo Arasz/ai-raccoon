@@ -51,7 +51,7 @@ internal static class MemorySchema
     ///     (<see cref="PruneOverlappingWatchesAsync" />, orchestrator ruling) — no version bump, since
     ///     its own logic is idempotent and it must reach fresh banks too.
     /// </summary>
-    internal const int CurrentVersion = 10;
+    internal const int CurrentVersion = 11;
 
     /// <summary>
     ///     The promotion_queue_entries_ad body (ADR-0023, amended by H4 and again by ADR-0046):
@@ -243,10 +243,11 @@ internal static class MemorySchema
                                           CREATE INDEX IF NOT EXISTS idx_noise_entries_expires_at ON noise_entries(expires_at);
 
                                           CREATE TABLE IF NOT EXISTS sync_tombstones (
+                                              project_id TEXT NOT NULL,
                                               hash TEXT NOT NULL,
                                               scope TEXT NOT NULL,
                                               deleted_at INTEGER NOT NULL,
-                                              PRIMARY KEY (hash, scope)
+                                              PRIMARY KEY (project_id, hash, scope)
                                           );
 
                                           -- File-watcher feature: persisted watch registrations and per-path
@@ -730,6 +731,11 @@ internal static class MemorySchema
             await MigrateToV10Async(connection, cancellationToken).ConfigureAwait(false);
         }
 
+        if (healthy && storedVersion < 11)
+        {
+            await MigrateToV11Async(connection, cancellationToken).ConfigureAwait(false);
+        }
+
         // Both stamps land together, only once the ladder actually finished (healthy): stamping the
         // digest on a degraded (unhealthy) run would let EnsureCheapAsync trust a bank whose ladder
         // never completed, the same bug this reordering exists to close (Data F1 / D5).
@@ -925,6 +931,50 @@ internal static class MemorySchema
                 )
                 """, cancellationToken: cancellationToken))
             .ConfigureAwait(false);
+
+    /// <summary>
+    ///     Ladder step 11: tombstones are project-scoped; legacy rows without a project id are ambiguous
+    ///     and are cleared rather than allowed to delete content across projects.
+    /// </summary>
+    private static async Task MigrateToV11Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var columns = (await connection.QueryAsync<string>(
+                new CommandDefinition(
+                    "SELECT name FROM pragma_table_info('sync_tombstones')",
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false)).ToHashSet(StringComparer.Ordinal);
+
+        if (!columns.Contains("project_id"))
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "ALTER TABLE sync_tombstones ADD COLUMN project_id TEXT NULL",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+
+        await connection.ExecuteAsync(
+                new CommandDefinition(
+                    """
+                    DELETE FROM sync_tombstones
+                    WHERE project_id IS NULL OR project_id = '';
+
+                    DELETE FROM sync_tombstones
+                    WHERE rowid NOT IN (
+                        SELECT MIN(rowid)
+                        FROM sync_tombstones
+                        GROUP BY project_id, hash, scope
+                    );
+                    """,
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+
+        await connection.ExecuteAsync(
+                new CommandDefinition(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_sync_tombstones_project_identity ON sync_tombstones(project_id, hash, scope)",
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
 
     /// <summary>
     ///     Unconditional, ungated, every-open no-overlapping-watches prune (orchestrator ruling, S7:
