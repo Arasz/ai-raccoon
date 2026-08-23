@@ -17,7 +17,7 @@ public sealed class PromotionToolsTests
     private static (FakePromotionQueue Queue, PromotionTools Tools) NewStack()
     {
         var queue = new FakePromotionQueue();
-        var gate = new ToolGate(new AllowingGuard(), queue, new NeverMigratingStore());
+        var gate = new ToolGate(new AllowingGuard(), queue, new NeverMigratingStore(), new AllowingRegistrationGuard());
         return (queue, new PromotionTools(queue, gate));
     }
 

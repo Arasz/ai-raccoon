@@ -65,7 +65,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
     }
 
     private MemoryTools BuildMemoryTools() =>
-        new(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore()),
+        new(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()),
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
             new QueryGuardService(new InMemorySettings()), new MemoryWriteService(_store, new FakePromotionQueue()),
             NoOpMeasurementRecorder.Instance, NullLogger<MemoryTools>.Instance);
@@ -135,7 +135,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
     public async Task MemoryShareExtract_UnderARespelledForm_ThreadsTheCanonicalId_ToTheExtractionRunner()
     {
         var extraction = new RecordingExtractionRunner();
-        var gate = new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore());
+        var gate = new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard());
         var tools = new ShareTools(_store, gate, new ShareExtractService(_store, extraction, new FakePromotionQueue()));
 
         await tools.ShareExtract([_respelled], cancellationToken: TestContext.Current.CancellationToken);
@@ -148,7 +148,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
     public async Task MemoryPromotionList_UnderARespelledForm_ListsUnderTheCanonicalId()
     {
         var queue = new FakePromotionQueue();
-        var gate = new ToolGate(new MemoryAccessGuard(_store), queue, new NeverMigratingStore());
+        var gate = new ToolGate(new MemoryAccessGuard(_store), queue, new NeverMigratingStore(), new AllowingRegistrationGuard());
         var tools = new PromotionTools(queue, gate);
 
         await tools.List(_respelled, cancellationToken: TestContext.Current.CancellationToken);

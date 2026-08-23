@@ -4,6 +4,7 @@ using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Code;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Embedding;
@@ -41,6 +42,8 @@ internal static partial class ToolRefusals
         // ADR-0076: refuses every bank operation for the duration of a model migration.
         [typeof(ModelMigrationInProgressException)] = "model-migration-in-progress",
         [typeof(ContextOutsideProjectException)] = "context-outside-project",
+        // ADR-0089 decision 3: a write to an id with no registry row and no existing rows.
+        [typeof(UnregisteredProjectException)] = "project-not-registered",
         // The install this process started from was replaced/removed under it (e.g. 'dotnet tool
         // update'); a plain InvalidOperationException still means the asset is genuinely missing
         // and stays unmapped (docs/reference/agent-memory-server.md Error shapes).

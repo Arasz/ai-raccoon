@@ -78,7 +78,8 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
                 new PromotionQueueMetrics(),
                 NullLogger<PromotionQueueService>.Instance,
                 _ctx.TimeProvider),
-            new NeverMigratingStore());
+            new NeverMigratingStore(),
+            new AllowingRegistrationGuard());
 
     private FakeCloudStore CloudStore => (FakeCloudStore)scenarioContext[CloudStoreKey];
 

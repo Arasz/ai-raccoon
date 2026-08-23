@@ -210,6 +210,6 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
         Hosted = new WatchHostedService(Store, WatchStore, Pipeline, EventSource, CatchUp, TimeProvider,
             TestTelemetry.None, NullLogger<WatchHostedService>.Instance);
         Service = new WatchService(WatchStore, Store, Pipeline, TimeProvider, new WatchOverlapResolver());
-        Tools = new WatchTools(Service, new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue(), new NeverMigratingStore()));
+        Tools = new WatchTools(Service, new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()));
     }
 }

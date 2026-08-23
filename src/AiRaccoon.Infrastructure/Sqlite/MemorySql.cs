@@ -421,8 +421,13 @@ internal static class MemorySql
 
     // ProjectRows.Of(), never Scope(): Scope() carries no project_id, so a Scope()-only predicate
     // is true for any project- or custom-scoped row in the whole bank, defeating the per-project
-    // answer this query exists to give (ADR-0089 §"Use Of(), never Scope()").
-    public static readonly string ProjectHasRows = $"SELECT count(*) FROM entries WHERE {ProjectRows.Of()}";
+    // answer this query exists to give (ADR-0089 §"Use Of(), never Scope()"). Both legs are
+    // index-served (idx_entries_scope_project, idx_code_entries_project) and short-circuit: a
+    // code-only legacy project (rows in code_entries, none in entries) must still be found, since
+    // ADR-0089 decision 3 tests "no registry row AND no rows" over both corpora, not entries alone.
+    public static readonly string ProjectHasRows =
+        $"SELECT EXISTS(SELECT 1 FROM entries WHERE {ProjectRows.Of()}) " +
+        "OR EXISTS(SELECT 1 FROM code_entries WHERE project_id = @projectId)";
 
     // ---- model_migration (ADR-0076) ----
 

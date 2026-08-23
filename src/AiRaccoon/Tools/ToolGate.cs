@@ -2,6 +2,7 @@ using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Projects;
+using AiRaccoon.Projects;
 using ModelContextProtocol;
 
 namespace AiRaccoon.Tools;
@@ -12,7 +13,11 @@ namespace AiRaccoon.Tools;
 ///     the project's access mode, and wrap the result in the envelope carrying the propose tier's
 ///     meta. One copy, so the seven tool classes cannot drift apart.
 /// </summary>
-public sealed class ToolGate(IMemoryAccessGuard access, IPromotionQueue queue, IModelMigrationStore migrations) : IToolGate
+public sealed class ToolGate(
+    IMemoryAccessGuard access,
+    IPromotionQueue queue,
+    IModelMigrationStore migrations,
+    IProjectRegistrationGuard registration) : IToolGate
 {
     /// <summary>Refuses while a migration is open. Nothing else — the check a tool with no project yet can still make.</summary>
     public async Task RequireBankAvailableAsync(string toolName, CancellationToken cancellationToken)
@@ -26,7 +31,8 @@ public sealed class ToolGate(IMemoryAccessGuard access, IPromotionQueue queue, I
 
     /// <summary>
     ///     Refuses while a migration is open, then rejects a blank project id, canonicalizes it
-    ///     (ADR-0089 decision 2), then throws access-denied when the mode is too low. Returns the
+    ///     (ADR-0089 decision 2), refuses an unregistered id on a write (decision 3 — reads pass
+    ///     through untouched), then throws access-denied when the mode is too low. Returns the
     ///     canonical id for the caller to carry to storage.
     /// </summary>
     public async Task<string> RequireAsync(string? projectId, AccessRequirement requirement, string toolName,
@@ -40,6 +46,12 @@ public sealed class ToolGate(IMemoryAccessGuard access, IPromotionQueue queue, I
         }
 
         var canonical = ProjectId.Canonicalize(projectId);
+
+        if (requirement != AccessRequirement.Read)
+        {
+            await registration.EnsureAsync(canonical, cancellationToken).ConfigureAwait(false);
+        }
+
         await access.EnsureAsync(canonical, requirement, toolName, cancellationToken).ConfigureAwait(false);
         return canonical;
     }
