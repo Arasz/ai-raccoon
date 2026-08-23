@@ -29,9 +29,9 @@ One block per source file that owns a `Log` class or equivalent:
 |---|---|
 | 10-12 | `src/AiRaccoon/AppRunner.cs` (corrected 2026-08-16: this block said `Program.cs`, which is a four-line shim; the `[LoggerMessage]` methods are and were in `AppRunner.cs`) |
 | 13-14 | `src/AiRaccoon/Observability/BankEngineReporter.cs` (added 2026-08-15: the startup line naming the running binary against the bank's embedding engine, WP3 step 5) |
-| 20 | `src/AiRaccoon/HostExtensions.cs` |
+| 20 | `src/AiRaccoon/Setup/Extensions/HostExtensions.cs` |
 | 30 | `src/AiRaccoon/Setup/McpServerSetup.cs` |
-| 40-41 | `src/AiRaccoon/Setup/EmbeddingAvailability.cs` |
+| 40-41 | `src/AiRaccoon/Setup/Models/EmbeddingAvailability.cs` |
 | 100-103 | `src/AiRaccoon.Infrastructure/Sync/SyncService.cs` (101-103 added 2026-08-22: the remote-blob HMAC authenticity check, docs/work/2026-08-21-delta-review-fix-plan.md S2 — 101 skips the push-side tag for an unencrypted bank, 102 skips the pull-side check for the same reason, 103 warns on a legacy remote blob with no tag) |
 | 200-202 | `src/AiRaccoon.Infrastructure/Sync/S3CloudStore.cs` |
 | 203-205 | `src/AiRaccoon.Infrastructure/Sync/AzureBlobCloudStore.cs` |
@@ -39,7 +39,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 302 | `src/AiRaccoon.Infrastructure/Watch/WatchPipeline.cs` |
 | 310-312 | `src/AiRaccoon.Infrastructure/Watch/WatchCatchUp.cs` |
 | 320, 321 | `src/AiRaccoon.Infrastructure/Watch/WatchHostedService.cs` |
-| 330 | `src/AiRaccoon/Setup/Dependencies.cs` |
+| 330 | `src/AiRaccoon/Setup/AppRegistrations.cs` |
 | 400 | *(retired 2026-08-22, WP11-B2)* — was `src/AiRaccoon.Infrastructure/Watch/WatchDigestExecutor.cs`'s best-effort-embed-failed warning; the digest no longer embeds inline (it signals the embed topic via `IEventPump<EmbedDrainRequest>.TryEnqueue`, which cannot throw), so the call site — and the `Log` class it lived in — is gone. Retired rather than reused, same convention as 416/512/516. |
 | 410-413 | `src/AiRaccoon.Infrastructure/Embedding/BundledModel.cs` |
 | 414-415, 417 | `src/AiRaccoon.Infrastructure/Embedding/OnnxEmbeddingGenerator.cs` (docs/adr/0036: embed-time truncation and possible-[UNK]-collapse detectors — 414 is STORED CONTENT only since ADR-0071; 417 added 2026-08-22, #466: the graph pools its own output, so the manifest's pooling.mode cannot be applied. **416 is a hole in this block, not a free id** — it was `EmbeddingService`'s query-trim event and moved to 418 (itself later moved to 426, #522 — see below) to open 417, because this owner sat wedged between `BundledModel`'s 413 and that 416 with nowhere to grow, the same wedge that moved `MetricsFlusher` off 962-964. Retired, never reused) |
@@ -53,11 +53,11 @@ One block per source file that owns a `Log` class or equivalent:
 | 510-524 | `src/AiRaccoon.Infrastructure/Maintenance/BankMaintenanceHostedService.cs` (517-519 added 2026-08-14: the pending-embed retry sweep, .NET-F1 — a watch-driven embedding failure used to leave a row permanently pending; 520-521 added 2026-08-14: the noise-entry retention purge, ADR-0039; 522-524 added 2026-08-15: the promotion-discard and search-quality retention purges, ADR-0055. **512 and 516 are retired**: both are still declared here but have had no call site since ADR-0070 moved vacuuming into `MaintenanceJobRunner`, which logs 525 instead — they cannot fire. Retired rather than deleted so the numbers are not reused; found by the 2026-08-16 checklist run. ADR-0076's on-demand poll loop deliberately reuses `RunFailed` (513) instead of minting a new id — a second near-duplicate would have interleaved with `MaintenanceJobRunner`'s adjacent 525-526 block) |
 | 530-537 | `src/AiRaccoon.Infrastructure/Degradation/SweepHostedService.cs` (537 is H6: skipped for access mode; moved from 520-527 on 2026-08-14 so the maintenance owner could stay contiguous when the noise purge extended it) |
 | 601-609 | `src/AiRaccoon/Hosting/Node/NodeRunner.cs` (606-607 are the loopback token, ADR-0020; 608 is the lost-the-port restart, ADR-0022; 604 and 609 are the unanswered probe, ADR-0043) |
-| 610-612 | `src/AiRaccoon/Setup/Serve/IdleWatchdog.cs` |
-| 620-623 | `src/AiRaccoon/Observability/ObservabilityRunner.cs` (landed in `4c4be1c`, #109) |
-| 630 | `src/AiRaccoon/Setup/Serve/ProxyRunner.cs` (ADR-0020) |
+| 610-612 | `src/AiRaccoon/Hosting/Watchdog/IdleWatchdog.cs` |
+| 620-623 | `src/AiRaccoon/Hosting/Node/ObservabilityRunner.cs` (landed in `4c4be1c`, #109) |
+| 630 | `src/AiRaccoon/Hosting/Proxy/ProxyRunner.cs` (ADR-0020) |
 | 633-635 | `src/AiRaccoon/Hosting/Proxy/BackendLauncher.cs` (ADR-0020; path corrected 2026-08-22 — moved from `Setup/Serve/`. 635's message extended with the captured stderr, delta-review plan C1) |
-| 636-639 | `src/AiRaccoon/Setup/Serve/ProxyForwarder.cs` (ADR-0020) |
+| 636-639 | `src/AiRaccoon/Hosting/Proxy/ProxyForwarder.cs` (ADR-0020) |
 | 640 | `src/AiRaccoon/Observability/OtlpExport.cs` (ADR-0009; OTLP export disabled warning) |
 | 650-656 | `src/AiRaccoon/Hosting/Node/ServerRestart.cs` (ADR-0022; 656 is the unanswered probe, ADR-0043) |
 | 660 | `src/AiRaccoon/Hosting/Node/ShutdownEndpoint.cs` (ADR-0022) |

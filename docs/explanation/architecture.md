@@ -219,13 +219,17 @@ stale-vector window. Unlike a memory engine change, this does **not** go through
 query, and its `ToolGate` closes every tool for the migration's duration — none of which
 fits a second, independent corpus. Instead, a standing `code-reindex` maintenance job (same
 on-demand shape as `PendingEmbedJob`: `HasWorkAsync` reads `code_entries.embed_state`
-directly, so a bank with no code engine configured is never "due") drains pending rows in
-batches of 32 on its own poll — no relay wait, no gate, memory tools stay fully available
-the whole time. While rows drain, `kind=code` search naturally degrades to FTS5-only for
-them (`code_fts` is populated at ingest time, independent of `embed_state`).
+directly, so a bank with no code engine configured is never "due") signals the embed topic's
+single consumer (`EmbedDrainService`, ADR-0091) rather than draining inline itself; each
+signal drains up to `maintenance.embed-rows-per-run.global` pending rows (default 128, ceiling
+4096) — no relay wait, no gate, memory tools stay fully available the whole time. A re-ingested
+code file also prunes `code_entries` rows its new chunk set no longer covers (#481). While rows
+drain, `kind=code` search naturally degrades to FTS5-only for them (`code_fts` is populated at
+ingest time, independent of `embed_state`).
 
 > **Evidence:** `docs/work/2026-08-21-code-search-implementation-plan.md` §3.1/§3.2/§3.3/§3.8,
-> `src/AiRaccoon.Infrastructure/Maintenance/CodeReindexJob.cs`
+> `src/AiRaccoon.Infrastructure/Maintenance/CodeReindexJob.cs`,
+> `src/AiRaccoon.Infrastructure/Embedding/EmbedDrainService.cs`
 
 ### Schema versioning
 
@@ -452,14 +456,16 @@ flowchart LR
 
 **Recording is best-effort and never on the caller's thread.** `MetricsRecorder.Record` swallows
 every exception a full or misbehaving buffer can throw, so a metrics failure never fails the
-search or tool call it is measuring. `MeasurementBuffer` is a capped `ConcurrentQueue` (not the
-`Channel`-based design the spec first proposed) — a slot is reserved with `Interlocked.Increment`
-before enqueueing, so concurrent writers cannot overrun the cap; past it, the measurement is
-dropped and `DroppedCount` counts it. `MetricsFlusher` drains the buffer on a fixed interval and
+search or tool call it is measuring. `MeasurementBuffer` is a thin adapter over `EventPump<Measurement>`
+(ADR-0091), the bounded-`Channel`-based pump every topic now shares — a slot is still reserved with
+`Interlocked.Increment` before enqueueing, so concurrent writers cannot overrun the cap; past it, the
+measurement is dropped and `DroppedCount` counts it, the same drop-and-count contract
+[ADR-0074](../adr/0074-a-capped-buffer-satisfies-the-channel-rule-and-reshapes-g4.md)'s original
+capped-`ConcurrentQueue` design shipped, carried over byte-for-byte onto the shared pump (ADR-0091).
+`MetricsFlusher` drains the buffer on a fixed interval and
 batch-inserts it, then writes its own flush duration, batch size and cumulative drop count
 *directly* to the store — bypassing the buffer, so the writer measuring itself cannot recurse
-into itself. See [ADR-0074](../adr/0074-a-capped-buffer-satisfies-the-channel-rule-and-reshapes-g4.md)
-for why the buffer replaces the channel and what that forced on the "no bank write during a
+into itself. See ADR-0074 for why the original design replaced a channel and what that forced on the "no bank write during a
 search" gate.
 
 **`MetricsRetentionJob`** is one entry in the same job list `VacuumJob` and `ChunkBackfillJob`
@@ -468,7 +474,7 @@ run from (ADR-0070) — every 2 hours it deletes `metrics` rows older than
 window is within contract, not a defect (docs/work/specs/PerformanceMetrics.feature).
 
 **`memory_performance`** derives its series list from the server's own tool inventory
-(`McpToolInventory.Names()`) plus `SearchTimings.SeriesNames` — the eight `search.*` phase names
+(`McpToolInventory.Names()`) plus `SearchTimings.SeriesNames` — the nine `search.*` phase names
 (`SearchTimings.PhaseNames`) plus the measured `search.total` — never from
 `SELECT DISTINCT name FROM metrics`, so a tool or phase nothing has called yet still appears, at
 count zero, rather than being silently omitted (derive-or-delete-the-list). `search.total` is a
@@ -479,12 +485,13 @@ against `memory_search`'s own reported duration — see
 against `memory_search` cannot be built at all. The report is project-scoped only; the whole-bank
 scope is deferred (D6, docs/plans/2026-08-15-performance-metrics-implementation.md §5).
 
-**Buffer pressure moves with phase count.** Phase rows per search go 6 → 9: each `memory_search`
-call now enqueues eight phase measurements plus `search.total`, alongside the one tool-level
-`memory_search` duration `ToolExecutionActivity` already records. Against `DefaultBufferCapacity`
-(1000, `MetricsConfigKeys.cs:8`) and the default 30 s flush (`DefaultFlushIntervalSeconds`,
-`MetricsConfigKeys.cs:18`), the searches-per-flush-window before the buffer starts dropping moves
-from roughly 142 to roughly 100. Not a risk at any realistic search rate — recorded here so a
+**Buffer pressure moves with phase count.** Phase rows per search go 6 → 10: each `memory_search`
+call now enqueues nine phase measurements (`search.adjustment` added, #483) plus `search.total`,
+alongside the one tool-level `memory_search` duration `ToolExecutionActivity` already records.
+Against `DefaultBufferCapacity` (1000, `MetricsConfigKeys.cs:8`) and the default 30 s flush
+(`DefaultFlushIntervalSeconds`, `MetricsConfigKeys.cs:18`), the searches-per-flush-window before
+the buffer starts dropping moves from roughly 142 to roughly 91. Not a risk at any realistic search
+rate — recorded here so a
 future `metrics.dropped` uptick has an explanation on hand rather than a fresh investigation.
 
 > **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:332-353` (schema, in `Ddl` so
@@ -851,13 +858,14 @@ src/AiRaccoon/              Thin MCP server — tool definitions, transport, DI
   Tools/PerformanceTools.cs memory_performance — thin over MetricsReportService (ADR-0065)
   Access/MemoryAccessGuard  Enforces access modes at the tool boundary
   Setup/McpServerSetup.cs   --transport CLI flag → stdio/HTTP host selection
-  Setup/Serve/              proxy (the default) and serve: ProxyRunner, ProxyForwarder,
-                            BackendLauncher, ServerProbe, McpTokenFile/Gate, ServeRunner,
-                            IdleWatchdog (ADR-0020)
+  Hosting/                  proxy (the default) and serve, moved out of Setup/Serve/ 2026-08-22:
+                            Proxy/ (ProxyRunner, ProxyForwarder, BackendLauncher), Node/ (NodeRunner,
+                            ServerRestart, ObservabilityRunner, McpTokenGate), Common/ (ServerProbe,
+                            McpTokenFile), Watchdog/ (IdleWatchdog) (ADR-0020)
 
 src/AiRaccoon.Core/         Pure domain layer — zero framework deps
   Memory/                   IMemoryStore port, records, ContentHash, SearchQuery, ContextNaming,
-                            SearchResults/SearchTimings (eight search-phase durations plus a
+                            SearchResults/SearchTimings (nine search-phase durations plus a
                             measured search.total, not itself a phase — ADR-0080),
                             MetricsConfigKeys (buffer/flush/retention settings)
   Metrics/                  Measurement, MeasurementKind, IMeasurementRecorder,
@@ -874,12 +882,16 @@ src/AiRaccoon.Core/         Pure domain layer — zero framework deps
   Encryption/               SshKeyDerivation, OpenSshPrivateKeyParser, EncryptionData
   Validation/               ValidatorConfiguration (FluentValidation wiring)
   Watch/                    IWatchService port, WatchConfig, WatchState, WatchPath
+  EventPump/                IEventPump<T>/EventPump<T>, PumpTopic (bounded-channel pump, one instance
+                            per topic — metrics and embed-drain signalling, ADR-0091)
 
 src/AiRaccoon.Infrastructure/   Adapters — Dapper over SQLite, sync, embedding
   Sqlite/                   SqliteMemoryStore, MemorySchema, ReciprocalRankFusion,
                             SearchContexts, SearchResultMerger, EntryBucket
   Sqlite/Encryption/        EncryptionKeyResolver, EncryptionSourceSidecar, key Providers
   Embedding/                EmbeddingService, OnnxEmbeddingGenerator, BundledModel, EntryEmbedder,
+                            CodeEmbedder, EmbedDrainService (the embed topic's single consumer,
+                            ADR-0076/ADR-0091), EmbedDrainRequest/EmbedDrainSignal,
                             ICodeTokenizer/CodeTokenizer (bundled code-daemon-embed-v1 sentencepiece
                             counting tokenizer, unconfigured-code-engine default)
   Ingestion/                FileIngestor (scope containment, chunking, chunk insertion; WI-8),
@@ -896,7 +908,7 @@ src/AiRaccoon.Infrastructure/   Adapters — Dapper over SQLite, sync, embedding
   Maintenance/              BankMaintenanceHostedService (WAL checkpoint, #79) running a job list
                             (ADR-0070): VacuumJob, Vec0ReclaimJob, ChunkBackfillJob,
                             MetricsRetentionJob (purges `metrics` past its retention window)
-  Metrics/                  MeasurementBuffer (capped queue), MetricsFlusher (fixed-interval
+  Metrics/                  MeasurementBuffer (thin adapter over EventPump<Measurement>, ADR-0091), MetricsFlusher (fixed-interval
                             BackgroundService), SqliteMetricsStore, MetricsRecorder,
                             MetricsReportService (window/bucket aggregation for memory_performance)
   Encryption/               BitwardenCliSecretManager (Bitwarden key source)

@@ -8,7 +8,7 @@ Ask the running server how it is performing — no OpenTelemetry collector requi
 
 AiRaccoon records a measurement for every MCP tool call, every `memory_search` phase
 (`search.open`, `search.embed`, `search.fts`, `search.vector`, `search.fusion`, `search.affinity`,
-`search.snippets`, `search.bump`), and one measured total per search (`search.total` — not itself
+`search.adjustment`, `search.snippets`, `search.bump`), and one measured total per search (`search.total` — not itself
 a phase; see [Reading `search.*` series](#reading-search-series) below), persists them in a
 `metrics` table inside `memory.db`, and reads them back through the `memory_performance` MCP tool.
 This is diagnostics for **you**, the person running or
@@ -62,7 +62,7 @@ hours in 1-minute buckets (180 points):
 A few things worth knowing before reading a report:
 
 - **The series list is fixed, not discovered.** It is every tool on the server's own tool
-  inventory plus `SearchTimings.SeriesNames` — the eight `memory_search` phases and the measured
+  inventory plus `SearchTimings.SeriesNames` — the nine `memory_search` phases and the measured
   `search.total` — never `SELECT DISTINCT name FROM metrics` — so a tool, phase or `search.total`
   nothing has called yet still appears, at `count: 0`, rather than being silently omitted.
 - **A quiet window is an empty series, never an error.** Asking about a bank with no traffic in

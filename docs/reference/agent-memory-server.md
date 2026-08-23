@@ -187,8 +187,10 @@ config channel (see [Command-line options](#command-line-options)).
   required 768. A missing/invalid manifest is refused with the same loader error `model set
   local` surfaces. On success the write commits in one transaction with invalidating every
   already-embedded code row back to `pending` — `vec_code` empties at that same commit, no
-  stale-vector window — and the `code-reindex` maintenance job re-embeds the pending rows on its
-  own cadence; there is no outbox, no relay wait, and memory tools are never blocked.
+  stale-vector window — and the `code-reindex` maintenance job signals the embed topic's single
+  consumer (`EmbedDrainService`, ADR-0091) whenever it finds pending rows, on its own on-demand
+  cadence, rather than re-embedding inline itself; there is no outbox, no relay wait, and memory
+  tools are never blocked.
   `ai-raccoon model set code default` downloads `faxenoff/code-daemon-embed-v1` (187 MB, if not
   already present) and activates it in one command — the recommended path
   (`CodeEngineSetup.DefaultModelCommand`, the exact string the search warning, `doctor`, and the
@@ -296,9 +298,10 @@ config channel (see [Command-line options](#command-line-options)).
 - **Deferred writes:** until an engine is configured, writes are stored deferred
   (`memory_stats.pending > 0`) and only become searchable after `memory_embed_pending`.
 - **`memory_performance`:** project-scoped only (the whole-bank scope is deferred). The
-  `series` list is derived from the server's tool inventory plus the six
-  `memory_search` phases (`search.fts`, `search.vector`, `search.fusion`,
-  `search.affinity`, `search.snippets`, `search.bump`) — not from what happens to be
+  `series` list is derived from the server's tool inventory plus the nine
+  `memory_search` phases (`search.open`, `search.embed`, `search.fts`, `search.vector`,
+  `search.fusion`, `search.affinity`, `search.adjustment`, `search.snippets`,
+  `search.bump`) — not from what happens to be
   in the metrics table — so a tool or phase that has never been recorded still appears,
   at `count: 0`, rather than being omitted. `bucketMinutes` wider than `windowMinutes`
   is never an error: it clamps to the window and the series returns one averaged point.
@@ -651,6 +654,7 @@ ai-raccoon model set local [path]
 ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]
 ai-raccoon settings model reset
 ai-raccoon settings model show
+ai-raccoon settings model threads {n}       # ORT intra-op thread cap; 0 = ORT default, unset = max(1, logicalCores/2)
 
 # model set code: the code corpus's own engine — independent settings rows, refuses non-768
 # manifests before anything commits (§3.3 D-E9), no memory-bank re-embed
