@@ -217,6 +217,67 @@ public sealed class MetricsReportServiceTests : IDisposable
     }
 
     /// <summary>
+    ///     WP11 (log-values-as-metrics): drain.&lt;corpus&gt;.* is bank-wide, discovered the same way
+    ///     job.* is — MetricsConfigKeys.InternalSeriesPrefixes now covers "drain." too.
+    /// </summary>
+    [Fact]
+    public async Task GetReportAsync_TheSelfMetricsProjectId_SurfacesDrainSeries()
+    {
+        await SeedAsync("drain.code.rows", 12, FixedNow - TimeSpan.FromMinutes(1), MetricsConfigKeys.SelfMetricsProjectId);
+
+        var report = await _service.GetReportAsync(MetricsConfigKeys.SelfMetricsProjectId, [],
+            TimeSpan.FromHours(1), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
+
+        var rows = report.Series.Single(s => s.Tool == "drain.code.rows");
+        rows.Count.ShouldBe(1);
+        rows.Max.ShouldBe(12.0);
+    }
+
+    /// <summary>Mirrors the job-series isolation gate: a bank-wide drain series must never leak into an ordinary project's report.</summary>
+    [Fact]
+    public async Task GetReportAsync_OrdinaryProject_NeverSeesDrainSeries()
+    {
+        await SeedAsync("drain.code.rows", 12, FixedNow - TimeSpan.FromMinutes(1), MetricsConfigKeys.SelfMetricsProjectId);
+
+        var report = await _service.GetReportAsync("acme", ["memory_search"],
+            TimeSpan.FromHours(1), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
+
+        report.Series.ShouldNotContain(s => s.Tool == "drain.code.rows");
+    }
+
+    /// <summary>
+    ///     WP11: write.replace.* is recorded under the writing project's own id (ReplaceCoreAsync
+    ///     already has it), so it must surface through the SAME prefix-discovery mechanism scoped to
+    ///     an ORDINARY project — not just the self-metrics id.
+    /// </summary>
+    [Fact]
+    public async Task GetReportAsync_OrdinaryProject_SurfacesWriteReplaceSeries()
+    {
+        await SeedAsync("write.replace.lock_ms", 8, FixedNow - TimeSpan.FromMinutes(1), "acme");
+
+        var report = await _service.GetReportAsync("acme", [],
+            TimeSpan.FromHours(1), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
+
+        var lockMs = report.Series.Single(s => s.Tool == "write.replace.lock_ms");
+        lockMs.Count.ShouldBe(1);
+        lockMs.Max.ShouldBe(8.0);
+    }
+
+    /// <summary>WP11: search.query.truncated_tokens is bank-wide (the embedding engine's query-trim path has no project id), so it discovers the same way job./drain. do.</summary>
+    [Fact]
+    public async Task GetReportAsync_TheSelfMetricsProjectId_SurfacesQueryTruncationSeries()
+    {
+        await SeedAsync("search.query.truncated_tokens", 30, FixedNow - TimeSpan.FromMinutes(1), MetricsConfigKeys.SelfMetricsProjectId);
+
+        var report = await _service.GetReportAsync(MetricsConfigKeys.SelfMetricsProjectId, [],
+            TimeSpan.FromHours(1), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
+
+        var truncated = report.Series.Single(s => s.Tool == "search.query.truncated_tokens");
+        truncated.Count.ShouldBe(1);
+        truncated.Max.ShouldBe(30.0);
+    }
+
+    /// <summary>
     ///     WP10: the report carries the search-phase series alongside the tool series, reading them
     ///     back from the same `metrics` table WP3's writer fills — the phase names must not be
     ///     filtered out of the SQL query the same way a hand-written tool-only list would drop them.
