@@ -313,12 +313,20 @@ config channel (see [Command-line options](#command-line-options)).
   appear in the whole-bank self-metrics report — same surface as `metrics.dropped` (#477).
   Three more series recorded as measurements beside their log line (WP11, "log-values-as-metrics"):
   `drain.<memory|code>.rows` and `drain.<memory|code>.duration_ms` (an embed-drain pass, EventId
-  1003) and `search.query.truncated_tokens` (a search query trimmed to the embedding window,
-  EventId 426) are bank-wide like `job.*` — neither a drain pass nor the embedding engine's
-  query-trim path has a project id to record under. `write.replace.lock_ms` and
-  `write.replace.rows` (a replace-by-path transaction's held write-lock time and row count,
-  EventId 899) are project-scoped, recorded under the writing project's own id, and so appear in
-  an ordinary project's report the same way a tool series does.
+  1003) and `search.query.truncated_tokens` — how many tokens a search query ran OVER the
+  embedding window, `tokens - maxTokens` (EventId 426) — are bank-wide like `job.*` — neither a
+  drain pass nor the embedding engine's query-trim path has a project id to record under.
+  `write.replace.lock_ms` and `write.replace.rows` (a replace-by-path transaction's held
+  write-lock time and row count, EventId 899) are project-scoped, recorded under the writing
+  project's own id, and so appear in an ordinary project's report the same way a tool series does.
+  `0 rows` on this series means a declined/no-op replace (fingerprint unchanged) — the lock was
+  still taken and released, so `lock_ms` stays real even though nothing was written; kept rather
+  than filtered, since that is the same `0` the EventId 899 log line already reports at that
+  branch. **`lock_ms` is currently wait-for-the-lock plus held-time combined** — a follow-up
+  (WP12) restructures `ReplaceCoreAsync` so the chunker runs outside the lock and splits the
+  899 measurement into `write.replace.wait_ms` and `write.replace.held_ms`; until that lands,
+  `lock_ms` is the two numbers summed, and a slow chunker under contention reads as a long "lock"
+  even though most of it was waiting, not holding.
 
 ### Unknown-id rule
 
