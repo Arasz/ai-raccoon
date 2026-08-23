@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace AiRaccoon.Core.Projects;
 
 /// <summary>
@@ -14,11 +16,10 @@ public static class ProjectId
     }
 
     /// <summary>
-    ///     True and the lowercase D-form when <paramref name="projectId" /> parses as a guid; false
-    ///     and the input unchanged otherwise. The BCL Try-pattern contract — never throws, even on
-    ///     null or blank input; <see cref="Canonicalize" /> is where that gets guarded.
+    ///     True and the lowercase D-form when <paramref name="projectId" /> parses as a guid; false and
+    ///     the input unchanged otherwise. Never throws — <see cref="Canonicalize" /> guards blank input.
     /// </summary>
-    public static bool TryCanonicalize(string projectId, out string canonical)
+    public static bool TryCanonicalize(string? projectId, [NotNullWhen(true)] out string? canonical)
     {
         if (!string.IsNullOrWhiteSpace(projectId) && Guid.TryParse(projectId, out var guid))
         {
