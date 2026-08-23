@@ -246,21 +246,27 @@ public sealed class MetricsReportServiceTests : IDisposable
     }
 
     /// <summary>
-    ///     WP11: write.replace.* is recorded under the writing project's own id (ReplaceCoreAsync
+    ///     WP11/WP12: write.replace.* is recorded under the writing project's own id (ReplaceCoreAsync
     ///     already has it), so it must surface through the SAME prefix-discovery mechanism scoped to
-    ///     an ORDINARY project — not just the self-metrics id.
+    ///     an ORDINARY project — not just the self-metrics id. Seeds the actual wait_ms/held_ms series
+    ///     names (WP12 split the WP11 combined lock_ms in two), not a stand-in example name — a
+    ///     rename here must fail this test, not just the prefix-discovery mechanism in the abstract.
     /// </summary>
     [Fact]
     public async Task GetReportAsync_OrdinaryProject_SurfacesWriteReplaceSeries()
     {
-        await SeedAsync("write.replace.lock_ms", 8, FixedNow - TimeSpan.FromMinutes(1), "acme");
+        await SeedAsync("write.replace.wait_ms", 3, FixedNow - TimeSpan.FromMinutes(1), "acme");
+        await SeedAsync("write.replace.held_ms", 5, FixedNow - TimeSpan.FromMinutes(1), "acme");
 
         var report = await _service.GetReportAsync("acme", [],
             TimeSpan.FromHours(1), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
 
-        var lockMs = report.Series.Single(s => s.Tool == "write.replace.lock_ms");
-        lockMs.Count.ShouldBe(1);
-        lockMs.Max.ShouldBe(8.0);
+        var waitMs = report.Series.Single(s => s.Tool == "write.replace.wait_ms");
+        waitMs.Count.ShouldBe(1);
+        waitMs.Max.ShouldBe(3.0);
+        var heldMs = report.Series.Single(s => s.Tool == "write.replace.held_ms");
+        heldMs.Count.ShouldBe(1);
+        heldMs.Max.ShouldBe(5.0);
     }
 
     /// <summary>WP11: search.query.truncated_tokens is bank-wide (the embedding engine's query-trim path has no project id), so it discovers the same way job./drain. do.</summary>
