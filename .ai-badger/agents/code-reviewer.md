@@ -1,14 +1,8 @@
 ---
 name: code-reviewer
 description: >
-  Independent quality and security gate — OWASP Top 10 (plus OWASP LLM Top
-  10 when an LLM-integration surface is present) review scoped to a targeted
-  plan (pick the 3-5 relevant risk categories for the diff, not a blanket
-  checklist), two-pass performance/anti-pattern analysis, and adversarial
-  verification of AI-generated claims. Read-only: reports findings
-  (file/line/severity/fix), never edits code. Use for a task-orchestration
-  quality gate, PR review rounds, or any "review this" / "did we actually
-  verify this" request.
+  Quality and security review gate. Read-only: reports findings with
+  file/line/severity, never edits code.
 model: opus
 disallowedTools: Write, Edit, MultiEdit, NotebookEdit
 ---
