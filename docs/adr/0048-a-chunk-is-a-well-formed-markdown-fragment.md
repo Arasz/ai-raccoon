@@ -53,11 +53,6 @@ path, which is why it is fixed in the chunker rather than by passing fence state
 > `maxTokens=100` puts **14 of 31 boundaries mid-word** — `AddUnitOrSplit`/`LargestPrefixWithinBudget`
 > is a token binary search with no word awareness. The guarantee delivered is **fence balance**.
 > Table-header carry-over and word-boundary awareness are unbuilt, not broken.
->
-> **Scope amendment — 2026-08-23, #538.** A second guarantee joined fence balance without a title
-> change: a heading opens the chunk that holds its section's content, never ends the previous one
-> holding only part of it (#489, generalized by #538 to a heading cut a few body lines after itself,
-> not just one dangling bare at the tail) — `MarkdownChunker.DeferOpenSection`.
 
 Three changes to `MarkdownChunker` carry it:
 
@@ -71,6 +66,15 @@ Three changes to `MarkdownChunker` carry it:
    one unbounded atomic unit — but it stays a fence while being bounded.
 3. **The mid-region bail-out is removed.** A fence region now runs to its closing delimiter or EOF.
    This is what re-aligns fence parity for the rest of the document.
+
+> **Scope amendment — 2026-08-23, #538 (revised on the gate's #538 follow-up).** A second
+> guarantee joined fence balance without a title change: a heading opens the chunk that holds its
+> section's content — **except** a section longer than any one chunk, whose heading opens only the
+> first of its chunks and the rest continues headless (deferring it further would never terminate).
+> Only heading levels 1–2 count as section openers, excluding the ingest `## Source:` provenance
+> header, matching the headings `HeadingPathParser` keeps (docs/adr/0004) — a `###`+ subheading or
+> a `## Source:` line at a chunk tail must not trigger a defer that shrinks the chunk without
+> changing its label. `MarkdownChunker.DeferOpenSection`.
 
 `AiRaccoon.Core.Chunking` stays infrastructure-free: all of this is built from the already-injected
 `TokenCount` delegate.
