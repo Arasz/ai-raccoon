@@ -282,8 +282,9 @@ config channel (see [Command-line options](#command-line-options)).
   `path-not-found:` / `watch-overlap:` tool errors; watch failures never fail the server.
 - **`ai-raccoon.ignore`:** an optional gitignore-subset exclude file at the root of a watched
   directory (or a `memory_ingest_directory` call's root) — `<root>/ai-raccoon.ignore`, one file
-  per root, never discovered in subdirectories. An explicit `memory_ingest_file` call has no walk
-  root of its own, so it resolves one: the containing registered watch if the path falls under
+  per root, never discovered in subdirectories; a `memory_ingest_directory` root without its own
+  file falls back to the same ancestor resolution as a single-file ingest. An explicit
+  `memory_ingest_file` call has no walk root of its own, so it resolves one: the containing registered watch if the path falls under
   one, else the ingest-scope allowlist entry that admits it, else the file's own parent directory
   as a last resort — and the same rule applies whether the file routes to memory or to the code
   corpus. Syntax: `*` (one path segment), `**` (zero or
@@ -297,7 +298,8 @@ config channel (see [Command-line options](#command-line-options)).
   ignore file is never matched against its own rules.
 - **Deferred writes:** until an engine is configured, writes are stored deferred
   (`memory_stats.pending > 0`) and only become searchable after `memory_embed_pending`.
-- **`memory_performance`:** project-scoped only (the whole-bank scope is deferred). The
+- **`memory_performance`:** project-scoped, except the reserved `__self_metrics__` project id,
+  which returns the bank-wide series instead (a per-tenant whole-bank scope is still deferred). The
   `series` list is derived from the server's tool inventory plus the nine
   `memory_search` phases (`search.open`, `search.embed`, `search.fts`, `search.vector`,
   `search.fusion`, `search.affinity`, `search.adjustment`, `search.snippets`,
@@ -306,6 +308,9 @@ config channel (see [Command-line options](#command-line-options)).
   at `count: 0`, rather than being omitted. `bucketMinutes` wider than `windowMinutes`
   is never an error: it clamps to the window and the series returns one averaged point.
   A window with no measurements is an empty series (every `count: 0`), never an error.
+  Maintenance-job series (`job.<name>.duration_ms` on every completed run, `job.<name>.rows` for a
+  job that reports an outstanding-row count) are bank-wide, not project-scoped, so they only
+  appear in the whole-bank self-metrics report — same surface as `metrics.dropped` (#477).
 
 ### Unknown-id rule
 
@@ -920,7 +925,7 @@ source of truth; a test cross-checks this table against it.
 | `sync-conflict` | Remote snapshot kept changing mid-merge, past the 3 re-pull/re-merge/re-push retries | `sync-conflict: <detail>` |
 | `sync-network` | Network-level failure during sync push/pull. A missing bucket/container (404) on **push** also lands here; on **pull** a 404 means "no remote snapshot yet" and returns null instead — it is not a refusal | `sync-network: <detail>` |
 | `sync-corrupt-file` | `PRAGMA quick_check` failed on the pulled remote snapshot — the local DB is not replaced | `sync-corrupt-file: <detail>` |
-| `sync-tampered-remote` | The pulled remote snapshot's embedded HMAC authenticity tag does not match its bytes, **or** the blob has no tag at all for an objectKey this bank has previously verified one for (checked before `PRAGMA quick_check` and before `ATTACH`) — the local DB is not replaced. An encrypted bank keys the tag from its own passphrase via `HKDF`; a headerless remote is accepted with a logged warning only the first time this objectKey is ever seen (trust-on-first-use) | `sync-tampered-remote: <detail>` |
+| `sync-tampered-remote` | The pulled remote snapshot's embedded HMAC authenticity tag does not match its bytes, **or** the blob has no tag at all for an objectKey this bank has previously verified one for (checked before `PRAGMA quick_check` and before `ATTACH`) — the local DB is not replaced. An encrypted bank keys the tag from its own passphrase via `HKDF`; a headerless remote is accepted with a logged warning only the first time this objectKey is ever seen (trust-on-first-use). An encrypted bank synced by ≥1.31 cannot be pulled by <1.31 — upgrade both ends of an encrypted sync pair together | `sync-tampered-remote: <detail>` |
 | `access-denied` | The resolved access mode (`ro`/`rw`/`full`) does not permit the attempted operation | `access-denied: <detail>` |
 | `context-outside-project` | A write's `context` names a project other than the request's `project_id` | `context-outside-project: Context '<context>' writes into a project other than '<project_id>'. A write may only target its own project.` |
 | `invalid-params` | FluentValidation rejected the request (missing/blank `projectId`, invalid `scope`, out-of-range `limit`, etc.) | `invalid-params: project_id is required` |

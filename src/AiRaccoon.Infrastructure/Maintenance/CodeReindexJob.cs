@@ -1,5 +1,7 @@
 using AiRaccoon.Core.EventPump;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Sqlite;
+using Dapper;
 using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Maintenance;
@@ -17,7 +19,8 @@ namespace AiRaccoon.Infrastructure.Maintenance;
 ///     legitimately unembeddable, forever, so the job stays quiet (no error spam) rather than
 ///     polling a permanently-pending backlog.
 /// </summary>
-public sealed class CodeReindexJob(ICodeEmbedder embedder, IEventPump<EmbedDrainRequest> embedDrainPump) : IMaintenanceJob
+public sealed class CodeReindexJob(ICodeEmbedder embedder, IEventPump<EmbedDrainRequest> embedDrainPump)
+    : IMaintenanceJob, IReportsOutstandingRows
 {
     public const string JobName = "code-reindex";
 
@@ -46,4 +49,9 @@ public sealed class CodeReindexJob(ICodeEmbedder embedder, IEventPump<EmbedDrain
         embedDrainPump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Code));
         return ValueTask.FromResult(false);
     }
+
+    /// <summary>WP3 (#477): `job.code-reindex.rows` — the bank-wide backlog immediately after signalling the drain, before it has run.</summary>
+    public async ValueTask<long> CountOutstandingRowsAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+        await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            MemorySql.CountPendingCodeEmbed, cancellationToken: cancellationToken)).ConfigureAwait(false);
 }

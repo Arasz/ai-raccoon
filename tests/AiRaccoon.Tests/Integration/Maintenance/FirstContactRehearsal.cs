@@ -60,7 +60,7 @@ public sealed class FirstContactRehearsal(ITestOutputHelper output)
         var migrateElapsed = DateTimeOffset.UtcNow - migrateStarted;
 
         var jobsStarted = DateTimeOffset.UtcNow;
-        var outcomes = await new MaintenanceJobRunner(TimeProvider.System,
+        var outcomes = await new MaintenanceJobRunner(TimeProvider.System, new NoOpMeasurementRecorder(),
                 NullLogger<MaintenanceJobRunner>.Instance)
             .RunDueAsync(connection,
             [

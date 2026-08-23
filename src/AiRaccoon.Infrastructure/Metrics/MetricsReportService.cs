@@ -3,6 +3,7 @@ using AiRaccoon.Core.Metrics;
 using AiRaccoon.Infrastructure.Sqlite;
 using CommunityToolkit.Diagnostics;
 using Dapper;
+using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Metrics;
 
@@ -23,6 +24,18 @@ public sealed class MetricsReportService(ISqliteConnectionFactory factory, TimeP
                                         AND recorded_at >= @FromUnix AND recorded_at <= @ToUnix
                                       """;
 
+    /// <summary>
+    ///     WP3 (#477), review B2: job.&lt;name&gt;.* series are one per maintenance job, which is
+    ///     dynamic and defined in a layer this project cannot reference — discovered by prefix from
+    ///     what the window actually holds instead of a hand-maintained name list (derive-or-delete).
+    /// </summary>
+    private const string DiscoverJobSeriesNamesSql = """
+                                                       SELECT DISTINCT name
+                                                       FROM metrics
+                                                       WHERE project_id = @ProjectId AND name LIKE @JobPrefix
+                                                         AND recorded_at >= @FromUnix AND recorded_at <= @ToUnix
+                                                       """;
+
     public async Task<PerformanceReport> GetReportAsync(
         string projectId,
         IReadOnlyList<string> toolNames,
@@ -41,14 +54,23 @@ public sealed class MetricsReportService(ISqliteConnectionFactory factory, TimeP
         // which would misattribute a bank-wide number to whichever project happened to ask first.
         var isSelfMetricsReport = string.Equals(projectId, MetricsConfigKeys.SelfMetricsProjectId, StringComparison.Ordinal);
         var selfMetricNames = isSelfMetricsReport ? MetricsConfigKeys.SelfMetricNames : [];
-        // toolNames + phaseNames can never be empty: SearchTimings.SeriesNames always holds at
-        // least the phases plus the total, so this always goes through the query below — no
-        // separate empty-list branch.
-        var phaseNames = (IReadOnlyList<string>) [.. SearchTimings.SeriesNames, .. selfMetricNames];
-        var seriesNames = (IReadOnlyList<string>) [.. toolNames, .. phaseNames];
         var from = now - effectiveWindow;
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+
+        IReadOnlyList<string> jobMetricNames = [];
+        if (isSelfMetricsReport)
+        {
+            jobMetricNames = await DiscoverJobMetricNamesAsync(connection, projectId, from, now, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        // toolNames + phaseNames can never be empty: SearchTimings.SeriesNames always holds at
+        // least the phases plus the total, so this always goes through the query below — no
+        // separate empty-list branch.
+        var phaseNames = (IReadOnlyList<string>) [.. SearchTimings.SeriesNames, .. selfMetricNames, .. jobMetricNames];
+        var seriesNames = (IReadOnlyList<string>) [.. toolNames, .. phaseNames];
+
         var rows = await connection.QueryAsync<MetricRow>(new CommandDefinition(SelectSql, new
         {
             ProjectId = projectId,
@@ -62,6 +84,19 @@ public sealed class MetricsReportService(ISqliteConnectionFactory factory, TimeP
             .ToList();
 
         return PerformanceReportBuilder.Build(toolNames, samples, now, effectiveWindow, effectiveBucket, phaseNames);
+    }
+
+    private async Task<IReadOnlyList<string>> DiscoverJobMetricNamesAsync(SqliteConnection connection,
+        string projectId, DateTimeOffset from, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var names = await connection.QueryAsync<string>(new CommandDefinition(DiscoverJobSeriesNamesSql, new
+        {
+            ProjectId = projectId,
+            JobPrefix = MetricsConfigKeys.JobMetricPrefix + "%",
+            FromUnix = from.ToUnixTimeSeconds(),
+            ToUnix = now.ToUnixTimeSeconds()
+        }, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        return [.. names];
     }
 
     private sealed record MetricRow(string Name, double Value, long RecordedAt);
