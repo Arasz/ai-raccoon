@@ -9,9 +9,10 @@ using Polly;
 namespace AiRaccoon.Hosting.Common;
 
 /// <summary>
-///     Recognizes an ai-raccoon MCP server on an endpoint: POST /mcp with an MCP Accept header and a
-///     non-JSON body; recognized iff the status is not transient (5xx/408/429 are retried) and the
-///     body mentions jsonrpc — any other status counts, the status set is not checked (#539).
+///     Recognizes an ai-raccoon MCP server on an endpoint: POST /mcp with Accept
+///     "application/json, text/event-stream" and the malformed JSON body "x" (Content-Type
+///     application/json); recognized iff the status is not transient (5xx/408/429 are retried) and
+///     the response body mentions jsonrpc — any other status counts, no status set is checked (#539).
 ///     Uses Polly v8 resilience pipeline with exponential backoff and random jitter.
 /// </summary>
 public sealed class ServerProbe : IServerProbe
