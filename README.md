@@ -30,7 +30,7 @@ flowchart LR
 ```
 
 ## What's new
-- **Two knobs bound the embedding engine — `settings model threads <n>` and `settings maintenance embed-rows-per-run <n>` — and `doctor` shows both.** (1.33.0) [ADR-0091](docs/adr/0091-the-event-pump-never-blocks-a-producer.md)
+- **Two knobs bound the embedding engine — `settings model threads <n>` and `settings maintenance embed-rows-per-run <n>` — and `doctor` shows the effective thread count.** (1.33.0) [ADR-0091](docs/adr/0091-the-event-pump-never-blocks-a-producer.md)
 - **The default code model installs with one command — `ai-raccoon model set code default`.** (1.32.0) [#453](https://github.com/Arasz/ai-raccoon/pull/453)
 - **Cloud snapshots are authenticity-checked (HMAC) before attach, and model activation verifies sha256 pins.** (1.31.0) [#431](https://github.com/Arasz/ai-raccoon/pull/431) · [#429](https://github.com/Arasz/ai-raccoon/pull/429)
 - **A second corpus indexes your code, searchable via `memory_search kind=code` — never synced, never mixed with memory.** (1.30.0) [Feature](docs/features/code-corpus/) · [ADR-0085](docs/adr/0085-a-second-code-only-corpus-in-the-same-bank.md)
