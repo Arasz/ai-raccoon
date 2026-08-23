@@ -310,6 +310,12 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
     internal static string ThreadCountDisplay(int threads) =>
         threads == 0 ? "ORT default" : threads.ToString(CultureInfo.InvariantCulture);
 
+    /// <summary>WP4/G4: the resolved count and its source for `embedding.threads`, in one place — doctor and settings both derived this ternary independently before.</summary>
+    internal static (int Threads, string Source) ResolveThreadCountForDisplay(string? rawSetting) =>
+        (TryParseThreadsSetting(rawSetting, out var explicitThreads)
+            ? explicitThreads
+            : HalvedCoreThreadDefault(Environment.ProcessorCount), ThreadCountSource(rawSetting));
+
     private IEmbeddingGenerator<string, Embedding<float>> CreateLocal(EmbeddingSettings settings)
     {
         // One-time per fingerprint (cached by _engines): sessions are rebuilt only on restart, so a
@@ -433,10 +439,7 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
 
         /// <summary>
         ///     #522: the resolved ORT intra-op thread count a local session was actually built with.
-        ///     WP4/#524: <paramref name="Threads" /> is the raw count so a sink can aggregate on it —
-        ///     PascalCase because it is not in the message template, so the generator uses the
-        ///     parameter name verbatim as the structured-state key; <paramref name="threadsDisplay" />
-        ///     carries the human phrase ("ORT default" for 0).
+        ///     WP4/#524: <paramref name="Threads" /> is the raw int for aggregation; <paramref name="threadsDisplay" /> is the human phrase (docs/reference/logging-event-ids.md, 428).
         /// </summary>
         [LoggerMessage(EventId = 428, Level = LogLevel.Information,
             Message = "Embedding session created: intra-op threads {ThreadsDisplay} ({Source})")]

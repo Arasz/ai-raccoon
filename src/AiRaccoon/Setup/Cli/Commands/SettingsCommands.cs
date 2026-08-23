@@ -296,6 +296,8 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
 
         await store.SetSettingAsync(EmbeddingSettingsKeys.Threads, threads.ToString(CultureInfo.InvariantCulture), cancellationToken);
         // G4: the same phrase doctor and `model show` render for the same stored value.
+        // ThreadCountSource(raw) always resolves to "setting" here — raw just passed the explicit-value
+        // parse above — but it goes through the shared helper anyway so this line can never drift.
         await streams.WriteOutputLineAsync(
             $"embedding threads set to {EmbeddingService.ThreadCountDisplay(threads)} ({EmbeddingService.ThreadCountSource(raw)}); takes effect on the next server restart");
         return 0;
@@ -333,12 +335,9 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         // Independent of provider (WP11-A/G16): the ORT thread cap applies to any local session,
         // memory or code, so it is shown unconditionally like codeModel below. G4: the resolved
         // count and its source, in the same phrase doctor and `model threads` render.
-        var threadsRaw = rows.GetValueOrDefault(EmbeddingSettingsKeys.Threads);
-        var resolvedThreads = EmbeddingService.TryParseThreadsSetting(threadsRaw, out var explicitThreads)
-            ? explicitThreads
-            : EmbeddingService.HalvedCoreThreadDefault(Environment.ProcessorCount);
-        await streams.WriteOutputLineAsync(
-            $"threads: {EmbeddingService.ThreadCountDisplay(resolvedThreads)} ({EmbeddingService.ThreadCountSource(threadsRaw)})");
+        var (resolvedThreads, threadsSource) =
+            EmbeddingService.ResolveThreadCountForDisplay(rows.GetValueOrDefault(EmbeddingSettingsKeys.Threads));
+        await streams.WriteOutputLineAsync($"threads: {EmbeddingService.ThreadCountDisplay(resolvedThreads)} ({threadsSource})");
 
         // Independent of the memory engine (§3.3): shown even when no memory provider is
         // configured, since the code corpus can be activated on its own.
