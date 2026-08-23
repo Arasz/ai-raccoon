@@ -1,3 +1,3 @@
-# No hardcoded secrets
+# Store secrets outside tracked files
 
-No credentials, connection strings, API keys, or tokens in tracked files, examples, or fixtures. Read secrets from configuration or environment variables, and keep sample/test values obviously fake.
+Keep credentials, connection strings, API keys, and tokens in environment variables, secret managers, or user-scoped config. Sample and test values should be obviously fake.

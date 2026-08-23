@@ -1,11 +1,6 @@
 ---
-description: 'QA for .NET server-side code — the `qa` persona''s judgment applied
-  with this stack''s runner, isolation tooling and blind spots: xUnit v3 parallelism
-  and traits, TimeProvider/FakeTimeProvider, Testcontainers and emulator-gated lanes,
-  WebApplicationFactory, Stryker and ArchUnitNET false-negatives. Use for designing
-  or auditing a backend suite, an integration/contract lane, or a coverage hole behind
-  an infra gate. Frontend suites go to this project''s frontend QA persona, if one
-  is scaffolded.'
+description: QA for .NET server-side code. Stack-specific runner, isolation tooling,
+  and blind spots (xUnit v3, Testcontainers, Stryker).
 name: qa-backend
 tools:
 - read

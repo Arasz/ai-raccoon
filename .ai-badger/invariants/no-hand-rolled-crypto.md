@@ -1,3 +1,3 @@
-# No hand-rolled crypto or security orchestration
+# Use platform security APIs
 
-Never implement security/cryptographic orchestration yourself — key derivation, token signing, session/cookie protection, encryption-at-rest schemes. Delegate to an audited, platform-provided library rather than composing audited primitives into your own protocol, even when the primitives themselves are sound.
+Always use the platform's built-in security and crypto APIs. Implementing key derivation, token signing, or encryption-at-rest yourself introduces vulnerabilities — delegate to an audited, platform-provided library rather than composing primitives into your own protocol.

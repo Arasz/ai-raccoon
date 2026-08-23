@@ -1,13 +1,6 @@
 ---
-description: 'Test-quality authority — designs a suite from acceptance criteria before
-  anyone writes it, and audits an existing suite for whether it can fail at all. Judges
-  the tests, not the production code: coverage vs. constraint, oracle independence,
-  determinism, double fidelity, and placement. Verifies every gap by running the mutation,
-  never by reasoning about it. Use when a test suite is being designed, when a diff''s
-  tests need more than the code-review screen, when a green suite is suspected of
-  proving nothing, or when someone asks "are these tests any good". For writing the
-  tests inside a feature change, dispatch `test-engineer`; for judging the production
-  code in a diff, dispatch `code-reviewer`.'
+description: Test-quality authority. Judges whether a suite would catch real defects;
+  verifies gaps by running mutations, never by reasoning alone.
 name: qa
 tools:
 - read

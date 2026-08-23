@@ -43,7 +43,23 @@ claim of severity. If a finding is pushed back on, re-verify against the
 current code rather than either capitulating or insisting — the pushback
 might be right.
 
-## Architecture consistency
+## Third-person framing
+
+Frame findings as objective criteria ("the spec requires X", "the test expects
+Y") rather than personal opinion ("I think X should change"). Research shows
+third-person framing reduces sycophantic retraction by up to 63.8% (SYCON
+Bench, EMNLP Findings 2025). When a finding is challenged, re-verify against
+the spec/test/code — not against your own prior statement.
+
+## Escalation rule
+
+If two review rounds have not converged on a finding, do not continue
+arguing. Restart with a consolidated assessment: the original diff, the
+acceptance criteria, the specific evidence for the finding, and the
+counter-evidence presented. This recovers ~95% of single-turn judgment
+quality (Laban et al., arXiv 2505.06120).
+
+@@ Architecture consistency @@
 
 Check layer purity (a pure/domain layer stays free of infrastructure
 concerns), extension-point contracts hold their documented shape, and

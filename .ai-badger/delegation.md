@@ -1,6 +1,6 @@
 # Delegation map — AiRaccoon
 
-> Scaffolded by ai-badger 0.134.1. Regenerated on every scaffold; do not edit.
+> Scaffolded by ai-badger 0.135.0. Regenerated on every scaffold; do not edit.
 
 ## Stacks
 
@@ -8,13 +8,13 @@ dotnet, mcp, python, github, ai-raccoon
 
 ## Personas available here
 
-- `architect` — Design and decomposition specialist — architecture decisions (module/layer boundaries, extension-point interfaces, folder structure), ADR authoring, multi-file change blueprints, and well-architected-style trade-off analysis (cost vs resilience vs velocity). Lane: opus.
-- `code-reviewer` — Independent quality and security gate — OWASP Top 10 (plus OWASP LLM Top 10 when an LLM-integration surface is present) review scoped to a targeted plan (pick the 3-5 relevant risk categories for the diff, not a blanket checklist), two-pass performance/anti-pattern analysis, and adversarial verification of AI-generated claims. Lane: opus.
-- `delegator` — Work-routing lead for long, multi-package sessions — decomposes a task into independently verifiable packages, dispatches each to the persona and model lane that fits it, and does only integration, arbitration and gate-running itself. Lane: opus.
-- `dotnet-engineer` — Default implementation engineer for .NET codebases — writes and edits C# across the project's layers, TDD-first (failing test before code), SOLID-minded, matching existing conventions (validation library idioms, guard-clause helpers, source-generated logging, current-generation C# features). Lane: sonnet.
-- `qa` — Test-quality authority — designs a suite from acceptance criteria before anyone writes it, and audits an existing suite for whether it can fail at all. Lane: opus.
-- `qa-backend` — QA for .NET server-side code — the qa persona's judgment applied with this stack's runner, isolation tooling and blind spots: xUnit v3 parallelism and traits, TimeProvider/FakeTimeProvider, Testcontainers and emulator-gated lanes, WebApplicationFactory, Stryker and ArchUnitNET false-negatives. Lane: opus.
-- `test-engineer` — Testing specialist — designs test strategy, writes failing tests first, plans phased test coverage (leaf types unmocked → mid-layer with leaf mocks → top-layer), and enforces edit-boundary discipline between test files and production code. Lane: sonnet.
+- `architect` — Architecture and decomposition specialist. Lane: opus.
+- `code-reviewer` — Quality and security review gate. Lane: opus.
+- `delegator` — Work-routing lead for multi-package sessions. Lane: opus.
+- `dotnet-engineer` — .NET implementation engineer. Lane: sonnet.
+- `qa` — Test-quality authority. Lane: opus.
+- `qa-backend` — QA for .NET server-side code. Lane: opus.
+- `test-engineer` — Testing specialist. Lane: sonnet.
 
 ## Routing (config.json personaRouting)
 
@@ -22,6 +22,23 @@ dotnet, mcp, python, github, ai-raccoon
 - tests, test strategy, test coverage → `test-engineer`
 - code review, quality gates, PR review → `code-reviewer`
 - C#/.NET implementation, MCP tools, backend work → `dotnet-engineer`
+
+## Reasoning-model dispatch
+
+When dispatching to a reasoning model (opus, o-series, Claude extended
+thinking, DeepSeek-R1), adjust the prompt:
+
+- **State goals and success criteria only** — strip prescriptive step-by-step
+  plans, CoT scaffolding, and few-shot examples. These constrain the model's
+  internal search and reduce quality.
+- **Keep the system prompt short** — elaborate prompts constrain reasoning
+  model search space (Anthropic). Prefer "what done looks like" over "how to
+  get there."
+- **Use API parameters for depth control** — `reasoning_effort` (OpenAI) or
+  `thinking_budget_tokens` (Anthropic) instead of prompt-side "think harder."
+
+For standard instruction-tuned models (sonnet, flash), the existing
+prescriptive persona descriptions are appropriate.
 
 ## Verifiers
 

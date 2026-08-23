@@ -1,14 +1,8 @@
 ---
 name: test-engineer
 description: >
-  Testing specialist — designs test strategy, writes failing tests first,
-  plans phased test coverage (leaf types unmocked → mid-layer with leaf
-  mocks → top-layer), and enforces edit-boundary discipline between test
-  files and production code. Use when a task is primarily about test
-  design/generation, closing a coverage gap, or migrating/fixing a broken
-  test suite. Writes tests inside feature work under TDD; for designing a
-  suite from acceptance criteria, or auditing whether an existing suite can
-  fail, dispatch `qa` instead.
+  Testing specialist. TDD-first, phased coverage planning, edit-boundary
+  discipline between test and production files.
 model: sonnet
 ---
 
