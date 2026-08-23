@@ -27,7 +27,7 @@ namespace AiRaccoon.Tests.Integration.Embedding;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class QueryTruncationTests : IDisposable
 {
-    private const int QueryTrimmedEventId = 418; // was 416 until #466; 416 is retired, not reused
+    private const int QueryTrimmedEventId = 426; // was 416 until #466, then 418 until #522 review; both retired, not reused
     private const int ChunkTruncatedEventId = 414;
 
     private readonly string _dataRoot = TestData.CreateTempRoot("query-truncation");
