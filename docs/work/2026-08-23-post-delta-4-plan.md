@@ -18,7 +18,7 @@ the corrected number.
 
 ## Session todo
 
-1. Open the draft PR carrying this plan; generate the owner gate form from §*Owner gate* (G1–G10).
+1. Open the draft PR carrying this plan; generate the owner gate form from §*Owner gate* (G1–G4, G6–G10).
 2. Fold the gate answers into rev 2.0; architect re-reviews before any gated WP opens.
 3. **WP4** — #524 follow-ups: one thread-count rendering (G4) + EventId 428 `Threads` as an int
    (ungated, *fix-what-you-find*).
@@ -446,7 +446,7 @@ Each row's gate is the question it waits on; **ungated** means it may start once
   pass whose job creates pending rows still signals the drain **in the same pass**; no
   `IMaintenanceJob` remains whose `RunAsync` is a bare enqueue; ADR-0091 carries an amendment naming
   what replaced the two jobs.
-- **Gate command.** `dotnet test --filter "FullyQualifiedName~Maintenance|FullyQualifiedName~EmbedDrain|FullyQualifiedName~CodeCorpus" --nologo -v m`, **plus the Slow lane and a full-scope fast run** — shared infrastructure, 13 test files, and a BDD feature block.
+- **Gate command.** `dotnet test --filter "FullyQualifiedName~Maintenance|FullyQualifiedName~EmbedDrain|FullyQualifiedName~CodeCorpus" --nologo -v m`, **plus the Slow lane and a full-scope fast run** — shared infrastructure, 15 test files, and a BDD feature block.
 - **Lane.** dotnet-engineer / Sonnet, architect / Opus for the ADR-0091 amendment first.
   **Collisions.** `EmbedDrainService.cs` (after **WP1**), `AppRegistrations.cs`,
   `BankMaintenanceHostedService.cs`, every `IMaintenanceJob` (before **WP3** shape ii), and
@@ -485,7 +485,7 @@ Each row's gate is the question it waits on; **ungated** means it may start once
 ### WP9 — small filed issues: #519 and #493 **[G9]**
 
 - **#519** — `tests/AiRaccoon.Tests/TestData.cs:86,89`: remove the two optional Null-object defaults,
-  make every caller pass its double explicitly — **83 call sites across 77 files**
+  make every caller pass its double explicitly — **83 call sites across 73 files**
   (`git grep -o "CreateMemoryStore(" -- tests ':!tests/AiRaccoon.Tests/TestData.cs' | wc -l`),
   mechanical. Done when
   `grep -rn "?? Null[A-Za-z]*\.Instance" src tests benchmarks` matches nothing outside
@@ -503,7 +503,7 @@ Each row's gate is the question it waits on; **ungated** means it may start once
   `BankMaintenanceHostedService.Log` actually declares.
 - **Gate command.** `dotnet build` + `dotnet test --filter "FullyQualifiedName~Performance" --nologo -v m`;
   #519's proof is that the suite still builds, so this one **must** get a full-scope fast run.
-- **Lane.** dotnet-engineer / Sonnet. **Collisions.** #519 touches ~74 test files — run it when no
+- **Lane.** dotnet-engineer / Sonnet. **Collisions.** #519 touches 73 test files — run it when no
   other lane has an open PR adding tests, i.e. **late**, or it conflicts with everything.
 
 ### WP6 — ADR-0089 implementation, five PRs **[G8]**
@@ -780,7 +780,7 @@ checks `EmbeddingOutput`'s rank, so anyone who downloaded before #496 stays wron
 (rank-based output selection, two untested name shapes) are the same file family and pair into one
 strand. **#493** (`PerformanceTools` lists six phases; `PhaseNames` has nine) is a
 *derive-or-delete-the-list* violation in our own code. **#519** (`TestData.CreateMemoryStore:86,89`)
-is your own #518 ruling left unenforced, but it rewrites **83 call sites across 77 files** and
+is your own #518 ruling left unenforced, but it rewrites **83 call sites across 73 files** and
 conflicts with every open PR that adds a test.
 *Why it matters.* Four of the five cost hours, not days, and two of them (#485, #497) are live
 defects a user can hit. #519 is the one with a scheduling cost rather than a work cost.
