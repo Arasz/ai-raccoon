@@ -67,4 +67,12 @@ public static class HeadingPathParser
 
         return stack.Path;
     }
+
+    /// <summary>The leaf of a " > "-joined heading path — what a `file#section` anchor names; "" when empty.
+    /// The bare '>' is not a separator: a heading may carry one of its own ("<!-- REQUIRED -->").</summary>
+    public static string Leaf(string headingPath)
+    {
+        var lastSeparator = headingPath.LastIndexOf(" > ", StringComparison.Ordinal);
+        return (lastSeparator < 0 ? headingPath : headingPath[(lastSeparator + 3)..]).Trim();
+    }
 }

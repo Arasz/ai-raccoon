@@ -174,4 +174,30 @@ public class MarkdownChunkerHeadingPathTests
 
         chunks.ShouldAllBe(c => c.HeadingPath == "");
     }
+
+    /// <summary>#549: one chunk holding several whole sections carries every section's leaf, so
+    /// every `file#section` anchor into it resolves (a single label could satisfy only one).</summary>
+    [Fact]
+    public void ChunkWithHeadings_OneChunkHoldingSeveralSections_ListsEverySectionItHoldsContentFor()
+    {
+        var text = "# ADR-0011 Frontend chassis\n\n## Context\n\nThe app needs a shell.\n\n## Decision\n\nWe adopt the chassis pattern.\n";
+
+        var chunks = new MarkdownChunker(CharCount).ChunkWithHeadings(text, 500);
+
+        chunks.Count.ShouldBe(1);
+        chunks[0].HeadingPath.ShouldBe("ADR-0011 Frontend chassis > Context");
+        chunks[0].Sections.ShouldBe(["Context", "Decision"]);
+    }
+
+    /// <summary>A chunk that only opens a section lists no section; a section whose heading sits in
+    /// the overlay still counts when the chunk holds its content.</summary>
+    [Fact]
+    public void ChunkWithHeadings_Sections_FollowTheContentNotTheHeadingLines()
+    {
+        var text = "# T\n\n## A\nAAAA\n\n## B\n" + string.Concat(Enumerable.Repeat("BBBB\n", 6));
+
+        var chunks = new MarkdownChunker(CharCount).ChunkWithHeadings(text, 24, 0);
+
+        chunks.Select(c => string.Join("|", c.Sections)).ShouldBe(["A", "B", "B"]);
+    }
 }

@@ -78,7 +78,8 @@ public sealed class MarkdownChunker : IMarkdownChunker
             var chunkText = string.Concat(chunkUnits.SelectMany(unit => unit.Lines));
             if (!string.IsNullOrWhiteSpace(chunkText))
             {
-                chunks.Add(new TextChunk(chunkText, HeadingPathFor(chunkUnits, newUnitCount, cursor, contexts)));
+                chunks.Add(new TextChunk(chunkText, HeadingPathFor(chunkUnits, newUnitCount, cursor, contexts),
+                    SectionsFor(chunkUnits, newUnitCount, cursor, contexts)));
             }
 
             previousUnits = chunkUnits;
@@ -125,6 +126,29 @@ public sealed class MarkdownChunker : IMarkdownChunker
         }
 
         return "";
+    }
+
+    /// <summary>The leaf of every section the chunk holds content for, in order — one chunk may
+    /// hold several whole sections, and each one's `file#section` anchor must resolve (#549).</summary>
+    private static IReadOnlyList<string> SectionsFor(List<Unit> chunkUnits, int newUnitCount, int cursor, List<string> contexts)
+    {
+        var newStart = chunkUnits.Count - newUnitCount;
+        List<string> sections = [];
+        for (var idx = newStart; idx < chunkUnits.Count; idx++)
+        {
+            if (!IsContentfulUnit(chunkUnits[idx]))
+            {
+                continue;
+            }
+
+            var leaf = HeadingPathParser.Leaf(contexts[cursor + (idx - newStart)]);
+            if (leaf.Length > 0 && (sections.Count == 0 || sections[^1] != leaf))
+            {
+                sections.Add(leaf);
+            }
+        }
+
+        return sections;
     }
 
     /// <summary>

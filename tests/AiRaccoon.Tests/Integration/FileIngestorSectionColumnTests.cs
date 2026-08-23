@@ -248,6 +248,68 @@ public class FileIngestorSectionColumnTests : IDisposable
         rows.Skip(1).ShouldContain(row => row.Section == "Boat Registry Cleanup");
     }
 
+    /// <summary>Issue #549: a section longer than one chunk — every chunk of it, not only the one
+    /// holding the heading, carries that section (the chunker reports the heading path in force).</summary>
+    [Fact]
+    public async Task IngestFileAsync_SectionLongerThanOneChunk_EveryChunkCarriesThatSection()
+    {
+        var file = Path.Combine(_testDir, "long-section.md");
+        var paragraph = string.Join("\n", Enumerable.Range(1, 12).Select(i =>
+            $"Paragraph {i}: the mooring fee ledger is reconciled against the registry every full moon, and any slip whose fee is paid while its boat has been absent for a season is flagged for the registrar's review before the next tide table is posted."));
+        await File.WriteAllTextAsync(file,
+            $"# Harbor Manual\n\n## Mooring Fees\n\n{paragraph}\n",
+            TestContext.Current.CancellationToken);
+        ConfigureLocalEmbeddingProvider();
+
+        await _ingestor.IngestFileAsync(_conn, "acme", file, null, TestContext.Current.CancellationToken);
+
+        var rows = await ReadSectionsAsync(file);
+        rows.Count.ShouldBeGreaterThanOrEqualTo(3, "the fixture is sized to split the one section across several chunks");
+        rows.ShouldAllBe(row => row.Section == "Mooring Fees");
+    }
+
+    /// <summary>Issue #549: an unchanged file deduplicates on hash, so the fix only reaches an
+    /// already-ingested bank if the dedup path refreshes the section column too.</summary>
+    [Fact]
+    public async Task IngestFileAsync_ReIngestingAnUnchangedFile_RefreshesTheSectionOnDeduplicatedRows()
+    {
+        var file = Path.Combine(_testDir, "reingest.md");
+        await File.WriteAllTextAsync(file,
+            "# Harbor Manual\n\n## Fuel Pump\n\nThe fuel pump is locked after the last boat leaves and the key hangs in the office.\n",
+            TestContext.Current.CancellationToken);
+        ConfigureLocalEmbeddingProvider();
+        await _ingestor.IngestFileAsync(_conn, "acme", file, null, TestContext.Current.CancellationToken);
+
+        // A bank written before the fix: the row exists (same hash) with a stale section.
+        await using (var stale = _conn.CreateCommand())
+        {
+            stale.CommandText = "UPDATE entries SET section = NULL WHERE source_file = @p";
+            stale.Parameters.AddWithValue("@p", file);
+            await stale.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        await _ingestor.IngestFileAsync(_conn, "acme", file, null, TestContext.Current.CancellationToken);
+
+        var rows = await ReadSectionsAsync(file);
+        rows.Count.ShouldBe(1);
+        rows[0].Section.ShouldBe("Fuel Pump");
+    }
+
+    private async Task<List<(string? Section, string Value)>> ReadSectionsAsync(string file)
+    {
+        var rows = new List<(string? Section, string Value)>();
+        await using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "SELECT section, value FROM entries WHERE source_file = @p ORDER BY chunk_index";
+        cmd.Parameters.AddWithValue("@p", file);
+        await using var reader = await cmd.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+        while (await reader.ReadAsync(TestContext.Current.CancellationToken))
+        {
+            rows.Add((reader.IsDBNull(0) ? null : reader.GetString(0), reader.GetString(1)));
+        }
+
+        return rows;
+    }
+
     [Fact]
     public async Task IngestFileAsync_HeadingContainingAngleBracket_StillPopulatesSection()
     {

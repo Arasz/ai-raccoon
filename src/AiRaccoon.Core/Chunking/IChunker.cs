@@ -16,7 +16,12 @@ public interface IChunker
     ///     version (docs/adr/0048, #549/#550 amendment); other chunkers keep this default.
     /// </summary>
     IReadOnlyList<TextChunk> ChunkWithHeadings(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null) =>
-        Chunk(text, maxTokens, overlayTokens, countTokens)
-            .Select(chunk => new TextChunk(chunk, HeadingPathParser.Parse(chunk)))
-            .ToList();
+        Chunk(text, maxTokens, overlayTokens, countTokens).Select(ParsedChunk).ToList();
+
+    private static TextChunk ParsedChunk(string chunk)
+    {
+        var path = HeadingPathParser.Parse(chunk);
+        var leaf = HeadingPathParser.Leaf(path);
+        return new TextChunk(chunk, path, leaf.Length == 0 ? [] : [leaf]);
+    }
 }

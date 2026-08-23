@@ -12,6 +12,9 @@ internal sealed class HeadingStack
 
     public string Path { get; private set; } = "";
 
+    /// <summary>The innermost heading on the stack — what a `file#section` anchor names; "" when empty.</summary>
+    public string Leaf => _stack.Count == 0 ? "" : _stack[^1].Text;
+
     /// <param name="level">1 or 2 — the caller decides whether a heading counts as a section opener.</param>
     public void Push(int level, string text)
     {
