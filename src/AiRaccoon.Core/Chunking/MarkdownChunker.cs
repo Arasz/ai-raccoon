@@ -112,12 +112,22 @@ public sealed class MarkdownChunker : IMarkdownChunker
     /// <summary>
     ///     A heading line must open the chunk that holds its section's content, not end the previous
     ///     one empty-handed (#489, generalized by #538): the LAST heading among this chunk's new
-    ///     units opens a section that is cut by the chunk boundary whenever the next unit after the
-    ///     chunk exists and is not itself a heading — that heading and everything after it are handed
-    ///     back to the next chunk, whether "everything after it" is a few body lines (#538) or nothing
-    ///     but blank lines (#489's own case). The heading is never deferred when it is the chunk's
-    ///     first new unit; deferring it then would make no forward progress and would defer forever a
-    ///     section too long to fit in any one chunk.
+    ///     units defers, along with everything after it, whenever its section is actually cut by the
+    ///     chunk boundary. Two cases decide that:
+    ///     <list type="bullet">
+    ///         <item>The heading has no content of its own in this chunk (only blank lines, if
+    ///         anything, follow it before the chunk ends) — it always defers, matching #489's
+    ///         original tail-heading rule, so a chunk is never labelled by a heading that holds none
+    ///         of its own content.</item>
+    ///         <item>The heading has real content in this chunk — it defers only when a real (not
+    ///         blank) unit follows the chunk boundary and that unit is not itself a heading. A blank
+    ///         line is its own unit, and markdown normally has one before the next heading, so blank
+    ///         units past the boundary are skipped before asking what comes next: otherwise a section
+    ///         that ends exactly at the boundary would be misread as cut and deferred whole.</item>
+    ///     </list>
+    ///     The heading is never deferred when it is the chunk's first new unit; deferring it then
+    ///     would make no forward progress and would defer forever a section too long to fit in any
+    ///     one chunk.
     /// </summary>
     private static int DeferOpenSection(List<Unit> chunkUnits, int newUnitCount, List<Unit> units, int cursor)
     {
@@ -137,7 +147,18 @@ public sealed class MarkdownChunker : IMarkdownChunker
             return 0;
         }
 
-        if (cursor >= units.Count || IsHeadingUnit(units[cursor]))
+        var headingHasOwnContent = false;
+        for (var idx = i + 1; idx < chunkUnits.Count; idx++)
+        {
+            if (!IsBlankUnit(chunkUnits[idx]))
+            {
+                headingHasOwnContent = true;
+                break;
+            }
+        }
+
+        var sectionIsCut = !headingHasOwnContent || SectionContinuesPastChunk(units, cursor);
+        if (!sectionIsCut)
         {
             return 0;
         }
@@ -150,6 +171,19 @@ public sealed class MarkdownChunker : IMarkdownChunker
 
         chunkUnits.RemoveRange(i, removeCount);
         return removeCount;
+    }
+
+    /// <summary>Skips blank-only units past the chunk boundary before asking whether real content
+    /// follows: only a real, non-heading unit proves the section continues past the boundary.</summary>
+    private static bool SectionContinuesPastChunk(List<Unit> units, int cursor)
+    {
+        var idx = cursor;
+        while (idx < units.Count && IsBlankUnit(units[idx]))
+        {
+            idx++;
+        }
+
+        return idx < units.Count && !IsHeadingUnit(units[idx]);
     }
 
     private static List<Unit> BuildOverlay(List<Unit>? previousUnits, int overlayTokens)
@@ -422,6 +456,8 @@ public sealed class MarkdownChunker : IMarkdownChunker
     }
 
     private static bool IsHeadingUnit(Unit unit) => unit.Lines.Count == 1 && IsHeadingLine(unit.Lines[0]);
+
+    private static bool IsBlankUnit(Unit unit) => unit.Lines.Count == 1 && string.IsNullOrWhiteSpace(unit.Lines[0]);
 
     /// <summary>ATX heading, levels 1-6 (a bare '#' or '#Text' does not count) — same shape HeadingPathParser parses.</summary>
     private static bool IsHeadingLine(string line)

@@ -203,6 +203,42 @@ public class MarkdownChunkerTests
     }
 
     [Fact]
+    public void Split_SectionEndsExactlyAtChunkBoundary_IsNotOverDeferred()
+    {
+        // Seam in the #538 fix: DeferOpenSection decided "cut" by looking at units[cursor] alone.
+        // A blank line is its own unit, and markdown normally has one before the next heading, so
+        // a section that ends EXACTLY at the boundary (next units: blank, then the next heading)
+        // read as "cut" purely because the immediate next unit wasn't itself a heading — deferring
+        // a complete section for no reason. The budget here ends chunk 0 right after "BBBB\n",
+        // before the blank line has room, so the bug can't hide behind a packed trailing blank.
+        var text = "# Title\n\n## Section A\nAAAA\n\n## Section B\nBBBB\n\n## Section C\nCCCC\n";
+
+        var chunks = new MarkdownChunker(CharCount).Chunk(text, 46);
+
+        chunks[0].ShouldBe("# Title\n\n## Section A\nAAAA\n\n## Section B\nBBBB\n");
+        chunks[0].ShouldContain("## Section B\nBBBB");
+    }
+
+    [Fact]
+    public void Split_HeadingWithNoContentOfItsOwnAtChunkTail_StillDefersSoNoChunkIsLabeledByAnEmptySection()
+    {
+        // Mirror of the case above: a heading with NOTHING between it and the next heading (an
+        // empty section in the source document, not a chunking artifact). #489's original rule
+        // unconditionally deferred a bare trailing heading regardless of what followed; keeping
+        // that here means chunk 0 stays labeled by the content it actually holds (Section A)
+        // rather than by Section B, which holds none. The deferred heading lands in the next
+        // chunk, where HeadingPathParser's last-heading-wins rule hands the label to Section C
+        // anyway — an empty section never gets to be anyone's label.
+        var text = "# Title\n\n## Section A\nAAAA\n\n## Section B\n\n## Section C\nCCCC\n";
+
+        var chunks = new MarkdownChunker(CharCount).Chunk(text, 41);
+
+        chunks[0].ShouldBe("# Title\n\n## Section A\nAAAA\n\n");
+        chunks[0].ShouldNotContain("## Section B");
+        HeadingPathParser.Parse(chunks[0]).ShouldBe("Title > Section A");
+    }
+
+    [Fact]
     public void Split_IdenticalInput_ProducesIdenticalChunks()
     {
         var text = "aaaa\nbbbb\ncccc\ndddd\n";
