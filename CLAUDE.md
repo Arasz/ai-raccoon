@@ -6,7 +6,7 @@ C# .NET 10 MCP server exposing agent memory management over sqlite-memory: proje
 
 > Domain: Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory.
 > Stacks: dotnet, mcp, python, github, ai-raccoon
-> Scaffolded by ai-badger 0.135.0. Source of truth for this file: `.ai-badger/CLAUDE.md`.
+> Scaffolded by ai-badger 0.135.1. Source of truth for this file: `.ai-badger/CLAUDE.md`.
 
 ## Commands
 
@@ -109,8 +109,23 @@ Each tool's own description covers the rest.
 - **Check the source, not your own reasoning** — Re-read the docs, the data and the code before stating a fact about them — those are what go stale, get misremembered, or change under you.
   → `.ai-badger/invariants/check-sources-not-yourself.md`
 
+- **Consolidated restart** — After two failed revision turns, restart the task with a single merged prompt instead of continuing the same thread and compounding drift.
+  → `.ai-badger/invariants/consolidated-restart.md`
+
+- **Critical instruction placement** — Keep the most important requirements in the first or last block of the prompt; do not bury them in the middle where they are easy to miss.
+  → `.ai-badger/invariants/critical-instruction-placement.md`
+
 - **Derive the list, or delete it** — A hand-maintained list meant to mirror something else — the gates on disk, the copies of a helper, the skills in the catalog — drifts the moment someone adds to one side and not the other, and nothing notices because nothing compares them.
   → `.ai-badger/invariants/derive-or-delete-the-list.md`
+
+- **Few-shot only for format** — Start zero-shot and use examples only when the output format is the failure mode; otherwise the task should be solvable from the specification alone.
+  → `.ai-badger/invariants/few-shot-format-only.md`
+
+- **Final output schema separation** — Keep free-form reasoning separate from the final output schema and emit the schema last so the output is auditable and machine-checkable.
+  → `.ai-badger/invariants/final-output-schema-separation.md`
+
+- **Grounded feedback** — Every correction must cite failing checks, compiler output, validator output, or source evidence before proposing a new patch.
+  → `.ai-badger/invariants/grounded-feedback.md`
 
 - **Guard clauses over hand-rolled null checks** — Prefer a dedicated guard/throw-helper for argument validation over hand-rolled `x ?? throw ...` or ad hoc `if (x == null) throw` blocks — a guard reads as intent, not boilerplate, and keeps the exception type/message consistent across the codebase.
   → `.ai-badger/invariants/guard-clauses.md`
@@ -127,11 +142,17 @@ Each tool's own description covers the rest.
 - **Store secrets outside tracked files** — Keep credentials, connection strings, API keys, and tokens in environment variables, secret managers, or user-scoped config.
   → `.ai-badger/invariants/no-hardcoded-secrets.md`
 
+- **One-turn specification** — State the objective, constraints, data sources, and success criteria in the first turn; keep the final ask last so the prompt is explicit and executable without a long back-and-forth.
+  → `.ai-badger/invariants/one-turn-specification.md`
+
 - **Run what you changed; the pipeline runs the rest** — Run the build and the tests your change touches, and let the pipeline run everything else — a full local sweep buys no coverage the pipeline does not already have and spends the same time twice.
   → `.ai-badger/invariants/pipeline-runs-the-rest.md`
 
 - **Plain names** — Name things with the simplest accurate word — variables, functions, types, files, folders, flags.
   → `.ai-badger/invariants/plain-names.md`
+
+- **Positive constraints and validation** — Prefer positive requirements and validator-backed checks over long negative instruction lists; specify the expected outcome and the validation gate directly.
+  → `.ai-badger/invariants/positive-constraints-and-validation.md`
 
 - **One PR per task** — Every unit of work ends in a pull request; never push directly to the main/trunk branch.
   → `.ai-badger/invariants/pr-per-task.md`
@@ -141,6 +162,9 @@ Each tool's own description covers the rest.
 
 - **A check you have not seen fail is not a check** — Put the defect a gate, test or acceptance criterion exists to catch in front of it, watch it go red, take the defect away and watch it go green — a check that has only ever passed is indistinguishable from one whose comparison can produce a single answer that looks like success.
   → `.ai-badger/invariants/prove-the-check-fails.md`
+
+- **Reasoning scaffolding minimization** — Avoid step-by-step CoT plans on modern reasoning models unless the task is genuine symbolic reasoning; state the goal and constraints instead of narrating the process.
+  → `.ai-badger/invariants/reasoning-scaffolding-minimization.md`
 
 - **Screaming architecture** — Organize folders and modules by domain/business concept, not by generic technical bucket.
   → `.ai-badger/invariants/screaming-architecture.md`
@@ -156,6 +180,9 @@ Each tool's own description covers the rest.
 
 - **Tests are designed before they are written, and judged after** — Green is the floor, not the evidence: a test list comes out of the acceptance criteria before the first test is written (`design-tests`, each row naming the failure mode it targets and the mutation that proves it real), and a change that adds or alters tests is not done until something other than its author has run `review-tests` and asked whether that suite could have gone red.
   → `.ai-badger/invariants/tests-are-designed-and-reviewed.md`
+
+- **Tool schema and success criteria outrank persona prose** — Define explicit tool contracts, required parameters, stop conditions, and success predicates before polishing role text; in short-horizon work, a clear schema plus outcome check beats a clever persona.
+  → `.ai-badger/invariants/tool-schema-success-criteria.md`
 
 - **Releases are traceable** — Every release records the version it went out at and what changed in it, using whatever version marker and release notes this project already keeps.
   → `.ai-badger/invariants/traceable-releases.md`

@@ -29,7 +29,7 @@ context.
 | Prefix | Meaning | Required behavior |
 |---|---|---|
 | `h:` / `hint:` | A potential insight or lead, not a command | Validate first — do a quick research pass (search the project, check relevant files/docs) before acting on it, and report what you found |
-| `f:` / `feedback:` | Direct critique or correction on previous work | High priority — address it before other work, referring back to the specific point in session history |
+| `f:` / `feedback:` | Direct critique or correction on previous work | High priority — address it before other work, referring back to the specific point in session history, and cite the failing output, validator result, or source evidence behind the correction |
 | `e:` / `extension:` | A request to expand the current task's scope | Analyze the new requirement; fold it into the current unit of work if it fits, or flag it for a follow-up task if it's too large |
 | `q:` / `queue:` | A queued instruction to run after active work finishes | Finish active work first. Once complete, analyze and execute this queued instruction, incorporating context from all prior work |
 | `i!:` / `important!:` | Immediate emergency interrupt | STOP IMMEDIATELY — pause or cancel running commands/subtasks, read the message, and react instantly before doing anything else |
@@ -37,6 +37,10 @@ context.
 Marker definitions (prefixes + the exact instruction text injected for each) live in
 `markers-context.json`, next to this file — edit that file to add a marker or change its wording;
 no code changes needed for that.
+
+If a task receives two failed `f:` feedback rounds in a row, treat the thread as drifted and restart
+with one merged prompt that includes the accepted constraints and the failing evidence instead of
+layering another round of commentary on top of the same stale request.
 
 ## How detection works
 
