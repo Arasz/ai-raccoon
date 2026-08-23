@@ -142,7 +142,13 @@ public sealed class FileIngestor(
         var scope = await ReadScopeAsync(connection, projectId, cancellationToken).ConfigureAwait(false);
         RequireInScope(scope, path);
 
-        var ignoreRoot = await ResolveIgnoreRootAsync(connection, projectId, path, cancellationToken).ConfigureAwait(false);
+        // B1 (PR #532 review): RequireInScope above already guarantees a scope entry admits path,
+        // so ResolveIgnoreRootAsync's admittingScopeEntry branch is never null here — an ancestor
+        // would always win over the walk root's own file. Check the walk root first, or its own
+        // ai-raccoon.ignore silently stops applying whenever it differs from that ancestor.
+        var ignoreRoot = File.Exists(Path.Combine(path, IgnoreRulesProvider.FileName))
+            ? path
+            : await ResolveIgnoreRootAsync(connection, projectId, path, cancellationToken).ConfigureAwait(false);
         var ignoreRules = await ignoreRulesProvider.LoadAsync(ignoreRoot, cancellationToken).ConfigureAwait(false);
         var files = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
             .Where(file => !IsHidden(path, file) && !IsIgnored(ignoreRules, ignoreRoot, file) && IsInScope(scope, file))
