@@ -12,7 +12,7 @@ namespace AiRaccoon.Tests.Integration;
 ///     <c>sqlite3_trace</c> on the real connection handle — not by splitting the <c>Ddl</c> source
 ///     string, which would misparse the trigger bodies' embedded semicolons. Pins both sides of
 ///     ADR-0075's digest gate: 5 statements when the digest matches (4 gate/repair reads + the S7
-///     watches probe), 57 in the block when it does not.
+///     watches probe), 58 in the block when it does not.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -34,13 +34,13 @@ public sealed class MemorySchemaDdlStatementCountTests
     }
 
     /// <summary>
-    ///     57 = the pre-code-corpus 42 plus the corpus's Ddl (code_entries/code_fts/vec_code,
+    ///     58 = the pre-code-corpus 42 plus the corpus's Ddl (code_entries/code_fts/vec_code,
     ///     trigger families, indexes, and the idx_code_entries_path DROP), plus 1 for the
-    ///     ADR-0089 <c>projects</c> table — re-derived from the trace, per-statement provenance on
-    ///     the assert below.
+    ///     ADR-0089 <c>projects</c> table, plus 1 for the WP12 <c>watch_digest_claims</c> table —
+    ///     re-derived from the trace, per-statement provenance on the assert below.
     /// </summary>
     [Fact]
-    public async Task EnsureAsync_WhenTheDigestIsStale_RunsTheFiftySevenStatementDdlBlock()
+    public async Task EnsureAsync_WhenTheDigestIsStale_RunsTheFiftyEightStatementDdlBlock()
     {
         await using var connection = await OpenAsync();
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
@@ -55,8 +55,9 @@ public sealed class MemorySchemaDdlStatementCountTests
         // 39 measured at ADR-0075, +1 model_migration (ADR-0076), +1 repair_requests, +1
         // promotion_queue_prune_requests, +14 the code corpus (ADR-0085: code_entries + code_fts +
         // vec_code, their trigger families, indexes, and the idx_code_entries_path DROP), +1 the
-        // ADR-0089 projects table.
-        CountDdl(statements).ShouldBe(57, Report(statements));
+        // ADR-0089 projects table, +1 the WP12 watch_digest_claims table (SqliteMemoryStore.ReplaceCoreAsync's
+        // chunk-once claim, now that the chunker runs outside the write lock).
+        CountDdl(statements).ShouldBe(58, Report(statements));
     }
 
     private static async Task<List<string>> TraceAsync(SqliteConnection connection)

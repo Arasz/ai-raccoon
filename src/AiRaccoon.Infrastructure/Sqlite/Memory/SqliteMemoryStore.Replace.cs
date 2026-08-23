@@ -52,11 +52,6 @@ public sealed partial class SqliteMemoryStore
     }
 
     /// <summary>
-    ///     Direct-tool replace-by-path (Defect B): the same delete-then-ingest transaction the watch
-    ///     digest runs, without the <c>watch_files</c> fingerprint — a direct ingest of a file nobody
-    ///     watches has no business claiming one. Returns the rows the re-ingest wrote.
-    /// </summary>
-    /// <summary>
     ///     Direct-tool ingest that replaces the path's chunk set (Defect B). Ingest runs first and
     ///     reports the chunks it wrote or rediscovered unchanged; anything else still stored for the
     ///     path is a leftover of a previous chunking and is pruned.
