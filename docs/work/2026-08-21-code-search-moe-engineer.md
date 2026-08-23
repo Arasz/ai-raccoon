@@ -29,7 +29,7 @@
 | Maintenance | `maintenance_jobs` ledger (ADR-0070); `IMaintenanceJob` with `Interval`/`HasWorkAsync`; job list = schedule; `PendingEmbedJob` (on-demand, bounded 4×32 rows/run, never due without engine) | `IMaintenanceJob.cs:9-35`; `MaintenanceJobs.cs:16-56`; `MemorySchema.cs:115-123`; `AppRegistrations.cs:149-179` |
 | Trigger family | `entries_fts_ai/ad/au` (external-content FTS5), `vec_entries_au` (embed → upsert vec row), `vec_entries_pending` (embedded→pending → delete vec row), `vec_entries_ad` | `MemorySchema.cs:125-141,166-201` |
 | Glob/ignore handling | **none anywhere in the watch or ingest paths** — no glob matcher, no `.gitignore` parsing, no wildcard support in `Watch/` (grep of `Watch/` for glob/wildcard/pattern/ignore: only config keys and event names); `Microsoft.Extensions.FileSystemGlobbing` is **not** in the package graph | grep 2026-08-21; `Directory.Packages.props:6-50` |
-| Code model (verified) | faxenoff/code-daemon-embed-v1: 768-dim INT8 QAT ONNX 187 MB, sentencepiece (`<s>=2 </s>=3 <pad>=0 <unk>=1`), pooling+L2 fused in graph ⇒ `pooling.mode=model-output`, hard 128-token cap (graph does not truncate), symmetric (no prefix) | exploration §1; `docs/work/2026-08-21-code-search-exploration.md:42-53` |
+| Code model (verified) | faxenoff/code-daemon-embed-v1: 768-dim ~~INT8 QAT~~ **fp32** **CORRECTED 2026-08-23** (fp32, not INT8 — see Amendments) ONNX 187 MB, sentencepiece (`<s>=2 </s>=3 <pad>=0 <unk>=1`), pooling+L2 fused in graph ⇒ `pooling.mode=model-output`, ~~hard 128-token cap~~ **512-token graph cap → chunk budget 510** **CORRECTED 2026-08-22** (#422 / PR #453 — propagated here 2026-08-23) (graph does not truncate), symmetric (no prefix) | exploration §1; `docs/work/2026-08-21-code-search-exploration.md:42-53` |
 | Engine generalization (prereq) | manifest-driven engine (D1), tokenizer families wordpiece+sentencepiece (D5), dynamic vec0 `float[N]` (D3), ctx−2 budget capped 510 (D6), fingerprint = manifest+sha256s (D7), `IEmbeddingTokenizer` routing incl. repair family (D9), pooling incl. `model-output` (D1) | `docs/work/2026-08-21-arbitrary-embedding-models-plan.md:85-96` |
 
 ---
@@ -393,3 +393,20 @@ Every WP starts with its failing test (TDD mandatory — CLAUDE.md invariant). G
 2. Sign off the §4.1 extension list (OQ1).
 3. Accept bundling the code-daemon tokenizer (626 KB) as the unconfigured counting tokenizer (OQ4), or pick the reject-alternative.
 4. Confirm `memory_ingest_file` stays memory-only in v1 (OQ2) — the watch and directory-ingest paths cover code onboarding.
+
+## Amendments
+
+### 2026-08-23 — the shipped code model is fp32, not INT8 QAT (WP7 desk half, PR #536)
+
+This document's INT8/QAT claims about `faxenoff/code-daemon-embed-v1` are wrong: the artifact we
+download and run is **fp32** — 70 initializers, all `FLOAT`, zero quantized ops. The evidence, what
+it does to the card's *"never PTQ"* warning, and the one open question that could still revise it
+live in `docs/work/2026-08-23-code-engine-inference-research.md` §2 and §8. **That record is the
+single source of truth and is deliberately not copied here** — five copies of a finding with an open
+question attached are five places to falsify at once.
+
+Also propagated here, from this repo's 2026-08-22 correction (#422 / PR #453): the *"128-token hard
+cap"* is the HF repo manifest's `max_tokens`, not a graph limit. The graph accepts **512** and the
+shipped chunk budget is **510** (`EmbeddingService.MaxManifestChunkTokens` = `512 - 2`, consumed by
+`CodeChunker.DefaultBudget`). The full amendment is in
+`docs/work/2026-08-21-code-search-exploration.md` §Amendments (2026-08-22).

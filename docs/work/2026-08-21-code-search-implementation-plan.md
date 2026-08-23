@@ -31,8 +31,8 @@ per-file sha256s (D7), `ai-raccoon model download <repo-id>` verb (D4/D8), `embe
 row (D2). This plan does not re-litigate those decisions; it builds on their contracts.
 
 **Code model (verified by spike, exploration §1):** `faxenoff/code-daemon-embed-v1` — 768-dim,
-INT8 QAT ONNX 187 MB, sentencepiece tokenizer (`<s>`=2 `</s>`=3 `<pad>`=0 `<unk>`=1), pooling +
-L2 fused in the graph → `pooling.mode = model-output`, 128-token hard cap → chunk budget **126**
+~~INT8 QAT~~ **fp32** ONNX 187 MB **CORRECTED 2026-08-23** (fp32, not INT8 — see Amendments), sentencepiece tokenizer (`<s>`=2 `</s>`=3 `<pad>`=0 `<unk>`=1), pooling +
+L2 fused in the graph → `pooling.mode = model-output`, ~~128-token hard cap → chunk budget **126**~~ **512-token graph cap → budget 510** **CORRECTED 2026-08-22** (#422 / PR #453 — propagated here 2026-08-23)
 (ctx−2), symmetric (no query prefix), MIT. A/B candidate: `jinaai/jina-embeddings-v2-base-code`
 (768-dim, Apache-2.0, ONNX int8 154 MB; pooling shape unverified — parity probe gates its arm).
 
@@ -346,8 +346,9 @@ precondition, GREEN assertion, home, kind. RED-witness logistics: QA §5.
 
 ## 8. Risks (condensed; full table in ops §4)
 
-Model provenance (registry pin + eval-before-default + jina A/B; never PTQ the INT8 QAT
-artifact), chunker quality without AST (Python repo in eval-set + span-overlap measure;
+Model provenance (registry pin + eval-before-default + jina A/B; ~~never PTQ the INT8 QAT
+artifact~~ — the artifact we run is **fp32**, so PTQ is permitted; the card's hit@1 .200 → .133
+figure stands as the cost to weigh, not a prohibition **CORRECTED 2026-08-23** (fp32, not INT8 — see Amendments)), chunker quality without AST (Python repo in eval-set + span-overlap measure;
 tree-sitter v2 lever), throughput 56 texts/s (incremental watch deltas; initial index of a
 large repo is the only wait; dependency trees excluded by deny set), sync push leakage (fixed
 by DROP-strip, both-paths test), re-embed blocking memory (impossible by design — no outbox,
@@ -547,3 +548,12 @@ on issue #422; the source document carries its own amendment.
 and `SqliteCodeEngineStore.ActivateCodeEngineAsync` refuses a manifest *narrower* than the chunker's
 budget instead of requiring exact equality with it. Every `126` and `128` in the body text above is
 historical.
+
+### 2026-08-23 — the shipped code model is fp32, not INT8 QAT (WP7 desk half, PR #536)
+
+This document's INT8/QAT claims about `faxenoff/code-daemon-embed-v1` are wrong: the artifact we
+download and run is **fp32** — 70 initializers, all `FLOAT`, zero quantized ops. The evidence, what
+it does to the card's *"never PTQ"* warning, and the one open question that could still revise it
+live in `docs/work/2026-08-23-code-engine-inference-research.md` §2 and §8. **That record is the
+single source of truth and is deliberately not copied here** — five copies of a finding with an open
+question attached are five places to falsify at once.
