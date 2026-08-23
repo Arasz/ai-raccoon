@@ -45,7 +45,7 @@ public class MemoryToolsTests
         var access = new MemoryAccessGuard(_store);
         var workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
-        var gate = new ToolGate(access, _queue);
+        var gate = new ToolGate(access, _queue, new NeverMigratingStore(), new AllowingRegistrationGuard());
         _tools = new MemoryTools(_store, gate, new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), NullLogger<MemoryTools>.Instance);
         _share = new ShareTools(_store, gate, new ShareExtractService(_store,
             new SharedExtractionRunner(_store, new SharedExtractionService(), _queue,
@@ -307,7 +307,7 @@ public class MemoryToolsTests
     public async Task Search_RecordsNineSeriesMeasurements_TaggedWithHashAndCorrelationId_NeverQueryText()
     {
         var recorder = new RecordingMeasurementRecorder();
-        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue, new NeverMigratingStore(), new AllowingRegistrationGuard()),
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
 
@@ -330,7 +330,7 @@ public class MemoryToolsTests
     {
         var recorder = new RecordingMeasurementRecorder();
         _store.Fusion = new FusionDiff(1, 2, 3);
-        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue, new NeverMigratingStore(), new AllowingRegistrationGuard()),
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
 
@@ -350,7 +350,7 @@ public class MemoryToolsTests
     public async Task Search_StoreReportsNoFusionDiff_RecordsNoFusionMeasurement()
     {
         var recorder = new RecordingMeasurementRecorder();
-        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue, new NeverMigratingStore(), new AllowingRegistrationGuard()),
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
 
@@ -370,7 +370,7 @@ public class MemoryToolsTests
     {
         var recorder = new RecordingMeasurementRecorder();
         var time = new FakeTimeProvider(FixedNow);
-        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue, new NeverMigratingStore(), new AllowingRegistrationGuard()),
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance, time);
 
@@ -384,7 +384,7 @@ public class MemoryToolsTests
     public async Task Search_WhenTheRecorderThrows_StillReturnsResults()
     {
         var recorder = new RecordingMeasurementRecorder { ThrowOnRecord = new InvalidOperationException("boom") };
-        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue, new NeverMigratingStore(), new AllowingRegistrationGuard()),
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
 
@@ -404,7 +404,7 @@ public class MemoryToolsTests
     public async Task Search_WhenTheRecorderThrows_TheFailedWriteIsNotAttemptedAgain()
     {
         var recorder = new RecordingMeasurementRecorder { ThrowOnRecord = new InvalidOperationException("boom") };
-        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue, new NeverMigratingStore(), new AllowingRegistrationGuard()),
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
 
@@ -627,7 +627,7 @@ public class MemoryToolsTests
     public async Task Search_InShadowMode_RecordsTheRefuseVerdict_ButStillReturnsResults()
     {
         var logger = new FakeLogger<MemoryTools>();
-        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue, new NeverMigratingStore(), new AllowingRegistrationGuard()),
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), logger);
         _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
 
@@ -644,7 +644,7 @@ public class MemoryToolsTests
     public async Task Search_InShadowMode_WithAnOrdinaryQuery_RecordsNothing()
     {
         var logger = new FakeLogger<MemoryTools>();
-        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue, new NeverMigratingStore(), new AllowingRegistrationGuard()),
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), logger);
         _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
 
@@ -658,7 +658,7 @@ public class MemoryToolsTests
     public async Task Search_WithTheGuardDisabled_RecordsNothing_EvenInShadowMode()
     {
         var logger = new FakeLogger<MemoryTools>();
-        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue, new NeverMigratingStore(), new AllowingRegistrationGuard()),
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), logger);
         _store.Settings[QueryGuardConfigKeys.EnabledGlobal] = "false";
         _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
@@ -729,7 +729,7 @@ public class MemoryToolsTests
     public async Task Search_InShadowMode_WithAStructuralWarn_RecordsButDoesNotSurfaceIt()
     {
         var logger = new FakeLogger<MemoryTools>();
-        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue),
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue, new NeverMigratingStore(), new AllowingRegistrationGuard()),
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), logger);
         _store.Settings[QueryGuardConfigKeys.StructuralEnabledGlobal] = "true";
         _store.Settings[QueryGuardConfigKeys.StructuralThresholdGlobal] = "0.0";

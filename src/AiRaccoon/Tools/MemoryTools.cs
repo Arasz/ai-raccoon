@@ -65,14 +65,14 @@ public sealed partial class MemoryTools(
         string? section = null,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryWrite, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryWrite, cancellationToken);
 
-        var request = new MemoryWriteRequest(projectId, content, context, agentId, workspaceId, sourceFile, section);
+        var request = new MemoryWriteRequest(canonical, content, context, agentId, workspaceId, sourceFile, section);
         await MemoryWriteRequestValidator.ValidateAndThrowAsync(request, cancellationToken);
 
         var entry = await writes.WriteAsync(request, cancellationToken);
         var result = new WriteResult(entry.Hash, entry.Path, entry.Context, entry.CreatedAt, entry.Stored, entry.Reason);
-        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
         return envelope;
     }
 
@@ -86,13 +86,13 @@ public sealed partial class MemoryTools(
         string hash,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryGet, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryGet, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
-        var entry = await store.GetAsync(projectId, hash, cancellationToken)
-                    ?? throw new UnknownHashException(hash, projectId);
+        var entry = await store.GetAsync(canonical, hash, cancellationToken)
+                    ?? throw new UnknownHashException(hash, canonical);
         var result = new GetResult(entry.Hash, entry.Value, entry.Path, entry.Context, entry.CreatedAt);
-        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
         return envelope;
     }
 
@@ -158,7 +158,7 @@ public sealed partial class MemoryTools(
         double? codeMinRelativeScore = null,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemorySearch, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemorySearch, cancellationToken);
 
         var parsedScope = scope.ToLowerInvariant() switch
         {
@@ -172,14 +172,14 @@ public sealed partial class MemoryTools(
 
         // Enum wire names are validated here (not silently defaulted) so a typo fails fast,
         // and provided tuning values are range-checked before any bank work.
-        var searchQuery = BuildValidatedSearchQuery(projectId, query, parsedScope, workspaceId, limit,
+        var searchQuery = BuildValidatedSearchQuery(canonical, query, parsedScope, workspaceId, limit,
             minRelativeScore, rrfK, ftsWeight, vectorWeight, contextLabel, sourceLambda,
             consolidationThreshold, docScoreFormula, candidateWindow);
 
-        var guard = await queryGuard.EvaluateAsync(projectId, query, cancellationToken);
+        var guard = await queryGuard.EvaluateAsync(canonical, query, cancellationToken);
         if (guard.Shadowed is { } suppressed)
         {
-            Log.QueryGuardShadowVerdict(logger, suppressed.Tier.ToString(), projectId,
+            Log.QueryGuardShadowVerdict(logger, suppressed.Tier.ToString(), canonical,
                 suppressed.PolicyName ?? string.Empty, QuerySnippet(query));
         }
 
@@ -201,7 +201,7 @@ public sealed partial class MemoryTools(
             // metrics stay useful telemetry either way, so only the content-identifying query hash
             // is excluded, not the whole recording (integration review S6).
             var queryHash = parsedKind == SearchKind.Memory ? ContentHash.OfValue(query) : null;
-            RecordSearchMeasurements(dispatch.MemorySearchResults, queryHash, correlationId, projectId);
+            RecordSearchMeasurements(dispatch.MemorySearchResults, queryHash, correlationId, canonical);
         }
 
         // QueryLengthGuard is always on -- a fact about the embedding window, not a togglable
@@ -210,7 +210,7 @@ public sealed partial class MemoryTools(
         // whichever kind was requested, since both corpora search the same query text.
         var warning = ComposeWarning(SearchWarnings.Compose(guard.Verdict, QueryLengthGuard.Evaluate(query)), dispatch.CodeWarning);
         var result = new SearchResultList(dispatch.Results, warning, dispatch.CodeResults);
-        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
 
         // SearchDispatcher records a search_quality row only for kind=memory, so a kind=code/both
         // correlation id would be a promise the envelope cannot keep: a later
@@ -294,10 +294,10 @@ public sealed partial class MemoryTools(
         [Description("The project id.")] string projectId,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryList, cancellationToken);
-        var files = await store.ListFilesAsync(projectId, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryList, cancellationToken);
+        var files = await store.ListFilesAsync(canonical, cancellationToken);
         var result = new ListResult(JsonNode.Parse(files) ?? new JsonObject());
-        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
         return envelope;
     }
 
@@ -307,10 +307,10 @@ public sealed partial class MemoryTools(
         [Description("The project id.")] string projectId,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryStats, cancellationToken);
-        var stats = await store.GetStatsAsync(projectId, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryStats, cancellationToken);
+        var stats = await store.GetStatsAsync(canonical, cancellationToken);
         var result = new StatsResult(stats.EntryCount, stats.PendingCount, stats.Contexts);
-        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
         return envelope;
     }
 
@@ -323,12 +323,12 @@ public sealed partial class MemoryTools(
         string hash,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Destructive, TnMemoryDelete, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Destructive, TnMemoryDelete, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
-        var deleted = await store.DeleteAsync(projectId, hash, cancellationToken);
+        var deleted = await store.DeleteAsync(canonical, hash, cancellationToken);
         var result = new DeletedResult(deleted ? 1 : 0);
-        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
         return envelope;
     }
 
@@ -341,12 +341,12 @@ public sealed partial class MemoryTools(
         string context,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Destructive, TnMemoryDeleteContext, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Destructive, TnMemoryDeleteContext, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(context);
 
-        var deleted = await store.DeleteContextAsync(projectId, context, cancellationToken);
+        var deleted = await store.DeleteContextAsync(canonical, context, cancellationToken);
         var result = new DeletedContextResult(deleted);
-        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
         return envelope;
     }
 
@@ -360,12 +360,12 @@ public sealed partial class MemoryTools(
         string? context = null,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryIngestFile, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryIngestFile, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        var indexed = await store.IngestFileAsync(projectId, path, context, cancellationToken);
+        var indexed = await store.IngestFileAsync(canonical, path, context, cancellationToken);
         var result = new IngestResult(indexed);
-        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
         return envelope;
     }
 
@@ -380,12 +380,12 @@ public sealed partial class MemoryTools(
         string? context = null,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryIngestDirectory, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryIngestDirectory, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        var scanned = await store.IngestDirectoryAsync(projectId, path, context, cancellationToken);
+        var scanned = await store.IngestDirectoryAsync(canonical, path, context, cancellationToken);
         var result = new ScannedResult(scanned);
-        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
         return envelope;
     }
 
@@ -397,11 +397,11 @@ public sealed partial class MemoryTools(
         int? limit = null,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryEmbedPending, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryEmbedPending, cancellationToken);
 
-        var result = await store.EmbedPendingAsync(projectId, limit, cancellationToken);
+        var result = await store.EmbedPendingAsync(canonical, limit, cancellationToken);
         var embedResult = new EmbedResult(result.Processed, result.Pending);
-        var envelope = await gate.WrapAsync(projectId, embedResult, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, embedResult, cancellationToken);
         return envelope;
     }
 

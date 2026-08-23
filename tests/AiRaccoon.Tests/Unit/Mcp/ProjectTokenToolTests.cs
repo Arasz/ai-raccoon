@@ -102,7 +102,7 @@ public sealed class ProjectTokenToolTests
             return Task.CompletedTask;
         }
 
-        public Task RequireAsync(string? projectId, AccessRequirement requirement, string toolName,
+        public Task<string> RequireAsync(string? projectId, AccessRequirement requirement, string toolName,
             CancellationToken cancellationToken) =>
             throw new NotSupportedException("project_id_token_get never resolves an access mode.");
 

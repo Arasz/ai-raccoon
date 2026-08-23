@@ -77,7 +77,9 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
                 new UniformCountEvictionPolicy(),
                 new PromotionQueueMetrics(),
                 NullLogger<PromotionQueueService>.Instance,
-                _ctx.TimeProvider));
+                _ctx.TimeProvider),
+            new NeverMigratingStore(),
+            new AllowingRegistrationGuard());
 
     private FakeCloudStore CloudStore => (FakeCloudStore)scenarioContext[CloudStoreKey];
 

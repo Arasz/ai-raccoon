@@ -34,7 +34,7 @@ public sealed class CodeGetToolTests : IAsyncLifetime
         var codeSearch = new SqliteCodeSearchService(_factory, new FakeCodeEmbedder());
         var settings = new SqliteSettingsStore(_factory);
         var access = new MemoryAccessGuard(new SettingsOnlyStore(settings));
-        var gate = new ToolGate(access, new FakePromotionQueue());
+        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard());
         _tools = new CodeTools(codeSearch, gate);
         await using var warm = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
     }

@@ -26,10 +26,10 @@ public sealed class QualityTools(
         string filePath,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Write, TnRecordFollowThrough, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnRecordFollowThrough, cancellationToken);
 
         await qualityService.RecordFollowThroughAsync(correlationId, filePath, cancellationToken);
-        var envelope = await gate.WrapAsync(projectId, new FollowThroughResult(true), cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, new FollowThroughResult(true), cancellationToken);
 
         return envelope;
     }
@@ -48,10 +48,10 @@ public sealed class QualityTools(
         string? note = null,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Write, TnRecordGrade, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnRecordGrade, cancellationToken);
 
-        await qualityService.RecordGradeAsync(projectId, correlationId, grade, note, cancellationToken);
-        var envelope = await gate.WrapAsync(projectId, new GradeResult(true), cancellationToken);
+        await qualityService.RecordGradeAsync(canonical, correlationId, grade, note, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, new GradeResult(true), cancellationToken);
 
         return envelope;
     }

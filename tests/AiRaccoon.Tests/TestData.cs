@@ -1,5 +1,6 @@
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using System.Security.Cryptography;
+using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Ingestion;
@@ -19,6 +20,7 @@ using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Watch;
+using AiRaccoon.Projects;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
@@ -533,6 +535,24 @@ public sealed class FakePromotionQueue : IPromotionQueue
 
         return Meta;
     }
+}
+
+/// <summary>Stub <see cref="IModelMigrationStore"/> for tests that construct a <see cref="ToolGate"/> directly and do not exercise ADR-0076's migration lock.</summary>
+public sealed class NeverMigratingStore : IModelMigrationStore
+{
+    public Task<bool> HasOpenModelMigrationAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(false);
+
+    public Task<EmbeddingConfig> StartModelMigrationAsync(string provider, string? model, string? baseUrl,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Not exercised by ToolGate.");
+}
+
+/// <summary>Stub <see cref="IProjectRegistrationGuard"/> for tests that construct a <see cref="ToolGate"/> directly and do not exercise ADR-0089's registration refusal.</summary>
+public sealed class AllowingRegistrationGuard : IProjectRegistrationGuard
+{
+    public Task EnsureAsync(string projectId, AccessRequirement requirement, CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
 }
 
 /// <summary>No-op implementation of <see cref="ISearchQualityService"/> for unit tests that construct <see cref="MemoryTools"/> directly.</summary>

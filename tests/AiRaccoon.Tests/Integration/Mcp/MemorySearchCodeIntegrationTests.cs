@@ -38,7 +38,7 @@ public sealed class MemorySearchCodeIntegrationTests : IAsyncLifetime
         var settings = new SqliteSettingsStore(_factory);
         var store = new SettingsOnlyStore(settings);
         var access = new MemoryAccessGuard(store);
-        var gate = new ToolGate(access, new FakePromotionQueue());
+        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard());
         _tools = new MemoryTools(store, gate,
             new SearchDispatcher(store, new SqliteCodeSearchService(_factory, new FakeCodeEmbedder()), new NoOpSearchQualityService()),
             new QueryGuardService(settings), new MemoryWriteService(store, new FakePromotionQueue()),

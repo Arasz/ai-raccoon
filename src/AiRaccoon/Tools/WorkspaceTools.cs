@@ -34,11 +34,11 @@ public sealed class WorkspaceTools(
         string? name = null,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryWorkspaceBegin, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryWorkspaceBegin, cancellationToken);
 
-        var workspace = await workspaces.BeginAsync(projectId, agentId, name, cancellationToken);
+        var workspace = await workspaces.BeginAsync(canonical, agentId, name, cancellationToken);
         var result = new WorkspaceBeginResult(workspace.Id, workspace.Context);
-        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
         return envelope;
     }
 
@@ -49,13 +49,13 @@ public sealed class WorkspaceTools(
         [Description("The workspace id.")] string workspaceId,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryWorkspaceStatus, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryWorkspaceStatus, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
 
-        var outbox = await workspaces.GetStatusAsync(projectId, workspaceId, cancellationToken);
+        var outbox = await workspaces.GetStatusAsync(canonical, workspaceId, cancellationToken);
         var result = new WorkspaceStatusResult(outbox.Entries, outbox.Entries.Count,
             outbox.Workspace.AgentId, outbox.Workspace.Name);
-        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
         return envelope;
     }
 
@@ -69,13 +69,13 @@ public sealed class WorkspaceTools(
         string[] keep,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryWorkspaceConsolidate, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryWorkspaceConsolidate, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
         ArgumentNullException.ThrowIfNull(keep);
 
-        var result = await workspaces.ConsolidateAsync(projectId, workspaceId, keep, cancellationToken);
+        var result = await workspaces.ConsolidateAsync(canonical, workspaceId, keep, cancellationToken);
         var toolResult = new ConsolidationToolResult(result.Promoted, result.Discarded);
-        var envelope = await gate.WrapAsync(projectId, toolResult, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, toolResult, cancellationToken);
         return envelope;
     }
 
@@ -86,12 +86,12 @@ public sealed class WorkspaceTools(
         [Description("The workspace id.")] string workspaceId,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryWorkspaceDiscard, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryWorkspaceDiscard, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
 
-        var discarded = await workspaces.DiscardAsync(projectId, workspaceId, cancellationToken);
+        var discarded = await workspaces.DiscardAsync(canonical, workspaceId, cancellationToken);
         var result = new WorkspaceDiscardResult(discarded);
-        var envelope = await gate.WrapAsync(projectId, result, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
         return envelope;
     }
 

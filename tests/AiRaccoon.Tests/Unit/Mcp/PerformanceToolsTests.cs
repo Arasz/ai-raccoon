@@ -105,13 +105,13 @@ public sealed class PerformanceToolsTests
         public Task RequireBankAvailableAsync(string toolName, CancellationToken cancellationToken) =>
             Task.CompletedTask;
 
-        public Task RequireAsync(string? projectId, AccessRequirement requirement, string toolName,
+        public Task<string> RequireAsync(string? projectId, AccessRequirement requirement, string toolName,
             CancellationToken cancellationToken)
         {
             LastProjectId = projectId;
             LastRequirement = requirement;
             LastToolName = toolName;
-            return Task.CompletedTask;
+            return Task.FromResult(projectId ?? string.Empty);
         }
 
         public Task<ApiEnvelope<T>> WrapAsync<T>(string? projectId, T data, CancellationToken cancellationToken) =>

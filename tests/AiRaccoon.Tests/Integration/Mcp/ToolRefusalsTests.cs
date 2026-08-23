@@ -5,6 +5,7 @@ using AiRaccoon.Core.Encryption;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Hosting.Common;
@@ -140,7 +141,8 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
             {
                 new BundledModelInstallReplacedException("embedding model", "model_qint8_arm64.onnx", "/replaced/install/dir"),
                 "embedding-install-replaced"
-            }
+            },
+            { new UnregisteredProjectException("acme"), "project-not-registered" }
         };
 
     /// <summary>
@@ -188,6 +190,10 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
         var dataRoot = TestData.CreateTempRoot("tool-refusals-e2e-schema-version-unsupported");
         try
         {
+            // Register before bumping the schema version: RegisterAsync opens the bank through the
+            // normal ensure path, which would itself throw UnsupportedSchemaVersionException once
+            // the version is stamped ahead.
+            await SeedProjectRegistrationAsync(dataRoot, "acme", TestContext.Current.CancellationToken);
             await SeedForwardSchemaVersionAsync(dataRoot, TestContext.Current.CancellationToken);
 
             var (port, host) = await LoopbackPort.BindWithRetryAsync(async candidate =>
@@ -275,6 +281,13 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
     private static async Task AssertRefusalOverRealServerAsync(string dataRoot, string toolName,
         Dictionary<string, object?> arguments, string expectedPrefix)
     {
+        // Every case here exercises a refusal other than project-not-registered, so the project id
+        // the call names (when it names a real one) must already be registered.
+        if (arguments.GetValueOrDefault("projectId") is string { Length: > 0 } projectId)
+        {
+            await SeedProjectRegistrationAsync(dataRoot, projectId, TestContext.Current.CancellationToken);
+        }
+
         var fakeLogs = new FakeLoggerProvider();
         var (port, host) = await LoopbackPort.BindWithRetryAsync(async candidate =>
         {
@@ -336,6 +349,24 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
         await store.SetSettingAsync(AccessModePolicy.ProjectSettingKey(projectId), mode, cancellationToken);
     }
 
+    /// <summary>
+    ///     Registers a project id directly (ADR-0089), the same way <see cref="SeedProjectAccessModeAsync" />
+    ///     seeds a mode: this class's cases exist to exercise a refusal OTHER than
+    ///     project-not-registered, so every project id a case writes under must already be a real
+    ///     project or that refusal fires first and shadows the one under test.
+    /// </summary>
+    private static async Task SeedProjectRegistrationAsync(string dataRoot, string projectId,
+        CancellationToken cancellationToken)
+    {
+        var options = TestData.CreateInfrastructureOptions(dataRoot);
+        var factory = new SqliteConnectionFactory(options,
+            new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
+                [new EnvEncryptionKeyProvider()]));
+        var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), TimeProvider.System,
+            TestData.CreateEmbeddingService());
+        await ((IProjectRegistry)store).RegisterAsync(projectId, null, cancellationToken);
+    }
+
     /// <summary>Opens the bank once (creating and migrating it to CurrentVersion), then stamps user_version one past it.</summary>
     private static async Task SeedForwardSchemaVersionAsync(string dataRoot, CancellationToken cancellationToken)
     {
@@ -371,6 +402,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
         var dataRoot = TestData.CreateTempRoot("tool-refusals-warning");
         try
         {
+            await SeedProjectRegistrationAsync(dataRoot, "acme", TestContext.Current.CancellationToken);
             var fakeLogs = new FakeLoggerProvider();
             var (port, host) = await LoopbackPort.BindWithRetryAsync(async candidate =>
             {

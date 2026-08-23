@@ -33,6 +33,7 @@ using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Infrastructure.Workspace;
 using AiRaccoon.Observability;
+using AiRaccoon.Projects;
 using AiRaccoon.Setup.Models;
 using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;
@@ -146,6 +147,7 @@ public static partial class AppRegistrations
         {
             services.AddRequiredSingleton<IMemoryAccessGuard, MemoryAccessGuard>();
             services.AddRequiredSingleton<IForgettingPolicyService, ForgettingPolicyService>();
+            services.AddRequiredSingleton<IProjectRegistrationGuard, ProjectRegistrationGuard>();
             services.AddRequiredSingleton<IToolGate, ToolGate>();
         }
 

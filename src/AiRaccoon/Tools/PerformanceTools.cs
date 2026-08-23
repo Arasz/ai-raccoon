@@ -23,12 +23,12 @@ public sealed class PerformanceTools(IMetricsReportService reportService, IToolG
         int? bucketMinutes = null,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryPerformance, cancellationToken);
-        var report = await reportService.GetReportAsync(projectId, McpToolInventory.Names(),
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryPerformance, cancellationToken);
+        var report = await reportService.GetReportAsync(canonical, McpToolInventory.Names(),
             windowMinutes is { } w ? TimeSpan.FromMinutes(w) : null,
             bucketMinutes is { } b ? TimeSpan.FromMinutes(b) : null,
             cancellationToken);
-        var envelope = await gate.WrapAsync(projectId, report, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, report, cancellationToken);
         return envelope;
     }
 }

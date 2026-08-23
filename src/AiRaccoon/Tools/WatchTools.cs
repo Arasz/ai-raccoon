@@ -24,11 +24,11 @@ public sealed class WatchTools(
         string path,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Write, TnWatchAdd, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnWatchAdd, cancellationToken);
 
-        var outcome = await watch.AddAsync(projectId, path, cancellationToken);
-        var envelope = await gate.WrapAsync(projectId,
-            new WatchAddResult(projectId, path, outcome.Pruned, outcome.AbsorbedBy), cancellationToken);
+        var outcome = await watch.AddAsync(canonical, path, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical,
+            new WatchAddResult(canonical, path, outcome.Pruned, outcome.AbsorbedBy), cancellationToken);
 
         return envelope;
     }
@@ -40,10 +40,10 @@ public sealed class WatchTools(
         [Description("The project id.")] string projectId,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Read, TnWatchStatus, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnWatchStatus, cancellationToken);
 
-        var states = await watch.StatusAsync(projectId, cancellationToken);
-        var envelope = await gate.WrapAsync(projectId, new WatchStatusResult(states), cancellationToken);
+        var states = await watch.StatusAsync(canonical, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, new WatchStatusResult(states), cancellationToken);
         return envelope;
     }
 
@@ -55,10 +55,10 @@ public sealed class WatchTools(
         string path,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Write, TnWatchRemove, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnWatchRemove, cancellationToken);
 
-        await watch.RemoveAsync(projectId, path, cancellationToken);
-        var envelope = await gate.WrapAsync(projectId, new WatchRemoveResult(projectId, path), cancellationToken);
+        await watch.RemoveAsync(canonical, path, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, new WatchRemoveResult(canonical, path), cancellationToken);
         return envelope;
     }
 

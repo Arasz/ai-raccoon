@@ -115,12 +115,36 @@ public sealed class SqliteProjectRegistryTests : IDisposable
         (await _registry.HasRowsAsync("project-b", TestContext.Current.CancellationToken)).ShouldBeFalse();
     }
 
+    /// <summary>
+    ///     The #546-review open question: a code-only legacy project has its rows in
+    ///     <c>code_entries</c>, never <c>entries</c> — ProjectHasRows must cover both corpora or the
+    ///     "rows" half of ADR-0089 decision 3's refusal test refuses a project that genuinely has
+    ///     content, just none of it memory-corpus.
+    /// </summary>
+    [Fact]
+    public async Task HasRowsAsync_IsTrueForACodeOnlyLegacyProject_WithRowsOnlyInCodeEntries()
+    {
+        await SeedCodeEntryRowAsync("code-only-legacy");
+
+        (await _registry.HasRowsAsync("code-only-legacy", TestContext.Current.CancellationToken)).ShouldBeTrue();
+    }
+
     private async Task SeedProjectRowAsync(string projectId)
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         await connection.ExecuteAsync(new CommandDefinition(
             "INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at) "
             + "VALUES (@hash, 'p.md', 'v', 'project', @projectId, 1, 1)",
+            new { hash = Guid.NewGuid().ToString("N"), projectId },
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    private async Task SeedCodeEntryRowAsync(string projectId)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO code_entries (hash, path, value, source_file, line_start, line_end, project_id, created_at, updated_at) "
+            + "VALUES (@hash, 'Foo.cs', 'class Foo {}', 'Foo.cs', 1, 1, @projectId, 1, 1)",
             new { hash = Guid.NewGuid().ToString("N"), projectId },
             cancellationToken: TestContext.Current.CancellationToken));
     }

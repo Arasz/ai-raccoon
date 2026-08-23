@@ -1,6 +1,8 @@
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Projects;
+using AiRaccoon.Projects;
 using ModelContextProtocol;
 
 namespace AiRaccoon.Tools;
@@ -11,23 +13,31 @@ namespace AiRaccoon.Tools;
 ///     the project's access mode, and wrap the result in the envelope carrying the propose tier's
 ///     meta. One copy, so the seven tool classes cannot drift apart.
 /// </summary>
-public sealed class ToolGate(IMemoryAccessGuard access, IPromotionQueue queue, IModelMigrationStore? migrations = null) : IToolGate
+public sealed class ToolGate(
+    IMemoryAccessGuard access,
+    IPromotionQueue queue,
+    IModelMigrationStore migrations,
+    IProjectRegistrationGuard registration) : IToolGate
 {
     /// <summary>Refuses while a migration is open. Nothing else — the check a tool with no project yet can still make.</summary>
     public async Task RequireBankAvailableAsync(string toolName, CancellationToken cancellationToken)
     {
-        // Optional so every existing two-argument fake construction across the test suite keeps
-        // compiling; production DI always resolves the real IModelMigrationStore (RegisterStores).
-        if (migrations is not null &&
-            await migrations.HasOpenModelMigrationAsync(cancellationToken).ConfigureAwait(false))
+        if (await migrations.HasOpenModelMigrationAsync(cancellationToken).ConfigureAwait(false))
         {
             throw new ModelMigrationInProgressException(
                 $"ai-raccoon: a model migration is in progress; try again once it finishes ({toolName})");
         }
     }
 
-    /// <summary>Refuses while a migration is open, then rejects a blank project id, then throws access-denied when the mode is too low.</summary>
-    public async Task RequireAsync(string? projectId, AccessRequirement requirement, string toolName,
+    /// <summary>
+    ///     Refuses while a migration is open, then rejects a blank project id, canonicalizes it
+    ///     (ADR-0089 decision 2), throws access-denied when the mode is too low, and only then
+    ///     refuses an unregistered id on a write (decision 3 — reads pass through untouched).
+    ///     Registration is checked last so an unauthorized caller cannot learn whether an id is
+    ///     registered from the refusal shape. Returns the canonical id for the caller to carry to
+    ///     storage.
+    /// </summary>
+    public async Task<string> RequireAsync(string? projectId, AccessRequirement requirement, string toolName,
         CancellationToken cancellationToken)
     {
         await RequireBankAvailableAsync(toolName, cancellationToken).ConfigureAwait(false);
@@ -37,7 +47,11 @@ public sealed class ToolGate(IMemoryAccessGuard access, IPromotionQueue queue, I
             throw new McpException("invalid-params: project_id is required");
         }
 
-        await access.EnsureAsync(projectId, requirement, toolName, cancellationToken).ConfigureAwait(false);
+        var canonical = ProjectId.Canonicalize(projectId);
+
+        await access.EnsureAsync(canonical, requirement, toolName, cancellationToken).ConfigureAwait(false);
+        await registration.EnsureAsync(canonical, requirement, cancellationToken).ConfigureAwait(false);
+        return canonical;
     }
 
     /// <summary>
