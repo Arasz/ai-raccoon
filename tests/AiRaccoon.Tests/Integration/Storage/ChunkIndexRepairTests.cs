@@ -99,6 +99,52 @@ public sealed class ChunkIndexRepairTests : IDisposable
         after.ShouldBe(before, "the repair must only UPDATE chunk_index/total_chunks — never insert or delete a row");
     }
 
+    /// <summary>#549: a repositioned row also takes the section the current chunker reports for it,
+    /// so a repair fixes the label a pre-#549 ingest left null.</summary>
+    [Fact]
+    public async Task RunAsync_RepositionedRows_TakeTheSectionTheCurrentChunkerReports()
+    {
+        var file = Path.Combine(_dataRoot, "sectioned.md");
+        await File.WriteAllTextAsync(file, "## Part A\n\npara one\n\npara two", TestContext.Current.CancellationToken);
+        await using var connection = await OpenSeededAsync((file, "## Part A", 2), (file, "para one", 1), (file, "para two", 0));
+
+        await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
+
+        (await connection.ExecuteScalarAsync<string?>(
+            "SELECT section FROM entries WHERE value = '## Part A'")).ShouldBe("Part A");
+    }
+
+    /// <summary>Copilot round 5 (comment 3838133861): a row the re-chunk cannot reproduce gets
+    /// chunk_index = -1 (unknown), but the repair must not clear its existing section on the way —
+    /// that would break its file#section anchor beyond the job's scope.</summary>
+    [Fact]
+    public async Task RunAsync_RowsTheRechunkCannotReproduce_KeepTheirExistingSection()
+    {
+        var file = Path.Combine(_dataRoot, "keep.md");
+        await File.WriteAllTextAsync(file, "para one\n\npara two", TestContext.Current.CancellationToken);
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        const string staleValue = "stale content the file no longer holds";
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO entries (hash, path, value, source_file, section, scope, project_id,
+                                 created_at, updated_at, embed_state, chunk_index, total_chunks)
+            VALUES (@hash, @path, @value, @sourceFile, @section, 'project', @projectId, 1, 1, 'embedded', @chunkIndex, @totalChunks)
+            """,
+            new
+            {
+                hash = ContentHash.Of(file, staleValue), path = file, value = staleValue, sourceFile = file,
+                section = "Keep", projectId = ProjectId, chunkIndex = 0, totalChunks = 1
+            });
+
+        var report = await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
+
+        report.RowsSetToUnknown.ShouldBe(1);
+        var row = await connection.QuerySingleAsync<(long ChunkIndex, string? Section)>(
+            "SELECT chunk_index AS ChunkIndex, section AS Section FROM entries WHERE path = @path", new { path = file });
+        row.ChunkIndex.ShouldBe(-1);
+        row.Section.ShouldBe("Keep");
+    }
+
     private static ChunkIndexRepair Repair()
     {
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]);

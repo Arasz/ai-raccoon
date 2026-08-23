@@ -269,6 +269,18 @@ internal static class MemorySchema
                                               PRIMARY KEY (project_id, path)
                                           );
 
+                                          -- WP12 Fix A: the chunker runs outside the write lock, so two replaces
+                                          -- racing the same stale-to-new transition (SqliteMemoryStore.ReplaceCoreAsync)
+                                          -- need a claim to still chunk exactly once — see MemorySql.TryClaimWatchDigest.
+                                          -- A crashed claim holder never deletes its row, so claimed_at (not presence
+                                          -- alone) lets the next digest reclaim it once it is stale.
+                                          CREATE TABLE IF NOT EXISTS watch_digest_claims (
+                                              project_id  TEXT NOT NULL,
+                                              path        TEXT NOT NULL,
+                                              claimed_at  INTEGER NOT NULL,
+                                              PRIMARY KEY (project_id, path)
+                                          );
+
                                           -- Propose tier: candidates waiting for promotion review, kept separate from
                                           -- entries — queue rows are never searchable and never counted by memory_stats.
                                           -- Capacity/eviction lives on this table only (the shared tier stays curated and sweep-exempt).

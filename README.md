@@ -30,6 +30,7 @@ flowchart LR
 ```
 
 ## What's new
+- **`project_id_token_get` mints and registers a project id (ADR-0089); `memory_performance` now reports the maintenance-job, embed-drain, replace-lock and query-truncation series.** (1.33.2) [#563](https://github.com/Arasz/ai-raccoon/pull/563) · [#535](https://github.com/Arasz/ai-raccoon/pull/535) · [#548](https://github.com/Arasz/ai-raccoon/pull/548)
 - **Two knobs bound the embedding engine — `settings model threads <n>` and `settings maintenance embed-rows-per-run <n>` — and `doctor` shows the effective thread count.** (1.33.0) [ADR-0091](docs/adr/0091-the-event-pump-never-blocks-a-producer.md)
 - **The default code model installs with one command — `ai-raccoon model set code default`.** (1.32.0) [#453](https://github.com/Arasz/ai-raccoon/pull/453)
 - **Cloud snapshots are authenticity-checked (HMAC) before attach, and model activation verifies sha256 pins.** (1.31.0) [#431](https://github.com/Arasz/ai-raccoon/pull/431) · [#429](https://github.com/Arasz/ai-raccoon/pull/429)

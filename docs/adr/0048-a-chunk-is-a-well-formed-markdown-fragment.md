@@ -67,6 +67,40 @@ Three changes to `MarkdownChunker` carry it:
 3. **The mid-region bail-out is removed.** A fence region now runs to its closing delimiter or EOF.
    This is what re-aligns fence parity for the rest of the document.
 
+> **Scope amendment — 2026-08-23, #538 (revised on the gate's #538 follow-up, QA'd on PR #543).**
+> A second guarantee joined fence balance without a title change: a deferral never trades away a
+> chunk's only real content — `DeferOpenSection` refuses to cut a heading loose when nothing but
+> other headings and blanks would remain (a lone heading is exactly as unindexable as a lone blank
+> line). **Except** a section longer than any one chunk, whose heading opens only the first of its
+> chunks and the rest continues headless (deferring it further would never terminate), and only
+> heading levels 1–2 count as section openers to begin with, excluding the ingest `## Source:`
+> provenance header — matching the headings `HeadingPathParser` keeps (docs/adr/0004), so a `###`+
+> subheading or a `## Source:` line at a chunk tail never triggers a defer that shrinks the chunk
+> without changing its label. A chunk can still *open* a section with no content of its own when
+> the greedy pack itself — not the deferral rule — cannot fit any body beside the heading (an
+> oversized next unit, or headers alone exhausting the budget), or at an overlay ratio that leaves
+> room for one unit; the label problem that shape used to cause is closed one layer up (next
+> amendment). `MarkdownChunker.DeferOpenSection`.
+
+> **Scope amendment — 2026-08-23, #549/#550 (PR #543).** A chunk's section label no longer comes
+> from re-reading the chunk's own text. `MarkdownChunker.ChunkWithHeadings` returns each chunk with
+> the heading path in force at its first contentful new unit (overlay units excluded; `""` when the
+> chunk has no contentful new unit at all) and the leaf of every section the chunk holds content
+> for; `FileIngestor` stores those leaves as `section` (joined, since the column is an FTS column
+> and a `file#section` anchor — docs/adr/0003 — matches by phrase) instead of calling
+> `HeadingPathParser` on the chunk, and refreshes the column on the dedup path so an
+> already-ingested bank gets the label without a re-embed. Every chunk of a section therefore
+> satisfies that section's anchor — continuation chunks, the first chunk of a unit too large to sit
+> beside its heading, and a one-chunk document holding several whole sections — and a chunk that
+> merely opens a section claims none. Chunk text, boundaries and budgets are unchanged
+> (docs/adr/0036 untouched), except that a whitespace-only chunk is no longer emitted. Measured on
+> 2 000 seeded documents at 254/48 (design probe, PR #543): chunks with no section 22 636/29 605 →
+> 0; a single first-unit label disagreeing with the section owning the chunk's last body line
+> 173/29 604 (0.58 %, all straddle chunks) — which is why the column carries every section the
+> chunk holds rather than one. `heading_path` and the structure embedding still come from
+> `EntryEmbedder`'s re-parse and are unchanged; aligning them moves docs/adr/0004's gates and is
+> tracked as #562. `MarkdownChunker.ChunkWithHeadings`, `HeadingStack`, `TextChunk`.
+
 `AiRaccoon.Core.Chunking` stays infrastructure-free: all of this is built from the already-injected
 `TokenCount` delegate.
 
