@@ -192,13 +192,17 @@ public class SettingsCommandsTests
         var (showExit, showOut, _) = await Run(["settings", "model", "show"], store);
 
         setExit.ShouldBe(0);
-        setOut.Trim().ShouldBe("embedding threads set to 3; takes effect on the next server restart");
+        setOut.Trim().ShouldBe("embedding threads set to 3 (setting); takes effect on the next server restart");
         showExit.ShouldBe(0);
-        showOut.ShouldContain("threads: 3");
+        showOut.ShouldContain("threads: 3 (setting)");
         store.Settings["embedding.threads"].ShouldBe("3");
     }
 
-    /// <summary>0 is a valid, explicit value meaning "ORT's own default" — not garbage.</summary>
+    /// <summary>
+    ///     0 is a valid, explicit value meaning "ORT's own default" — not garbage. G4: the set
+    ///     confirmation and `show` must print the same phrase doctor does for the same stored value
+    ///     — `&lt;value-or-"ORT default"&gt; (&lt;source&gt;)` — not a bespoke spelling each.
+    /// </summary>
     [Fact]
     public async Task ModelThreadsSet_Zero_RestoresOrtDefault()
     {
@@ -208,8 +212,8 @@ public class SettingsCommandsTests
         var (_, showOut, _) = await Run(["settings", "model", "show"], store);
 
         setExit.ShouldBe(0);
-        setOut.ShouldContain("ORT default");
-        showOut.ShouldContain("threads: 0 (ORT default)");
+        setOut.Trim().ShouldBe("embedding threads set to ORT default (setting); takes effect on the next server restart");
+        showOut.ShouldContain("threads: ORT default (setting)");
         store.Settings["embedding.threads"].ShouldBe("0");
     }
 
@@ -228,13 +232,15 @@ public class SettingsCommandsTests
         store.Settings.ShouldNotContainKey("embedding.threads");
     }
 
+    /// <summary>G4: an unset row resolves to the halved-core default and renders like doctor's own unset case.</summary>
     [Fact]
     public async Task ModelShow_NoThreadsRow_PrintsUnsetDefault()
     {
         var (exit, stdout, _) = await Run(["settings", "model", "show"], new FakeConfigStore());
 
         exit.ShouldBe(0);
-        stdout.ShouldContain("threads: (unset — default max(1, logicalCores/2))");
+        var expected = Math.Max(1, Environment.ProcessorCount / 2);
+        stdout.ShouldContain($"threads: {expected} (halved-core default)");
     }
 
     [Fact]

@@ -135,15 +135,13 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
             var raw = await TableExistsAsync(connection, "settings", cancellationToken)
                 ? await ReadSettingAsync(connection, EmbeddingSettingsKeys.Threads, cancellationToken)
                 : null;
-            var threads = EmbeddingService.TryParseThreadsSetting(raw, out var explicitThreads)
-                ? explicitThreads
-                : EmbeddingService.HalvedCoreThreadDefault(Environment.ProcessorCount);
-            return new EmbeddingThreadsState(threads, EmbeddingService.ThreadCountSource(raw));
+            var (threads, source) = EmbeddingService.ResolveThreadCountForDisplay(raw);
+            return new EmbeddingThreadsState(threads, source);
         }
         catch (SqliteException)
         {
-            return new EmbeddingThreadsState(EmbeddingService.HalvedCoreThreadDefault(Environment.ProcessorCount),
-                EmbeddingService.ThreadCountSource(null));
+            var (threads, source) = EmbeddingService.ResolveThreadCountForDisplay(null);
+            return new EmbeddingThreadsState(threads, source);
         }
     }
 
