@@ -105,7 +105,8 @@ public static class TestData
         CancellationToken cancellationToken = default)
     {
         var service = new EmbedDrainService(pump, factory, entryEmbedder, codeEmbedder ?? new FakeCodeEmbedder(),
-            new SqliteSettingsStore(factory), TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
+            new SqliteSettingsStore(factory), NoOpMeasurementRecorder.Instance, TimeProvider.System,
+            TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
         foreach (var request in pump.DrainUpTo(int.MaxValue))
         {
             await service.DrainOnceAsync(request, cancellationToken).ConfigureAwait(false);
@@ -571,6 +572,8 @@ public sealed class NoOpCodeSearchService : ICodeSearchService
 /// <summary>Discards every measurement — for tests that need an <see cref="IMeasurementRecorder" /> but do not assert on it.</summary>
 public sealed class NoOpMeasurementRecorder : IMeasurementRecorder
 {
+    public static NoOpMeasurementRecorder Instance { get; } = new();
+
     public void Record(Measurement measurement)
     {
     }

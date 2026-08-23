@@ -1,5 +1,6 @@
 using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Metrics;
 using AiRaccoon.Core.Observability;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -38,6 +39,8 @@ public sealed partial class EmbedDrainService(
     IEntryEmbedder entryEmbedder,
     ICodeEmbedder codeEmbedder,
     ISettingsStore settings,
+    IMeasurementRecorder measurements,
+    TimeProvider timeProvider,
     IOperationTelemetry telemetry,
     ILogger<EmbedDrainService> logger)
     : BackgroundService
@@ -105,6 +108,7 @@ public sealed partial class EmbedDrainService(
     {
         Log.DrainStarted(logger, request.Corpus);
         using var pass = telemetry.Begin(OperationName);
+        var startedAt = timeProvider.GetTimestamp();
         try
         {
             var raw = await settings.GetSettingAsync(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal, cancellationToken)
@@ -131,7 +135,9 @@ public sealed partial class EmbedDrainService(
             }
 
             pass.Succeeded();
+            pass.RecordRows(drained);
             Log.DrainFinished(logger, request.Corpus, drained);
+            RecordDrainMetrics(request.Corpus, drained, timeProvider.GetElapsedTime(startedAt));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -142,6 +148,21 @@ public sealed partial class EmbedDrainService(
             pass.Failed(ex);
             throw;
         }
+    }
+
+    /// <summary>
+    ///     WP11 (log-values-as-metrics): EventId 1003's row count, plus the pass duration, recorded
+    ///     beside the log line above — same values, not a second computation. Bank-wide (like
+    ///     job.*): a drain pass has a corpus, not a project.
+    /// </summary>
+    private void RecordDrainMetrics(EmbedCorpus corpus, int rows, TimeSpan elapsed)
+    {
+        var corpusName = corpus.ToString().ToLowerInvariant();
+        var now = timeProvider.GetUtcNow();
+        measurements.Record(new Measurement(MetricsConfigKeys.DrainRowsMetricName(corpusName),
+            MeasurementKind.Histogram, rows, "count", now, MetricsConfigKeys.SelfMetricsProjectId));
+        measurements.Record(new Measurement(MetricsConfigKeys.DrainDurationMetricName(corpusName),
+            MeasurementKind.Histogram, elapsed.TotalMilliseconds, "ms", now, MetricsConfigKeys.SelfMetricsProjectId));
     }
 
     /// <summary>The most recently warned-about invalid raw value, or null once a valid one is seen — this pass runs every drain, so warning on every pass for a persistent bad value would never stop (review finding 2, #517).</summary>
