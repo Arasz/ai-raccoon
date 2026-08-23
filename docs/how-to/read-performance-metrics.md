@@ -61,15 +61,22 @@ hours in 1-minute buckets (180 points):
 
 A few things worth knowing before reading a report:
 
-- **The series list is fixed, not discovered.** It is every tool on the server's own tool
-  inventory plus `SearchTimings.SeriesNames` — the nine `memory_search` phases and the measured
-  `search.total` — never `SELECT DISTINCT name FROM metrics` — so a tool, phase or `search.total`
-  nothing has called yet still appears, at `count: 0`, rather than being silently omitted.
+- **The tool/phase series list is fixed, not discovered.** It is every tool on the server's own
+  tool inventory plus `SearchTimings.SeriesNames` — the nine `memory_search` phases and the
+  measured `search.total` — so a tool or phase nothing has called yet still appears, at
+  `count: 0`, rather than being silently omitted.
+- **Maintenance-job series ARE discovered, by prefix, and only in the self-metrics report.**
+  `job.<name>.duration_ms` on every completed maintenance-job run, `job.<name>.rows` for a job
+  that reports an outstanding-row count (#477) — `<name>` is dynamic (one per job), so these are
+  found with a `name LIKE 'job.%'` query over the requested window rather than a fixed list, and
+  only appear when you ask for the whole-bank self-metrics project id (see below), never a
+  `count: 0` placeholder if that job never ran in the window.
 - **A quiet window is an empty series, never an error.** Asking about a bank with no traffic in
   the requested window is a well-formed answer ("nothing happened"), not a failure.
-- **The report is project-scoped.** It covers only the `projectId` you pass; there is no
-  whole-bank view yet (deferred — see
-  [the implementation plan](../plans/2026-08-15-performance-metrics-implementation.md), item D6).
+- **The report is project-scoped**, with one exception: passing the reserved
+  `__self_metrics__` project id returns the bank-wide series instead — `metrics.dropped`,
+  `metrics.flush.*`, and the `job.*` series above. There is still no per-tenant whole-bank view
+  (deferred — see [the implementation plan](../plans/2026-08-15-performance-metrics-implementation.md), item D6).
 - **`windowMinutes` / `bucketMinutes`** override the defaults. A `bucketMinutes` wider than
   `windowMinutes` is never rejected — it clamps to the window and the series returns one averaged
   point covering the whole thing.
