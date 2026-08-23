@@ -133,6 +133,13 @@ public sealed partial class SqliteMemoryStore
     ///     <paramref name="keepCode" /> null (#436) means the ingest has no trustworthy code-corpus
     ///     chunk set to prune by — never a stand-in chunker's zero chunks read as "delete
     ///     everything" — so the code leg is skipped entirely rather than run with an empty keep list.
+    ///     <para>
+    ///         WP12 review finding: a KEPT hash (still in <paramref name="keep" />) is never deleted
+    ///         from `entries`, so the cascade above never fires for it — a discarded hash whose row
+    ///         survives a replace (unchanged content) would otherwise keep its stale
+    ///         `promotion_queue` row forever. <see cref="MemorySql.DeleteDiscardedQueueRowsForSourcePath" />
+    ///         sweeps that residue explicitly, scoped to this path.
+    ///     </para>
     /// </summary>
     private async Task PruneAsync(SqliteConnection connection, string projectId, string path,
         IReadOnlyList<string> keep, IReadOnlyList<string>? keepCode, CancellationToken cancellationToken)
@@ -141,6 +148,10 @@ public sealed partial class SqliteMemoryStore
             .ConfigureAwait(false);
         await connection.ExecuteAsync(
                 Def(MemorySql.CaptureQueueRowsForSourcePath,
+                    new { projectId, path, pathPrefix = LikePattern.Escape(path) + "/%" }, cancellationToken))
+            .ConfigureAwait(false);
+        await connection.ExecuteAsync(
+                Def(MemorySql.DeleteDiscardedQueueRowsForSourcePath,
                     new { projectId, path, pathPrefix = LikePattern.Escape(path) + "/%" }, cancellationToken))
             .ConfigureAwait(false);
         await connection.ExecuteAsync(keep.Count == 0
@@ -171,15 +182,22 @@ public sealed partial class SqliteMemoryStore
         return new ReplaceResult(result.Ran, result.Corpus);
     }
 
+    /// <summary>A stale claim (its holder crashed mid-chunk and never released it) can be reclaimed after this long.</summary>
+    private static readonly TimeSpan ClaimStaleAfter = TimeSpan.FromMinutes(5);
+
     /// <summary>
     ///     Replace-by-path (WP12 Fix A): chunking runs OUTSIDE the write lock, exactly like
     ///     <see cref="ReplaceForDirectIngestAsync" /> — a cheap unlocked <paramref name="guard" />
-    ///     read decides whether to bother at all, then <see cref="IFileIngestor.IngestFileAsync" />
-    ///     runs autocommit (file read, chunk, hash, insert; rows left `embed_state = 'pending'`), and
-    ///     only the short prune-and-fingerprint tail takes <c>BEGIN IMMEDIATE</c>: the guard's
-    ///     authoritative re-check (a racing replace that lost re-chunked for nothing, but
-    ///     <see cref="PruneAsync" /> keeps by hash so it writes nothing twice), the delete of
-    ///     whatever the ingest did not account for, and the fingerprint write.
+    ///     read decides whether to bother at all, then (when a <paramref name="guard" /> exists,
+    ///     i.e. the watch digest, never the unconditional repair) a short claim transaction decides
+    ///     which of two racing replaces on the same path gets to chunk it —
+    ///     <see cref="MemorySql.TryClaimWatchDigest" />; the fingerprint alone cannot gate this,
+    ///     since it is not written until everything else is done. The loser declines without ever
+    ///     calling the chunker. The claim's winner runs
+    ///     <see cref="IFileIngestor.IngestFileAsync" /> autocommit (file read, chunk, hash, insert;
+    ///     rows left `embed_state = 'pending'`), then a short prune-and-fingerprint transaction:
+    ///     the delete of whatever the ingest did not account for, the fingerprint write, and
+    ///     releasing the claim.
     ///     <para>
     ///         Traded against the old delete-then-ingest shape: a reader can see the file's old AND
     ///         new chunks during the short window between the ingest's autocommit and the prune's
@@ -205,13 +223,102 @@ public sealed partial class SqliteMemoryStore
             return new ReplaceCoreResult(false, 0, CorpusKind.Neither);
         }
 
-        // fileIngestor self-filters by extension and, when the path is a code file, dispatches to
-        // ICodeIngestor internally (FileIngestor.IngestFileAsync) — one call covers both corpora.
-        // Autocommit, outside any lock: this is the chunker the write lock used to be held through.
-        var ingestResult = await fileIngestor
-            .IngestFileAsync(connection, projectId, path, context, cancellationToken)
-            .ConfigureAwait(false);
+        if (guard is not null)
+        {
+            var claimed = await TryClaimChunkerAsync(connection, projectId, path, guard, cancellationToken)
+                .ConfigureAwait(false);
+            if (!claimed)
+            {
+                // Another replace on this exact path already owns the chunk — its own commit
+                // (fingerprint + released claim) will make the target state durable. Chunking here
+                // too would defeat the claim's whole point: chunk this path exactly once.
+                return new ReplaceCoreResult(false, 0, CorpusKind.Neither);
+            }
+        }
 
+        try
+        {
+            // fileIngestor self-filters by extension and, when the path is a code file, dispatches to
+            // ICodeIngestor internally (FileIngestor.IngestFileAsync) — one call covers both corpora.
+            // Autocommit, outside any lock: this is the chunker the write lock used to be held through.
+            var ingestResult = await fileIngestor
+                .IngestFileAsync(connection, projectId, path, context, cancellationToken)
+                .ConfigureAwait(false);
+
+            var waitFrom = timeProvider.GetTimestamp();
+            await connection.ExecuteAsync(
+                    new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            var waitMs = timeProvider.GetElapsedTime(waitFrom).TotalMilliseconds;
+            var heldFrom = timeProvider.GetTimestamp();
+            try
+            {
+                await PruneAsync(connection, projectId, path, ingestResult.ChunkHashes ?? [],
+                        ingestResult.CodeChunkHashes, cancellationToken)
+                    .ConfigureAwait(false);
+                if (guard is not null)
+                {
+                    await connection.ExecuteAsync(Def(MemorySql.ReleaseWatchDigestClaim,
+                            new { projectId, path }, cancellationToken))
+                        .ConfigureAwait(false);
+                }
+
+                // B1: a code-only file a stand-in chunker (e.g. NoOpCodeChunker) produced zero rows
+                // for must NOT be fingerprinted — a fingerprint here would hash-skip it forever, even
+                // past the point a real chunker starts producing rows for unchanged content. Every
+                // other outcome (memory match, mixed match, no corpus matches at all) fingerprints
+                // as before.
+                if (fingerprint && ingestResult.FingerprintEligible)
+                {
+                    await connection.ExecuteAsync(
+                            Def(MemorySql.UpsertWatchFile,
+                                new
+                                {
+                                    projectId, path, fileHash,
+                                    updatedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds()
+                                }, cancellationToken))
+                        .ConfigureAwait(false);
+                }
+
+                await connection.ExecuteAsync(
+                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                var heldMs = timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds;
+                Log.TransactionHeld(logger, waitMs, heldMs, ingestResult.RowsInserted);
+                RecordReplaceLockMetrics(projectId, waitMs, heldMs, ingestResult.RowsInserted);
+                return new ReplaceCoreResult(true, ingestResult.RowsInserted, ingestResult.WrittenCorpus);
+            }
+            catch
+            {
+                await connection.ExecuteAsync(
+                        new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                throw;
+            }
+        }
+        catch when (guard is not null)
+        {
+            // The claim must never outlive a failed chunk/prune — otherwise every later replace of
+            // this path declines forever, thinking someone else still owns it (ClaimStaleAfter is
+            // the crash-only backstop for this same release, not the fast path).
+            await using var release = await factory.OpenBankAsync(CancellationToken.None).ConfigureAwait(false);
+            await release.ExecuteAsync(Def(MemorySql.ReleaseWatchDigestClaim, new { projectId, path },
+                    CancellationToken.None))
+                .ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    /// <summary>
+    ///     A short <c>BEGIN IMMEDIATE</c> that re-checks <paramref name="guard" /> authoritatively
+    ///     (a racer that already committed while this call waited for the lock) and, if still
+    ///     stale, claims the chunker for <paramref name="path" /> — <see cref="MemorySql.TryClaimWatchDigest" />'s
+    ///     affected-row count says whether this call now owns it. Either way the lock is released
+    ///     immediately after; the chunker itself never runs under it.
+    /// </summary>
+    private async Task<bool> TryClaimChunkerAsync(SqliteConnection connection, string projectId, string path,
+        Func<SqliteConnection, Task<bool>> guard, CancellationToken cancellationToken)
+    {
         var waitFrom = timeProvider.GetTimestamp();
         await connection.ExecuteAsync(
                 new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
@@ -220,46 +327,34 @@ public sealed partial class SqliteMemoryStore
         var heldFrom = timeProvider.GetTimestamp();
         try
         {
-            // Authoritative re-check under the lock: a racing replace that lost re-chunked for
-            // nothing above, but writes nothing twice (PruneAsync keeps the rows it just
-            // rediscovered, since the winner's own ingest already produced the same hashes).
-            if (guard is not null && !await guard(connection).ConfigureAwait(false))
+            if (!await guard(connection).ConfigureAwait(false))
             {
                 await connection.ExecuteAsync(
                         new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
                     .ConfigureAwait(false);
-                var heldMs = timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds;
-                Log.TransactionHeld(logger, waitMs, heldMs, 0);
-                RecordReplaceLockMetrics(projectId, waitMs, heldMs, 0);
-                return new ReplaceCoreResult(false, 0, CorpusKind.Neither);
+                var declinedHeldMs = timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds;
+                Log.TransactionHeld(logger, waitMs, declinedHeldMs, 0);
+                RecordReplaceLockMetrics(projectId, waitMs, declinedHeldMs, 0);
+                return false;
             }
 
-            await PruneAsync(connection, projectId, path, ingestResult.ChunkHashes ?? [],
-                    ingestResult.CodeChunkHashes, cancellationToken)
-                .ConfigureAwait(false);
-            // B1: a code-only file a stand-in chunker (e.g. NoOpCodeChunker) produced zero rows for
-            // must NOT be fingerprinted — a fingerprint here would hash-skip it forever, even past
-            // the point a real chunker starts producing rows for unchanged content. Every other
-            // outcome (memory match, mixed match, no corpus matches at all) fingerprints as before.
-            if (fingerprint && ingestResult.FingerprintEligible)
-            {
-                await connection.ExecuteAsync(
-                        Def(MemorySql.UpsertWatchFile,
-                            new
-                            {
-                                projectId, path, fileHash,
-                                updatedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds()
-                            }, cancellationToken))
-                    .ConfigureAwait(false);
-            }
-
+            var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
+            var claimed = await connection.ExecuteAsync(
+                    Def(MemorySql.TryClaimWatchDigest,
+                        new { projectId, path, claimedAt = now, staleAfterSeconds = (long)ClaimStaleAfter.TotalSeconds },
+                        cancellationToken))
+                .ConfigureAwait(false) > 0;
             await connection.ExecuteAsync(
                     new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
-            var heldMsCommitted = timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds;
-            Log.TransactionHeld(logger, waitMs, heldMsCommitted, ingestResult.RowsInserted);
-            RecordReplaceLockMetrics(projectId, waitMs, heldMsCommitted, ingestResult.RowsInserted);
-            return new ReplaceCoreResult(true, ingestResult.RowsInserted, ingestResult.WrittenCorpus);
+            if (!claimed)
+            {
+                var heldMs = timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds;
+                Log.TransactionHeld(logger, waitMs, heldMs, 0);
+                RecordReplaceLockMetrics(projectId, waitMs, heldMs, 0);
+            }
+
+            return claimed;
         }
         catch
         {

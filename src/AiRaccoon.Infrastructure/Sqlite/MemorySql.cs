@@ -223,6 +223,23 @@ internal static class MemorySql
                                                                         AND (e.path = @path OR e.path LIKE @pathPrefix ESCAPE '\'))
                                                         """;
 
+    // WP12 Fix A gap: a KEPT hash (still in the ingest's "keep" list) is never deleted from entries,
+    // so promotion_queue_entries_ad's cascade — the only thing that used to purge a discarded hash's
+    // queue row on a replace — never fires for it. This sweeps that residue explicitly, scoped to
+    // this path so it costs proportional to one file, not the whole project's queue.
+    public static readonly string DeleteDiscardedQueueRowsForSourcePath = $"""
+                                                        DELETE FROM promotion_queue
+                                                        WHERE project_id = @projectId
+                                                          AND EXISTS (SELECT 1 FROM promotion_discards d
+                                                                      WHERE d.project_id = promotion_queue.project_id
+                                                                        AND d.hash = promotion_queue.hash)
+                                                          AND EXISTS (SELECT 1 FROM entries e
+                                                                      WHERE e.project_id = promotion_queue.project_id
+                                                                        AND e.hash = promotion_queue.hash
+                                                                        AND {ProjectRows.Scope("e.")}
+                                                                        AND (e.path = @path OR e.path LIKE @pathPrefix ESCAPE '\'))
+                                                        """;
+
     public static readonly string RestoreQueueRowsStillBacked = $"""
                                                       INSERT INTO promotion_queue (project_id, hash, path, value, source_file, score, reasons, created_at, updated_at)
                                                       SELECT r.project_id, r.hash, r.path, r.value, r.source_file, r.score, r.reasons, r.created_at, r.updated_at
@@ -304,6 +321,25 @@ internal static class MemorySql
 
     public const string SelectWatchFilesByProject =
         "SELECT path FROM watch_files WHERE project_id = @projectId";
+
+    /// <summary>
+    ///     WP12 Fix A: claims the right to chunk (project_id, path) — 1 row affected means this
+    ///     caller now owns it (a fresh claim, or a reclaim of one stale by more than
+    ///     <c>@staleAfterSeconds</c>); 0 means another, still-fresh claim already owns it and this
+    ///     caller must not chunk. <see cref="SqliteMemoryStore.PruneAsync" /> releases the claim
+    ///     inside the same transaction that writes the fingerprint, so a released claim and a
+    ///     durable fingerprint are never observed apart.
+    /// </summary>
+    public const string TryClaimWatchDigest = """
+                                              INSERT INTO watch_digest_claims (project_id, path, claimed_at)
+                                              VALUES (@projectId, @path, @claimedAt)
+                                              ON CONFLICT(project_id, path) DO UPDATE SET claimed_at = excluded.claimed_at
+                                              WHERE excluded.claimed_at - watch_digest_claims.claimed_at > @staleAfterSeconds
+                                              """;
+
+    public const string ReleaseWatchDigestClaim = """
+                                                  DELETE FROM watch_digest_claims WHERE project_id = @projectId AND path = @path
+                                                  """;
 
     // Counts the project's contexts, labelled or not (ADR-0045) — PendingCount has always counted
     // every row carrying the project id, and a bank holding one context-labelled entry reported
