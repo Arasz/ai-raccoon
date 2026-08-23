@@ -47,6 +47,7 @@ public sealed class EmbeddingSessionThreadLoggingTests : IDisposable
         record.Level.ShouldBe(LogLevel.Information);
         record.StructuredState.ShouldNotBeNull();
         record.StructuredState!.Single(kv => kv.Key == "Threads").Value.ShouldBe("3");
+        record.StructuredState!.Single(kv => kv.Key == "ThreadsDisplay").Value.ShouldBe("3");
         record.StructuredState!.Single(kv => kv.Key == "Source").Value.ShouldBe("setting");
     }
 
@@ -63,10 +64,15 @@ public sealed class EmbeddingSessionThreadLoggingTests : IDisposable
         var record = logger.Collector.GetSnapshot().ShouldHaveSingleItem();
         record.Id.Id.ShouldBe(428);
         record.StructuredState!.Single(kv => kv.Key == "Threads").Value.ShouldBe(expectedThreads.ToString());
+        record.StructuredState!.Single(kv => kv.Key == "ThreadsDisplay").Value.ShouldBe(expectedThreads.ToString());
         record.StructuredState!.Single(kv => kv.Key == "Source").Value.ShouldBe("halved-core default");
     }
 
-    /// <summary>#522 review: 0 is a real setting meaning "ORT's own default", not zero threads — a bare "0" misreads as broken.</summary>
+    /// <summary>
+    ///     #522 review: 0 is a real setting meaning "ORT's own default", not zero threads — a bare
+    ///     "0" misreads as broken. WP4/#524 follow-up: the structured `Threads` value stays the raw
+    ///     `int` a sink can aggregate on; the human phrase lives in its own `ThreadsDisplay` field.
+    /// </summary>
     [Fact]
     public void CreateGenerator_Local_ExplicitZeroThreadsSetting_LogsOrtDefaultDisplay()
     {
@@ -79,7 +85,8 @@ public sealed class EmbeddingSessionThreadLoggingTests : IDisposable
 
         var record = logger.Collector.GetSnapshot().ShouldHaveSingleItem();
         record.Id.Id.ShouldBe(428);
-        record.StructuredState!.Single(kv => kv.Key == "Threads").Value.ShouldBe("ORT default");
+        record.StructuredState!.Single(kv => kv.Key == "Threads").Value.ShouldBe("0");
+        record.StructuredState!.Single(kv => kv.Key == "ThreadsDisplay").Value.ShouldBe("ORT default");
         record.StructuredState!.Single(kv => kv.Key == "Source").Value.ShouldBe("setting");
     }
 }
