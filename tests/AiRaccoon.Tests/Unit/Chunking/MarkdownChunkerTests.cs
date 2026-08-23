@@ -157,6 +157,52 @@ public class MarkdownChunkerTests
     }
 
     [Fact]
+    public void Split_SectionContinuesPastChunkTail_DefersHeadingAndItsBodyToNextChunk()
+    {
+        // Issue #538 (a #489 residual): #489 only handed back a heading that dangled bare at a
+        // chunk's tail. When the budget instead runs out a few body lines AFTER the heading, the
+        // heading plus those lines stay at the tail and the whole chunk gets mislabeled with a
+        // section that is ~90% absent from it. A heading opens its chunk unless its whole section
+        // fits in the one that would otherwise hold it.
+        var text = "# Title\n\n## Section A\nAAAA\n\n## Section B\nBBBB\nCCCC\n";
+
+        var chunks = new MarkdownChunker(CharCount).Chunk(text, 46);
+
+        chunks.ShouldBe(["# Title\n\n## Section A\nAAAA\n\n", "## Section B\nBBBB\nCCCC\n"]);
+        chunks[0].ShouldNotContain("## Section B");
+        HeadingPathParser.Parse(chunks[0]).ShouldBe("Title > Section A");
+        chunks[1].ShouldStartWith("## Section B");
+    }
+
+    [Fact]
+    public void Split_NextSectionFitsEntirelyInRemainingBudget_StaysInTheSameChunk()
+    {
+        // Negative control for #538: a heading must be deferred only when its section is actually
+        // cut by the chunk boundary. When the whole next section already fits alongside the
+        // previous one, deferring it anyway would just shrink chunks for no reason.
+        var text = "# Title\n\n## Section A\nAAAA\n\n## Section B\nBBBB\n\n## Section C\nCCCC\n";
+
+        var chunks = new MarkdownChunker(CharCount).Chunk(text, 47);
+
+        chunks.ShouldBe(["# Title\n\n## Section A\nAAAA\n\n## Section B\nBBBB\n\n", "## Section C\nCCCC\n"]);
+    }
+
+    [Fact]
+    public void Split_SectionLargerThanMaxTokens_HeadingOpensItsFirstChunkAndSplittingTerminates()
+    {
+        // Negative control for #538: a section too long to fit any chunk must still have its
+        // heading open the first chunk that carries its content — deferring it forever would
+        // either loop or emit an empty chunk. The heading-as-first-new-unit guard is what stops
+        // the generalized rule from deferring it past the point where it can make no progress.
+        var text = "# Title\n\n## Big Section\nLINE1\nLINE2\nLINE3\nLINE4\nLINE5\n";
+
+        var chunks = new MarkdownChunker(CharCount).Chunk(text, 30);
+
+        chunks.ShouldBe(["# Title\n\n", "## Big Section\nLINE1\nLINE2\n", "LINE3\nLINE4\nLINE5\n"]);
+        chunks.ShouldAllBe(chunk => CharCount(chunk) <= 30 && chunk.Length > 0);
+    }
+
+    [Fact]
     public void Split_IdenticalInput_ProducesIdenticalChunks()
     {
         var text = "aaaa\nbbbb\ncccc\ndddd\n";

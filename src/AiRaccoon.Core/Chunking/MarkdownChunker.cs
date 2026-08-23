@@ -101,7 +101,7 @@ public sealed class MarkdownChunker : IMarkdownChunker
         int deferred;
         do
         {
-            deferred = DeferTrailingHeading(chunkUnits, newUnitCount);
+            deferred = DeferOpenSection(chunkUnits, newUnitCount, units, c);
             newUnitCount -= deferred;
             c -= deferred;
         } while (deferred > 0);
@@ -111,21 +111,33 @@ public sealed class MarkdownChunker : IMarkdownChunker
 
     /// <summary>
     ///     A heading line must open the chunk that holds its section's content, not end the previous
-    ///     one empty-handed (#489): when this chunk's new units trail off in a heading — followed by
-    ///     nothing but blank lines, if anything — that heading is handed back to the next chunk.
-    ///     Returns 0, leaving the heading in place, when it is the chunk's only new unit; deferring it
-    ///     then would make no forward progress.
+    ///     one empty-handed (#489, generalized by #538): the LAST heading among this chunk's new
+    ///     units opens a section that is cut by the chunk boundary whenever the next unit after the
+    ///     chunk exists and is not itself a heading — that heading and everything after it are handed
+    ///     back to the next chunk, whether "everything after it" is a few body lines (#538) or nothing
+    ///     but blank lines (#489's own case). The heading is never deferred when it is the chunk's
+    ///     first new unit; deferring it then would make no forward progress and would defer forever a
+    ///     section too long to fit in any one chunk.
     /// </summary>
-    private static int DeferTrailingHeading(List<Unit> chunkUnits, int newUnitCount)
+    private static int DeferOpenSection(List<Unit> chunkUnits, int newUnitCount, List<Unit> units, int cursor)
     {
         var newStart = chunkUnits.Count - newUnitCount;
-        var i = chunkUnits.Count - 1;
-        while (i >= newStart && IsBlankUnit(chunkUnits[i]))
+        var i = -1;
+        for (var idx = chunkUnits.Count - 1; idx > newStart; idx--)
         {
-            i--;
+            if (IsHeadingUnit(chunkUnits[idx]))
+            {
+                i = idx;
+                break;
+            }
         }
 
-        if (i < newStart || !IsHeadingUnit(chunkUnits[i]))
+        if (i < 0)
+        {
+            return 0;
+        }
+
+        if (cursor >= units.Count || IsHeadingUnit(units[cursor]))
         {
             return 0;
         }
@@ -410,8 +422,6 @@ public sealed class MarkdownChunker : IMarkdownChunker
     }
 
     private static bool IsHeadingUnit(Unit unit) => unit.Lines.Count == 1 && IsHeadingLine(unit.Lines[0]);
-
-    private static bool IsBlankUnit(Unit unit) => unit.Lines.Count == 1 && string.IsNullOrWhiteSpace(unit.Lines[0]);
 
     /// <summary>ATX heading, levels 1-6 (a bare '#' or '#Text' does not count) — same shape HeadingPathParser parses.</summary>
     private static bool IsHeadingLine(string line)
