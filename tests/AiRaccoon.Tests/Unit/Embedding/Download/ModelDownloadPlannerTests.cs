@@ -433,6 +433,114 @@ public class ModelDownloadPlannerTests
         plan.PoolingProvenance.ShouldBe("sentence-transformers");
     }
 
+    /// <summary>
+    ///     #504: a two-output graph naming the pooled output FIRST
+    ///     (<c>[sentence_embedding, &lt;tail&gt;]</c>) must not let the unrecognized tail steal the
+    ///     pooled role — before this fix, <c>SelectTokenEmbeddingsOutput</c>'s naive
+    ///     <c>FirstOrDefault</c> fallback picked <c>sentence_embedding</c> itself as the token-level
+    ///     output, so the two names came out swapped.
+    /// </summary>
+    [Fact]
+    public void Pooling_TwoOutputs_SentenceEmbeddingNamedFirst_TailIsTheTokenLevelOutput()
+    {
+        var probe = BgeM3Probe() with { OutputNames = ["sentence_embedding", "hidden_states"] };
+
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), probe);
+
+        plan.EmbeddingOutput.ShouldBe("sentence_embedding");
+        plan.TokenEmbeddingsOutput.ShouldBe("hidden_states");
+        plan.PoolingMode.ShouldBe(PoolingMode.ModelOutput);
+        plan.PoolingProvenance.ShouldContain("placeholder");
+    }
+
+    /// <summary>
+    ///     #504's other named shape — a recognized token-level name plus an unrecognized,
+    ///     non-embedding-looking tail (<c>[token_embeddings, &lt;tail&gt;]</c>) — pins the existing
+    ///     <c>outputs[^1]</c> fallback as the pooled output. Untested before this fix, not broken.
+    /// </summary>
+    [Fact]
+    public void Pooling_TwoOutputs_TokenEmbeddingsNamedFirst_TailIsThePooledOutput()
+    {
+        var probe = BgeM3Probe() with { OutputNames = ["token_embeddings", "pooler_output"] };
+
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), probe);
+
+        plan.TokenEmbeddingsOutput.ShouldBe("token_embeddings");
+        plan.EmbeddingOutput.ShouldBe("pooler_output");
+        plan.PoolingMode.ShouldBe(PoolingMode.ModelOutput);
+        plan.PoolingProvenance.ShouldContain("placeholder");
+    }
+
+    /// <summary>
+    ///     #504 B3: rank is a fact, a name is a guess — with both outputs' real rank known, the
+    ///     graph's declared shape decides regardless of which name the list gives first. Both
+    ///     shapes named in the issue, in BOTH orders, must land on the same (token, embedding) pair.
+    /// </summary>
+    [Theory]
+    [InlineData("sentence_embedding", "hidden_states")]
+    [InlineData("hidden_states", "sentence_embedding")]
+    public void Pooling_RankKnown_SelectsByRank_RegardlessOfNameOrder_UnrecognizedNames(string first, string second)
+    {
+        var probe = BgeM3Probe() with
+        {
+            OutputNames = [first, second],
+            OutputRanks = new Dictionary<string, int> { ["sentence_embedding"] = 2, ["hidden_states"] = 3 }
+        };
+
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), probe);
+
+        plan.TokenEmbeddingsOutput.ShouldBe("hidden_states");
+        plan.EmbeddingOutput.ShouldBe("sentence_embedding");
+        plan.PoolingMode.ShouldBe(PoolingMode.ModelOutput);
+        plan.PoolingProvenance.ShouldContain("placeholder");
+    }
+
+    /// <summary>The other named shape (a recognized token-level name plus an unrecognized tail),
+    /// same order-independence proof.</summary>
+    [Theory]
+    [InlineData("token_embeddings", "pooler_output")]
+    [InlineData("pooler_output", "token_embeddings")]
+    public void Pooling_RankKnown_SelectsByRank_RegardlessOfNameOrder_RecognizedTokenName(string first, string second)
+    {
+        var probe = BgeM3Probe() with
+        {
+            OutputNames = [first, second],
+            OutputRanks = new Dictionary<string, int> { ["token_embeddings"] = 3, ["pooler_output"] = 2 }
+        };
+
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), probe);
+
+        plan.TokenEmbeddingsOutput.ShouldBe("token_embeddings");
+        plan.EmbeddingOutput.ShouldBe("pooler_output");
+        plan.PoolingMode.ShouldBe(PoolingMode.ModelOutput);
+        plan.PoolingProvenance.ShouldContain("placeholder");
+    }
+
+    /// <summary>
+    ///     #504 B4 (round 2 review): "names as tie-breaker" means among candidates that SHARE the
+    ///     wanted rank, not "fall back to list order". Three outputs, two of them rank-2
+    ///     (<c>pooler_output</c> first in the list, <c>sentence_embedding</c> second) — the
+    ///     recognized name must win regardless of which one the graph lists first, never the
+    ///     first-found-by-rank.
+    /// </summary>
+    [Fact]
+    public void Pooling_ThreeOutputs_TiedRank_PrefersRecognizedNameOverListOrder()
+    {
+        var probe = BgeM3Probe() with
+        {
+            OutputNames = ["last_hidden_state", "pooler_output", "sentence_embedding"],
+            OutputRanks = new Dictionary<string, int>
+            {
+                ["last_hidden_state"] = 3, ["pooler_output"] = 2, ["sentence_embedding"] = 2
+            }
+        };
+
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), probe);
+
+        plan.TokenEmbeddingsOutput.ShouldBe("last_hidden_state");
+        plan.EmbeddingOutput.ShouldBe("sentence_embedding");
+    }
+
     [Fact]
     public void Pooling_Placeholder_WhenSentenceTransformersLayoutAbsent()
     {

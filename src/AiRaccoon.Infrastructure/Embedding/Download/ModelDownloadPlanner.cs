@@ -131,8 +131,12 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
             .ToList();
 
         var inputs = probe?.InputNames ?? [];
-        var tokenEmbeddingsOutput = probe is null ? null : SelectTokenEmbeddingsOutput(probe.OutputNames);
-        var embeddingOutput = probe is null ? null : SelectEmbeddingOutput(probe.OutputNames, tokenEmbeddingsOutput);
+        string? tokenEmbeddingsOutput = null;
+        string? embeddingOutput = null;
+        if (probe is not null)
+        {
+            (tokenEmbeddingsOutput, embeddingOutput) = SelectOutputs(probe);
+        }
 
         return new ModelDownloadPlan(
             repoId,
@@ -346,8 +350,7 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
     private static (PoolingMode Mode, NormalizationMode Normalization, string Provenance) PoolingDecision(
         IReadOnlyDictionary<string, string> rawFiles, OnnxGraphProbe? probe)
     {
-        var hasPooledOutput = probe is not null
-            && SelectEmbeddingOutput(probe.OutputNames, SelectTokenEmbeddingsOutput(probe.OutputNames)) is not null;
+        var hasPooledOutput = probe is not null && SelectOutputs(probe).EmbeddingOutput is not null;
 
         if (rawFiles.TryGetValue("1_Pooling/config.json", out var poolingJson))
         {
@@ -512,13 +515,66 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
                    && type.GetString()?.EndsWith(".Normalize", StringComparison.Ordinal) == true);
     }
 
+    /// <summary>
+    ///     #504: an ONNX rank is a fact, a name is a guess. With two or more outputs, selects
+    ///     token-level (<see cref="OnnxOutputRanks.TokenLevelRank" />) and pooled
+    ///     (<see cref="OnnxOutputRanks.PooledRank" />) by their real declared rank whenever the
+    ///     probe knows both roles — order-independent, since a rank does not move when a name
+    ///     does. When more than one output shares the wanted rank, a recognized name breaks the
+    ///     tie (round-2 review, B4) — list order never silently decides. Falls back to the name
+    ///     heuristic entirely only when rank is unknown for a role (including the sole-output
+    ///     #470/#475 shape, which the real rank check corrects later).
+    /// </summary>
+    private static (string? TokenEmbeddingsOutput, string? EmbeddingOutput) SelectOutputs(OnnxGraphProbe probe)
+    {
+        var outputs = probe.OutputNames;
+        if (outputs.Count <= 1)
+        {
+            return (outputs.Count == 0 ? string.Empty : outputs[0], null);
+        }
+
+        var tokenCandidates = outputs.Where(n => RankOf(probe, n) == OnnxOutputRanks.TokenLevelRank).ToList();
+        var embeddingCandidates = outputs.Where(n => RankOf(probe, n) == OnnxOutputRanks.PooledRank).ToList();
+        if (tokenCandidates.Count > 0 && embeddingCandidates.Count > 0)
+        {
+            return (PreferRecognizedName(tokenCandidates, IsTokenEmbeddingsName), PreferRecognizedName(embeddingCandidates, IsEmbeddingName));
+        }
+
+        var tokenByName = SelectTokenEmbeddingsOutput(outputs);
+        return (tokenByName, SelectEmbeddingOutput(outputs, tokenByName));
+    }
+
+    /// <summary>The first name a role's own recognized-names list matches, else the first
+    /// candidate — candidates are already partitioned by rank, so no exclusion is needed here the
+    /// way the pure name heuristic below needs one.</summary>
+    private static string PreferRecognizedName(IReadOnlyList<string> candidates, Func<string, bool> isRecognized) =>
+        candidates.FirstOrDefault(isRecognized) ?? candidates[0];
+
+    private static bool IsTokenEmbeddingsName(string name) => name is "token_embeddings" or "last_hidden_state";
+
+    private static bool IsEmbeddingName(string name) =>
+        name == "sentence_embedding" || name.Contains("embedding", StringComparison.OrdinalIgnoreCase);
+
+    private static int? RankOf(OnnxGraphProbe probe, string output) =>
+        probe.OutputRanks is not null && probe.OutputRanks.TryGetValue(output, out var rank) ? rank : null;
+
     private static string SelectTokenEmbeddingsOutput(IReadOnlyList<string> outputs)
     {
-        foreach (var name in outputs)
+        var recognized = outputs.FirstOrDefault(IsTokenEmbeddingsName);
+        if (recognized is not null)
         {
-            if (name is "token_embeddings" or "last_hidden_state")
+            return recognized;
+        }
+
+        // #504: with an unrecognized name and more than one output, never fall back to a name
+        // that looks like the graph's own pooled output — that is SelectEmbeddingOutput's role,
+        // and picking it here swaps the two outputs (e.g. [sentence_embedding, <tail>]).
+        if (outputs.Count > 1)
+        {
+            var nonPooledLooking = outputs.FirstOrDefault(n => !IsEmbeddingName(n));
+            if (nonPooledLooking is not null)
             {
-                return name;
+                return nonPooledLooking;
             }
         }
 
@@ -530,17 +586,10 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
     /// shape) is never returned here, even when it is literally named "sentence_embedding".</summary>
     private static string? SelectEmbeddingOutput(IReadOnlyList<string> outputs, string? tokenEmbeddingsOutput)
     {
-        foreach (var name in outputs)
+        var recognized = outputs.FirstOrDefault(n => n != tokenEmbeddingsOutput && IsEmbeddingName(n));
+        if (recognized is not null)
         {
-            if (name == tokenEmbeddingsOutput)
-            {
-                continue;
-            }
-
-            if (name == "sentence_embedding" || name.Contains("embedding", StringComparison.OrdinalIgnoreCase))
-            {
-                return name;
-            }
+            return recognized;
         }
 
         return outputs.Count > 0 && outputs[^1] != tokenEmbeddingsOutput ? outputs[^1] : null;
