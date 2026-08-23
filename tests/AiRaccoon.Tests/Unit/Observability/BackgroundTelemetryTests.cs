@@ -207,6 +207,39 @@ public sealed class BackgroundTelemetryTests
         probe.Passes.Count.ShouldBe(1);
     }
 
+    // ---- RecordRows (WP11): a drain pass's row count on its own histogram ----
+
+    [Fact]
+    public void RecordRows_ThenSucceeded_RecordsOneRowsMeasurement_TaggedLikeDurationAndPasses()
+    {
+        using var probe = new BackgroundTelemetryProbe(Operation);
+
+        using (var scope = probe.Telemetry.Begin(Operation))
+        {
+            scope.RecordRows(42);
+            scope.Succeeded();
+        }
+
+        var rows = probe.Rows.ShouldHaveSingleItem();
+        rows.Value.ShouldBe(42);
+        rows.Tags["operation"].ShouldBe(Operation);
+        rows.Tags["result"].ShouldBe("success");
+    }
+
+    /// <summary>A pass that never calls RecordRows (most background passes have no natural row count) must not fabricate a zero.</summary>
+    [Fact]
+    public void Succeeded_WithoutRecordRows_RecordsNoRowsMeasurement()
+    {
+        using var probe = new BackgroundTelemetryProbe(Operation);
+
+        using (var scope = probe.Telemetry.Begin(Operation))
+        {
+            scope.Succeeded();
+        }
+
+        probe.Rows.ShouldBeEmpty();
+    }
+
     [Fact]
     public void Probe_IgnoresSpansFromAnotherTelemetryInstance_SharingTheSourceName()
     {

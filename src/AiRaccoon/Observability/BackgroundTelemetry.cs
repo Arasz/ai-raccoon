@@ -25,6 +25,8 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
 
     private readonly Counter<long> _passes;
 
+    private readonly Histogram<long> _rows;
+
     public BackgroundTelemetry()
     {
         Meter = new Meter(OtlpNames.BackgroundScope);
@@ -46,6 +48,11 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
             "Duration of a background pass",
             null,
             advice);
+
+        _rows = Meter.CreateHistogram<long>(
+            OtlpNames.BackgroundPassRows,
+            "{row}",
+            "Rows processed in a background pass, for passes that have a natural row count");
     }
 
     /// <summary>Meter named "AiRaccoon.Background" — discoverable by dotnet-counters via EventPipe.</summary>
@@ -66,7 +73,7 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
         return new Scope(this, operation);
     }
 
-    private void Record(string operation, TimeSpan elapsed, string result, string? errorType)
+    private void Record(string operation, TimeSpan elapsed, string result, string? errorType, long? rows)
     {
         var tags = new TagList { { OperationTag, operation }, { ResultTag, result } };
         if (errorType is not null)
@@ -76,6 +83,10 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
 
         _passes.Add(1, tags);
         _duration.Record(elapsed.TotalSeconds, tags);
+        if (rows is { } value)
+        {
+            _rows.Record(value, tags);
+        }
     }
 
     private sealed class Scope(BackgroundTelemetry owner, string operation) : IOperationScope
@@ -86,6 +97,7 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
         private Activity? _activity;
         private bool _recorded;
         private bool _worthy;
+        private long? _rows;
 
         private TimeSpan Elapsed => Stopwatch.GetElapsedTime(_startedAt);
 
@@ -102,6 +114,8 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
 
         public void NoteWork() => _worthy = true;
 
+        public void RecordRows(long rows) => _rows = rows;
+
         public void Succeeded()
         {
             if (!Take())
@@ -116,7 +130,7 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
 
             _activity?.SetStatus(ActivityStatusCode.Ok);
             _activity?.SetTag(ResultTag, ResultSuccess);
-            owner.Record(operation, Elapsed, ResultSuccess, null);
+            owner.Record(operation, Elapsed, ResultSuccess, null, _rows);
         }
 
         public void Failed(Exception exception)
@@ -133,7 +147,7 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
             _activity?.SetTag(ResultTag, ResultError);
             _activity?.SetTag(ErrorTypeTag, errorType);
             _activity?.AddException(exception);
-            owner.Record(operation, Elapsed, ResultError, errorType);
+            owner.Record(operation, Elapsed, ResultError, errorType, _rows);
         }
 
         public void PartiallyFailed(int failureCount)
@@ -148,7 +162,7 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
             _activity?.SetStatus(ActivityStatusCode.Ok);
             _activity?.SetTag(ResultTag, ResultPartial);
             _activity?.SetTag(FailuresTag, failureCount.ToString());
-            owner.Record(operation, Elapsed, ResultPartial, null);
+            owner.Record(operation, Elapsed, ResultPartial, null, _rows);
         }
 
         public void Dispose()
@@ -157,7 +171,7 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
             {
                 StartSpan(); // an abandoned pass is a hole, not a success: always worth reading
                 _activity?.SetTag(ResultTag, ResultUnknown);
-                owner.Record(operation, Elapsed, ResultUnknown, null);
+                owner.Record(operation, Elapsed, ResultUnknown, null, _rows);
             }
 
             _activity?.Dispose();
