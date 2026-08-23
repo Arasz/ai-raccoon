@@ -1,11 +1,11 @@
-# Plan — post-delta session 4 (rev 2.0 — gate answered 9/9; lanes open)
+# Plan — post-delta session 4 (rev 2.1 — gate answered 9/9; wave 1 merged; WP11 added (owner extension))
 
 **Date:** 2026-08-23 · **Base:** main `72e15088` (`VERSION` = 1.33.0; one open PR, draft #499) ·
-**Status:** rev 2.0 — **gate answered 9/9** (`docs/work/2026-08-23-post-delta-4-feedback.md`,
+**Status:** rev 2.1 — **gate answered 9/9** (`docs/work/2026-08-23-post-delta-4-feedback.md`,
 2026-08-23 05:32Z): G1–G4 APPROVE, **G6 APPROVE "3"** (shape (iii) — #477 as written), **G7 REJECT
 "dont delete"** (WP5 dropped; the two jobs stay — standing ruling), **G8 APPROVE "3 now, 2 later —
 create plan for the next session before starting"**, **G9 APPROVE "all"**, **G10 APPROVE "move it to
-the next session"**. Review round 1 (PR #526) folded at rev 1.1. **Lanes open** — see §Re-review for
+the next session"**. Review round 1 (PR #526) folded at rev 1.1. **Wave 1 merged; wave 2 (WP6 chain, WP11) running** — see §Re-review for
 what the answers changed and which wave dispatches first ·
 **Task:** `post-delta-4` · **Lane:** architect (plan + gate), Opus.
 
@@ -39,7 +39,8 @@ the corrected number.
    Scheduling this against live lanes is what made #511's numbers unusable.
 7. **Wave 4, strictly last:** **WP9** — #493 and #519 (83 call sites across 73 files; it conflicts
    with every open PR that adds a test).
-8. Close the session: update `.ai-badger/state.json` and `status-notes.json`, and hand session 5 the
+8. **WP11** — log-only values (899 replace-lock ms/rows, 1003 drain rows per corpus, 426 truncated tokens) recorded through `IMeasurementRecorder` and the OTLP background meter, surfaced by `memory_performance` (owner extension 2026-08-23; ungated; file-disjoint from 6a).
+9. Close the session: update `.ai-badger/state.json` and `status-notes.json`, and hand session 5 the
    plan from item 3.
 
 **Dropped / moved by the gate.** **WP5 is DROPPED** (G7 REJECT — record as a standing ruling).
@@ -605,6 +606,27 @@ S6b (the history rewrite, #414) becomes the owner's to run over all three privat
 pass.
 
 ---
+
+### WP11 — log-only measurements become metrics (owner extension, 2026-08-23)
+
+**Owner ask (e:):** values that today exist only as log text — EventId 899 (`Replace-by-path transaction held the write lock for N ms (R row(s))`), 1003 (`Embed drain pass finished for <corpus>: N row(s)`), 426 (query shortened: N tokens over the window, C of T characters used) — belong in the internal metrics collection (`memory_performance`) and in telemetry.
+
+**Scope.** Record each value through the existing `IMeasurementRecorder` (ADR-0074 buffer → `metrics` table, self-metrics project) **beside** the log line (the log stays; the measurement is the source, the log formats it — no second computation), and export the two hot ones on the OTLP background meter:
+- `EmbedDrainService` (1003): `drain.<memory|code>.rows` and `drain.<corpus>.duration_ms` per pass; a `Histogram<long>` for rows on `BackgroundTelemetry`'s meter (the pass counter/duration already exist there — extend, do not duplicate).
+- `SqliteMemoryStore.Replace` (899): `write.replace.lock_ms` and `write.replace.rows` per replace transaction.
+- `EmbeddingService` (426): `search.query.truncated_tokens` (tokens over the window) per truncated query, plus a counter.
+- `MetricsReportService`: surface them the way `job.*` is surfaced — but derive-or-delete: replace the single `job.` prefix check with one constant set `MetricsConfigKeys.InternalSeriesPrefixes = ["job.", "drain.", "write.", "search.query."]` consumed by both the recorder-side naming and the report's discovery, so a fourth family cannot be added on one side only.
+- Docs: `docs/reference/agent-memory-server.md` (`memory_performance` series list), `docs/how-to/read-performance-metrics.md`, `docs/reference/logging-event-ids.md` only if an id changes (none expected).
+
+**Files.** `Embedding/EmbedDrainService.cs` (ctor gains `IMeasurementRecorder`, required), `Sqlite/Memory/SqliteMemoryStore.Replace.cs` (+ the store's ctor/DI — check how the store reaches a recorder without a circular dependency: the recorder writes to the same bank; if it is a cycle, record via the existing `IOperationTelemetry` callback shape instead and say so), `Embedding/EmbeddingService.cs`, `Metrics/MetricsReportService.cs`, `Core/Memory/MetricsConfigKeys.cs`, `Observability/BackgroundTelemetry.cs`, tests beside each.
+
+**RED.** `EmbedDrainMetricsTests`: one full pass with N rows → recorder holds `drain.memory.rows == N` and a `drain.memory.duration_ms` sample. `ReplaceLockMetricsTests`: one replace → `write.replace.lock_ms` > 0 recorded with `rows`. `QueryTruncationMetricsTests`: a query over the window → `search.query.truncated_tokens` recorded; under the window → nothing. `MetricsReportServiceTests`: a recorded `drain.code.rows` appears in `memory_performance` for the self-metrics project and never for an ordinary project. Red today: no series exists.
+
+**Acceptance.** All four series observable via `memory_performance` on a scratch bank after one ingest + one drain; OTLP export shows the rows histogram; no wall-clock assertion (fake `TimeProvider` for durations); no duplicated prefix list; `LoggerMessageEventIdTests` unchanged (no new ids).
+
+**Gate.** `dotnet build AiRaccoon.slnx` (0 warnings) · `dotnet test tests/AiRaccoon.Tests --filter "FullyQualifiedName~EmbedDrain|FullyQualifiedName~MetricsReport|FullyQualifiedName~ReplaceLock|FullyQualifiedName~QueryTruncation|FullyQualifiedName~BackgroundTelemetry|FullyQualifiedName~LoggerMessageEventId|FullyQualifiedName~GateCoverage" --nologo -v m`.
+
+**Lane.** dotnet-engineer / Sonnet; reviewer code-reviewer / Opus. **Collisions:** none with 6a (`SqliteMemoryStore.Projects.cs` is a different partial); `EmbedDrainService.cs` is free after #530. Ungated (owner-directed).
 
 ## Sequencing — four waves (rev 2.0, WP5 dropped and WP10 moved out)
 
