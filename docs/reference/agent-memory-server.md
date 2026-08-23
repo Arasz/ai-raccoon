@@ -16,16 +16,18 @@ watches, watch_files, FTS5, vec0, sync_meta, and sync_tombstones — live in
 starts clean with the new native schema. A re-hash + re-embed migration path is
 deferred to a deployment that needs it (D11).
 
-## Tools (28)
+## Tools (29)
 
 Every tool requires `projectId` (camelCase — all parameters are camelCase), except
-`memory_promotion_list` where it is optional. Writes land in `project:<id>` by
-default; naming a `workspaceId` routes them into that workspace's isolated context.
+`memory_promotion_list` where it is optional, and `project_id_token_get`, which mints
+one and so takes none. Writes land in `project:<id>` by default; naming a `workspaceId`
+routes them into that workspace's isolated context.
 
 10 memory tools (including `memory_get`, ADR-0035), 4 workspace tools, 3 watch tools,
 2 promotion tools, 2 share tools, 2 sweep tools (`memory_sweep`, `memory_set_ttl`),
 2 search-feedback tools (`memory_record_followthrough`, `memory_record_grade`),
-1 sync tool, 1 performance tool (`memory_performance`), 1 code tool (`code_get`).
+1 sync tool, 1 performance tool (`memory_performance`), 1 code tool (`code_get`),
+1 project tool (`project_id_token_get`, ADR-0089 — mints and registers a new project id).
 `memory_configure` and `memory_set_structure_alpha` were removed by the CLI-config
 refactor: configuration is no longer an MCP tool — the CLI verbs are the single
 config channel (see [Command-line options](#command-line-options)).
@@ -60,6 +62,7 @@ config channel (see [Command-line options](#command-line-options)).
 | `memory_promotion_discard`     | `projectId`, `hash?`                                                                                                                                        | `{discarded: n}`                                                                                   |
 | `memory_performance`           | `projectId`, `windowMinutes?=180`, `bucketMinutes?=1`                                                                                                       | `{generatedAt, window, bucket, bucketCount, series: [{tool, count, p50, p95, p99, min, max, buckets: [{start, count, average}]}]}` |
 | `code_get`                     | `projectId`, `hash`                                                                                                                                         | `{hash, value, path, lineStart, lineEnd}`                                                          |
+| `project_id_token_get`         | `name?`                                                                                                                                                     | `{projectId, instructions}`                                                                        |
 
 ### Notes on the less obvious tools
 

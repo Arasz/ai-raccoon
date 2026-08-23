@@ -100,17 +100,57 @@ public class ToolInventoryTests
         prompts.ShouldContain("workspace-consolidation-guide");
     }
 
+    /// <summary>
+    ///     Re-derived (ADR-0089 6b): a `projectId`/`projectIds` parameter is required exactly on a
+    ///     tool whose body gates via <c>gate.RequireAsync</c> — <c>project_id_token_get</c> mints an
+    ///     id and has none, so "every tool names it" is false on its own. Reads the body from source
+    ///     the way <c>Unit.Layering.ToolMethodSizeTests</c> does, so this also catches the opposite
+    ///     bug: a tool that names the parameter but never gates on it.
+    /// </summary>
     [Fact]
     public void EveryTool_NamesTheProjectIdParameter()
     {
-        var missing = ToolMethods()
-            .Where(x => !x.Method.GetParameters()
+        var offenders = new List<string>();
+
+        foreach (var (type, method, _) in ToolMethods())
+        {
+            var namesParameter = method.GetParameters()
                 .Select(p => p.Name)
-                .Any(n => n is "projectId" or "projectIds"))
-            .Select(x => $"{x.Class.Name}.{x.Method.Name}")
+                .Any(n => n is "projectId" or "projectIds");
+            var gatesOnIt = MethodBodyCallsRequireAsync(type.Name, method.Name);
+
+            if (namesParameter != gatesOnIt)
+            {
+                offenders.Add($"{type.Name}.{method.Name} (namesProjectId={namesParameter}, callsRequireAsync={gatesOnIt})");
+            }
+        }
+
+        offenders.ShouldBeEmpty(
+            "a tool names projectId/projectIds exactly when its body gates via gate.RequireAsync: "
+            + string.Join("; ", offenders));
+    }
+
+    /// <summary>Whether a tool method's body (read from its own source file) calls gate.RequireAsync.</summary>
+    private static bool MethodBodyCallsRequireAsync(string className, string methodName)
+    {
+        var text = File.ReadAllText(RepoFile($"src/AiRaccoon/Tools/{className}.cs"));
+        var attributeStarts = Regex.Matches(text, @"\[McpServerTool[^\]]*\]")
+            .Select(m => m.Index)
+            .Order()
             .ToList();
 
-        missing.ShouldBeEmpty();
+        foreach (var start in attributeStarts)
+        {
+            var end = attributeStarts.FirstOrDefault(i => i > start, text.Length);
+            var region = text[start..end];
+            var nameMatch = Regex.Match(region, @"public\s+(?:async\s+)?[\w<>?,\s\[\]]+\s+(\w+)\s*\(");
+            if (nameMatch.Success && nameMatch.Groups[1].Value == methodName)
+            {
+                return region.Contains("gate.RequireAsync(", StringComparison.Ordinal);
+            }
+        }
+
+        throw new InvalidOperationException($"Could not locate {className}.{methodName} in its source file.");
     }
 
     /// <summary>The server reference doc lists all MCP tools — its tool count heading must track the registry, not go stale.</summary>
@@ -131,8 +171,8 @@ public class ToolInventoryTests
         var readme = File.ReadAllText(RepoFile("docs/reference/agent-memory-server.md"));
         // memory_* (10 memory tools et al.) plus code_* (WP6, the code corpus's own tool family
         // -- code_\w+, not a hardcoded code_get, so a second code tool doesn't need this regex
-        // edited too; integration review small item 1).
-        var documentedTools = Regex.Matches(readme, @"^\|\s*`(memory_\w+|code_\w+)`", RegexOptions.Multiline)
+        // edited too; integration review small item 1) plus project_* (ADR-0089 6b, same reason).
+        var documentedTools = Regex.Matches(readme, @"^\|\s*`(memory_\w+|code_\w+|project_\w+)`", RegexOptions.Multiline)
             .Select(m => m.Groups[1].Value)
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
