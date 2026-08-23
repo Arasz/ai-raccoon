@@ -47,8 +47,17 @@ public sealed class ProjectsTableDdlTests
     {
         await using var connection = await OpenAsync();
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
-        var versionBefore = await ReadUserVersionAsync(connection);
 
+        // Pin the historical fact, not MemorySchema.CurrentVersion: reading both sides after the
+        // SAME EnsureAsync call is tautological — a fresh bank's first open always stamps
+        // CurrentVersion in one shot (the `fresh` branch), and the second call here never revisits
+        // the ladder because storedVersion already equals CurrentVersion, so before == after holds
+        // for any value of CurrentVersion and even with the projects table deleted from Ddl
+        // entirely (both measured against this exact test, review round 1, PR #546). A real v10
+        // bank is stamped 10 independently of what this binary's CurrentVersion compiles to — that
+        // independence is what makes a future CurrentVersion bump able to turn this test red.
+        await connection.ExecuteAsync(new CommandDefinition(
+            "PRAGMA user_version = 10", cancellationToken: TestContext.Current.CancellationToken));
         await connection.ExecuteAsync(new CommandDefinition(
             "DROP TABLE IF EXISTS projects", cancellationToken: TestContext.Current.CancellationToken));
         await connection.ExecuteAsync(new CommandDefinition(
@@ -56,9 +65,10 @@ public sealed class ProjectsTableDdlTests
             cancellationToken: TestContext.Current.CancellationToken));
 
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
-        var versionAfter = await ReadUserVersionAsync(connection);
 
-        versionAfter.ShouldBe(versionBefore, "the projects table is additive Ddl, not a ladder step — no version bump");
+        (await TableExistsAsync(connection, "projects")).ShouldBeTrue("a v10 bank must gain the projects table on reopen");
+        (await ReadUserVersionAsync(connection)).ShouldBe(10,
+            "the projects table is additive Ddl, not a ladder step — a v10 bank must still be v10 after gaining it");
     }
 
     [Fact]
