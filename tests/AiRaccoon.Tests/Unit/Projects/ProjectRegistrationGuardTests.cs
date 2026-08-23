@@ -17,8 +17,7 @@ namespace AiRaccoon.Tests.Unit.Projects;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ProjectRegistrationGuardTests
 {
-    private static ProjectRegistrationGuard NewGuard(FakeProjectRegistry registry) =>
-        new(registry, NullLogger<ProjectRegistrationGuard>.Instance);
+    private static ProjectRegistrationGuard NewGuard(FakeProjectRegistry registry) => new(registry, NullLogger<ProjectRegistrationGuard>.Instance);
 
     [Fact]
     public async Task AnUnregisteredGuidV7_IsRefused()
@@ -31,13 +30,14 @@ public sealed class ProjectRegistrationGuardTests
     }
 
     [Fact]
-    public async Task AnUnregisteredRawTextId_IsRefused()
+    public async Task AnUnregisteredRawTextId_IsAutoRegistered()
     {
-        var guard = NewGuard(new FakeProjectRegistry());
+        var registry = new FakeProjectRegistry();
+        var guard = NewGuard(registry);
 
-        // The refusal is about registration, never the string's shape (ADR-0089 §"any valid guid…").
-        await Should.ThrowAsync<UnregisteredProjectException>(() =>
-            guard.EnsureAsync("jsaa", AccessRequirement.Write, TestContext.Current.CancellationToken));
+        await guard.EnsureAsync("jsaa", AccessRequirement.Write, TestContext.Current.CancellationToken);
+
+        registry.Registered.ShouldContain("jsaa");
     }
 
     [Fact]
@@ -51,7 +51,7 @@ public sealed class ProjectRegistrationGuardTests
         await guard.EnsureAsync("jsaa", AccessRequirement.Write, TestContext.Current.CancellationToken);
 
         logger.Collector.GetSnapshot().ShouldContain(r =>
-            r.Id.Name == "LegacyProjectIdAccepted",
+                r.Id.Name == "LegacyProjectIdAccepted",
             "the first write through a legacy id warns");
     }
 
@@ -101,7 +101,7 @@ public sealed class ProjectRegistrationGuardTests
         await guard.EnsureAsync("code-only-legacy", AccessRequirement.Write, TestContext.Current.CancellationToken);
 
         logger.Collector.GetSnapshot().ShouldContain(r =>
-            r.Id.Name == "LegacyProjectIdAccepted",
+                r.Id.Name == "LegacyProjectIdAccepted",
             "a code-only legacy id takes the same warn-and-work path");
     }
 

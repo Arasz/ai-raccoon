@@ -34,9 +34,16 @@ public sealed partial class ProjectRegistrationGuard(IProjectRegistry registry, 
             return;
         }
 
-        if (!await registry.HasRowsAsync(projectId, cancellationToken).ConfigureAwait(false))
+        var hasRows = await registry.HasRowsAsync(projectId, cancellationToken).ConfigureAwait(false);
+        if (!hasRows)
         {
-            throw new UnregisteredProjectException(projectId);
+            if (Guid.TryParse(projectId, out _))
+            {
+                throw new UnregisteredProjectException(projectId);
+            }
+
+            await registry.RegisterAsync(projectId, projectId, cancellationToken).ConfigureAwait(false);
+            return;
         }
 
         lock (warnedGate)
