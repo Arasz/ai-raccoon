@@ -339,16 +339,19 @@ public static class TestData
     }
 
     /// <summary>Rewrites a seeded manifest's pooling block — the shape `model download` wrote
-    /// before it read the graph's output rank (#470): a token-level mode plus the output name.</summary>
-    public static void WriteManifestPooling(string dir, PoolingMode mode, string tokenEmbeddingsOutput)
+    /// before it read the graph's output rank (#470): a token-level mode plus the output name.
+    /// <paramref name="embeddingOutput" /> names a second, distinctly-named output when set (the
+    /// #497 pre-#496 bge-m3 shape: the planner always name-selected this field independent of
+    /// pooling mode); omitted, it reproduces the #470 sole-output shape.</summary>
+    public static void WriteManifestPooling(string dir, PoolingMode mode, string tokenEmbeddingsOutput, string? embeddingOutput = null)
     {
         var serializer = new EmbeddingManifestSerializer();
         var path = Path.Combine(dir, EmbeddingManifest.FileName);
         var manifest = serializer.Deserialize(File.ReadAllText(path));
         File.WriteAllText(path, serializer.Serialize(manifest with
         {
-            Pooling = new PoolingManifest(mode, new PoolingOutputNames(string.Empty, tokenEmbeddingsOutput)),
-            Onnx = manifest.Onnx with { EmbeddingOutput = null, TokenEmbeddingsOutput = tokenEmbeddingsOutput }
+            Pooling = new PoolingManifest(mode, new PoolingOutputNames(embeddingOutput ?? string.Empty, tokenEmbeddingsOutput)),
+            Onnx = manifest.Onnx with { EmbeddingOutput = embeddingOutput, TokenEmbeddingsOutput = tokenEmbeddingsOutput }
         }));
     }
 

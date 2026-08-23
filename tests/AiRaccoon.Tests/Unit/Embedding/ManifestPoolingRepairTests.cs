@@ -69,6 +69,50 @@ public sealed class ManifestPoolingRepairTests : IDisposable
 
     /// <summary>A manifest already telling the truth is never rewritten — the fingerprint it feeds
     /// must not move on every activation.</summary>
+    /// <summary>
+    ///     #497: a manifest downloaded before #496 already names a distinct
+    ///     <c>onnx.embeddingOutput</c> (the planner always name-selected it, independent of
+    ///     pooling mode) — the graph's real rank on THAT output, not just
+    ///     <c>tokenEmbeddingsOutput</c>, must repair the mode. Both names are left exactly as they
+    ///     already are; only <c>pooling.mode</c> and <c>pooling.outputNames.embedding</c> change.
+    /// </summary>
+    [Fact]
+    public void Repair_DistinctEmbeddingOutputGraphPoolsItself_RepairsThePoolingMode()
+    {
+        TestData.SeedCodeManifestDirectory(_dir);
+        TestData.WriteManifestPooling(_dir, PoolingMode.Cls, "token_embeddings", "sentence_embedding");
+
+        Repair(("token_embeddings", 3), ("sentence_embedding", 2)).Repair(_dir).ShouldBeTrue();
+
+        var after = Manifest();
+        after.Pooling.Mode.ShouldBe(PoolingMode.ModelOutput);
+        after.Onnx.TokenEmbeddingsOutput.ShouldBe("token_embeddings");
+        after.Onnx.EmbeddingOutput.ShouldBe("sentence_embedding");
+        after.Pooling.OutputNames!.Embedding.ShouldBe("sentence_embedding");
+        after.Pooling.OutputNames!.TokenEmbeddings.ShouldBe("token_embeddings");
+        new EmbeddingManifestValidator().Validate(after).ShouldBeEmpty();
+
+        var record = _logger.Collector.GetSnapshot().ShouldHaveSingleItem();
+        record.Id.Id.ShouldBe(424);
+        record.Level.ShouldBe(LogLevel.Information);
+    }
+
+    /// <summary>Negative control (#497): a stale/wrong <c>embeddingOutput</c> name whose graph rank
+    /// is genuinely token-level (3) must not be repaired — only a real rank-2 output earns the
+    /// rewrite.</summary>
+    [Fact]
+    public void Repair_DistinctEmbeddingOutputStillTokenLevel_LeavesTheManifestAlone()
+    {
+        TestData.SeedCodeManifestDirectory(_dir);
+        TestData.WriteManifestPooling(_dir, PoolingMode.Cls, "token_embeddings", "sentence_embedding");
+        var before = File.ReadAllText(Path.Combine(_dir, EmbeddingManifest.FileName));
+
+        Repair(("token_embeddings", 3), ("sentence_embedding", 3)).Repair(_dir).ShouldBeFalse();
+
+        File.ReadAllText(Path.Combine(_dir, EmbeddingManifest.FileName)).ShouldBe(before);
+        _logger.Collector.GetSnapshot().ShouldBeEmpty();
+    }
+
     [Fact]
     public void Repair_ManifestAlreadySaysModelOutput_LeavesItAlone()
     {

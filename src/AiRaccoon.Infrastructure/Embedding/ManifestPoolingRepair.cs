@@ -14,10 +14,13 @@ public interface IManifestPoolingRepair
 }
 
 /// <summary>
-///     Repairs the #470 manifest: a token-level <c>pooling.mode</c> over an output the graph has
-///     already pooled. Runs at engine ACTIVATION, never at load — activation invalidates every
-///     vector anyway, so the fingerprint change this rewrite causes costs nothing there, while the
-///     same rewrite on a load would re-embed a whole corpus for a correction that changes no vector.
+///     Repairs a token-level <c>pooling.mode</c> over an output the graph has already pooled: the
+///     #470 shape (the sole output serves both roles) and the #497 shape (a distinctly-named
+///     <c>onnx.embeddingOutput</c> the planner always name-selected, but whose real rank was never
+///     checked before #496). Runs at engine ACTIVATION, never at load — activation invalidates
+///     every vector anyway, so the fingerprint change this rewrite causes costs nothing there,
+///     while the same rewrite on a load would re-embed a whole corpus for a correction that
+///     changes no vector.
 /// </summary>
 /// <remarks>
 ///     A manifest that cannot be read is left alone silently: the caller's own
@@ -50,18 +53,46 @@ public sealed partial class ManifestPoolingRepair(
             return false;
         }
 
-        var output = manifest.Onnx.TokenEmbeddingsOutput;
-        if (manifest.Pooling.Mode == PoolingMode.ModelOutput || string.IsNullOrWhiteSpace(output)
-            || manifest.Onnx.Files.Count == 0 || !GraphPools(modelDirectory, manifestPath, manifest, output))
+        var tokenOutput = manifest.Onnx.TokenEmbeddingsOutput;
+        var embeddingOutput = manifest.Onnx.EmbeddingOutput;
+        if (manifest.Pooling.Mode == PoolingMode.ModelOutput || manifest.Onnx.Files.Count == 0
+            || (string.IsNullOrWhiteSpace(tokenOutput) && string.IsNullOrWhiteSpace(embeddingOutput)))
         {
             return false;
         }
 
+        var ranks = GraphOutputRanks(modelDirectory, manifestPath, manifest);
+        if (ranks is null)
+        {
+            return false;
+        }
+
+        // #470: the sole output the manifest names as token-level already serves both roles.
+        if (!string.IsNullOrWhiteSpace(tokenOutput) && GraphPools(ranks, tokenOutput))
+        {
+            return WriteRepair(manifestPath, manifest, tokenOutput, manifest.Pooling.OutputNames?.TokenEmbeddings ?? tokenOutput);
+        }
+
+        // #497: a distinctly-named embeddingOutput the graph itself pools, beside a token-level
+        // output that stays genuinely token-level — both names are left exactly as they are.
+        if (!string.IsNullOrWhiteSpace(embeddingOutput) && embeddingOutput != tokenOutput && GraphPools(ranks, embeddingOutput))
+        {
+            return WriteRepair(manifestPath, manifest, embeddingOutput, tokenOutput ?? embeddingOutput);
+        }
+
+        return false;
+    }
+
+    /// <summary>Writes the repaired manifest: <paramref name="embeddingOutputName" /> becomes
+    /// <c>onnx.embeddingOutput</c>, <paramref name="outputNamesTokenEmbeddings" /> becomes
+    /// <c>pooling.outputNames.tokenEmbeddings</c>. Shared by both repair shapes.</summary>
+    private bool WriteRepair(string manifestPath, EmbeddingManifest manifest, string embeddingOutputName, string outputNamesTokenEmbeddings)
+    {
         var repaired = manifest with
         {
             Pooling = new PoolingManifest(PoolingMode.ModelOutput,
-                new PoolingOutputNames(output, manifest.Pooling.OutputNames?.TokenEmbeddings ?? output)),
-            Onnx = manifest.Onnx with { EmbeddingOutput = output }
+                new PoolingOutputNames(embeddingOutputName, outputNamesTokenEmbeddings)),
+            Onnx = manifest.Onnx with { EmbeddingOutput = embeddingOutputName }
         };
 
         var errors = validator.Validate(repaired);
@@ -93,25 +124,27 @@ public sealed partial class ManifestPoolingRepair(
             return false;
         }
 
-        Log.PoolingModeRepaired(logger, manifest.Model, SchemaName(manifest.Pooling.Mode), output, manifestPath);
+        Log.PoolingModeRepaired(logger, manifest.Model, SchemaName(repaired.Pooling.Mode), embeddingOutputName, manifestPath);
         return true;
     }
 
-    private bool GraphPools(string modelDirectory, string manifestPath, EmbeddingManifest manifest, string output)
+    private IReadOnlyDictionary<string, int>? GraphOutputRanks(string modelDirectory, string manifestPath, EmbeddingManifest manifest)
     {
         try
         {
-            return graph.Verify(Path.Combine(modelDirectory, manifest.Onnx.Files[0].Path))
-                .TryGetValue(output, out var rank) && rank == OnnxOutputRanks.PooledRank;
+            return graph.Verify(Path.Combine(modelDirectory, manifest.Onnx.Files[0].Path));
         }
         catch (OnnxSmokeTestException ex)
         {
             // Nothing else on the activation path opens the graph, so this is the only chance to
             // say why the manifest could not be checked at all.
             Log.PoolingModeNotRepaired(logger, manifestPath, ex.Message);
-            return false;
+            return null;
         }
     }
+
+    private static bool GraphPools(IReadOnlyDictionary<string, int> ranks, string output) =>
+        ranks.TryGetValue(output, out var rank) && rank == OnnxOutputRanks.PooledRank;
 
     private static void Delete(string path)
     {
