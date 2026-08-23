@@ -1,9 +1,6 @@
 namespace AiRaccoon.Core.Projects;
 
-/// <summary>
-///     Which project ids exist (ADR-0089 decisions 1/3/5) — a directory, not a gate. Split out of
-///     <see cref="IMemoryStore" /> for the same reason <see cref="IModelMigrationStore" /> was.
-/// </summary>
+/// <summary>Which project ids exist (ADR-0089 decisions 1/3/5) — a directory, not a gate.</summary>
 public interface IProjectRegistry
 {
     /// <summary>
