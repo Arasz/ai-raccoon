@@ -214,7 +214,7 @@ public sealed partial class WatchHostedService : BackgroundService
 
     private static partial class Log
     {
-        [LoggerMessage(EventId = 320, Level = LogLevel.Error, Message = "Watch re-watch reconcile pass failed")]
+        [LoggerMessage(EventId = 320, Level = LogLevel.Warning, Message = "Watch re-watch reconcile pass failed")]
         public static partial void ReconcileError(ILogger logger, Exception exception);
 
         [LoggerMessage(EventId = 321, Level = LogLevel.Information,
