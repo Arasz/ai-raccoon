@@ -18,7 +18,7 @@ the tests, this lane cites their categories.
 | Source | What it grounds |
 |---|---|
 | `docs/work/2026-08-21-arbitrary-embedding-models-plan.md` (embedding-model-support worktree) | D1 manifest (numeric special-token map, `pooling.mode` incl. `model-output`), D2 `embedding.dimensions`, D3 transactional vec0 reconcile float[N], D5 sentencepiece family, D6 chunk budget = ctx−2 capped 510 (`MaxManifestChunkTokens`), D7 fingerprint = manifest semantic content + per-file sha256, D8 `ai-raccoon model download <repo-id>` (C# verb), D9 repair-family tokenizer routing, D10 remote dims probe, G3 byte-identical golden vectors, G4 kill-9 migration tests |
-| `docs/work/2026-08-21-code-search-exploration.md` | code-daemon-embed-v1 facts (768-dim ~~INT8 QAT~~ **fp32** **CORRECTED 2026-08-23** (fp32, not INT8 — see Amendments) ONNX 187 MB, sentencepiece ids `<s>`=2 `</s>`=3 `<pad>`=0 `<unk>`=1, pooling+L2 fused → `model-output`, 128-token hard cap → budget 126, symmetric no prefix, MIT, 56 texts/s on M4, ~50 MB resident); verdicts: separate corpus, unified `kind` search, no cross-corpus fusion; jina-code-v2 comparison row (768-dim, 8192 ctx, int8 ONNX 154 MB, Apache-2.0) |
+| `docs/work/2026-08-21-code-search-exploration.md` | code-daemon-embed-v1 facts (768-dim ~~INT8 QAT~~ **fp32** **CORRECTED 2026-08-23** (fp32, not INT8 — see Amendments) ONNX 187 MB, sentencepiece ids `<s>`=2 `</s>`=3 `<pad>`=0 `<unk>`=1, pooling+L2 fused → `model-output`, ~~128-token hard cap → budget 126~~ **512-token graph cap → budget 510** **CORRECTED 2026-08-22** (#422 / PR #453 — propagated here 2026-08-23), symmetric no prefix, MIT, 56 texts/s on M4, ~50 MB resident); verdicts: separate corpus, unified `kind` search, no cross-corpus fusion; jina-code-v2 comparison row (768-dim, 8192 ctx, int8 ONNX 154 MB, Apache-2.0) |
 | `jinaai/jina-embeddings-v2-base-code/config.json` + `tokenizer_config.json` (fetched 2026-08-21) | `model_type: bert`, ALiBi, hidden 768, `max_position_embeddings` 8192, `emb_pooler: mean`, `tokenizer_class: RobertaTokenizer` → **sentencepiece family** (same as code-daemon), so the engine-generalization manifest (D1/D5) covers it |
 | `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs` | entries DDL (81–108), settings (110–113), maintenance_jobs (119–123), entries_fts (125–131), vec_entries/vec_structure `float[384]` + `ctx` metadata column + `cosine` (137–141), trigger family (143–201), watches/watch_files (249–265), model_migration outbox (372–382), digest gate (450–460), `CurrentVersion = 10` + ladder (38–49, 732), metrics-table-in-Ddl precedent (335–342) |
 | `src/AiRaccoon.Infrastructure/Sqlite/MemorySql.cs` | InsertEntry ON CONFLICT DO NOTHING (15–21), bm25 weights 1.0/8.0/4.0 (105–123), vec0 KNN with `ctx` + `k` (141–162), DeleteBySourcePath (196–200), watch SQL (239–266) |
@@ -616,31 +616,15 @@ the manifest machinery (engine plan D6); the ADR's tokenizer-routing extension (
 
 ### 2026-08-23 — the shipped code model is fp32, not INT8 QAT (WP7 desk half, PR #536)
 
-**What was wrong:** this document records `faxenoff/code-daemon-embed-v1` as an INT8
-quantization-aware-trained artifact in its inputs table, quoting the exploration record. The file AiRaccoon downloads and runs is **fp32**.
+This document's INT8/QAT claims about `faxenoff/code-daemon-embed-v1` are wrong: the artifact we
+download and run is **fp32** — 70 initializers, all `FLOAT`, zero quantized ops. The evidence, what
+it does to the card's *"never PTQ"* warning, and the one open question that could still revise it
+live in `docs/work/2026-08-23-code-engine-inference-research.md` §2 and §8. **That record is the
+single source of truth and is deliberately not copied here** — five copies of a finding with an open
+question attached are five places to falsify at once.
 
-**Measured 2026-08-23** by loading the artifact that
-`model download faxenoff/code-daemon-embed-v1` places on disk — 187,286,767 B, sha256
-`57bcfc6aed11ea239d01f2b124f2f948456f2284ad6e2c4744452509c9c25ca9`, the value pinned in that
-directory's own `ai-raccoon.manifest.json`:
-
-| | Recorded here | Measured |
-|---|---|---|
-| Weights | INT8, QAT, Q/DQ nodes carry trained scales | **fp32** — 70 initializers, **all `FLOAT`**, 46,801,920 elements = 187,207,680 raw bytes |
-| Quantized ops | implied throughout | **zero** `QuantizeLinear`, `DequantizeLinear`, `MatMulInteger` or `QGemm` in 373 nodes |
-| Why 187 MB reads as int8 | — | it does not: 46.8M parameters x 4 bytes **is** 187 MB. A 46.8M-parameter int8 graph would be ~47 MB — which is exactly what quantizing this one produces |
-
-Reproduced independently during review of PR #536.
-
-**What it changes:** the model card's *"never PTQ the INT8 QAT artifact"* warning refers to a
-**different file** (`model_int8qdt.onnx`) than the one we run, so it does not forbid quantizing the
-fp32 graph we actually have. It remains a live warning about what quantization costs this model
-family's retrieval — hit@1 .200 -> .133 — and WP7's desk half measured a fp32-vs-int8 cosine of
-**0.964** (against a 0.9999 negative control), which points the same way. **Nothing shipped
-changes:** the engine has always been running this fp32 graph, so every throughput and
-resident-size figure taken against it stands; only the label was wrong.
-
-**Not rewritten:** figures elsewhere in this document that merely *label* the model INT8 while
-reporting something else measured correctly are historical and read as such.
-
-**Full record:** `docs/work/2026-08-23-code-engine-inference-research.md` §2.
+Also propagated here, from this repo's 2026-08-22 correction (#422 / PR #453): the *"128-token hard
+cap"* is the HF repo manifest's `max_tokens`, not a graph limit. The graph accepts **512** and the
+shipped chunk budget is **510** (`EmbeddingService.MaxManifestChunkTokens` = `512 - 2`, consumed by
+`CodeChunker.DefaultBudget`). The full amendment is in
+`docs/work/2026-08-21-code-search-exploration.md` §Amendments (2026-08-22).

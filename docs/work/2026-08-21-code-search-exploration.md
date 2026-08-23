@@ -78,7 +78,7 @@ leaderboard (archersama.github.io/coir), all read 2026-08-21.
 
 | Model | Params | Dims | Ctx | ONNX shipped | License | Provenance | Fit for AiRaccoon |
 |---|---|---|---|---|---|---|---|
-| **faxenoff/code-daemon-embed-v1** | 46.8M | 768 | **128 hard cap** | yes (~~INT8 QAT~~ **fp32** 187 MB) **CORRECTED 2026-08-23** (fp32, not INT8 — see Amendments) | MIT | 66 dl / 0 likes / 2 weeks | purpose-built hybrid dense channel, agent-style queries, rerank distilled — but unproven |
+| **faxenoff/code-daemon-embed-v1** | 46.8M | 768 | ~~**128 hard cap**~~ **512** (budget 510) **CORRECTED 2026-08-22** (#422 / PR #453 — propagated here 2026-08-23) | yes (~~INT8 QAT~~ **fp32** 187 MB) **CORRECTED 2026-08-23** (fp32, not INT8 — see Amendments) | MIT | 66 dl / 0 likes / 2 weeks | purpose-built hybrid dense channel, agent-style queries, rerank distilled — but unproven |
 | **jinaai/jina-embeddings-v2-base-code** | 161M | 768 | 8192 (ALiBi) | yes (int8 154 MB) | Apache-2.0 | 396k dl / 143 likes | established, 30 languages, symmetric, no prefix; generic code embeddings, not agent-query-trained |
 | nomic-ai/CodeRankEmbed | 137M | 768 | 8192 | **no** (safetensors) | MIT | 414k dl / 77 likes | CoIR-competitive; needs ONNX export + `tokenizer-json` family (deferred in engine plan) |
 | codesage/codesage-small-v2 | ~130M | 1024 | 2048 | no | Apache-2.0 | 1.3k dl | CoIR strong (large-v2 64.18 avg); no ONNX, dims 1024 |

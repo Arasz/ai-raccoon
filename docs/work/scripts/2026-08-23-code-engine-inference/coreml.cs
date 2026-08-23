@@ -10,8 +10,12 @@
 // verbose log visible to harvest the GetCapability / node-placement lines and,
 // under mlprogram, Apple's E5RT shape rejections (§3.2).
 
+using System.Globalization;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
+
+// Figures are quoted in the research record, so they must not pick up a decimal comma.
+CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
 
 var modelPath = args[0];
 var backend = args.Length > 1 ? args[1] : "mlprogram";
@@ -80,5 +84,6 @@ foreach (var seq in new[] { 64, 128 })
     {
         maxAbs = Math.Max(maxAbs, Math.Abs(cpu[i] - cml[i]));
     }
-    Console.WriteLine($"PARITY seq={seq} len={cpu.Length} cosine={Cos(cpu, cml):F10} maxAbsDelta={maxAbs:E3}");
+    Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+        $"PARITY seq={seq} len={cpu.Length} cosine={Cos(cpu, cml):F10} maxAbsDelta={maxAbs:E3}"));
 }

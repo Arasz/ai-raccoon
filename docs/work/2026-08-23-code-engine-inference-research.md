@@ -478,8 +478,9 @@ makes the bucketing question of §3.2/§8 decidable now instead of deferred — 
 comparison isolates the execution provider. A3-vs-A0 is still reported, as the end-to-end number a
 user would actually feel.
 
-A0 through A3 are **scratch-branch** builds. Per G3, nothing merges from this measurement; the record
-ends in a recommendation.
+A0 through A4 are **scratch-branch** builds — A2/A3/A4 each need a one- or two-line source change that
+is never intended to merge. Per G3, nothing merges from this measurement; the record ends in a
+recommendation.
 
 ### 6.3 Thresholds — every one of these can go red
 

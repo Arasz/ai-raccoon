@@ -319,31 +319,9 @@ Run against a **bank copy** first, then a real repo:
 
 ### 2026-08-23 — the shipped code model is fp32, not INT8 QAT (WP7 desk half, PR #536)
 
-**What was wrong:** this document records `faxenoff/code-daemon-embed-v1` as an INT8
-quantization-aware-trained artifact in its §4 risk table, where it is carried forward as a live ops constraint. The file AiRaccoon downloads and runs is **fp32**.
-
-**Measured 2026-08-23** by loading the artifact that
-`model download faxenoff/code-daemon-embed-v1` places on disk — 187,286,767 B, sha256
-`57bcfc6aed11ea239d01f2b124f2f948456f2284ad6e2c4744452509c9c25ca9`, the value pinned in that
-directory's own `ai-raccoon.manifest.json`:
-
-| | Recorded here | Measured |
-|---|---|---|
-| Weights | INT8, QAT, Q/DQ nodes carry trained scales | **fp32** — 70 initializers, **all `FLOAT`**, 46,801,920 elements = 187,207,680 raw bytes |
-| Quantized ops | implied throughout | **zero** `QuantizeLinear`, `DequantizeLinear`, `MatMulInteger` or `QGemm` in 373 nodes |
-| Why 187 MB reads as int8 | — | it does not: 46.8M parameters x 4 bytes **is** 187 MB. A 46.8M-parameter int8 graph would be ~47 MB — which is exactly what quantizing this one produces |
-
-Reproduced independently during review of PR #536.
-
-**What it changes:** the model card's *"never PTQ the INT8 QAT artifact"* warning refers to a
-**different file** (`model_int8qdt.onnx`) than the one we run, so it does not forbid quantizing the
-fp32 graph we actually have. It remains a live warning about what quantization costs this model
-family's retrieval — hit@1 .200 -> .133 — and WP7's desk half measured a fp32-vs-int8 cosine of
-**0.964** (against a 0.9999 negative control), which points the same way. **Nothing shipped
-changes:** the engine has always been running this fp32 graph, so every throughput and
-resident-size figure taken against it stands; only the label was wrong.
-
-**Not rewritten:** figures elsewhere in this document that merely *label* the model INT8 while
-reporting something else measured correctly are historical and read as such.
-
-**Full record:** `docs/work/2026-08-23-code-engine-inference-research.md` §2.
+This document's INT8/QAT claims about `faxenoff/code-daemon-embed-v1` are wrong: the artifact we
+download and run is **fp32** — 70 initializers, all `FLOAT`, zero quantized ops. The evidence, what
+it does to the card's *"never PTQ"* warning, and the one open question that could still revise it
+live in `docs/work/2026-08-23-code-engine-inference-research.md` §2 and §8. **That record is the
+single source of truth and is deliberately not copied here** — five copies of a finding with an open
+question attached are five places to falsify at once.

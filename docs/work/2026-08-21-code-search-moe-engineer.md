@@ -29,7 +29,7 @@
 | Maintenance | `maintenance_jobs` ledger (ADR-0070); `IMaintenanceJob` with `Interval`/`HasWorkAsync`; job list = schedule; `PendingEmbedJob` (on-demand, bounded 4×32 rows/run, never due without engine) | `IMaintenanceJob.cs:9-35`; `MaintenanceJobs.cs:16-56`; `MemorySchema.cs:115-123`; `AppRegistrations.cs:149-179` |
 | Trigger family | `entries_fts_ai/ad/au` (external-content FTS5), `vec_entries_au` (embed → upsert vec row), `vec_entries_pending` (embedded→pending → delete vec row), `vec_entries_ad` | `MemorySchema.cs:125-141,166-201` |
 | Glob/ignore handling | **none anywhere in the watch or ingest paths** — no glob matcher, no `.gitignore` parsing, no wildcard support in `Watch/` (grep of `Watch/` for glob/wildcard/pattern/ignore: only config keys and event names); `Microsoft.Extensions.FileSystemGlobbing` is **not** in the package graph | grep 2026-08-21; `Directory.Packages.props:6-50` |
-| Code model (verified) | faxenoff/code-daemon-embed-v1: 768-dim ~~INT8 QAT~~ **fp32** **CORRECTED 2026-08-23** (fp32, not INT8 — see Amendments) ONNX 187 MB, sentencepiece (`<s>=2 </s>=3 <pad>=0 <unk>=1`), pooling+L2 fused in graph ⇒ `pooling.mode=model-output`, hard 128-token cap (graph does not truncate), symmetric (no prefix) | exploration §1; `docs/work/2026-08-21-code-search-exploration.md:42-53` |
+| Code model (verified) | faxenoff/code-daemon-embed-v1: 768-dim ~~INT8 QAT~~ **fp32** **CORRECTED 2026-08-23** (fp32, not INT8 — see Amendments) ONNX 187 MB, sentencepiece (`<s>=2 </s>=3 <pad>=0 <unk>=1`), pooling+L2 fused in graph ⇒ `pooling.mode=model-output`, ~~hard 128-token cap~~ **512-token graph cap → chunk budget 510** **CORRECTED 2026-08-22** (#422 / PR #453 — propagated here 2026-08-23) (graph does not truncate), symmetric (no prefix) | exploration §1; `docs/work/2026-08-21-code-search-exploration.md:42-53` |
 | Engine generalization (prereq) | manifest-driven engine (D1), tokenizer families wordpiece+sentencepiece (D5), dynamic vec0 `float[N]` (D3), ctx−2 budget capped 510 (D6), fingerprint = manifest+sha256s (D7), `IEmbeddingTokenizer` routing incl. repair family (D9), pooling incl. `model-output` (D1) | `docs/work/2026-08-21-arbitrary-embedding-models-plan.md:85-96` |
 
 ---
@@ -398,31 +398,15 @@ Every WP starts with its failing test (TDD mandatory — CLAUDE.md invariant). G
 
 ### 2026-08-23 — the shipped code model is fp32, not INT8 QAT (WP7 desk half, PR #536)
 
-**What was wrong:** this document records `faxenoff/code-daemon-embed-v1` as an INT8
-quantization-aware-trained artifact, graded **verified**. The file AiRaccoon downloads and runs is **fp32**.
+This document's INT8/QAT claims about `faxenoff/code-daemon-embed-v1` are wrong: the artifact we
+download and run is **fp32** — 70 initializers, all `FLOAT`, zero quantized ops. The evidence, what
+it does to the card's *"never PTQ"* warning, and the one open question that could still revise it
+live in `docs/work/2026-08-23-code-engine-inference-research.md` §2 and §8. **That record is the
+single source of truth and is deliberately not copied here** — five copies of a finding with an open
+question attached are five places to falsify at once.
 
-**Measured 2026-08-23** by loading the artifact that
-`model download faxenoff/code-daemon-embed-v1` places on disk — 187,286,767 B, sha256
-`57bcfc6aed11ea239d01f2b124f2f948456f2284ad6e2c4744452509c9c25ca9`, the value pinned in that
-directory's own `ai-raccoon.manifest.json`:
-
-| | Recorded here | Measured |
-|---|---|---|
-| Weights | INT8, QAT, Q/DQ nodes carry trained scales | **fp32** — 70 initializers, **all `FLOAT`**, 46,801,920 elements = 187,207,680 raw bytes |
-| Quantized ops | implied throughout | **zero** `QuantizeLinear`, `DequantizeLinear`, `MatMulInteger` or `QGemm` in 373 nodes |
-| Why 187 MB reads as int8 | — | it does not: 46.8M parameters x 4 bytes **is** 187 MB. A 46.8M-parameter int8 graph would be ~47 MB — which is exactly what quantizing this one produces |
-
-Reproduced independently during review of PR #536.
-
-**What it changes:** the model card's *"never PTQ the INT8 QAT artifact"* warning refers to a
-**different file** (`model_int8qdt.onnx`) than the one we run, so it does not forbid quantizing the
-fp32 graph we actually have. It remains a live warning about what quantization costs this model
-family's retrieval — hit@1 .200 -> .133 — and WP7's desk half measured a fp32-vs-int8 cosine of
-**0.964** (against a 0.9999 negative control), which points the same way. **Nothing shipped
-changes:** the engine has always been running this fp32 graph, so every throughput and
-resident-size figure taken against it stands; only the label was wrong.
-
-**Not rewritten:** figures elsewhere in this document that merely *label* the model INT8 while
-reporting something else measured correctly are historical and read as such.
-
-**Full record:** `docs/work/2026-08-23-code-engine-inference-research.md` §2.
+Also propagated here, from this repo's 2026-08-22 correction (#422 / PR #453): the *"128-token hard
+cap"* is the HF repo manifest's `max_tokens`, not a graph limit. The graph accepts **512** and the
+shipped chunk budget is **510** (`EmbeddingService.MaxManifestChunkTokens` = `512 - 2`, consumed by
+`CodeChunker.DefaultBudget`). The full amendment is in
+`docs/work/2026-08-21-code-search-exploration.md` §Amendments (2026-08-22).
