@@ -963,12 +963,17 @@ internal static class MemorySchema
 
         if (needsRecreate)
         {
-            // Preserve any existing data before recreating.
-            var existingRows = (await connection.QueryAsync(
-                    new CommandDefinition(
-                        "SELECT project_id, hash, scope, deleted_at FROM sync_tombstones WHERE project_id IS NOT NULL AND project_id != ''",
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false)).ToList();
+            // Preserve existing data only when project_id already exists (wrong shape but
+            // has the column). When the column is entirely missing, there is nothing to keep.
+            List<dynamic>? existingRows = null;
+            if (projectIdColumn is not null)
+            {
+                existingRows = (await connection.QueryAsync(
+                        new CommandDefinition(
+                            "SELECT project_id, hash, scope, deleted_at FROM sync_tombstones WHERE project_id IS NOT NULL AND project_id != ''",
+                            cancellationToken: cancellationToken))
+                    .ConfigureAwait(false)).ToList();
+            }
 
             await connection.ExecuteAsync(
                     new CommandDefinition("DROP TABLE sync_tombstones", cancellationToken: cancellationToken))
@@ -989,7 +994,7 @@ internal static class MemorySchema
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
 
-            if (existingRows.Count != 0)
+            if (existingRows is { Count: > 0 })
             {
                 foreach (var row in existingRows)
                 {
