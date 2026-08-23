@@ -12,7 +12,8 @@ public sealed partial class ProjectRegistrationGuard(IProjectRegistry registry, 
     : IProjectRegistrationGuard
 {
     // The docs promise a ONE-time warning per legacy id; the guard is a singleton, so this set
-    // makes that true per process rather than per call.
+    // makes that true per process rather than per call. Locked: tool calls run concurrently.
+    private readonly object warnedGate = new();
     private readonly HashSet<string> warnedLegacyIds = [];
 
     /// <inheritdoc />
@@ -38,9 +39,12 @@ public sealed partial class ProjectRegistrationGuard(IProjectRegistry registry, 
             throw new UnregisteredProjectException(projectId);
         }
 
-        if (warnedLegacyIds.Add(projectId))
+        lock (warnedGate)
         {
-            Log.LegacyProjectIdAccepted(logger, projectId);
+            if (warnedLegacyIds.Add(projectId))
+            {
+                Log.LegacyProjectIdAccepted(logger, projectId);
+            }
         }
     }
 
