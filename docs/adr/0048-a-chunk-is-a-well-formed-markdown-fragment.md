@@ -67,14 +67,20 @@ Three changes to `MarkdownChunker` carry it:
 3. **The mid-region bail-out is removed.** A fence region now runs to its closing delimiter or EOF.
    This is what re-aligns fence parity for the rest of the document.
 
-> **Scope amendment — 2026-08-23, #538 (revised on the gate's #538 follow-up).** A second
-> guarantee joined fence balance without a title change: a heading opens the chunk that holds its
-> section's content — **except** a section longer than any one chunk, whose heading opens only the
-> first of its chunks and the rest continues headless (deferring it further would never terminate).
-> Only heading levels 1–2 count as section openers, excluding the ingest `## Source:` provenance
-> header, matching the headings `HeadingPathParser` keeps (docs/adr/0004) — a `###`+ subheading or
-> a `## Source:` line at a chunk tail must not trigger a defer that shrinks the chunk without
-> changing its label. `MarkdownChunker.DeferOpenSection`.
+> **Scope amendment — 2026-08-23, #538 (revised on the gate's #538 follow-up, QA'd on PR #543).**
+> A second guarantee joined fence balance without a title change: a deferral never trades away a
+> chunk's only real content — `DeferOpenSection` refuses to cut a heading loose when nothing but
+> other headings and blanks would remain (a lone heading is exactly as unindexable as a lone blank
+> line). **Except** a section longer than any one chunk, whose heading opens only the first of its
+> chunks and the rest continues headless (deferring it further would never terminate), and only
+> heading levels 1–2 count as section openers to begin with, excluding the ingest `## Source:`
+> provenance header — matching the headings `HeadingPathParser` keeps (docs/adr/0004), so a `###`+
+> subheading or a `## Source:` line at a chunk tail never triggers a defer that shrinks the chunk
+> without changing its label. **Not guaranteed:** a chunk can still open a section with no content
+> of its own when the greedy pack itself — not the deferral rule — cannot fit any body beside the
+> heading (an oversized next unit, or headers alone exhausting the budget) or when the overlay
+> ratio or a heading-only document produces the same shape (#549, #550).
+> `MarkdownChunker.DeferOpenSection`.
 
 `AiRaccoon.Core.Chunking` stays infrastructure-free: all of this is built from the already-injected
 `TokenCount` delegate.
