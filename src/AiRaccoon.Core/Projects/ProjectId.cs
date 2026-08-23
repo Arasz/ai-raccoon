@@ -13,11 +13,14 @@ public static class ProjectId
         return TryCanonicalize(projectId, out var canonical) ? canonical : projectId;
     }
 
-    /// <summary>True and the lowercase D-form when <paramref name="projectId" /> parses as a guid; false and the input unchanged otherwise.</summary>
+    /// <summary>
+    ///     True and the lowercase D-form when <paramref name="projectId" /> parses as a guid; false
+    ///     and the input unchanged otherwise. The BCL Try-pattern contract — never throws, even on
+    ///     null or blank input; <see cref="Canonicalize" /> is where that gets guarded.
+    /// </summary>
     public static bool TryCanonicalize(string projectId, out string canonical)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
-        if (Guid.TryParse(projectId, out var guid))
+        if (!string.IsNullOrWhiteSpace(projectId) && Guid.TryParse(projectId, out var guid))
         {
             canonical = guid.ToString("D");
             return true;
