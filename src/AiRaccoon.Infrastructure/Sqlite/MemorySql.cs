@@ -712,7 +712,11 @@ internal static class MemorySql
                                                                                WHERE entries.id IN (SELECT id FROM numbered)
                                                                               """;
 
-    /// <summary>Sets one row's document position directly — the authoritative-at-insert write (GH #371) FileIngestor uses instead of the id-order recompute.</summary>
+    /// <summary>Sets one row's document position and section directly — the authoritative-at-insert
+    /// write (GH #371) FileIngestor uses instead of the id-order recompute, and the write
+    /// <see cref="AiRaccoon.Infrastructure.Ingestion.ChunkIndexRepair" /> uses to take the section
+    /// the current chunker reports (docs/adr/0048, #549). The FTS trigger covers section, so the
+    /// index resyncs.</summary>
     public const string SetChunkPosition =
         "UPDATE entries SET chunk_index = @chunkIndex, total_chunks = @totalChunks, section = @section WHERE id = @id";
 

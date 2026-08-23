@@ -81,8 +81,9 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddin
 
                 if (apply)
                 {
+                    var section = scan.SectionById[row.Id];
                     await connection.ExecuteAsync(new CommandDefinition(MemorySql.SetChunkPosition,
-                            new { id = row.Id, chunkIndex = newIndex, totalChunks }, cancellationToken: cancellationToken))
+                            new { id = row.Id, chunkIndex = newIndex, totalChunks, section }, cancellationToken: cancellationToken))
                         .ConfigureAwait(false);
                 }
             }

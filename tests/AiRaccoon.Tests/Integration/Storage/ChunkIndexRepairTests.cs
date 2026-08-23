@@ -99,6 +99,21 @@ public sealed class ChunkIndexRepairTests : IDisposable
         after.ShouldBe(before, "the repair must only UPDATE chunk_index/total_chunks — never insert or delete a row");
     }
 
+    /// <summary>#549: a repositioned row also takes the section the current chunker reports for it,
+    /// so a repair fixes the label a pre-#549 ingest left null.</summary>
+    [Fact]
+    public async Task RunAsync_RepositionedRows_TakeTheSectionTheCurrentChunkerReports()
+    {
+        var file = Path.Combine(_dataRoot, "sectioned.md");
+        await File.WriteAllTextAsync(file, "## Part A\n\npara one\n\npara two", TestContext.Current.CancellationToken);
+        await using var connection = await OpenSeededAsync((file, "## Part A", 2), (file, "para one", 1), (file, "para two", 0));
+
+        await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
+
+        (await connection.ExecuteScalarAsync<string?>(
+            "SELECT section FROM entries WHERE value = '## Part A'")).ShouldBe("Part A");
+    }
+
     private static ChunkIndexRepair Repair()
     {
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]);

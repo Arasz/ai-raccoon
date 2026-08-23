@@ -250,7 +250,7 @@ public sealed class FileIngestor(
             // SourcePathQuery ANDs a "file#section" anchor against the FTS {source_file section}
             // columns; the chunker reports the heading path in force at each chunk (docs/adr/0048,
             // #549), and the anchor only ever names its leaf.
-            var section = chunks[ordinal].Sections.Count == 0 ? null : string.Join(" | ", chunks[ordinal].Sections);
+            var section = chunks[ordinal].SectionLabel();
             var existingId = await connection.ExecuteScalarAsync<long?>(
                     Def(MemorySql.SelectChunkIdByPathAndHashInBucket,
                         new
