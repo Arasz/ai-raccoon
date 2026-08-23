@@ -319,6 +319,50 @@
             "status": "",
             "accepted": null,
             "acceptance-reason": ""
+        },
+        {
+            "item": "settings-model-threads-round-trip-and-effect",
+            "expected-result": "`ai-raccoon settings model threads <n>` round trips (set -> `settings model list` shows n); a non-integer / negative value is rejected with exit 1 and nothing written (negative control). After a server restart on the scratch root, the first embedding session logs EventId 428 (ORT intra-op thread count that took effect, source `setting`) and `doctor` prints the same count with its source; with the setting absent, both report the halved-core default. ADR-0091 / #522 / #524.",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": "",
+            "anchor": "ADR-0091; #522/#524 EventId 428"
+        },
+        {
+            "item": "settings-maintenance-embed-rows-per-run-validation",
+            "expected-result": "`ai-raccoon settings maintenance embed-rows-per-run <n>`: set 7 -> `settings maintenance list` shows 7. Set 0, \"\", and 5000 -> exit 1 naming the positive / at-most-4096 bound, and the list still shows 7 (nothing written). ADR-0091, #517.",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": "",
+            "anchor": "ADR-0091; #517"
+        },
+        {
+            "item": "embed-drain-proof-mixed-corpus-with-code-model-active",
+            "expected-result": "With the code model active on a scratch root, memory_ingest_directory over a directory holding both markdown and .cs files leaves pending:0 for BOTH corpora (doctor / memory_stats) with no inline embedding -- the server log shows the EmbedDrainService drain pass (EventIds 1002/1003) and 1006 (invalid setting) does NOT fire. With embed-rows-per-run=7 and 10 fresh .cs files, one drain pass embeds exactly 7 rows before the next pass takes the rest. ADR-0091, #507 #517 #518.",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": "",
+            "anchor": "ADR-0091; #507/#518 EventIds 1002/1003/1006"
+        },
+        {
+            "item": "watched-directory-cs-file-triggers-code-corpus-drain-signal",
+            "expected-result": "Adding a .cs file under a registered watch (code model active) produces a drain signal for the CODE corpus (EventId 1002/1003 with corpus Code immediately after the watch digest's write), and memory_search kind=code returns the new file's content; a sibling .md file added the same way signals the Memory corpus (negative control for the routing #518 fixed).",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": "",
+            "anchor": "ADR-0091; #518"
         }
     ]
 }
