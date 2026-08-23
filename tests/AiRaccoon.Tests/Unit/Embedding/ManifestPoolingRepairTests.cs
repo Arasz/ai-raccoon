@@ -108,6 +108,27 @@ public sealed class ManifestPoolingRepairTests : IDisposable
         record.Message.ShouldNotContain("vectors this engine", customMessage: "429's identical-vectors claim is false for this shape");
     }
 
+    /// <summary>Review nit: both repair shapes must derive <c>pooling.outputNames.tokenEmbeddings</c>
+    /// by the SAME rule (preserve the existing value) — the #497 branch must not overwrite it with
+    /// <c>onnx.tokenEmbeddingsOutput</c> just because that field happens to equal it in most cases.</summary>
+    [Fact]
+    public void Repair_DistinctEmbeddingOutput_PreservesExistingPoolingOutputNamesTokenEmbeddings()
+    {
+        TestData.SeedCodeManifestDirectory(_dir);
+        TestData.WriteManifestPooling(_dir, PoolingMode.Cls, "token_embeddings", "sentence_embedding");
+        var serializer = new EmbeddingManifestSerializer();
+        var path = Path.Combine(_dir, EmbeddingManifest.FileName);
+        var seeded = serializer.Deserialize(File.ReadAllText(path));
+        File.WriteAllText(path, serializer.Serialize(seeded with
+        {
+            Pooling = seeded.Pooling with { OutputNames = seeded.Pooling.OutputNames! with { TokenEmbeddings = "stale_token_name" } }
+        }));
+
+        Repair(("token_embeddings", 3), ("sentence_embedding", 2)).Repair(_dir).ShouldBeTrue();
+
+        Manifest().Pooling.OutputNames!.TokenEmbeddings.ShouldBe("stale_token_name");
+    }
+
     /// <summary>Negative control (#497): a stale/wrong <c>embeddingOutput</c> name whose graph rank
     /// is genuinely token-level (3) must not be repaired — only a real rank-2 output earns the
     /// rewrite.</summary>

@@ -71,7 +71,7 @@ public sealed partial class ManifestPoolingRepair(
         // every embed already reads it either way, so the correction changes no vector.
         if (!string.IsNullOrWhiteSpace(tokenOutput) && GraphPools(ranks, tokenOutput))
         {
-            var repaired = Repaired(manifest, tokenOutput, manifest.Pooling.OutputNames?.TokenEmbeddings ?? tokenOutput);
+            var repaired = Repaired(manifest, tokenOutput, tokenOutput);
             if (!WriteManifest(manifestPath, repaired, out var reason))
             {
                 Log.PoolingModeNotRepaired(logger, manifestPath, reason!);
@@ -102,13 +102,14 @@ public sealed partial class ManifestPoolingRepair(
     }
 
     /// <summary>The rewritten manifest: <paramref name="embeddingOutputName" /> becomes
-    /// <c>onnx.embeddingOutput</c>, <paramref name="outputNamesTokenEmbeddings" /> becomes
-    /// <c>pooling.outputNames.tokenEmbeddings</c>. Shared by both repair shapes.</summary>
-    private static EmbeddingManifest Repaired(EmbeddingManifest manifest, string embeddingOutputName, string outputNamesTokenEmbeddings) =>
+    /// <c>onnx.embeddingOutput</c>. <c>pooling.outputNames.tokenEmbeddings</c> is preserved from
+    /// whatever the manifest already said (falling back to <paramref name="tokenOutput" /> only
+    /// when unset) by the SAME rule for both repair shapes — neither one overwrites it.</summary>
+    private static EmbeddingManifest Repaired(EmbeddingManifest manifest, string embeddingOutputName, string tokenOutput) =>
         manifest with
         {
             Pooling = new PoolingManifest(PoolingMode.ModelOutput,
-                new PoolingOutputNames(embeddingOutputName, outputNamesTokenEmbeddings)),
+                new PoolingOutputNames(embeddingOutputName, manifest.Pooling.OutputNames?.TokenEmbeddings ?? tokenOutput)),
             Onnx = manifest.Onnx with { EmbeddingOutput = embeddingOutputName }
         };
 
