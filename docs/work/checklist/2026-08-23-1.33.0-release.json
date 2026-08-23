@@ -11,7 +11,7 @@
     "version": "1.33.0",
     "mcp-tool-count": 28,
     "mcp-prompt-count": 2,
-    "note": "python3 .ai-badger/skills/ai-raccoon-manual-checklist/scripts/derive-facts.py . -> version=1.33.0 mcp-tool-count=28 mcp-prompt-count=2 (worktree at 43b5387c, VERSION file 1.33.0). Live cross-check against the installed binary is item 1 and full-mcp-surface."
+    "note": "python3 .ai-badger/skills/ai-raccoon-manual-checklist/scripts/derive-facts.py . -> version=1.33.0 mcp-tool-count=28 mcp-prompt-count=2 (worktree at 43b5387c, VERSION file 1.33.0). Live cross-check against the installed binary is item 1 and full-mcp-surface. After main was merged into this branch mid-run (#528 VERSION 1.33.1, README-only), derive-facts on the tree reports version=1.33.1 mcp-tool-count=28 mcp-prompt-count=2: the tool/prompt counts are unchanged and the version difference is the deliberate owner instruction to test the published 1.33.0 package (1.33.1 carries no binary change), so the binary-matches-tree comparison is made against tag v1.33.0 = 0d43ef56, not against the branch head."
   },
   "findings-against-prior-runs": [
     {
