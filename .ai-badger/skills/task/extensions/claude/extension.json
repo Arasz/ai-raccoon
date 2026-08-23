@@ -1,5 +1,7 @@
 {
-  "skill": "task",
-  "extension": "claude",
-  "requires": ["agents=claude"]
+    "skill": "task",
+    "extension": "claude",
+    "requires": [
+        "agents=claude"
+    ]
 }

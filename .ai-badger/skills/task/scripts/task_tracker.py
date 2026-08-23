@@ -139,7 +139,7 @@ def _default_branch(path):
     the wrong branch.
     """
     ref = _git(path, "symbolic-ref", "-q", "--short", "refs/remotes/origin/HEAD",
-              check=False).strip()
+               check=False).strip()
     if ref:
         return ref
     for candidate in ("main", "master"):

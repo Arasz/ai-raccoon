@@ -12,7 +12,6 @@ from pathlib import Path
 
 from scaffold_context import ScaffoldContext
 
-
 _SECTION_RE = re.compile(r'^##\s+(.+)$')
 _AT_MARKER_RE = re.compile(r'^@([a-z][a-z0-9-]*):\s*(.*)$')
 _EXT_MARKER_RE = re.compile(r'<!--\s*EXT:([a-z][a-z0-9-]*)\s*-->')

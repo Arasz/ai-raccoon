@@ -41,33 +41,20 @@ role.
 
 ## Tests that pin down behaviour
 
-Covering the line is the floor. A test earns its place by failing under a
-plausible bug:
+Covering the line is the floor. A test earns its place by failing under a plausible bug:
 
-- **Property intersections** — when the code handles independent properties
-  (present/absent, quoted/unquoted, first/last, empty/full), add at least one
-  test that combines several at once. Bugs live at the intersections, not on
-  the single axes each test already walks.
-- **Behaviour radius** — assert on at least one *secondary* observable
-  (neighbouring field, emitted event, retry counter, related state), not only
-  the return value. A function can return the right thing and still be wrong.
-- **Fixture realism** — never set the parameter under test to a degenerate
-  value: scrollback with a non-zero scrollback, eviction with a capacity above
-  one, retries with a retry budget above zero, ordering with more than one
-  element. A degenerate fixture makes the test fail for the wrong reason, and
-  leaves it green when the parameter itself stops working.
+- **Property intersections** — when the code handles independent properties (present/absent, quoted/unquoted, first/last, empty/full), add at least one test that combines several at once. Bugs live at the intersections, not on the single
+  axes each test already walks.
+- **Behaviour radius** — assert on at least one *secondary* observable (neighbouring field, emitted event, retry counter, related state), not only the return value. A function can return the right thing and still be wrong.
+- **Fixture realism** — never set the parameter under test to a degenerate value: scrollback with a non-zero scrollback, eviction with a capacity above one, retries with a retry budget above zero, ordering with more than one element. A
+  degenerate fixture makes the test fail for the wrong reason, and leaves it green when the parameter itself stops working.
 
 ## Mutation findings are run, never reasoned
 
-Never report a mutation survivor you did not apply and re-run. Apply it as a
-real edit, run the narrowest covering tests, then revert and confirm the suite
-is green again: still passing is a genuine survivor, newly failing means the
-tests already catch it and it is not a finding. This matters most where no
-mutation-testing tool runs — static reasoning about "would a test catch this"
-produces confident false survivors, and a false gap costs more than a missed
-one, because it sends someone writing a redundant test. When the suite
-genuinely cannot be executed, label every such finding **unverified (static
-reasoning)** in the report rather than presenting it as a proven gap.
+Never report a mutation survivor you did not apply and re-run. Apply it as a real edit, run the narrowest covering tests, then revert and confirm the suite is green again: still passing is a genuine survivor, newly failing means the tests
+already catch it and it is not a finding. This matters most where no mutation-testing tool runs — static reasoning about "would a test catch this"
+produces confident false survivors, and a false gap costs more than a missed one, because it sends someone writing a redundant test. When the suite genuinely cannot be executed, label every such finding **unverified (static reasoning)** in
+the report rather than presenting it as a proven gap.
 
 > The two sections above carry over the discipline in `test-gap-analysis`
 > (step 4b) and `code-testing-agent` from

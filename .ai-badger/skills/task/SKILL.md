@@ -24,9 +24,8 @@ planning and the final quality gate — is delegated to a high-reasoning model; 
 models do the hands-on work; the orchestrating session integrates and tracks everything so a
 dead session can be resumed.
 
-**All project specifics come from `.ai-badger/config.json`** — never hardcode a build command,
-a persona name, or a repository. Tracking data lives in `.ai-badger/task-tracking/` (gitignored).
-Scripts live in this skill's `scripts/`. Read `references/file-schemas.md` before hand-writing or repairing any tracking file — it carries the exact shape of each one.
+**All project specifics come from `.ai-badger/config.json`** — never hardcode a build command, a persona name, or a repository. Tracking data lives in `.ai-badger/task-tracking/` (gitignored). Scripts live in this skill's `scripts/`. Read
+`references/file-schemas.md` before hand-writing or repairing any tracking file — it carries the exact shape of each one.
 
 ## When NOT to Use
 
@@ -61,58 +60,42 @@ assuming its own model.
   lightweight per-subagent completion check, run the configured build/test, and tiny surgical
   fixes found during the quality gate.
 
-These are roles, not models. Which concrete model fills each role — and why the subscription's
-metering makes that the cheap choice rather than merely the fast one — is bound by the
-agent-specific extension for your coding agent (`extensions/claude/` for Claude).
+These are roles, not models. Which concrete model fills each role — and why the subscription's metering makes that the cheap choice rather than merely the fast one — is bound by the agent-specific extension for your coding agent
+(`extensions/claude/` for Claude).
 
 Subagent prompts must be self-contained: scope, acceptance criteria, files/docs to read, the
 project's TDD + code-style rules (point them at CLAUDE.md), and what to report back. Run
 independent subagents in parallel.
 
-**Split work so it *can* run in parallel.** A large item that one agent works through in sequence
-is usually several items that could have run at once. Do the split while planning, and name which
-sections share a file — those serialise, the rest do not.
+**Split work so it *can* run in parallel.** A large item that one agent works through in sequence is usually several items that could have run at once. Do the split while planning, and name which sections share a file — those serialise, the
+rest do not.
 
 **Isolate every agent, at every depth.** "Isolated" is exact, and it has two axes:
 
 - **A worktree of its own** — the agent's workspace on disk. One per agent, not one per session.
-- **A workspace id of its own** in every shared store that supports one — the memory bank, the
-  scratch/notes tier, anywhere in-progress state accumulates. Its notes stay in that workspace and
-  are consolidated or discarded when the agent finishes.
+- **A workspace id of its own** in every shared store that supports one — the memory bank, the scratch/notes tier, anywhere in-progress state accumulates. Its notes stay in that workspace and are consolidated or discarded when the agent
+  finishes.
 
-This applies to **every** agent in the tree, not just the ones you dispatch directly: an agent that
-dispatches its own agent owes each of them the same two things. Depth does not exempt anyone; a
-sub-agent sharing its parent's tree is the same collision one level down, and harder to see.
+This applies to **every** agent in the tree, not just the ones you dispatch directly: an agent that dispatches its own agent owes each of them the same two things. Depth does not exempt anyone; a sub-agent sharing its parent's tree is the
+same collision one level down, and harder to see.
 
-**Disjoint files are not isolation.** Agents sharing one tree share its build output, dependency
-cache, and whatever state a build writes beside the source — so one agent compiles against another's
-half-applied edit, and a green or red run then says nothing about its own change. Sharing one
-workspace id has the same shape in the notes store: partial findings from one agent are read as
-another's context. Both failures are quiet — nothing is lost, but agents block on each other and no
-per-agent result can be cited.
+**Disjoint files are not isolation.** Agents sharing one tree share its build output, dependency cache, and whatever state a build writes beside the source — so one agent compiles against another's half-applied edit, and a green or red run
+then says nothing about its own change. Sharing one workspace id has the same shape in the notes store: partial findings from one agent are read as another's context. Both failures are quiet — nothing is lost, but agents block on each other
+and no per-agent result can be cited.
 
-Dispatch using the isolation your agent tool provides rather than creating worktrees by hand — a
-manual step before each dispatch is the one that gets skipped when the work feels urgent. Two things
-travel with the worktree and are easy to forget: any per-directory permission or auto-approval mode
-must be armed for the new path too, or the agent stalls waiting for an answer nobody is there to
-give; and **the gate is still re-run on the merged result**, because each per-agent run measured a
-different tree.
+Dispatch using the isolation your agent tool provides rather than creating worktrees by hand — a manual step before each dispatch is the one that gets skipped when the work feels urgent. Two things travel with the worktree and are easy to
+forget: any per-directory permission or auto-approval mode must be armed for the new path too, or the agent stalls waiting for an answer nobody is there to give; and **the gate is still re-run on the merged result**, because each per-agent
+run measured a different tree.
 
-Serialising the dispatches also removes the collision — by removing the parallelism. Prefer
-isolation; fall back to sequential only when the work genuinely cannot be split.
+Serialising the dispatches also removes the collision — by removing the parallelism. Prefer isolation; fall back to sequential only when the work genuinely cannot be split.
 
-**Two levels of dispatch, no more.** You dispatch; those agents may dispatch once; nothing
-deeper. The cap is about the machine rather than the design: every live agent costs memory and a
-share of the CPU, and a tree that widens without bound starves the work already running.
+**Two levels of dispatch, no more.** You dispatch; those agents may dispatch once; nothing deeper. The cap is about the machine rather than the design: every live agent costs memory and a share of the CPU, and a tree that widens without
+bound starves the work already running.
 
-**Write the brief so the lane can improve on it.** Before dispatching an agent that owns a
-unit of work end to end, read `references/lane-dispatch-brief.md` — it carries the prompt
-shape, and the reason each part of it is there.
+**Write the brief so the lane can improve on it.** Before dispatching an agent that owns a unit of work end to end, read `references/lane-dispatch-brief.md` — it carries the prompt shape, and the reason each part of it is there.
 
-**Reach for whatever tool makes the work smaller.** A code graph, an MCP server, an existing
-skill, a script the repo already has — check what is installed before writing something that
-already exists. This is not permission to add tooling mid-task; it is a reminder that the
-expensive path is often the one nobody checked for a shortcut.
+**Reach for whatever tool makes the work smaller.** A code graph, an MCP server, an existing skill, a script the repo already has — check what is installed before writing something that already exists. This is not permission to add tooling
+mid-task; it is a reminder that the expensive path is often the one nobody checked for a shortcut.
 
 **Cache-aware dispatch:** every agent's request prefix includes your project's always-loaded
 context (CLAUDE.md/AGENTS.md-equivalent instructions, `.ai-badger/state.json`, and any other
@@ -120,20 +103,15 @@ files your project loads on every turn) — keep them byte-stable within a task 
 mid-task; the finish protocol writes state *between* tasks) so they serve as cache reads at
 roughly a tenth of the cost instead of a fresh write. Subagent caches are independent cold starts
 on a ~5-minute TTL, so: prefer one multi-turn subagent over many one-shot dispatches for a
-cluster of related steps (amortises the cold start), and use `/rewind` rather than `/compact` to
-backtrack within a task (rewind reuses the cached prefix; compact pays for a fresh summary
-write). Compact only at task boundaries (Phase 0).
+cluster of related steps (amortises the cold start), and use `/rewind` rather than `/compact` to backtrack within a task (rewind reuses the cached prefix; compact pays for a fresh summary write). Compact only at task boundaries (Phase 0).
 
 **How a finished task is judged.** `token-usage.json` records `cacheEfficiency`, `modelMix`,
-`outputByModel` and `dispatches`; `python3 .ai-badger/skills/task/scripts/task_tracker.py status` summarises them. Judge a run by its
-**model mix** — the share of output produced by the mid and cheap tiers, over the main transcript
-*and* its subagents together — not by cache efficiency, which does not discriminate. A run whose
-dispatches are mostly `general-purpose` is not routing to this project's personas, whatever
+`outputByModel` and `dispatches`; `python3 .ai-badger/skills/task/scripts/task_tracker.py status` summarises them. Judge a run by its **model mix** — the share of output produced by the mid and cheap tiers, over the main transcript *and*
+its subagents together — not by cache efficiency, which does not discriminate. A run whose dispatches are mostly `general-purpose` is not routing to this project's personas, whatever
 `personaRouting` says.
 
-Subagent transcripts are written beside the session's, not inside it, so a per-dispatch split is
-available without chasing `parentUuid`. Where those files live, the numbers behind the model-mix
-rule, and why the agent panel's `model` field can disagree with the transcript, are in
+Subagent transcripts are written beside the session's, not inside it, so a per-dispatch split is available without chasing `parentUuid`. Where those files live, the numbers behind the model-mix rule, and why the agent panel's `model` field
+can disagree with the transcript, are in
 `extensions/claude/extension.md` — read it when interpreting the numbers, not on every dispatch.
 
 **If you cannot spawn subagents** (you are running as a subagent yourself, or the Agent tool is
@@ -151,51 +129,36 @@ reduced rigor since high-reasoning delegation wasn't possible.
 ## Phase 1 — Start
 
 1. Resolve the task (an issue URL, or freeform text used as scope/title; cross-check the project
-   board via the source-control extension if active). Read the referenced docs.
-   **If the argument is a path to a `spec.json` written by `create-task-spec`,** read it and its
-   companion `.feature` file instead of treating the path as a title: the manifest supplies the
-   scope, out-of-scope, constraints and deferred decisions, and the spec supplies the acceptance
-   criteria. Feed both to the planning agent in step 6, and hold the non-deferred scenarios as
-   Phase 3's pass condition.
+   board via the source-control extension if active). Read the referenced docs. **If the argument is a path to a `spec.json` written by `create-task-spec`,** read it and its companion `.feature` file instead of treating the path as a title:
+   the manifest supplies the scope, out-of-scope, constraints and deferred decisions, and the spec supplies the acceptance criteria. Feed both to the planning agent in step 6, and hold the non-deferred scenarios as Phase 3's pass condition.
 2. Register: `python3 .ai-badger/skills/task/scripts/task_tracker.py start <taskId> --title "<title>" --branch task/<taskId>-<slug>`.
 3. Ask the user to rename the session to match the task (skip if autonomous).
 4. **Work in the worktree `start` just created** — it prints the path, and it is
-   `.ai-badger/worktrees/<taskId>` on the branch you passed to `--branch`. Every command for
-   the rest of the task runs there, not in the main checkout.
+   `.ai-badger/worktrees/<taskId>` on the branch you passed to `--branch`. Every command for the rest of the task runs there, not in the main checkout.
 
-   This step used to read "create/switch to the task branch", and `start` recorded the branch name
-   without creating anything. A recorded name that nothing creates is worse than no field: `status`
-   reports the branch, so the tracker looks like it is managing something it never touched. On
-   2026-08-01 that put two commits on `main` in one session. Pass `--no-worktree` if you genuinely
-   want the old behaviour; the branch is still recorded either way.
+   This step used to read "create/switch to the task branch", and `start` recorded the branch name without creating anything. A recorded name that nothing creates is worse than no field: `status`
+   reports the branch, so the tracker looks like it is managing something it never touched. On 2026-08-01 that put two commits on `main` in one session. Pass `--no-worktree` if you genuinely want the old behaviour; the branch is still
+   recorded either way.
 
-   A worktree is also what makes concurrent sessions safe. Sessions share one checkout, so a second
-   agent switching branches mid-run changes the files under the first one — measured the same day:
+   A worktree is also what makes concurrent sessions safe. Sessions share one checkout, so a second agent switching branches mid-run changes the files under the first one — measured the same day:
    a push failed because the tree moved to `main` while its tests were running.
-5. **Review before you plan, and plan the review first.** Write down what has to be checked to
-   answer the task — every point in the request, and which of them need research rather than a
-   guess. Then run that review and gather the evidence. A plan written before the review is a
-   guess with a table around it.
+5. **Review before you plan, and plan the review first.** Write down what has to be checked to answer the task — every point in the request, and which of them need research rather than a guess. Then run that review and gather the evidence.
+   A plan written before the review is a guess with a table around it.
 6. **Plan from what the review found.** Delegate decomposition to a high-reasoning agent (the
    `architect` persona), feeding it the task body, the review findings and doc excerpts.
 
-   Split the plan into sections that can be worked independently, and say which may run at the
-   same time. Parallelism has to be designed in; it does not arrive on its own.
+   Split the plan into sections that can be worked independently, and say which may run at the same time. Parallelism has to be designed in; it does not arrive on its own.
 
-   **Every point carries acceptance criteria and a quality gate** — what must be true, and the run
-   that proves it. A point without them is a wish. Where a point needs a specification or a design
-   before it can be built, produce one, and look for an installed skill that formalises that shape
-   before writing a bespoke document.
+   **Every point carries acceptance criteria and a quality gate** — what must be true, and the run that proves it. A point without them is a wish. Where a point needs a specification or a design before it can be built, produce one, and look
+   for an installed skill that formalises that shape before writing a bespoke document.
 
 ## Phase 2 — Execute
 
 1. Dispatch implementation subagents per `personaRouting`. Instruct every code subagent to write
    the failing test first (TDD).
 2. Record each subagent's `total_tokens` on completion:
-   `python3 .ai-badger/skills/task/scripts/task_tracker.py subagent <taskId> <total_tokens> --description "<what it did>"`.
-   To record a delegation by id instead of a manual count, pass `--delegation <id>`; the
-   session source that owns the task decides how the delegation's tokens are read. The two
-   are mutually exclusive.
+   `python3 .ai-badger/skills/task/scripts/task_tracker.py subagent <taskId> <total_tokens> --description "<what it did>"`. To record a delegation by id instead of a manual count, pass `--delegation <id>`; the session source that owns the
+   task decides how the delegation's tokens are read. The two are mutually exclusive.
 3. Review each result at the seams (matches plan? acceptance criteria?). Send follow-ups back
    rather than rewriting, unless the fix is a few lines.
 4. Commit and push per work package (small commits). If the source-control extension is active,
@@ -212,26 +175,19 @@ build/test, then proceed.
 
 ### Review every join, not just every part
 
-Each time separate work is combined — the review findings into a plan, several plan sections into
-one change, several subagents' branches into one PR — check that the combination still works.
-Parts that each passed alone routinely fail together: two branches pick the same version, one
-renames what another calls, a guard passes on each half and fails on the whole.
+Each time separate work is combined — the review findings into a plan, several plan sections into one change, several subagents' branches into one PR — check that the combination still works. Parts that each passed alone routinely fail
+together: two branches pick the same version, one renames what another calls, a guard passes on each half and fails on the whole.
 
 Run the checks against the combined result, not against the pieces you already ran them on.
 
-**Then stop checking.** Execute what the plan says rather than re-reading it for reassurance; a
-third pass over your own reasoning finds much less than the first and costs the same. Re-verify
-after an integration when there is a reason to — something changed underneath, a claim is load
-bearing, a check has never actually been seen to fail. **Facts are the exception**: anything
-taken from documentation, an earlier run, or someone else's research gets re-checked against its
+**Then stop checking.** Execute what the plan says rather than re-reading it for reassurance; a third pass over your own reasoning finds much less than the first and costs the same. Re-verify after an integration when there is a reason to —
+something changed underneath, a claim is load bearing, a check has never actually been seen to fail. **Facts are the exception**: anything taken from documentation, an earlier run, or someone else's research gets re-checked against its
 source every time, because that is what goes stale while your reasoning stays put.
 
 ### The slow suites
 
-The pre-push hook runs the checks that cost seconds. The slow ones — the full test suite, the
-lint pass, any end-to-end or integration journey — belong to CI, which runs them on every push
-to every branch on the project's declared floor rather than on whatever the developer's machine
-happens to have.
+The pre-push hook runs the checks that cost seconds. The slow ones — the full test suite, the lint pass, any end-to-end or integration journey — belong to CI, which runs them on every push to every branch on the project's declared floor
+rather than on whatever the developer's machine happens to have.
 
 That makes the local hook fast feedback, not the pass condition:
 
@@ -251,12 +207,9 @@ That makes the local hook fast feedback, not the pass condition:
    `completedTasks`, refresh `next`/`lastUpdated`; write verbose notes/decisions to the
    project's notes file.
 3. Compaction check on CLAUDE.md if the project tracks one.
-4. Close tracking: `python3 .ai-badger/skills/task/scripts/task_tracker.py finish <taskId>`. This
-   also removes the task's worktree — **unless it still holds work that exists nowhere else**, in
-   which case it refuses, says what it found, and leaves the directory alone. Read the
-   `worktree.keptBecause` field in the output; a kept worktree means something is unmerged or
-   uncommitted, not that cleanup failed. Resolve it and re-run, or pass `--keep-worktree` when you
-   are deliberately leaving it in place.
+4. Close tracking: `python3 .ai-badger/skills/task/scripts/task_tracker.py finish <taskId>`. This also removes the task's worktree — **unless it still holds work that exists nowhere else**, in which case it refuses, says what it found, and
+   leaves the directory alone. Read the
+   `worktree.keptBecause` field in the output; a kept worktree means something is unmerged or uncommitted, not that cleanup failed. Resolve it and re-run, or pass `--keep-worktree` when you are deliberately leaving it in place.
 5. Ask the user to grade the skill 0–5: `python3 .ai-badger/skills/task/scripts/task_tracker.py grade <taskId> <0-5>`
    (skip/leave unset if autonomous).
 6. Report the task's token cost and recommend `/compact` or a fresh session before the next
@@ -275,25 +228,20 @@ project's docs against the merged code, fix small drift, and report gaps needing
 
 ## Gotchas
 
-- **`start` with `--no-worktree` records a branch name nothing creates.** `status` then reports a
-  branch that does not exist (2026-08-01: two commits landed on `main`).
+- **`start` with `--no-worktree` records a branch name nothing creates.** `status` then reports a branch that does not exist (2026-08-01: two commits landed on `main`).
 - **`finish` refuses and keeps the worktree when it holds work that exists nowhere else.** Read the
   `worktree.keptBecause` field; a kept worktree is unmerged or uncommitted work, not failed cleanup.
 - **Never rewrite always-loaded context files (`CLAUDE.md`, `.ai-badger/state.json`) mid-task.**
   Subagent cache reads depend on a byte-stable prefix (~10× cost); rewrite only between tasks.
 - **Two levels of dispatch, no deeper.** A widening agent tree starves the machine.
-- **"Isolated" means per agent, at every depth, on two axes: its own worktree and its own workspace
-  id.** Being *in* a worktree is not the same as each agent having *its own*, and an agent that
-  dispatches further owes its children the same. Disjoint files still share build output and
-  dependency state, so an agent can block on another's half-applied edit and no per-agent gate
-  result can be trusted; a shared workspace id does the same to in-progress notes. Arm any
+- **"Isolated" means per agent, at every depth, on two axes: its own worktree and its own workspace id.** Being *in* a worktree is not the same as each agent having *its own*, and an agent that dispatches further owes its children the same.
+  Disjoint files still share build output and dependency state, so an agent can block on another's half-applied edit and no per-agent gate result can be trusted; a shared workspace id does the same to in-progress notes. Arm any
   per-directory approval mode for each new path, and re-run the gate on the merged result.
 
 ## Recovery
 
-`task_tracker.py` records each task's session id and resume command. Pass `--cron` to `start` to
-also install a resume cron that watches for stalled sessions — it is opt-in, since it writes to
-your crontab. If you wake in a resumed session mid-task, run
+`task_tracker.py` records each task's session id and resume command. Pass `--cron` to `start` to also install a resume cron that watches for stalled sessions — it is opt-in, since it writes to your crontab. If you wake in a resumed session
+mid-task, run
 `python3 .ai-badger/skills/task/scripts/task_tracker.py reattach <taskId>` first, then continue.
 
 > **Extensions:** source-control PR/issue/review-loop behavior and agent-specific model lanes

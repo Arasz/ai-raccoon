@@ -23,6 +23,7 @@ def _within(parent: Path, candidate: Path) -> bool:
         return False
     return True
 
+
 # Test files and eval suites — applied to every copytree to keep framework-only
 # content out of scaffolded repos.
 _test_ignore = shutil.ignore_patterns(

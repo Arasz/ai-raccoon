@@ -140,7 +140,7 @@ def tags_for_display(tool_name: str, index: Dict[str, Any]) -> List[str]:
 
 
 def build_hint(ranked: List[Tuple[str, float]], index: Dict[str, Any],
-                max_chars: int = MAX_HINT_CHARS) -> str:
+               max_chars: int = MAX_HINT_CHARS) -> str:
     """The `[ai-badger] Relevant MCP tools: ...` line, tags included unless that overflows."""
     tools_str = ", ".join(
         f"{name} ({', '.join(tags_for_display(name, index))})" for name, _ in ranked[:TOP_N]

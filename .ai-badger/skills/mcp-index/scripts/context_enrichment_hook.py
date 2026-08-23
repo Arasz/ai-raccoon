@@ -81,7 +81,7 @@ def _debug(event: str, **fields: Any) -> None:
 
 
 def _record_retrieval(context_enrichment: Any, project: Optional[str], query: str,
-                       index: Dict[str, Any], ranked) -> None:
+                      index: Dict[str, Any], ranked) -> None:
     """Record what the BM25 retrieval did — mirrors ai_badger_hooks.py's `_record_retrieval`.
 
     `no_terms` is not `gate`: when the tokenizer yields no usable terms, no candidate is ever

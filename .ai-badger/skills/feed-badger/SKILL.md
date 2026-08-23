@@ -59,13 +59,10 @@ back to `ai-badger` as a **draft PR** for human review.
      --title "feed: <summary>" --body-file <body.md> --repo Arasz/ai-badger \
      --path features/<stack>/<feature>/<name> --path index.json
    ```
-   `--path` is **required and repeatable**: name every path you placed, plus `index.json` if
-   you regenerated it. Only declared paths are staged, so an unrelated dirty file in the
-   checkout cannot ride along in the PR.
+   `--path` is **required and repeatable**: name every path you placed, plus `index.json` if you regenerated it. Only declared paths are staged, so an unrelated dirty file in the checkout cannot ride along in the PR.
 
-   Every declared path is scanned for credential-shaped literals before anything is staged.
-   A finding refuses the PR and names the file and the shape — never the matched text. It is
-   a guard, not proof: it checks known literal shapes, so a clean run is not a certificate.
+   Every declared path is scanned for credential-shaped literals before anything is staged. A finding refuses the PR and names the file and the shape — never the matched text. It is a guard, not proof: it checks known literal shapes, so a
+   clean run is not a certificate.
 
    Use `--dry-run` to preview the git/gh commands without executing (useful for testing).
 
@@ -81,25 +78,20 @@ back to `ai-badger` as a **draft PR** for human review.
 ## Gotchas
 
 - **Draft PR, always.** A human reviews and merges; never auto-merge.
-- **`--path` is required and repeatable.** Only declared paths are staged, so an unrelated dirty
-  file cannot ride along in the PR.
-- **The credential scan is a guard, not proof.** It checks known literal shapes; a clean run is
-  not a certificate.
+- **`--path` is required and repeatable.** Only declared paths are staged, so an unrelated dirty file cannot ride along in the PR.
+- **The credential scan is a guard, not proof.** It checks known literal shapes; a clean run is not a certificate.
 - **The agnostic bar is high.** When unsure, keep it in the project, not the framework.
 
 ## Error Recovery
 
-When any script in the feed flow (`detect_additions.py`, `open_pr.py`) exits
-non-zero or emits an error, attempt recovery before surfacing the failure.
+When any script in the feed flow (`detect_additions.py`, `open_pr.py`) exits non-zero or emits an error, attempt recovery before surfacing the failure.
 
-1. **Parse the error.** Scripts emit structured JSON — read the `error` field to
-   classify the failure.
+1. **Parse the error.** Scripts emit structured JSON — read the `error` field to classify the failure.
 
-2. **Attempt automatic recovery.** Try the applicable fix, then re-run the
-   failed step.
+2. **Attempt automatic recovery.** Try the applicable fix, then re-run the failed step.
 
    | Error | Fix |
-   |---|---|
+      |---|---|
    | `manifest.json` missing or corrupt | Project not scaffolded — run `welcome-ai-badger` first |
    | `detect_additions.py` found no candidates | Confirm `.ai-badger/` has changes beyond manifest; check git status |
    | `open_pr.py` — `gh` not authenticated | `gh auth login` or set `GITHUB_TOKEN` |
@@ -107,15 +99,11 @@ non-zero or emits an error, attempt recovery before surfacing the failure.
    | `open_pr.py` — push rejected | Pull latest, rebase, force-push (draft branch only) |
    | `index_build.py` / `validate.py` error after placing files | Fix the placed files, re-run index build + validate |
 
-   After applying a fix, **re-run the failed step** and continue the flow. If it
-   succeeds, report what was fixed.
+   After applying a fix, **re-run the failed step** and continue the flow. If it succeeds, report what was fixed.
 
 3. **Recovery failed — offer to create a GitHub issue.** Follow
-   `.ai-badger/skills/welcome-ai-badger/references/reporting-a-framework-bug.md` **when a fix
-   does not recover the failure**: ask
-   permission first, gate on `gh` being installed and authenticated, sanitize the config
-   before including it. **Never create the issue without explicit user approval** — that rule
-   holds even if the reference file is not present.
+   `.ai-badger/skills/welcome-ai-badger/references/reporting-a-framework-bug.md` **when a fix does not recover the failure**: ask permission first, gate on `gh` being installed and authenticated, sanitize the config before including it.
+   **Never create the issue without explicit user approval** — that rule holds even if the reference file is not present.
 
 ## Verification Checklist
 

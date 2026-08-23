@@ -32,6 +32,7 @@ def _bootstrap_lib() -> Path:
     (ADR-0009). Duplicated verbatim in every entry point because locating badger_lib is
     what it is for.
     """
+
     def is_root(path):
         return ((path / "schemas").is_dir() and (path / "features").is_dir()
                 and (path / "engine" / "badger_lib.py").is_file())

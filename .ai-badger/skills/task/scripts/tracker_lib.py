@@ -43,7 +43,6 @@ SESSION_SOURCES: dict = {}
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
-
 # badger_lib.GIT_LOCATION_ENV, repeated because this ships into projects that have no framework
 # checkout to import it from. git exports GIT_DIR to its hooks and GIT_COMMON_DIR answers
 # `--git-common-dir` outright, so a child that inherits either reports another repository's
@@ -112,7 +111,7 @@ def project_above(start: Path, stop: Path | None = None) -> Path | None:
 
 
 def resolve_project_root(
-        env: dict | None = None, cwd: Path | None = None, script_dir: Path = SCRIPT_DIR
+    env: dict | None = None, cwd: Path | None = None, script_dir: Path = SCRIPT_DIR
 ) -> Path:
     """Resolve the ai-badger project root, in precedence order:
 

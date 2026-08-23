@@ -12,7 +12,6 @@ from typing import Dict, List
 from scaffold_context import ScaffoldContext
 from template_rendering import TemplateRendering
 
-
 # Known non-standard agent file locations that may coexist with the standard ones.
 _NONSTANDARD_AGENT_FILES: Dict[str, List[str]] = {
     ".github/copilot-instructions.md": ["COPILOT_INSTRUCTIONS.md"],
@@ -27,7 +26,7 @@ class AgentFiles:
         self.rendering = rendering
 
     def _apply_scaffolding(self, agent_name: str, instructions_doc: str,  # pylint: disable=too-many-statements
-                            instr_paths: List[Path], invariants: List[str]) -> None:
+                           instr_paths: List[Path], invariants: List[str]) -> None:
         """Apply features/<agent>/scaffolding.json to write agent files."""
         import badger_lib as bl
 
@@ -70,7 +69,7 @@ class AgentFiles:
             source_of_truth = aib_copy or file_entry["target"]
             if is_template:
                 body = self.rendering.render_template_file(source, instr_paths, invariants,
-                                                  source_of_truth)
+                                                           source_of_truth)
             else:
                 body = source.read_text(encoding="utf-8")
 
@@ -136,7 +135,7 @@ class AgentFiles:
                 )
 
     def write_agent_files(self, instructions_doc: str, instr_paths: List[Path],
-                           invariants: List[str]) -> None:
+                          invariants: List[str]) -> None:
         """Write agent discovery files using scaffolding.json from each agent's feature dir.
 
         Each agent in config.agents must have a features/<agent>/scaffolding.json that

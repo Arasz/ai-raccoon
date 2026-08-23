@@ -27,6 +27,7 @@ def _bootstrap_lib() -> Path:
     (ADR-0009). Duplicated verbatim in every entry point because locating badger_lib is
     what it is for.
     """
+
     def is_root(path):
         return ((path / "schemas").is_dir() and (path / "features").is_dir()
                 and (path / "engine" / "badger_lib.py").is_file())
@@ -124,7 +125,6 @@ def _bootstrap_lib() -> Path:
 
 FRAMEWORK_ROOT = _bootstrap_lib()
 import badger_lib as bl
-
 
 # vendored / build / framework-owned directories whose contents must not trigger stack
 # detection: `.claude` and `.ai-badger` are the framework's own scaffolded output, and

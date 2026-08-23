@@ -5,7 +5,9 @@
   "type": "object",
   "required": ["version", "files", "directories", "instructionSets", "sharedPolicy", "agents", "validation"],
   "properties": {
-    "$schema": { "type": "string" },
+      "$schema": {
+          "type": "string"
+      },
     "version": { "type": "integer", "minimum": 1 },
     "files": {
       "type": "object",

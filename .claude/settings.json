@@ -164,13 +164,15 @@
       "mcp__code-review-graph__*",
       "mcp__hermes__*",
       "mcp__ai-raccoon__*",
-      "mcp__semantica__*"
+        "mcp__semantica__*",
+        "mcp__playwright__*"
     ]
   },
   "enabledMcpjsonServers": [
     "code-review-graph",
     "hermes",
     "ai-raccoon",
-    "semantica"
+      "semantica",
+      "playwright"
   ]
 }

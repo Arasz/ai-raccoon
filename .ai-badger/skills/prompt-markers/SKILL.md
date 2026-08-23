@@ -26,13 +26,13 @@ context.
 
 ## The markers
 
-| Prefix | Meaning | Required behavior |
-|---|---|---|
-| `h:` / `hint:` | A potential insight or lead, not a command | Validate first — do a quick research pass (search the project, check relevant files/docs) before acting on it, and report what you found |
-| `f:` / `feedback:` | Direct critique or correction on previous work | High priority — address it before other work, referring back to the specific point in session history |
-| `e:` / `extension:` | A request to expand the current task's scope | Analyze the new requirement; fold it into the current unit of work if it fits, or flag it for a follow-up task if it's too large |
-| `q:` / `queue:` | A queued instruction to run after active work finishes | Finish active work first. Once complete, analyze and execute this queued instruction, incorporating context from all prior work |
-| `i!:` / `important!:` | Immediate emergency interrupt | STOP IMMEDIATELY — pause or cancel running commands/subtasks, read the message, and react instantly before doing anything else |
+| Prefix                | Meaning                                                | Required behavior                                                                                                                        |
+|-----------------------|--------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
+| `h:` / `hint:`        | A potential insight or lead, not a command             | Validate first — do a quick research pass (search the project, check relevant files/docs) before acting on it, and report what you found |
+| `f:` / `feedback:`    | Direct critique or correction on previous work         | High priority — address it before other work, referring back to the specific point in session history                                    |
+| `e:` / `extension:`   | A request to expand the current task's scope           | Analyze the new requirement; fold it into the current unit of work if it fits, or flag it for a follow-up task if it's too large         |
+| `q:` / `queue:`       | A queued instruction to run after active work finishes | Finish active work first. Once complete, analyze and execute this queued instruction, incorporating context from all prior work          |
+| `i!:` / `important!:` | Immediate emergency interrupt                          | STOP IMMEDIATELY — pause or cancel running commands/subtasks, read the message, and react instantly before doing anything else           |
 
 Marker definitions (prefixes + the exact instruction text injected for each) live in
 `markers-context.json`, next to this file — edit that file to add a marker or change its wording;
@@ -71,16 +71,12 @@ the audit write silently — it never creates project-tracking structure on its 
 
 ## Gotchas
 
-- **The hook *appends* via `additionalContext` and never rewrites the prompt.** Prepending or
-  rewriting invalidates prompt caching for that turn and every subsequent one (rationale recorded
-  in ADR-0017; mirror it in the project's ADRs instead of re-deriving).
+- **The hook *appends* via `additionalContext` and never rewrites the prompt.** Prepending or rewriting invalidates prompt caching for that turn and every subsequent one (rationale recorded in ADR-0017; mirror it in the project's ADRs
+  instead of re-deriving).
 - **Registration merges into existing arrays.** If the project already runs a
-  `UserPromptSubmit` hook (e.g. task's session tracker), add an entry, never replace it — the
-  host runs all registered hooks.
-- **The audit write is best-effort by design.** It only fires when an `.ai-badger` directory
-  already exists; a missing `marker-state.json` is not a hook failure.
-- **Marker definitions live in `markers-context.json`.** Edit that file to add or change a
-  marker, not the hook.
+  `UserPromptSubmit` hook (e.g. task's session tracker), add an entry, never replace it — the host runs all registered hooks.
+- **The audit write is best-effort by design.** It only fires when an `.ai-badger` directory already exists; a missing `marker-state.json` is not a hook failure.
+- **Marker definitions live in `markers-context.json`.** Edit that file to add or change a marker, not the hook.
 
 ## Installation
 
@@ -111,43 +107,32 @@ Code runs all registered hooks for an event.
 
 ## A mid-turn marker never reaches the hook
 
-`UserPromptSubmit` fires when a message **starts a turn**. A message sent **mid-turn** —
-queued by the user while the agent is already working — is delivered to the model as an
-attachment instead, and never passes through the hook. Its marker is therefore never
-expanded, and nothing reports a failure: the hook did not error, it was never called.
+`UserPromptSubmit` fires when a message **starts a turn**. A message sent **mid-turn** — queued by the user while the agent is already working — is delivered to the model as an attachment instead, and never passes through the hook. Its
+marker is therefore never expanded, and nothing reports a failure: the hook did not error, it was never called.
 
-Measured 2026-08-14 against a real session transcript
-(`~/.claude/projects/<project>/<session>.jsonl`):
+Measured 2026-08-14 against a real session transcript (`~/.claude/projects/<project>/<session>.jsonl`):
 
-| Message | Record type | Hook ran |
-|---|---|---|
-| Sent at turn start | `type: "user"` with `promptSource`, `origin`, `entrypoint` | yes |
-| Sent mid-turn | `type: "queue-operation"` + `type: "attachment"` | **no** |
+| Message            | Record type                                                | Hook ran |
+|--------------------|------------------------------------------------------------|----------|
+| Sent at turn start | `type: "user"` with `promptSource`, `origin`, `entrypoint` | yes      |
+| Sent mid-turn      | `type: "queue-operation"` + `type: "attachment"`           | **no**   |
 
-Two mid-turn `f:` messages produced no `type: "user"` record at all — and no marker context,
-no other `UserPromptSubmit` output either, which is what distinguishes this from a fault in
-this skill. The hook itself is fine: fed the same text directly it returns the correct
+Two mid-turn `f:` messages produced no `type: "user"` record at all — and no marker context, no other `UserPromptSubmit` output either, which is what distinguishes this from a fault in this skill. The hook itself is fine: fed the same text
+directly it returns the correct
 `additionalContext` and exit 0.
 
-**This is not fixable from a hook**, because there is no hook event for a queued message. The
-mitigation is the standing list below, which is why that list has to be complete.
+**This is not fixable from a hook**, because there is no hook event for a queued message. The mitigation is the standing list below, which is why that list has to be complete.
 
 ## Agent-facing contract
 
 Whichever agent instruction file the project maintains (`CLAUDE.md`, …)
-should tell agents that these markers exist and name the required behavior for each — the hook
-delivers the instruction text at the moment a marker is used, but a standing mention in the
-always-loaded instructions makes the behavior legible to a human reading the file, and is the
-**only** thing that carries the behavior when the hook does not fire.
+should tell agents that these markers exist and name the required behavior for each — the hook delivers the instruction text at the moment a marker is used, but a standing mention in the always-loaded instructions makes the behavior legible
+to a human reading the file, and is the **only** thing that carries the behavior when the hook does not fire.
 
 That list is generated from `features/common/templates/CLAUDE.md.tmpl` and
 `HERMES.md.tmpl`, where it is written out longhand rather than derived from
-`markers-context.json` — so adding a marker to the catalog does not add it to the templates,
-and nothing compared the two. It drifted exactly that way: `q:` and `i!:` reached the catalog
-and `HERMES.md.tmpl`, while `CLAUDE.md.tmpl` kept listing three for a release, taking both
-Copilot files with it.
+`markers-context.json` — so adding a marker to the catalog does not add it to the templates, and nothing compared the two. It drifted exactly that way: `q:` and `i!:` reached the catalog and `HERMES.md.tmpl`, while `CLAUDE.md.tmpl` kept
+listing three for a release, taking both Copilot files with it.
 
-**Fix the template, not the agent file.** An agent file edited directly looks correct until the
-next `scaffold.py` run silently reverts it.
-`tests/test_prompt_marker_standing_list.py` compares both templates *and* every generated
-agent file against `markers-context.json`, so the next marker added fails the build.
+**Fix the template, not the agent file.** An agent file edited directly looks correct until the next `scaffold.py` run silently reverts it.
+`tests/test_prompt_marker_standing_list.py` compares both templates *and* every generated agent file against `markers-context.json`, so the next marker added fails the build.

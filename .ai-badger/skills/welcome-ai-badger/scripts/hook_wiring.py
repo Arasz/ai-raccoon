@@ -268,7 +268,7 @@ class HookWiring:
                     hook_scripts = [named] if named.is_file() else []
                 else:
                     hook_scripts = (sorted(skill_hook_script.glob("*_hook.py"))
-                                     if skill_hook_script.exists() else [])
+                                    if skill_hook_script.exists() else [])
                     if len(hook_scripts) > 1:
                         names = ", ".join(p.name for p in hook_scripts)
                         self.ctx.notes.append(
@@ -335,7 +335,7 @@ class HookWiring:
         settings_path = self.ctx.target / ".claude" / "settings.json"
         # Nothing to wire and nothing a previous run could have wired for a declined skill.
         if not target_hooks["hooks"] and not (
-                self.ctx.excluded["skills"] and settings_path.exists()):
+            self.ctx.excluded["skills"] and settings_path.exists()):
             return
 
         if target_hooks["hooks"]:

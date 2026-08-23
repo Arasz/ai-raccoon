@@ -1,5 +1,7 @@
 {
-  "skill": "task",
-  "extension": "copilot",
-  "requires": ["agents=copilot"]
+    "skill": "task",
+    "extension": "copilot",
+    "requires": [
+        "agents=copilot"
+    ]
 }

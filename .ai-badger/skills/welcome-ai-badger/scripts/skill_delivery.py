@@ -28,6 +28,7 @@ def project_owned_names(skill_name: str) -> List[str]:
     """
     return [PROJECT_LOCAL_FILE] + SEED_ONCE_SKILL_FILES.get(skill_name, [])
 
+
 # Hermes-authored skills live under one directory the namespace links whole.
 LEARNED_SKILLS_DIR = "learned"
 HERMES_HOME_ENV = "HERMES_HOME"

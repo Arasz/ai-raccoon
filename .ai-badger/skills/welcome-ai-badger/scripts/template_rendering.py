@@ -139,7 +139,7 @@ class TemplateRendering:
         return "\n\n".join(blocks) + "\n\n" if blocks else ""
 
     def compute_doc_slots(self, invariants: List[str], instr_paths: List[Path],
-                            source_of_truth: str = "CLAUDE.md") -> Dict[str, str]:
+                          source_of_truth: str = "CLAUDE.md") -> Dict[str, str]:
         """Compute the template slots shared by CLAUDE.md and HERMES.md assembly.
 
         `source_of_truth` is the .ai-badger/ file this render is the copy of — every agent
@@ -220,7 +220,7 @@ class TemplateRendering:
         return "\n".join(lines) or "_None indexed._"
 
     def write_delegation_map(self, invariants: List[str], instr_paths: List[Path],
-                               mcp_servers: Sequence[str]) -> None:
+                             mcp_servers: Sequence[str]) -> None:
         """Write `.ai-badger/delegation.md`: who this project can delegate to, and through what.
 
         Called once the personas are scaffolded — their frontmatter is what names each lane.
@@ -240,7 +240,7 @@ class TemplateRendering:
     # -- agent-discovery copies -----------------------------------------------------
 
     def render_template_file(self, source: Path, instr_paths: List[Path],
-                               invariants: List[str], source_of_truth: str = "CLAUDE.md") -> str:
+                             invariants: List[str], source_of_truth: str = "CLAUDE.md") -> str:
         """Render a .tmpl file with the standard scaffold slots."""
         tmpl = source.read_text(encoding="utf-8")
         slots = self.compute_doc_slots(invariants, instr_paths, source_of_truth)
@@ -269,7 +269,7 @@ class TemplateRendering:
     def copy_with_header(self, dest: Path, name: str, body: str) -> None:
         """Write body to dest with managed header, preserving hand-authored files."""
         if (not self.ctx.overwrite and dest.exists()
-                and not _is_managed(dest.read_text(encoding="utf-8", errors="ignore"))):
+            and not _is_managed(dest.read_text(encoding="utf-8", errors="ignore"))):
             self.ctx.notes.append(
                 f"preserved hand-authored {dest.relative_to(self.ctx.target).as_posix()} "
                 "(source written to .ai-badger/; pass --overwrite-agent-files to replace)"

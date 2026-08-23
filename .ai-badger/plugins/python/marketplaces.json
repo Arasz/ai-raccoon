@@ -1,0 +1,8 @@
+{
+    "marketplaces": [
+        {
+            "name": "claude-plugins-official",
+            "source": "https://github.com/anthropics/claude-plugins-official"
+        }
+    ]
+}
