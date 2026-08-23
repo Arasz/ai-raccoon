@@ -535,6 +535,17 @@ public sealed class FakePromotionQueue : IPromotionQueue
     }
 }
 
+/// <summary>Stub <see cref="IModelMigrationStore"/> for tests that construct a <see cref="ToolGate"/> directly and do not exercise ADR-0076's migration lock.</summary>
+public sealed class NeverMigratingStore : IModelMigrationStore
+{
+    public Task<bool> HasOpenModelMigrationAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(false);
+
+    public Task<EmbeddingConfig> StartModelMigrationAsync(string provider, string? model, string? baseUrl,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Not exercised by ToolGate.");
+}
+
 /// <summary>No-op implementation of <see cref="ISearchQualityService"/> for unit tests that construct <see cref="MemoryTools"/> directly.</summary>
 public sealed class NoOpSearchQualityService : ISearchQualityService
 {

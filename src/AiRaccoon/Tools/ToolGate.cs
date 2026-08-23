@@ -11,15 +11,12 @@ namespace AiRaccoon.Tools;
 ///     the project's access mode, and wrap the result in the envelope carrying the propose tier's
 ///     meta. One copy, so the seven tool classes cannot drift apart.
 /// </summary>
-public sealed class ToolGate(IMemoryAccessGuard access, IPromotionQueue queue, IModelMigrationStore? migrations = null) : IToolGate
+public sealed class ToolGate(IMemoryAccessGuard access, IPromotionQueue queue, IModelMigrationStore migrations) : IToolGate
 {
     /// <summary>Refuses while a migration is open. Nothing else — the check a tool with no project yet can still make.</summary>
     public async Task RequireBankAvailableAsync(string toolName, CancellationToken cancellationToken)
     {
-        // Optional so every existing two-argument fake construction across the test suite keeps
-        // compiling; production DI always resolves the real IModelMigrationStore (RegisterStores).
-        if (migrations is not null &&
-            await migrations.HasOpenModelMigrationAsync(cancellationToken).ConfigureAwait(false))
+        if (await migrations.HasOpenModelMigrationAsync(cancellationToken).ConfigureAwait(false))
         {
             throw new ModelMigrationInProgressException(
                 $"ai-raccoon: a model migration is in progress; try again once it finishes ({toolName})");
