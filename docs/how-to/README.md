@@ -11,3 +11,4 @@ Task-oriented recipes: the reader has a goal (configure server, switch embedding
 - [Read back performance metrics](read-performance-metrics.md) — ask the running server how it is performing with `memory_performance`, no OTLP collector required.
 - [Rekey an encrypted bank](rekey-an-encrypted-bank.md) — move a Bitwarden/SSH-keyed bank from the pre-ADR-0012 key derivation to the current HKDF one with `ai-raccoon encryption migrate`.
 - [Run the Python scripts](run-the-python-scripts.md) — set up `uv`, install the declared dependencies, and run `scripts/` tooling and its test suite from a bare checkout.
+- [Search the code corpus](search-the-code-corpus.md) — search project source code via `memory_search kind=code`, read chunks with `code_get`, and set up the code embedding engine.
