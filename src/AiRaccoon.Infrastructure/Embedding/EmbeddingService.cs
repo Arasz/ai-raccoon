@@ -306,9 +306,15 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
     internal static string ThreadCountSource(string? rawSetting) =>
         TryParseThreadsSetting(rawSetting, out _) ? "setting" : "halved-core default";
 
-    /// <summary>#522: 0 means ORT's own default, not zero threads — displayed as text so it never misreads as broken. Shared by the session log and doctor.</summary>
+    /// <summary>#522/#524: 0 means ORT's own default, not zero threads — displayed as text so it never misreads as broken. The single producer of the phrase shared by the session log, doctor and settings (WP4/G4).</summary>
     internal static string ThreadCountDisplay(int threads) =>
         threads == 0 ? "ORT default" : threads.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>WP4/G4: the resolved count and its source for `embedding.threads`, in one place — doctor and settings both derived this ternary independently before.</summary>
+    internal static (int Threads, string Source) ResolveThreadCountForDisplay(string? rawSetting) =>
+        (TryParseThreadsSetting(rawSetting, out var explicitThreads)
+            ? explicitThreads
+            : HalvedCoreThreadDefault(Environment.ProcessorCount), ThreadCountSource(rawSetting));
 
     private IEmbeddingGenerator<string, Embedding<float>> CreateLocal(EmbeddingSettings settings)
     {
@@ -348,7 +354,8 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
         }
 
         // #522: the live confirmation the resolved thread count took effect.
-        Log.EmbeddingSessionCreated(_logger, ThreadCountDisplay(generator.IntraOpThreads), ThreadCountSource(rawThreads));
+        Log.EmbeddingSessionCreated(_logger, generator.IntraOpThreads, ThreadCountDisplay(generator.IntraOpThreads),
+            ThreadCountSource(rawThreads));
         return generator;
     }
 
@@ -430,9 +437,12 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
                       + "Using max(1, logicalCores/2) instead.")]
         public static partial void InvalidThreadsSetting(ILogger logger, string value);
 
-        /// <summary>#522: the resolved ORT intra-op thread count a local session was actually built with.</summary>
+        /// <summary>
+        ///     #522: the resolved ORT intra-op thread count a local session was actually built with.
+        ///     WP4/#524: <paramref name="Threads" /> is the raw int for aggregation; <paramref name="threadsDisplay" /> is the human phrase (docs/reference/logging-event-ids.md, 428).
+        /// </summary>
         [LoggerMessage(EventId = 428, Level = LogLevel.Information,
-            Message = "Embedding session created: intra-op threads {Threads} ({Source})")]
-        public static partial void EmbeddingSessionCreated(ILogger logger, string threads, string source);
+            Message = "Embedding session created: intra-op threads {ThreadsDisplay} ({Source})")]
+        public static partial void EmbeddingSessionCreated(ILogger logger, int Threads, string threadsDisplay, string source);
     }
 }
