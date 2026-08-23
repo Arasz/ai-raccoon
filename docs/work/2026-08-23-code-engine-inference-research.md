@@ -13,11 +13,13 @@ Every figure below carries the command that produced it and a tag:
 
 **The headline.** Both arms are real, and neither is the shape the plan assumed.
 
-- **The CoreML arm works and is numerically clean** — the pinned 1.29.0 package runs this graph on
-  the CoreML EP today, agreeing with the CPU EP to `cos = 1.0000000`, max component delta
-  **2.1e-7** (MLProgram backend). But Apple's runtime rejects the graph's *dynamic* input shapes
-  at every partition boundary, so the arm is **not** "a `SessionOptions` call": it needs a
-  fixed-or-bucketed padding policy, which is a change to `OnnxEmbeddingGenerator.RunBatch`.
+- **The CoreML arm loads and runs today** — the pinned 1.29.0 package takes 177 of 197 nodes on the
+  CoreML EP under MLProgram. But Apple's runtime rejects the graph's *dynamic* input shapes at every
+  partition boundary, so the arm is **not** "a `SessionOptions` call": it needs a fixed-or-bucketed
+  padding policy, which is a change to `OnnxEmbeddingGenerator.RunBatch`. **And the parity number
+  this record originally leaned on does not cover the arm being proposed** — it was measured on a
+  run that fell back to CPU. Vector drift for CoreML is **unmeasured**; §6.3's Gate 2 now covers
+  every arm, not just int8.
 - **The int8 arm does not exist as specified.** `quantize_dynamic` run on this model the way the
   card describes it quantizes **nothing that costs time** — 0 of 29 weight MatMuls — because every
   weight sits behind a `Transpose`. A three-step recipe does produce a genuine 47 MB / 25
@@ -169,19 +171,47 @@ synthetic `input_ids`/`attention_mask`, and compares the 768-float outputs. Sess
 
 ### 3.1 Backend choice decides the arm
 
-| Backend | Nodes in graph | Supported by CoreML | **Partitions** | Nodes placed on CoreML EP | Cosine vs CPU | max abs delta |
+| Backend | Nodes ORT offered | Supported by CoreML | **Partitions** | Fused CoreML nodes in final graph | Cosine vs CPU | max abs delta |
 |---|---|---|---|---|---|---|
 | `COREML_FLAG_USE_NONE` (NeuralNetwork, the default) | 197 | 104 | **32** | 32 | 1.0000000 | **1.9e-5** |
 | `COREML_FLAG_CREATE_MLPROGRAM` | 197 | **177** | **12** | 12 | 1.0000000 | **2.1e-7** |
 
-Source line, verbatim: `CoreMLExecutionProvider::GetCapability, number of partitions supported by
-CoreML: 12 number of nodes in the graph: 197 number of nodes supported by CoreML: 177`.
+Both source lines, verbatim **[measured]**:
+
+```
+CoreMLExecutionProvider::GetCapability, number of partitions supported by CoreML: 32
+  number of nodes in the graph: 197 number of nodes supported by CoreML: 104
+CoreMLExecutionProvider::GetCapability, number of partitions supported by CoreML: 12
+  number of nodes in the graph: 197 number of nodes supported by CoreML: 177
+```
+
+**Reading the last two columns** (they look contradictory and are not). "Supported by CoreML" counts
+nodes *before* partitioning; "Fused CoreML nodes in final graph" counts the fused subgraph nodes ORT
+reports afterwards — `Node(s) placed on [CoreMLExecutionProvider]. Number of nodes: 12`, each one a
+compiled partition standing in for many original nodes. 177 original nodes become 12 fused nodes
+across 12 partitions; the remaining 20 sit on `[CPUExecutionProvider]`. So one partition boundary per
+fused node, which is the cost that matters.
+
+**On "197" versus §2's 373** — the same file, two counters. §2 inventories `model.onnx` **as it sits
+on disk**: 373 nodes. ORT applies its own default graph optimizations *before* offering the graph to
+an EP for partitioning, so `GetCapability` sees an already-folded 197-node graph. It is the same
+optimizer §4.2's recipe leans on. **"177/197" is therefore not "177 of the model's 373 nodes."**
 
 The default NeuralNetwork backend **rejects every op that matters**: the verbose log rejects
 `MatMul` at every layer (`Operator [MatMul] is not supported by the impl`), plus `Reshape`, `Erf`
 and `Cast`. It splits the graph into 32 interleaved subgraphs and leaves all the arithmetic on CPU.
 **If the measured arm is run with default flags it will measure nothing and look like a
 regression.** `COREML_FLAG_CREATE_MLPROGRAM` is the only backend worth measuring.
+
+**The two parity figures above are CPU-fallback measurements, and they do not cover the arm this
+record proposes.** §3.2 shows that on these same runs Apple's E5RT rejected every dynamic shape and
+CoreML fell back; so the arithmetic that produced `2.1e-7` largely did **not** execute on the CoreML
+backend. Worse, the figure and the arm are mutually exclusive by this record's own reasoning: A3
+exists to bind shapes so the graph *can* schedule on the ANE, the ANE computes in fp16, and a graph
+that genuinely lands there will not agree with fp32 CPU to 2.1e-7. **What these numbers do prove is
+narrower and still worth having: ORT's CoreML EP wires up correctly, partitions this graph, and
+returns right answers.** They prove nothing about drift under a bound-shape CoreML arm — that is
+unmeasured, and §6.3's Gate 2 now covers A3 for exactly this reason.
 
 ### 3.2 The blocker is dynamic shapes, and it is Apple's, not ORT's
 
@@ -295,11 +325,23 @@ After step 1, 25 of the 29 weight MatMuls have `B = initializer` **[measured]**.
 | `MatMulInteger` | 0 | **25** |
 | `DynamicQuantizeLinear` | 0 | **17** |
 | `MatMul` (left fp32) | 33 | 8 |
-| int8 initializers | 0 | 50 tensors / 28,901,401 elements |
+| INT8 initializers | 0 | 50 tensors / 28,901,401 elements |
+| UINT8 initializers | 0 | 6 tensors / 17,859,075 elements (the embedding tables, from §4.1) |
+| FLOAT initializers | 70 tensors / 46,801,920 elements | 77 tensors / 41,507 elements (scales, zero-points, LayerNorm) |
 
-That is exactly ADR-0049's shape: `DynamicQuantizeLinear` emits uint8 activations against int8
-weights, so **every quantized matmul is u8s8** — the same arithmetic the bundled memory model uses
-(`model_qint8_arm64.onnx`, *"48 `MatMulInteger`"*, ADR-0049 `:55` **[read]**).
+The three rows close against the file size, which is why they are all listed: 28,901,401 + 17,859,075
+= **46,760,476** bytes of quantized tensors, plus 41,507 floats (166,028 B) = 46,926,504 B, leaving
+**108,262 B** of graph structure — node definitions, names, shapes — against the artifact's actual
+47,034,766 B. **[measured]** A table carrying only the INT8 row leaves 17.9M elements unaccounted
+for, which at fp32 would be 71.6 MB inside a 47 MB file, and reads as impossible.
+
+That is the same **u8s8 arithmetic** the bundled memory model uses: `DynamicQuantizeLinear` emits
+uint8 activations against int8 weights, so every quantized matmul is u8s8, exactly as
+`model_qint8_arm64.onnx` does (*"48 `MatMulInteger`"*, ADR-0049 `:55` **[read]**). It is **not** the
+same coverage: the memory model is 48/48 with **zero** fp32 matmuls left — fully quantized — while
+this artifact is 25 of 33 with **8** still fp32, about 76 %. The u8s8 claim, and with it §5b's
+inheritance of ADR-0049's cross-ISA risk, rests on the arithmetic and holds; "the same shape" would
+have overstated it.
 
 **`ORT_ENABLE_ALL` was tried and rejected.** It also folds the transposes, but it introduces
 `com.microsoft`-domain fusions (`BiasGelu`), after which `quantize_dynamic` fails outright —
@@ -349,8 +391,8 @@ gate is written to be failable rather than as a formality.
 | Manifest change | `onnx.files[0].sha256` re-pinned | none |
 | NuGet pin change | none | none |
 | Production code | none *if* the artifact is just activated | `OnnxEmbeddingGenerator` ctor **and** `:130` padding policy **and** an OS guard |
-| Fingerprint / re-embed | **yes** — a manifest content change is the engine fingerprint (ADR-0084), so `model set code local` invalidates all 1,762 code rows in one transaction (ADR-0087). ~1,061 s at today's rate **[read]** | **no** — vectors are unchanged to 2.1e-7 |
-| Stored-vector compatibility | **breaks** — banks embedded fp32 must re-embed | none |
+| Fingerprint / re-embed | **yes** — a manifest content change is the engine fingerprint (ADR-0084), so `model set code local` invalidates all 1,762 code rows in one transaction (ADR-0087). ~1,061 s at today's rate **[read]** | **unknown** — no manifest changes, so nothing triggers a re-embed *automatically*; whether one is *needed* depends on Gate 2 |
+| Stored-vector compatibility | **breaks** — banks embedded fp32 must re-embed | **unmeasured** — the 2.1e-7 was taken on a CPU-fallback run (§3.1); a bound-shape CoreML arm may compute in fp16 on the ANE. Gate 2 settles it |
 | Non-Apple platforms | unchanged | must be a guarded no-op, or the engine throws (§1.2) |
 
 Three consequences worth their own lines:
@@ -374,6 +416,14 @@ accepted risk, and it should be decided deliberately rather than inherited.
 
 **(c) CoreML collides with WP12-A.** §3.2. Length-sorted batches minimize padding; static shapes
 maximize it. Bucketing may satisfy both; nobody has measured that.
+
+**(d) CoreML's "no accuracy cost" is a hypothesis, not a finding.** It is the one claim in this
+record that was over-stated in the first draft, and it was load-bearing in four places — Gate 1's
+lower bar, the §5 row above, the ADR's Context, and Gate 2's scope. All four are now conditional.
+Both plans always scoped WP7 as three arms *"plus a vector-drift check of the same 1,762 chunks
+against fp32"* (`docs/work/2026-08-23-post-delta-4-plan.md:496` and
+`docs/work/2026-08-23-post-delta-5-plan.md:135` **[read]**) — not int8-only. Narrowing it was an
+unflagged departure from an approved scope; it is withdrawn.
 
 ---
 
@@ -408,9 +458,25 @@ Baselines to compare against, all from that document **[read]**: **S4 = 2.347 ro
 | **A1** | int8, cap 5 | the §4.2 artifact (47 MB, 25 `MatMulInteger`), activated via `model set code local` |
 | **A2** | CoreML MLProgram, fp32, cap 5 | scratch branch: `AppendExecutionProvider_CoreML(COREML_FLAG_CREATE_MLPROGRAM)` at `OnnxEmbeddingGenerator.cs:60` |
 | **A3** | CoreML MLProgram + **static shapes**, fp32, cap 5 | A2 plus fixed `maxLen = 512` at `:130` and `COREML_FLAG_ONLY_ALLOW_STATIC_INPUT_SHAPES` |
+| **A4** | **fp32 CPU + fixed `maxLen = 512`**, cap 5 — *padding control* | A3's `:130` change **without** the CoreML EP |
 
 A3 is not optional garnish: §3.2 says A2 is expected to fall back, so **A2 alone cannot falsify the
 CoreML arm** — only A3 can. A2 exists to size the fallback penalty.
+
+**A4 is what makes A3 readable, and it is the cheapest arm in the set.** A0 pads each batch to that
+batch's longest row; A3 pads every batch to 512. That is not a free change: the profile document
+sizes the same axis in the opposite direction — length-sorted batching (*less* padding) is worth
+"a conservative 10–20 % of the 1,061 s drain (105–210 s) … attention is superlinear in sequence
+length" (`docs/work/2026-08-22-code-ingestion-profile.md:251-253` **[read]** — and tagged there
+*"[inferred, and the derivation is explicitly weaker than the others]"*, so treat it as an order of
+magnitude, not a number), against a mean chunk of 1,159 chars and 18.5 % of rows under 500. So A3 must clear its bar **while doing materially more arithmetic than A0**, and without A4
+a miss cannot be attributed: CoreML losing and the padding eating the win look identical. A4 also
+makes the bucketing question of §3.2/§8 decidable now instead of deferred — it is the same one-line
+`:130` change A3 needs anyway.
+
+**Gate 1 for A3 is therefore read against A4, not A0** — same padding on both sides, so the
+comparison isolates the execution provider. A3-vs-A0 is still reported, as the end-to-end number a
+user would actually feel.
 
 A0 through A3 are **scratch-branch** builds. Per G3, nothing merges from this measurement; the record
 ends in a recommendation.
@@ -428,41 +494,76 @@ comparable to the published baselines. This is the check that catches the #511 f
 - **A1 (int8)** must reach **≥ 1.5× A0** to be recommendable. Rationale: it costs a full re-embed,
   a re-pinned manifest, an unsolved provenance story (§5a) and an extension of ADR-0049 (§5b).
   1.5× removes ≈ 354 s from the 1,061 s drain; below that the price is not paid for.
-- **A2/A3 (CoreML)** must reach **≥ 1.25× A0**. A lower bar is justified because the arm costs **no
-  accuracy** (§3.1: 2.1e-7) and **no re-embed** — its price is code complexity and a platform guard,
-  not vector churn.
+- **A2/A3 (CoreML)** must reach **≥ 1.25×**, A3 measured against **A4** (§6.2). **This bar is
+  provisional.** It was set on the premise that the arm costs no accuracy, and §3.1 now says that
+  premise is unmeasured — the 2.1e-7 came from a CPU-fallback run. **If A3 fails Gate 2, its bar
+  rises to A1's 1.5×**, because an arm that moves vectors is buying its speed with the same currency
+  int8 is, and must pay the same price. The bar is confirmed at 1.25× only once A3 clears Gate 2.
+- **A4 (padding control)** carries no bar. It is a measurement, not a candidate.
 - Below its bar, an arm is **rejected in the record**, not re-run with a lower bar.
 
-**Gate 2 — accuracy, A1 only.** Re-embed all **1,762** real chunks under fp32 and under int8 and
+**Gate 2 — vector drift. Every arm that could move a vector: A1 *and* A3** (and A2 if it is run
+with any shape binding at all). Re-embed all **1,762** real chunks under A0 and under the arm, and
 compare, per chunk:
 
 - primary: **mean top-5 overlap ≥ 0.80** across **≥ 30** code queries run against both banks —
-  i.e. int8 returns at least 4 of fp32's top 5, on average. Retrieval agreement is what the corpus
+  i.e. the arm returns at least 4 of A0's top 5, on average. Retrieval agreement is what the corpus
   is for; cosine is a proxy for it.
 - secondary: **mean per-chunk cosine ≥ 0.99** and **1st-percentile cosine ≥ 0.97**.
 
-**This gate is predicted to fail.** §4.3 measures mean 0.964 / min 0.958 on a smoke corpus, well
-under both secondary numbers. Naming the threshold and the prediction together is the point: if A1
-comes back at 0.995 on real chunks, that is a genuine surprise worth acting on, and if it comes back
-at 0.96 the gate has done its job. A1 failing Gate 2 **rejects the arm regardless of Gate 1** — a
-faster engine that returns different results is not a faster engine.
+**Failing Gate 2 rejects an arm regardless of Gate 1** — a faster engine that returns different
+results is not a faster engine. For A3 the consequence is graded rather than fatal: failing it moves
+A3 to the 1.5× bar and puts a full code re-embed into its cost column (§5), which is exactly the
+price int8 pays.
 
-**Gate 3 — CoreML is actually executing off-CPU (A2/A3 diagnostic).**
-Report mean and max CPU % from the identical `top` invocation. If A3's CPU band overlaps A0's
-124.3–140.3 %, the ANE/GPU is not being used, the E5RT fallback of §3.2 is still in force, and the
-arm is dead **whatever rows/s says**. A CoreML arm that wins on throughput while pinning the same
-CPU is measuring something else and must be investigated, not banked.
+**For A1 this gate is predicted to fail.** §4.3 measures mean 0.964 / min 0.958 on a smoke corpus,
+well under both secondary numbers. Naming the threshold and the prediction together is the point: if
+A1 comes back at 0.995 on real chunks, that is a genuine surprise worth acting on, and if it comes
+back at 0.96 the gate has done its job.
 
-**Gate 4 — session-create cost.** Time `InferenceSession` construction, cold, 3 repeats per arm.
-Any arm whose cold construction exceeds **A0 + 10 s** is reported as a startup regression alongside
-its throughput number. `serve` restarts are routine (§6.1 makes one mandatory per measurement), so
-this is a user-visible cost, not a lab artifact.
+**For A3 there is no prediction, and that is the finding.** §3.1's 2.1e-7 does not apply to a
+bound-shape run, and the ANE's fp16 arithmetic could plausibly land anywhere between 0.999 and
+int8's 0.964. This gate exists because nobody knows.
+
+**Gate 3 — CoreML is actually executing off-CPU (A2/A3).** The primary criterion is **binary and
+on-mechanism**, not a CPU proxy, because §3 already harvested the direct signal:
+
+- **primary:** A3's `ORT_LOGGING_LEVEL_VERBOSE` session log contains **zero** E5RT shape-rejection
+  messages — none of `attention_mask`, `_encoder_encoder_layer_*_attention_self_Reshape_1_output_0`,
+  `_encoder_Mul_output_0`, `_ReduceL2_output_0`, `_Expand_output_0` may appear with *"has unbounded
+  dimension which is not supported"*. One occurrence means the shapes did not bind and A3 is just A2.
+- **secondary:** partition and placement counts from the same log, which must still report a CoreML
+  placement (§3.1's shape), and mean/max CPU % from the identical `top` invocation — A3's band
+  separating from A0's 124.3–140.3 % is corroboration, never the finding on its own. CPU % cannot
+  tell "ANE running" from "GPU running, driven from CPU" from "slower and idle".
+- **tie-breaker if the two disagree:** `powermetrics --samplers ane_power,gpu_power` alongside the
+  window settles it outright.
+
+Failing the primary criterion means the E5RT fallback of §3.2 is still in force and **the arm is
+dead whatever rows/s says** — a CoreML arm that wins on throughput while still logging shape
+rejections is measuring something else and must be investigated, not banked.
+
+**Gate 4 — session-create cost.** Time `InferenceSession` construction cold, 3 repeats per arm,
+timed the same way S3–S5 time their windows (wall clock around the construction call, server freshly
+started). Two lines, both able to go red:
+
+- **≥ A0 + 10 s: rejected**, on the same footing as a Gate 1 miss. `serve` restarts are routine —
+  §6.1 makes one mandatory per measurement — so a minute of CoreML compilation on every start is a
+  user-visible regression that a throughput win does not buy back.
+- **A0 + 3 s to A0 + 10 s: escalated to an owner ruling**, reported with the arm's throughput so the
+  trade is visible. Below A0 + 3 s: passes silently.
+
+This gate was written as "reported as" in the first draft, which made it an annotation rather than a
+gate and contradicted this section's own opening.
 
 ### 6.4 What gets recorded per arm
 
 rows/s (pending before → after, window length to 0.1 s), CPU mean/max and thread count, cold
-session-create seconds, and for A1 the Gate 2 distribution. Every one with its command and its tag,
-in the same table shape as the profile document's §3, so the two records read against each other.
+session-create seconds, the Gate 2 distribution for **A1 and A3**, and for A2/A3 the E5RT
+rejection count and the partition/placement lines Gate 3 reads. Every one with its command and its
+tag, in the same table shape as the profile document's §3, so the two records read against each
+other. A3 is reported twice — against **A4** (isolating the execution provider) and against **A0**
+(the end-to-end number a user would feel).
 
 ---
 
@@ -470,9 +571,13 @@ in the same table shape as the profile document's §3, so the two records read a
 
 **Order the arms A0 → A3 → A2 → A1**, and be prepared to stop early.
 
-A3 is the cheapest arm with a real chance: no vector change, no re-embed, no provenance problem, and
-§3.1 already proves the numerics are clean to 2.1e-7. Its only unknown is whether static shapes let
-CoreML schedule the graph, which Gate 3 answers directly.
+A3 is the arm with the best cost-to-chance ratio, but it is not the free win the first draft of this
+record called it. It has no provenance problem and needs no new artifact — but it has **two** open
+unknowns, not one: whether static shapes let CoreML schedule the graph (Gate 3 answers it directly,
+on-mechanism), and whether a bound-shape CoreML run moves the vectors (Gate 2 — unmeasured, because
+§3.1's 2.1e-7 came from a CPU-fallback run). Run **A4** immediately after A3 regardless of the
+result: it is a one-line change, it is the only thing that makes A3's number attributable, and it
+answers the bucketing question §3.2 leaves open.
 
 A1 should be measured **last and possibly not at all.** Three independent things point away from it
 before any timing exists: the desk parity at 0.964 (§4.3), the model card's own PTQ figure of
@@ -492,10 +597,15 @@ the owner reads any WP7 result against it.
 
 - Whether `faxenoff/code-daemon-embed-v1` still hosts `model_int8qdt.onnx`, and whether it is a
   genuine QAT artifact. If it is, the int8 arm is a download, not a recipe, and §4 is moot (§2).
+- **Vector drift under a bound-shape CoreML arm.** §3.1's 2.1e-7 is a CPU-fallback measurement and
+  does not cover A3. Gate 2 settles it; there is no prediction.
 - Whether A3's static padding can coexist with WP12-A's length-sorted batches via bucketing (§3.2).
+  **A4 is the arm that answers this**, and it is cheap.
 - CoreML cold session-create as a number (§3.3) — Gate 4 settles it.
 - Whether `COREML_FLAG_ONLY_ENABLE_DEVICE_WITH_ANE` changes A3's partitioning. Not tried.
-- Everything about throughput. No rows/s figure appears anywhere in this document, by design.
+- Everything about throughput. **No newly measured rows/s figure appears anywhere in this
+  document** — the only rows/s here are the profile record's published baselines (2.347, 1.902) and
+  Gate 0's band derived from one of them.
 
 ## 9. Reproducing the desk half
 
