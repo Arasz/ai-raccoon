@@ -408,11 +408,11 @@ public sealed partial class SqliteMemoryStore(
         // pruned per file. Files the walk did not reach — gone from disk, newly ignored — keep their
         // chunks here; removing those is the watch digest's job, which sees deletes and ignore
         // transitions that a one-shot directory ingest cannot distinguish from "not walked this time".
-        // #436: the walk does not (yet) track per-file code-corpus hashes, so keepCode is null —
-        // code_entries pruning for the directory walk is a known, separately scoped gap: #485.
+        // #485: the walk now threads each file's code-corpus hashes through, so a shrinking code
+        // file's stale code_entries rows are pruned here the same way the single-file path does.
         foreach (var file in result.Files)
         {
-            await PruneChunksNotIn(connection, projectId, file.Path, file.ChunkHashes, keepCode: null, cancellationToken)
+            await PruneChunksNotIn(connection, projectId, file.Path, file.ChunkHashes, file.CodeChunkHashes, cancellationToken)
                 .ConfigureAwait(false);
         }
 

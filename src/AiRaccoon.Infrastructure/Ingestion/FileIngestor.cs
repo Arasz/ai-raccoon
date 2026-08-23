@@ -78,21 +78,31 @@ public sealed class FileIngestor(
 
         var result = await codeIngestor.IngestFileAsync(connection, projectId, path, cancellationToken)
             .ConfigureAwait(false);
+        var codeChunkHashes = ResolveCodeChunkHashes(result);
         if (result.ChunkHashes is { Count: > 0 })
         {
-            return new FileIngestResult(result.Rows, true, CodeChunkHashes: result.ChunkHashes);
+            return new FileIngestResult(result.Rows, true, CodeChunkHashes: codeChunkHashes);
         }
 
         return result.ContentWhitespaceOnly
-            ? new FileIngestResult(0, true, CodeChunkHashes: result.ChunkHashes ?? [])
-            : new FileIngestResult(0, false, CodeChunkHashes: null);
+            ? new FileIngestResult(0, true, CodeChunkHashes: codeChunkHashes)
+            : new FileIngestResult(0, false, CodeChunkHashes: codeChunkHashes);
     }
 
+    /// <summary>The null-vs-empty <see cref="CodeIngestResult.ChunkHashes" /> prune contract (S3,
+    /// #485): null for a stand-in chunker's untrustworthy zero chunks, else the real set.</summary>
+    private static IReadOnlyList<string>? ResolveCodeChunkHashes(CodeIngestResult result) =>
+        result.ChunkHashes is { Count: > 0 }
+            ? result.ChunkHashes
+            : result.ContentWhitespaceOnly
+                ? result.ChunkHashes ?? []
+                : null;
+
     /// <summary>
-    ///     The `ai-raccoon.ignore` root for an explicit single-file ingest: the containing
-    ///     registered watch if one exists (longest match), else the ingest-scope allowlist entry
-    ///     that admits the path, else the file's own parent directory. `IgnoreRulesProvider` reads
-    ///     one file at whatever root it is given — no nested discovery.
+    ///     The `ai-raccoon.ignore` root for a single-file ingest or a directory walk's root: the
+    ///     containing registered watch if one exists (longest match), else the ingest-scope
+    ///     allowlist entry that admits the path, else the path's own parent directory.
+    ///     `IgnoreRulesProvider` reads one file at whatever root it is given — no nested discovery.
     /// </summary>
     private async Task<string> ResolveIgnoreRootAsync(SqliteConnection connection, string projectId, string path,
         CancellationToken cancellationToken)
@@ -128,9 +138,16 @@ public sealed class FileIngestor(
         var scope = await ReadScopeAsync(connection, projectId, cancellationToken).ConfigureAwait(false);
         RequireInScope(scope, path);
 
-        var ignoreRules = await ignoreRulesProvider.LoadAsync(path, cancellationToken).ConfigureAwait(false);
+        // B1 (PR #532 review): RequireInScope above already guarantees a scope entry admits path,
+        // so ResolveIgnoreRootAsync's admittingScopeEntry branch is never null here — an ancestor
+        // would always win over the walk root's own file. Check the walk root first, or its own
+        // ai-raccoon.ignore silently stops applying whenever it differs from that ancestor.
+        var ignoreRoot = File.Exists(Path.Combine(path, IgnoreRulesProvider.FileName))
+            ? path
+            : await ResolveIgnoreRootAsync(connection, projectId, path, cancellationToken).ConfigureAwait(false);
+        var ignoreRules = await ignoreRulesProvider.LoadAsync(ignoreRoot, cancellationToken).ConfigureAwait(false);
         var files = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
-            .Where(file => !IsHidden(path, file) && !IsIgnored(ignoreRules, path, file) && IsInScope(scope, file))
+            .Where(file => !IsHidden(path, file) && !IsIgnored(ignoreRules, ignoreRoot, file) && IsInScope(scope, file))
             .OrderBy(file => file, StringComparer.Ordinal);
 
         var indexed = 0;
@@ -148,6 +165,7 @@ public sealed class FileIngestor(
                         .ConfigureAwait(false);
                     indexed += codeResult.Rows;
                     codeRowsWritten |= codeResult.Rows > 0;
+                    walked.Add(new WalkedFile(file, [], ResolveCodeChunkHashes(codeResult)));
                 }
 
                 continue;
@@ -159,7 +177,7 @@ public sealed class FileIngestor(
                 .ConfigureAwait(false);
             indexed += rows;
             memoryRowsWritten |= rows > 0;
-            walked.Add(new WalkedFile(file, hashes));
+            walked.Add(new WalkedFile(file, hashes, null));
         }
 
         // One signal per corpus the walk actually wrote rows for — never per file (a per-file
