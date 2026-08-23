@@ -95,9 +95,14 @@ public sealed class ProjectRegistrationGuardTests
     public async Task ACodeOnlyLegacyProjectWithRows_IsAllowedAndWarns()
     {
         var registry = new FakeProjectRegistry { RowsFor = { "code-only-legacy" } };
-        var guard = NewGuard(registry);
+        var logger = new FakeLogger<ProjectRegistrationGuard>();
+        var guard = new ProjectRegistrationGuard(registry, logger);
 
         await guard.EnsureAsync("code-only-legacy", AccessRequirement.Write, TestContext.Current.CancellationToken);
+
+        logger.Collector.GetSnapshot().ShouldContain(r =>
+            r.Id.Name == "LegacyProjectIdAccepted",
+            "a code-only legacy id takes the same warn-and-work path");
     }
 
     [Fact]
@@ -110,16 +115,16 @@ public sealed class ProjectRegistrationGuardTests
         await guard.EnsureAsync(canonical, AccessRequirement.Write, TestContext.Current.CancellationToken);
     }
 
+    /// <summary>The guard's contract receives the CANONICAL form: ToolGate canonicalizes before
+    /// calling (ADR-0089 decision 2), so a re-spelled input never reaches here. This pins that
+    /// the guard answers on the canonical string it is given.</summary>
     [Fact]
-    public async Task AReSpelledRegisteredGuid_IsAllowed()
+    public async Task ACanonicalRegisteredGuid_IsAllowed()
     {
         var canonical = Guid.CreateVersion7().ToString("D");
         var registry = new FakeProjectRegistry { Registered = { canonical } };
         var guard = NewGuard(registry);
 
-        // The registry (a fake here) always answers on the canonical form — ToolGate canonicalizes
-        // before calling this guard (ADR-0089 decision 2), so a re-spelled input reaching here
-        // would already be folded down; this pins the guard's own contract against that form.
         await guard.EnsureAsync(canonical, AccessRequirement.Write, TestContext.Current.CancellationToken);
     }
 

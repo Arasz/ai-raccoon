@@ -1,4 +1,6 @@
+using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
+using AiRaccoon.Core.Projects;
 
 namespace AiRaccoon.Projects;
 
@@ -6,9 +8,9 @@ namespace AiRaccoon.Projects;
 public interface IProjectRegistrationGuard
 {
     /// <summary>
-    ///     Reads are allowed unconditionally — same shape as <see cref="AiRaccoon.Access.IMemoryAccessGuard.EnsureAsync" />.
+    ///     Reads are allowed unconditionally — same shape as <see cref="IMemoryAccessGuard.EnsureAsync" />.
     ///     For a write/destructive <paramref name="requirement" />, throws
-    ///     <see cref="AiRaccoon.Core.Projects.UnregisteredProjectException" /> when the canonical
+    ///     <see cref="UnregisteredProjectException" /> when the canonical
     ///     <paramref name="projectId" /> has no registry row and the bank holds no rows for it
     ///     either. A registered-but-empty project passes silently; a legacy id with rows but no
     ///     registration passes with a one-time warning.
