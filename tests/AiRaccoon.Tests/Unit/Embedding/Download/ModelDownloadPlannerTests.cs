@@ -449,6 +449,8 @@ public class ModelDownloadPlannerTests
 
         plan.EmbeddingOutput.ShouldBe("sentence_embedding");
         plan.TokenEmbeddingsOutput.ShouldBe("hidden_states");
+        plan.PoolingMode.ShouldBe(PoolingMode.ModelOutput);
+        plan.PoolingProvenance.ShouldContain("placeholder");
     }
 
     /// <summary>
@@ -465,6 +467,53 @@ public class ModelDownloadPlannerTests
 
         plan.TokenEmbeddingsOutput.ShouldBe("token_embeddings");
         plan.EmbeddingOutput.ShouldBe("pooler_output");
+        plan.PoolingMode.ShouldBe(PoolingMode.ModelOutput);
+        plan.PoolingProvenance.ShouldContain("placeholder");
+    }
+
+    /// <summary>
+    ///     #504 B3: rank is a fact, a name is a guess — with both outputs' real rank known, the
+    ///     graph's declared shape decides regardless of which name the list gives first. Both
+    ///     shapes named in the issue, in BOTH orders, must land on the same (token, embedding) pair.
+    /// </summary>
+    [Theory]
+    [InlineData("sentence_embedding", "hidden_states")]
+    [InlineData("hidden_states", "sentence_embedding")]
+    public void Pooling_RankKnown_SelectsByRank_RegardlessOfNameOrder_UnrecognizedNames(string first, string second)
+    {
+        var probe = BgeM3Probe() with
+        {
+            OutputNames = [first, second],
+            OutputRanks = new Dictionary<string, int> { ["sentence_embedding"] = 2, ["hidden_states"] = 3 }
+        };
+
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), probe);
+
+        plan.TokenEmbeddingsOutput.ShouldBe("hidden_states");
+        plan.EmbeddingOutput.ShouldBe("sentence_embedding");
+        plan.PoolingMode.ShouldBe(PoolingMode.ModelOutput);
+        plan.PoolingProvenance.ShouldContain("placeholder");
+    }
+
+    /// <summary>The other named shape (a recognized token-level name plus an unrecognized tail),
+    /// same order-independence proof.</summary>
+    [Theory]
+    [InlineData("token_embeddings", "pooler_output")]
+    [InlineData("pooler_output", "token_embeddings")]
+    public void Pooling_RankKnown_SelectsByRank_RegardlessOfNameOrder_RecognizedTokenName(string first, string second)
+    {
+        var probe = BgeM3Probe() with
+        {
+            OutputNames = [first, second],
+            OutputRanks = new Dictionary<string, int> { ["token_embeddings"] = 3, ["pooler_output"] = 2 }
+        };
+
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), probe);
+
+        plan.TokenEmbeddingsOutput.ShouldBe("token_embeddings");
+        plan.EmbeddingOutput.ShouldBe("pooler_output");
+        plan.PoolingMode.ShouldBe(PoolingMode.ModelOutput);
+        plan.PoolingProvenance.ShouldContain("placeholder");
     }
 
     [Fact]

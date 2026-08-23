@@ -131,8 +131,12 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
             .ToList();
 
         var inputs = probe?.InputNames ?? [];
-        var tokenEmbeddingsOutput = probe is null ? null : SelectTokenEmbeddingsOutput(probe.OutputNames);
-        var embeddingOutput = probe is null ? null : SelectEmbeddingOutput(probe.OutputNames, tokenEmbeddingsOutput);
+        string? tokenEmbeddingsOutput = null;
+        string? embeddingOutput = null;
+        if (probe is not null)
+        {
+            (tokenEmbeddingsOutput, embeddingOutput) = SelectOutputs(probe);
+        }
 
         return new ModelDownloadPlan(
             repoId,
@@ -346,8 +350,7 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
     private static (PoolingMode Mode, NormalizationMode Normalization, string Provenance) PoolingDecision(
         IReadOnlyDictionary<string, string> rawFiles, OnnxGraphProbe? probe)
     {
-        var hasPooledOutput = probe is not null
-            && SelectEmbeddingOutput(probe.OutputNames, SelectTokenEmbeddingsOutput(probe.OutputNames)) is not null;
+        var hasPooledOutput = probe is not null && SelectOutputs(probe).EmbeddingOutput is not null;
 
         if (rawFiles.TryGetValue("1_Pooling/config.json", out var poolingJson))
         {
@@ -511,6 +514,36 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
                    && type.ValueKind == JsonValueKind.String
                    && type.GetString()?.EndsWith(".Normalize", StringComparison.Ordinal) == true);
     }
+
+    /// <summary>
+    ///     #504: an ONNX rank is a fact, a name is a guess. With two or more outputs, selects
+    ///     token-level (<see cref="OnnxOutputRanks.TokenLevelRank" />) and pooled
+    ///     (<see cref="OnnxOutputRanks.PooledRank" />) by their real declared rank whenever the
+    ///     probe knows both — order-independent, since a rank does not move when a name does.
+    ///     Falls back to the name heuristic only when rank is unknown or ambiguous for either role
+    ///     (including the sole-output #470/#475 shape, which the real rank check corrects later).
+    /// </summary>
+    private static (string? TokenEmbeddingsOutput, string? EmbeddingOutput) SelectOutputs(OnnxGraphProbe probe)
+    {
+        var outputs = probe.OutputNames;
+        if (outputs.Count <= 1)
+        {
+            return (outputs.Count == 0 ? string.Empty : outputs[0], null);
+        }
+
+        var tokenByRank = outputs.FirstOrDefault(n => RankOf(probe, n) == OnnxOutputRanks.TokenLevelRank);
+        var embeddingByRank = outputs.FirstOrDefault(n => RankOf(probe, n) == OnnxOutputRanks.PooledRank);
+        if (tokenByRank is not null && embeddingByRank is not null && tokenByRank != embeddingByRank)
+        {
+            return (tokenByRank, embeddingByRank);
+        }
+
+        var tokenByName = SelectTokenEmbeddingsOutput(outputs);
+        return (tokenByName, SelectEmbeddingOutput(outputs, tokenByName));
+    }
+
+    private static int? RankOf(OnnxGraphProbe probe, string output) =>
+        probe.OutputRanks is not null && probe.OutputRanks.TryGetValue(output, out var rank) ? rank : null;
 
     private static string SelectTokenEmbeddingsOutput(IReadOnlyList<string> outputs)
     {
