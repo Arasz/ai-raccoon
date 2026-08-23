@@ -1,0 +1,97 @@
+using AiRaccoon.Infrastructure.Sqlite;
+using Dapper;
+using Microsoft.Data.Sqlite;
+using Shouldly;
+using Xunit;
+
+namespace AiRaccoon.Tests.Integration.Storage;
+
+/// <summary>
+///     ADR-0089 decision 5: the <c>projects</c> registry table lives in the unconditional
+///     <c>Ddl</c> block beside <c>metrics</c> — no <see cref="MemorySchema.CurrentVersion" />
+///     bump, so it reaches a legacy bank via the digest-rerun path (ADR-0086), not a ladder step.
+/// </summary>
+[Trait(TestCategories.Category, TestCategories.Integration)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
+public sealed class ProjectsTableDdlTests
+{
+    [Fact]
+    public async Task OpeningALegacyBank_CreatesTheProjectsTable()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO entries (hash, path, value, project_id, scope, created_at, updated_at)
+            VALUES ('h1', 'p1', 'a memory row', 'acme', 'project', 1, 1)
+            """, cancellationToken: TestContext.Current.CancellationToken));
+
+        // Simulate a pre-6a bank: the projects table doesn't exist yet and the digest is stale —
+        // the shape a v10 bank stamped before this task's Ddl change actually has.
+        await connection.ExecuteAsync(new CommandDefinition(
+            "DROP TABLE IF EXISTS projects", cancellationToken: TestContext.Current.CancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(
+            $"PRAGMA application_id = {MemorySchema.SchemaDigest + 1}",
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        (await TableExistsAsync(connection, "projects")).ShouldBeTrue("a legacy bank must gain the projects table on reopen");
+        (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM entries", cancellationToken: TestContext.Current.CancellationToken)))
+            .ShouldBe(1L, "existing memory rows must survive the projects table addition");
+    }
+
+    [Fact]
+    public async Task CreatingTheProjectsTable_DoesNotChangeUserVersion()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        var versionBefore = await ReadUserVersionAsync(connection);
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            "DROP TABLE IF EXISTS projects", cancellationToken: TestContext.Current.CancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(
+            $"PRAGMA application_id = {MemorySchema.SchemaDigest + 1}",
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        var versionAfter = await ReadUserVersionAsync(connection);
+
+        versionAfter.ShouldBe(versionBefore, "the projects table is additive Ddl, not a ladder step — no version bump");
+    }
+
+    [Fact]
+    public async Task FreshBank_HasTheProjectsTableWithTheDecidedShape()
+    {
+        await using var connection = await OpenAsync();
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var columns = (await connection.QueryAsync<string>(new CommandDefinition(
+                "SELECT name FROM pragma_table_info('projects')",
+                cancellationToken: TestContext.Current.CancellationToken)))
+            .ToHashSet(StringComparer.Ordinal);
+        columns.ShouldBe(["id", "name", "created_at"], ignoreOrder: true);
+    }
+
+    private static async Task<int> ReadUserVersionAsync(SqliteConnection connection) =>
+        await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            "PRAGMA user_version", cancellationToken: TestContext.Current.CancellationToken));
+
+    private static async Task<bool> TableExistsAsync(SqliteConnection connection, string name) =>
+        await connection.ExecuteScalarAsync<long?>(new CommandDefinition(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = @name",
+            new { name }, cancellationToken: TestContext.Current.CancellationToken)) is not null;
+
+    private static async Task<SqliteConnection> OpenAsync()
+    {
+        var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        // The DDL declares vec0 virtual tables, so the module has to be loaded exactly as
+        // SqliteConnectionFactory.InitializeAsync does before the schema can be applied.
+        connection.EnableExtensions();
+        connection.LoadVector();
+        return connection;
+    }
+}
