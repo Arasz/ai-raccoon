@@ -306,6 +306,10 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
     internal static string ThreadCountSource(string? rawSetting) =>
         TryParseThreadsSetting(rawSetting, out _) ? "setting" : "halved-core default";
 
+    /// <summary>#522: 0 means ORT's own default, not zero threads — displayed as text so it never misreads as broken. Shared by the session log and doctor.</summary>
+    internal static string ThreadCountDisplay(int threads) =>
+        threads == 0 ? "ORT default" : threads.ToString(CultureInfo.InvariantCulture);
+
     private IEmbeddingGenerator<string, Embedding<float>> CreateLocal(EmbeddingSettings settings)
     {
         // One-time per fingerprint (cached by _engines): sessions are rebuilt only on restart, so a
@@ -343,9 +347,8 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
             generator = new OnnxEmbeddingGenerator(modelPath, bundledTokenizer, BundledDescriptor, _logger, threads);
         }
 
-        // #522: the only observable confirmation that the resolved thread count took effect —
-        // doctor shows what a setting resolves to, this shows what a real session was built with.
-        EmbeddingSessionLog.EmbeddingSessionCreated(_logger, generator.IntraOpThreads, ThreadCountSource(rawThreads));
+        // #522: the live confirmation the resolved thread count took effect.
+        Log.EmbeddingSessionCreated(_logger, ThreadCountDisplay(generator.IntraOpThreads), ThreadCountSource(rawThreads));
         return generator;
     }
 
@@ -412,9 +415,8 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
 
     private static partial class Log
     {
-        // Moved 416 -> 418 (#466): OnnxEmbeddingGenerator's block ran 414-415 and needed 417, which
-        // 416 wedged shut. 416 is retired, not reused — see docs/reference/logging-event-ids.md.
-        [LoggerMessage(EventId = 418, Level = LogLevel.Warning,
+        /// <summary>Moved 416→418 (#466), then 418→426 (#522 review, to free room below for the session-created event). See docs/reference/logging-event-ids.md.</summary>
+        [LoggerMessage(EventId = 426, Level = LogLevel.Warning,
             Message = "Search query was shortened to fit the embedding model: {Tokens} tokens exceeded the "
                       + "{MaxTokens}-token window, so only the first {TrimmedChars} of {OriginalChars} characters "
                       + "were used to find matches. Results may miss what the rest of the query asked for — "
@@ -422,26 +424,15 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
         public static partial void QueryTrimmedToWindow(ILogger logger, int tokens, int maxTokens,
             int trimmedChars, int originalChars);
 
-        /// <summary>WP11-A/G16: embedding.threads didn't parse to a non-negative integer; the halved-core default is used instead.</summary>
-        [LoggerMessage(EventId = 419, Level = LogLevel.Warning,
+        /// <summary>Moved 419→427 (#522 review). embedding.threads didn't parse to a non-negative integer; the halved-core default is used instead.</summary>
+        [LoggerMessage(EventId = 427, Level = LogLevel.Warning,
             Message = "Invalid embedding.threads setting '{Value}': expected a non-negative integer (0 = ORT default). "
                       + "Using max(1, logicalCores/2) instead.")]
         public static partial void InvalidThreadsSetting(ILogger logger, string value);
-    }
-}
 
-/// <summary>
-///     #522: EventId 426, its own owner block. `OnnxEmbeddingGenerator` (414-415, 417) and
-///     `EmbeddingService` (418-419) are both wedged against their neighbours (416 retired,
-///     420-425 taken by `NoOpCodeChunker`/`CodeEmbedder`/`ManifestPoolingRepair`) — neither block
-///     could grow without its range engulfing another owner's, which
-///     <c>LoggerMessageEventIdTests.EventIdBlocks_DoNotInterleaveBetweenOwners</c> forbids. A
-///     dedicated single-id owner, immediately after that cluster, avoids renumbering any of them.
-///     See docs/reference/logging-event-ids.md.
-/// </summary>
-internal static partial class EmbeddingSessionLog
-{
-    [LoggerMessage(EventId = 426, Level = LogLevel.Information,
-        Message = "Embedding session created: intra-op threads {Threads} ({Source})")]
-    public static partial void EmbeddingSessionCreated(ILogger logger, int threads, string source);
+        /// <summary>#522: the resolved ORT intra-op thread count a local session was actually built with.</summary>
+        [LoggerMessage(EventId = 428, Level = LogLevel.Information,
+            Message = "Embedding session created: intra-op threads {Threads} ({Source})")]
+        public static partial void EmbeddingSessionCreated(ILogger logger, string threads, string source);
+    }
 }

@@ -174,3 +174,9 @@ The query-trim event this record cites as ADR-0071's own (`event 416`) was renum
 room to grow. Only the id changed; the comparison this record draws — trimming a query and
 saying so, rather than silently reweighting its terms — is untouched. See ADR-0071's
 amendment and `docs/reference/logging-event-ids.md`.
+
+## Amendment (2026-08-23) — "event 418" above is now event 426
+
+`EmbeddingService`'s block moved again on 2026-08-23 (#522 review) to make room for a new
+session-created event without interleaving `NoOpCodeChunker`/`CodeEmbedder`/`ManifestPoolingRepair`.
+Only the id changed. See ADR-0071's second amendment and `docs/reference/logging-event-ids.md`.

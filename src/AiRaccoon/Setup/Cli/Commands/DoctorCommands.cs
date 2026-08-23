@@ -68,10 +68,9 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         await streams.WriteOutputLineAsync(code.Directory is null
             ? $"code engine: not configured — run '{CodeEngineSetup.DefaultModelCommand}' to enable semantic code search"
             : $"code engine: {code.Model} ({code.Directory})");
-        // #522: what `embedding.threads` currently resolves to — the same resolver a real local
-        // session build uses (EmbeddingService), so this never drifts from EmbeddingSessionLog's
-        // live confirmation.
-        await streams.WriteOutputLineAsync($"embedding threads: {threads.Threads} ({threads.Source})");
+        // #522: what `embedding.threads` resolves to, via EmbeddingService's own resolver.
+        await streams.WriteOutputLineAsync(
+            $"embedding threads: {EmbeddingService.ThreadCountDisplay(threads.Threads)} ({threads.Source})");
         await streams.WriteOutputLineAsync(
             $"code rows pending: {code.PendingRows?.ToString(CultureInfo.InvariantCulture) ?? "unreadable"}");
         await streams.WriteOutputLineAsync("doctor verifies schema shape only; it never repairs a bank");
@@ -127,13 +126,7 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         }
     }
 
-    /// <summary>
-    ///     #522: `embedding.threads` resolves the same way for every local session (memory or
-    ///     code), so doctor reports what it currently resolves to — using
-    ///     <see cref="EmbeddingService" />'s own resolver, never a second copy of the halving
-    ///     default. Guarded exactly like <see cref="ReadCodeEngineStateAsync" />: a shape-mismatched
-    ///     bank must never turn this extra read into doctor's own exit code.
-    /// </summary>
+    /// <summary>#522: what `embedding.threads` resolves to, guarded like <see cref="ReadCodeEngineStateAsync" /> — a shape mismatch must never become doctor's own exit code.</summary>
     private static async Task<EmbeddingThreadsState> ReadEmbeddingThreadsStateAsync(SqliteConnection connection,
         CancellationToken cancellationToken)
     {

@@ -99,3 +99,12 @@ two: `EmbeddingService.Log.QueryTrimmedToWindow` is now **EventId 418**, and
 reading `[416]` is always this event from a build before 1.32.0. The split this record
 argued for is unchanged: the stored-content event (414) and the query event (418) are still
 two countable ids, which was the point.
+
+## Amendment (2026-08-23) — the query-trim event is 426, not 418
+
+The number moved again, same reason as before: `EmbeddingService`'s own block (418-419) sat
+wedged against `NoOpCodeChunker`/`CodeEmbedder`/`ManifestPoolingRepair` (420-425) with no
+room to grow for #522's new session-created event, so the whole block relocated rather than
+orphaning that event in a type of its own. `EmbeddingService.Log.QueryTrimmedToWindow` is
+now **EventId 426**; `QueryTruncationTests.QueryTrimmedEventId` follows it. **418 is retired,
+not reused** — see `docs/reference/logging-event-ids.md`.
