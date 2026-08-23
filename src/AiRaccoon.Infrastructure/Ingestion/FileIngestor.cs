@@ -89,12 +89,8 @@ public sealed class FileIngestor(
             : new FileIngestResult(0, false, CodeChunkHashes: codeChunkHashes);
     }
 
-    /// <summary>
-    ///     The null-vs-empty <see cref="CodeIngestResult.ChunkHashes" /> contract (S3, #485): a
-    ///     non-empty set is the file's current chunk set; a legitimately empty
-    ///     (whitespace-only-content) result is an empty set to prune by; a stand-in chunker's zero
-    ///     chunks on real content is untrustworthy and must not be pruned by, so it resolves to null.
-    /// </summary>
+    /// <summary>The null-vs-empty <see cref="CodeIngestResult.ChunkHashes" /> prune contract (S3,
+    /// #485): null for a stand-in chunker's untrustworthy zero chunks, else the real set.</summary>
     private static IReadOnlyList<string>? ResolveCodeChunkHashes(CodeIngestResult result) =>
         result.ChunkHashes is { Count: > 0 }
             ? result.ChunkHashes
@@ -181,7 +177,7 @@ public sealed class FileIngestor(
                 .ConfigureAwait(false);
             indexed += rows;
             memoryRowsWritten |= rows > 0;
-            walked.Add(new WalkedFile(file, hashes));
+            walked.Add(new WalkedFile(file, hashes, null));
         }
 
         // One signal per corpus the walk actually wrote rows for — never per file (a per-file

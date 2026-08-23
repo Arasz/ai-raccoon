@@ -42,7 +42,7 @@ public readonly record struct FileIngestResult(
 ///     enough to prune by.
 /// </summary>
 public readonly record struct WalkedFile(string Path, IReadOnlyList<string> ChunkHashes,
-    IReadOnlyList<string>? CodeChunkHashes = null);
+    IReadOnlyList<string>? CodeChunkHashes);
 
 /// <summary>A directory walk's outcome: files indexed, plus each walked file's current chunk set.</summary>
 public readonly record struct DirectoryIngestResult(int Indexed, IReadOnlyList<WalkedFile> Files);
