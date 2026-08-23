@@ -43,7 +43,7 @@ public sealed class EmbeddingSessionThreadLoggingTests : IDisposable
         using var generator = service.CreateGenerator(new EmbeddingSettings("local", CopyBundledModel(), null, null));
 
         var record = logger.Collector.GetSnapshot().ShouldHaveSingleItem();
-        record.Id.Id.ShouldBe(426);
+        record.Id.Id.ShouldBe(428);
         record.Level.ShouldBe(LogLevel.Information);
         record.StructuredState.ShouldNotBeNull();
         record.StructuredState!.Single(kv => kv.Key == "Threads").Value.ShouldBe("3");
@@ -61,8 +61,25 @@ public sealed class EmbeddingSessionThreadLoggingTests : IDisposable
         using var generator = service.CreateGenerator(new EmbeddingSettings("local", CopyBundledModel(), null, null));
 
         var record = logger.Collector.GetSnapshot().ShouldHaveSingleItem();
-        record.Id.Id.ShouldBe(426);
+        record.Id.Id.ShouldBe(428);
         record.StructuredState!.Single(kv => kv.Key == "Threads").Value.ShouldBe(expectedThreads.ToString());
         record.StructuredState!.Single(kv => kv.Key == "Source").Value.ShouldBe("halved-core default");
+    }
+
+    /// <summary>#522 review: 0 is a real setting meaning "ORT's own default", not zero threads — a bare "0" misreads as broken.</summary>
+    [Fact]
+    public void CreateGenerator_Local_ExplicitZeroThreadsSetting_LogsOrtDefaultDisplay()
+    {
+        var logger = new FakeLogger<EmbeddingService>();
+        var settings = new InMemorySettings();
+        settings.Values[EmbeddingSettingsKeys.Threads] = "0";
+        var service = CreateService(logger, settings);
+
+        using var generator = service.CreateGenerator(new EmbeddingSettings("local", CopyBundledModel(), null, null));
+
+        var record = logger.Collector.GetSnapshot().ShouldHaveSingleItem();
+        record.Id.Id.ShouldBe(428);
+        record.StructuredState!.Single(kv => kv.Key == "Threads").Value.ShouldBe("ORT default");
+        record.StructuredState!.Single(kv => kv.Key == "Source").Value.ShouldBe("setting");
     }
 }

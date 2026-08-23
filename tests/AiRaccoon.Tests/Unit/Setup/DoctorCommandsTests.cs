@@ -160,6 +160,22 @@ public sealed class DoctorCommandsTests : IDisposable
         outp.ShouldContain($"embedding threads: {expected} (halved-core default)");
     }
 
+    /// <summary>#522 review: 0 is a real setting meaning "ORT's own default", not zero threads — a bare "0" misreads as broken.</summary>
+    [Fact]
+    public async Task Doctor_ZeroThreadsSetting_ReportsOrtDefault()
+    {
+        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await connection.ExecuteAsync(new CommandDefinition(MemorySql.UpsertSetting,
+                new { key = EmbeddingSettingsKeys.Threads, value = "0" },
+                cancellationToken: TestContext.Current.CancellationToken));
+        }
+
+        var (_, outp, _) = await Run(CreateDoctor(), ["doctor"]);
+
+        outp.ShouldContain("embedding threads: ORT default (setting)");
+    }
+
     /// <summary>The exact GH #357 repro: an `entries` table already exists with a narrower shape before doctor ever touches it.</summary>
     [Fact]
     public async Task Doctor_HandSurgeredEntriesTable_DetectsShapeMismatchAndFailsDistinctExitCode()
