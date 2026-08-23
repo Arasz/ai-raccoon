@@ -25,16 +25,21 @@ public sealed class MetricsReportService(ISqliteConnectionFactory factory, TimeP
                                       """;
 
     /// <summary>
-    ///     WP3 (#477), review B2: job.&lt;name&gt;.* series are one per maintenance job, which is
-    ///     dynamic and defined in a layer this project cannot reference — discovered by prefix from
-    ///     what the window actually holds instead of a hand-maintained name list (derive-or-delete).
+    ///     WP3 (#477) / WP11 (log-values-as-metrics): every internal-series family — job.&lt;name&gt;.*,
+    ///     drain.&lt;corpus&gt;.*, write.replace.*, search.query.* — is either dynamic (defined in a
+    ///     layer this project cannot reference) or bank-wide, so it is discovered by prefix from what
+    ///     the window actually holds for THIS report's project id, never a hand-maintained name list
+    ///     (derive-or-delete). Scoped to @ProjectId, not just the self-metrics id: write.replace.* is
+    ///     recorded under the writing project's own id, so an ordinary project's report must discover
+    ///     it too.
     /// </summary>
-    private const string DiscoverJobSeriesNamesSql = """
-                                                       SELECT DISTINCT name
-                                                       FROM metrics
-                                                       WHERE project_id = @ProjectId AND name LIKE @JobPrefix
-                                                         AND recorded_at >= @FromUnix AND recorded_at <= @ToUnix
-                                                       """;
+    private static readonly string DiscoverInternalSeriesNamesSql = $"""
+                                                                       SELECT DISTINCT name
+                                                                       FROM metrics
+                                                                       WHERE project_id = @ProjectId AND ({string.Join(" OR ",
+                                                                           MetricsConfigKeys.InternalSeriesPrefixes.Select((_, i) => $"name LIKE @Prefix{i}"))})
+                                                                         AND recorded_at >= @FromUnix AND recorded_at <= @ToUnix
+                                                                       """;
 
     public async Task<PerformanceReport> GetReportAsync(
         string projectId,
@@ -58,17 +63,13 @@ public sealed class MetricsReportService(ISqliteConnectionFactory factory, TimeP
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
 
-        IReadOnlyList<string> jobMetricNames = [];
-        if (isSelfMetricsReport)
-        {
-            jobMetricNames = await DiscoverJobMetricNamesAsync(connection, projectId, from, now, cancellationToken)
-                .ConfigureAwait(false);
-        }
+        var internalMetricNames = await DiscoverInternalMetricNamesAsync(connection, projectId, from, now, cancellationToken)
+            .ConfigureAwait(false);
 
         // toolNames + phaseNames can never be empty: SearchTimings.SeriesNames always holds at
         // least the phases plus the total, so this always goes through the query below — no
         // separate empty-list branch.
-        var phaseNames = (IReadOnlyList<string>) [.. SearchTimings.SeriesNames, .. selfMetricNames, .. jobMetricNames];
+        var phaseNames = (IReadOnlyList<string>) [.. SearchTimings.SeriesNames, .. selfMetricNames, .. internalMetricNames];
         var seriesNames = (IReadOnlyList<string>) [.. toolNames, .. phaseNames];
 
         var rows = await connection.QueryAsync<MetricRow>(new CommandDefinition(SelectSql, new
@@ -86,16 +87,20 @@ public sealed class MetricsReportService(ISqliteConnectionFactory factory, TimeP
         return PerformanceReportBuilder.Build(toolNames, samples, now, effectiveWindow, effectiveBucket, phaseNames);
     }
 
-    private async Task<IReadOnlyList<string>> DiscoverJobMetricNamesAsync(SqliteConnection connection,
+    private static async Task<IReadOnlyList<string>> DiscoverInternalMetricNamesAsync(SqliteConnection connection,
         string projectId, DateTimeOffset from, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var names = await connection.QueryAsync<string>(new CommandDefinition(DiscoverJobSeriesNamesSql, new
+        var parameters = new DynamicParameters();
+        parameters.Add("ProjectId", projectId);
+        parameters.Add("FromUnix", from.ToUnixTimeSeconds());
+        parameters.Add("ToUnix", now.ToUnixTimeSeconds());
+        for (var i = 0; i < MetricsConfigKeys.InternalSeriesPrefixes.Count; i++)
         {
-            ProjectId = projectId,
-            JobPrefix = MetricsConfigKeys.JobMetricPrefix + "%",
-            FromUnix = from.ToUnixTimeSeconds(),
-            ToUnix = now.ToUnixTimeSeconds()
-        }, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            parameters.Add($"Prefix{i}", MetricsConfigKeys.InternalSeriesPrefixes[i] + "%");
+        }
+
+        var names = await connection.QueryAsync<string>(new CommandDefinition(DiscoverInternalSeriesNamesSql,
+            parameters, cancellationToken: cancellationToken)).ConfigureAwait(false);
         return [.. names];
     }
 

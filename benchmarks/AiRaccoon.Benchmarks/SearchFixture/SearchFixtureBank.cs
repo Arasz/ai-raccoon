@@ -4,6 +4,7 @@ using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
+using AiRaccoon.Core.Metrics;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
@@ -98,7 +99,8 @@ public sealed class SearchFixtureBank : IAsyncDisposable
         var factory = new SqliteConnectionFactory(options, new NoopEncryptionKeyResolver());
         var sourceStore = new SqliteMemorySourceStore(factory);
         var embeddingService = new EmbeddingService(NullLogger<EmbeddingService>.Instance, new LocalTokenizer(),
-            new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
+            new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
+            NoOpMeasurementRecorder.Instance, TimeProvider.System);
         var countTokens = new TokenCount(new O200kTokenizer().CountTokens);
         var markdownChunker = new MarkdownChunker(countTokens);
         var fileTypeMatcher = new FileTypeMatcher([
@@ -115,7 +117,7 @@ public sealed class SearchFixtureBank : IAsyncDisposable
         var noiseFilteringService = new NoiseFilteringService([]);
         var store = new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, TimeProvider.System,
             NullLogger<SqliteMemoryStore>.Instance, noiseFilteringService, new SqliteSettingsStore(factory),
-            embedDrainPump);
+            embedDrainPump, NoOpMeasurementRecorder.Instance);
 
         // Rows land pending (no engine configured yet) so the fixture write loop pays for one
         // round trip per row, not one HTTP call per row; embedding happens once, batched, below.

@@ -83,4 +83,30 @@ public sealed class MetricsConfigKeysTests
         MetricsConfigKeys.ParseRetentionDays("7").ShouldBe(7);
         MetricsConfigKeys.ParseRetentionDays("90").ShouldBe(90);
     }
+
+    /// <summary>
+    ///     WP11 (log-values-as-metrics): one constant set both MetricsReportService's discovery and
+    ///     every internal recorder's naming consume, so a fifth family cannot be added on one side
+    ///     only (derive-or-delete).
+    /// </summary>
+    [Fact]
+    public void InternalSeriesPrefixes_CoversJobDrainWriteAndSearchQuery()
+    {
+        MetricsConfigKeys.InternalSeriesPrefixes.ShouldBe(["job.", "drain.", "write.", "search.query."]);
+    }
+
+    [Fact]
+    public void DrainMetricNames_AreDrainPrefixed()
+    {
+        MetricsConfigKeys.DrainRowsMetricName("code").ShouldBe("drain.code.rows");
+        MetricsConfigKeys.DrainDurationMetricName("memory").ShouldBe("drain.memory.duration_ms");
+    }
+
+    [Fact]
+    public void WriteAndSearchQueryMetricNames_AreTheFixedContract()
+    {
+        MetricsConfigKeys.ReplaceLockMsMetricName.ShouldBe("write.replace.lock_ms");
+        MetricsConfigKeys.ReplaceRowsMetricName.ShouldBe("write.replace.rows");
+        MetricsConfigKeys.QueryTruncatedTokensMetricName.ShouldBe("search.query.truncated_tokens");
+    }
 }

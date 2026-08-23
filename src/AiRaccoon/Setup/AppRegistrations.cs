@@ -50,6 +50,12 @@ public static partial class AppRegistrations
             services.AddHttpClient();
             services.AddSingleton(TimeProvider.System);
             services.RegisterEncryptionServices(options);
+            // WP11: EmbeddingService and SqliteMemoryStore (both wired below) take
+            // IMeasurementRecorder — the narrower CLI graph that calls only this method (never
+            // RegisterMemoryServices/RegisterMetricsServices) still needs it resolvable, so the
+            // buffer + best-effort recorder register here. Only the persistence side (IMetricsStore,
+            // MetricsFlusher, IMetricsReportService) stays server-only in RegisterMetricsServices.
+            services.RegisterMeasurementRecording();
             services.RegisterEmbeddingServices();
             services.RegisterFileIngestionServices();
             services.RegisterStores();
@@ -209,16 +215,29 @@ public static partial class AppRegistrations
         }
 
         /// <summary>
-        ///     The capped buffer, its best-effort recorder, the SQLite writer and the fixed-interval
-        ///     flusher (docs/plans/2026-08-15-performance-metrics-implementation.md, WP3). The buffer
-        ///     starts at the documented default; MetricsFlusher applies the configured setting once at
-        ///     startup, so nothing here blocks on a bank read.
+        ///     The capped buffer and its best-effort recorder alone (WP11): every graph that
+        ///     constructs <see cref="EmbeddingService" /> or <see cref="SqliteMemoryStore" /> —
+        ///     including the narrower CLI graph <see cref="RegisterCoreMemoryServices" /> builds on
+        ///     its own — needs <see cref="IMeasurementRecorder" /> resolvable, whether or not that
+        ///     process also runs the flusher that persists what it buffers. The buffer starts at the
+        ///     documented default; MetricsFlusher applies the configured setting once at startup, so
+        ///     nothing here blocks on a bank read.
+        /// </summary>
+        private void RegisterMeasurementRecording()
+        {
+            services.AddSingleton<IMeasurementBuffer>(_ => new MeasurementBuffer(MetricsConfigKeys.DefaultBufferCapacity));
+            services.AddRequiredSingleton<IMeasurementRecorder, MetricsRecorder>();
+        }
+
+        /// <summary>
+        ///     The persistence side alone (docs/plans/2026-08-15-performance-metrics-implementation.md,
+        ///     WP3): the SQLite writer and the fixed-interval flusher, plus the read-side report
+        ///     service. Server-only — <see cref="RegisterMeasurementRecording" /> is what the narrower
+        ///     CLI graph needs, and it registers on its own from <see cref="RegisterCoreMemoryServices" />.
         /// </summary>
         private void RegisterMetricsServices()
         {
-            services.AddSingleton<IMeasurementBuffer>(_ => new MeasurementBuffer(MetricsConfigKeys.DefaultBufferCapacity));
             services.AddRequiredSingleton<IMetricsStore, SqliteMetricsStore>();
-            services.AddRequiredSingleton<IMeasurementRecorder, MetricsRecorder>();
             services.AddHostedService<MetricsFlusher>();
             services.AddRequiredSingleton<IMetricsReportService, MetricsReportService>();
         }

@@ -32,6 +32,13 @@ public interface IOperationScope : IDisposable
     /// </summary>
     void NoteWork();
 
+    /// <summary>
+    ///     Records this pass's row count on the background rows histogram, tagged like the
+    ///     duration/pass measurements. Optional — a pass with no natural row count never calls it,
+    ///     so it never fabricates a zero (WP11).
+    /// </summary>
+    void RecordRows(long rows);
+
     void Succeeded();
 
     void Failed(Exception exception);

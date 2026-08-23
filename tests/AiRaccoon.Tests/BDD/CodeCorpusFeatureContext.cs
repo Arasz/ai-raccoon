@@ -235,7 +235,8 @@ public sealed class CodeCorpusFeatureContext : IDisposable
             new IgnoreRulesProvider(), codeFileTypeMatcher, codeIngestor, WatchStore, EmbedDrainPump);
         var noiseFilteringService = new NoiseFilteringService([]);
         return new SqliteMemoryStore(Factory, sourceStore, fileIngestor, embedder, TimeProvider,
-            NullLogger<SqliteMemoryStore>.Instance, noiseFilteringService, Settings, EmbedDrainPump);
+            NullLogger<SqliteMemoryStore>.Instance, noiseFilteringService, Settings, EmbedDrainPump,
+            NoOpMeasurementRecorder.Instance);
     }
 
     private void ComposeWatchStack()

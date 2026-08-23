@@ -72,7 +72,8 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
 
         var request = pump.DrainUpTo(1).ShouldHaveSingleItem();
         var drainService = new EmbedDrainService(pump, _factory, entryEmbedder, new FakeCodeEmbedder(),
-            new SqliteSettingsStore(_factory), TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
+            new SqliteSettingsStore(_factory), NoOpMeasurementRecorder.Instance, TimeProvider.System,
+            TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
         await drainService.DrainOnceAsync(request, TestContext.Current.CancellationToken);
 
         (await PendingCountAsync()).ShouldBe(0, "one drain pass is enough — every row is embedded exactly once");

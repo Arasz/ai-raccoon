@@ -91,7 +91,8 @@ public sealed class RepairFamilyRoutesThroughTheEngineResolverTests
         [new MarkdownFileTypeHandler(new MarkdownChunker(new TokenCount(new O200kTokenizer().CountTokens)))]);
 
     private static EmbeddingService Service() =>
-        new(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
+        new(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
+            NoOpMeasurementRecorder.Instance, TimeProvider.System);
 
     [Fact]
     public async Task ChunkPositionScanner_BudgetAsync_ManifestModel_ResolvesBudgetAndCounterFromTheManifest()

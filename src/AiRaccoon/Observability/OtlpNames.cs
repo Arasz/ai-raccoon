@@ -54,6 +54,9 @@ public static class OtlpNames
     public const string BackgroundPasses = "ai_raccoon.background.passes";
     public const string BackgroundPassDuration = "ai_raccoon.background.pass.duration";
 
+    /// <summary>WP11: a pass's row count, recorded only when the pass has a natural one (e.g. an embed-drain pass) via IOperationScope.RecordRows.</summary>
+    public const string BackgroundPassRows = "ai_raccoon.background.pass.rows";
+
     /// <summary>Every meter the process registers for OTLP export.</summary>
     public static readonly IReadOnlyList<string> Meters =
         [MemoryToolsScope, PromotionQueueScope, BackgroundScope, RuntimeScope, HttpScope];

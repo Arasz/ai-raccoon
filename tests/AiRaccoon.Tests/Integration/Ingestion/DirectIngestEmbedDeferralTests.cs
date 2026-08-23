@@ -43,7 +43,7 @@ public sealed class DirectIngestEmbedDeferralTests : IDisposable
             NullWatchStore.Instance, _pump);
         _store = new SqliteMemoryStore(_factory, sourceStore, fileIngestor, _entryEmbedder, TimeProvider.System,
             NullLogger<SqliteMemoryStore>.Instance, new NoiseFilteringService([]), new SqliteSettingsStore(_factory),
-            _pump);
+            _pump, NoOpMeasurementRecorder.Instance);
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
