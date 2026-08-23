@@ -298,7 +298,8 @@ config channel (see [Command-line options](#command-line-options)).
   ignore file is never matched against its own rules.
 - **Deferred writes:** until an engine is configured, writes are stored deferred
   (`memory_stats.pending > 0`) and only become searchable after `memory_embed_pending`.
-- **`memory_performance`:** project-scoped only (the whole-bank scope is deferred). The
+- **`memory_performance`:** project-scoped, except the reserved `__self_metrics__` project id,
+  which returns the bank-wide series instead (a per-tenant whole-bank scope is still deferred). The
   `series` list is derived from the server's tool inventory plus the nine
   `memory_search` phases (`search.open`, `search.embed`, `search.fts`, `search.vector`,
   `search.fusion`, `search.affinity`, `search.adjustment`, `search.snippets`,
@@ -307,6 +308,9 @@ config channel (see [Command-line options](#command-line-options)).
   at `count: 0`, rather than being omitted. `bucketMinutes` wider than `windowMinutes`
   is never an error: it clamps to the window and the series returns one averaged point.
   A window with no measurements is an empty series (every `count: 0`), never an error.
+  Maintenance-job series (`job.<name>.duration_ms` on every completed run, `job.<name>.rows` for a
+  job that reports an outstanding-row count) are bank-wide, not project-scoped, so they only
+  appear in the whole-bank self-metrics report — same surface as `metrics.dropped` (#477).
 
 ### Unknown-id rule
 

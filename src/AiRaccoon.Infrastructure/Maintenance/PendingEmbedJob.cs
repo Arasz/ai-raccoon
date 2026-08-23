@@ -14,7 +14,8 @@ namespace AiRaccoon.Infrastructure.Maintenance;
 ///     with no configured embedding provider is legitimately never due — a pending row with no
 ///     engine has nothing to embed with, forever, not just until the next poll.
 /// </summary>
-public sealed class PendingEmbedJob(IEntryEmbedder embedder, IEventPump<EmbedDrainRequest> embedDrainPump) : IMaintenanceJob
+public sealed class PendingEmbedJob(IEntryEmbedder embedder, IEventPump<EmbedDrainRequest> embedDrainPump)
+    : IMaintenanceJob, IReportsOutstandingRows
 {
     public const string JobName = "pending-embed";
 
@@ -49,4 +50,9 @@ public sealed class PendingEmbedJob(IEntryEmbedder embedder, IEventPump<EmbedDra
         embedDrainPump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Memory));
         return ValueTask.FromResult(false);
     }
+
+    /// <summary>WP3 (#477): `job.pending-embed.rows` — the bank-wide backlog immediately after signalling the drain, before it has run.</summary>
+    public async ValueTask<long> CountOutstandingRowsAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+        await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            MemorySql.CountPendingEmbed, cancellationToken: cancellationToken)).ConfigureAwait(false);
 }

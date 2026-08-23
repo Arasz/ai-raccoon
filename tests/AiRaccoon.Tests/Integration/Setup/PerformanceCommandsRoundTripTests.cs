@@ -134,7 +134,7 @@ public sealed class PerformanceCommandsRoundTripTests : IDisposable
         await SeedMetricAsync(connection, "inside-5-day-window", FixedNow.AddDays(-4).ToUnixTimeSeconds());
 
         var time = new FakeTimeProvider(FixedNow);
-        await new MaintenanceJobRunner(time, NullLogger<MaintenanceJobRunner>.Instance)
+        await new MaintenanceJobRunner(time, new NoOpMeasurementRecorder(), NullLogger<MaintenanceJobRunner>.Instance)
             .RunDueAsync(connection, [new MetricsRetentionJob(time)], TestContext.Current.CancellationToken);
 
         var survivors = (await connection.QueryAsync<string>("SELECT name FROM metrics ORDER BY name")).ToList();

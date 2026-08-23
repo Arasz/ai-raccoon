@@ -122,7 +122,7 @@ public sealed class MetricsRetentionJobTests : IDisposable
         stamped.ShouldBeNull("an unstamped failure retries on the next pass");
     }
 
-    private MaintenanceJobRunner Runner() => new(_time, NullLogger<MaintenanceJobRunner>.Instance);
+    private MaintenanceJobRunner Runner() => new(_time, new NoOpMeasurementRecorder(), NullLogger<MaintenanceJobRunner>.Instance);
 
     private async Task<SqliteConnection> OpenAsync() => await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
 

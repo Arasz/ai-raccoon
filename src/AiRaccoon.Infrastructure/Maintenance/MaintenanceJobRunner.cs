@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Metrics;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
@@ -17,7 +19,10 @@ public sealed record MaintenanceJobOutcome(string Name, bool Ran, string? Error,
 ///         VACUUM would ever collect.
 ///     </para>
 /// </summary>
-public sealed partial class MaintenanceJobRunner(TimeProvider timeProvider, ILogger<MaintenanceJobRunner> logger)
+public sealed partial class MaintenanceJobRunner(
+    TimeProvider timeProvider,
+    IMeasurementRecorder measurements,
+    ILogger<MaintenanceJobRunner> logger)
 {
     public async Task<IReadOnlyList<MaintenanceJobOutcome>> RunDueAsync(SqliteConnection connection,
         IReadOnlyList<IMaintenanceJob> jobs, CancellationToken cancellationToken = default)
@@ -90,12 +95,50 @@ public sealed partial class MaintenanceJobRunner(TimeProvider timeProvider, ILog
                     """,
                     new { name = job.Name, now = now.ToUnixTimeSeconds() }, cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
-            Log.JobRan(logger, job.DisplayName, job.Name,
-                Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            var elapsedMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            Log.JobRan(logger, job.DisplayName, job.Name, elapsedMs);
+            await RecordJobMetricsAsync(connection, job, elapsedMs, now, cancellationToken).ConfigureAwait(false);
             outcomes.Add(new MaintenanceJobOutcome(job.Name, true, null, createdWork));
         }
 
         return outcomes;
+    }
+
+    /// <summary>
+    ///     Route (a) (WP3, #477): the duration is data the runner already computes for the log line
+    ///     above, so recording it costs nothing extra. The rows gauge only fires for a job that opts
+    ///     into <see cref="IReportsOutstandingRows" /> (two of the ten today) — a job with nothing
+    ///     to count records duration alone, never a fabricated zero.
+    /// </summary>
+    private async Task RecordJobMetricsAsync(SqliteConnection connection, IMaintenanceJob job, double elapsedMs,
+        DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        measurements.Record(new Measurement(MetricsConfigKeys.JobDurationMetricName(job.Name),
+            MeasurementKind.Histogram, elapsedMs, "ms", now, MetricsConfigKeys.SelfMetricsProjectId));
+
+        if (job is not IReportsOutstandingRows counter)
+        {
+            return;
+        }
+
+        try
+        {
+            var outstanding = await counter.CountOutstandingRowsAsync(connection, cancellationToken)
+                .ConfigureAwait(false);
+            measurements.Record(new Measurement(MetricsConfigKeys.JobRowsMetricName(job.Name),
+                MeasurementKind.Gauge, outstanding, "count", now, MetricsConfigKeys.SelfMetricsProjectId));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // The job itself already ran and is already ledger-stamped above: a broken row count
+            // must not undo that or retry a job that succeeded. It just means this pass's rows
+            // gauge is missing, not zero.
+            Log.JobRowsCountFailed(logger, job.DisplayName, job.Name, ex);
+        }
     }
 
     private static partial class Log
@@ -111,6 +154,10 @@ public sealed partial class MaintenanceJobRunner(TimeProvider timeProvider, ILog
         [LoggerMessage(EventId = 527, Level = LogLevel.Warning,
             Message = "ai-raccoon: maintenance job '{DisplayName}' ({JobName}) due-check failed; it will be retried")]
         public static partial void JobCheckFailed(ILogger logger, string displayName, string jobName, Exception exception);
+
+        [LoggerMessage(EventId = 528, Level = LogLevel.Warning,
+            Message = "ai-raccoon: maintenance job '{DisplayName}' ({JobName}) outstanding-rows count failed; the job itself already ran, only its rows gauge is missing this pass")]
+        public static partial void JobRowsCountFailed(ILogger logger, string displayName, string jobName, Exception exception);
     }
 
     private static bool IsDue(IMaintenanceJob job, long? lastRunAt, DateTimeOffset now)
