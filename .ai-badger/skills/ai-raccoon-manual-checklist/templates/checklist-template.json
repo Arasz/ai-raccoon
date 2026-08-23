@@ -76,13 +76,14 @@
         },
         {
             "item": "source-path-anchor-resolves-its-chunk",
-            "expected-result": "a `file#section` query returns that exact chunk within the production result window",
+            "expected-result": "A `file#section` query (ADR-0003 SourcePathQuery: `name.md#heading-slug` is rewritten to an FTS {source_file section} column query with AND semantics) returns that exact chunk at rank 1. Run it with `vectorWeight: 0` -- with the vector leg on, every query returns hits and the anchor's answer is indistinguishable from a keyword coincidence (five runs substituted this item believing the syntax did not exist). Controls: `name.md#no-such-section` returns ZERO results while the same words in keyword shape return hits; `name.md` alone returns every chunk of that file and nothing else. Ingest a file with at least two headings and anchor BOTH sections: a chunk that swallows the next heading plus a few body lines is labelled with the later section (#538, the #489 residual), so the earlier section's anchor resolving nothing is the known defect, not a pass.",
             "command": "",
             "evidence": "",
             "observed-result": "",
             "status": "",
             "accepted": null,
-            "acceptance-reason": ""
+            "acceptance-reason": "",
+            "anchor": "ADR-0003; ADR-0004; #489 #538"
         },
         {
             "item": "write-path-noise-filtering",
