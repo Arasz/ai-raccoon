@@ -272,7 +272,13 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
                 ? dimensions
                 : null);
 
-    /// <summary>Embeds a set of rows with the configured engine; missing rows are skipped.</summary>
+    /// <summary>
+    ///     Embeds a set of rows with the configured engine; missing rows are skipped. One
+    ///     <c>BEGIN IMMEDIATE</c>/<c>COMMIT</c> per <c>BatchSize</c> sub-batch around that batch's
+    ///     <c>MarkEmbedded</c> writes (WP12 Fix B) — inference stays outside it, so a BUSY write lock
+    ///     costs at most one batch's already-done inference, not every row this call has marked so
+    ///     far.
+    /// </summary>
     private async Task<int> EmbedAsync(SqliteConnection connection, IReadOnlyList<EmbedRow> rows,
         CancellationToken cancellationToken)
     {
@@ -296,20 +302,37 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
             var structure = await EmbedDistinctHeadingsAsync(generator, headingPaths, cancellationToken)
                 .ConfigureAwait(false);
 
-            for (var i = 0; i < batch.Count; i++)
+            await connection.ExecuteAsync(
+                    new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            try
             {
-                var headingPath = headingPaths[i];
-                structure.TryGetValue(headingPath, out var structureEmbedding);
-                affected += await connection.ExecuteAsync(Def(MemorySql.MarkEmbedded,
-                        new
-                        {
-                            id = batch[i].Id,
-                            embedding = EmbeddingBlob.ToBytes(result[i].Vector),
-                            headingPath,
-                            structureEmbedding
-                        },
-                        cancellationToken))
+                for (var i = 0; i < batch.Count; i++)
+                {
+                    var headingPath = headingPaths[i];
+                    structure.TryGetValue(headingPath, out var structureEmbedding);
+                    affected += await connection.ExecuteAsync(Def(MemorySql.MarkEmbedded,
+                            new
+                            {
+                                id = batch[i].Id,
+                                embedding = EmbeddingBlob.ToBytes(result[i].Vector),
+                                headingPath,
+                                structureEmbedding
+                            },
+                            cancellationToken))
+                        .ConfigureAwait(false);
+                }
+
+                await connection.ExecuteAsync(
+                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
                     .ConfigureAwait(false);
+            }
+            catch
+            {
+                await connection.ExecuteAsync(
+                        new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                throw;
             }
         }
 

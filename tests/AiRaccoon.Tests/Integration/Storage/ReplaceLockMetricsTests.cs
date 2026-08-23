@@ -11,10 +11,11 @@ using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemorySto
 namespace AiRaccoon.Tests.Integration.Storage;
 
 /// <summary>
-///     WP11 (log-values-as-metrics): EventId 899's "Replace-by-path transaction held the write lock
-///     for N ms (R row(s))" carries values that today only exist as log text. Recorded as the same
-///     numbers the log line already computed, under the WRITING project's own id — ReplaceCoreAsync
-///     already receives projectId, so there is no reason to fall back to the self-metrics sentinel.
+///     WP11 (log-values-as-metrics) + WP12 (wait/held split): EventId 899's "Replace-by-path waited
+///     W ms for the write lock and held it H ms (R row(s) written)" carries values that today only
+///     exist as log text. Recorded as the same numbers the log line already computed, under the
+///     WRITING project's own id — ReplaceCoreAsync already receives projectId, so there is no reason
+///     to fall back to the self-metrics sentinel.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -48,10 +49,15 @@ public sealed class ReplaceLockMetricsTests : IDisposable
 
         await _store.ReplaceAsync("acme", file, "fixed-hash", ct);
 
-        var lockMs = _measurements.Recorded.Single(m => m.Name == "write.replace.lock_ms");
-        lockMs.Kind.ShouldBe(MeasurementKind.Histogram);
-        lockMs.ProjectId.ShouldBe("acme");
-        lockMs.Value.ShouldBeGreaterThanOrEqualTo(0);
+        var waitMs = _measurements.Recorded.Single(m => m.Name == "write.replace.wait_ms");
+        waitMs.Kind.ShouldBe(MeasurementKind.Histogram);
+        waitMs.ProjectId.ShouldBe("acme");
+        waitMs.Value.ShouldBeGreaterThanOrEqualTo(0);
+
+        var heldMs = _measurements.Recorded.Single(m => m.Name == "write.replace.held_ms");
+        heldMs.Kind.ShouldBe(MeasurementKind.Histogram);
+        heldMs.ProjectId.ShouldBe("acme");
+        heldMs.Value.ShouldBeGreaterThanOrEqualTo(0);
 
         var rows = _measurements.Recorded.Single(m => m.Name == "write.replace.rows");
         rows.Kind.ShouldBe(MeasurementKind.Histogram);
@@ -60,16 +66,16 @@ public sealed class ReplaceLockMetricsTests : IDisposable
     }
 
     /// <summary>
-    ///     M1 (#548 review, non-blocking): a guard-declined replace (fingerprint unchanged) still
-    ///     records write.replace.rows = 0 and a real write.replace.lock_ms — same as what the log
-    ///     line already does at the decline branch (Log.TransactionHeld(logger, declinedElapsedMs,
-    ///     0)). Kept deliberately, not skipped: skipping would make the metric diverge from the log
-    ///     line it is recorded beside, which is the one invariant this WP is built on ("the log
-    ///     stays; the measurement is the source, the log formats it — no second computation"). See
-    ///     docs/how-to/read-performance-metrics.md, "0 rows = declined/no-op replace".
+    ///     WP12 Fix A superseded M1 (#548 review): <c>ReplaceCoreAsync</c> now runs the guard as a
+    ///     cheap UNLOCKED read first, so the common no-race decline (fingerprint unchanged) never
+    ///     reaches <c>BEGIN IMMEDIATE</c> at all — there is no wait or held time to record, so nothing
+    ///     is. (The guard's authoritative re-check still runs a second time under the lock, for the
+    ///     rare case of two replays racing the same stale-to-new transition; that path DOES take the
+    ///     lock briefly and DOES still record real wait/held times with 0 rows — just not this one,
+    ///     where nothing raced.)
     /// </summary>
     [Fact]
-    public async Task ReplaceIfFileChangedAsync_WhenFingerprintUnchanged_RecordsZeroRowsButARealLockTime()
+    public async Task ReplaceIfFileChangedAsync_WhenFingerprintUnchanged_RecordsNothing()
     {
         var ct = TestContext.Current.CancellationToken;
         var file = Path.Combine(_dataRoot, "declined.md");
@@ -81,12 +87,7 @@ public sealed class ReplaceLockMetricsTests : IDisposable
 
         await _store.ReplaceIfFileChangedAsync("acme", file, "same-hash", ct); // declines: fingerprint unchanged
 
-        var rows = _measurements.Recorded.Single(m => m.Name == "write.replace.rows");
-        rows.ProjectId.ShouldBe("acme");
-        rows.Value.ShouldBe(0, "a declined replace wrote nothing — the log line already says 0 too");
-
-        var lockMs = _measurements.Recorded.Single(m => m.Name == "write.replace.lock_ms");
-        lockMs.ProjectId.ShouldBe("acme");
-        lockMs.Value.ShouldBeGreaterThanOrEqualTo(0, "the lock was still taken and released, even though nothing changed");
+        _measurements.Recorded.ShouldBeEmpty(
+            "the unlocked guard declined before the write lock was ever touched — nothing to measure");
     }
 }

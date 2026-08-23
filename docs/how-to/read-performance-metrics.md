@@ -76,20 +76,20 @@ A few things worth knowing before reading a report:
   - `search.query.truncated_tokens` — how many tokens a search query ran OVER the embedding
     window (`tokens - maxTokens`, not how many survived or were dropped) for a query that had to
     be trimmed (EventId 426, WP11).
-  - `write.replace.lock_ms` and `write.replace.rows` for a replace-by-path transaction's held
-    write-lock time and row count (EventId 899, WP11). **`0 rows = a declined/no-op replace** — a
-    fingerprint-gated replace whose stored hash already matched skips the re-ingest but still
-    takes and releases the write lock, so `lock_ms` is real even when `rows` is `0`; this is the
-    same 0 the log line (EventId 899) already reports at that branch, not a separate computation,
-    so it is kept rather than filtered out.
+  - `write.replace.wait_ms`, `write.replace.held_ms` and `write.replace.rows` for a
+    replace-by-path transaction (EventId 899, WP11/WP12): `wait_ms` is time spent waiting for
+    `BEGIN IMMEDIATE` to return, `held_ms` is time from there to `COMMIT`/`ROLLBACK` — chunking now
+    runs before the lock is ever requested (WP12 Fix A), so `held_ms` reflects the write itself, not
+    the chunker. **A race-losing replace records `rows = 0` with a real `held_ms`** — the guard's
+    authoritative re-check under the lock still takes and releases it even when it declines; the
+    common no-race decline (fingerprint unchanged) never reaches the lock at all and records
+    nothing.
 
   `job.*`, `drain.*` and `search.query.*` are bank-wide — none of a maintenance job, an
   embed-drain pass, or the embedding engine's query-trim path has a project id — so they only
   ever appear when you ask for the whole-bank self-metrics project id (see below). `write.*` is
   recorded under the WRITING project's own real id, so it surfaces in an ordinary project's report
-  the same way a tool series does. `lock_ms` is currently wait-for-the-lock plus held-time
-  combined (`WP12` is expected to split those apart — see the note in
-  [`agent-memory-server.md`](../reference/agent-memory-server.md)).
+  the same way a tool series does.
 - **A quiet window is an empty series, never an error.** Asking about a bank with no traffic in
   the requested window is a well-formed answer ("nothing happened"), not a failure.
 - **The report is project-scoped**, with one exception: passing the reserved

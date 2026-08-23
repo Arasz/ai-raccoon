@@ -316,17 +316,18 @@ config channel (see [Command-line options](#command-line-options)).
   1003) and `search.query.truncated_tokens` — how many tokens a search query ran OVER the
   embedding window, `tokens - maxTokens` (EventId 426) — are bank-wide like `job.*` — neither a
   drain pass nor the embedding engine's query-trim path has a project id to record under.
-  `write.replace.lock_ms` and `write.replace.rows` (a replace-by-path transaction's held
-  write-lock time and row count, EventId 899) are project-scoped, recorded under the writing
-  project's own id, and so appear in an ordinary project's report the same way a tool series does.
-  `0 rows` on this series means a declined/no-op replace (fingerprint unchanged) — the lock was
-  still taken and released, so `lock_ms` stays real even though nothing was written; kept rather
-  than filtered, since that is the same `0` the EventId 899 log line already reports at that
-  branch. **`lock_ms` is currently wait-for-the-lock plus held-time combined** — a follow-up
-  (WP12) restructures `ReplaceCoreAsync` so the chunker runs outside the lock and splits the
-  899 measurement into `write.replace.wait_ms` and `write.replace.held_ms`; until that lands,
-  `lock_ms` is the two numbers summed, and a slow chunker under contention reads as a long "lock"
-  even though most of it was waiting, not holding.
+  `write.replace.wait_ms`, `write.replace.held_ms` and `write.replace.rows` (a replace-by-path
+  transaction, EventId 899) are project-scoped, recorded under the writing project's own id, and
+  so appear in an ordinary project's report the same way a tool series does. `wait_ms` is time
+  spent waiting for `BEGIN IMMEDIATE` to return; `held_ms` is time from there to
+  `COMMIT`/`ROLLBACK`. WP12 moved the chunker (file read, chunk, hash, insert) entirely before the
+  lock is requested, so `held_ms` now reflects the write itself — the prune-and-fingerprint tail —
+  not the chunker; a slow chunker under contention now shows up as `wait_ms`, not `held_ms`. The
+  authoritative guard re-check that runs once the lock is held can still decline (a rare race
+  between two replaces on the same path): that path records `rows = 0` with a real `held_ms`,
+  the same `0` the EventId 899 log line reports there. The common no-race decline (fingerprint
+  already matches) is checked BEFORE the lock is ever requested and records nothing at all — there
+  is no wait or held time to report.
 
 ### Unknown-id rule
 

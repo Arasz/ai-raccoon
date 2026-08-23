@@ -84,8 +84,17 @@ public sealed class DeleteReplaceRollbackTests : IDisposable
             .ShouldBe("original-hash", "the watch fingerprint itself must be unchanged — the failed statement's own effect was rolled back too");
     }
 
+    /// <summary>
+    ///     WP12 Fix A changed what this failure rolls back: the chunker (and its inserts) now run
+    ///     BEFORE the write lock, autocommit — only the prune-and-fingerprint tail is transactional.
+    ///     A mid-transaction failure here rolls back the PRUNE (so the original row survives) but not
+    ///     the ingest that already committed the revised row — the trade
+    ///     <see cref="SqliteMemoryStore.ReplaceForDirectIngestAsync" />'s doc comment already made:
+    ///     a reader can see old AND new chunks for a file whose replace failed partway, instead of
+    ///     the delete-then-ingest shape's all-or-nothing swap.
+    /// </summary>
     [Fact]
-    public async Task ReplaceFile_WhenTheWatchFingerprintUpsertFailsMidTransaction_RollsBackTheWholeReplace()
+    public async Task ReplaceFile_WhenTheWatchFingerprintUpsertFailsMidTransaction_RollsBackOnlyThePruneAndFingerprint()
     {
         var ct = TestContext.Current.CancellationToken;
         var file = Path.Combine(_dataRoot, "rollback-replace.md");
@@ -112,18 +121,19 @@ public sealed class DeleteReplaceRollbackTests : IDisposable
             await DropFailureTriggerAsync(ct);
         }
 
-        (await CountEntriesAsync("acme", ct)).ShouldBe(preEntries,
-            "the delete-and-reingest must have been rolled back — the row count must be exactly what it was before the failed replace");
+        (await CountEntriesAsync("acme", ct)).ShouldBeGreaterThan(preEntries,
+            "the revised row already committed (autocommit ingest, outside the failed transaction) — " +
+            "only the prune that would have removed the original row was rolled back");
         (await _store.SearchAsync(new SearchQuery("acme", "gallimaufry original"), ct)).Results
-            .ShouldNotBeEmpty("the original content must still be there — the replace never committed");
+            .ShouldNotBeEmpty("the original row survived: the prune that would have deleted it rolled back");
         // Raw SQL, not _store.SearchAsync: hybrid (FTS + vector) search can surface a semantically
         // near result even for text that was never written, so the direct row content is the only
-        // precise proof that the revised value never landed.
+        // precise proof of what actually landed.
         await using var verify = await _factory.OpenBankAsync(ct);
         (await verify.ExecuteScalarAsync<int>(
                 "SELECT count(*) FROM entries WHERE project_id = @projectId AND value LIKE '%revised%'",
                 new { projectId = "acme" }))
-            .ShouldBe(0, "the revised content must not have been committed");
+            .ShouldBeGreaterThan(0, "the revised row committed autocommit, before the failed transaction ever began");
         (await verify.ExecuteScalarAsync<int>(
                 "SELECT count(*) FROM watch_files WHERE project_id = @projectId AND path = @path",
                 new { projectId = "acme", path = file }))

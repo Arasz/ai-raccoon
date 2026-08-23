@@ -86,55 +86,13 @@ public sealed partial class SqliteMemoryStore
             .IngestFileAsync(connection, projectId, path, context, cancellationToken)
             .ConfigureAwait(false);
 
-        await PruneChunksNotIn(connection, projectId, path, ingestResult.ChunkHashes ?? [],
-                ingestResult.CodeChunkHashes, cancellationToken)
-            .ConfigureAwait(false);
-
-        embedDrainPump.SignalWritten(ingestResult.WrittenCorpus);
-        return ingestResult.RowsInserted;
-    }
-
-    /// <summary>
-    ///     Deletes what the ingest did not account for, holding the write lock only for that. The
-    ///     embed-queue capture/restore comes along because the delete fires
-    ///     <c>promotion_queue_entries_ad</c> (ADR-0023); <c>RestoreQueueRowsStillBacked</c> restores
-    ///     only rows a surviving entry still backs, so a pruned chunk's queue row correctly goes
-    ///     with it. `code_entries` has no promotion-queue trigger, so its leg needs no such dance.
-    ///     <paramref name="keepCode" /> null (#436) means the ingest has no trustworthy code-corpus
-    ///     chunk set to prune by — never a stand-in chunker's zero chunks read as "delete
-    ///     everything" — so the code leg is skipped entirely rather than run with an empty keep list.
-    /// </summary>
-    private async Task PruneChunksNotIn(SqliteConnection connection, string projectId, string path,
-        IReadOnlyList<string> keep, IReadOnlyList<string>? keepCode, CancellationToken cancellationToken)
-    {
         await connection.ExecuteAsync(
                 new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
             .ConfigureAwait(false);
         try
         {
-            await connection.ExecuteAsync(Def(MemorySql.CreateQueueRestoreTable, null, cancellationToken))
-                .ConfigureAwait(false);
-            await connection.ExecuteAsync(
-                    Def(MemorySql.CaptureQueueRowsForSourcePath,
-                        new { projectId, path, pathPrefix = LikePattern.Escape(path) + "/%" }, cancellationToken))
-                .ConfigureAwait(false);
-            await connection.ExecuteAsync(keep.Count == 0
-                    ? Def(MemorySql.DeleteAllChunksForPath, new { projectId, path }, cancellationToken)
-                    : Def(MemorySql.DeleteChunksForPathExcept, new { projectId, path, keep }, cancellationToken))
-                .ConfigureAwait(false);
-            if (keepCode is not null)
-            {
-                var codeParams = new
-                {
-                    projectId, path, pathPrefix = LikePattern.Escape(path) + "/%", keep = keepCode
-                };
-                await connection.ExecuteAsync(keepCode.Count == 0
-                        ? Def(MemorySql.DeleteAllCodeChunksForPath, codeParams, cancellationToken)
-                        : Def(MemorySql.DeleteCodeChunksForPathExcept, codeParams, cancellationToken))
-                    .ConfigureAwait(false);
-            }
-
-            await connection.ExecuteAsync(Def(MemorySql.RestoreQueueRowsStillBacked, null, cancellationToken))
+            await PruneChunksNotIn(connection, projectId, path, ingestResult.ChunkHashes ?? [],
+                    ingestResult.CodeChunkHashes, cancellationToken)
                 .ConfigureAwait(false);
             await connection.ExecuteAsync(
                     new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
@@ -147,73 +105,124 @@ public sealed partial class SqliteMemoryStore
                 .ConfigureAwait(false);
             throw;
         }
+
+        embedDrainPump.SignalWritten(ingestResult.WrittenCorpus);
+        return ingestResult.RowsInserted;
+    }
+
+    /// <summary>
+    ///     Deletes what the ingest did not account for. The caller holds the write lock for this
+    ///     (and whatever else shares its transaction) — this method issues no BEGIN/COMMIT of its
+    ///     own. The embed-queue capture/restore comes along because the delete fires
+    ///     <c>promotion_queue_entries_ad</c> (ADR-0023); <c>RestoreQueueRowsStillBacked</c> restores
+    ///     only rows a surviving entry still backs, so a pruned chunk's queue row correctly goes
+    ///     with it. `code_entries` has no promotion-queue trigger, so its leg needs no such dance.
+    ///     <paramref name="keepCode" /> null (#436) means the ingest has no trustworthy code-corpus
+    ///     chunk set to prune by — never a stand-in chunker's zero chunks read as "delete
+    ///     everything" — so the code leg is skipped entirely rather than run with an empty keep list.
+    /// </summary>
+    private async Task PruneChunksNotIn(SqliteConnection connection, string projectId, string path,
+        IReadOnlyList<string> keep, IReadOnlyList<string>? keepCode, CancellationToken cancellationToken)
+    {
+        await connection.ExecuteAsync(Def(MemorySql.CreateQueueRestoreTable, null, cancellationToken))
+            .ConfigureAwait(false);
+        await connection.ExecuteAsync(
+                Def(MemorySql.CaptureQueueRowsForSourcePath,
+                    new { projectId, path, pathPrefix = LikePattern.Escape(path) + "/%" }, cancellationToken))
+            .ConfigureAwait(false);
+        await connection.ExecuteAsync(keep.Count == 0
+                ? Def(MemorySql.DeleteAllChunksForPath, new { projectId, path }, cancellationToken)
+                : Def(MemorySql.DeleteChunksForPathExcept, new { projectId, path, keep }, cancellationToken))
+            .ConfigureAwait(false);
+        if (keepCode is not null)
+        {
+            var codeParams = new
+            {
+                projectId, path, pathPrefix = LikePattern.Escape(path) + "/%", keep = keepCode
+            };
+            await connection.ExecuteAsync(keepCode.Count == 0
+                    ? Def(MemorySql.DeleteAllCodeChunksForPath, codeParams, cancellationToken)
+                    : Def(MemorySql.DeleteCodeChunksForPathExcept, codeParams, cancellationToken))
+                .ConfigureAwait(false);
+        }
+
+        await connection.ExecuteAsync(Def(MemorySql.RestoreQueueRowsStillBacked, null, cancellationToken))
+            .ConfigureAwait(false);
     }
 
     private async Task<ReplaceResult> ReplaceIfChangedCoreAsync(string projectId, string path, string fileHash,
         Func<SqliteConnection, Task<bool>>? guard, CancellationToken cancellationToken)
     {
-        var (ran, _, corpus) = await ReplaceCoreAsync(projectId, path, fileHash, guard, context: null,
+        var result = await ReplaceCoreAsync(projectId, path, fileHash, guard, context: null,
             fingerprint: true, cancellationToken).ConfigureAwait(false);
-        return new ReplaceResult(ran, corpus);
+        return new ReplaceResult(result.Ran, result.Corpus);
     }
 
     /// <summary>
-    ///     Replace-by-path, all in one transaction so no reader ever sees the file chunkless and a
-    ///     crash rolls the whole replace back: an optional <paramref name="guard" /> decides whether
-    ///     to proceed at all (evaluated after the write lock is held, so it is authoritative), then
-    ///     delete, re-ingest, fingerprint write. Embedding is left pending for the caller to run after
-    ///     the commit — the engine is far too slow to hold the bank's write lock through. The guard is
-    ///     each caller's own decision (<see cref="ReplaceIfFileChangedAsync" /> passes one,
-    ///     <see cref="ReplaceAsync" /> passes none); this method knows nothing about fingerprints.
+    ///     Replace-by-path (WP12 Fix A): chunking runs OUTSIDE the write lock, exactly like
+    ///     <see cref="ReplaceForDirectIngestAsync" /> — a cheap unlocked <paramref name="guard" />
+    ///     read decides whether to bother at all, then <see cref="IFileIngestor.IngestFileAsync" />
+    ///     runs autocommit (file read, chunk, hash, insert; rows left `embed_state = 'pending'`), and
+    ///     only the short prune-and-fingerprint tail takes <c>BEGIN IMMEDIATE</c>: the guard's
+    ///     authoritative re-check (a racing replace that lost re-chunked for nothing, but
+    ///     <see cref="PruneChunksNotIn" /> keeps by hash so it writes nothing twice), the delete of
+    ///     whatever the ingest did not account for, and the fingerprint write.
+    ///     <para>
+    ///         Traded against the old delete-then-ingest shape: a reader can see the file's old AND
+    ///         new chunks during the short window between the ingest's autocommit and the prune's
+    ///         commit, instead of never seeing it chunkless — the same trade
+    ///         <see cref="ReplaceForDirectIngestAsync" />'s own doc comment already made. A crash or a
+    ///         forced-failure mid-prune leaves both old and new chunks in place rather than rolling
+    ///         the ingest back too, since the ingest is no longer part of that transaction.
+    ///     </para>
+    ///     The guard is each caller's own decision (<see cref="ReplaceIfFileChangedAsync" /> passes
+    ///     one, <see cref="ReplaceAsync" /> passes none); this method knows nothing about
+    ///     fingerprints.
     /// </summary>
-    private async Task<(bool Ran, int Rows, CorpusKind Corpus)> ReplaceCoreAsync(string projectId, string path,
+    private async Task<ReplaceCoreResult> ReplaceCoreAsync(string projectId, string path,
         string? fileHash, Func<SqliteConnection, Task<bool>>? guard, string? context, bool fingerprint,
         CancellationToken cancellationToken)
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
 
-        // Logs how long the write lock was held — a measurement, never a threshold assertion.
-        var heldFrom = timeProvider.GetTimestamp();
+        // Unlocked pre-check: the common case (an unrelated concurrent replace never raced this
+        // path) declines here without ever touching the write lock.
+        if (guard is not null && !await guard(connection).ConfigureAwait(false))
+        {
+            return new ReplaceCoreResult(false, 0, CorpusKind.Neither);
+        }
+
+        // fileIngestor self-filters by extension and, when the path is a code file, dispatches to
+        // ICodeIngestor internally (FileIngestor.IngestFileAsync) — one call covers both corpora.
+        // Autocommit, outside any lock: this is the chunker the write lock used to be held through.
+        var ingestResult = await fileIngestor
+            .IngestFileAsync(connection, projectId, path, context, cancellationToken)
+            .ConfigureAwait(false);
+
+        var waitFrom = timeProvider.GetTimestamp();
         await connection.ExecuteAsync(
                 new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
             .ConfigureAwait(false);
+        var waitMs = timeProvider.GetElapsedTime(waitFrom).TotalMilliseconds;
+        var heldFrom = timeProvider.GetTimestamp();
         try
         {
+            // Authoritative re-check under the lock: a racing replace that lost re-chunked for
+            // nothing above, but writes nothing twice (PruneChunksNotIn keeps the rows it just
+            // rediscovered, since the winner's own ingest already produced the same hashes).
             if (guard is not null && !await guard(connection).ConfigureAwait(false))
             {
                 await connection.ExecuteAsync(
                         new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
                     .ConfigureAwait(false);
-                var declinedElapsedMs = timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds;
-                Log.TransactionHeld(logger, declinedElapsedMs, 0);
-                RecordReplaceLockMetrics(projectId, declinedElapsedMs, 0);
-                return (false, 0, CorpusKind.Neither);
+                var heldMs = timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds;
+                Log.TransactionHeld(logger, waitMs, heldMs, 0);
+                RecordReplaceLockMetrics(projectId, waitMs, heldMs, 0);
+                return new ReplaceCoreResult(false, 0, CorpusKind.Neither);
             }
 
-            var pathPrefix = LikePattern.Escape(path) + "/%";
-            await connection.ExecuteAsync(
-                    Def(MemorySql.CreateQueueRestoreTable, null, cancellationToken))
-                .ConfigureAwait(false);
-            await connection.ExecuteAsync(
-                    Def(MemorySql.CaptureQueueRowsForSourcePath, new { projectId, path, pathPrefix },
-                        cancellationToken))
-                .ConfigureAwait(false);
-            await connection.ExecuteAsync(
-                    Def(MemorySql.DeleteBySourcePath, new { projectId, path, pathPrefix }, cancellationToken))
-                .ConfigureAwait(false);
-            // Code corpus leg (docs/work/2026-08-21-code-search-implementation-plan.md §3.5):
-            // unconditional, same reasoning as DeleteSourcePathAsync above.
-            await connection.ExecuteAsync(
-                    Def(MemorySql.DeleteCodeBySourcePath, new { projectId, path, pathPrefix }, cancellationToken))
-                .ConfigureAwait(false);
-            // fileIngestor self-filters by extension and, when the path is a code file, dispatches
-            // to ICodeIngestor internally (FileIngestor.IngestFileAsync) — one re-ingest call
-            // covers both corpora; each ingestor's own matcher decides whether it does anything.
-            var ingestResult = await fileIngestor
-                .IngestFileAsync(connection, projectId, path, context, cancellationToken)
-                .ConfigureAwait(false);
-            await connection.ExecuteAsync(
-                    Def(MemorySql.RestoreQueueRowsStillBacked, null, cancellationToken))
+            await PruneChunksNotIn(connection, projectId, path, ingestResult.ChunkHashes ?? [],
+                    ingestResult.CodeChunkHashes, cancellationToken)
                 .ConfigureAwait(false);
             // B1: a code-only file a stand-in chunker (e.g. NoOpCodeChunker) produced zero rows for
             // must NOT be fingerprinted — a fingerprint here would hash-skip it forever, even past
@@ -234,10 +243,10 @@ public sealed partial class SqliteMemoryStore
             await connection.ExecuteAsync(
                     new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
-            var elapsedMs = timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds;
-            Log.TransactionHeld(logger, elapsedMs, ingestResult.RowsInserted);
-            RecordReplaceLockMetrics(projectId, elapsedMs, ingestResult.RowsInserted);
-            return (true, ingestResult.RowsInserted, ingestResult.WrittenCorpus);
+            var heldMsCommitted = timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds;
+            Log.TransactionHeld(logger, waitMs, heldMsCommitted, ingestResult.RowsInserted);
+            RecordReplaceLockMetrics(projectId, waitMs, heldMsCommitted, ingestResult.RowsInserted);
+            return new ReplaceCoreResult(true, ingestResult.RowsInserted, ingestResult.WrittenCorpus);
         }
         catch
         {
@@ -249,15 +258,17 @@ public sealed partial class SqliteMemoryStore
     }
 
     /// <summary>
-    ///     WP11 (log-values-as-metrics): EventId 899's held-lock ms and row count, recorded beside
-    ///     the log line above — same values, not a second computation. Under the WRITING project's
-    ///     own id: unlike a drain pass, a replace transaction always has one.
+    ///     WP11 (log-values-as-metrics) + WP12 (wait/held split): EventId 899's wait/held ms and row
+    ///     count, recorded beside the log line above — same values, not a second computation. Under
+    ///     the WRITING project's own id: unlike a drain pass, a replace transaction always has one.
     /// </summary>
-    private void RecordReplaceLockMetrics(string projectId, double elapsedMs, int rows)
+    private void RecordReplaceLockMetrics(string projectId, double waitMs, double heldMs, int rows)
     {
         var now = timeProvider.GetUtcNow();
-        measurements.Record(new Measurement(MetricsConfigKeys.ReplaceLockMsMetricName,
-            MeasurementKind.Histogram, elapsedMs, "ms", now, projectId));
+        measurements.Record(new Measurement(MetricsConfigKeys.ReplaceWaitMsMetricName,
+            MeasurementKind.Histogram, waitMs, "ms", now, projectId));
+        measurements.Record(new Measurement(MetricsConfigKeys.ReplaceHeldMsMetricName,
+            MeasurementKind.Histogram, heldMs, "ms", now, projectId));
         measurements.Record(new Measurement(MetricsConfigKeys.ReplaceRowsMetricName,
             MeasurementKind.Histogram, rows, "count", now, projectId));
     }
@@ -265,7 +276,11 @@ public sealed partial class SqliteMemoryStore
     private static partial class Log
     {
         [LoggerMessage(EventId = 899, Level = LogLevel.Information,
-            Message = "Replace-by-path transaction held the write lock for {ElapsedMs:F1} ms ({Rows} row(s) written)")]
-        public static partial void TransactionHeld(ILogger logger, double elapsedMs, int rows);
+            Message = "Replace-by-path waited {WaitMs:F1} ms for the write lock and held it {HeldMs:F1} ms "
+                      + "({Rows} row(s) written)")]
+        public static partial void TransactionHeld(ILogger logger, double waitMs, double heldMs, int rows);
     }
+
+    /// <summary><see cref="ReplaceCoreAsync" />'s outcome: whether it ran at all, the rows it wrote, and which corpus.</summary>
+    private readonly record struct ReplaceCoreResult(bool Ran, int Rows, CorpusKind Corpus);
 }
