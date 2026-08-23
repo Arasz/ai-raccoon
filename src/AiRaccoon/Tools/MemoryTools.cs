@@ -397,11 +397,11 @@ public sealed partial class MemoryTools(
         int? limit = null,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryEmbedPending, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryEmbedPending, cancellationToken);
 
-        var result = await store.EmbedPendingAsync(projectId, limit, cancellationToken);
+        var result = await store.EmbedPendingAsync(canonical, limit, cancellationToken);
         var embedResult = new EmbedResult(result.Processed, result.Pending);
-        var envelope = await gate.WrapAsync(projectId, embedResult, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, embedResult, cancellationToken);
         return envelope;
     }
 

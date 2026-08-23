@@ -1,6 +1,7 @@
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Projects;
 using ModelContextProtocol;
 
 namespace AiRaccoon.Tools;
@@ -23,8 +24,12 @@ public sealed class ToolGate(IMemoryAccessGuard access, IPromotionQueue queue, I
         }
     }
 
-    /// <summary>Refuses while a migration is open, then rejects a blank project id, then throws access-denied when the mode is too low.</summary>
-    public async Task RequireAsync(string? projectId, AccessRequirement requirement, string toolName,
+    /// <summary>
+    ///     Refuses while a migration is open, then rejects a blank project id, canonicalizes it
+    ///     (ADR-0089 decision 2), then throws access-denied when the mode is too low. Returns the
+    ///     canonical id for the caller to carry to storage.
+    /// </summary>
+    public async Task<string> RequireAsync(string? projectId, AccessRequirement requirement, string toolName,
         CancellationToken cancellationToken)
     {
         await RequireBankAvailableAsync(toolName, cancellationToken).ConfigureAwait(false);
@@ -34,7 +39,9 @@ public sealed class ToolGate(IMemoryAccessGuard access, IPromotionQueue queue, I
             throw new McpException("invalid-params: project_id is required");
         }
 
-        await access.EnsureAsync(projectId, requirement, toolName, cancellationToken).ConfigureAwait(false);
+        var canonical = ProjectId.Canonicalize(projectId);
+        await access.EnsureAsync(canonical, requirement, toolName, cancellationToken).ConfigureAwait(false);
+        return canonical;
     }
 
     /// <summary>
