@@ -1,12 +1,15 @@
 namespace AiRaccoon.Infrastructure.Embedding.Download;
 
-/// <summary>What the downloader needs to know about a model's ONNX graph before fetching its siblings.</summary>
+/// <summary>What the downloader needs to know about a model's ONNX graph before fetching its siblings.
+/// <see cref="OutputRanks" /> (#504) carries each output's declared tensor rank — absent when the
+/// graph declares no static shape for that output, or when a probe predates this field.</summary>
 public sealed record OnnxGraphProbe(
     IReadOnlyList<string> ExternalDataFiles,
     IReadOnlyList<string> InputNames,
     IReadOnlyList<string> OutputNames,
     int IrVersion,
-    int? OpsetVersion);
+    int? OpsetVersion,
+    IReadOnlyDictionary<string, int>? OutputRanks = null);
 
 /// <summary>The file is not a parseable ONNX protobuf (or the graph is malformed).</summary>
 public sealed class OnnxProbeException(string message, Exception? inner = null) : Exception(message, inner);
@@ -302,6 +305,7 @@ public sealed class OnnxGraphProbeReader : IOnnxGraphProbeReader
         private readonly List<string> _externalData = [];
         private readonly List<string> _inputs = [];
         private readonly List<string> _outputs = [];
+        private readonly Dictionary<string, int> _outputRanks = new(StringComparer.Ordinal);
 
         public int IrVersion { get; set; }
 
@@ -319,24 +323,86 @@ public sealed class OnnxGraphProbeReader : IOnnxGraphProbeReader
         {
             var reader = new ProtoReader(message);
             var name = string.Empty;
+            int? rank = null;
+            while (reader.TryTag(out var field, out var wireType))
+            {
+                switch (field, wireType)
+                {
+                    case (1, 2): // ValueInfoProto.name
+                        name = reader.ReadString();
+                        break;
+                    case (2, 2): // ValueInfoProto.type
+                        rank = TensorRank(reader.ReadBytes());
+                        break;
+                    default:
+                        reader.Skip(wireType);
+                        break;
+                }
+            }
+
+            if (name.Length == 0)
+            {
+                return;
+            }
+
+            (isInput ? _inputs : _outputs).Add(name);
+            if (!isInput && rank is not null)
+            {
+                _outputRanks[name] = rank.Value;
+            }
+        }
+
+        public OnnxGraphProbe Build() => new(_externalData, _inputs, _outputs, IrVersion, OpsetVersion, _outputRanks);
+
+        /// <summary>#504: TypeProto.tensor_type (field 1) → Tensor.shape (field 2) → the dim count
+        /// of TensorShapeProto is the declared rank. Null for a sequence/map type (no tensor_type)
+        /// or an unranked tensor (tensor_type with no shape at all) — never a recursive walk, so no
+        /// depth guard is needed: nothing here follows a field back into another TypeProto.</summary>
+        private static int? TensorRank(ReadOnlySpan<byte> typeMessage)
+        {
+            var reader = new ProtoReader(typeMessage);
             while (reader.TryTag(out var field, out var wireType))
             {
                 if (field == 1 && wireType == 2)
                 {
-                    name = reader.ReadString();
+                    return TensorShapeRank(reader.ReadBytes());
                 }
-                else
-                {
-                    reader.Skip(wireType);
-                }
+
+                reader.Skip(wireType);
             }
 
-            if (name.Length > 0)
-            {
-                (isInput ? _inputs : _outputs).Add(name);
-            }
+            return null;
         }
 
-        public OnnxGraphProbe Build() => new(_externalData, _inputs, _outputs, IrVersion, OpsetVersion);
+        private static int? TensorShapeRank(ReadOnlySpan<byte> tensorMessage)
+        {
+            var reader = new ProtoReader(tensorMessage);
+            while (reader.TryTag(out var field, out var wireType))
+            {
+                if (field == 2 && wireType == 2) // TypeProto.Tensor.shape
+                {
+                    var shapeReader = new ProtoReader(reader.ReadBytes());
+                    var dims = 0;
+                    while (shapeReader.TryTag(out var shapeField, out var shapeWireType))
+                    {
+                        if (shapeField == 1 && shapeWireType == 2) // TensorShapeProto.dim, repeated
+                        {
+                            shapeReader.SkipBytes();
+                            dims++;
+                        }
+                        else
+                        {
+                            shapeReader.Skip(shapeWireType);
+                        }
+                    }
+
+                    return dims;
+                }
+
+                reader.Skip(wireType);
+            }
+
+            return null; // an unranked tensor: tensor_type with no shape field at all
+        }
     }
 }

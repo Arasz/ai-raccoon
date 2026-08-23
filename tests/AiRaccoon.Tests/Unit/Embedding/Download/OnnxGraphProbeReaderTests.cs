@@ -36,6 +36,37 @@ public class OnnxGraphProbeReaderTests
         probe.OutputNames.ShouldBe(["token_embeddings", "sentence_embedding"]);
     }
 
+    /// <summary>
+    ///     #504: rank is a fact the graph's own protobuf already declares (ValueInfoProto.type
+    ///     .tensor_type.shape), reachable at plan time without ONNX Runtime — so output selection
+    ///     no longer has to guess from names alone.
+    /// </summary>
+    [Fact]
+    public void ReadsOutputRanks_FromDeclaredShapes()
+    {
+        var model = TestOnnx.MinimalModelWithExternalData("model.onnx_data",
+            outputRanks: new Dictionary<string, int> { ["token_embeddings"] = 3, ["sentence_embedding"] = 2 });
+
+        var probe = Probe().Read(model);
+
+        probe.OutputRanks.ShouldNotBeNull();
+        probe.OutputRanks!["token_embeddings"].ShouldBe(3);
+        probe.OutputRanks!["sentence_embedding"].ShouldBe(2);
+    }
+
+    /// <summary>An output with no declared shape at all (no `type` field) has no rank entry —
+    /// "unknown", not zero — so a consumer can fall back to the name heuristic for it alone.</summary>
+    [Fact]
+    public void OutputWithNoDeclaredShape_HasNoRankEntry()
+    {
+        var model = TestOnnx.MinimalModelWithExternalData("model.onnx_data");
+
+        var probe = Probe().Read(model);
+
+        probe.OutputRanks.ShouldNotBeNull();
+        probe.OutputRanks!.ContainsKey("token_embeddings").ShouldBeFalse();
+    }
+
     [Fact]
     public void ReadsIrAndOpsetVersions()
     {
@@ -108,10 +139,12 @@ public class OnnxGraphProbeReaderTests
 /// </summary>
 internal static class TestOnnx
 {
-    public static byte[] MinimalModelWithExternalData(string externalLocation, IReadOnlyList<string>? outputs = null) =>
-        MinimalModel(initializers: [TensorWithExternalData("weights", externalLocation)], outputs: outputs);
+    public static byte[] MinimalModelWithExternalData(string externalLocation, IReadOnlyList<string>? outputs = null,
+        IReadOnlyDictionary<string, int>? outputRanks = null) =>
+        MinimalModel(initializers: [TensorWithExternalData("weights", externalLocation)], outputs: outputs, outputRanks: outputRanks);
 
-    public static byte[] MinimalModel(IReadOnlyList<byte[]>? initializers = null, IReadOnlyList<string>? outputs = null)
+    public static byte[] MinimalModel(IReadOnlyList<byte[]>? initializers = null, IReadOnlyList<string>? outputs = null,
+        IReadOnlyDictionary<string, int>? outputRanks = null)
     {
         List<byte> graph = [.. StringField(1, "g")];
         foreach (var tensor in initializers ?? [])
@@ -126,7 +159,8 @@ internal static class TestOnnx
 
         foreach (var output in outputs ?? ["token_embeddings", "sentence_embedding"])
         {
-            graph.AddRange(MessageField(12, ValueInfo(output)));
+            var rank = outputRanks is not null && outputRanks.TryGetValue(output, out var r) ? r : (int?)null;
+            graph.AddRange(MessageField(12, ValueInfo(output, rank)));
         }
 
         var opset = new List<byte>();
@@ -155,7 +189,30 @@ internal static class TestOnnx
         return tensor.ToArray();
     }
 
-    private static byte[] ValueInfo(string name) => StringField(1, name);
+    private static byte[] ValueInfo(string name, int? rank = null)
+    {
+        var valueInfo = new List<byte>(StringField(1, name));
+        if (rank is not null)
+        {
+            valueInfo.AddRange(MessageField(2, TypeProto(rank.Value))); // ValueInfoProto.type
+        }
+
+        return valueInfo.ToArray();
+    }
+
+    /// <summary>TypeProto.tensor_type (field 1) → TypeProto.Tensor.shape (field 2) →
+    /// TensorShapeProto.dim (field 1, repeated) — one empty Dimension per declared rank. Dimension
+    /// content (dim_value/dim_param) is irrelevant to a rank count, so it is left empty.</summary>
+    private static byte[] TypeProto(int rank)
+    {
+        var shape = new List<byte>();
+        for (var i = 0; i < rank; i++)
+        {
+            shape.AddRange(MessageField(1, []));
+        }
+
+        return MessageField(1, MessageField(2, shape.ToArray()));
+    }
 
     private static byte[] StringStringEntry(string key, string value)
     {
