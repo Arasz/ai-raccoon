@@ -114,7 +114,24 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
 
         public void NoteWork() => _worthy = true;
 
-        public void RecordRows(long rows) => _rows = rows;
+        /// <summary>
+        ///     Throws if the scope's one measurement was already recorded (#548 review, B1): a
+        ///     silently-dropped rows value is exactly the bug that shipped — the caller must record
+        ///     rows before <see cref="Succeeded" />/<see cref="Failed" />/<see cref="PartiallyFailed" />,
+        ///     never after.
+        /// </summary>
+        public void RecordRows(long rows)
+        {
+            if (_recorded)
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(RecordRows)} was called after the scope's measurement was already recorded " +
+                    "(Succeeded/Failed/PartiallyFailed/Dispose) — the row count would be silently dropped. " +
+                    $"Call {nameof(RecordRows)} before the terminal call, not after.");
+            }
+
+            _rows = rows;
+        }
 
         public void Succeeded()
         {

@@ -134,8 +134,11 @@ public sealed partial class EmbedDrainService(
                 Log.SelfReSignalNotQueued(logger, request.Corpus);
             }
 
-            pass.Succeeded();
+            // RecordRows MUST run before Succeeded() (#548 review, B1): Succeeded() claims the
+            // scope's one measurement immediately, so a rows value set after it lands on an
+            // already-spent scope and the OTLP histogram never receives it.
             pass.RecordRows(drained);
+            pass.Succeeded();
             Log.DrainFinished(logger, request.Corpus, drained);
             RecordDrainMetrics(request.Corpus, drained, timeProvider.GetElapsedTime(startedAt));
         }

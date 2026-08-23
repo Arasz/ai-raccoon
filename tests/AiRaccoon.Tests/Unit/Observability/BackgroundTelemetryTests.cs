@@ -240,6 +240,21 @@ public sealed class BackgroundTelemetryTests
         probe.Rows.ShouldBeEmpty();
     }
 
+    /// <summary>
+    ///     #548 review, B1: calling RecordRows AFTER the scope's one measurement was already claimed
+    ///     used to silently drop the row count (the exact bug that shipped in EmbedDrainService).
+    ///     Now it throws, so a future ordering mistake fails loudly instead of just losing data.
+    /// </summary>
+    [Fact]
+    public void RecordRows_AfterSucceeded_ThrowsInsteadOfSilentlyDroppingTheValue()
+    {
+        using var probe = new BackgroundTelemetryProbe(Operation);
+        var scope = probe.Telemetry.Begin(Operation);
+        scope.Succeeded();
+
+        Should.Throw<InvalidOperationException>(() => scope.RecordRows(42));
+    }
+
     [Fact]
     public void Probe_IgnoresSpansFromAnotherTelemetryInstance_SharingTheSourceName()
     {

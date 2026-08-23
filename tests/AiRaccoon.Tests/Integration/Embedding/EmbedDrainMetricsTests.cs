@@ -1,10 +1,12 @@
 using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Metrics;
+using AiRaccoon.Core.Observability;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.TestHelpers;
+using AiRaccoon.Tests.Unit.Observability;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -37,9 +39,9 @@ public sealed class EmbedDrainMetricsTests : IDisposable
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private EmbedDrainService NewService(IEventPump<EmbedDrainRequest> pump, RecordingMeasurementRecorder measurements,
-        IEntryEmbedder? entry = null, ICodeEmbedder? code = null) =>
+        IEntryEmbedder? entry = null, ICodeEmbedder? code = null, IOperationTelemetry? telemetry = null) =>
         new(pump, _factory, entry ?? new StubEntryEmbedder(), code ?? new StubCodeEmbedder(),
-            new SqliteSettingsStore(_factory), measurements, _timeProvider, TestTelemetry.None,
+            new SqliteSettingsStore(_factory), measurements, _timeProvider, telemetry ?? TestTelemetry.None,
             NullLogger<EmbedDrainService>.Instance);
 
     [Fact]
@@ -61,6 +63,30 @@ public sealed class EmbedDrainMetricsTests : IDisposable
         var duration = measurements.Recorded.Single(m => m.Name == "drain.memory.duration_ms");
         duration.Kind.ShouldBe(MeasurementKind.Histogram);
         duration.ProjectId.ShouldBe(MetricsConfigKeys.SelfMetricsProjectId);
+    }
+
+    /// <summary>
+    ///     Review round 1 (#548, B1/B2): TestTelemetry.None is a no-op IOperationScope, so it cannot
+    ///     see the ordering hazard where <c>pass.Succeeded()</c> claims the scope's one measurement
+    ///     BEFORE <c>pass.RecordRows(drained)</c> runs — the row count then lands on an
+    ///     already-spent scope and <c>ai_raccoon.background.pass.rows</c> never fires. This drives
+    ///     DrainOnceAsync against the REAL BackgroundTelemetry (via BackgroundTelemetryProbe) so the
+    ///     OTLP histogram is actually observed, not assumed.
+    /// </summary>
+    [Fact]
+    public async Task OneFullPass_ExportsTheDrainedRowCountOnTheBackgroundRowsHistogram()
+    {
+        using var probe = new BackgroundTelemetryProbe(EmbedDrainService.OperationName);
+        var pump = TestData.NewEmbedDrainPump();
+        var measurements = new RecordingMeasurementRecorder();
+        var entry = new StubEntryEmbedder { RowsToReturn = 5 };
+        var service = NewService(pump, measurements, entry: entry, telemetry: probe.Telemetry);
+        var request = new EmbedDrainRequest(EmbedCorpus.Memory);
+
+        await service.DrainOnceAsync(request, TestContext.Current.CancellationToken);
+
+        probe.Passes.ShouldHaveSingleItem("the pass itself must still be recorded");
+        probe.Rows.ShouldHaveSingleItem().Value.ShouldBe(5);
     }
 
     [Fact]
