@@ -131,7 +131,7 @@ engine is activated, so the two never disagree for long:
   declared rank; a rank-2 token-embeddings output writes `pooling.mode: model-output` plus
   `onnx.embeddingOutput` instead of the planner's file-derived inference.
 - **Activation.** `IManifestPoolingRepair` rewrites an existing manifest with the same rule,
-  once, logging event 424 (or 425 when the file cannot be written, leaving 417 to keep
+  once, logging event 429 (or 430 when the file cannot be written, leaving 417 to keep
   firing). It runs at activation and deliberately **not** at load: the local engine
   fingerprint is a hash of the manifest's bytes, and `CodeReindexJob` reconciles that
   fingerprint on every poll, so rewriting the file on a load would re-embed an entire corpus
@@ -140,3 +140,25 @@ engine is activated, so the two never disagree for long:
 
 Pins are unaffected: a manifest does not pin itself, so the rewrite leaves every recorded
 sha256 exactly as it was, and the activation pin check (the amendment above) still runs.
+
+## Amendment (2026-08-23, #497/#504) — a second reconciliation rule: the tensor read can change
+
+The rule above has a second shape, and it does NOT "change no vector". A model can bake a
+DISTINCT pooled output beside a genuine token-level one (bge-m3: `token_embeddings` rank 3,
+`sentence_embedding` rank 2) — the planner always name-selected `onnx.embeddingOutput` for
+that second output regardless of `pooling.mode`, so a manifest downloaded before #496 kept
+naming it correctly while still declaring a token-level `pooling.mode` (e.g. `cls`). Unlike
+the sole-output shape above, every embed until the repair genuinely read
+`onnx.tokenEmbeddingsOutput` under that mode — a real, still-token-level tensor — so the
+correction (switching the read to `onnx.embeddingOutput`) reads a DIFFERENT tensor and
+existing vectors DO change. The engine fingerprint (D7) includes the manifest's pooling
+mode, so the rewrite itself changes the fingerprint and the next poll's reconcile re-embeds
+— the correction is not silent about that, it relies on it.
+
+`IManifestPoolingRepair` checks `onnx.embeddingOutput`'s real rank too when it names a
+distinct output from `onnx.tokenEmbeddingsOutput`, logging event 431 (or 432 when the file
+cannot be written) — a separate id pair from 429/430 because their messages make the
+opposite claim about vectors, and because event 417 does not cover this shape's write
+failure the way it covers the sole-output one: 417 only fires when the output the engine
+actually reads is itself rank-2, and here that output (`tokenEmbeddingsOutput`) stays
+rank-3, so a failed correction is silently permanent rather than nagged on every load.

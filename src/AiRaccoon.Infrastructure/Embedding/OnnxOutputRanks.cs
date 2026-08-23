@@ -13,6 +13,9 @@ internal static class OnnxOutputRanks
     /// <summary>Rank of an output the graph already pooled: <c>[batch, dimensions]</c>.</summary>
     public const int PooledRank = 2;
 
+    /// <summary>Rank of a genuine token-level output: <c>[batch, sequence, dimensions]</c>.</summary>
+    public const int TokenLevelRank = 3;
+
     extension(InferenceSession session)
     {
         /// <summary>Rank the graph declares for one output; 0 when the graph has no such output.</summary>

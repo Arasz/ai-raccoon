@@ -231,7 +231,7 @@ Existing banks can hold nested watches (old versions allowed them — no overlap
 
 | # | Risk | Evidence / mitigation | Grade |
 |---|---|---|---|
-| 1 | **Model provenance** — single author, 66 downloads, 2 weeks old, MIT | Registry pin: committed SHA-256 pin for `faxenoff/code-daemon-embed-v1` (engine plan D8 pattern; `BundledResource.IsVerified`); first download TOFU pin re-verified on every load; **eval before any default flip**; A/B vs `jinaai/jina-embeddings-v2-base-code` (154 MB int8, 768-dim, Apache-2.0, 396k downloads — the established fallback). Never PTQ the INT8 QAT artifact (card-measured hit@1 .200→.133) | READ + MEASURED (exploration §1/§1.1/§6.1) |
+| 1 | **Model provenance** — single author, 66 downloads, 2 weeks old, MIT | Registry pin: committed SHA-256 pin for `faxenoff/code-daemon-embed-v1` (engine plan D8 pattern; `BundledResource.IsVerified`); first download TOFU pin re-verified on every load; **eval before any default flip**; A/B vs `jinaai/jina-embeddings-v2-base-code` (154 MB int8, 768-dim, Apache-2.0, 396k downloads — the established fallback). ~~Never PTQ the INT8 QAT artifact~~ — the artifact we run is **fp32**, so PTQ is permitted; the card's hit@1 .200→.133 is the cost to weigh, not a prohibition **CORRECTED 2026-08-23** (fp32, not INT8 — see Amendments) | READ + MEASURED (exploration §1/§1.1/§6.1) |
 | 2 | **Chunker quality without AST** | v1 line-range heuristics approximate function boundaries; eval settles it — the eval set must include a Python repo (indentation-based splitting is the weak case, exploration §6.2); tree-sitter symbol extraction is the v2 lever if nDCG fails | READ (exploration §6.2) |
 | 3 | **Throughput** — 56 texts/s on M4 CPU (spike) | 10k-unit repo ≈ 3 min initial index; watch deltas in seconds. Initial index of a large repo is the only real wait; document expected wall time in the how-to; 700k-unit repos are the GPU/OpenVINO story, not local default | MEASURED (spike, exploration §1/§6.3) |
 | 4 | **187 MB download, ~50 MB resident** | Under the 500 MB `--yes` threshold; disk-space check exists in the download verb (engine plan D4); two sessions in-process (23 MB MiniLM + ~50 MB code) is fine | READ (engine plan D4) |
@@ -314,3 +314,14 @@ Run against a **bank copy** first, then a real repo:
 - **H3 (HYPOTHESIS):** initial-index wall time on user repos tracks the spike's 56 texts/s — real repos vary; P5 measures on the eval repos.
 - **H4 (HYPOTHESIS):** the existing outbox/lease machinery expresses a per-corpus code drain without new machinery — engineer lane verifies in P1/P4.
 - **H5 (HYPOTHESIS):** the digest-gate Ddl rerun is safe on banks with in-flight sync state — the rerun is additive-only CREATE IF NOT EXISTS, but a sync test on a mid-cycle bank copy is in G1.
+
+## Amendments
+
+### 2026-08-23 — the shipped code model is fp32, not INT8 QAT (WP7 desk half, PR #536)
+
+This document's INT8/QAT claims about `faxenoff/code-daemon-embed-v1` are wrong: the artifact we
+download and run is **fp32** — 70 initializers, all `FLOAT`, zero quantized ops. The evidence, what
+it does to the card's *"never PTQ"* warning, and the one open question that could still revise it
+live in `docs/work/2026-08-23-code-engine-inference-research.md` §2 and §8. **That record is the
+single source of truth and is deliberately not copied here** — five copies of a finding with an open
+question attached are five places to falsify at once.

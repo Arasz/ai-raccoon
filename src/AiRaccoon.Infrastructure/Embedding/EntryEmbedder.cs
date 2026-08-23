@@ -283,6 +283,7 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
 
         var settings = await ReadSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
         var generator = embeddings.CreateGenerator(settings);
+        var affected = 0;
         for (var offset = 0; offset < rows.Count; offset += BatchSize)
         {
             var batch = rows.Skip(offset).Take(BatchSize).ToList();
@@ -299,7 +300,7 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
             {
                 var headingPath = headingPaths[i];
                 structure.TryGetValue(headingPath, out var structureEmbedding);
-                await connection.ExecuteAsync(Def(MemorySql.MarkEmbedded,
+                affected += await connection.ExecuteAsync(Def(MemorySql.MarkEmbedded,
                         new
                         {
                             id = batch[i].Id,
@@ -312,7 +313,7 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
             }
         }
 
-        return rows.Count;
+        return affected;
     }
 
     /// <summary>

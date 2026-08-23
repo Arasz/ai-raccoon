@@ -207,6 +207,29 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
         state.ShouldBe("embedded", "an unchanged manifest must never invalidate an already-embedded row");
     }
 
+    /// <summary>WP3 (#477), review B1: CodeReindexJob opts into IReportsOutstandingRows so the runner can record `job.code-reindex.rows`.</summary>
+    [Fact]
+    public async Task CountOutstandingRowsAsync_ReturnsThePendingCodeRowCount()
+    {
+        var job = new CodeReindexJob(new CodeEmbedder(new FakeCodeEmbeddingService(), NullLogger<CodeEmbedder>.Instance),
+            TestData.NewEmbedDrainPump());
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await SeedPendingCodeRowAsync(connection, id: 1);
+        await SeedPendingCodeRowAsync(connection, id: 2);
+
+        (await job.CountOutstandingRowsAsync(connection, TestContext.Current.CancellationToken)).ShouldBe(2L);
+    }
+
+    [Fact]
+    public async Task CountOutstandingRowsAsync_NoPendingCodeRows_IsZero()
+    {
+        var job = new CodeReindexJob(new CodeEmbedder(new FakeCodeEmbeddingService(), NullLogger<CodeEmbedder>.Instance),
+            TestData.NewEmbedDrainPump());
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+
+        (await job.CountOutstandingRowsAsync(connection, TestContext.Current.CancellationToken)).ShouldBe(0L);
+    }
+
     private static async Task<string?> ReadCodeEngineSettingAsync(SqliteConnection connection) =>
         await connection.ExecuteScalarAsync<string?>("SELECT value FROM settings WHERE key = @key",
             new { key = EmbeddingSettingsKeys.CodeEngine });

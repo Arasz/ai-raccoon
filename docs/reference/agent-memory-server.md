@@ -282,8 +282,9 @@ config channel (see [Command-line options](#command-line-options)).
   `path-not-found:` / `watch-overlap:` tool errors; watch failures never fail the server.
 - **`ai-raccoon.ignore`:** an optional gitignore-subset exclude file at the root of a watched
   directory (or a `memory_ingest_directory` call's root) — `<root>/ai-raccoon.ignore`, one file
-  per root, never discovered in subdirectories. An explicit `memory_ingest_file` call has no walk
-  root of its own, so it resolves one: the containing registered watch if the path falls under
+  per root, never discovered in subdirectories; a `memory_ingest_directory` root without its own
+  file falls back to the same ancestor resolution as a single-file ingest. An explicit
+  `memory_ingest_file` call has no walk root of its own, so it resolves one: the containing registered watch if the path falls under
   one, else the ingest-scope allowlist entry that admits it, else the file's own parent directory
   as a last resort — and the same rule applies whether the file routes to memory or to the code
   corpus. Syntax: `*` (one path segment), `**` (zero or
@@ -297,7 +298,8 @@ config channel (see [Command-line options](#command-line-options)).
   ignore file is never matched against its own rules.
 - **Deferred writes:** until an engine is configured, writes are stored deferred
   (`memory_stats.pending > 0`) and only become searchable after `memory_embed_pending`.
-- **`memory_performance`:** project-scoped only (the whole-bank scope is deferred). The
+- **`memory_performance`:** project-scoped, except the reserved `__self_metrics__` project id,
+  which returns the bank-wide series instead (a per-tenant whole-bank scope is still deferred). The
   `series` list is derived from the server's tool inventory plus the nine
   `memory_search` phases (`search.open`, `search.embed`, `search.fts`, `search.vector`,
   `search.fusion`, `search.affinity`, `search.adjustment`, `search.snippets`,
@@ -306,6 +308,9 @@ config channel (see [Command-line options](#command-line-options)).
   at `count: 0`, rather than being omitted. `bucketMinutes` wider than `windowMinutes`
   is never an error: it clamps to the window and the series returns one averaged point.
   A window with no measurements is an empty series (every `count: 0`), never an error.
+  Maintenance-job series (`job.<name>.duration_ms` on every completed run, `job.<name>.rows` for a
+  job that reports an outstanding-row count) are bank-wide, not project-scoped, so they only
+  appear in the whole-bank self-metrics report — same surface as `metrics.dropped` (#477).
 
 ### Unknown-id rule
 

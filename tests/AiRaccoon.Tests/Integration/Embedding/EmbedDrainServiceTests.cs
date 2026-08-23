@@ -148,12 +148,14 @@ public sealed class EmbedDrainServiceTests : IDisposable
         await service.StopAsync(TestContext.Current.CancellationToken);
     }
 
-    /// <summary>E5: no self-re-enqueue — the pump is empty after a full-budget drain, pinning the pacing decision.</summary>
+    /// <summary>E5 (WP1, docs/work/2026-08-23-post-delta-4-plan.md): a partial-budget drain does
+    /// not re-signal — only a full row budget does (see <c>EmbedDrainContinuousTests</c> for that
+    /// half), so the pump stays empty until an external producer signals again.</summary>
     [Fact]
-    public async Task RowsRemain_NoSelfReEnqueue_TheNextSignalDoesTheRest()
+    public async Task PartialRows_NoSelfReEnqueue_TheNextSignalDoesTheRest()
     {
         var pump = TestData.NewEmbedDrainPump();
-        var entry = new RecordingEntryEmbedder { RowsToReturn = BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun };
+        var entry = new RecordingEntryEmbedder { RowsToReturn = BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun - 1 };
         var service = NewService(pump, entry: entry);
 
         using var cts = new CancellationTokenSource();
@@ -161,7 +163,7 @@ public sealed class EmbedDrainServiceTests : IDisposable
         pump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Memory)).ShouldBeTrue();
         (await service.Drains.WaitAsync(1, SignalTimeout, TestContext.Current.CancellationToken)).ShouldBeTrue();
 
-        pump.DrainUpTo(1).ShouldBeEmpty("a full-budget drain must not queue its own next pass");
+        pump.DrainUpTo(1).ShouldBeEmpty("a partial-budget drain must not queue its own next pass");
         pump.EnqueuedCount.ShouldBe(1);
         run.IsFaulted.ShouldBeFalse();
         await service.StopAsync(TestContext.Current.CancellationToken);

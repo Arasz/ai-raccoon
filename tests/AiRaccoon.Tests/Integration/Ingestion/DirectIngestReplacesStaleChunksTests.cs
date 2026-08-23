@@ -54,6 +54,18 @@ public sealed class DirectIngestReplacesStaleChunksTests : IDisposable
         return rows.ToList();
     }
 
+    private async Task<int> CodeChunkCountAsync(string path)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.ExecuteScalarAsync<int>(
+            "SELECT count(*) FROM code_entries WHERE path = @path",
+            new { path = IngestPath.Normalize(path) });
+    }
+
+    /// <summary>Blank-line-separated blocks — one <see cref="StubCodeChunker" /> chunk per block.</summary>
+    private static string CodeBlocks(int count, string prefix) =>
+        string.Join("\n\n", Enumerable.Range(1, count).Select(i => $"class {prefix}{i}\n{{\n}}"));
+
     /// <summary>A five-section document; the markdown chunker splits it into more than one chunk.</summary>
     private static string LargeContent() =>
         string.Join("\n\n", Enumerable.Range(1, 5).Select(i =>
@@ -164,4 +176,36 @@ public sealed class DirectIngestReplacesStaleChunksTests : IDisposable
         chunks[0].TotalChunks.ShouldBe(1);
         (await ChunksAsync(stable)).Count.ShouldBe(1, "an unchanged sibling in the walk is untouched");
     }
+
+    /// <summary>
+    ///     #485 (docs/work/2026-08-23-post-delta-4-plan.md §WP2): the directory walk passed
+    ///     `keepCode: null` for every walked file, so a code file that re-chunks to fewer blocks
+    ///     through `memory_ingest_directory` stranded its old `code_entries` rows — the same defect
+    ///     B6 fixed for the memory corpus, left open for code (single-file leg fixed by #481).
+    /// </summary>
+    [Fact]
+    public async Task ReIngestingADirectory_PrunesStaleCodeEntries_ForAShrunkCodeFile()
+    {
+        var dir = Path.Combine(_dataRoot, "src");
+        Directory.CreateDirectory(dir);
+        var file = Path.Combine(dir, "Widget.cs");
+        var codeStore = CreateCodeStore();
+        await codeStore.SetSettingAsync(IngestScopeKeys.ScopeGlobal, IngestScopeKeys.Serialize([_dataRoot]),
+            TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(file, CodeBlocks(5, "Old"), TestContext.Current.CancellationToken);
+        await codeStore.IngestDirectoryAsync("acme", dir, null, TestContext.Current.CancellationToken);
+        (await CodeChunkCountAsync(file)).ShouldBe(5, "precondition: five blank-line-separated blocks chunk to five rows");
+
+        await File.WriteAllTextAsync(file, CodeBlocks(1, "New"), TestContext.Current.CancellationToken);
+        await codeStore.IngestDirectoryAsync("acme", dir, null, TestContext.Current.CancellationToken);
+
+        (await CodeChunkCountAsync(file)).ShouldBe(1,
+            "the rewritten file chunks into one block; the other four stranded code_entries rows must not survive a directory re-ingest");
+    }
+
+    private SqliteMemoryStore CreateCodeStore() =>
+        TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
+            new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
+            TestData.CreateEmbeddingService(), ignoreRulesProvider: new IgnoreRulesProvider(),
+            codeChunker: new StubCodeChunker());
 }
