@@ -366,6 +366,17 @@ internal static class MemorySchema
                                           -- not the `if (fresh)` branch, for the same reason as the two indexes above.
                                           CREATE INDEX IF NOT EXISTS idx_metrics_recorded_at ON metrics(recorded_at);
 
+                                          -- Project registry (ADR-0089 decision 5): which project ids exist, as a fact of
+                                          -- record rather than derived from entries rows. name is optional and never an
+                                          -- identifier — not unique, never accepted where an id is expected. In the
+                                          -- unconditional Ddl block, not the `if (fresh)` branch, same reason as metrics
+                                          -- above: no CurrentVersion bump, reaches a legacy bank via the digest-rerun path.
+                                          CREATE TABLE IF NOT EXISTS projects (
+                                              id         TEXT PRIMARY KEY,
+                                              name       TEXT,
+                                              created_at INTEGER NOT NULL
+                                          );
+
                                           -- Model-migration outbox (ADR-0076): a single-row lock+ledger for an in-flight
                                           -- embedding-engine change. `model set` writes the new engine settings and this
                                           -- row in ONE transaction — the outbox pattern, so no crash can produce the
