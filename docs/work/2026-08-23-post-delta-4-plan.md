@@ -37,7 +37,7 @@ the corrected number.
    **6c** the unregistered-id refusal.
 6. **Wave 3, quiet machine, no other lane running:** WP7's measured arms (S3–S5 protocol).
    Scheduling this against live lanes is what made #511's numbers unusable.
-7. **Wave 4, strictly last:** **WP9** — #493 and #519 (83 call sites across 77 files; it conflicts
+7. **Wave 4, strictly last:** **WP9** — #493 and #519 (83 call sites across 73 files; it conflicts
    with every open PR that adds a test).
 8. Close the session: update `.ai-badger/state.json` and `status-notes.json`, and hand session 5 the
    plan from item 3.
@@ -631,7 +631,7 @@ None of these files is opened by any wave-1 lane.
 **Wave 3 — WP7's measured arms, alone on a quiet machine.** Not a file collision: a *measurement*
 collision. See §Re-review.
 
-**Wave 4 — WP9, strictly last.** #519 rewrites **83 call sites across 77 files**, so it conflicts with
+**Wave 4 — WP9, strictly last.** #519 rewrites **83 call sites across 73 files**, so it conflicts with
 every wave-1 and wave-2 PR that adds a test. #493 and the `logging-event-ids.md:53` doc fix ride with it.
 
 **Shared-file map (rev 2.0).** `EmbedDrainService.cs` → WP1 only (WP5 is dropped, so it has no second
@@ -812,7 +812,7 @@ unconditional `Ddl` block with **no `CurrentVersion` bump** (stays 10), and 6c's
 "no registry row **and** no existing rows".
 
 **G9 — APPROVE, note _"all"_.** All five filed issues ride: **#485** → WP2 (same method),
-**#497 + #504** → WP8 (same file family), **#493 + #519** → WP9. #519 is 83 call sites across 77
+**#497 + #504** → WP8 (same file family), **#493 + #519** → WP9. #519 is 83 call sites across 73
 files, which is why WP9 is wave 4 rather than wave 1.
 
 **G10 — APPROVE, note _"- move it to the next session"_.** WP10 (#455) moves to session 5 entirely
