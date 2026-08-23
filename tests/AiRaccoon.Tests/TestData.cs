@@ -71,7 +71,8 @@ public static class TestData
         IEnumerable<INoiseFilterPolicy>? noisePolicies = null,
         ISettingsStore? settings = null,
         ICodeChunker? codeChunker = null,
-        IIgnoreRulesProvider? ignoreRulesProvider = null)
+        IIgnoreRulesProvider? ignoreRulesProvider = null,
+        IMeasurementRecorder? measurements = null)
     {
         jsonChunker ??= RealJsonChunker(markdownChunker);
         var embedder = new EntryEmbedder(embeddings, modelMigrationLease ?? ModelMigrationLease, timeProvider);
@@ -90,7 +91,7 @@ public static class TestData
                 new CodeIngestor(new CodeFileTypeMatcher(), codeChunker, timeProvider), NullWatchStore.Instance, pump);
         var noiseFilteringService = new NoiseFilteringService(noisePolicies ?? []);
         return new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService,
-            settings ?? new SqliteSettingsStore(factory), pump);
+            settings ?? new SqliteSettingsStore(factory), pump, measurements ?? NoOpMeasurementRecorder.Instance);
     }
 
     /// <summary>

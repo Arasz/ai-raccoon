@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Metrics;
 using AiRaccoon.Infrastructure.Embedding;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -183,7 +184,9 @@ public sealed partial class SqliteMemoryStore
                 await connection.ExecuteAsync(
                         new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
                     .ConfigureAwait(false);
-                Log.TransactionHeld(logger, timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds, 0);
+                var declinedElapsedMs = timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds;
+                Log.TransactionHeld(logger, declinedElapsedMs, 0);
+                RecordReplaceLockMetrics(projectId, declinedElapsedMs, 0);
                 return (false, 0, CorpusKind.Neither);
             }
 
@@ -231,7 +234,9 @@ public sealed partial class SqliteMemoryStore
             await connection.ExecuteAsync(
                     new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
-            Log.TransactionHeld(logger, timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds, ingestResult.RowsInserted);
+            var elapsedMs = timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds;
+            Log.TransactionHeld(logger, elapsedMs, ingestResult.RowsInserted);
+            RecordReplaceLockMetrics(projectId, elapsedMs, ingestResult.RowsInserted);
             return (true, ingestResult.RowsInserted, ingestResult.WrittenCorpus);
         }
         catch
@@ -241,6 +246,20 @@ public sealed partial class SqliteMemoryStore
                 .ConfigureAwait(false);
             throw;
         }
+    }
+
+    /// <summary>
+    ///     WP11 (log-values-as-metrics): EventId 899's held-lock ms and row count, recorded beside
+    ///     the log line above — same values, not a second computation. Under the WRITING project's
+    ///     own id: unlike a drain pass, a replace transaction always has one.
+    /// </summary>
+    private void RecordReplaceLockMetrics(string projectId, double elapsedMs, int rows)
+    {
+        var now = timeProvider.GetUtcNow();
+        measurements.Record(new Measurement(MetricsConfigKeys.ReplaceLockMsMetricName,
+            MeasurementKind.Histogram, elapsedMs, "ms", now, projectId));
+        measurements.Record(new Measurement(MetricsConfigKeys.ReplaceRowsMetricName,
+            MeasurementKind.Histogram, rows, "count", now, projectId));
     }
 
     private static partial class Log
