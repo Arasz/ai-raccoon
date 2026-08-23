@@ -636,8 +636,8 @@ pass.
 
 **Symptom (owner's live log, 2026-08-23):** `SQLite Error 5: 'database is locked'` from four
 different writers — `EntryEmbedder.EmbedAsync` (drain row marks, EventId 1005),
-`SqliteMetricsStore.SaveBatchAsync` (970, batch of 11 dropped), `SqlitePromotionQueueStore.EvictVictimAsync`
-(503, a `DELETE … RETURNING`), `MaintenanceJobRunner.RunDueAsync` (513, the ledger upsert) — interleaved
+`SqliteMetricsStore.SaveBatchAsync` (970, batch of 11 dropped), `ExtractionHostedService` (503, whose pass failed inside
+`SqlitePromotionQueueStore.EvictVictimAsync` — a `DELETE … RETURNING`), `MaintenanceJobRunner.RunDueAsync` (513, the ledger upsert) — interleaved
 with 899 lines of 300–4700 ms.
 
 **Diagnosis (checked against the code and the machine, not reasoned):**
@@ -702,7 +702,7 @@ with 899 lines of 300–4700 ms.
   succeeding → batch saved, not dropped; three times → dropped with 970 logged once.
 
 **Acceptance:** every RED above seen failing then green; `dotnet build` 0 warnings; the gate filter
-`ReplaceHoldsTheLock|DigestConvoy|EntryEmbedderMarksABatch|MetricsFlusherRetries|ReplaceChunk|FileIngestor|EmbedDrain|WatchPipeline|LoggerMessageEventId`
+`ReplaceHoldsTheLock|DigestConvoy|EntryEmbedderMarksABatch|MetricsFlusherRetries|Replace|FileIngestor|EmbedDrain|WatchPipeline|CodeIngestor|LoggerMessageEventId`
 green; `docs/reference/agent-memory-server.md` watch-digest paragraph and
 `docs/how-to/read-performance-metrics.md` (`write.replace.held_ms` now bounded by the write, not the
 chunker) updated. **Proof on the live bank is the owner's**: after the release, `write.replace.held_ms`
