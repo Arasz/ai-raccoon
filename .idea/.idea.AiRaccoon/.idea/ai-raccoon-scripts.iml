@@ -9,6 +9,7 @@
       <excludeFolder url="file://$MODULE_DIR$/../../.ai-badger/worktrees/continue-testing-algorithm/.venv" />
       <excludeFolder url="file://$MODULE_DIR$/../../.ai-badger/worktrees/review-nightly-tests/.venv" />
       <excludeFolder url="file://$MODULE_DIR$/../../.claude/worktrees/agent-a88d7bfe883ad5a68/.venv" />
+      <excludeFolder url="file://$MODULE_DIR$/../../.claude/worktrees/agent-ae53326609da90260/.venv" />
     </content>
     <orderEntry type="jdk" jdkName="~/RiderProjects/ai-raccoon/.venv" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
