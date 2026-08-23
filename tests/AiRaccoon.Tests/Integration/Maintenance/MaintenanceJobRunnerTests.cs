@@ -1,4 +1,6 @@
 using AiRaccoon.Core.EventPump;
+using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Metrics;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -127,7 +129,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
 
         _time.Advance(TimeSpan.FromMinutes(30));
         // A brand-new runner is a brand-new process. It reads the bank, not its own memory.
-        await new MaintenanceJobRunner(_time, NullLogger<MaintenanceJobRunner>.Instance).RunDueAsync(connection, [job], TestContext.Current.CancellationToken);
+        await new MaintenanceJobRunner(_time, new NoOpMeasurementRecorder(), NullLogger<MaintenanceJobRunner>.Instance).RunDueAsync(connection, [job], TestContext.Current.CancellationToken);
 
         job.Runs.ShouldBe(1, "30 minutes into a 2-hour interval, a restart must not earn another run");
     }
@@ -214,7 +216,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
         var logger = new FakeLogger<MaintenanceJobRunner>();
         var broken = new CountingJob("broken-check", interval: null) { ThrowFromHasWorkAsync = true };
 
-        await new MaintenanceJobRunner(_time, logger).RunDueAsync(connection, [broken], TestContext.Current.CancellationToken);
+        await new MaintenanceJobRunner(_time, new NoOpMeasurementRecorder(), logger).RunDueAsync(connection, [broken], TestContext.Current.CancellationToken);
 
         var record = logger.Collector.LatestRecord;
         record.ShouldNotBeNull();
@@ -284,7 +286,67 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
         row.LastRunAt.ShouldBe(Start.AddHours(2).ToUnixTimeSeconds());
     }
 
-    private MaintenanceJobRunner Runner() => new(_time, NullLogger<MaintenanceJobRunner>.Instance);
+    /// <summary>
+    ///     WP3 (#477): a completed run records `job.&lt;name&gt;.duration_ms`; the duration the runner
+    ///     already computes at :71/:94 for the log line goes to the measurement recorder too, under
+    ///     the self-metrics project id so `memory_performance` can find it (route (a) — no change to
+    ///     <see cref="IMaintenanceJob" />).
+    /// </summary>
+    [Fact]
+    public async Task ACompletedRun_RecordsJobDurationMetric()
+    {
+        await using var connection = await OpenAsync();
+        var job = new CountingJob("duration-job", interval: null);
+        var recorder = new RecordingMeasurementRecorder();
+
+        await Runner(recorder).RunDueAsync(connection, [job], TestContext.Current.CancellationToken);
+
+        var measurement = recorder.Recorded.ShouldHaveSingleItem();
+        measurement.Name.ShouldBe("job.duration-job.duration_ms");
+        measurement.Kind.ShouldBe(MeasurementKind.Histogram);
+        measurement.Unit.ShouldBe("ms");
+        measurement.ProjectId.ShouldBe(MetricsConfigKeys.SelfMetricsProjectId);
+    }
+
+    /// <summary>
+    ///     WP3 (#477): a job that opts into <see cref="IReportsOutstandingRows" /> also gets its
+    ///     `job.&lt;name&gt;.rows` gauge recorded — route (a)'s escape hatch for the "rows" half of
+    ///     the issue, reachable without touching <see cref="IMaintenanceJob" /> or any of its ten
+    ///     implementations (none opt in today).
+    /// </summary>
+    [Fact]
+    public async Task AJobWithOutstandingRows_RecordsJobRowsMetric()
+    {
+        await using var connection = await OpenAsync();
+        var job = new CountingJobWithOutstandingRows("rows-job", outstandingRows: 7);
+        var recorder = new RecordingMeasurementRecorder();
+
+        await Runner(recorder).RunDueAsync(connection, [job], TestContext.Current.CancellationToken);
+
+        var rows = recorder.Recorded.Single(m => m.Name == "job.rows-job.rows");
+        rows.Kind.ShouldBe(MeasurementKind.Gauge);
+        rows.Value.ShouldBe(7);
+        rows.Unit.ShouldBe("count");
+        rows.ProjectId.ShouldBe(MetricsConfigKeys.SelfMetricsProjectId);
+    }
+
+    /// <summary>WP3 (#477): a job that is not due neither ran nor produced anything to measure — no metric at all, not a zero.</summary>
+    [Fact]
+    public async Task ANotDueJob_RecordsNeitherMetric()
+    {
+        await using var connection = await OpenAsync();
+        var job = new CountingJob("not-due", TimeSpan.FromHours(2));
+        var recorder = new RecordingMeasurementRecorder();
+        await Runner(recorder).RunDueAsync(connection, [job], TestContext.Current.CancellationToken);
+        recorder.Recorded.Clear();
+
+        await Runner(recorder).RunDueAsync(connection, [job], TestContext.Current.CancellationToken);
+
+        recorder.Recorded.ShouldBeEmpty();
+    }
+
+    private MaintenanceJobRunner Runner(IMeasurementRecorder? measurements = null) =>
+        new(_time, measurements ?? new NoOpMeasurementRecorder(), NullLogger<MaintenanceJobRunner>.Instance);
 
     private async Task<SqliteConnection> OpenAsync() =>
         await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -332,5 +394,22 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
             Runs++;
             return ValueTask.FromResult(false);
         }
+    }
+
+    /// <summary>WP3 (#477) fixture: a job that opts into <see cref="IReportsOutstandingRows" />. None of the ten real jobs do this today — route (a)'s point is that this is possible without touching <see cref="IMaintenanceJob" />.</summary>
+    private sealed class CountingJobWithOutstandingRows(string name, long outstandingRows)
+        : IMaintenanceJob, IReportsOutstandingRows
+    {
+        public string Name => name;
+
+        public string DisplayName => $"counting job {name} with outstanding rows";
+
+        public TimeSpan? Interval => null;
+
+        public ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+            ValueTask.FromResult(false);
+
+        public ValueTask<long> CountOutstandingRowsAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+            ValueTask.FromResult(outstandingRows);
     }
 }

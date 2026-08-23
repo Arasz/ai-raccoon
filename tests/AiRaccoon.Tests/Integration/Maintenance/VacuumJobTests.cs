@@ -111,7 +111,7 @@ public sealed class VacuumJobTests : IDisposable
         (await RunCountAsync(connection)).ShouldBe(2, "two hours must be enough; seven days was the old default");
     }
 
-    private MaintenanceJobRunner Runner() => new(_time, NullLogger<MaintenanceJobRunner>.Instance);
+    private MaintenanceJobRunner Runner() => new(_time, new NoOpMeasurementRecorder(), NullLogger<MaintenanceJobRunner>.Instance);
 
     private static async Task<long> RunCountAsync(SqliteConnection connection) =>
         await connection.ExecuteScalarAsync<long>(
