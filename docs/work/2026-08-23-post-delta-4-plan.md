@@ -1,11 +1,11 @@
 # Plan — post-delta session 4 (rev 2.1 — gate answered 9/9; wave 1 merged; WP11 added (owner extension))
 
 **Date:** 2026-08-23 · **Base:** main `72e15088` (`VERSION` = 1.33.0; one open PR, draft #499) ·
-**Status:** rev 2.0 — **gate answered 9/9** (`docs/work/2026-08-23-post-delta-4-feedback.md`,
+**Status:** rev 2.1 — **gate answered 9/9** (`docs/work/2026-08-23-post-delta-4-feedback.md`,
 2026-08-23 05:32Z): G1–G4 APPROVE, **G6 APPROVE "3"** (shape (iii) — #477 as written), **G7 REJECT
 "dont delete"** (WP5 dropped; the two jobs stay — standing ruling), **G8 APPROVE "3 now, 2 later —
 create plan for the next session before starting"**, **G9 APPROVE "all"**, **G10 APPROVE "move it to
-the next session"**. Review round 1 (PR #526) folded at rev 1.1. **Lanes open** — see §Re-review for
+the next session"**. Review round 1 (PR #526) folded at rev 1.1. **Wave 1 merged; wave 2 (WP6 chain, WP11) running** — see §Re-review for
 what the answers changed and which wave dispatches first ·
 **Task:** `post-delta-4` · **Lane:** architect (plan + gate), Opus.
 
