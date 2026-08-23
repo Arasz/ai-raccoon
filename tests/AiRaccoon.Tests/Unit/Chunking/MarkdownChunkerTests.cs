@@ -25,6 +25,54 @@ public class MarkdownChunkerTests
             line.TrimStart().StartsWith("```", StringComparison.Ordinal)
             || line.TrimStart().StartsWith("~~~", StringComparison.Ordinal));
 
+    /// <summary>True when the chunk carries no body text at all — only headings and blank lines.
+    /// Such a chunk still becomes an entries row and an embedding in FileIngestor.</summary>
+    private static bool HasNoBodyText(string chunk)
+    {
+        var inFence = false;
+        foreach (var line in chunk.Split('\n'))
+        {
+            var trimmed = line.TrimStart();
+            if (trimmed.StartsWith("```", StringComparison.Ordinal) || trimmed.StartsWith("~~~", StringComparison.Ordinal))
+            {
+                inFence = !inFence;
+                continue;
+            }
+
+            if (inFence)
+            {
+                if (line.Trim().Length > 0)
+                {
+                    return false;
+                }
+
+                continue;
+            }
+
+            if (line.Trim().Length == 0 || IsHeadingLikeForBodyCheck(line))
+            {
+                continue;
+            }
+
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsHeadingLikeForBodyCheck(string line)
+    {
+        var trimmed = line.TrimStart();
+        var level = 0;
+        while (level < trimmed.Length && trimmed[level] == '#')
+        {
+            level++;
+        }
+
+        return level is >= 1 and <= 6 && level < trimmed.Length && trimmed[level] == ' '
+               && trimmed[(level + 1)..].Trim().Length > 0;
+    }
+
     [Fact]
     public void Split_NoteLongerThanMaxTokens_SplitsAtLineBoundariesWithinBudget()
     {
@@ -194,12 +242,16 @@ public class MarkdownChunkerTests
         // heading open the first chunk that carries its content — deferring it forever would
         // either loop or emit an empty chunk. The heading-as-first-new-unit guard is what stops
         // the generalized rule from deferring it past the point where it can make no progress.
+        // QA gate on 93756cb6 (BREAK-1): this used to pass by asserting the defect itself —
+        // ["# Title\n\n", …], a content-free first chunk. The contentful-unit guard now refuses
+        // that deferral, so "## Big Section" and its first line stay together in chunk 0.
         var text = "# Title\n\n## Big Section\nLINE1\nLINE2\nLINE3\nLINE4\nLINE5\n";
 
         var chunks = new MarkdownChunker(CharCount).Chunk(text, 30);
 
-        chunks.ShouldBe(["# Title\n\n", "## Big Section\nLINE1\nLINE2\n", "LINE3\nLINE4\nLINE5\n"]);
-        chunks.ShouldAllBe(chunk => CharCount(chunk) <= 30 && chunk.Length > 0);
+        chunks.ShouldAllBe(chunk => CharCount(chunk) <= 30 && chunk.Trim().Length > 0);
+        chunks[0].ShouldNotBe("# Title\n\n");
+        HeadingPathParser.Parse(chunks[0]).ShouldBe("Title > Big Section");
     }
 
     [Fact]
@@ -301,14 +353,16 @@ public class MarkdownChunkerTests
     public void Split_ProvenanceHeaderCascade_DoesNotStripChunk0ToJustTheHeader()
     {
         // The exact cascade the gate found: the "## Source:" header, once correctly excluded from
-        // triggering its own deferral, no longer needs item 1's whitespace-chunk guard to save it
-        // from "# Title" repeatedly deferring back onto it — chunk 0 must keep real content.
+        // triggering its own deferral, no longer needs the whitespace-chunk guard to save it from
+        // "# Title" repeatedly deferring back onto it — chunk 0 must keep real content.
+        // QA gate on 93756cb6 (BREAK-1): "not equal to the header alone" was one predicate short —
+        // chunk 0 could still be "## Source: …\n\n# Title\n\n", non-blank but with no body text.
         var text = "## Source: /a/b/c.md\n\n# Title\n\n## A\nAAAA\nBBBB\n\n## B\nCCCC\n";
 
         var chunks = new MarkdownChunker(CharCount).Chunk(text, 44);
 
         chunks[0].ShouldNotBe("## Source: /a/b/c.md\n\n");
-        chunks.ShouldAllBe(chunk => chunk.Trim().Length > 0, string.Join(" | ", chunks));
+        chunks.ShouldAllBe(chunk => !HasNoBodyText(chunk), string.Join(" | ", chunks));
     }
 
     [Fact]

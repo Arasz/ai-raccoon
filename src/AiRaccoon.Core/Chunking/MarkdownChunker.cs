@@ -279,15 +279,16 @@ public sealed class MarkdownChunker : IMarkdownChunker
     ///     Splits an over-budget fence into consecutive bounded fences, each repeating the region's
     ///     own opening and closing delimiter. Every unit stays a well-formed fence, so no chunk can
     ///     begin inside a code block and be read as prose (docs/adr/0048). Falls back to bare lines
-    ///     only when the delimiters alone leave no room for content — the token budget outranks the
-    ///     balance, and that floor is unreachable at any realistic maxTokens.
+    ///     only when even an empty sub-fence (opener + the forced content newline + closer) would
+    ///     not fit — the token budget outranks the balance, and that floor is unreachable at any
+    ///     realistic maxTokens.
     /// </summary>
     private static void FlushAsSubFences(List<Unit> units, List<string> fenceLines, int maxTokens,
         TokenCount countTokens)
     {
         var opener = EndWithNewline(fenceLines[0]);
         var closer = EndWithNewline(fenceLines[^1]);
-        if (countTokens(string.Concat(opener, closer)) >= maxTokens)
+        if (countTokens(SubFenceText(opener, [""], closer)) >= maxTokens)
         {
             FlushAsLines(units, fenceLines, maxTokens, countTokens);
             return;
@@ -475,9 +476,9 @@ public sealed class MarkdownChunker : IMarkdownChunker
 
     private static bool IsBlankUnit(Unit unit) => unit.Lines.Count == 1 && string.IsNullOrWhiteSpace(unit.Lines[0]);
 
-    /// <summary>A unit worth leaving behind after a deferral: neither blank nor a provenance
-    /// header, both invisible to HeadingPathParser and neither one real, indexable content.</summary>
-    private static bool IsContentfulUnit(Unit unit) => !IsBlankUnit(unit) && !IsSourceProvenanceUnit(unit);
+    /// <summary>A unit worth leaving behind after a deferral: not blank and not itself a heading
+    /// (any level) — a lone heading is exactly as unindexable as a lone blank line.</summary>
+    private static bool IsContentfulUnit(Unit unit) => !IsBlankUnit(unit) && !IsHeadingUnit(unit);
 
     /// <summary>ATX heading, levels 1-6 (a bare '#' or '#Text' does not count) — same shape HeadingPathParser parses.</summary>
     private static bool IsHeadingLine(string line)
