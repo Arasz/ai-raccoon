@@ -67,6 +67,21 @@ public class OnnxGraphProbeReaderTests
         probe.OutputRanks!.ContainsKey("token_embeddings").ShouldBeFalse();
     }
 
+    /// <summary>Round-2 review nit: a dynamic axis (a symbolic <c>dim_param</c>, e.g. the batch
+    /// dimension) must count toward rank exactly like a static <c>dim_value</c> — the parser only
+    /// counts that a `dim` entry exists, never inspects which kind it is.</summary>
+    [Fact]
+    public void DynamicAxis_CountsTowardRank_SameAsAStaticOne()
+    {
+        var model = TestOnnx.MinimalModelWithExternalData("model.onnx_data",
+            outputRanks: new Dictionary<string, int> { ["token_embeddings"] = 3 },
+            dynamicAxisIndex: new Dictionary<string, int> { ["token_embeddings"] = 0 }); // batch, dynamic
+
+        var probe = Probe().Read(model);
+
+        probe.OutputRanks!["token_embeddings"].ShouldBe(3);
+    }
+
     [Fact]
     public void ReadsIrAndOpsetVersions()
     {
@@ -140,11 +155,12 @@ public class OnnxGraphProbeReaderTests
 internal static class TestOnnx
 {
     public static byte[] MinimalModelWithExternalData(string externalLocation, IReadOnlyList<string>? outputs = null,
-        IReadOnlyDictionary<string, int>? outputRanks = null) =>
-        MinimalModel(initializers: [TensorWithExternalData("weights", externalLocation)], outputs: outputs, outputRanks: outputRanks);
+        IReadOnlyDictionary<string, int>? outputRanks = null, IReadOnlyDictionary<string, int>? dynamicAxisIndex = null) =>
+        MinimalModel(initializers: [TensorWithExternalData("weights", externalLocation)], outputs: outputs,
+            outputRanks: outputRanks, dynamicAxisIndex: dynamicAxisIndex);
 
     public static byte[] MinimalModel(IReadOnlyList<byte[]>? initializers = null, IReadOnlyList<string>? outputs = null,
-        IReadOnlyDictionary<string, int>? outputRanks = null)
+        IReadOnlyDictionary<string, int>? outputRanks = null, IReadOnlyDictionary<string, int>? dynamicAxisIndex = null)
     {
         List<byte> graph = [.. StringField(1, "g")];
         foreach (var tensor in initializers ?? [])
@@ -160,7 +176,8 @@ internal static class TestOnnx
         foreach (var output in outputs ?? ["token_embeddings", "sentence_embedding"])
         {
             var rank = outputRanks is not null && outputRanks.TryGetValue(output, out var r) ? r : (int?)null;
-            graph.AddRange(MessageField(12, ValueInfo(output, rank)));
+            var dynamicIndex = dynamicAxisIndex is not null && dynamicAxisIndex.TryGetValue(output, out var d) ? d : (int?)null;
+            graph.AddRange(MessageField(12, ValueInfo(output, rank, dynamicIndex)));
         }
 
         var opset = new List<byte>();
@@ -189,26 +206,29 @@ internal static class TestOnnx
         return tensor.ToArray();
     }
 
-    private static byte[] ValueInfo(string name, int? rank = null)
+    private static byte[] ValueInfo(string name, int? rank = null, int? dynamicAxisIndex = null)
     {
         var valueInfo = new List<byte>(StringField(1, name));
         if (rank is not null)
         {
-            valueInfo.AddRange(MessageField(2, TypeProto(rank.Value))); // ValueInfoProto.type
+            valueInfo.AddRange(MessageField(2, TypeProto(rank.Value, dynamicAxisIndex))); // ValueInfoProto.type
         }
 
         return valueInfo.ToArray();
     }
 
     /// <summary>TypeProto.tensor_type (field 1) → TypeProto.Tensor.shape (field 2) →
-    /// TensorShapeProto.dim (field 1, repeated) — one empty Dimension per declared rank. Dimension
-    /// content (dim_value/dim_param) is irrelevant to a rank count, so it is left empty.</summary>
-    private static byte[] TypeProto(int rank)
+    /// TensorShapeProto.dim (field 1, repeated), one per declared rank: a static <c>dim_value</c>
+    /// (field 1) at every index except <paramref name="dynamicAxisIndex" />, which gets a
+    /// <c>dim_param</c> (field 2, a symbolic name) instead — a rank count doesn't care which kind
+    /// a dim is, only that it exists.</summary>
+    private static byte[] TypeProto(int rank, int? dynamicAxisIndex = null)
     {
         var shape = new List<byte>();
         for (var i = 0; i < rank; i++)
         {
-            shape.AddRange(MessageField(1, []));
+            var dimension = i == dynamicAxisIndex ? StringField(2, "batch") : Int64Field(1, 1);
+            shape.AddRange(MessageField(1, dimension));
         }
 
         return MessageField(1, MessageField(2, shape.ToArray()));

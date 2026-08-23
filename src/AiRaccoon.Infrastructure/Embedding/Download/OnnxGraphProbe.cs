@@ -1,8 +1,9 @@
 namespace AiRaccoon.Infrastructure.Embedding.Download;
 
 /// <summary>What the downloader needs to know about a model's ONNX graph before fetching its siblings.
-/// <see cref="OutputRanks" /> (#504) carries each output's declared tensor rank — absent when the
-/// graph declares no static shape for that output, or when a probe predates this field.</summary>
+/// <see cref="OutputRanks" /> (#504) carries each output's declared tensor rank — a dynamic axis
+/// still counts (rank is the dim COUNT, not each dim's value), so only an output with no shape at
+/// all (or a probe that predates this field) has no entry.</summary>
 public sealed record OnnxGraphProbe(
     IReadOnlyList<string> ExternalDataFiles,
     IReadOnlyList<string> InputNames,

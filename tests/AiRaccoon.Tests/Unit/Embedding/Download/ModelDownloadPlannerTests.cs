@@ -516,6 +516,31 @@ public class ModelDownloadPlannerTests
         plan.PoolingProvenance.ShouldContain("placeholder");
     }
 
+    /// <summary>
+    ///     #504 B4 (round 2 review): "names as tie-breaker" means among candidates that SHARE the
+    ///     wanted rank, not "fall back to list order". Three outputs, two of them rank-2
+    ///     (<c>pooler_output</c> first in the list, <c>sentence_embedding</c> second) — the
+    ///     recognized name must win regardless of which one the graph lists first, never the
+    ///     first-found-by-rank.
+    /// </summary>
+    [Fact]
+    public void Pooling_ThreeOutputs_TiedRank_PrefersRecognizedNameOverListOrder()
+    {
+        var probe = BgeM3Probe() with
+        {
+            OutputNames = ["last_hidden_state", "pooler_output", "sentence_embedding"],
+            OutputRanks = new Dictionary<string, int>
+            {
+                ["last_hidden_state"] = 3, ["pooler_output"] = 2, ["sentence_embedding"] = 2
+            }
+        };
+
+        var plan = Planner().BuildPlan("BAAI/bge-m3", "main", BgeM3Tree(), BgeM3Raw(), probe);
+
+        plan.TokenEmbeddingsOutput.ShouldBe("last_hidden_state");
+        plan.EmbeddingOutput.ShouldBe("sentence_embedding");
+    }
+
     [Fact]
     public void Pooling_Placeholder_WhenSentenceTransformersLayoutAbsent()
     {
