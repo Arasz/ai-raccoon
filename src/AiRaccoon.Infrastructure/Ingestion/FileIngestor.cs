@@ -89,10 +89,10 @@ public sealed class FileIngestor(
     }
 
     /// <summary>
-    ///     The `ai-raccoon.ignore` root for an explicit single-file ingest: the containing
-    ///     registered watch if one exists (longest match), else the ingest-scope allowlist entry
-    ///     that admits the path, else the file's own parent directory. `IgnoreRulesProvider` reads
-    ///     one file at whatever root it is given — no nested discovery.
+    ///     The `ai-raccoon.ignore` root for a single-file ingest or a directory walk's root: the
+    ///     containing registered watch if one exists (longest match), else the ingest-scope
+    ///     allowlist entry that admits the path, else the path's own parent directory.
+    ///     `IgnoreRulesProvider` reads one file at whatever root it is given — no nested discovery.
     /// </summary>
     private async Task<string> ResolveIgnoreRootAsync(SqliteConnection connection, string projectId, string path,
         CancellationToken cancellationToken)
@@ -128,9 +128,10 @@ public sealed class FileIngestor(
         var scope = await ReadScopeAsync(connection, projectId, cancellationToken).ConfigureAwait(false);
         RequireInScope(scope, path);
 
-        var ignoreRules = await ignoreRulesProvider.LoadAsync(path, cancellationToken).ConfigureAwait(false);
+        var ignoreRoot = await ResolveIgnoreRootAsync(connection, projectId, path, cancellationToken).ConfigureAwait(false);
+        var ignoreRules = await ignoreRulesProvider.LoadAsync(ignoreRoot, cancellationToken).ConfigureAwait(false);
         var files = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
-            .Where(file => !IsHidden(path, file) && !IsIgnored(ignoreRules, path, file) && IsInScope(scope, file))
+            .Where(file => !IsHidden(path, file) && !IsIgnored(ignoreRules, ignoreRoot, file) && IsInScope(scope, file))
             .OrderBy(file => file, StringComparer.Ordinal);
 
         var indexed = 0;
