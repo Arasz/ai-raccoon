@@ -76,7 +76,7 @@
         },
         {
             "item": "source-path-anchor-resolves-its-chunk",
-            "expected-result": "A `file#section` query (ADR-0003 SourcePathQuery: `name.md#heading-slug` is rewritten to an FTS {source_file section} column query with AND semantics) returns that exact chunk at rank 1. Run it with `vectorWeight: 0` -- with the vector leg on, every query returns hits and the anchor's answer is indistinguishable from a keyword coincidence (five runs substituted this item believing the syntax did not exist). Controls: `name.md#no-such-section` returns ZERO results while the same words in keyword shape return hits; `name.md` alone returns every chunk of that file and nothing else. Ingest a file with at least two headings and anchor BOTH sections: a chunk that swallows the next heading plus a few body lines is labelled with the later section (#538, the #489 residual), so the earlier section's anchor resolving nothing is the known defect, not a pass.",
+            "expected-result": "A `file#section` query (ADR-0003 SourcePathQuery: `name.md#heading-slug` is rewritten to an FTS {source_file section} column query with AND semantics) returns that exact chunk at rank 1. Run it with `vectorWeight: 0` -- with the vector leg on, every query returns hits and the anchor's answer is indistinguishable from a keyword coincidence (five runs substituted this item believing the syntax did not exist). Controls: `name.md#no-such-section` returns ZERO results while the same words in keyword shape return hits; `name.md` alone returns every chunk of that file and nothing else. Ingest a file with at least two headings and anchor BOTH sections. If an earlier section's anchor resolves nothing, read the chunk tails before recording: a chunk that swallowed the next heading plus a few body lines is labelled with the later section (#538, the #489 residual) -- a fail while #538 is open, tracked there; once #538 is closed it is a plain fail.",
             "command": "",
             "evidence": "",
             "observed-result": "",
@@ -320,6 +320,50 @@
             "status": "",
             "accepted": null,
             "acceptance-reason": ""
+        },
+        {
+            "item": "settings-model-threads-round-trip-and-effect",
+            "expected-result": "`ai-raccoon settings model threads <n>` round trips (set -> `settings model list` shows n); a non-integer / negative value is rejected with exit 15 (ExitCode.InvalidArgument) and nothing written (negative control; 0 is legal and means ORT's own default). After a server restart on the scratch root, the first embedding session logs EventId 428 (the ORT intra-op thread count that took effect, source `setting`) and `doctor` prints the same count with its source; with the setting absent, both report the halved-core default. #522 / #524.",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": "",
+            "anchor": "#522/#524 EventId 428 (no ADR governs the threads setting)"
+        },
+        {
+            "item": "settings-maintenance-embed-rows-per-run-validation",
+            "expected-result": "`ai-raccoon settings maintenance embed-rows-per-run <n>`: set 7 -> `settings maintenance list` shows 7. Set 0, \"\", and 5000 -> exit 15 (ExitCode.InvalidArgument) naming the positive / at-most-4096 bound, and the list still shows 7 (nothing written). ADR-0091, #517.",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": "",
+            "anchor": "ADR-0091; #517"
+        },
+        {
+            "item": "embed-drain-proof-mixed-corpus-with-code-model-active",
+            "expected-result": "With the code model active on a scratch root, memory_ingest_directory over a directory holding both markdown and .cs files leaves pending:0 for BOTH corpora (doctor / memory_stats) with no inline embedding -- the server log shows the EmbedDrainService drain pass (EventIds 1002/1003) and 1006 (invalid setting) does NOT fire. With embed-rows-per-run=7 and 10 fresh .cs files, one drain pass embeds exactly 7 rows before the next pass takes the rest. ADR-0091, #507 #517 #518.",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": "",
+            "anchor": "ADR-0091; #507/#518 EventIds 1002/1003/1006"
+        },
+        {
+            "item": "watched-directory-cs-file-triggers-code-corpus-drain-signal",
+            "expected-result": "Adding a .cs file under a registered watch (code model active) produces a drain pass for the CODE corpus: the observable signal is EventId 1003 (DrainFinished, Information) with corpus Code logged right after the watch digest's write -- 1002 (DrainStarted) is Debug-level and invisible at the console default, and EmbedDrainService logs 1003 unconditionally after it for the same corpus, so 1003 is the pass condition, not a substitution. memory_search kind=code then returns the new file's content; a sibling .md file added the same way produces a 1003 with corpus Memory (negative control for the routing #518 fixed).",
+            "command": "",
+            "evidence": "",
+            "observed-result": "",
+            "status": "",
+            "accepted": null,
+            "acceptance-reason": "",
+            "anchor": "ADR-0091; #518"
         }
     ]
 }
