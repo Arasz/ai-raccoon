@@ -107,8 +107,8 @@ public sealed partial class MaintenanceJobRunner(
     /// <summary>
     ///     Route (a) (WP3, #477): the duration is data the runner already computes for the log line
     ///     above, so recording it costs nothing extra. The rows gauge only fires for a job that opts
-    ///     into <see cref="IReportsOutstandingRows" /> — none of the ten do today — so a job with
-    ///     nothing to count records duration alone, never a fabricated zero.
+    ///     into <see cref="IReportsOutstandingRows" /> (two of the ten today) — a job with nothing
+    ///     to count records duration alone, never a fabricated zero.
     /// </summary>
     private async Task RecordJobMetricsAsync(SqliteConnection connection, IMaintenanceJob job, double elapsedMs,
         DateTimeOffset now, CancellationToken cancellationToken)

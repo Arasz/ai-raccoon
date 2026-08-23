@@ -312,7 +312,8 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
     ///     WP3 (#477): a job that opts into <see cref="IReportsOutstandingRows" /> also gets its
     ///     `job.&lt;name&gt;.rows` gauge recorded — route (a)'s escape hatch for the "rows" half of
     ///     the issue, reachable without touching <see cref="IMaintenanceJob" /> or any of its ten
-    ///     implementations (none opt in today).
+    ///     implementations. <see cref="PendingEmbedJob" />/<see cref="CodeReindexJob" /> opt in for real
+    ///     (PendingEmbedJobTests/CodeReindexJobTests); this uses a fixture to isolate the runner's own behaviour.
     /// </summary>
     [Fact]
     public async Task AJobWithOutstandingRows_RecordsJobRowsMetric()
@@ -328,6 +329,33 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
         rows.Value.ShouldBe(7);
         rows.Unit.ShouldBe("count");
         rows.ProjectId.ShouldBe(MetricsConfigKeys.SelfMetricsProjectId);
+    }
+
+    /// <summary>
+    ///     Review B3: EventId 528's catch-and-log-only branch had no test. A broken rows count must
+    ///     not undo the job's own success — it already ran and is already ledger-stamped by the time
+    ///     the count is attempted — so only the rows gauge is missing, duration still records, and the
+    ///     failure is logged distinctly (528) rather than swallowed.
+    /// </summary>
+    [Fact]
+    public async Task AJobWhoseRowsCountThrows_StillCompletes_RecordsDurationOnly_AndLogs528()
+    {
+        await using var connection = await OpenAsync();
+        var job = new CountingJobWithOutstandingRows("rows-broken", outstandingRows: 0) { ThrowOnCount = true };
+        var recorder = new RecordingMeasurementRecorder();
+        var logger = new FakeLogger<MaintenanceJobRunner>();
+
+        var outcomes = await new MaintenanceJobRunner(_time, recorder, logger)
+            .RunDueAsync(connection, [job], TestContext.Current.CancellationToken);
+
+        outcomes.Single().Ran.ShouldBeTrue("the job itself succeeded; only its rows count failed");
+        var duration = recorder.Recorded.ShouldHaveSingleItem();
+        duration.Name.ShouldBe("job.rows-broken.duration_ms");
+        var record = logger.Collector.LatestRecord;
+        record.ShouldNotBeNull();
+        record.Id.Id.ShouldBe(528);
+        record.Level.ShouldBe(LogLevel.Warning);
+        record.Message.ShouldContain("rows-broken");
     }
 
     /// <summary>WP3 (#477): a job that is not due neither ran nor produced anything to measure — no metric at all, not a zero.</summary>
@@ -396,10 +424,12 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
         }
     }
 
-    /// <summary>WP3 (#477) fixture: a job that opts into <see cref="IReportsOutstandingRows" />. None of the ten real jobs do this today — route (a)'s point is that this is possible without touching <see cref="IMaintenanceJob" />.</summary>
+    /// <summary>WP3 (#477) fixture: a job that opts into <see cref="IReportsOutstandingRows" /> — route (a)'s point is that this is possible without touching <see cref="IMaintenanceJob" />; the real opt-ins are <see cref="PendingEmbedJob" /> and <see cref="CodeReindexJob" />.</summary>
     private sealed class CountingJobWithOutstandingRows(string name, long outstandingRows)
         : IMaintenanceJob, IReportsOutstandingRows
     {
+        public bool ThrowOnCount { get; init; }
+
         public string Name => name;
 
         public string DisplayName => $"counting job {name} with outstanding rows";
@@ -410,6 +440,8 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
             ValueTask.FromResult(false);
 
         public ValueTask<long> CountOutstandingRowsAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
-            ValueTask.FromResult(outstandingRows);
+            ThrowOnCount
+                ? throw new InvalidOperationException("rows count failed")
+                : ValueTask.FromResult(outstandingRows);
     }
 }
