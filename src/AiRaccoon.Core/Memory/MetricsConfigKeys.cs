@@ -57,4 +57,36 @@ public static class MetricsConfigKeys
 
     /// <summary>The <c>job.&lt;name&gt;.rows</c> series name for one maintenance job.</summary>
     public static string JobRowsMetricName(string jobName) => $"{JobMetricPrefix}{jobName}.rows";
+
+    /// <summary>Prefix for embed-drain pass series (WP11): <c>drain.&lt;corpus&gt;.rows</c> and <c>drain.&lt;corpus&gt;.duration_ms</c>, bank-wide self-metrics like job.*.</summary>
+    public const string DrainMetricPrefix = "drain.";
+
+    /// <summary>Prefix for write-path series (WP11): today just <c>write.replace.lock_ms</c> and <c>write.replace.rows</c>.</summary>
+    public const string WriteMetricPrefix = "write.";
+
+    /// <summary>Prefix for query-time series (WP11): today just <c>search.query.truncated_tokens</c>.</summary>
+    public const string SearchQueryMetricPrefix = "search.query.";
+
+    /// <summary>
+    ///     Every internal-series prefix MetricsReportService's discovery and the internal recorders'
+    ///     own naming both consume — one constant set, so a fifth family cannot be added on one side
+    ///     only (derive-or-delete).
+    /// </summary>
+    public static readonly IReadOnlyList<string> InternalSeriesPrefixes =
+        [JobMetricPrefix, DrainMetricPrefix, WriteMetricPrefix, SearchQueryMetricPrefix];
+
+    /// <summary>The <c>drain.&lt;corpus&gt;.rows</c> series name for one embed-drain pass.</summary>
+    public static string DrainRowsMetricName(string corpus) => $"{DrainMetricPrefix}{corpus}.rows";
+
+    /// <summary>The <c>drain.&lt;corpus&gt;.duration_ms</c> series name for one embed-drain pass.</summary>
+    public static string DrainDurationMetricName(string corpus) => $"{DrainMetricPrefix}{corpus}.duration_ms";
+
+    /// <summary>Replace-by-path's write-lock hold time, per transaction (EventId 899 recorded as a measurement).</summary>
+    public const string ReplaceLockMsMetricName = $"{WriteMetricPrefix}replace.lock_ms";
+
+    /// <summary>Rows a replace-by-path transaction wrote, per transaction.</summary>
+    public const string ReplaceRowsMetricName = $"{WriteMetricPrefix}replace.rows";
+
+    /// <summary>Tokens a search query exceeded the embedding window by, per truncated query (EventId 426 recorded as a measurement).</summary>
+    public const string QueryTruncatedTokensMetricName = $"{SearchQueryMetricPrefix}truncated_tokens";
 }

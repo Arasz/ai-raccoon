@@ -48,7 +48,8 @@ public sealed class CustomContextDiscoverabilityTests : IDisposable
             NullWatchStore.Instance, NullEmbedDrainPump.Instance);
         return new SqliteMemoryStore(_factory, new SqliteMemorySourceStore(_factory), fileIngestor,
             embedder, new FakeTimeProvider(FixedNow), NullLogger<SqliteMemoryStore>.Instance,
-            new NoiseFilteringService([]), new SqliteSettingsStore(_factory), NullEmbedDrainPump.Instance);
+            new NoiseFilteringService([]), new SqliteSettingsStore(_factory), NullEmbedDrainPump.Instance,
+            NoOpMeasurementRecorder.Instance);
     }
 
     [Fact]

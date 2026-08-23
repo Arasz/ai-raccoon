@@ -24,7 +24,7 @@ public sealed class QueryTrimSharesTheLocalTokenizerTests
             builds++;
             return OnnxEmbeddingGenerator.CreateTokenizer(BundledModel.ResolveVocabPath());
         });
-        var service = new EmbeddingService(new FakeLogger<EmbeddingService>(), localTokenizer, new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
+        var service = new EmbeddingService(new FakeLogger<EmbeddingService>(), localTokenizer, new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()), NoOpMeasurementRecorder.Instance, TimeProvider.System);
         var settings = new EmbeddingSettings("local", null, null, null);
 
         service.TrimQueryToWindow(settings, LongQuery());
@@ -45,7 +45,7 @@ public sealed class QueryTrimSharesTheLocalTokenizerTests
             builds++;
             return OnnxEmbeddingGenerator.CreateTokenizer(BundledModel.ResolveVocabPath());
         });
-        var service = new EmbeddingService(new FakeLogger<EmbeddingService>(), localTokenizer, new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()));
+        var service = new EmbeddingService(new FakeLogger<EmbeddingService>(), localTokenizer, new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()), NoOpMeasurementRecorder.Instance, TimeProvider.System);
         var settings = new EmbeddingSettings("openai", "text-embedding-3-small", null, null);
 
         service.TrimQueryToWindow(settings, LongQuery());

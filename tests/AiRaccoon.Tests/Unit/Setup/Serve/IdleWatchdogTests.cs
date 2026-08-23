@@ -324,6 +324,10 @@ public sealed class IdleWatchdogTests
         {
         }
 
+        public void RecordRows(long rows)
+        {
+        }
+
         public void Succeeded()
         {
         }

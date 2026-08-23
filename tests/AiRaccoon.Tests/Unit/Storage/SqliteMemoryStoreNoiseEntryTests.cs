@@ -53,7 +53,7 @@ public sealed class SqliteMemoryStoreNoiseEntryTests : IDisposable
         return new SqliteMemoryStore(_factory, new SqliteMemorySourceStore(_factory), fileIngestor,
             entryEmbedder, new FakeTimeProvider(FixedNow), NullLogger<SqliteMemoryStore>.Instance,
             noiseFilteringService, new SqliteSettingsStore(_factory), NullEmbedDrainPump.Instance,
-            NoOpNoiseShadowObserverForTests.Instance, noiseEntryStore);
+            NoOpMeasurementRecorder.Instance, NoOpNoiseShadowObserverForTests.Instance, noiseEntryStore);
     }
 
     [Fact]

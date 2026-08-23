@@ -18,6 +18,10 @@ public sealed class TestTelemetry : IOperationTelemetry, IOperationScope
     {
     }
 
+    public void RecordRows(long rows)
+    {
+    }
+
     public void Succeeded()
     {
     }

@@ -125,7 +125,8 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
 
         var drainService = new EmbedDrainService(pump, _factory, new EntryEmbedder(new CountingEmbeddingService(),
             Substitute.For<IModelMigrationLease>(), TimeProvider.System), embedder,
-            new SqliteSettingsStore(_factory), TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
+            new SqliteSettingsStore(_factory), NoOpMeasurementRecorder.Instance, TimeProvider.System,
+            TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
         var request = pump.DrainUpTo(1).ShouldHaveSingleItem();
         await drainService.DrainOnceAsync(request, TestContext.Current.CancellationToken);
 

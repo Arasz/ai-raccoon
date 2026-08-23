@@ -49,7 +49,8 @@ public sealed class SqliteMemoryStoreCodeDeleteTests : IDisposable
             NullIgnoreRulesProvider.Instance, new CodeFileTypeMatcher(), codeIngestor,
             NullWatchStore.Instance, pump);
         _store = new SqliteMemoryStore(_factory, sourceStore, fileIngestor, embedder, timeProvider,
-            NullLogger<SqliteMemoryStore>.Instance, new NoiseFilteringService([]), new SqliteSettingsStore(_factory), pump);
+            NullLogger<SqliteMemoryStore>.Instance, new NoiseFilteringService([]), new SqliteSettingsStore(_factory), pump,
+            NoOpMeasurementRecorder.Instance);
     }
 
     public void Dispose()

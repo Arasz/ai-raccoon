@@ -207,6 +207,54 @@ public sealed class BackgroundTelemetryTests
         probe.Passes.Count.ShouldBe(1);
     }
 
+    // ---- RecordRows (WP11): a drain pass's row count on its own histogram ----
+
+    [Fact]
+    public void RecordRows_ThenSucceeded_RecordsOneRowsMeasurement_TaggedLikeDurationAndPasses()
+    {
+        using var probe = new BackgroundTelemetryProbe(Operation);
+
+        using (var scope = probe.Telemetry.Begin(Operation))
+        {
+            scope.RecordRows(42);
+            scope.Succeeded();
+        }
+
+        var rows = probe.Rows.ShouldHaveSingleItem();
+        rows.Value.ShouldBe(42);
+        rows.Tags["operation"].ShouldBe(Operation);
+        rows.Tags["result"].ShouldBe("success");
+    }
+
+    /// <summary>A pass that never calls RecordRows (most background passes have no natural row count) must not fabricate a zero.</summary>
+    [Fact]
+    public void Succeeded_WithoutRecordRows_RecordsNoRowsMeasurement()
+    {
+        using var probe = new BackgroundTelemetryProbe(Operation);
+
+        using (var scope = probe.Telemetry.Begin(Operation))
+        {
+            scope.Succeeded();
+        }
+
+        probe.Rows.ShouldBeEmpty();
+    }
+
+    /// <summary>
+    ///     #548 review, B1: calling RecordRows AFTER the scope's one measurement was already claimed
+    ///     used to silently drop the row count (the exact bug that shipped in EmbedDrainService).
+    ///     Now it throws, so a future ordering mistake fails loudly instead of just losing data.
+    /// </summary>
+    [Fact]
+    public void RecordRows_AfterSucceeded_ThrowsInsteadOfSilentlyDroppingTheValue()
+    {
+        using var probe = new BackgroundTelemetryProbe(Operation);
+        var scope = probe.Telemetry.Begin(Operation);
+        scope.Succeeded();
+
+        Should.Throw<InvalidOperationException>(() => scope.RecordRows(42));
+    }
+
     [Fact]
     public void Probe_IgnoresSpansFromAnotherTelemetryInstance_SharingTheSourceName()
     {
