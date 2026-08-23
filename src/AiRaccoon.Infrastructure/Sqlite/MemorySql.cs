@@ -326,7 +326,7 @@ internal static class MemorySql
     ///     WP12 Fix A: claims the right to chunk (project_id, path) — 1 row affected means this
     ///     caller now owns it (a fresh claim, or a reclaim of one stale by more than
     ///     <c>@staleAfterSeconds</c>); 0 means another, still-fresh claim already owns it and this
-    ///     caller must not chunk. <see cref="SqliteMemoryStore.PruneAsync" /> releases the claim
+    ///     caller must not chunk. <see cref="SqliteMemoryStore.ReplaceCoreAsync" /> releases the claim
     ///     inside the same transaction that writes the fingerprint, so a released claim and a
     ///     durable fingerprint are never observed apart.
     /// </summary>
