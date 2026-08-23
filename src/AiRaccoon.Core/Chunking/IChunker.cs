@@ -9,11 +9,11 @@ public interface IChunker
     IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null);
 
     /// <summary>
-    ///     <see cref="Chunk" /> plus the heading path in force at each chunk (docs/adr/0048,
-    ///     #549/#550 amendment). Default implementation re-parses each chunk's own text via
-    ///     <see cref="HeadingPathParser" /> — today's semantics, correct only when a chunk actually
-    ///     holds the heading whose section it belongs to. <see cref="MarkdownChunker" /> overrides
-    ///     this with the accurate, single-pass version; other chunkers keep this default.
+    ///     <see cref="Chunk" /> plus each chunk's <see cref="TextChunk.HeadingPath" />. Default
+    ///     implementation approximates the contract by re-parsing each chunk's own text via
+    ///     <see cref="HeadingPathParser" /> — wrong when a chunk holds none of the section it
+    ///     opens. <see cref="MarkdownChunker" /> overrides this with the accurate, single-pass
+    ///     version (docs/adr/0048, #549/#550 amendment); other chunkers keep this default.
     /// </summary>
     IReadOnlyList<TextChunk> ChunkWithHeadings(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null) =>
         Chunk(text, maxTokens, overlayTokens, countTokens)
