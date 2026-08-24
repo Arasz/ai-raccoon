@@ -1167,4 +1167,89 @@ public sealed class MemorySchemaVersionTests
         second.Pruned.ShouldBeEmpty();
         second.Warnings.ShouldBeEmpty();
     }
+
+    // ── v11: sync_tombstones project_id shape migration ──
+
+    /// <summary>
+    ///     The exact repro from the live bank: a legacy <c>sync_tombstones</c> table whose
+    ///     <c>project_id</c> is <c>TEXT</c> (nullable, not PK) instead of <c>TEXT NOT NULL</c> as
+    ///     part of a composite primary key. The v11 ladder step must detect the mismatch, recreate
+    ///     the table with the correct shape, and preserve existing data.
+    /// </summary>
+    [Fact]
+    public async Task EnsureAsync_OnAV10Bank_WithLegacySyncTombstones_RecreatesWithCorrectShape_AndPreservesData()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        // Simulate the legacy shape: drop the correct table and recreate with project_id as
+        // plain TEXT (no NOT NULL, no PK) — exactly what an ALTER TABLE ADD COLUMN produces.
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            DROP TABLE sync_tombstones;
+            CREATE TABLE sync_tombstones (
+                project_id TEXT,
+                hash TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                deleted_at INTEGER NOT NULL
+            );
+            CREATE UNIQUE INDEX uq_sync_tombstones_project_identity
+                ON sync_tombstones(project_id, hash, scope);
+            INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at)
+                VALUES ('acme', 'h1', 'project', 100);
+            INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at)
+                VALUES ('acme', 'h2', 'shared', 200);
+            PRAGMA user_version = 10;
+            """,
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        // Verify the table has the correct shape.
+        var columns = await connection.QueryAsync<ColumnRow>(
+            new CommandDefinition(
+                "SELECT name, type, \"notnull\", pk FROM pragma_table_info('sync_tombstones')",
+                cancellationToken: TestContext.Current.CancellationToken));
+        var projectIdCol = columns.First(c => c.Name == "project_id");
+        projectIdCol.Type.ShouldBe("TEXT");
+        projectIdCol.NotNull.ShouldBe(1L);
+        projectIdCol.Pk.ShouldBe(1L);
+
+        // Verify data was preserved.
+        var rows = (await connection.QueryAsync<(string ProjectId, string Hash, string Scope, long DeletedAt)>(
+                new CommandDefinition(
+                    "SELECT project_id AS ProjectId, hash AS Hash, scope AS Scope, deleted_at AS DeletedAt FROM sync_tombstones ORDER BY hash",
+                    cancellationToken: TestContext.Current.CancellationToken)))
+            .ToList();
+        rows.ShouldBe([
+            ("acme", "h1", "project", 100),
+            ("acme", "h2", "shared", 200)
+        ]);
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
+    }
+
+    /// <summary>A bank already at the correct shape must not be touched by the v11 step.</summary>
+    [Fact]
+    public async Task EnsureAsync_OnAV10Bank_WithCorrectSyncTombstones_SkipsTheMigration()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at)
+                VALUES ('acme', 'h1', 'project', 100);
+            PRAGMA user_version = 10;
+            """,
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var count = await connection.ExecuteScalarAsync<long>(
+            new CommandDefinition(
+                "SELECT count(*) FROM sync_tombstones",
+                cancellationToken: TestContext.Current.CancellationToken));
+        count.ShouldBe(1L, "the existing row must survive unchanged");
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
+    }
+
+    private sealed record ColumnRow(string Name, string Type, long NotNull, long Pk);
 }
