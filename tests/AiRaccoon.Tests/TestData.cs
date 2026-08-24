@@ -77,7 +77,7 @@ public static class TestData
         IMeasurementRecorder? measurements)
     {
         jsonChunker ??= RealJsonChunker(markdownChunker);
-        var embedder = new EntryEmbedder(embeddings, modelMigrationLease ?? ModelMigrationLease, timeProvider);
+        var embedder = new EntryEmbedder(embeddings, modelMigrationLease ?? ModelMigrationLease, timeProvider, new VecDimensionReconciler());
         var matcher = new FileTypeMatcher(
             [new MarkdownFileTypeHandler(markdownChunker), new JsonFileTypeHandler(jsonChunker)]);
         // This helper's own documented contract is "omitted, the store behaves as a memory-only
@@ -136,7 +136,7 @@ public static class TestData
             .ConfigureAwait(false);
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
         var resolvedClock = clock ?? TimeProvider.System;
-        var embedder = new EntryEmbedder(embeddings, new SqliteModelMigrationLease(resolvedClock), resolvedClock);
+        var embedder = new EntryEmbedder(embeddings, new SqliteModelMigrationLease(resolvedClock), resolvedClock, new VecDimensionReconciler());
         await embedder.DrainMigrationAsync(connection, cancellationToken).ConfigureAwait(false);
         return config;
     }

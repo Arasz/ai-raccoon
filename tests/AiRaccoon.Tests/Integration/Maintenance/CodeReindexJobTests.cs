@@ -124,7 +124,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
         stateAfterSignal.ShouldBe("pending", "RunAsync only signals — it must not drain itself");
 
         var drainService = new EmbedDrainService(pump, _factory, new EntryEmbedder(new CountingEmbeddingService(),
-            Substitute.For<IModelMigrationLease>(), TimeProvider.System), embedder,
+            Substitute.For<IModelMigrationLease>(), TimeProvider.System, new VecDimensionReconciler()), embedder,
             new SqliteSettingsStore(_factory), NoOpMeasurementRecorder.Instance, TimeProvider.System,
             TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
         var request = pump.DrainUpTo(1).ShouldHaveSingleItem();

@@ -46,7 +46,7 @@ public sealed class QueryTruncationMetricsTests : IDisposable
     public async Task ALongQuery_RecordsTokensOverTheWindow()
     {
         await using var connection = await OpenConfiguredAsync();
-        var embedder = new EntryEmbedder(NewEmbeddingService(), _modelMigrationLease, _timeProvider);
+        var embedder = new EntryEmbedder(NewEmbeddingService(), _modelMigrationLease, _timeProvider, new VecDimensionReconciler());
 
         await embedder.EmbedQueryAsync(connection, LongQuery(), TestContext.Current.CancellationToken);
 
@@ -60,7 +60,7 @@ public sealed class QueryTruncationMetricsTests : IDisposable
     public async Task AShortQuery_RecordsNothing()
     {
         await using var connection = await OpenConfiguredAsync();
-        var embedder = new EntryEmbedder(NewEmbeddingService(), _modelMigrationLease, _timeProvider);
+        var embedder = new EntryEmbedder(NewEmbeddingService(), _modelMigrationLease, _timeProvider, new VecDimensionReconciler());
 
         await embedder.EmbedQueryAsync(connection, "how does the promotion queue decide?",
             TestContext.Current.CancellationToken);

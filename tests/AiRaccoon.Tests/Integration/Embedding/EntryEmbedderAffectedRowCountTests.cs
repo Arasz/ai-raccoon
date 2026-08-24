@@ -60,7 +60,7 @@ public sealed class EntryEmbedderAffectedRowCountTests : IDisposable
         }
 
         var embeddings = new VanishingRowEmbeddingService(connection, ids[1]);
-        var embedder = new EntryEmbedder(embeddings, Substitute.For<IModelMigrationLease>(), TimeProvider.System);
+        var embedder = new EntryEmbedder(embeddings, Substitute.For<IModelMigrationLease>(), TimeProvider.System, new VecDimensionReconciler());
 
         var affected = await embedder.EmbedPendingBatchAsync(connection, 3, ct);
 

@@ -196,7 +196,7 @@ public sealed class EmbedDrainServiceTests : IDisposable
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         await SeedPendingProviderAndRowAsync(connection);
         var job = new PendingEmbedJob(new EntryEmbedder(new CountingEmbeddingService(),
-            NSubstitute.Substitute.For<IModelMigrationLease>(), TimeProvider.System), pump);
+            NSubstitute.Substitute.For<IModelMigrationLease>(), TimeProvider.System, new VecDimensionReconciler()), pump);
         (await job.HasWorkAsync(connection, TestContext.Current.CancellationToken)).ShouldBeTrue(
             "the coalesced signal cost nothing durable — the row is still pending");
     }
@@ -374,7 +374,7 @@ public sealed class EmbedDrainServiceTests : IDisposable
         public Task<bool> ReconcileVecCodeDimensionsAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
             Task.FromResult(false);
 
-public Task<bool> ReconcileFingerprintAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+        public Task<bool> ReconcileFingerprintAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
     }
 }
