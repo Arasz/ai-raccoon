@@ -334,13 +334,20 @@ public static class TestData
     /// <paramref name="dir" /> with stub tokenizer/onnx files, so a real
     /// <see cref="IEmbeddingManifestLoader" /> accepts it — for tests that activate a real code
     /// engine and need the B1 manifest gate (§3.3 D-E9) to pass.</summary>
-    public static void SeedCodeManifestDirectory(string dir)
+    public static void SeedCodeManifestDirectory(string dir) => SeedCodeManifestDirectory(dir, CodeCorpusSchema.EmbeddingDimensions);
+
+    /// <summary>Same seed at an explicit dimension: rewrites the 768 fixture's `dimensions` line
+    /// (contextWindowTokens stays 512, above the chunk budget, so only the dimension differs —
+    /// the vec-code-unfix-dim tests need a non-768 manifest that the chunk gate still accepts).</summary>
+    public static void SeedCodeManifestDirectory(string dir, int dimensions)
     {
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "sentencepiece.bpe.model"), "tokenizer");
         File.WriteAllText(Path.Combine(dir, "model.onnx"), "model");
-        File.Copy(RepoFile("tests/AiRaccoon.Tests/Resources/ManifestFixtures/code-daemon-embed-v1.json"),
-            Path.Combine(dir, EmbeddingManifest.FileName));
+        var manifest = File.ReadAllText(
+            RepoFile("tests/AiRaccoon.Tests/Resources/ManifestFixtures/code-daemon-embed-v1.json"));
+        File.WriteAllText(Path.Combine(dir, EmbeddingManifest.FileName),
+            manifest.Replace("\"dimensions\": 768,", $"\"dimensions\": {dimensions},", StringComparison.Ordinal));
     }
 
     /// <summary>Rewrites a seeded manifest's pooling block — the shape `model download` wrote

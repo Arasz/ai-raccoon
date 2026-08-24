@@ -42,7 +42,7 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
         var options = new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _store = new SqliteCodeEngineStore(_factory, TestData.CreateEmbeddingService(), TestData.CreateManifestLoader(),
-            TestData.CreateManifestPoolingRepair());
+            TestData.CreateManifestPoolingRepair(), new VecDimensionReconciler());
         return ValueTask.CompletedTask;
     }
 
@@ -134,7 +134,8 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
         TestData.WriteManifestPooling(dir, PoolingMode.Cls, "last_hidden_state");
         var store = new SqliteCodeEngineStore(_factory, TestData.CreateEmbeddingService(),
             TestData.CreateManifestLoader(),
-            TestData.CreateManifestPoolingRepair(TestData.GraphWithOutputRanks(("last_hidden_state", 2))));
+            TestData.CreateManifestPoolingRepair(TestData.GraphWithOutputRanks(("last_hidden_state", 2))),
+            new VecDimensionReconciler());
 
         var config = await store.ActivateCodeEngineAsync(dir, TestContext.Current.CancellationToken);
 
@@ -151,28 +152,35 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
 
     /// <summary>
     ///     Gate review of #475: the repair must sit AFTER every refusal leg. A model this corpus
-    ///     will never accept (1024 dims) whose manifest also names a self-pooling output must be
-    ///     refused with its file untouched — rewriting a manifest whose pins were never verified,
-    ///     for an activation that is about to be refused, is a write nobody asked for.
+    ///     will never accept — one whose window is NARROWER than the chunker's budget, refused by
+    ///     the chunk-budget gate — whose manifest also names a self-pooling output must be
+    ///     refused with its file untouched: rewriting a manifest whose pins were never verified,
+    ///     for an activation that is about to be refused, is a write nobody asked for. (The old
+    ///     refusal leg this test used was the 1024-dimension gate; dimensions are no longer a
+    ///     refusal — vec-code-unfix-dim — so the chunk-budget gate takes its place.)
     /// </summary>
     [Fact]
     public async Task ActivateCodeEngineAsync_RefusedManifest_IsNotRepaired()
     {
-        var dir = Path.Combine(_dataRoot, "code-model-non768-selfpooling");
+        var dir = Path.Combine(_dataRoot, "code-model-narrow-selfpooling");
         Directory.CreateDirectory(dir);
         await File.WriteAllTextAsync(Path.Combine(dir, "sentencepiece.bpe.model"), "tokenizer",
             TestContext.Current.CancellationToken);
         await File.WriteAllTextAsync(Path.Combine(dir, "model.onnx"), "model",
             TestContext.Current.CancellationToken);
-        File.Copy(TestData.RepoFile("tests/AiRaccoon.Tests/Resources/ManifestFixtures/code-daemon-embed-v1-non768.json"),
-            Path.Combine(dir, EmbeddingManifest.FileName));
+        var manifest = File.ReadAllText(
+                TestData.RepoFile("tests/AiRaccoon.Tests/Resources/ManifestFixtures/code-daemon-embed-v1.json"))
+            .Replace("\"contextWindowTokens\": 512", "\"contextWindowTokens\": 128");
+        await File.WriteAllTextAsync(Path.Combine(dir, EmbeddingManifest.FileName), manifest,
+            TestContext.Current.CancellationToken);
         TestData.WriteManifestPooling(dir, PoolingMode.Cls, "last_hidden_state");
         var before = await File.ReadAllTextAsync(Path.Combine(dir, EmbeddingManifest.FileName),
             TestContext.Current.CancellationToken);
         var logger = new FakeLogger<ManifestPoolingRepair>();
         var store = new SqliteCodeEngineStore(_factory, TestData.CreateEmbeddingService(),
             TestData.CreateManifestLoader(),
-            TestData.CreateManifestPoolingRepair(TestData.GraphWithOutputRanks(("last_hidden_state", 2)), logger));
+            TestData.CreateManifestPoolingRepair(TestData.GraphWithOutputRanks(("last_hidden_state", 2)), logger),
+            new VecDimensionReconciler());
 
         await Should.ThrowAsync<CodeEngineActivationRefusedException>(
             () => store.ActivateCodeEngineAsync(dir, TestContext.Current.CancellationToken));
@@ -202,23 +210,82 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
             "a refused activation must never commit the code-engine setting row");
     }
 
-    /// <summary>#472: same refusal type as the missing-manifest case above.</summary>
+    /// <summary>
+    ///     vec-code-unfix-dim: dimensions are no longer a refusal. A 1024-dim manifest activates,
+    ///     reconciles vec_code to float[1024] and records embedding.codeDimensions — in the SAME
+    ///     transaction as the settings write and the invalidation.
+    /// </summary>
     [Fact]
-    public async Task ActivateCodeEngineAsync_Non768Manifest_RefusesAndWritesNothing()
+    public async Task ActivateCodeEngineAsync_Non768Manifest_ReconcilesVecCodeAndWritesCodeDimensions()
     {
-        var dir = Path.Combine(_dataRoot, "code-model-non768");
-        Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "sentencepiece.bpe.model"), "tokenizer");
-        File.WriteAllText(Path.Combine(dir, "model.onnx"), "model");
-        File.Copy(TestData.RepoFile("tests/AiRaccoon.Tests/Resources/ManifestFixtures/code-daemon-embed-v1-non768.json"),
-            Path.Combine(dir, EmbeddingManifest.FileName));
+        await SeedAnEmbeddedCodeRowAsync();
+        var dir = Path.Combine(_dataRoot, "code-model-1024");
+        TestData.SeedCodeManifestDirectory(dir, 1024);
 
-        var ex = await Should.ThrowAsync<CodeEngineActivationRefusedException>(
+        var config = await _store.ActivateCodeEngineAsync(dir, TestContext.Current.CancellationToken);
+
+        config.Model.ShouldBe(Path.GetFullPath(dir));
+        (await ReadSettingAsync(EmbeddingSettingsKeys.CodeModel)).ShouldBe(Path.GetFullPath(dir));
+        (await ReadSettingAsync(EmbeddingSettingsKeys.CodeDimensions)).ShouldBe("1024");
+        (await TableSqlAsync("vec_code")).ShouldContain("float[1024]",
+            customMessage: "activation must reconcile vec_code to the manifest's dimension");
+        (await ReadCodeEmbedStateAsync(1)).ShouldBe("pending");
+        (await CountVecCodeRowsAsync()).ShouldBe(0);
+    }
+
+    /// <summary>A matching-dimension activation must not drop the populated index — reconcile is a
+    /// create-if-missing-or-mismatch, and the dimension is still recorded.</summary>
+    [Fact]
+    public async Task ActivateCodeEngineAsync_768Manifest_NoDdlAndWritesCodeDimensions()
+    {
+        await SeedAnEmbeddedCodeRowAsync();
+        (await CountVecCodeRowsAsync()).ShouldBe(1, "the seed must land an embedded row first");
+        var dir = Path.Combine(_dataRoot, "code-model-768");
+        TestData.SeedCodeManifestDirectory(dir);
+
+        await _store.ActivateCodeEngineAsync(dir, TestContext.Current.CancellationToken);
+
+        (await ReadSettingAsync(EmbeddingSettingsKeys.CodeDimensions)).ShouldBe("768");
+        (await TableSqlAsync("vec_code")).ShouldContain("float[768]",
+            customMessage: "a matching dimension must not drop and recreate a populated index");
+        (await ReadCodeEmbedStateAsync(1)).ShouldBe("pending");
+    }
+
+    /// <summary>
+    ///     S7 extension: the reconcile's DDL lives INSIDE the activation transaction. Forcing the
+    ///     last statement (MarkAllCodeEmbeddedPending) to fail must roll back the settings rows AND
+    ///     the vec_code DDL — a separately-committed reconcile would survive the rollback with the
+    ///     table left at float[1024] and no engine configured.
+    /// </summary>
+    [Fact]
+    public async Task ActivateCodeEngineAsync_ReconcileFailure_RollsBackSettingsAndDdl()
+    {
+        await SeedAnEmbeddedCodeRowAsync();
+        await using (var setupConnection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await setupConnection.ExecuteAsync(new CommandDefinition(
+                """
+                CREATE TRIGGER s7b_witness_abort_pending BEFORE UPDATE OF embed_state ON code_entries
+                WHEN NEW.embed_state = 'pending'
+                BEGIN
+                    SELECT RAISE(ABORT, 'S7b witness: forced failure on the invalidate step');
+                END
+                """, cancellationToken: TestContext.Current.CancellationToken));
+        }
+
+        var dir = Path.Combine(_dataRoot, "code-model-s7b");
+        TestData.SeedCodeManifestDirectory(dir, 1024);
+
+        await Should.ThrowAsync<SqliteException>(
             () => _store.ActivateCodeEngineAsync(dir, TestContext.Current.CancellationToken));
 
-        ex.Message.ShouldContain("1024");
-        ex.Message.ShouldContain(CodeCorpusSchema.EmbeddingDimensions.ToString());
         (await ReadSettingAsync(EmbeddingSettingsKeys.CodeModel)).ShouldBeNull();
+        (await ReadSettingAsync(EmbeddingSettingsKeys.CodeEngine)).ShouldBeNull();
+        (await ReadSettingAsync(EmbeddingSettingsKeys.CodeDimensions)).ShouldBeNull(
+            customMessage: "a failed activation must roll back the dimension row too");
+        (await TableSqlAsync("vec_code")).ShouldContain("float[768]",
+            customMessage: "the reconcile's DDL must roll back with the settings — it is inside the same transaction");
+        (await ReadCodeEmbedStateAsync(1)).ShouldBe("embedded");
     }
 
     /// <summary>
@@ -321,5 +388,13 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         return await connection.QuerySingleAsync<int>(new CommandDefinition(
             "SELECT count(*) FROM vec_code", cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    private async Task<string> TableSqlAsync(string table)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.QuerySingleAsync<string>(new CommandDefinition(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = @table", new { table },
+            cancellationToken: TestContext.Current.CancellationToken));
     }
 }

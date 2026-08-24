@@ -104,7 +104,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
     {
         var embedder = new CodeEmbedder(new FakeCodeEmbeddingService(), NullLogger<CodeEmbedder>.Instance);
         var pump = TestData.NewEmbedDrainPump();
-        var store = new SqliteCodeEngineStore(_factory, new FakeCodeEmbeddingService(), TestData.CreateManifestLoader(), TestData.CreateManifestPoolingRepair());
+        var store = new SqliteCodeEngineStore(_factory, new FakeCodeEmbeddingService(), TestData.CreateManifestLoader(), TestData.CreateManifestPoolingRepair(), new VecDimensionReconciler());
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         await SeedEmbeddedCodeRowAsync(connection, id: 1);
 
@@ -137,7 +137,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
     [Fact]
     public async Task FingerprintChangeViaReactivation_ReEmbedsCodeOnly_MemoryRowsUntouched()
     {
-        var store = new SqliteCodeEngineStore(_factory, new FakeCodeEmbeddingService(), TestData.CreateManifestLoader(), TestData.CreateManifestPoolingRepair());
+        var store = new SqliteCodeEngineStore(_factory, new FakeCodeEmbeddingService(), TestData.CreateManifestLoader(), TestData.CreateManifestPoolingRepair(), new VecDimensionReconciler());
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         await SeedEmbeddedCodeRowAsync(connection, id: 1);
         await SeedEmbeddedMemoryRowAsync(connection, id: 1);
@@ -163,7 +163,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
     public async Task HasWorkAsync_ManifestChangedInPlaceSinceActivation_InvalidatesAndUpdatesTheStoredFingerprint()
     {
         var embeddingService = TestData.CreateEmbeddingService();
-        var store = new SqliteCodeEngineStore(_factory, embeddingService, TestData.CreateManifestLoader(), TestData.CreateManifestPoolingRepair());
+        var store = new SqliteCodeEngineStore(_factory, embeddingService, TestData.CreateManifestLoader(), TestData.CreateManifestPoolingRepair(), new VecDimensionReconciler());
         var job = new CodeReindexJob(new CodeEmbedder(embeddingService, NullLogger<CodeEmbedder>.Instance), TestData.NewEmbedDrainPump());
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
 
@@ -192,7 +192,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
     public async Task HasWorkAsync_ManifestUnchanged_NeverInvalidatesAlreadyEmbeddedRows()
     {
         var embeddingService = TestData.CreateEmbeddingService();
-        var store = new SqliteCodeEngineStore(_factory, embeddingService, TestData.CreateManifestLoader(), TestData.CreateManifestPoolingRepair());
+        var store = new SqliteCodeEngineStore(_factory, embeddingService, TestData.CreateManifestLoader(), TestData.CreateManifestPoolingRepair(), new VecDimensionReconciler());
         var job = new CodeReindexJob(new CodeEmbedder(embeddingService, NullLogger<CodeEmbedder>.Instance), TestData.NewEmbedDrainPump());
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
 
@@ -247,7 +247,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
     public async Task MemoryToolsStayCallable_RegardlessOfPendingCodeRows_NoToolGateOrModelMigrationCoupling()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
-        var store = new SqliteCodeEngineStore(_factory, new FakeCodeEmbeddingService(), TestData.CreateManifestLoader(), TestData.CreateManifestPoolingRepair());
+        var store = new SqliteCodeEngineStore(_factory, new FakeCodeEmbeddingService(), TestData.CreateManifestLoader(), TestData.CreateManifestPoolingRepair(), new VecDimensionReconciler());
         await SeedPendingCodeRowAsync(connection, id: 1);
         var modelDir = Path.Combine(_dataRoot, "models", "code-daemon-embed-v1");
         TestData.SeedCodeManifestDirectory(modelDir);
