@@ -41,7 +41,7 @@ graph LR
 Switch to or restore the bundled ONNX model:
 
 ```bash
-ai-raccoon model set local
+ai-raccoon model embedding set local
 ```
 
 *The local model needs no network access and runs in-process via ONNX Runtime.*
@@ -51,7 +51,7 @@ ai-raccoon model set local
 Use official OpenAI text embeddings:
 
 ```bash
-ai-raccoon model set openai text-embedding-3-small --api-key "sk-..."
+ai-raccoon model embedding set openai text-embedding-3-small --api-key "sk-..."
 ```
 
 ### Recipe 3: Configure Ollama or local LLM server
@@ -59,17 +59,17 @@ ai-raccoon model set openai text-embedding-3-small --api-key "sk-..."
 Point to a local Ollama or LM Studio OpenAI-compatible endpoint:
 
 ```bash
-ai-raccoon model set openai bge-m3 http://localhost:11434/v1 --api-key "ollama"
+ai-raccoon model embedding set openai bge-m3 http://localhost:11434/v1 --api-key "ollama"
 ```
 
 Declare the output dimension whenever it is not 384 — sqlite-vec cannot infer it, and
 the vector index has to be rebuilt to match:
 
 ```bash
-ai-raccoon model set openai text-embedding-3-large --api-key "sk-..." --dims 3072
+ai-raccoon model embedding set openai text-embedding-3-large --api-key "sk-..." --dims 3072
 ```
 
-`model set` probes the endpoint before it commits. A `--dims` the endpoint contradicts,
+`model embedding set` probes the endpoint before it commits. A `--dims` the endpoint contradicts,
 an endpoint that returns something other than 384 with no `--dims`, or an endpoint that
 cannot be reached are all refused with nothing written.
 
@@ -81,14 +81,14 @@ Hugging Face publishes as LFS oids, then activate it as a second step:
 ```bash
 ai-raccoon model download BAAI/bge-m3 --dry-run   # resolve, print files, sizes and pins
 ai-raccoon model download BAAI/bge-m3 --yes       # >500 MB needs --yes
-ai-raccoon model set local <data-root>/models/bge-m3
+ai-raccoon model embedding set local <data-root>/models/bge-m3
 ```
 
 The download writes `ai-raccoon.manifest.json` beside the model files, describing its
 dimensions, context window, tokenizer family, pooling and normalization — read from the
 repo's own `config.json`, `tokenizer_config.json`, `1_Pooling/config.json` and
 `modules.json` rather than guessed. **A model directory without that manifest is
-refused**; only the legacy `model set local <file>.onnx` path keeps the bundled defaults.
+refused**; only the legacy `model embedding set local <file>.onnx` path keeps the bundled defaults.
 
 **`pooling.mode` comes from the graph, not only from those files.** A repo with no
 `1_Pooling/config.json` leaves the mode to be inferred, and some models pool *inside* their
@@ -114,10 +114,11 @@ repo also ships no `added_tokens_decoder`, the piece table is the only available
 numbering is the wrong one; writing those ids would embed the wrong `<s>` and `<unk>` for every
 sequence without any error. The download refuses instead, naming the measured `vocab_size` and
 piece-count difference. Hand-write `ai-raccoon.manifest.json` with the model's real
-special-token ids and `tokenizer.options.vocabOffset`, then `model set local` the directory as
+special-token ids and `tokenizer.options.vocabOffset`, then `model embedding set local` the directory as
 usual.
 
-Downloading never activates: `model set local` is always the explicit next step.
+Downloading never activates: `model embedding set local` (or `model code set local` for
+the code corpus) is always the explicit next step.
 
 Activation re-checks the pins, not just the manifest: every pinned tokenizer/ONNX file is
 re-hashed against the bytes on disk, so a file swapped in place after download (manifest
@@ -132,7 +133,7 @@ configured independently of everything above — activating it never touches
 `embedding.provider`/`embedding.model`/`embedding.engine`, and vice versa.
 
 ```bash
-ai-raccoon model set code default
+ai-raccoon model code set default
 ```
 
 That is the whole recipe. It downloads `faxenoff/code-daemon-embed-v1` (187 MB) into
@@ -146,7 +147,7 @@ instructions and the `memory_search` tool description all name this exact string
 (`CodeEngineSetup.DefaultModelCommand` — one constant, not six copies).
 
 **Why this one activates when `model download` never does.** `model download` is a fetch
-verb and stays one. `model set code default` lives in the `model set` family, which is the
+verb and stays one. `model code set default` lives in the `model code set` family, which is the
 activating family, and it deliberately does both halves: the surfaces above have to hand a
 user something they can paste, and "download, then run a second command with a path you
 work out yourself" is a hint people do not complete (#422).
@@ -155,7 +156,7 @@ The long way round still works, and is what you want for a non-default model:
 
 ```bash
 ai-raccoon model download faxenoff/code-daemon-embed-v1
-ai-raccoon model set code local <data-root>/models/faxenoff__code-daemon-embed-v1
+ai-raccoon model code set local <data-root>/models/faxenoff__code-daemon-embed-v1
 ```
 
 `faxenoff/code-daemon-embed-v1`'s HF repo ships no `added_tokens_decoder` in its
@@ -173,7 +174,7 @@ this gate demanded exactly 126 tokens, derived from an exploration note claiming
 without hand-editing its manifest. The measurement is on issue #422.)
 
 `vec_code` is a fixed `float[768]` index — unlike the memory engine, there is **no**
-dimension-reconcile phase, so `model set code local` refuses a manifest whose
+dimension-reconcile phase, so `model code set local` refuses a manifest whose
 `dimensions` is not `768` before anything commits, naming the declared value and the
 required `768`. A missing/invalid manifest is refused the same way, with the loader's
 own error.
@@ -196,8 +197,8 @@ ai-raccoon settings model reset         # the memory engine's reset; never touch
 
 ## Re-embedding lifecycle
 
-This section covers the **memory** engine (`model set local`/`model set openai`) only.
-`model set code local` (Recipe 5) does not use this outbox/relay/ToolGate machinery at
+This section covers the **memory** engine (`model embedding set local`/`model embedding set openai`) only.
+`model code set local` (Recipe 5) does not use this outbox/relay/ToolGate machinery at
 all — it invalidates the code corpus in one plain transaction and returns; the
 `code-reindex` maintenance job drains it in the background with no tool-blocking window.
 
@@ -220,7 +221,7 @@ sequenceDiagram
     
     participant Relay as Relay (on-demand job)
 
-    Dev->>Server: `ai-raccoon model set ...`
+    Dev->>Server: `ai-raccoon model embedding set ...`
     rect rgb(240, 240, 240)
         note over Server,Store: one transaction (ADR-0076)
         Server->>Store: Write the new engine settings
@@ -247,7 +248,7 @@ quick. Three things follow, and the first is the one that catches people out:
   Searching a half-migrated bank
   would return quietly worse results; refusing is the honest alternative.
 - **A crash does not lose the migration.** The record is durable, so the next server's startup pass
-  finishes it — you do not re-run `model set`.
+  finishes it — you do not re-run `model embedding set`.
 - **Search degrades to keyword-only in the meantime**, because the stale vectors are dropped when
   the transaction commits rather than being overwritten one at a time.
 

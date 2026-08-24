@@ -7,7 +7,7 @@ Search your project's source code alongside (or instead of) your memory bank.
 A code-corpus embedding engine must be active. If you have not set one up yet:
 
 ```bash
-ai-raccoon model set code default
+ai-raccoon model code set default
 ```
 
 This downloads and activates `faxenoff/code-daemon-embed-v1` (187 MB, 768-dim) into
@@ -100,8 +100,8 @@ workspace's project scope.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `code-engine-unloadable` warning | Manifest or model files missing/corrupt | `ai-raccoon model set code local <dir>` or `ai-raccoon settings model code reset` |
-| No code results, warning about missing engine | No code engine configured | `ai-raccoon model set code default` |
+| `code-engine-unloadable` warning | Manifest or model files missing/corrupt | `ai-raccoon model code set local <dir>` or `ai-raccoon settings model code reset` |
+| No code results, warning about missing engine | No code engine configured | `ai-raccoon model code set default` |
 | Code results are FTS5-only (no vector hits) | Engine configured but embedding pending | Wait for the maintenance embed-drain to finish, or check `memory_performance` |
 
 ## See also

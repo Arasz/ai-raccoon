@@ -174,17 +174,17 @@ Feature: Code corpus
 
     Rule: The code corpus's vector index accepts only 768-dimension manifests
         # Plan §3.3: vec_code is a fixed float[768] index; unlike the memory bank's
-        # "model set local", code has no dimension-reconcile phase, so this is the
+        # "model embedding set local", code has no dimension-reconcile phase, so this is the
         # only gate protecting it — refused at configure time, before anything commits.
-        Scenario: model set code local refuses a non-768-dimension manifest
+        Scenario: model code set local refuses a non-768-dimension manifest
             Given a local model manifest declaring 1024 embedding dimensions
-            When the user runs model set code local against that manifest's directory
+            When the user runs model code set local against that manifest's directory
             Then the command errors naming the required 768 dimensions
             And no code engine setting is changed
 
-        Scenario: model set code local accepts a 768-dimension manifest
+        Scenario: model code set local accepts a 768-dimension manifest
             Given a local model manifest declaring 768 embedding dimensions
-            When the user runs model set code local against that manifest's directory
+            When the user runs model code set local against that manifest's directory
             Then the code embedding engine is activated
 
     Rule: The code corpus never leaves the machine
@@ -213,11 +213,11 @@ Feature: Code corpus
         # Plan §3.3 (join disposition #2): the model_migration outbox is single-row,
         # its relay hard-codes the memory query, and its ToolGate closes ALL tools
         # during a migration — three reasons a second corpus cannot share it. Instead,
-        # "model set code local" invalidates pending code rows in the SAME transaction
+        # "model code set local" invalidates pending code rows in the SAME transaction
         # as the settings write; a separate code-reindex maintenance job drains them.
         Scenario: Activating a new code engine invalidates pending code rows in one transaction
             Given a project with code chunks already embedded under the old engine
-            When the user runs model set code local against a new manifest
+            When the user runs model code set local against a new manifest
             Then every code row's embed_state becomes pending in the same transaction as the settings change
 
         Scenario: Memory tools are never blocked while code rows drain
