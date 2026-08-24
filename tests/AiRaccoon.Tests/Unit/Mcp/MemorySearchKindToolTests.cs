@@ -86,6 +86,22 @@ public sealed class MemorySearchKindToolTests
         _store.SearchCallCount.ShouldBe(0, "an invalid kind must fail fast, before any bank work");
     }
 
+    /// <summary>Pins the wire default itself (mirrors SearchScoreFloorContractTests' shape): a
+    /// silent default revert back to "memory" must show up here, not only in behavior tests.</summary>
+    [Fact]
+    public void Search_KindParameter_DefaultsToBoth()
+    {
+        var parameter = typeof(MemoryTools)
+            .GetMethod(nameof(MemoryTools.Search), System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+            .ShouldNotBeNull()
+            .GetParameters()
+            .SingleOrDefault(p => p.Name == "kind");
+
+        parameter.ShouldNotBeNull("the MCP parameter must still be named 'kind'");
+        parameter.HasDefaultValue.ShouldBeTrue();
+        parameter.DefaultValue.ShouldBe("both");
+    }
+
     /// <summary>S5: codeLimit/codeMinRelativeScore override limit/minRelativeScore for the code
     /// section only — they must be validated the same way, not passed through silently.</summary>
     [Fact]
@@ -141,11 +157,26 @@ public sealed class MemorySearchKindToolTests
     }
 
     [Fact]
-    public async Task Search_KindMemory_Default_RecordsSearchQuality()
+    public async Task Search_DefaultKind_IsBoth()
+    {
+        _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
+        _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
+
+        var envelope = await _tools.Search("acme", "widgets", cancellationToken: TestContext.Current.CancellationToken);
+
+        envelope.Data!.Results.ShouldHaveSingleItem().Hash.ShouldBe("mem-hash",
+            "the default kind runs the memory leg");
+        envelope.Data!.Code!.ShouldHaveSingleItem().Hash.ShouldBe("code-hash",
+            "the default kind is both -- the code leg runs with no explicit kind");
+        _codeSearch.SearchCallCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Search_KindMemory_Explicit_RecordsSearchQuality()
     {
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
 
-        await _tools.Search("acme", "widgets", cancellationToken: TestContext.Current.CancellationToken);
+        await _tools.Search("acme", "widgets", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
 
         _quality.RecordedCorrelationIds.ShouldHaveSingleItem();
     }
@@ -203,7 +234,8 @@ public sealed class MemorySearchKindToolTests
     {
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
 
-        var envelope = await _tools.Search("acme", "widgets", cancellationToken: TestContext.Current.CancellationToken);
+        var envelope = await _tools.Search("acme", "widgets", kind: "memory",
+            cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Warning.ShouldBeNull();
     }
@@ -239,11 +271,12 @@ public sealed class MemorySearchKindToolTests
     }
 
     [Fact]
-    public async Task Search_KindMemory_Default_HasCorrelationIdInMeta()
+    public async Task Search_KindMemory_Explicit_HasCorrelationIdInMeta()
     {
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
 
-        var envelope = await _tools.Search("acme", "widgets", cancellationToken: TestContext.Current.CancellationToken);
+        var envelope = await _tools.Search("acme", "widgets", kind: "memory",
+            cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Meta.CorrelationId.ShouldNotBeNullOrEmpty("kind=memory records search_quality, so the correlation id is real");
     }
@@ -275,7 +308,7 @@ public sealed class MemorySearchKindToolTests
     }
 
     [Fact]
-    public async Task Search_KindMemory_Default_RecordsMetricsWithAQueryHash()
+    public async Task Search_KindMemory_Explicit_RecordsMetricsWithAQueryHash()
     {
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
         var recorder = new SpyMeasurementRecorder();
@@ -283,7 +316,7 @@ public sealed class MemorySearchKindToolTests
             new SearchDispatcher(_store, _codeSearch, _quality), new QueryGuardService(new InMemorySettings()),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
 
-        await tools.Search("acme", "widgets", cancellationToken: TestContext.Current.CancellationToken);
+        await tools.Search("acme", "widgets", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
 
         recorder.Recorded.ShouldNotBeEmpty();
         recorder.Recorded.ShouldAllBe(m => m.QueryHash != null, "kind=memory is not code-adjacent -- its query hash is unchanged");
@@ -308,6 +341,25 @@ public sealed class MemorySearchKindToolTests
         ex.Message.ShouldStartWith("invalid-params: ");
         _store.SearchCallCount.ShouldBe(0);
         _codeSearch.SearchCallCount.ShouldBe(0);
+    }
+
+    /// <summary>
+    ///     The default kind is both (2026-08-24 default flip): a default search runs the code leg
+    ///     too, and with no engine configured it must degrade — FTS5-only results plus an
+    ///     EngineNotConfigured warning — never refuse. The memory leg is unaffected.
+    /// </summary>
+    [Fact]
+    public async Task Search_KindBoth_WithNoEngineConfigured_DegradesToFtsOnlyWithWarning()
+    {
+        _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
+        _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
+        _codeSearch.StubWarning = CodeSearchWarnings.EngineNotConfigured;
+
+        var envelope = await _tools.Search("acme", "widgets", cancellationToken: TestContext.Current.CancellationToken);
+
+        envelope.Data!.Results.ShouldHaveSingleItem("the memory leg is unaffected by the missing code engine");
+        envelope.Data!.Code.ShouldNotBeNull().ShouldHaveSingleItem("FTS5-only results are still returned");
+        envelope.Data!.Warning.ShouldNotBeNull().ShouldContain(CodeSearchWarnings.EngineNotConfigured);
     }
 
     /// <summary>Permits every guarded call; only SearchAsync is exercised by this suite.</summary>

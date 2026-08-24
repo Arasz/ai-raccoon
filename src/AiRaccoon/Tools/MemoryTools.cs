@@ -148,10 +148,11 @@ public sealed partial class MemoryTools(
                      "the project (the default); memory_stats lists the labels in use.")]
         string? contextLabel = null,
         [Description(
-            "Which corpus to search: memory (default — today's behavior, unchanged), code (the " +
-            "indexed code corpus only), or both. Code is always project-scoped: scope=shared " +
+            "Which corpus to search: both (default — the memory bank and the indexed code corpus, " +
+            "each ranked by its own hybrid), memory (the memory bank only, today's legacy envelope), " +
+            "or code (the indexed code corpus only). Code is always project-scoped: scope=shared " +
             "returns an empty code section. Code hits carry lineStart/lineEnd instead of chunkIndex/totalChunks.")]
-        string kind = "memory",
+        string kind = "both",
         [Description("Code section only: maximum results, overriding limit for the code section (bank setting unaffected).")]
         int? codeLimit = null,
         [Description("Code section only: relative floor, overriding minRelativeScore for the code section.")]

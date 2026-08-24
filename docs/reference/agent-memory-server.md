@@ -36,7 +36,7 @@ config channel (see [Command-line options](#command-line-options)).
 |--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
 | `memory_write`                 | `projectId`, `content`, `workspaceId?`, `agentId?`, `context?`, `sourceFile?`, `section?`                                                                   | `{hash, path, context, createdAt}`                                                                 |
 | `memory_get`                   | `projectId`, `hash`                                                                                                                                         | `{hash, value, path, context, createdAt}`                                                          |
-| `memory_search`                | `projectId`, `query`, `scope=all\|project\|shared`, `workspaceId?`, `limit=20`, `minRelativeScore=0`, `rrfK=60`, `ftsWeight=1`, `vectorWeight=1`, `contextLabel?`, `kind=memory\|code\|both` | `{results:[{hash, ranking, path, snippet, sourceFile?, chunkIndex, totalChunks}], code?:[{hash, ranking, path, snippet, lineStart, lineEnd}], warning?}` |
+| `memory_search`                | `projectId`, `query`, `scope=all\|project\|shared`, `workspaceId?`, `limit=20`, `minRelativeScore=0`, `rrfK=60`, `ftsWeight=1`, `vectorWeight=1`, `contextLabel?`, `kind=memory\|code\|both` (default `both`) | `{results:[{hash, ranking, path, snippet, sourceFile?, chunkIndex, totalChunks}], code?:[{hash, ranking, path, snippet, lineStart, lineEnd}], warning?}` |
 | `memory_record_followthrough`  | `projectId`, `correlationId`, `filePath`                                                                                                                    | `{recorded: true}`                                                                                 |
 | `memory_record_grade`          | `projectId`, `correlationId`, `grade`, `note?`                                                                                                              | `{recorded: true}`                                                                                 |
 | `memory_list`                  | `projectId`                                                                                                                                                 | `{files: <json tree>}`                                                                             |
@@ -70,10 +70,11 @@ config channel (see [Command-line options](#command-line-options)).
   when named); `scope=project` searches `project:<id>` only; `scope=shared` searches the
   `shared` promotion tier only. Workspace scratch is never included in `scope=all` — it is
   only visible to a search that names that `workspaceId`.
-- **`memory_search` `kind` values:** `kind=memory` (default) is today's behavior, unchanged —
-  no `code` key in the response at all. `kind=code` searches the code corpus only (`results`
-  is present but empty); `kind=both` runs both hybrids independently and returns both sections
-  (no cross-corpus fusion — each section is ranked by its own FTS5+vec0 hybrid). Code is always
+- **`memory_search` `kind` values:** `kind=both` (default since 1.34.0) runs both hybrids
+  independently and returns both sections (no cross-corpus fusion — each section is ranked by
+  its own FTS5+vec0 hybrid). `kind=memory` is the pre-1.34 default behavior, unchanged — no
+  `code` key in the response at all. `kind=code` searches the code corpus only (`results`
+  is present but empty). Code is always
   project-scoped: `scope=shared` with `kind=code`/`both` returns an empty `code` section.
   `codeLimit`/`codeMinRelativeScore` override `limit`/`minRelativeScore` for the code section
   only (omit them to use the same values as the memory section) — the only per-section knobs.
