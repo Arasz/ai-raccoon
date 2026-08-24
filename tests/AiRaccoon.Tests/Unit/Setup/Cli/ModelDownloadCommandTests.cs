@@ -44,7 +44,7 @@ public class ModelDownloadCommandTests : IDisposable
         exit.ShouldBe(ExitCode.Success);
         @out.ShouldContain($"downloaded {repo.RepoId}");
         @out.ShouldContain(EmbeddingManifest.FileName);
-        @out.ShouldContain("model set local");
+        @out.ShouldContain("model embedding set local");
         err.ShouldBeEmpty();
         var targetDir = Path.Combine(_dataRoot, "models", ModelSlug.Sanitize(repo.RepoId));
         File.Exists(Path.Combine(targetDir, EmbeddingManifest.FileName)).ShouldBeTrue();

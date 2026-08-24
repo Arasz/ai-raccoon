@@ -10,5 +10,5 @@ namespace AiRaccoon.Core.Memory.Code;
 public sealed class CodeEngineUnloadableException(string codeModel, Exception inner)
     : InvalidOperationException(
         $"The configured code engine at '{codeModel}' could not be loaded: {inner.Message} " +
-        "Run 'ai-raccoon model set code local <dir>' to reconfigure it, or clear it with " +
+        "Run 'ai-raccoon model code set local <dir>' to reconfigure it, or clear it with " +
         "'ai-raccoon settings model code reset'.", inner);

@@ -81,7 +81,7 @@ internal static class CliCommandTree
     ///     subsystem is a node here, not a new top-level family nobody remembers to add.
     /// </summary>
     private static Command SettingsCommand() =>
-        new("settings", "Runtime configuration, one node per subsystem. Operations live at the top level: 'watch registered', 'extract prune', 'noise entries', 'model set', 'encryption', 'serve'.")
+        new("settings", "Runtime configuration, one node per subsystem. Operations live at the top level: 'watch registered', 'extract prune', 'noise entries', 'model embedding set', 'model code set', 'encryption', 'serve'.")
         {
             AccessCommand(),
             SettingsModelCommand(),
@@ -143,30 +143,34 @@ internal static class CliCommandTree
     }
 
     /// <summary>
-    ///     `model set` re-embeds the whole bank (ADR-0076: the CLI commits an outbox record and
-    ///     returns; a relay on the server drains it), so it is an operation and stays top level;
-    ///     the provider rows it leaves behind are read and cleared under settings. The help says
-    ///     "blocks", not "in the background": the command returns immediately, but the bank refuses
-    ///     every tool call until the re-embed finishes, and "background" told users the opposite.
+    ///     `model` commands: `model embedding set` selects the memory bank's embedding engine;
+    ///     `model code set` selects the code corpus's embedding engine; `model download` fetches
+    ///     models from Hugging Face into &lt;data-root&gt;/models/.
     /// </summary>
     private static Command ModelCommand() =>
-        new("model", "Embedding engine selection; configuration is under 'settings model'")
+        new("model", "Embedding engine selection (for memory embeddings or code corpus); configuration is under 'settings model'")
         {
-            new Command("set",
-                "Sets the engine and re-embeds the bank. Blocks all reads and writes until done — minutes on a large bank")
+            new Command("embedding", "Memory bank embedding engine; configuration is under 'settings model embedding'")
             {
-                new Command("local", "Embeds in-process with the bundled ONNX model; optional path overrides it")
-                    { new Argument<string?>("path") { HelpName = "path", Arity = ArgumentArity.ZeroOrOne } },
-                new Command("openai", "Routes through an OpenAI-compatible endpoint; key via --api-key (persisted in settings)")
+                new Command("set",
+                    "Sets the memory embedding engine and re-embeds the bank. Blocks all reads and writes until done — minutes on a large bank")
                 {
-                    new Argument<string>("model") { HelpName = "model-id" }, new Argument<string?>("base-url") { HelpName = "url", Arity = ArgumentArity.ZeroOrOne },
-                    new Option<string>("--api-key") { Description = "API key persisted in the settings table", HelpName = "key" },
-                    new Option<int?>("--dims") { Description = "Output dimension the endpoint returns (sqlite-vec cannot infer it)", HelpName = "n" }
-                },
-                new Command("code", "Code corpus embedding engine (local only in v1); configuration is under 'settings model code'")
+                    new Command("local", "Embeds in-process with the bundled ONNX model; optional path overrides it")
+                        { new Argument<string?>("path") { HelpName = "path", Arity = ArgumentArity.ZeroOrOne } },
+                    new Command("openai", "Routes through an OpenAI-compatible endpoint; key via --api-key (persisted in settings)")
+                    {
+                        new Argument<string>("model") { HelpName = "model-id" }, new Argument<string?>("base-url") { HelpName = "url", Arity = ArgumentArity.ZeroOrOne },
+                        new Option<string>("--api-key") { Description = "API key persisted in the settings table", HelpName = "key" },
+                        new Option<int?>("--dims") { Description = "Output dimension the endpoint returns (sqlite-vec cannot infer it)", HelpName = "n" }
+                    }
+                }
+            },
+            new Command("code", "Code corpus embedding engine (local only in v1); configuration is under 'settings model code'")
+            {
+                new Command("set", "Activates a model for the code corpus")
                 {
                     // `default` deliberately downloads AND activates, and it sits under
-                    // `model set` — the activating family — so `model download`'s "never activates"
+                    // `model code set` — the activating family — so `model download`'s "never activates"
                     // contract is untouched. A hint that needs a second command with a path the
                     // reader has to construct is a hint nobody follows, and this string is quoted
                     // to users from the search warning, doctor, the MCP instructions and the docs.
@@ -183,7 +187,7 @@ internal static class CliCommandTree
                 }
             },
             new Command("download",
-                "Downloads a Hugging Face embedding model into <data-root>/models/<slug> with SHA-256 pins. Does NOT activate — 'model set local <dir>' is the next step.")
+                "Downloads a Hugging Face embedding model into <data-root>/models/<slug> with SHA-256 pins. Does NOT activate — 'model embedding set local <dir>' or 'model code set local <dir>' is the next step.")
             {
                 new Argument<string>("repo-id") { HelpName = "repo-id" },
                 new Option<string>("--revision") { Description = "Revision to resolve (default main)", HelpName = "revision" },
@@ -197,11 +201,33 @@ internal static class CliCommandTree
 
     private static Command SettingsModelCommand()
     {
-        var model = new Command("model", "Embedding engine configuration (the engine itself is selected by 'model set')");
-        var reset = new Command("reset", "Back to default: no engine (FTS5-only search). Never touches the code engine's rows — see 'model code reset'.");
+        var model = new Command("model", "Embedding engine configuration (the engine itself is selected by 'model embedding set' or 'model code set')");
+
+        var embedding = new Command("embedding", "Memory bank embedding engine configuration");
+        var embeddingReset = new Command("reset", "Back to default: no engine (FTS5-only search). Never touches the code engine's rows — see 'settings model code reset'.");
+        embeddingReset.Aliases.Add("unset");
+        embeddingReset.Aliases.Add("remove");
+        embedding.Add(embeddingReset);
+        var embeddingShow = new Command("show", "Shows the configured memory embedding provider/model/baseUrl/dims");
+        embeddingShow.Aliases.Add("list");
+        embedding.Add(embeddingShow);
+        model.Add(embedding);
+
+        var code = new Command("code", "Code corpus embedding engine configuration (the engine itself is selected by 'model code set local')");
+        var codeReset = new Command("reset", "Deletes ONLY the code engine rows (embedding.codeModel/codeEngine) — the memory engine is untouched");
+        codeReset.Aliases.Add("unset");
+        codeReset.Aliases.Add("remove");
+        code.Add(codeReset);
+        var codeShow = new Command("show", "Shows the configured code corpus model and engine");
+        codeShow.Aliases.Add("list");
+        code.Add(codeShow);
+        model.Add(code);
+
+        var reset = new Command("reset", "Back to default: no engine (FTS5-only search). Never touches the code engine's rows — see 'settings model code reset'.");
         reset.Aliases.Add("unset");
         reset.Aliases.Add("remove");
         model.Add(reset);
+
         var show = new Command("show", "Shows the configured provider/model/baseUrl/engine, and the code engine rows when set");
         show.Aliases.Add("list");
         model.Add(show);
@@ -212,13 +238,6 @@ internal static class CliCommandTree
         {
             new Argument<string>("n") { HelpName = "n" }
         });
-
-        var code = new Command("code", "Code corpus embedding engine configuration (the engine itself is selected by 'model set code local')");
-        var codeReset = new Command("reset", "Deletes ONLY the code engine rows (embedding.codeModel/codeEngine) — the memory engine is untouched");
-        codeReset.Aliases.Add("unset");
-        codeReset.Aliases.Add("remove");
-        code.Add(codeReset);
-        model.Add(code);
 
         return model;
     }

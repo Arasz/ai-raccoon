@@ -36,10 +36,13 @@ public class SettingsCommandTreeTests
         ("settings access set", ["settings", "access", "set", "p1", "ro"]),
         ("settings access unset", ["settings", "access", "unset", "p1"]),
         ("settings access list", ["settings", "access", "list"]),
+        ("settings model embedding reset", ["settings", "model", "embedding", "reset"]),
+        ("settings model embedding show", ["settings", "model", "embedding", "show"]),
+        ("settings model code reset", ["settings", "model", "code", "reset"]),
+        ("settings model code show", ["settings", "model", "code", "show"]),
         ("settings model reset", ["settings", "model", "reset"]),
         ("settings model show", ["settings", "model", "show"]),
         ("settings model threads", ["settings", "model", "threads", "5"]),
-        ("settings model code reset", ["settings", "model", "code", "reset"]),
         ("settings retrieval alpha set", ["settings", "retrieval", "alpha", "set", "0.5"]),
         ("settings retrieval alpha show", ["settings", "retrieval", "alpha", "show"]),
         ("settings retrieval fusion enable", ["settings", "retrieval", "fusion", "enable"]),
@@ -113,7 +116,7 @@ public class SettingsCommandTreeTests
     ///     that cannot run with no arguments at all (`model download` needs a repo-id).
     /// </summary>
     private static readonly string[] WriteOptOuts =
-        ["model set local", "model set openai", "model set code local", "model download", "encryption bitwarden", "encryption show", "encryption unset", "encryption migrate", "serve", "serve observability"];
+        ["model embedding set local", "model embedding set openai", "model code set default", "model code set local", "model download", "encryption bitwarden", "encryption show", "encryption unset", "encryption migrate", "serve", "serve observability"];
 
     public static TheoryData<string[]> SettingsArgv()
     {
@@ -229,12 +232,13 @@ public class SettingsCommandTreeTests
     }
 
     [Theory]
-    [InlineData("local")]
-    [InlineData("openai text-embedding-3-small")]
-    [InlineData("code local /tmp")]
+    [InlineData("embedding set local")]
+    [InlineData("embedding set openai text-embedding-3-small")]
+    [InlineData("code set default")]
+    [InlineData("code set local /tmp")]
     public void ModelSet_StaysTopLevel(string tail)
     {
-        var parseResult = CliCommandTree.BuildFullRootCommand().Parse(["model", "set", .. tail.Split(' ')]);
+        var parseResult = CliCommandTree.BuildFullRootCommand().Parse(["model", .. tail.Split(' ')]);
 
         parseResult.Errors.Select(e => e.Message).ShouldBeEmpty();
     }

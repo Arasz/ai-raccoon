@@ -255,16 +255,16 @@ public class CliArgsTests
     [Fact]
     public void Parse_ModelSetLocal_ParsesCommandPath()
     {
-        CliArgs.TryParse(["model", "set", "local"], out var parsed);
+        CliArgs.TryParse(["model", "embedding", "set", "local"], out var parsed);
 
         parsed!.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldBe(["model", "set", "local"]);
+        parsed.CommandPath.ShouldBe(["model", "embedding", "set", "local"]);
     }
 
     [Fact]
     public void Parse_ModelSetLocalWithPath_ParsesOptionalPath()
     {
-        CliArgs.TryParse(["model", "set", "local", "/models/custom.onnx"], out var parsed);
+        CliArgs.TryParse(["model", "embedding", "set", "local", "/models/custom.onnx"], out var parsed);
 
         parsed!.Errors.ShouldBeEmpty();
         parsed.ParsedCliArgs.GetValue<string>("path").ShouldBe("/models/custom.onnx");
@@ -273,10 +273,10 @@ public class CliArgsTests
     [Fact]
     public void Parse_ModelSetOpenAi_ParsesModelAndOptionalBaseUrl()
     {
-        CliArgs.TryParse(["model", "set", "openai", "text-embedding-3-small"], out var parsed);
+        CliArgs.TryParse(["model", "embedding", "set", "openai", "text-embedding-3-small"], out var parsed);
 
         parsed!.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldBe(["model", "set", "openai"]);
+        parsed.CommandPath.ShouldBe(["model", "embedding", "set", "openai"]);
         parsed.ParsedCliArgs.GetValue<string>("model").ShouldBe("text-embedding-3-small");
         parsed.ParsedCliArgs.GetValue<string>("base-url").ShouldBeNull();
     }
@@ -285,7 +285,7 @@ public class CliArgsTests
     public void Parse_ModelSetOpenAiWithBaseUrlAndApiKey_ParsesOptions()
     {
         CliArgs.TryParse(
-            ["model", "set", "openai", "m", "http://localhost:11434/v1", "--api-key", "k"], out var parsed);
+            ["model", "embedding", "set", "openai", "m", "http://localhost:11434/v1", "--api-key", "k"], out var parsed);
 
         parsed!.Errors.ShouldBeEmpty();
         parsed.ParsedCliArgs.GetValue<string>("base-url").ShouldBe("http://localhost:11434/v1");

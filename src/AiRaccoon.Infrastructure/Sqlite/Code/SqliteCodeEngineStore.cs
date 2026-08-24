@@ -45,7 +45,7 @@ public sealed class SqliteCodeEngineStore(ISqliteConnectionFactory factory, IEmb
             throw new CodeEngineActivationRefusedException(
                 $"Manifest '{fullPath}' declares {descriptor.Dimensions}-dimension embeddings, but the code " +
                 $"corpus's vec_code index is fixed at {CodeCorpusSchema.EmbeddingDimensions} dimensions — there " +
-                "is no dimension-reconcile phase for code, unlike the memory bank. Point 'model set code local' " +
+                "is no dimension-reconcile phase for code, unlike the memory bank. Point 'model code set local' " +
                 $"at a manifest with dimensions: {CodeCorpusSchema.EmbeddingDimensions}.");
         }
 
@@ -63,7 +63,7 @@ public sealed class SqliteCodeEngineStore(ISqliteConnectionFactory factory, IEmb
                 $"Manifest '{fullPath}' resolves to a {chunkBudget}-token chunk budget (min(510, context - " +
                 $"reservation)), narrower than the {CodeChunker.DefaultBudget}-token chunks the code corpus's " +
                 "chunker emits — that engine would silently truncate every chunk at embed time. Point " +
-                $"'model set code local' at a manifest whose window is at least {CodeChunker.DefaultBudget} " +
+                $"'model code set local' at a manifest whose window is at least {CodeChunker.DefaultBudget} " +
                 "content tokens.");
         }
 

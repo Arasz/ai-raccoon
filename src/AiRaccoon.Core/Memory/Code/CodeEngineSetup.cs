@@ -12,5 +12,5 @@ public static class CodeEngineSetup
     public const string DefaultModelRepoId = "faxenoff/code-daemon-embed-v1";
 
     /// <summary>Downloads <see cref="DefaultModelRepoId" /> if it is not already on disk, then activates it.</summary>
-    public const string DefaultModelCommand = "ai-raccoon model set code default";
+    public const string DefaultModelCommand = "ai-raccoon model code set default";
 }

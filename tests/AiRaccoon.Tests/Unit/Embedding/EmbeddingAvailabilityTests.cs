@@ -24,7 +24,7 @@ public sealed class EmbeddingAvailabilityTests
         record.ShouldNotBeNull();
         record.Level.ShouldBe(LogLevel.Warning);
         record.Id.Id.ShouldBe(40);
-        record.Message.ShouldContain("model set local");
+        record.Message.ShouldContain("model embedding set local");
         record.Message.ShouldContain("e1");
     }
 
@@ -53,7 +53,7 @@ public sealed class EmbeddingAvailabilityTests
         record.ShouldNotBeNull();
         record.Level.ShouldBe(LogLevel.Error);
         record.Id.Id.ShouldBe(41);
-        record.Message.ShouldContain("model set local");
+        record.Message.ShouldContain("model embedding set local");
     }
 
     private sealed class StubBundledModel(BundledModelResult result) : IBundledModel

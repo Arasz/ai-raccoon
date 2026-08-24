@@ -105,7 +105,7 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         var path = parseResult.GetResult("path") is not null ? ExpandTilde(parseResult.GetValue<string>("path")) : null;
 
         // Directory activation (M3): a directory REQUIRES a valid manifest, validated BEFORE the
-        // outbox commits — a refused model set must never mark the bank pending. Any dimension is
+        // outbox commits — a refused model embedding set must never mark the bank pending. Any dimension is
         // accepted; the drain reconciles vec0 to it as its first phase (WP4/D3).
         if (path is not null && Directory.Exists(path))
         {
@@ -141,7 +141,7 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         else if (string.IsNullOrWhiteSpace(await store.GetSettingAsync(EmbeddingSettingsKeys.ApiKey, cancellationToken)))
         {
             await streams.WriteErrorLineAsync(
-                "ai-raccoon: warning — no API key set; run 'ai-raccoon model set openai <model> --api-key <key>' or embeddings will fail");
+                "ai-raccoon: warning — no API key set; run 'ai-raccoon model embedding set openai <model> --api-key <key>' or embeddings will fail");
         }
 
         var dims = parseResult.GetResult("--dims") is not null ? parseResult.GetValue<int?>("--dims") : null;
@@ -204,7 +204,7 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
 
     /// <summary>
     ///     §3.3 D-E9: refused HERE, before anything commits. vec_code is a fixed float[768] index
-    ///     and, unlike the memory bank's `model set local`, code has no dimension-reconcile phase to
+    ///     and, unlike the memory bank's `model embedding set local`, code has no dimension-reconcile phase to
     ///     fix up a wrong-dimension activation afterward — this is the only gate protecting it. A
     ///     missing/invalid manifest surfaces the loader's own actionable error unchanged.
     /// </summary>
@@ -214,7 +214,7 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
             codeEngine, streams, cancellationToken);
 
     /// <summary>
-    ///     #422: `model set code default` is the one command every "no code engine" surface quotes.
+    ///     #422: `model code set default` is the one command every "no code engine" surface quotes.
     ///     It downloads <see cref="CodeEngineSetup.DefaultModelRepoId" /> into the usual
     ///     <c>&lt;data-root&gt;/models/&lt;slug&gt;</c> when it is not already there, then activates
     ///     it — deliberately both halves, because a hint that leaves the reader to construct a path
@@ -255,7 +255,7 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
             throw new InvalidOperationException(
                 $"Manifest '{fullPath}' declares {descriptor.Dimensions}-dimension embeddings, but the code " +
                 $"corpus's vec_code index is fixed at {CodeCorpusSchema.EmbeddingDimensions} dimensions — there " +
-                "is no dimension-reconcile phase for code, unlike the memory bank. Point 'model set code local' " +
+                "is no dimension-reconcile phase for code, unlike the memory bank. Point 'model code set local' " +
                 $"at a manifest with dimensions: {CodeCorpusSchema.EmbeddingDimensions}.");
         }
 
@@ -310,6 +310,52 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         await store.DeleteSettingAsync(EmbeddingSettingsKeys.CodeModel, cancellationToken);
         await store.DeleteSettingAsync(EmbeddingSettingsKeys.CodeEngine, cancellationToken);
         await streams.WriteOutputLineAsync("code embedding engine reset to default: no engine (FTS5-only code search)");
+        return 0;
+    }
+
+    public async Task<int> ModelEmbeddingShowAsync(IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken)
+    {
+        var rows = await store.GetSettingsByPrefixAsync("embedding.", cancellationToken);
+        var provider = rows.GetValueOrDefault(EmbeddingSettingsKeys.Provider);
+        if (string.IsNullOrWhiteSpace(provider))
+        {
+            await streams.WriteOutputLineAsync("provider: (none — FTS5-only search)");
+        }
+        else
+        {
+            await streams.WriteOutputLineAsync($"provider: {provider}");
+            await streams.WriteOutputLineAsync($"model: {rows.GetValueOrDefault(EmbeddingSettingsKeys.Model) ?? "(unset)"}");
+            await streams.WriteOutputLineAsync($"baseUrl: {rows.GetValueOrDefault(EmbeddingSettingsKeys.BaseUrl) ?? "(unset)"}");
+            await streams.WriteOutputLineAsync($"engine: {rows.GetValueOrDefault(EmbeddingSettingsKeys.Engine) ?? "(unset)"}");
+            var keyState = rows.ContainsKey(EmbeddingSettingsKeys.ApiKey) ? "set" : "unset";
+            await streams.WriteOutputLineAsync($"apiKey: *** ({keyState})");
+        }
+
+        var (resolvedThreads, threadsSource) =
+            EmbeddingService.ResolveThreadCountForDisplay(rows.GetValueOrDefault(EmbeddingSettingsKeys.Threads));
+        await streams.WriteOutputLineAsync($"threads: {EmbeddingService.ThreadCountDisplay(resolvedThreads)} ({threadsSource})");
+        return 0;
+    }
+
+    public async Task<int> ModelCodeShowAsync(IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken)
+    {
+        var rows = await store.GetSettingsByPrefixAsync("embedding.", cancellationToken);
+        var codeModel = rows.GetValueOrDefault(EmbeddingSettingsKeys.CodeModel);
+        if (string.IsNullOrWhiteSpace(codeModel))
+        {
+            await streams.WriteOutputLineAsync("codeModel: (none — FTS5-only code search)");
+        }
+        else
+        {
+            await streams.WriteOutputLineAsync($"codeModel: {codeModel}");
+            await streams.WriteOutputLineAsync($"codeEngine: {rows.GetValueOrDefault(EmbeddingSettingsKeys.CodeEngine) ?? "(unset)"}");
+        }
+
+        var (resolvedThreads, threadsSource) =
+            EmbeddingService.ResolveThreadCountForDisplay(rows.GetValueOrDefault(EmbeddingSettingsKeys.Threads));
+        await streams.WriteOutputLineAsync($"threads: {EmbeddingService.ThreadCountDisplay(resolvedThreads)} ({threadsSource})");
         return 0;
     }
 

@@ -18,7 +18,7 @@ Protocol (revised per architect plan review deleg_98028a5e):
   2. layout check + sha256 of model/vocab (integrity, not presence)
   3. --version -> 2>&1, substring "$V"
   4. --help -> 2>&1, verb tree renders
-  5. model set local (documented setup verb; bundled engine, no download)
+  5. model embedding set local (documented setup verb; bundled engine, no download)
   6. MCP stdio: initialize (<10s) -> serverInfo; notifications/initialized
   7. tools/call memory_write {projectId, content} unique string -> no error
   8. tools/call memory_search {projectId, query} -> written entry returns by hash (real vec0 path)
@@ -26,7 +26,7 @@ Protocol (revised per architect plan review deleg_98028a5e):
  10. stderr assertions: no "Bundled embedding model unavailable", no "Downloading bundled model asset"
  11. dual-instance: 2nd server, fresh DATAROOT, concurrent initialize (5000-bind regression)
  12. graceful shutdown: close stdin -> exit 0
- 13. zero-config probe: fresh DATAROOT, NO model set local, write+search -> record behavior
+ 13. zero-config probe: fresh DATAROOT, NO model embedding set local, write+search -> record behavior
      (informational: FTS5-only by design — "model reset" prints 'no engine (FTS5-only search)')
  14. cleanup
 Exit 0 = all green on first install attempt, zero manual repair.
@@ -144,10 +144,10 @@ r = run([os.path.join(TOOLPATH, "ai-raccoon"), "--help"])
 help_text = r.stdout + r.stderr
 check("--help renders verb tree", all(v in help_text for v in ["access", "model", "retrieval", "sync", "watch", "encryption", "--data-root"]), f"stdout={r.stdout!r}")
 
-print("== step 5: model set local (bundled engine) ==")
-r = run([os.path.join(TOOLPATH, "ai-raccoon"), "--data-root", DATAROOT, "model", "set", "local"])
-check("model set local exits 0", r.returncode == 0, r.stderr[-300:])
-check("model set local prints confirmation", "local" in (r.stdout + r.stderr).lower(), (r.stdout + r.stderr).strip())
+print("== step 5: model embedding set local (bundled engine) ==")
+r = run([os.path.join(TOOLPATH, "ai-raccoon"), "--data-root", DATAROOT, "model", "embedding", "set", "local"])
+check("model embedding set local exits 0", r.returncode == 0, r.stderr[-300:])
+check("model embedding set local prints confirmation", "local" in (r.stdout + r.stderr).lower(), (r.stdout + r.stderr).strip())
 
 class MCP:
     def __init__(self, tool, dataroot):

@@ -125,7 +125,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
         try
         {
             await CliRun.RunAsync(
-                ["model", "set", "code", "local", _manifestDir!],
+                ["model", "code", "set", "local", _manifestDir!],
                 (parsed, streams, cancellationToken) =>
                     new SettingsCommands().ModelSetCodeLocalAsync(parsed.ParsedCliArgs, Ctx.CodeEngineStore, streams, cancellationToken));
         }
@@ -620,7 +620,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
     public void ThenToolErrorsActionableMessageNamingEngineProblem()
     {
         _lastError.ShouldNotBeNull().ShouldBeOfType<CodeEngineUnloadableException>();
-        _lastError!.Message.ShouldContain("model set code local");
+        _lastError!.Message.ShouldContain("model code set local");
     }
 
     [Then("^memory_search with kind \"([^\"]*)\" for the same project still succeeds$")]
@@ -640,13 +640,13 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
         _manifestDir = dir;
     }
 
-    [When("^the user runs model set code local against that manifest's directory$")]
+    [When("^the user runs model code set local against that manifest's directory$")]
     public Task WhenUserRunsModelSetCodeLocal() => RunModelSetCodeLocalAsync();
 
     [Then("^the command errors naming the required 768 dimensions$")]
     public void ThenCommandErrorsNaming768()
     {
-        _lastError.ShouldNotBeNull("expected model set code local to refuse the manifest");
+        _lastError.ShouldNotBeNull("expected model code set local to refuse the manifest");
         _lastError!.Message.ShouldContain(CodeCorpusSchema.EmbeddingDimensions.ToString());
     }
 
@@ -721,7 +721,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
         await SeedEmbeddedCodeEntryAsync("old-embedded-hash", "src/Old.cs", "sealed class Old { }", 1, 1);
     }
 
-    [When("^the user runs model set code local against a new manifest$")]
+    [When("^the user runs model code set local against a new manifest$")]
     public async Task WhenUserRunsModelSetCodeLocalAgainstNewManifest()
     {
         var newDir = Path.Combine(Ctx.DataRoot, "new-engine");

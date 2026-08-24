@@ -30,7 +30,7 @@ public sealed class ModelSetOpenAiDimensionsTests
         var store = new FakeConfigStore();
 
         var (exit, _, _) = await RunOpenAi(
-            ["model", "set", "openai", "text-embedding-3-large", "--api-key", "k", "--dims", "3072"], store);
+            ["model", "embedding", "set", "openai", "text-embedding-3-large", "--api-key", "k", "--dims", "3072"], store);
 
         exit.ShouldBe(0);
         store.Settings[EmbeddingSettingsKeys.Dimensions].ShouldBe("3072");
@@ -41,7 +41,7 @@ public sealed class ModelSetOpenAiDimensionsTests
     {
         var store = new FakeConfigStore();
 
-        await RunOpenAi(["model", "set", "openai", "text-embedding-3-small", "--api-key", "k"], store);
+        await RunOpenAi(["model", "embedding", "set", "openai", "text-embedding-3-small", "--api-key", "k"], store);
 
         store.Settings.ShouldNotContainKey(EmbeddingSettingsKeys.Dimensions,
             "an undeclared dimension keeps the legacy 384 assumption rather than inventing one");
@@ -53,7 +53,7 @@ public sealed class ModelSetOpenAiDimensionsTests
         var store = new FakeConfigStore();
         store.Settings[EmbeddingSettingsKeys.Dimensions] = "3072";
 
-        await RunLocal(["model", "set", "local"], store);
+        await RunLocal(["model", "embedding", "set", "local"], store);
 
         store.Settings.ShouldNotContainKey(EmbeddingSettingsKeys.Dimensions,
             "a 384 local engine must not inherit the previous remote model's dimension");

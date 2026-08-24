@@ -50,7 +50,7 @@ public sealed class ModelSetCodeLocalTests
         SeedManifestDirectory(dir, "code-daemon-embed-v1-non768.json");
         var store = new FakeConfigStore();
 
-        var ex = await Should.ThrowAsync<InvalidOperationException>(() => Run(["model", "set", "code", "local", dir], store));
+        var ex = await Should.ThrowAsync<InvalidOperationException>(() => Run(["model", "code", "set", "local", dir], store));
 
         ex.Message.ShouldContain("1024", customMessage: "the refusal must name the declared dimensions");
         ex.Message.ShouldContain(CodeCorpusSchema.EmbeddingDimensions.ToString(),
@@ -65,7 +65,7 @@ public sealed class ModelSetCodeLocalTests
         File.WriteAllText(Path.Combine(dir, "model.onnx"), "model");
         var store = new FakeConfigStore();
 
-        var ex = await Should.ThrowAsync<InvalidOperationException>(() => Run(["model", "set", "code", "local", dir], store));
+        var ex = await Should.ThrowAsync<InvalidOperationException>(() => Run(["model", "code", "set", "local", dir], store));
 
         ex.Message.ShouldContain(EmbeddingManifest.FileName, customMessage: "the loader's own missing-manifest message must surface");
         store.CodeActivated.ShouldBeNull();
@@ -78,7 +78,7 @@ public sealed class ModelSetCodeLocalTests
         SeedManifestDirectory(dir, "code-daemon-embed-v1.json");
         var store = new FakeConfigStore();
 
-        var (exit, _, _) = await Run(["model", "set", "code", "local", dir], store);
+        var (exit, _, _) = await Run(["model", "code", "set", "local", dir], store);
 
         exit.ShouldBe(0);
         store.CodeActivated.ShouldNotBeNull();

@@ -335,7 +335,7 @@ class McpClient:
 
 
 def wait_for_embed_ready(client: McpClient, project_id: str, timeout_s: float = 90.0) -> dict:
-    """Wait for the re-embed triggered by `model set local` to drain."""
+    """Wait for the re-embed triggered by `model embedding set local` to drain."""
     deadline = time.monotonic() + timeout_s
     last: dict = {}
     while time.monotonic() < deadline:
@@ -399,8 +399,8 @@ def main(argv: list[str] | None = None) -> int:
         client = McpClient(f"http://127.0.0.1:{port}", token)
         client.initialize()
 
-        print("setting embedding engine: model set local")
-        run_cli(args.binary, bank_copy, port, "model", "set", "local")
+        print("setting embedding engine: model embedding set local")
+        run_cli(args.binary, bank_copy, port, "model", "embedding", "set", "local")
         stats = wait_for_embed_ready(client, args.project_id)
         entry_count = stats.get("entries")
         print(f"memory_stats: entries={entry_count} pending={stats.get('pending')}")

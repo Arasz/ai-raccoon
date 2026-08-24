@@ -87,7 +87,7 @@ public sealed class BundledModelEnsureDownloadsTests : IDisposable
         var message = BundledModel.MissingBundledModelMessage(BundledModel.ModelFileName);
 
         message.ShouldContain(BundledModel.ModelFileName);
-        message.ShouldContain("model set local");
+        message.ShouldContain("model embedding set local");
         message.ShouldContain("path-to-onnx");
     }
 

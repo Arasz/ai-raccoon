@@ -48,7 +48,7 @@ def main(argv):
     if model == "onnx":
         print("")
         print("bundled model ready — it ships inside the tool package (packed from src/AiRaccoon/Models).")
-        print("custom path override: 'ai-raccoon model set local /path/to/model.onnx' (the embedding.model settings row)")
+        print("custom path override: 'ai-raccoon model embedding set local /path/to/model.onnx' (the embedding.model settings row)")
     return 0
 
 

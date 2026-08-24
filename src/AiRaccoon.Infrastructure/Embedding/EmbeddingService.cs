@@ -360,7 +360,7 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
             {
                 throw new InvalidOperationException(
                     $"Configured embedding model '{modelPath}' does not exist (it may be a model name, not a path; ~ is not expanded). " +
-                    "Run 'ai-raccoon model set local' for the bundled model, or 'ai-raccoon model set local <path-to-onnx>' for a custom path.");
+                    "Run 'ai-raccoon model embedding set local' for the bundled model, or 'ai-raccoon model embedding set local <path-to-onnx>' for a custom path.");
             }
 
             var bundledTokenizer = _tokenizers.GetOrAdd("bundled",
@@ -421,12 +421,12 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
             throw new InvalidOperationException("OpenAI-compatible embeddings require a model id.");
         }
 
-        // The key is a settings row (embedding.apiKey), written by `ai-raccoon model set openai`.
+        // The key is a settings row (embedding.apiKey), written by `ai-raccoon model embedding set openai`.
         var apiKey = settings.ApiKey;
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             throw new InvalidOperationException(
-                "OpenAI-compatible embeddings require an API key: run 'ai-raccoon model set openai <model> --api-key <key>'.");
+                "OpenAI-compatible embeddings require an API key: run 'ai-raccoon model embedding set openai <model> --api-key <key>'.");
         }
 
         var baseUrl = string.IsNullOrWhiteSpace(settings.BaseUrl) ? DefaultOpenAiEndpoint : settings.BaseUrl;

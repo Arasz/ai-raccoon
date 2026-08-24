@@ -174,7 +174,7 @@ public class ConfigCommandsAccessModelTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, stdout, _) = await Run(["model", "set", "local"], store);
+        var (exit, stdout, _) = await Run(["model", "embedding", "set", "local"], store);
 
         exit.ShouldBe(0);
         store.Settings["embedding.provider"].ShouldBe("local");
@@ -188,7 +188,7 @@ public class ConfigCommandsAccessModelTests
     {
         var store = new FakeConfigStore();
 
-        await Run(["model", "set", "local", "/models/custom.onnx"], store);
+        await Run(["model", "embedding", "set", "local", "/models/custom.onnx"], store);
 
         store.Settings["embedding.model"].ShouldBe("/models/custom.onnx");
         store.Settings["embedding.engine"].ShouldBe("local:/models/custom.onnx");
@@ -209,7 +209,7 @@ public class ConfigCommandsAccessModelTests
             }
         };
 
-        await Run(["model", "set", "local"], store);
+        await Run(["model", "embedding", "set", "local"], store);
 
         store.Settings["embedding.provider"].ShouldBe("local");
         store.Settings.ShouldNotContainKey("embedding.model");
@@ -224,7 +224,7 @@ public class ConfigCommandsAccessModelTests
         var store = new FakeConfigStore();
 
         var (exit, _, _) = await Run(
-            ["model", "set", "openai", "text-embedding-3-small", "http://localhost:11434/v1", "--api-key", "k123"],
+            ["model", "embedding", "set", "openai", "text-embedding-3-small", "http://localhost:11434/v1", "--api-key", "k123"],
             store);
 
         exit.ShouldBe(0);
@@ -247,7 +247,7 @@ public class ConfigCommandsAccessModelTests
             }
         };
 
-        await Run(["model", "set", "openai", "m", "--api-key", "k"], store);
+        await Run(["model", "embedding", "set", "openai", "m", "--api-key", "k"], store);
 
         store.Settings.ShouldNotContainKey("embedding.baseUrl");
         store.Settings["embedding.engine"].ShouldBe($"openai:m@{EmbeddingService.DefaultOpenAiEndpoint}");
@@ -258,7 +258,7 @@ public class ConfigCommandsAccessModelTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, err) = await Run(["model", "set", "openai", "m"], store);
+        var (exit, _, err) = await Run(["model", "embedding", "set", "openai", "m"], store);
 
         exit.ShouldBe(0);
         err.ShouldContain("api key");
@@ -413,7 +413,7 @@ public class ConfigCommandsAccessModelTests
         var store = new FakeConfigStore();
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
-        await Run(["model", "set", "local", "~/models/custom.onnx"], store);
+        await Run(["model", "embedding", "set", "local", "~/models/custom.onnx"], store);
 
         store.Settings["embedding.model"].ShouldBe(Path.Combine(home, "models/custom.onnx"));
     }
