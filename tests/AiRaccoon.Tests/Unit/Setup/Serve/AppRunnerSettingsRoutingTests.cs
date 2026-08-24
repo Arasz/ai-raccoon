@@ -80,7 +80,7 @@ public sealed class AppRunnerSettingsRoutingTests : IDisposable
                 acquireCalls++;
                 return Task.FromResult<ISettingsStore>(fake);
             },
-            ["--data-root", _dataRoot, "model", "set", "local"]);
+            ["--data-root", _dataRoot, "model", "embedding", "set", "local"]);
 
         exit.ShouldBe(0);
         acquireCalls.ShouldBe(1);

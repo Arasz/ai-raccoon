@@ -34,13 +34,13 @@ public sealed class DefaultCodeModelCommandTests
     }
 
     /// <summary>
-    ///     `default` sits beside `local` under `model set code`, so the activating family stays the
+    ///     `default` sits beside `local` under `model code set`, so the activating family stays the
     ///     activating family and `model download`'s "never activates" contract is untouched.
     /// </summary>
     [Fact]
     public void TheCommandString_IsUnderModelSetCode_NotUnderModelDownload()
     {
-        CodeEngineSetup.DefaultModelCommand.ShouldBe("ai-raccoon model set code default");
+        CodeEngineSetup.DefaultModelCommand.ShouldBe("ai-raccoon model code set default");
 
         var parse = CliCommandTree.BuildFullRootCommand().Parse(["model", "download", "code"]);
 
@@ -69,7 +69,7 @@ public sealed class DefaultCodeModelCommandTests
         var store = new FakeConfigStore();
 
         var (exit, outp, _) = await CliRun.RunAsync(
-            ["model", "set", "code", "default"],
+            ["model", "code", "set", "default"],
             (parsed, streams, ct) => new SettingsCommands().ModelSetCodeDefaultAsync(
                 new ModelDownloadCommands(new UnusedHttpClientFactory()), store, dataRoot, streams, ct));
 

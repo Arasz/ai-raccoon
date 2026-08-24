@@ -26,7 +26,9 @@ public sealed class CliHelpOnIncompleteCommandTests
         var output = stderr.ToString();
         output.ShouldContain("Required command was not provided.");
         output.ShouldContain("Usage:");
-        output.ShouldContain("set");
+        output.ShouldContain("embedding");
+        output.ShouldContain("code");
+        output.ShouldContain("download");
         CountOccurrences(output, "Required command was not provided.").ShouldBe(1);
         CountOccurrences(output, "Usage:").ShouldBe(1);
     }
@@ -34,7 +36,7 @@ public sealed class CliHelpOnIncompleteCommandTests
     [Fact]
     public void MissingArgument_ShowsHelpForTheResolvedCommand()
     {
-        CliArgs.TryParse(["model", "set", "openai"], out var parsed);
+        CliArgs.TryParse(["model", "embedding", "set", "openai"], out var parsed);
         var stderr = new StringWriter();
 
         CliRendering.Render(parsed!, new StandardStreams(TextReader.Null, TextWriter.Null, stderr));

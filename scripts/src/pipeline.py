@@ -79,7 +79,7 @@ async def ingest_files_batched(
         if isinstance(embed_result, dict) and embed_result.get("processed", 0) == 0 and embed_result.get("pending", 0) > 0:
             log.warning(
                 "No embedding provider configured (%d rows stay pending). "
-                "Fix with `ai-raccoon model set local` (single config channel) and re-run.",
+                "Fix with `ai-raccoon model embedding set local` (single config channel) and re-run.",
                 embed_result.get("pending", 0),
             )
 

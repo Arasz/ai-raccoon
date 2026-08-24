@@ -27,7 +27,7 @@ public sealed class RemoteDimensionProbeTests
         var store = new FakeConfigStore();
 
         var ex = await Should.ThrowAsync<InvalidOperationException>(() =>
-            Run(["model", "set", "openai", "some-model", "--api-key", "k", "--dims", "1024"], store, Probe(384)));
+            Run(["model", "embedding", "set", "openai", "some-model", "--api-key", "k", "--dims", "1024"], store, Probe(384)));
 
         ex.Message.ShouldContain("1024");
         ex.Message.ShouldContain("384");
@@ -42,7 +42,7 @@ public sealed class RemoteDimensionProbeTests
         var store = new FakeConfigStore();
 
         var (exit, _, _) = await Run(
-            ["model", "set", "openai", "some-model", "--api-key", "k", "--dims", "1024"], store, Probe(1024));
+            ["model", "embedding", "set", "openai", "some-model", "--api-key", "k", "--dims", "1024"], store, Probe(1024));
 
         exit.ShouldBe(0);
         store.Configured.ShouldNotBeNull();
@@ -59,7 +59,7 @@ public sealed class RemoteDimensionProbeTests
         var store = new FakeConfigStore();
 
         var ex = await Should.ThrowAsync<InvalidOperationException>(() =>
-            Run(["model", "set", "openai", "some-model", "--api-key", "k"], store, Probe(3072)));
+            Run(["model", "embedding", "set", "openai", "some-model", "--api-key", "k"], store, Probe(3072)));
 
         ex.Message.ShouldContain("3072");
         ex.Message.ShouldContain("--dims", customMessage: "the refusal must name the flag that fixes it");
@@ -71,7 +71,7 @@ public sealed class RemoteDimensionProbeTests
     {
         var store = new FakeConfigStore();
 
-        var (exit, _, _) = await Run(["model", "set", "openai", "some-model", "--api-key", "k"], store, Probe(384));
+        var (exit, _, _) = await Run(["model", "embedding", "set", "openai", "some-model", "--api-key", "k"], store, Probe(384));
 
         exit.ShouldBe(0);
         store.Configured.ShouldNotBeNull("384 is the legacy shape and needs no declaration");
@@ -84,7 +84,7 @@ public sealed class RemoteDimensionProbeTests
         var store = new FakeConfigStore();
 
         var ex = await Should.ThrowAsync<InvalidOperationException>(() =>
-            Run(["model", "set", "openai", "some-model", "--api-key", "k", "--dims", "1024"], store,
+            Run(["model", "embedding", "set", "openai", "some-model", "--api-key", "k", "--dims", "1024"], store,
                 new ThrowingProbe()));
 
         ex.Message.ShouldContain("could not be reached");

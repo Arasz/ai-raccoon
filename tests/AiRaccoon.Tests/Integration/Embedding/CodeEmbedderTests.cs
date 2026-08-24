@@ -109,7 +109,7 @@ public sealed class CodeEmbedderTests : IAsyncLifetime
             () => embedder.EmbedQueryAsync(connection, "QuokkaFinder", TestContext.Current.CancellationToken));
 
         ex.Message.ShouldContain("/models/broken-code-engine");
-        ex.Message.ShouldContain("model set code local");
+        ex.Message.ShouldContain("model code set local");
     }
 
     [Fact]

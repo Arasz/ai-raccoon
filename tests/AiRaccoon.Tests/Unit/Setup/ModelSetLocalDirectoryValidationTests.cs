@@ -37,7 +37,7 @@ public sealed class ModelSetLocalDirectoryValidationTests
         File.WriteAllText(Path.Combine(dir, "model.onnx"), "model");
         var store = new FakeConfigStore();
 
-        var ex = await Should.ThrowAsync<InvalidOperationException>(() => Run(["model", "set", "local", dir], store));
+        var ex = await Should.ThrowAsync<InvalidOperationException>(() => Run(["model", "embedding", "set", "local", dir], store));
 
         ex.Message.ShouldContain("manifest.json", customMessage: "the refusal must name the missing manifest");
         ex.Message.ShouldContain("model download", customMessage: "the refusal must point at the fix");
@@ -73,7 +73,7 @@ public sealed class ModelSetLocalDirectoryValidationTests
             """);
         var store = new FakeConfigStore();
 
-        var (exit, _, _) = await Run(["model", "set", "local", dir], store);
+        var (exit, _, _) = await Run(["model", "embedding", "set", "local", dir], store);
 
         exit.ShouldBe(0);
         store.Configured.ShouldNotBeNull(
@@ -109,7 +109,7 @@ public sealed class ModelSetLocalDirectoryValidationTests
             """);
         var store = new FakeConfigStore();
 
-        var (exit, _, _) = await Run(["model", "set", "local", dir], store);
+        var (exit, _, _) = await Run(["model", "embedding", "set", "local", dir], store);
 
         exit.ShouldBe(0);
         store.Configured.ShouldNotBeNull();
@@ -123,7 +123,7 @@ public sealed class ModelSetLocalDirectoryValidationTests
         File.WriteAllText(file, "model");
         var store = new FakeConfigStore();
 
-        var (exit, _, _) = await Run(["model", "set", "local", file], store);
+        var (exit, _, _) = await Run(["model", "embedding", "set", "local", file], store);
 
         exit.ShouldBe(0);
         store.Configured.ShouldNotBeNull();

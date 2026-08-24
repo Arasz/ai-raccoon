@@ -389,7 +389,7 @@ internal static class MemorySchema
                                           );
 
                                           -- Model-migration outbox (ADR-0076): a single-row lock+ledger for an in-flight
-                                          -- embedding-engine change. `model set` writes the new engine settings and this
+                                          -- embedding-engine change. `model embedding set` writes the new engine settings and this
                                           -- row in ONE transaction — the outbox pattern, so no crash can produce the
                                           -- settings change without the record of the re-embed it owes, or vice versa.
                                           -- finished_at is null for exactly as long as a re-embed is owed; a separate

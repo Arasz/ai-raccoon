@@ -75,12 +75,12 @@ public sealed class CliContractTests : IAsyncLifetime
             "  interval-hours <1..8760>  Sets the reaper cadence in hours (1..8760, default 24); applies live, no server restart needed\n" +
             "  threshold                 Sweep rating threshold\n" +
             "  list, show                Shows the whole policy: enabled, interval hours and threshold (row values, else the defaults)"),
-        new(["model", "set", "openai"], ExitCode.InvalidArgument, "",
+        new(["model", "embedding", "set", "openai"], ExitCode.InvalidArgument, "",
             "Required argument missing for command: 'openai'.\n\n" +
             "Description:\n" +
             "  Routes through an OpenAI-compatible endpoint; key via --api-key (persisted in settings)\n\n" +
             "Usage:\n" +
-            "  AiRaccoon model set openai <model> [<base-url>] [options]\n\n" +
+            "  AiRaccoon model embedding set openai <model> [<base-url>] [options]\n\n" +
             "Arguments:\n" +
             "  <model-id>\n" +
             "  <url>\n\n" +

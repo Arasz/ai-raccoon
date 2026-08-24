@@ -23,7 +23,7 @@ public sealed class EmbeddingServiceLocalGuardTests : IDisposable
 
         var ex = Should.Throw<InvalidOperationException>(() =>
             service.CreateGenerator(new EmbeddingSettings("local", Path.Combine(_root, "missing.onnx"), null, null)));
-        ex.Message.ShouldContain("ai-raccoon model set local");
+        ex.Message.ShouldContain("ai-raccoon model embedding set local");
     }
 
     [Fact]
@@ -35,7 +35,7 @@ public sealed class EmbeddingServiceLocalGuardTests : IDisposable
         var ex = Should.Throw<InvalidOperationException>(() =>
             service.CreateGenerator(new EmbeddingSettings("local", "nomic-embed-text", null, null)));
         ex.Message.ShouldContain(Path.GetFullPath("nomic-embed-text"));
-        ex.Message.ShouldContain("model set local");
+        ex.Message.ShouldContain("model embedding set local");
         ex.Message.ShouldContain("path-to-onnx");
     }
 }

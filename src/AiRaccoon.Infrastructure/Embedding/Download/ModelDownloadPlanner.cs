@@ -76,7 +76,7 @@ public interface IModelDownloadPlanner
 public sealed class ModelDownloadPlanner : IModelDownloadPlanner
 {
     private static readonly string[] SupportedModelTypes =
-        ["bert*", "xlm-roberta", "roberta", "t5", "gpt2", "llama", "qwen2"];
+        ["bert*", "new", "gte*", "xlm-roberta", "roberta", "t5", "gpt2", "llama", "qwen2"];
 
     public ModelDownloadPlan BuildPlan(
         string repoId,
@@ -231,7 +231,9 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
     private static (TokenizerFamily Family, string FileName) PairTokenizer(string configJson)
     {
         var modelType = ModelType(configJson);
-        if (modelType.StartsWith("bert", StringComparison.OrdinalIgnoreCase))
+        if (modelType.StartsWith("bert", StringComparison.OrdinalIgnoreCase)
+            || modelType.Equals("new", StringComparison.OrdinalIgnoreCase)
+            || modelType.StartsWith("gte", StringComparison.OrdinalIgnoreCase))
         {
             return (TokenizerFamily.BertWordpiece, "vocab.txt");
         }

@@ -5,7 +5,7 @@ using Microsoft.Data.Sqlite;
 namespace AiRaccoon.Infrastructure.Maintenance;
 
 /// <summary>
-///     The relay half of a model migration (ADR-0076): finishes whatever <c>model set</c>'s outbox
+///     The relay half of a model migration (ADR-0076): finishes whatever <c>model embedding set</c>'s outbox
 ///     transaction left owing. On-demand — <see cref="HasWorkAsync" /> answers from the
 ///     <c>model_migration</c> row itself, not a clock — so it is picked up by the maintenance loop's
 ///     startup pass (the crash-recovery guarantee) and every later poll, never by a cadence that

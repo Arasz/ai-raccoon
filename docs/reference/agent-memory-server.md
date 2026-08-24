@@ -83,7 +83,7 @@ config channel (see [Command-line options](#command-line-options)).
   separate `codeRrfK`/etc. namespace). Code search degrades by configuration state: with no
   `embedding.codeModel` configured, it is FTS5-only and carries a `warning`
   (`"code engine not configured — FTS5-only results"`); once a code engine is configured
-  (`model set code local`, below) it runs the full vec0 hybrid, fused with the same weighted RRF
+  (`model code set local`, below) it runs the full vec0 hybrid, fused with the same weighted RRF
   as memory (`retrieval.rrfK`/`ftsWeight`/`vectorWeight`, or the per-call args above —
   `retrieval.structureAlpha` is read but never applied, since code has no structure modality); a
   query over the engine's
@@ -109,7 +109,7 @@ config channel (see [Command-line options](#command-line-options)).
   `dist`, `build`, `target`) rules apply identically to both corpora. Code files are chunked
   (`CodeChunker`, line-range splitting) and stored on every ingest regardless of engine
   configuration; each row lands `embed_state = 'pending'` until a code embedding engine is
-  configured (`model set code local`, below) — until then the rows are FTS5-searchable only
+  configured (`model code set local`, below) — until then the rows are FTS5-searchable only
   (see `kind=code` above). Memory ingest is unaffected.
 - **`memory_share`:** promotes the entry whose `hash` you pass (from a `memory_write`
   or `memory_search` result) into `shared`. It is additive — the source project row
@@ -159,16 +159,16 @@ config channel (see [Command-line options](#command-line-options)).
   can tell "everything queued was already shared" (`skippedDuplicates` > 0, `failures` empty) apart
   from "everything failed" (`failures` covers the whole batch), and can see partial success instead
   of a single pass/fail verdict for the batch.
-- **Embedding engine (CLI, not a tool):** `ai-raccoon model set local [path]` selects
+- **Embedding engine (CLI, not a tool):** `ai-raccoon model embedding set local [path]` selects
   the bundled int8 ONNX all-MiniLM-L6-v2 (in-process, ~23 MB, Apache-2.0, SHA-256
-  pinned); `ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]`
+  pinned); `ai-raccoon model embedding set openai {model-id} [base-url] [--api-key <key>]`
   selects any OpenAI-compatible `baseUrl` (default `https://api.openai.com/v1`).
   `model` is the model id for openai or a custom ONNX path for local; it defaults to
   the bundled model for local, is required for openai. A local **directory** must contain
   `ai-raccoon.manifest.json` describing its dimensions, tokenizer, pooling and files, and
   is refused without one; only a `.onnx` file path keeps the pre-manifest defaults.
   `--dims <n>` declares a remote engine's output dimension (required when it is not 384 —
-  sqlite-vec infers none); `model set openai` probes the endpoint first and refuses a
+  sqlite-vec infers none); `model embedding set openai` probes the endpoint first and refuses a
   contradicted or undeclared non-384 dimension before the outbox commits. The API key is
   persisted in the settings table. Changing the engine re-embeds the bank, rebuilding the
   vector index first when the dimension differs. The `engine` field in the
@@ -180,9 +180,9 @@ config channel (see [Command-line options](#command-line-options)).
   model), runs an ONNX Runtime opset smoke test, and writes `ai-raccoon.manifest.json` into
   `<data-root>/models/<slug>/` (e.g. `BAAI__bge-m3`). Flags: `--revision`, `--file` (repeatable),
   `--dir`, `--dry-run` (resolve + print sizes/oids, download nothing), `--yes` (confirm
-  downloads > 500 MB). It never activates the model — `model set local <dir>` is the explicit
+  downloads > 500 MB). It never activates the model — `model embedding set local <dir>` is the explicit
   next step (plan `docs/work/2026-08-21-arbitrary-embedding-models-plan.md`, D4/D8).
-- **Code corpus embedding engine (CLI, not a tool):** `ai-raccoon model set code local <dir>`
+- **Code corpus embedding engine (CLI, not a tool):** `ai-raccoon model code set local <dir>`
   activates a manifest directory for the code corpus — independent of the memory engine above,
   its own `embedding.codeModel`/`embedding.codeEngine`/`embedding.codeDimensions` settings rows.
   `<dir>` must contain `ai-raccoon.manifest.json`; its declared dimension is accepted as-is and
@@ -193,14 +193,15 @@ config channel (see [Command-line options](#command-line-options)).
   same commit, no stale-vector window — and the `code-reindex` maintenance job signals the embed
   topic's single consumer (`EmbedDrainService`, ADR-0091) whenever it finds pending rows, on its
   own on-demand
+>>>>>>> origin/main
   cadence, rather than re-embedding inline itself; there is no outbox, no relay wait, and memory
   tools are never blocked.
-  `ai-raccoon model set code default` downloads `faxenoff/code-daemon-embed-v1` (187 MB, if not
+  `ai-raccoon model code set default` downloads `faxenoff/code-daemon-embed-v1` (187 MB, if not
   already present) and activates it in one command — the recommended path
   (`CodeEngineSetup.DefaultModelCommand`, the exact string the search warning, `doctor`, and the
   `memory_search` tool description all quote). For a non-default model, the manual two-step still
-  applies: `ai-raccoon model download {repo-id}` then `ai-raccoon model set
-  code local <dir>`. `ai-raccoon settings model
+  applies: `ai-raccoon model download {repo-id}` then `ai-raccoon model code
+  set local <dir>`. `ai-raccoon settings model
   show` includes the `codeModel`/`codeEngine` rows when set; `ai-raccoon settings model reset`
   never touches them; `ai-raccoon settings model code reset` deletes only them, leaving the
   memory engine untouched (`docs/work/2026-08-21-code-search-implementation-plan.md` §3.3).
@@ -670,7 +671,7 @@ Every family below lives under the top-level `settings` command
 (`ai-raccoon settings <family> …`), with four exceptions that stay top-level because they
 either read a table `settings` doesn't own or perform an operation that isn't a settings
 write: `ai-raccoon watch registered` (reads the watches table), `ai-raccoon extract prune`
-(deletes `promotion_queue` rows), `ai-raccoon model set` (starts re-embedding the whole bank in the
+(deletes `promotion_queue` rows), `ai-raccoon model embedding set` (starts re-embedding the whole bank in the
 background, ADR-0076), and `ai-raccoon encryption` / `ai-raccoon serve` (unaffected by this split).
 
 ```bash
@@ -681,19 +682,29 @@ ai-raccoon settings access set {project-id|*} {ro|rw|full}
 ai-raccoon settings access unset {project-id|*}
 ai-raccoon settings access list
 
-# model: embedding engine ('set' stays top-level — it starts re-embedding the whole bank in the
-# background, ADR-0076; 'show'/'reset' move under settings)
-ai-raccoon model set local [path]
-ai-raccoon model set openai {model-id} [base-url] [--api-key <key>]
-ai-raccoon settings model reset
-ai-raccoon settings model show
+# model: embedding engine selection ('set' stays top-level — it starts re-embedding the whole bank in
+# the background, ADR-0076; 'show'/'reset' move under settings)
+ai-raccoon model embedding set local [path]
+ai-raccoon model embedding set openai {model-id} [base-url] [--api-key <key>]
+ai-raccoon settings model embedding reset
+ai-raccoon settings model embedding show
 ai-raccoon settings model threads {n}       # ORT intra-op thread cap; 0 = ORT default, unset = max(1, logicalCores/2)
 
-# model set code: the code corpus's own engine — independent settings rows, any manifest
+# model code set: the code corpus's own engine — independent settings rows, any manifest
 # dimension accepted (vec_code is reconciled to it), no memory-bank re-embed
-ai-raccoon model set code default   # downloads the default model if needed, then activates it
-ai-raccoon model set code local <dir>
+ai-raccoon model code set default   # downloads the default model if needed, then activates it
+ai-raccoon model code set local <dir>
 ai-raccoon settings model code reset
+ai-raccoon settings model code show
+ai-raccoon settings model threads {n}      # ORT intra-op thread cap; 0 = ORT default, unset = max(1, logicalCores/2)
+ai-raccoon settings model code reset
+ai-raccoon settings model code show
+ai-raccoon settings model threads {n}      # ORT intra-op thread cap; 0 = ORT default, unset = max(1, logicalCores/2)
+
+# model code set: the code corpus's own engine — independent settings rows, refuses non-768
+# manifests before anything commits (§3.3 D-E9), no memory-bank re-embed
+ai-raccoon model code set default   # downloads the default model if needed, then activates it
+ai-raccoon model code set local <dir>
 
 # settings retrieval: hybrid-search blend weight
 ai-raccoon settings retrieval alpha set {0..1}
@@ -859,7 +870,7 @@ aws configure   # or: aws sso login (short-lived SSO tokens)
 `--cli` mode uses the default credential chain (env, `~/.aws/credentials`, SSO, IMDS);
 prefer SSO/short-lived credentials over static keys in `~/.aws/credentials`.
 
-Secrets (OpenAI API key via `model set openai --api-key`, S3 access/secret keys via
+Secrets (OpenAI API key via `model embedding set openai --api-key`, S3 access/secret keys via
 `sync add s3`, or the Azure connection string via `sync add azure`) are persisted in the settings table and are never launch flags — the
 parser's unknown-option error is the defense. `--help`/`--version` and parse errors
 print to **stderr** (exit 0 / exit 1). Generic host flags (`--environment`,
@@ -906,7 +917,7 @@ config, never in a shared or tracked file:
 
 Local embeddings run in-process on ONNX Runtime over the small int8
 all-MiniLM-L6-v2 model (dimension 384, mean-pool + L2-normalize) **bundled inside
-the tool package** — `ai-raccoon model set local` needs no sidecar, server
+the tool package** — `ai-raccoon model embedding set local` needs no sidecar, server
 process or download. The binary is gitignored and fetched once by the pinned script
 (SHA-256 verified); the tests FAIL (never skip) when it is missing:
 
@@ -915,7 +926,7 @@ scripts/download-embedding-model.py          # -> src/AiRaccoon/Models/model_qin
 ```
 
 A custom ONNX model path overrides the bundled model via
-`ai-raccoon model set local /path/to/model.onnx`.
+`ai-raccoon model embedding set local /path/to/model.onnx`.
 
 ## Embedding configuration matrix
 
@@ -960,9 +971,9 @@ source of truth; a test cross-checks this table against it.
 | `invalid-params` | FluentValidation rejected the request (missing/blank `projectId`, invalid `scope`, out-of-range `limit`, etc.) | `invalid-params: project_id is required` |
 | `invalid-argument` | A call's JSON argument shape doesn't match the tool's declared parameter type (e.g. a scalar where an array is declared), a required parameter is missing, or a present-but-blank value fails a guard clause — caught at argument-binding time or by a guard clause at the top of the tool method, before its logic runs. Mapped from `JsonException`, `ArgumentException` and `ArgumentNullException`. `ArgumentOutOfRangeException` is deliberately **not** mapped: it is how .NET reports the server's own index arithmetic going wrong, so refusing it would mute Error-level alerting and tell the caller to retry an argument that was never at fault | `invalid-argument: The JSON value could not be converted to System.String[]. Path: $ \| LineNumber: 0 \| BytePositionInLine: 5.` |
 | `confirm-required` | `memory_share_extract` called with `autoPromote=true` but `confirm` not set to `true` — an explicit enable gate for a promotion that shares data across all listed projects | `confirm-required: autoPromote shares candidates with ALL projects — pass confirm=true to enable` |
-| `model-migration-in-progress` | Every bank operation is refused for the duration of an embedding-model migration (`model set`, ADR-0076) — a bank whose rows are half old-model and half new-model vectors is not detectably broken, it just retrieves worse, so the migration locks the bank rather than serving through it | `model-migration-in-progress: ai-raccoon: a model migration is in progress; try again once it finishes (memory_write)` |
+| `model-migration-in-progress` | Every bank operation is refused for the duration of an embedding-model migration (`model embedding set`, ADR-0076) — a bank whose rows are half old-model and half new-model vectors is not detectably broken, it just retrieves worse, so the migration locks the bank rather than serving through it | `model-migration-in-progress: ai-raccoon: a model migration is in progress; try again once it finishes (memory_write)` |
 | `embedding-install-replaced` | The bundled embedding model/vocab could not be resolved because the install this server process started from (`AppContext.BaseDirectory`) no longer exists on disk — replaced or removed out from under a still-running server (e.g. `dotnet tool update` moving the outgoing version into `.store/.stage` and deleting it; already-mapped assemblies keep the process serving MCP calls even though its own install root is gone). A plain `InvalidOperationException` from the same lookup still means the asset is genuinely missing next to a live install and stays unmapped — only this replaced-install case is refused, because only a restart fixes it | `embedding-install-replaced: Bundled embedding model 'model_qint8_arm64.onnx' could not be resolved: the install this server started from ('<dir>') no longer exists, likely replaced by a tool update (e.g. 'dotnet tool update'). Restart the MCP server (or its host) to pick up the new install.` |
-| `code-engine-unloadable` | A code engine IS configured (`embedding.codeModel`) but its manifest or model/tokenizer files fail to load at search time (missing files, a dimension mismatch, a corrupt asset) — distinct from "no engine configured" (which degrades to FTS5-only silently, no refusal). Affects `memory_search kind=code/both` only; `kind=memory` is unaffected, since the memory and code engines are independent settings rows | `code-engine-unloadable: The configured code engine at '<dir>' could not be loaded: <detail> Run 'ai-raccoon model set code local <dir>' to reconfigure it, or clear it with 'ai-raccoon settings model code reset'.` |
+| `code-engine-unloadable` | A code engine IS configured (`embedding.codeModel`) but its manifest or model/tokenizer files fail to load at search time (missing files, a dimension mismatch, a corrupt asset) — distinct from "no engine configured" (which degrades to FTS5-only silently, no refusal). Affects `memory_search kind=code/both` only; `kind=memory` is unaffected, since the memory and code engines are independent settings rows | `code-engine-unloadable: The configured code engine at '<dir>' could not be loaded: <detail> Run 'ai-raccoon model code set local <dir>' to reconfigure it, or clear it with 'ai-raccoon settings model code reset'.` |
 
 Anything `ToolRefusals` does not recognize — a remote embedding provider called without
 a key, or any other unmapped exception — is a genuine failure, not a refusal, and its message
@@ -972,7 +983,7 @@ replaces it with the bare string `"An error occurred invoking '<tool>'."` (measu
 live server; see `docs/adr/0019-forward-version-write-guard.md`). So a call that hits, say, the
 embeddings service's plain `InvalidOperationException`
 (`src/AiRaccoon.Infrastructure/Embedding/EmbeddingService.cs` —
-`"OpenAI-compatible embeddings require an API key: run 'ai-raccoon model set openai <model>
+`"OpenAI-compatible embeddings require an API key: run 'ai-raccoon model embedding set openai <model>
 --api-key <key>'."`, thrown from whichever tool needed the embedding engine — `memory_write`,
 `memory_search`, `memory_ingest_file/directory`, `memory_embed_pending`) does not get that text on
 the wire at all: the caller sees only `"An error occurred invoking '<tool>'."`, logged at `Error`,

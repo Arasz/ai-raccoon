@@ -73,7 +73,7 @@ public sealed class SettingsChannelExitCodeTests
             var commands = TestData.CreateConfigCommands(new FakeConfigStore(), settings: new SettingsCommands(),
                 codeEngine: codeEngine);
 
-            var (exit, _, err) = await CliRun.RunAsync(["model", "set", "code", "local", dir], commands);
+            var (exit, _, err) = await CliRun.RunAsync(["model", "code", "set", "local", dir], commands);
 
             exit.ShouldBe(ExitCode.InvalidArgument);
             err.ShouldContain(CodeChunker.DefaultBudget.ToString());

@@ -9,7 +9,7 @@ namespace AiRaccoon.Setup.Cli.Commands;
 /// <summary>
 ///     Handler for <c>ai-raccoon model download &lt;repo-id&gt;</c> (plan D4/D8): resolves the HF
 ///     tree, verifies every download against its LFS-oid SHA-256 pin, writes manifest.json, and
-///     never activates the model — <c>model set local &lt;dir&gt;</c> is the explicit next step.
+///     never activates the model — <c>model embedding set local &lt;dir&gt;</c> (or <c>model code set local &lt;dir&gt;</c> for the code corpus) is the explicit next step.
 ///     Downloading is a one-shot CLI operation, so the HTTP client is created per run.
 /// </summary>
 internal sealed class ModelDownloadCommands(
@@ -43,7 +43,7 @@ internal sealed class ModelDownloadCommands(
     }
 
     /// <summary>
-    ///     #422: the download half of <c>model set code default</c>. Same service, same pins, same
+    ///     #422: the download half of <c>model code set default</c>. Same service, same pins, same
     ///     target-directory convention as <c>model download</c> — it just knows the repo id, so a
     ///     fresh install never has to.
     /// </summary>
@@ -53,8 +53,8 @@ internal sealed class ModelDownloadCommands(
             new ModelDownloadRequest(CodeEngineSetup.DefaultModelRepoId, "main", targetDir,
                 Confirm: message => PromptConfirm(streams, message)),
             // No "activate it next" hint: this call IS the download half of an activating verb, and
-            // pointing at 'model set local' here would send the reader at the MEMORY engine.
-            streams, false, cancellationToken);
+            // pointing at 'model embedding set local' here would send the reader at the MEMORY engine.
+            streams, activationHint: false, cancellationToken);
 
     private async Task<int> ExecuteAsync(ModelDownloadRequest request, StandardStreams streams,
         bool activationHint, CancellationToken cancellationToken)
@@ -83,7 +83,7 @@ internal sealed class ModelDownloadCommands(
 
             await streams.WriteOutputLineAsync(
                 $"downloaded {repoId}@{revision} to {targetDir} ({result.DownloadedFiles.Count} file(s)); {EmbeddingManifest.FileName} written. " +
-                (activationHint ? $"Activate with 'ai-raccoon model set local {targetDir}'. " : string.Empty) +
+                (activationHint ? $"Activate with 'ai-raccoon model embedding set local {targetDir}' (or 'ai-raccoon model code set local {targetDir}'). " : string.Empty) +
                 "Trust note: the SHA-256 pins were captured from Hugging Face's LFS oids before download — the first pin trusts the channel once; registry pins are the reviewed tier (plan D8).");
             return ExitCode.Success;
         }

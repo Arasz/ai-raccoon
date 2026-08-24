@@ -28,13 +28,13 @@ internal sealed record SettingValue(string Value);
 /// <summary>Every row under a prefix; empty rather than absent when nothing matches.</summary>
 internal sealed record SettingRows(IReadOnlyDictionary<string, string> Rows);
 
-/// <summary>A `model set` request (ADR-0076): provider is required, model/baseUrl are engine-specific.</summary>
+/// <summary>A `model embedding set` request (ADR-0076): provider is required, model/baseUrl are engine-specific.</summary>
 internal sealed record ModelMigrationRequest(string Provider, string? Model, string? BaseUrl);
 
 /// <summary>What the outbox transaction actually committed — the CLI's only feedback; the re-embed itself is reported nowhere (ruled: no progress channel).</summary>
 internal sealed record ModelMigrationResponse(string Provider, string Model, string Engine);
 
-/// <summary>A `model set code local` request (§3.3 D-E9): the directory is validated (manifest present) by the CLI before this is sent.</summary>
+/// <summary>A `model code set local` request (§3.3 D-E9): the directory is validated (manifest present) by the CLI before this is sent.</summary>
 internal sealed record ModelCodeActivationRequest(string Directory);
 
 /// <summary>What the activation transaction actually committed — the CLI's only feedback.</summary>

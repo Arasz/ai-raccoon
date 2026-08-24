@@ -222,9 +222,9 @@ public sealed partial class AppRunner
             var loggerFactory = settingsLoggerFactory;
             var lazyServerStore = new LazyServerSettingsStore(ctx => _acquireServerSettingsStore(cliInput.ServerConfig, loggerFactory, ctx));
             services.AddSingleton<ISettingsStore>(lazyServerStore);
-            // ADR-0076: model set routes the same way now — same instance, same acquired connection.
+            // ADR-0076: model embedding set routes the same way now — same instance, same acquired connection.
             services.AddSingleton<IModelMigrationStore>(lazyServerStore);
-            // §3.3 D-E9: model set code local routes the same way too.
+            // §3.3 D-E9: model code set local routes the same way too.
             services.AddSingleton<ICodeEngineStore>(lazyServerStore);
             // ADR-0075 amendment: repair routes the same way — same instance, same acquired connection.
             services.AddSingleton<IRepairStore>(lazyServerStore);

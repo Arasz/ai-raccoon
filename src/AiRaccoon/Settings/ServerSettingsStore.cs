@@ -25,8 +25,8 @@ internal sealed class SettingsServerErrorException(string message) : Exception(m
 ///         Also <see cref="IModelMigrationStore" /> (ADR-0076), <see cref="ICodeEngineStore" />
 ///         (§3.3 D-E9), <see cref="IRepairStore" />, <see cref="IPromotionQueuePruneStore" />,
 ///         <see cref="IMaintenanceStatsStore" />, <see cref="INoiseSummaryStore" /> and
-///         <see cref="IWatchRegisteredStore" /> (all this same amendment): <c>model set</c>,
-///         <c>model set code local</c>, <c>repair</c>, <c>extract prune</c>,
+///         <see cref="IWatchRegisteredStore" /> (all this same amendment): <c>model embedding set</c>,
+///         <c>model code set local</c>, <c>repair</c>, <c>extract prune</c>,
 ///         <c>settings maintenance list</c>, <c>noise entries</c> and <c>watch registered</c> all
 ///         reach the same way, over the same connection — one class, one credential, one transport
 ///         for every control-plane resource.

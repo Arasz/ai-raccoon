@@ -796,4 +796,122 @@ public class ModelDownloadPlannerTests
 
         plan.AddBeginOfSentence.ShouldBeFalse("only the Roberta family has the implicit wrapper");
     }
+
+    [Fact]
+    public void SfrEmbeddingCode400MR_WithModelTypeNew_PairsBertWordpiece_AndBuildsCorrectPlan()
+    {
+        var tree = new List<HfTreeEntry>
+        {
+            Onnx,
+            Vocab,
+            new("config.json", "file", 1000, null),
+            new("tokenizer_config.json", "file", 1000, null),
+            PoolingConfig,
+            Modules
+        };
+
+        var sfrConfig = """
+            {
+              "architectures": ["NewModel"],
+              "auto_map": {
+                "AutoConfig": "Alibaba-NLP/new-impl--configuration.NewConfig",
+                "AutoModel": "Alibaba-NLP/new-impl--modeling.NewModel"
+              },
+              "hidden_size": 1024,
+              "max_position_embeddings": 8192,
+              "model_type": "new",
+              "vocab_size": 30528
+            }
+            """;
+
+        var sfrTokenizerConfig = """
+            {
+              "tokenizer_class": "BertTokenizer",
+              "cls_token": "[CLS]",
+              "sep_token": "[SEP]",
+              "pad_token": "[PAD]",
+              "unk_token": "[UNK]",
+              "added_tokens_decoder": {
+                "0": { "content": "[PAD]", "special": true },
+                "100": { "content": "[UNK]", "special": true },
+                "101": { "content": "[CLS]", "special": true },
+                "102": { "content": "[SEP]", "special": true },
+                "103": { "content": "[MASK]", "special": true }
+              }
+            }
+            """;
+
+        var sfrPooling = """
+            {
+              "word_embedding_dimension": 1024,
+              "pooling_mode_cls_token": true,
+              "pooling_mode_mean_tokens": false
+            }
+            """;
+
+        var sfrModules = """
+            [
+              { "idx": 0, "name": "0", "path": "", "type": "sentence_transformers.models.Transformer" },
+              { "idx": 1, "name": "1", "path": "1_Pooling", "type": "sentence_transformers.models.Pooling" }
+            ]
+            """;
+
+        var raw = new Dictionary<string, string>
+        {
+            ["config.json"] = sfrConfig,
+            ["tokenizer_config.json"] = sfrTokenizerConfig,
+            ["1_Pooling/config.json"] = sfrPooling,
+            ["modules.json"] = sfrModules
+        };
+
+        var probe = new OnnxGraphProbe(
+            ExternalDataFiles: [],
+            InputNames: ["input_ids", "attention_mask", "token_type_ids"],
+            OutputNames: ["last_hidden_state"],
+            IrVersion: 8,
+            OpsetVersion: 17);
+
+        var plan = Planner().BuildPlan("Salesforce/SFR-Embedding-Code-400M_R", "main", tree, raw, probe);
+
+        plan.ModelFilePath.ShouldBe("onnx/model.onnx");
+        plan.TokenizerFamily.ShouldBe(TokenizerFamily.BertWordpiece);
+        plan.TokenizerFiles.Select(f => f.Path).ShouldBe(["vocab.txt"]);
+        plan.Dimensions.ShouldBe(1024);
+        plan.ContextWindowTokens.ShouldBe(8190);
+        plan.RequiresTokenTypeIds.ShouldBeTrue();
+        plan.PoolingMode.ShouldBe(PoolingMode.Cls);
+        plan.Normalization.ShouldBe(NormalizationMode.None);
+        plan.SpecialTokens["[CLS]"].ShouldBe(101);
+        plan.SpecialTokens["[SEP]"].ShouldBe(102);
+        plan.SpecialTokens["[PAD]"].ShouldBe(0);
+        plan.SpecialTokens["[UNK]"].ShouldBe(100);
+    }
+
+    [Theory]
+    [InlineData("new")]
+    [InlineData("gte")]
+    [InlineData("gte-large")]
+    public void GteAndNewModelTypes_PairWithBertWordpiece(string modelType)
+    {
+        var tree = new List<HfTreeEntry>
+        {
+            RootOnnx,
+            Vocab,
+            new("config.json", "file", 500, null),
+            new("tokenizer_config.json", "file", 500, null)
+        };
+
+        var raw = new Dictionary<string, string>
+        {
+            ["config.json"] = $$"""{"model_type": "{{modelType}}", "hidden_size": 768, "max_position_embeddings": 514}""",
+            ["tokenizer_config.json"] = BertTokenizerConfig
+        };
+
+        var plan = Planner().BuildPlan("test/gte-model", "main", tree, raw, probe: null);
+
+        plan.TokenizerFamily.ShouldBe(TokenizerFamily.BertWordpiece);
+        plan.TokenizerFiles.Select(f => f.Path).ShouldBe(["vocab.txt"]);
+        plan.Dimensions.ShouldBe(768);
+        plan.ContextWindowTokens.ShouldBe(512);
+    }
 }
