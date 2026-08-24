@@ -107,7 +107,7 @@ public sealed class SearchFixtureBank : IAsyncDisposable
             new MarkdownFileTypeHandler(markdownChunker),
             new JsonFileTypeHandler(new JsonFileTypeChunker(countTokens, markdownChunker, ChunkingDefaults.OverlayTokens))
         ]);
-        var embedder = new EntryEmbedder(embeddingService, ModelMigrationLease, TimeProvider);
+        var embedder = new EntryEmbedder(embeddingService, ModelMigrationLease, TimeProvider, new VecDimensionReconciler());
         // Nothing drains this topic in the fixture: a real, unconsumed pump of any capacity.
         IEventPump<EmbedDrainRequest> embedDrainPump = new EventPump<EmbedDrainRequest>(
             new PumpTopic(Ceiling: 8, Capacity: 8, Coalesce: true));
@@ -135,7 +135,7 @@ public sealed class SearchFixtureBank : IAsyncDisposable
         await store.StartModelMigrationAsync("openai", "bench-embed-model", embeddings.BaseUrl, cancellationToken)
             .ConfigureAwait(false);
         var drainEmbedder = new EntryEmbedder(embeddingService, new SqliteModelMigrationLease(TimeProvider),
-            TimeProvider);
+            TimeProvider, new VecDimensionReconciler());
         await using (var migrationConnection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false))
         {
             await drainEmbedder.DrainMigrationAsync(migrationConnection, cancellationToken).ConfigureAwait(false);
