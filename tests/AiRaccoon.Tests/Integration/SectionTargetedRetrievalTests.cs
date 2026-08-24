@@ -46,11 +46,13 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     };
 
     private readonly string _dataRoot;
+    private readonly string _pinnedRoot;
     private readonly SqliteConnectionFactory _factory;
     private readonly Dictionary<string, HashSet<string>> _fileHashes;
     private readonly Dictionary<string, string> _hashMap;
     private readonly ITestOutputHelper _output;
     private readonly SqliteMemoryStore _store;
+    private readonly SqliteMemoryStore _pinnedStore;
 
     public SectionTargetedRetrievalTests(ITestOutputHelper output)
     {
@@ -74,9 +76,25 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
             TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
         (_hashMap, _fileHashes) = LoadDerivedHashMap();
+
+        // The S2 gate searches a second copy with pinned query vectors (ADR-0050 pattern): the
+        // bundled u8s8 model puts ADR-0006 exactly on this gate's rank-3/4 boundary, so the live
+        // embedding made the verdict a function of the host CPU — arm64 passes at 3, VNNI/non-VNNI
+        // x64 flips to 4 (nightly #575, docs/adr/0049). The other gates keep the live path.
+        _pinnedRoot = TestData.CreateTempRoot("ai-raccoon-section-targeted-pinned");
+        File.Copy(bundledDb, Path.Combine(_pinnedRoot, "memory.db"));
+        var pinnedFactory = new SqliteConnectionFactory(
+            new InfrastructureOptions { DataRoot = _pinnedRoot, Rid = "osx-arm64", Scope = InstallScope.User },
+            NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _pinnedRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
+        _pinnedStore = TestData.CreateMemoryStore(pinnedFactory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(pinnedFactory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
+            PinnedQueryVectors.EmbeddingService(), null, null, null, null, null, null, null);
     }
 
-    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
+    public void Dispose()
+    {
+        TestData.DeleteTempRoot(_dataRoot);
+        TestData.DeleteTempRoot(_pinnedRoot);
+    }
 
     /// <summary>
     ///     Section-target gates S1/S3/S4/S5/S6: the query's own section chunk must rank &lt;= 3.
@@ -105,6 +123,9 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     /// <summary>
     ///     Wave 6 gate (b) + Wave 3 amendment: S2 must answer at the FILE level within the top 3.
     ///     Section-exact retrieval of the Decision chunk is a known gap, not asserted here.
+    ///     Searches the pinned-vector copy (ADR-0050 pattern): with the live query embedding this
+    ///     verdict was a function of the host CPU — arm64 gives rank 3, x64 flips to 4
+    ///     (docs/adr/0049; nightly reds #527/#575).
     /// </summary>
     [Fact]
     public async Task S2_SectionQuery_AnswersAtFileLevel()
@@ -112,7 +133,11 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
         var query = Catalog("S2");
         var fileHashes = _fileHashes[CorpusHashMap.FileKey(query.ExpectedSource!)];
 
-        var results = await TopResultsAsync(query.Query, TestContext.Current.CancellationToken);
+        var results = (await _pinnedStore.SearchAsync(new SearchQuery(
+                ProjectId, query.Query, SearchScope.Project,
+                Limit: SearchLimit, MinRelativeScore: 0.0, RrfK: 60,
+                FtsWeight: 1, VectorWeight: 1), TestContext.Current.CancellationToken)).Results
+            .ToList();
         var fileRank = results.FindIndex(r => fileHashes.Contains(r.Hash)) + 1;
         var sectionRank = results.FindIndex(r => r.Hash == _hashMap[query.ExpectedSource!]) + 1;
 
