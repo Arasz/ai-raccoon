@@ -30,6 +30,7 @@ flowchart LR
 
 ## What's new
 
+- **The code corpus accepts any embedding dimension.** `model set code local` no longer refuses non-768 manifests — activation reconciles `vec_code` to the manifest's dimension in the same transaction (the memory bank's D3 reconcile, shared), records it as `embedding.codeDimensions`, and the server-open + fingerprint paths reconcile too. Fresh banks still start at 768; existing banks are untouched until a different-dimension engine activates. (1.35.0) [ADR-0093](docs/adr/0093-vec-code-is-dimension-agnostic-through-the-shared-d3-reconciler.md) · [How-to](docs/how-to/configure-embedding-engines.md)
 - **`memory_search` defaults to `kind=both`.** A default search now hits the memory bank and the code corpus, each ranked by its own hybrid (no cross-corpus fusion); pass `kind=memory` explicitly for the pre-1.34 legacy envelope. With no
   code engine configured, a default search degrades to keyword-only code results with a warning — it never refuses.
   (1.34.0) [ADR-0088](docs/adr/0088-code-search-surface-kind-envelope-no-fusion.md) · [How-to](docs/how-to/search-the-code-corpus.md)

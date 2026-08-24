@@ -11,10 +11,11 @@ namespace AiRaccoon.Core.Memory;
 public interface ICodeEngineStore
 {
     /// <summary>
-    ///     Commits embedding.codeModel = <paramref name="directory" /> and embedding.codeEngine =
+    ///     Commits embedding.codeModel = <paramref name="directory" />, embedding.codeEngine =
     ///     its fingerprint (the same derivation <c>IEmbeddingService.EngineFingerprint</c> uses),
-    ///     and marks every currently-embedded code_entries row pending. The directory's manifest
-    ///     must already be validated (the 768-dim refusal happens before this is called).
+    ///     and embedding.codeDimensions; reconciles vec_code to the manifest's dimension; and marks
+    ///     every currently-embedded code_entries row pending — all in ONE transaction. The
+    ///     directory's manifest must already be valid (the chunk-budget refusal happens here).
     /// </summary>
     Task<EmbeddingConfig> ActivateCodeEngineAsync(string directory, CancellationToken cancellationToken = default);
 }

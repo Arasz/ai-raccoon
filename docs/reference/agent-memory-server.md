@@ -184,15 +184,15 @@ config channel (see [Command-line options](#command-line-options)).
   next step (plan `docs/work/2026-08-21-arbitrary-embedding-models-plan.md`, D4/D8).
 - **Code corpus embedding engine (CLI, not a tool):** `ai-raccoon model set code local <dir>`
   activates a manifest directory for the code corpus — independent of the memory engine above,
-  its own `embedding.codeModel`/`embedding.codeEngine` settings rows. `<dir>` must contain
-  `ai-raccoon.manifest.json` declaring exactly `dimensions: 768`: `vec_code` is a fixed
-  `float[768]` index with no dimension-reconcile phase (unlike `model set local`), so any other
-  declared dimension is refused before anything commits, naming the declared value and the
-  required 768. A missing/invalid manifest is refused with the same loader error `model set
-  local` surfaces. On success the write commits in one transaction with invalidating every
-  already-embedded code row back to `pending` — `vec_code` empties at that same commit, no
-  stale-vector window — and the `code-reindex` maintenance job signals the embed topic's single
-  consumer (`EmbedDrainService`, ADR-0091) whenever it finds pending rows, on its own on-demand
+  its own `embedding.codeModel`/`embedding.codeEngine`/`embedding.codeDimensions` settings rows.
+  `<dir>` must contain `ai-raccoon.manifest.json`; its declared dimension is accepted as-is and
+  `vec_code` is reconciled to it in the same transaction (like the memory bank's D3 reconcile —
+  fresh banks start at `float[768]`, the default-model dimension). A missing/invalid manifest is
+  refused with the loader's own error. On success the write commits in one transaction with
+  invalidating every already-embedded code row back to `pending` — `vec_code` empties at that
+  same commit, no stale-vector window — and the `code-reindex` maintenance job signals the embed
+  topic's single consumer (`EmbedDrainService`, ADR-0091) whenever it finds pending rows, on its
+  own on-demand
   cadence, rather than re-embedding inline itself; there is no outbox, no relay wait, and memory
   tools are never blocked.
   `ai-raccoon model set code default` downloads `faxenoff/code-daemon-embed-v1` (187 MB, if not
@@ -689,8 +689,8 @@ ai-raccoon settings model reset
 ai-raccoon settings model show
 ai-raccoon settings model threads {n}       # ORT intra-op thread cap; 0 = ORT default, unset = max(1, logicalCores/2)
 
-# model set code: the code corpus's own engine — independent settings rows, refuses non-768
-# manifests before anything commits (§3.3 D-E9), no memory-bank re-embed
+# model set code: the code corpus's own engine — independent settings rows, any manifest
+# dimension accepted (vec_code is reconciled to it), no memory-bank re-embed
 ai-raccoon model set code default   # downloads the default model if needed, then activates it
 ai-raccoon model set code local <dir>
 ai-raccoon settings model code reset
