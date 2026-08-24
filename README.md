@@ -31,6 +31,7 @@ flowchart LR
 
 ## What's new
 
+- **`memory_search` defaults to `kind=both`.** A default search now hits the memory bank and the code corpus, each ranked by its own hybrid (no cross-corpus fusion); pass `kind=memory` explicitly for the pre-1.34 legacy envelope. With no code engine configured, a default search degrades to keyword-only code results with a warning — it never refuses. (1.34.0) [ADR-0088](docs/adr/0088-code-search-surface-kind-envelope-no-fusion.md) · [How-to](docs/how-to/search-the-code-corpus.md)
 - **`project_id_token_get` mints and registers a project id.** (1.33.2) [ADR-0089](docs/adr/0089-the-project-id-is-a-guidv7-and-that-is-not-access-control.md)
 - **`memory_performance` now reports the maintenance-job, embed-drain, replace-lock and query-truncation series.** (1.33.2) [ADR-0091](docs/adr/0091-the-event-pump-never-blocks-a-producer.md)
 - **Two knobs bound the embedding engine.** `settings model threads <n>` caps ORT intra-op threads; `settings maintenance embed-rows-per-run <n>` sets the per-tick drain. `doctor` shows the effective thread count. (1.33.0) [ADR-0091](docs/adr/0091-the-event-pump-never-blocks-a-producer.md)

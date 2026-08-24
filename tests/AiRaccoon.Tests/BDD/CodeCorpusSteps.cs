@@ -566,6 +566,18 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
     [Given("^code chunks stored pending$")]
     public Task GivenCodeChunksStoredPending() => WhenCodeFileIngested();
 
+    [Given("^a memory entry matching the same query$")]
+    public async Task GivenMemoryEntryMatchingSameQuery()
+    {
+        await Ctx.MemoryTools.Write(DefaultProject, $"{_searchQuery} memory content");
+    }
+
+    [Then("^the memory results are present and unaffected$")]
+    public void ThenMemoryResultsPresentAndUnaffected()
+    {
+        ThenResponseHasResultsKeyWithHits();
+    }
+
     [Then("^its chunks are stored in the code corpus with embed_state \"([^\"]*)\"$")]
     public async Task ThenChunksStoredWithEmbedState(string embedState)
     {

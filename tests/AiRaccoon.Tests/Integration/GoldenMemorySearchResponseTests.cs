@@ -88,7 +88,8 @@ public sealed class GoldenMemorySearchResponseTests : IAsyncLifetime
             new QueryGuardService(_settings), new MemoryWriteService(_store, new FakePromotionQueue()),
             new NoOpMeasurementRecorder(), NullLogger<MemoryTools>.Instance);
 
-        var response = await tools.Search("acme", "quick fox", cancellationToken: TestContext.Current.CancellationToken);
+        var response = await tools.Search("acme", "quick fox", kind: "memory",
+            cancellationToken: TestContext.Current.CancellationToken);
 
         var captured = NormalizeCorrelationId(JsonSerializer.SerializeToNode(response, JsonOptions)!.AsObject());
         var golden = JsonNode.Parse(await File.ReadAllTextAsync(TestData.RepoFile(GoldenRelativePath),

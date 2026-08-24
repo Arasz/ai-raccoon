@@ -88,6 +88,22 @@ searchable versus FTS5-only).
 
 ## Amendments
 
+### 2026-08-24 — the default `kind` is `both`, not `memory`
+
+Decision 1's default changed from `"memory"` to `"both"`: a caller who omits `kind` now gets
+both sections. The compatibility promise that motivated the original default (every existing
+caller sees today's envelope) is preserved for callers who pass `kind=memory` explicitly —
+that path serializes the exact legacy shape, still pinned by the golden-response test. A
+default `kind=both` search with no code engine configured degrades, never refuses: memory
+results come back normally and the code section is FTS5-only with an
+`engine-not-configured` warning (ADR-0085's degradation rule applies unchanged). The
+`search_quality`/correlation-id exclusions follow the requested kind exactly as before — a
+default search is excluded from both, like any other `kind=both` call.
+
+Everything else in this ADR —
+the `kind` parameter, the `results`/`code` envelope, the no-fusion ruling, the empty-section
+behaviour for `scope=shared` — is unchanged and still in force.
+
 ### 2026-08-22 — the code window in Decision 1 is 510, not 126 (issue #422, PR #453)
 
 Decision 1 above said "the 126-token manifest window". That number came from an exploration note

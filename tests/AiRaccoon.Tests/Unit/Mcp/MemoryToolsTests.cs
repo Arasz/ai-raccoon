@@ -311,7 +311,7 @@ public class MemoryToolsTests
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
 
-        var envelope = await tools.Search("acme", "widgets", cancellationToken: TestContext.Current.CancellationToken);
+        var envelope = await tools.Search("acme", "widgets", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
         var correlationId = envelope.Meta.CorrelationId.ShouldNotBeNull();
 
         recorder.Recorded.Select(m => m.Name).ShouldBe(SearchTimings.SeriesNames, ignoreOrder: true);
@@ -334,7 +334,7 @@ public class MemoryToolsTests
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
 
-        var envelope = await tools.Search("acme", "widgets", cancellationToken: TestContext.Current.CancellationToken);
+        var envelope = await tools.Search("acme", "widgets", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
         var correlationId = envelope.Meta.CorrelationId.ShouldNotBeNull();
 
         var fusion = recorder.Recorded.Where(m => FusionDiff.MetricNames.Contains(m.Name)).ToList();
@@ -354,7 +354,7 @@ public class MemoryToolsTests
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
 
-        await tools.Search("acme", "widgets", cancellationToken: TestContext.Current.CancellationToken);
+        await tools.Search("acme", "widgets", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
 
         _store.Fusion.ShouldBeNull();
         recorder.Recorded.ShouldNotContain(m => FusionDiff.MetricNames.Contains(m.Name));
@@ -374,7 +374,7 @@ public class MemoryToolsTests
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance, time);
 
-        await tools.Search("acme", "widgets", cancellationToken: TestContext.Current.CancellationToken);
+        await tools.Search("acme", "widgets", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
 
         recorder.Recorded.ShouldAllBe(m => m.RecordedAt == FixedNow);
     }
@@ -388,7 +388,7 @@ public class MemoryToolsTests
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
 
-        var envelope = await tools.Search("acme", "widgets", cancellationToken: TestContext.Current.CancellationToken);
+        var envelope = await tools.Search("acme", "widgets", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data.ShouldNotBeNull();
         recorder.Recorded.ShouldBeEmpty("the throwing recorder never got to append anything");
@@ -408,7 +408,7 @@ public class MemoryToolsTests
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
 
-        await tools.Search("acme", "widgets", cancellationToken: TestContext.Current.CancellationToken);
+        await tools.Search("acme", "widgets", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
 
         recorder.CallCount.ShouldBe(1,
             "the first phase measurement's write fails and RecordPhaseMeasurements' loop stops there — nothing retries it");

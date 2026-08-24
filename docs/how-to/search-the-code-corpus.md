@@ -15,7 +15,9 @@ This downloads and activates `faxenoff/code-daemon-embed-v1` (187 MB, 768-dim) i
 for details.
 
 Without a code engine, `kind=code` and `kind=both` searches degrade to FTS5-only
-(keyword matching, no vector similarity) and the server emits a warning.
+(keyword matching, no vector similarity) and the server emits a warning. The
+default `kind=both` search behaves the same way: memory results come back
+normally, code results are keyword-only, and the response carries the warning.
 
 ## What gets indexed
 
@@ -43,7 +45,22 @@ code corpus. The two corpora are disjoint by design.
 Returns a `code` array with hits carrying `lineStart`/`lineEnd` instead of
 `chunkIndex`/`totalChunks`. The `results` key is present but empty.
 
-### Memory only (default)
+### Memory only (legacy envelope)
+
+```json
+{
+  "projectId": "<your-project-id>",
+  "query": "how does the RRF fusion work",
+  "kind": "memory"
+}
+```
+
+Passing `kind=memory` searches only the memory bank. No `code`
+key appears in the response. This is the pre-1.34 behavior, still available
+explicitly — but the default is now `both`, so omit `kind` only when you want
+both corpora.
+
+### Both corpora (default)
 
 ```json
 {
@@ -52,21 +69,10 @@ Returns a `code` array with hits carrying `lineStart`/`lineEnd` instead of
 }
 ```
 
-Omitting `kind` (or passing `kind=memory`) searches only the memory bank. No `code`
-key appears in the response. This is the legacy behavior, unchanged.
-
-### Both corpora
-
-```json
-{
-  "projectId": "<your-project-id>",
-  "query": "how does the RRF fusion work",
-  "kind": "both"
-}
-```
-
-Runs both hybrids independently and returns both sections. Useful when you do not
-know whether the answer lives in memory or in source.
+Omitting `kind` (or passing `kind=both`) runs both hybrids independently and
+returns both sections. Useful when you do not know whether the answer lives in
+memory or in source. With no code engine configured, the memory section is
+normal and the code section is keyword-only (FTS5) with a warning.
 
 ## Reading a full code chunk
 

@@ -24,10 +24,17 @@ Feature: Code corpus
         # Plan §3.6: keys are "results" (existing) and "code" (new); kind=memory
         # serializes the exact legacy shape (no "code" key at all, via
         # [JsonIgnore(Condition = WhenWritingNull)]); kind=code/both always carry both
-        # keys. Default kind is "memory" — memory behavior is unchanged by default.
-        Scenario: The default kind searches memory only, with the legacy envelope
+        # keys. Default kind is "both" since 1.34.0 (was "memory") — a default search
+        # runs both corpora's hybrids independently, no cross-corpus fusion.
+        Scenario: The default kind searches both corpora
             Given a project with memory entries and code chunks
             When I call memory_search for the project without a kind
+            Then the response contains a "results" key with the memory hits
+            And the response contains a "code" key with the code hits
+
+        Scenario: kind=memory keeps the legacy envelope with no code key
+            Given a project with memory entries and code chunks
+            When I call memory_search for the project with kind "memory"
             Then the response contains a "results" key with the memory hits
             And the response contains no "code" key
 
@@ -148,6 +155,15 @@ Feature: Code corpus
             And code chunks stored pending
             When I call memory_search for the project with kind "code"
             Then the code section is served from full-text search only
+            And the response carries a warning that vector search is unavailable
+
+        Scenario: the default kind=both search degrades to FTS5-only with a warning when unconfigured
+            Given a project with no code embedding engine configured
+            And code chunks stored pending
+            And a memory entry matching the same query
+            When I call memory_search for the project without a kind
+            Then the memory results are present and unaffected
+            And the code section is served from full-text search only
             And the response carries a warning that vector search is unavailable
 
         Scenario: A configured-but-unloadable code engine refuses code search only
