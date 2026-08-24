@@ -41,6 +41,7 @@ public sealed class SourceIdentityTests : IDisposable
     private readonly Dictionary<string, string> _hashMap;
     private readonly ITestOutputHelper _output;
     private readonly SqliteMemoryStore _store;
+    private readonly SqliteMemoryStore _pinnedStore;
 
     public SourceIdentityTests(ITestOutputHelper output)
     {
@@ -64,6 +65,19 @@ public sealed class SourceIdentityTests : IDisposable
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
             TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
+
+        // The S2 gate searches a second copy with pinned query vectors (ADR-0050 pattern): the
+        // bundled u8s8 model puts ADR-0006 exactly on this gate's rank-3/4 boundary, so the live
+        // embedding made the verdict a function of the host CPU — arm64 passes at 3, VNNI/non-VNNI
+        // x64 flips to 4 (nightly #575, docs/adr/0049). The other gates keep the live path.
+        var pinnedRoot = TestData.CreateTempRoot("ai-raccoon-source-identity-pinned");
+        var pinnedDbPath = Path.Combine(pinnedRoot, "memory.db");
+        File.Copy(ResolveBundledDbPath(), pinnedDbPath);
+        var pinnedFactory = new SqliteConnectionFactory(
+            new InfrastructureOptions { DataRoot = pinnedRoot, Rid = "osx-arm64", Scope = InstallScope.User },
+            NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = pinnedRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
+        _pinnedStore = TestData.CreateMemoryStore(pinnedFactory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(pinnedFactory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
+            PinnedQueryVectors.EmbeddingService(), null, null, null, null, null, null, null);
 
         // Derives structured-path -> hash directly from the regenerated corpus (WP4b,
         // docs/plans/2026-08-14-code-quality-improvement-plan.md) instead of the retired
@@ -99,13 +113,13 @@ public sealed class SourceIdentityTests : IDisposable
         }
     }
 
-    /// <summary>S2 (docs/plans/retrieval-improvement-c.md §3 Wave 2): the Decision-chunk's own rank is logged, not asserted — Wave 6's dual-vector structure signal is the target for that.</summary>
+    /// <summary>S2 (docs/plans/retrieval-improvement-c.md §3 Wave 2): the Decision-chunk's own rank is logged, not asserted — Wave 6's dual-vector structure signal is the target for that. Searches the pinned-vector copy (ADR-0050 pattern): with the live query embedding this verdict was a function of the host CPU — arm64 passes at 3, x64 flips to 4 (docs/adr/0049; nightly reds #527/#575).</summary>
     [Fact]
     public async Task S2_SectionQuery_FindsItsFileWithinTop3_AndLogsDecisionChunkRank()
     {
         var hashMap = _hashMap;
 
-        var results = (await _store.SearchAsync(new SearchQuery(ProjectId, "What does ADR-0006 decide?",
+        var results = (await _pinnedStore.SearchAsync(new SearchQuery(ProjectId, "What does ADR-0006 decide?",
             SearchScope.Project, Limit: 20, MinRelativeScore: 0.0), TestContext.Current.CancellationToken)).Results;
 
         var (fileHit, fileRank) = FindRank(results, r => string.Equals(r.SourceFile, AdrSource, StringComparison.Ordinal));
