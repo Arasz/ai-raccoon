@@ -92,6 +92,14 @@ jobs:
     timeout-minutes: 15
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: true
+      # #150 crash class: build-slow captures dumps; fast must too (diagnose-fast-tests —
+      # a host crash here previously left no evidence to triage).
+      DOTNET_DbgEnableMiniDump: 1
+      DOTNET_DbgMiniDumpType: 2
+      DOTNET_DbgMiniDumpName: ${{ github.workspace }}/dumps/coredump.%p.dmp
+      # diagnose-fast-tests: a crashed build/pack step must not leave MSBuild node-reuse
+      # processes spinning on the runner for the rest of the run.
+      MSBUILDDISABLENODEREUSE: 1
     steps:
       - name: Skip (doc-only change)
         if: needs.changes.outputs.code != 'true'
@@ -132,6 +140,7 @@ jobs:
     timeout-minutes: 15
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: true
+      MSBUILDDISABLENODEREUSE: 1
     steps:
       - name: Skip (doc-only change)
         if: needs.changes.outputs.code != 'true'
@@ -181,6 +190,7 @@ jobs:
       DOTNET_DbgEnableMiniDump: 1
       DOTNET_DbgMiniDumpType: 2
       DOTNET_DbgMiniDumpName: ${{ github.workspace }}/dumps/coredump.%p.dmp
+      MSBUILDDISABLENODEREUSE: 1
     steps:
       - name: Skip (doc-only change)
         if: needs.changes.outputs.code != 'true'

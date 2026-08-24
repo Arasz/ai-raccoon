@@ -157,21 +157,35 @@ public sealed class NodeRunnerTests : IDisposable
     public async Task ConcurrentStartsOnSamePort_ExactlyOneOwns_TheOtherAttachesOrReturnsPortInUse()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
-        using var lease = LoopbackPort.Reserve();
-        var port = lease.Port;
         var secondRoot = TestData.CreateTempRoot("ai-raccoon-serve-race");
         try
         {
-            var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            var firstTask = ServeHarness.StartAsync(["--data-root", _dataRoot, "serve", "--port", port.ToString()], gate: gate.Task);
-            var secondTask = ServeHarness.StartAsync(["--data-root", secondRoot, "serve", "--port", port.ToString()], gate: gate.Task);
-            // Both runners bind only once the gate opens: hold the number until then.
-            lease.ReleaseForBind();
-            gate.SetResult();
-            await using var first = await firstTask;
-            await using var second = await secondTask;
+            // diagnose-fast-tests: ReleaseForBind→bind is a real window in which a parallel serve
+            // test can seize the freed port — both racers then see PortInUse, which is a third-party
+            // steal, not a defect in the race under test. Retry the race on a fresh port before failing.
+            ServeHarness first = null!, second = null!;
+            var exits = Array.Empty<int>();
+            for (var attempt = 0; attempt < 3; attempt++)
+            {
+                using var lease = LoopbackPort.Reserve();
+                var port = lease.Port;
+                var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                var firstTask = ServeHarness.StartAsync(["--data-root", _dataRoot, "serve", "--port", port.ToString()], gate: gate.Task);
+                var secondTask = ServeHarness.StartAsync(["--data-root", secondRoot, "serve", "--port", port.ToString()], gate: gate.Task);
+                // Both runners bind only once the gate opens: hold the number until then.
+                lease.ReleaseForBind();
+                gate.SetResult();
+                first = await firstTask;
+                second = await secondTask;
+                exits = await Task.WhenAll(first.Exit, second.Exit);
+                if (exits.Count(exit => exit == ExitCode.Success) >= 1)
+                {
+                    break;
+                }
 
-            var exits = await Task.WhenAll(first.Exit, second.Exit);
+                await first.DisposeAsync();
+                await second.DisposeAsync();
+            }
 
             exits.ShouldAllBe(exit => exit == ExitCode.Success || exit == ExitCode.PortInUse);
             exits.Count(exit => exit == ExitCode.Success).ShouldBeGreaterThanOrEqualTo(1);
@@ -199,6 +213,9 @@ public sealed class NodeRunnerTests : IDisposable
             {
                 run.Stderr.ShouldNotContain("   at ");
             }
+
+            await first.DisposeAsync();
+            await second.DisposeAsync();
         }
         finally
         {
