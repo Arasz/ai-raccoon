@@ -26,8 +26,7 @@ public sealed class SqliteCodeEngineStore(ISqliteConnectionFactory factory, IEmb
 
         // B1: the CLI's own pre-flight (SettingsCommands.ModelSetCodeLocalAsync) is only a fast
         // local check — the HTTP settings endpoint (SettingsEndpoint.MapSettings) calls THIS
-        // method directly with no CLI in the path, so this is the only refusal that actually
-        // protects the code engine's contract. Nothing is written when a refusal throws.
+        // method directly with no CLI in the path. Nothing is written when a refusal throws.
         // #472: every refusal leg below throws CodeEngineActivationRefusedException (an
         // InvalidOperationException subtype) so the endpoint can catch just this refusal and
         // answer 4xx with the reason, instead of it escaping as a bare 500.
@@ -48,8 +47,6 @@ public sealed class SqliteCodeEngineStore(ISqliteConnectionFactory factory, IEmb
         // is accepted: under-filled chunks are a retrieval-quality trade, not a correctness fault.
         // The equality this used to require is what made the flagship model unactivatable, because
         // the constant it compared against was derived from a claim the graph contradicts.
-        // Dimension is deliberately NOT a gate (vec-code-unfix-dim): any manifest dimension is
-        // accepted, and vec_code is reconciled to it inside this same transaction below.
         var chunkBudget = embeddings.ResolveChunkBudgetFor(new EmbeddingSettings("local", fullPath, null, null));
         if (chunkBudget < CodeChunker.DefaultBudget)
         {
@@ -84,11 +81,6 @@ public sealed class SqliteCodeEngineStore(ISqliteConnectionFactory factory, IEmb
                 new { key = EmbeddingSettingsKeys.CodeDimensions, value = descriptor.Dimensions.ToString(CultureInfo.InvariantCulture) },
                 transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
 
-            // Bring vec_code to the manifest's dimension BEFORE the invalidation, in the SAME
-            // transaction: a crash mid-activation then rolls back to the old, fully-consistent bank
-            // instead of leaving a 1024 engine against a 768 index (rows would hit MaxEmbedAttempts
-            // and be abandoned). The triggers survive the DROP and bind to the recreated table by
-            // name; MarkAllCodeEmbeddedPending below empties it through vec_code_pending.
             await vecDimensions.ReconcileAsync(connection, transaction, descriptor.Dimensions,
                 VecDimensionReconciler.CodeVecTables, cancellationToken).ConfigureAwait(false);
 

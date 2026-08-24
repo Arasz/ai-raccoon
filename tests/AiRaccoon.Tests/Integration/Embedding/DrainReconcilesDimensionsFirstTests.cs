@@ -73,10 +73,6 @@ public sealed class DrainReconcilesDimensionsFirstTests
 
         public long EmbeddedRowsWhenCalled { get; private set; } = -1;
 
-        public async Task<bool> ReconcileAsync(SqliteConnection _, int targetDimension,
-            CancellationToken cancellationToken) =>
-            await ReconcileAsync(_, null, targetDimension, VecDimensionReconciler.MemoryVecTables, cancellationToken);
-
         public async Task<bool> ReconcileAsync(SqliteConnection _, SqliteTransaction? transaction,
             int targetDimension, IReadOnlyCollection<string> tables, CancellationToken cancellationToken)
         {

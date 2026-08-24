@@ -248,9 +248,6 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
     private async Task<int> ActivateCodeDirectoryAsync(string fullPath, ICodeEngineStore codeEngine,
         StandardStreams streams, CancellationToken cancellationToken)
     {
-        // The manifest pre-flight: a missing/invalid manifest surfaces the loader's own message.
-        // Dimensions are deliberately NOT checked here (vec-code-unfix-dim) — the store accepts
-        // any manifest dimension and reconciles vec_code to it.
         new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator())
             .Load(fullPath);
 

@@ -58,13 +58,9 @@ public interface ICodeEmbedder
     Task<bool> ReconcileFingerprintAsync(SqliteConnection connection, CancellationToken cancellationToken);
 
     /// <summary>
-    ///     Brings `vec_code` to the dimension the configured code engine embeds at (D3 mirror for
-    ///     the code corpus, vec-code-unfix-dim): reads `embedding.codeModel` (blank → no-op, false),
-    ///     resolves the target from `embedding.codeDimensions` (missing → 768, the pre-1.35
-    ///     default), and recreates the table when missing or mismatched. DDL-only — never touches
-    ///     row state, so a reconciled-away table degrades to FTS-only until the next activation or
-    ///     fingerprint change, exactly like the memory bank's open reconcile. Server-only by
-    ///     construction: called from NodeRunner's open path, never from a CLI verb.
+    ///     Brings `vec_code` to the configured code engine's dimension (D3 mirror for the code
+    ///     corpus): recreates the table when missing or mismatched; DDL-only, never touches row
+    ///     state; missing `embedding.codeDimensions` defaults to 768. Server-only by construction.
     /// </summary>
     Task<bool> ReconcileVecCodeDimensionsAsync(SqliteConnection connection, CancellationToken cancellationToken);
 }

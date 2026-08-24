@@ -8,16 +8,10 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 /// <summary>Brings the vec0 tables to the dimension the active engine embeds at (plan D3).</summary>
 public interface IVecDimensionReconciler
 {
-    /// <summary>Recreates the memory tables (`vec_entries`/`vec_structure`) at
-    /// <paramref name="targetDimension" /> when either is missing or declared at another dimension.
-    /// True when the bank changed.</summary>
-    Task<bool> ReconcileAsync(SqliteConnection connection, int targetDimension, CancellationToken cancellationToken);
-
-    /// <summary>Generalized form: reconciles exactly <paramref name="tables" /> at
-    /// <paramref name="targetDimension" />. When <paramref name="transaction" /> is null the
-    /// reconciler begins and commits its own transaction; when it is passed, the caller owns the
-    /// transaction — the reconciler never begins, commits or rolls back (the activation path
-    /// needs the DDL to roll back with its settings write).</summary>
+    /// <summary>Recreates <paramref name="tables" /> at <paramref name="targetDimension" /> when
+    /// any is missing or declared at another dimension. When <paramref name="transaction" /> is
+    /// passed the caller owns it (the reconciler never begins, commits or rolls back); otherwise
+    /// the reconciler begins and commits its own. True when any table changed.</summary>
     Task<bool> ReconcileAsync(SqliteConnection connection, SqliteTransaction? transaction,
         int targetDimension, IReadOnlyCollection<string> tables, CancellationToken cancellationToken);
 }
@@ -38,10 +32,6 @@ public sealed partial class VecDimensionReconciler : IVecDimensionReconciler
 
     /// <summary>The code corpus's vec0 table.</summary>
     public static readonly IReadOnlyCollection<string> CodeVecTables = ["vec_code"];
-
-    public Task<bool> ReconcileAsync(SqliteConnection connection, int targetDimension,
-        CancellationToken cancellationToken) =>
-        ReconcileAsync(connection, transaction: null, targetDimension, MemoryVecTables, cancellationToken);
 
     public async Task<bool> ReconcileAsync(SqliteConnection connection, SqliteTransaction? transaction,
         int targetDimension, IReadOnlyCollection<string> tables, CancellationToken cancellationToken)

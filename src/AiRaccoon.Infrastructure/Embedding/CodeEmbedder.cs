@@ -189,9 +189,7 @@ public sealed partial class CodeEmbedder(IEmbeddingService embeddings, ILogger<C
 
         // The SAME invalidation ICodeEngineStore.ActivateCodeEngineAsync performs: update the
         // stored fingerprint and mark every embedded code row pending, in one transaction — the
-        // vec_code_pending trigger empties vec_code the instant this commits. The manifest's
-        // dimension is recorded and vec_code reconciled in the same transaction: a manifest
-        // swapped to another dimension (same path) must not leave the index at the old width.
+        // vec_code_pending trigger empties vec_code the instant this commits.
         var dimensions = embeddings.ResolveDimensions(SettingsFor(codeModel));
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -227,9 +225,6 @@ public sealed partial class CodeEmbedder(IEmbeddingService embeddings, ILogger<C
             return false;
         }
 
-        // Missing/unparseable defaults to the pre-1.35 dimension (768) — every bank written
-        // before codeDimensions existed was gated to 768 by the activation refusal, so the
-        // default is the actual shape, not a guess (ADR-0083 fallback-to-constants precedent).
         var stored = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
             MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.CodeDimensions },
             cancellationToken: cancellationToken)).ConfigureAwait(false);

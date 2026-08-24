@@ -156,7 +156,8 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
             return;
         }
 
-        await reconciler.ReconcileAsync(connection, embeddings.ResolveDimensions(settings), cancellationToken)
+        await reconciler.ReconcileAsync(connection, transaction: null,
+            embeddings.ResolveDimensions(settings), VecDimensionReconciler.MemoryVecTables, cancellationToken)
             .ConfigureAwait(false);
     }
 

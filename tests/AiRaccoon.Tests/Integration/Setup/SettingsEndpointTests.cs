@@ -173,24 +173,18 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
         body.ShouldContain(EmbeddingManifest.FileName);
     }
 
-    /// <summary>#472: same mapping for the other refusal leg — a manifest that isn't 768-dimensional.</summary>
+    /// <summary>vec-code-unfix-dim: dimensions are no longer a refusal leg — a 1024 manifest
+    /// activates via the endpoint; the chunk-budget gate (next test) is the remaining refusal.</summary>
     [Fact]
-    public async Task PostModelCode_Non768Manifest_IsABadRequest_WithTheReasonInTheBody()
+    public async Task PostModelCode_Non768Manifest_Activates()
     {
-        var dir = Path.Combine(_dataRoot, "code-model-non768");
-        Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "sentencepiece.bpe.model"), "tokenizer");
-        File.WriteAllText(Path.Combine(dir, "model.onnx"), "model");
-        File.Copy(TestData.RepoFile("tests/AiRaccoon.Tests/Resources/ManifestFixtures/code-daemon-embed-v1-non768.json"),
-            Path.Combine(dir, EmbeddingManifest.FileName));
+        var dir = Path.Combine(_dataRoot, "code-model-1024");
+        TestData.SeedCodeManifestDirectory(dir, 1024);
 
         var response = await _client.PostAsJsonAsync(SettingsProtocol.ModelCodePath,
             new ModelCodeActivationRequest(dir), TestContext.Current.CancellationToken);
 
-        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
-        body.ShouldContain("1024");
-        body.ShouldContain(CodeCorpusSchema.EmbeddingDimensions.ToString());
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 
     /// <summary>#472: same mapping for the third refusal leg — a manifest whose context window
