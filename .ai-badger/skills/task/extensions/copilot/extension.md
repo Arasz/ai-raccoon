@@ -10,7 +10,7 @@ sends you to the product for the specifics, rather than hardcoding a model lineu
 
 ## What is different from the Claude lane
 
-The base skill's Phase 2 says "dispatch implementation subagents". Copilot has no in-session
+The base skill's Phase 3 says "dispatch implementation subagents". Copilot has no in-session
 subagent primitive equivalent to Claude Code's `Agent` tool, so **the phases run sequentially in
 one session** rather than fanning out. That changes two things and nothing else:
 
@@ -33,7 +33,7 @@ releases:
 - **Check the picker and your plan's usage page** before assuming a model is free to use in a
   loop. Premium requests are metered.
 - **Match the model to the phase, not to the task.** Use the strongest reasoning model available
-  for decomposition (Phase 1) and for the correctness/architecture review (Phase 3); use a
+  for decomposition (Phase 2 PLANNING) and for the correctness/architecture review (Phase 4); use a
   cheaper one for executing an already-decided spec.
 - **Say which model you switched to and why** in the task record, the same way the Claude
   extension prefixes dispatches with a lane name. A model switch that nobody recorded is a

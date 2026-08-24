@@ -611,6 +611,11 @@ def pre_llm_inject_context(
     if pending_reminder:
         parts.append(pending_reminder)
 
+    gf = _load_grounded_feedback()
+    pending_feedback = None if gf is None else gf.pop_pending_feedback(project)
+    if pending_feedback:
+        parts.append(pending_feedback)
+
     # Framework version — see `versions_diverge`; a patch-only bump is silent (B10).
     fw_version = _read_framework_version()
     if fw_version:
@@ -742,6 +747,31 @@ DEFAULT_COMMIT_ESCALATE_AFTER = 3
 # different lifecycle from the marker's threshold-crossing debounce. Keeping them apart
 # means this addition can never corrupt the marker schema the Claude/Copilot hook depends on.
 PENDING_REMINDER_FILE = Path.home() / ".ai-badger" / "commit-reminder" / "pending.json"
+GROUND_FEEDBACK_MODULE_NAME = "ai_badger_grounded_feedback"
+
+
+def _load_grounded_feedback() -> Optional[Any]:
+    """Import the sibling grounded_feedback module lazily; None when absent, or it's broken."""
+    return _load_sibling_module(GROUND_FEEDBACK_MODULE_NAME, "grounded_feedback.py", "gf")
+
+
+def _load_pending_reminders() -> Dict[str, str]:
+    """Load the pending-reminder file; ``{}`` on missing/bad JSON or no module."""
+    gf = _load_grounded_feedback()
+    return {} if gf is None else gf.load_pending_reminders(PENDING_REMINDER_FILE)
+
+
+def _set_pending_reminder(project: str, message: str) -> None:
+    """Stash ``message`` for ``project``; a no-op when the sibling module is absent."""
+    gf = _load_grounded_feedback()
+    if gf is not None:
+        gf.set_pending_reminder(project, message, PENDING_REMINDER_FILE)
+
+
+def _pop_pending_reminder(project: str) -> Optional[str]:
+    """Return and clear the pending reminder for ``project``, or None."""
+    gf = _load_grounded_feedback()
+    return None if gf is None else gf.pop_pending_reminder(project, PENDING_REMINDER_FILE)
 
 
 def _load_commit_reminder() -> Optional[Any]:
@@ -775,42 +805,6 @@ def _commit_escalate_after() -> int:
 def _now_iso() -> str:
     """UTC timestamp for the moment a command first went unanswered."""
     return datetime.now(timezone.utc).isoformat()
-
-
-def _load_pending_reminders() -> Dict[str, str]:
-    """Load the pending-reminder file; `{}` on missing file, read error, or malformed JSON."""
-    try:
-        raw = PENDING_REMINDER_FILE.read_text(encoding="utf-8")
-    except OSError:
-        return {}
-    try:
-        data = json.loads(raw)
-    except ValueError:
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
-def _save_pending_reminders(pending: Dict[str, str]) -> None:
-    """Persist the pending-reminder file, creating parent directories as needed."""
-    PENDING_REMINDER_FILE.parent.mkdir(parents=True, exist_ok=True)
-    PENDING_REMINDER_FILE.write_text(json.dumps(pending), encoding="utf-8")
-
-
-def _set_pending_reminder(project: str, message: str) -> None:
-    """Stash ``message`` for ``project``, keyed by its resolved absolute path."""
-    pending = _load_pending_reminders()
-    pending[str(Path(project).resolve())] = message
-    _save_pending_reminders(pending)
-
-
-def _pop_pending_reminder(project: str) -> Optional[str]:
-    """Return and clear the pending reminder for ``project``, or None if there isn't one."""
-    pending = _load_pending_reminders()
-    key = str(Path(project).resolve())
-    message = pending.pop(key, None)
-    if message is not None:
-        _save_pending_reminders(pending)
-    return message
 
 
 def _maybe_remind_commit(tool_name: str, cwd: str) -> None:
@@ -938,6 +932,17 @@ def post_tool_observer(tool_name: str = "", result: str = "",
         _maybe_remind_commit(tool_name, cwd)
     except Exception:  # pylint: disable=broad-exception-caught
         logger.warning("commit reminder check failed", exc_info=True)
+
+    try:
+        gf = _load_grounded_feedback()
+        if gf is not None:
+            gf.stash_if_failure(
+                tool_name, result, _project_cwd(cwd),
+                status=str(kwargs.get("status", "ok")),
+                error_type=str(kwargs.get("error_type", "") or ""),
+                debug_fn=_debug)
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.warning("grounded feedback stash failed", exc_info=True)
 
     try:
         _maybe_record_memory_consult(tool_name, args, cwd, session_id)

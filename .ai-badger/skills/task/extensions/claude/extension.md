@@ -43,7 +43,7 @@ Anthropic clarifies which article is current.
 
 ## Claude model lanes
 
-- **Opus — planning and the quality gate.** Phase 1 decomposition and the Phase 3 correctness +
+- **Opus — planning and the quality gate.** Phase 2 decomposition and the Phase 4 correctness +
   architecture review. Also: adversarial review of another agent's claims, money or other
   derivation-heavy math, non-obvious root-cause debugging, and arbitration when two work
   packages disagree about a contract. Dispatch `model: "opus"` and prefix the call's

@@ -145,6 +145,16 @@
             "command": "if [ -f \"${CLAUDE_PROJECT_DIR}/.ai-badger/skills/semantica-knowledge-graph/scripts/semantica_export_autosave_hook.py\" ]; then python3 \"${CLAUDE_PROJECT_DIR}/.ai-badger/skills/semantica-knowledge-graph/scripts/semantica_export_autosave_hook.py\"; elif [ -f \".ai-badger/skills/semantica-knowledge-graph/scripts/semantica_export_autosave_hook.py\" ]; then python3 \".ai-badger/skills/semantica-knowledge-graph/scripts/semantica_export_autosave_hook.py\"; else echo '{\"systemMessage\": \"ai-badger: .ai-badger/skills/semantica-knowledge-graph/scripts/semantica_export_autosave_hook.py not found - hook skipped\"}'; fi"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f \"${CLAUDE_PROJECT_DIR}/.ai-badger/skills/prompt-markers/scripts/grounded_feedback_hook.py\" ]; then python3 \"${CLAUDE_PROJECT_DIR}/.ai-badger/skills/prompt-markers/scripts/grounded_feedback_hook.py\"; elif [ -f \".ai-badger/skills/prompt-markers/scripts/grounded_feedback_hook.py\" ]; then python3 \".ai-badger/skills/prompt-markers/scripts/grounded_feedback_hook.py\"; else echo '{\"systemMessage\": \"ai-badger: .ai-badger/skills/prompt-markers/scripts/grounded_feedback_hook.py not found - hook skipped\"}'; fi",
+            "timeout": 10
+          }
+        ]
       }
     ]
   }
