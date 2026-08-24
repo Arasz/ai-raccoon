@@ -2,7 +2,6 @@ using System.ComponentModel;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using JetBrains.Annotations;
-using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
 // ReSharper disable ExplicitCallerInfoArgument

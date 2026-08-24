@@ -1,12 +1,10 @@
 using System.Diagnostics;
 using System.Net;
 using System.Reflection;
-using System.Text;
 using System.Text.Json;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Observability;
-using AiRaccoon.Setup.Cli;
 using Shouldly;
 using Xunit;
 using AiRaccoon.Tests.TestHelpers;

@@ -5,7 +5,6 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Embedding;
-using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sync;
@@ -137,14 +136,10 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
 
     private void SeedManifestDirectory(string dir, int dimensions)
     {
-        Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "sentencepiece.bpe.model"), "tokenizer");
-        File.WriteAllText(Path.Combine(dir, "model.onnx"), "model");
-        var fixtureName = dimensions == CodeCorpusSchema.EmbeddingDimensions
-            ? "code-daemon-embed-v1.json"
-            : "code-daemon-embed-v1-non768.json";
-        var fixturePath = Path.Combine(AppContext.BaseDirectory, "Resources", "ManifestFixtures", fixtureName);
-        File.Copy(fixturePath, Path.Combine(dir, EmbeddingManifest.FileName));
+        // TestData's seeder rewrites the 768 fixture's dimensions line, keeping the 512-token
+        // window — the non-768 fixture's 128-token window would trip the chunk-budget gate, and
+        // the vec-code-unfix-dim scenarios must isolate the DIMENSION behavior.
+        TestData.SeedCodeManifestDirectory(dir, dimensions);
     }
 
     private static async Task<SqliteConnection> OpenRawAsync(string path, bool readOnly, bool runSchema, CancellationToken cancellationToken)
@@ -643,11 +638,15 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
     [When("^the user runs model code set local against that manifest's directory$")]
     public Task WhenUserRunsModelSetCodeLocal() => RunModelSetCodeLocalAsync();
 
-    [Then("^the command errors naming the required 768 dimensions$")]
-    public void ThenCommandErrorsNaming768()
+    [Then("^vec_code is reconciled to (\\d+) dimensions$")]
+    public async Task ThenVecCodeReconciledToDimensions(int dimensions)
     {
-        _lastError.ShouldNotBeNull("expected model code set local to refuse the manifest");
-        _lastError!.Message.ShouldContain(CodeCorpusSchema.EmbeddingDimensions.ToString());
+        await using var connection = await OpenRawAsync(Ctx.Factory.BankPath, readOnly: true, runSchema: false,
+            CancellationToken.None);
+        var ddl = await connection.QuerySingleAsync<string>(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'vec_code'");
+        ddl.ShouldContain($"float[{dimensions}]",
+            customMessage: "activation must reconcile vec_code to the manifest's dimension");
     }
 
     [Then("^no code engine setting is changed$")]

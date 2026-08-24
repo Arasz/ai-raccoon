@@ -3,9 +3,7 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Metrics;
 using AiRaccoon.Core.Observability;
 using AiRaccoon.Infrastructure.Embedding;
-using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tests.Unit.Observability;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -146,6 +144,9 @@ public sealed class EmbedDrainMetricsTests : IDisposable
 
         public Task<bool> HasPendingWorkAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
+
+        public Task<bool> ReconcileVecCodeDimensionsAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+            Task.FromResult(false);
 
         public Task<bool> ReconcileFingerprintAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
             throw new NotSupportedException();

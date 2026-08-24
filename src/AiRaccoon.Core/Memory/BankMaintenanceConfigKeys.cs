@@ -30,11 +30,9 @@ public static class BankMaintenanceConfigKeys
 
     public const int DefaultSearchQualityRetentionDays = 90;
 
-    public static int ParsePromotionDiscardRetentionDays(string? value) =>
-        int.TryParse(value, out var days) && days > 0 ? days : DefaultPromotionDiscardRetentionDays;
+    public static int ParsePromotionDiscardRetentionDays(string? value) => int.TryParse(value, out var days) && days > 0 ? days : DefaultPromotionDiscardRetentionDays;
 
-    public static int ParseSearchQualityRetentionDays(string? value) =>
-        int.TryParse(value, out var days) && days > 0 ? days : DefaultSearchQualityRetentionDays;
+    public static int ParseSearchQualityRetentionDays(string? value) => int.TryParse(value, out var days) && days > 0 ? days : DefaultSearchQualityRetentionDays;
 
     public static int ParseVacuumIntervalDays(string? value) =>
         int.TryParse(value, out var days) && days > 0

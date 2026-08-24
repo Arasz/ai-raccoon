@@ -39,8 +39,7 @@ public sealed class SentencePieceEmbeddingTokenizer : IEmbeddingTokenizer
         _unk = Special(specials, "<unk>", tokenizer.UnknownId);
     }
 
-    private static int Special(IReadOnlyDictionary<string, int>? specials, string token, int fallback) =>
-        specials is not null && specials.TryGetValue(token, out var id) ? id : fallback;
+    private static int Special(IReadOnlyDictionary<string, int>? specials, string token, int fallback) => specials is not null && specials.TryGetValue(token, out var id) ? id : fallback;
 
     /// <summary>
     ///     Maps a sentencepiece id onto the model's vocabulary. Fairseq-derived models (xlm-roberta,

@@ -1,4 +1,3 @@
-using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Microsoft.Extensions.Time.Testing;

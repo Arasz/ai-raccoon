@@ -1,4 +1,3 @@
-using System;
 using AiRaccoon.Core.Memory.QueryGuard.Structural;
 using Shouldly;
 using Xunit;

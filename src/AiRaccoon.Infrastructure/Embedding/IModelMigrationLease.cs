@@ -40,13 +40,13 @@ public sealed class SqliteModelMigrationLease(TimeProvider timeProvider) : IMode
     {
         var now = Now();
         return await ExecuteAsync(connection, MemorySql.AcquireModelMigrationLease,
-            new { owner = Owner, now, expiresAt = now + (long)LeaseTtl.TotalSeconds }, cancellationToken)
+                new { owner = Owner, now, expiresAt = now + (long)LeaseTtl.TotalSeconds }, cancellationToken)
             .ConfigureAwait(false) == 1;
     }
 
     public async Task<bool> TryRenewAsync(SqliteConnection connection, CancellationToken cancellationToken = default) =>
         await ExecuteAsync(connection, MemorySql.RenewModelMigrationLease,
-            new { owner = Owner, expiresAt = Now() + (long)LeaseTtl.TotalSeconds }, cancellationToken)
+                new { owner = Owner, expiresAt = Now() + (long)LeaseTtl.TotalSeconds }, cancellationToken)
             .ConfigureAwait(false) == 1;
 
     public async Task ReleaseAsync(SqliteConnection connection, CancellationToken cancellationToken = default) =>

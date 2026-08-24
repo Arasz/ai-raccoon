@@ -1,8 +1,6 @@
 using System.Runtime.InteropServices;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
-using AiRaccoon.Settings;
-using AiRaccoon.Setup;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;

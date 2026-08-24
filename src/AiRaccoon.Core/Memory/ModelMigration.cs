@@ -6,8 +6,13 @@ namespace AiRaccoon.Core.Memory;
 ///     re-embedding is owed — the only two states this record can be in, and the only transition
 ///     between them is <see cref="IsOpen" /> flipping false, made by the relay that drains it.
 /// </summary>
-public sealed record ModelMigration(string Provider, string? Model, string? BaseUrl, string Engine,
-    DateTimeOffset StartedAt, DateTimeOffset? FinishedAt)
+public sealed record ModelMigration(
+    string Provider,
+    string? Model,
+    string? BaseUrl,
+    string Engine,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? FinishedAt)
 {
     public bool IsOpen => FinishedAt is null;
 }

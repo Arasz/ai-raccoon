@@ -100,8 +100,7 @@ public sealed class KebabCaseEnumJsonConverter<TEnum> : JsonConverter<TEnum>
             $"'{raw}' is not a supported {typeof(TEnum).Name} value; supported values: {string.Join(", ", Supported())}");
     }
 
-    public override void Write(Utf8JsonWriter writer, TEnum value, JsonSerializerOptions options) =>
-        writer.WriteStringValue(SchemaName(value));
+    public override void Write(Utf8JsonWriter writer, TEnum value, JsonSerializerOptions options) => writer.WriteStringValue(SchemaName(value));
 
     private static IEnumerable<string> Supported() => Enum.GetValues<TEnum>().Select(SchemaName);
 

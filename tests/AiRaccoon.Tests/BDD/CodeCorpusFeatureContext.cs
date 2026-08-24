@@ -1,5 +1,4 @@
 using AiRaccoon.Access;
-using AiRaccoon.Core.Access;
 using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
@@ -57,14 +56,14 @@ public sealed class CodeCorpusFeatureContext : IDisposable
         TimeProvider = new FakeTimeProvider(FixedNow);
         Settings = new SqliteSettingsStore(Factory);
         FakeEmbeddingService = new FakeCodeEmbeddingService();
-        CodeEmbedder = new CodeEmbedder(FakeEmbeddingService, NullLogger<CodeEmbedder>.Instance);
+        CodeEmbedder = new CodeEmbedder(FakeEmbeddingService, NullLogger<CodeEmbedder>.Instance, new VecDimensionReconciler());
 
         WatchStore = new WatchStore(Factory);
         Store = ComposeStore();
         CodeSearch = new SqliteCodeSearchService(Factory, CodeEmbedder);
         CodeEngineStore = new SqliteCodeEngineStore(Factory, FakeEmbeddingService,
             new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
-            TestData.CreateManifestPoolingRepair());
+            TestData.CreateManifestPoolingRepair(), new VecDimensionReconciler());
         SearchQuality = new SqliteSearchQualityService(Factory, NullLogger<SqliteSearchQualityService>.Instance);
         ReindexJob = new CodeReindexJob(CodeEmbedder, EmbedDrainPump);
 
@@ -228,7 +227,7 @@ public sealed class CodeCorpusFeatureContext : IDisposable
             new JsonFileTypeHandler(TestData.RealJsonChunker(markdownChunker))
         ]);
         var embeddings = TestData.CreateEmbeddingService();
-        var embedder = new EntryEmbedder(embeddings, ModelMigrationLease, TimeProvider);
+        var embedder = new EntryEmbedder(embeddings, ModelMigrationLease, TimeProvider, new VecDimensionReconciler());
         var codeFileTypeMatcher = new CodeFileTypeMatcher();
         var codeIngestor = new CodeIngestor(codeFileTypeMatcher, new StubCodeChunker(), TimeProvider);
         var fileIngestor = new FileIngestor(matcher, sourceStore, TimeProvider, embeddings,

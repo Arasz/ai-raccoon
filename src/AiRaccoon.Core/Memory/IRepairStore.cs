@@ -17,12 +17,13 @@ public static class RepairKinds
 
     extension(RepairKind kind)
     {
-        public string ToKey() => kind switch
-        {
-            RepairKind.Reingest => Reingest,
-            RepairKind.ChunkIndex => ChunkIndex,
-            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "ai-raccoon: unknown repair kind")
-        };
+        public string ToKey() =>
+            kind switch
+            {
+                RepairKind.Reingest => Reingest,
+                RepairKind.ChunkIndex => ChunkIndex,
+                _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "ai-raccoon: unknown repair kind")
+            };
     }
 }
 

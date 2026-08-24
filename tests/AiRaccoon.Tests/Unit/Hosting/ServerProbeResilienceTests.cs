@@ -3,7 +3,6 @@ using System.Net.Sockets;
 using System.Text;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Resilience;
-using Polly;
 using Shouldly;
 using Xunit;
 

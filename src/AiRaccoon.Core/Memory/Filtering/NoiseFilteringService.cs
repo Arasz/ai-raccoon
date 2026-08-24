@@ -3,7 +3,7 @@ namespace AiRaccoon.Core.Memory.Filtering;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using AiRaccoon.Core.Memory;
+using Memory;
 
 public sealed class NoiseFilteringService(IEnumerable<INoiseFilterPolicy> policies) : INoiseFilteringService
 {
@@ -17,6 +17,7 @@ public sealed class NoiseFilteringService(IEnumerable<INoiseFilterPolicy> polici
                 return result;
             }
         }
+
         return NoiseFilterResult.Clean;
     }
 }

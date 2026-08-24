@@ -220,8 +220,7 @@ public sealed partial class AppRunner
         {
             settingsLoggerFactory = CreateCliLoggerFactory(cliInput.ServerConfig.Options);
             var loggerFactory = settingsLoggerFactory;
-            var lazyServerStore = new LazyServerSettingsStore(
-                ctx => _acquireServerSettingsStore(cliInput.ServerConfig, loggerFactory, ctx));
+            var lazyServerStore = new LazyServerSettingsStore(ctx => _acquireServerSettingsStore(cliInput.ServerConfig, loggerFactory, ctx));
             services.AddSingleton<ISettingsStore>(lazyServerStore);
             // ADR-0076: model embedding set routes the same way now — same instance, same acquired connection.
             services.AddSingleton<IModelMigrationStore>(lazyServerStore);
@@ -263,13 +262,11 @@ public sealed partial class AppRunner
 
     /// <summary>One-shot graphs get no host logging pipeline; quiet mode must still reach them
     /// or a quiet stdio bridge prints per-request HttpClient lines to the terminal (QA-4).</summary>
-    private static void ConfigureConsoleLogging(IServiceCollection services, InfrastructureOptions options) =>
-        services.AddLogging(builder => ConfigureCliLogging(builder, options));
+    private static void ConfigureConsoleLogging(IServiceCollection services, InfrastructureOptions options) => services.AddLogging(builder => ConfigureCliLogging(builder, options));
 
     /// <summary>Standalone twin of <see cref="ConfigureConsoleLogging" />: the settings-server acquire
     /// (ADR-0075 §5.1) needs an <see cref="ILoggerFactory" /> before the CLI-command DI graph exists.</summary>
-    private static ILoggerFactory CreateCliLoggerFactory(InfrastructureOptions options) =>
-        LoggerFactory.Create(builder => ConfigureCliLogging(builder, options));
+    private static ILoggerFactory CreateCliLoggerFactory(InfrastructureOptions options) => LoggerFactory.Create(builder => ConfigureCliLogging(builder, options));
 
     private static void ConfigureCliLogging(ILoggingBuilder builder, InfrastructureOptions options)
     {

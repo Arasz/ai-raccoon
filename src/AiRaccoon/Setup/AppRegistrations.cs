@@ -211,10 +211,7 @@ public static partial class AppRegistrations
         ///     <see cref="SqliteMemoryStore" />) needs it wherever <see cref="RegisterCoreMemoryServices" />
         ///     runs, including the narrower CLI graph that never registers this hosted service.
         /// </summary>
-        private void RegisterEmbedDrainServices()
-        {
-            services.AddHostedService<EmbedDrainService>();
-        }
+        private void RegisterEmbedDrainServices() => services.AddHostedService<EmbedDrainService>();
 
         /// <summary>
         ///     The capped buffer and its best-effort recorder alone (WP11): every graph that
@@ -255,7 +252,7 @@ public static partial class AppRegistrations
         {
             services.AddSingleton<IEventPump<EmbedDrainRequest>>(_ =>
                 new EventPump<EmbedDrainRequest>(
-                    new PumpTopic(EmbedDrainService.PumpCeiling, EmbedDrainService.PumpCapacity, Coalesce: true)));
+                    new PumpTopic(EmbedDrainService.PumpCeiling, EmbedDrainService.PumpCapacity, true)));
             services.AddSingleton<O200kTokenizer>();
             services.AddSingleton<TokenCount>(sp => new TokenCount(sp.GetRequiredService<O200kTokenizer>().CountTokens));
             services.AddRequiredSingleton<IMarkdownChunker, MarkdownChunker>();

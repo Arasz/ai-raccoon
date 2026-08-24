@@ -1,10 +1,7 @@
 using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
-using AiRaccoon.Infrastructure.Maintenance;
-using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -179,6 +176,9 @@ public sealed class EmbedDrainContinuousTests : IDisposable
         public Task<bool> HasPendingWorkAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
+        public Task<bool> ReconcileVecCodeDimensionsAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+            Task.FromResult(false);
+
         public Task<bool> ReconcileFingerprintAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
     }
@@ -213,6 +213,9 @@ public sealed class EmbedDrainContinuousTests : IDisposable
 
         public Task<bool> HasPendingWorkAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
+
+        public Task<bool> ReconcileVecCodeDimensionsAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+            Task.FromResult(false);
 
         public Task<bool> ReconcileFingerprintAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
             throw new NotSupportedException();

@@ -25,6 +25,7 @@ internal partial class NodeRunner(
     IEmbeddingAvailability
         embeddingAvailability,
     IEntryEmbedder entryEmbedder,
+    ICodeEmbedder codeEmbedder,
     ILogger<NodeRunner>
         logger) : INodeRunner
 {
@@ -121,6 +122,7 @@ internal partial class NodeRunner(
             await using (var connection = await connectionFactory.OpenBankAsync(ctx).ConfigureAwait(false))
             {
                 await entryEmbedder.ReconcileVecDimensionsAsync(connection, ctx).ConfigureAwait(false);
+                await codeEmbedder.ReconcileVecCodeDimensionsAsync(connection, ctx).ConfigureAwait(false);
             }
 
             await serverHost.StartAsync(ctx);

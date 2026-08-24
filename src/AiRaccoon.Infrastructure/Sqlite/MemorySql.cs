@@ -29,25 +29,25 @@ internal static class MemorySql
                                           """;
 
     public static readonly string SelectSourceByHashAndProject = $""""""
-                                                        SELECT e.path AS Path, e.value AS Value, e.source_file AS SourceFile, e.section AS Section,
-                                                               ms.source_type AS SourceType, ms.heading_path AS HeadingPath
-                                                       FROM entries e
-                                                       LEFT JOIN memory_source ms ON ms.id = e.source_id
-                                                       WHERE e.hash = @hash AND {ProjectRows.Of("e.")}
-                                                       ORDER BY {ProjectRows.CommittedFirst("e.")}
-                                                       LIMIT 1
-                                                       """""";
+                                                                   SELECT e.path AS Path, e.value AS Value, e.source_file AS SourceFile, e.section AS Section,
+                                                                          ms.source_type AS SourceType, ms.heading_path AS HeadingPath
+                                                                  FROM entries e
+                                                                  LEFT JOIN memory_source ms ON ms.id = e.source_id
+                                                                  WHERE e.hash = @hash AND {ProjectRows.Of("e.")}
+                                                                  ORDER BY {ProjectRows.CommittedFirst("e.")}
+                                                                  LIMIT 1
+                                                                  """""";
 
     public static readonly string SelectExtractionCandidates = $""""""
-                                                     SELECT e.hash AS Hash, e.path AS Path, e.value AS Value, e.source_file AS SourceFile,
-                                                            ms.source_type AS SourceType,
-                                                            e.rating AS Rating, e.access_count AS AccessCount, e.created_at AS CreatedAt,
-                                                            e.ttl_days AS TtlDays
-                                                     FROM entries e
-                                                     LEFT JOIN memory_source ms ON ms.id = e.source_id
-                                                     WHERE {ProjectRows.Of("e.")} AND e.embed_state = 'embedded'
-                                                       AND (@includeTtlRows = 1 OR e.ttl_days IS NULL)
-                                                     """""";
+                                                                SELECT e.hash AS Hash, e.path AS Path, e.value AS Value, e.source_file AS SourceFile,
+                                                                       ms.source_type AS SourceType,
+                                                                       e.rating AS Rating, e.access_count AS AccessCount, e.created_at AS CreatedAt,
+                                                                       e.ttl_days AS TtlDays
+                                                                FROM entries e
+                                                                LEFT JOIN memory_source ms ON ms.id = e.source_id
+                                                                WHERE {ProjectRows.Of("e.")} AND e.embed_state = 'embedded'
+                                                                  AND (@includeTtlRows = 1 OR e.ttl_days IS NULL)
+                                                                """""";
 
     public const string SelectSharedIndex = """"
                                             SELECT path AS Path, value AS Value
@@ -56,11 +56,11 @@ internal static class MemorySql
                                             """";
 
     public static readonly string SelectProjectIds = $""""
-                                           SELECT DISTINCT project_id AS ProjectId
-                                           FROM entries
-                                           WHERE {ProjectRows.Scope()}
-                                           ORDER BY project_id
-                                           """";
+                                                      SELECT DISTINCT project_id AS ProjectId
+                                                      FROM entries
+                                                      WHERE {ProjectRows.Scope()}
+                                                      ORDER BY project_id
+                                                      """";
 
     // Global content dedup (FR-NM-7; see docs/work/features-native-memory/native-memory.feature): the earliest committed row (workspace_id IS NULL) holding
     // this value, across every scope of the project — writing identical content returns it.
@@ -213,45 +213,45 @@ internal static class MemorySql
     // "Backed" means the same rows ShareAsync can resolve — ProjectRows is the one definition
     // (ADR-0046); this used to be a hand-copied `e.scope = 'project'` in six places.
     public static readonly string CaptureQueueRowsForSourcePath = $"""
-                                                        INSERT INTO queue_restore (project_id, hash, path, value, source_file, score, reasons, created_at, updated_at)
-                                                        SELECT q.project_id, q.hash, q.path, q.value, q.source_file, q.score, q.reasons, q.created_at, q.updated_at
-                                                        FROM promotion_queue q
-                                                        WHERE q.project_id = @projectId
-                                                          AND EXISTS (SELECT 1 FROM entries e
-                                                                      WHERE e.project_id = q.project_id AND e.hash = q.hash
-                                                                        AND {ProjectRows.Scope("e.")}
-                                                                        AND (e.path = @path OR e.path LIKE @pathPrefix ESCAPE '\'))
-                                                        """;
+                                                                   INSERT INTO queue_restore (project_id, hash, path, value, source_file, score, reasons, created_at, updated_at)
+                                                                   SELECT q.project_id, q.hash, q.path, q.value, q.source_file, q.score, q.reasons, q.created_at, q.updated_at
+                                                                   FROM promotion_queue q
+                                                                   WHERE q.project_id = @projectId
+                                                                     AND EXISTS (SELECT 1 FROM entries e
+                                                                                 WHERE e.project_id = q.project_id AND e.hash = q.hash
+                                                                                   AND {ProjectRows.Scope("e.")}
+                                                                                   AND (e.path = @path OR e.path LIKE @pathPrefix ESCAPE '\'))
+                                                                   """;
 
     // WP12 Fix A gap: a KEPT hash (still in the ingest's "keep" list) is never deleted from entries,
     // so promotion_queue_entries_ad's cascade — the only thing that used to purge a discarded hash's
     // queue row on a replace — never fires for it. This sweeps that residue explicitly, scoped to
     // this path so it costs proportional to one file, not the whole project's queue.
     public static readonly string DeleteDiscardedQueueRowsForSourcePath = $"""
-                                                        DELETE FROM promotion_queue
-                                                        WHERE project_id = @projectId
-                                                          AND EXISTS (SELECT 1 FROM promotion_discards d
-                                                                      WHERE d.project_id = promotion_queue.project_id
-                                                                        AND d.hash = promotion_queue.hash)
-                                                          AND EXISTS (SELECT 1 FROM entries e
-                                                                      WHERE e.project_id = promotion_queue.project_id
-                                                                        AND e.hash = promotion_queue.hash
-                                                                        AND {ProjectRows.Scope("e.")}
-                                                                        AND (e.path = @path OR e.path LIKE @pathPrefix ESCAPE '\'))
-                                                        """;
+                                                                           DELETE FROM promotion_queue
+                                                                           WHERE project_id = @projectId
+                                                                             AND EXISTS (SELECT 1 FROM promotion_discards d
+                                                                                         WHERE d.project_id = promotion_queue.project_id
+                                                                                           AND d.hash = promotion_queue.hash)
+                                                                             AND EXISTS (SELECT 1 FROM entries e
+                                                                                         WHERE e.project_id = promotion_queue.project_id
+                                                                                           AND e.hash = promotion_queue.hash
+                                                                                           AND {ProjectRows.Scope("e.")}
+                                                                                           AND (e.path = @path OR e.path LIKE @pathPrefix ESCAPE '\'))
+                                                                           """;
 
     public static readonly string RestoreQueueRowsStillBacked = $"""
-                                                      INSERT INTO promotion_queue (project_id, hash, path, value, source_file, score, reasons, created_at, updated_at)
-                                                      SELECT r.project_id, r.hash, r.path, r.value, r.source_file, r.score, r.reasons, r.created_at, r.updated_at
-                                                      FROM queue_restore r
-                                                      WHERE EXISTS (SELECT 1 FROM entries e
-                                                                    WHERE e.project_id = r.project_id AND e.hash = r.hash
-                                                                      AND {ProjectRows.Scope("e.")})
-                                                        AND NOT EXISTS (SELECT 1 FROM promotion_discards d
-                                                                        WHERE d.project_id = r.project_id AND d.hash = r.hash)
-                                                      ON CONFLICT(project_id, hash) DO NOTHING;
-                                                      DELETE FROM queue_restore;
-                                                      """;
+                                                                 INSERT INTO promotion_queue (project_id, hash, path, value, source_file, score, reasons, created_at, updated_at)
+                                                                 SELECT r.project_id, r.hash, r.path, r.value, r.source_file, r.score, r.reasons, r.created_at, r.updated_at
+                                                                 FROM queue_restore r
+                                                                 WHERE EXISTS (SELECT 1 FROM entries e
+                                                                               WHERE e.project_id = r.project_id AND e.hash = r.hash
+                                                                                 AND {ProjectRows.Scope("e.")})
+                                                                   AND NOT EXISTS (SELECT 1 FROM promotion_discards d
+                                                                                   WHERE d.project_id = r.project_id AND d.hash = r.hash)
+                                                                 ON CONFLICT(project_id, hash) DO NOTHING;
+                                                                 DELETE FROM queue_restore;
+                                                                 """;
 
     public const string DeleteWatchFilesByProjectPathCascade = """
                                                                DELETE FROM watch_files
@@ -552,15 +552,15 @@ internal static class MemorySql
                                               """;
 
     public static readonly string CommittedContexts = $"""
-                                            SELECT DISTINCT CASE
-                                                     WHEN scope = 'shared' THEN 'shared'
-                                                     WHEN scope = 'custom' THEN 'custom:' || context_label
-                                                     ELSE 'project:' || project_id
-                                                   END AS context
-                                            FROM entries
-                                            WHERE scope = 'shared' OR ({ProjectRows.Of()})
-                                            ORDER BY CASE WHEN scope = 'shared' THEN 0 WHEN scope = 'project' THEN 1 ELSE 2 END, context
-                                            """;
+                                                       SELECT DISTINCT CASE
+                                                                WHEN scope = 'shared' THEN 'shared'
+                                                                WHEN scope = 'custom' THEN 'custom:' || context_label
+                                                                ELSE 'project:' || project_id
+                                                              END AS context
+                                                       FROM entries
+                                                       WHERE scope = 'shared' OR ({ProjectRows.Of()})
+                                                       ORDER BY CASE WHEN scope = 'shared' THEN 0 WHEN scope = 'project' THEN 1 ELSE 2 END, context
+                                                       """;
 
     public const string DistinctFilePaths = """
                                             SELECT DISTINCT path
@@ -639,24 +639,24 @@ internal static class MemorySql
     // only in a context was reported unknown-hash (ADR-0046).
     public static readonly string UpdateEntryTtl =
         $"""
-        UPDATE entries
-        SET ttl_days = @ttlDays
-        WHERE id = (SELECT id FROM entries
-                    WHERE hash = @hash AND {ProjectRows.Of()}
-                    ORDER BY {ProjectRows.CommittedFirst()}, id
-                    LIMIT 1)
-        """;
+         UPDATE entries
+         SET ttl_days = @ttlDays
+         WHERE id = (SELECT id FROM entries
+                     WHERE hash = @hash AND {ProjectRows.Of()}
+                     ORDER BY {ProjectRows.CommittedFirst()}, id
+                     LIMIT 1)
+         """;
 
     // Reads the same row UpdateEntryTtl writes — the explicit ORDER BY is what makes "the entry
     // for this hash" deterministic when a labelled sibling shares it (ADR-0046).
     public static readonly string SelectEntryMetadata =
         $"""
-        SELECT rating AS Rating, ttl_days AS TtlDays
-        FROM entries
-        WHERE hash = @hash AND {ProjectRows.Of()}
-        ORDER BY {ProjectRows.CommittedFirst()}, id
-        LIMIT 1
-        """;
+         SELECT rating AS Rating, ttl_days AS TtlDays
+         FROM entries
+         WHERE hash = @hash AND {ProjectRows.Of()}
+         ORDER BY {ProjectRows.CommittedFirst()}, id
+         LIMIT 1
+         """;
 
     public const string SelectEntriesByContext = """
                                                  SELECT id AS Id, hash AS Hash, path AS Path, value AS Value, scope AS Scope,
@@ -766,12 +766,12 @@ internal static class MemorySql
     // cannot scramble a group whose positions are already correct. @deletedIndex < 0 means the
     // removed row's own position was unknown, so nothing shifts (only the count shrinks).
     public static readonly string CompactChunkColumnsAfterDelete = $"""
-                                                                     UPDATE entries
-                                                                        SET chunk_index = CASE WHEN @deletedIndex >= 0 AND chunk_index > @deletedIndex
-                                                                                                THEN chunk_index - 1 ELSE chunk_index END,
-                                                                            total_chunks = MAX(total_chunks - 1, 0)
-                                                                      WHERE source_file IS NOT NULL AND ({ContextKeyExpression("")}) = @ctx AND source_file = @sourceFile
-                                                                     """;
+                                                                    UPDATE entries
+                                                                       SET chunk_index = CASE WHEN @deletedIndex >= 0 AND chunk_index > @deletedIndex
+                                                                                               THEN chunk_index - 1 ELSE chunk_index END,
+                                                                           total_chunks = MAX(total_chunks - 1, 0)
+                                                                     WHERE source_file IS NOT NULL AND ({ContextKeyExpression("")}) = @ctx AND source_file = @sourceFile
+                                                                    """;
 
     // The vec0 `ctx` column — a partition key until v9, a metadata column since (ADR-0068).
     // Length-prefixed, not

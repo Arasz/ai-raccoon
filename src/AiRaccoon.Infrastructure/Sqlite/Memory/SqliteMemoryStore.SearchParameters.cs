@@ -41,16 +41,17 @@ public sealed partial class SqliteMemoryStore
         public int? RrfK => SearchParameterSettingsKeys.ParseNullableInt(Get(SearchParameterSettingsKeys.RrfK), 1);
         public int? FtsWeight => SearchParameterSettingsKeys.ParseNullableInt(Get(SearchParameterSettingsKeys.FtsWeight), 0);
         public int? VectorWeight => SearchParameterSettingsKeys.ParseNullableInt(Get(SearchParameterSettingsKeys.VectorWeight), 0);
-        public double? SourceLambda =>
-            SearchParameterSettingsKeys.ParseNullableDouble(Get(SearchParameterSettingsKeys.SourceLambda), 0.0, 1.0);
-        public double? ConsolidationThreshold => SearchParameterSettingsKeys.ParseNullableDouble(
-            Get(SearchParameterSettingsKeys.ConsolidationThreshold), 0.0, double.MaxValue);
-        public DocScoreFormula? DocScoreFormula => SearchParameterSettingsKeys.ParseDocScoreFormula(
-            Get(SearchParameterSettingsKeys.DocScoreFormula));
-        public CandidateWindowMode? CandidateWindow => SearchParameterSettingsKeys.ParseCandidateWindow(
-            Get(SearchParameterSettingsKeys.CandidateWindow));
-        public double? StructureAlpha =>
-            SearchParameterSettingsKeys.ParseNullableDouble(Get(SearchParameterSettingsKeys.StructureAlpha), 0.0, 1.0);
+        public double? SourceLambda => SearchParameterSettingsKeys.ParseNullableDouble(Get(SearchParameterSettingsKeys.SourceLambda), 0.0, 1.0);
+        public double? ConsolidationThreshold =>
+            SearchParameterSettingsKeys.ParseNullableDouble(
+                Get(SearchParameterSettingsKeys.ConsolidationThreshold), 0.0, double.MaxValue);
+        public DocScoreFormula? DocScoreFormula =>
+            SearchParameterSettingsKeys.ParseDocScoreFormula(
+                Get(SearchParameterSettingsKeys.DocScoreFormula));
+        public CandidateWindowMode? CandidateWindow =>
+            SearchParameterSettingsKeys.ParseCandidateWindow(
+                Get(SearchParameterSettingsKeys.CandidateWindow));
+        public double? StructureAlpha => SearchParameterSettingsKeys.ParseNullableDouble(Get(SearchParameterSettingsKeys.StructureAlpha), 0.0, 1.0);
         public bool? FusionNoRegressionEnabled => SearchParameterSettingsKeys.ParseNullableBool(_fusionFlag);
 
         private string? Get(string key) => _retrieval.GetValueOrDefault(key);

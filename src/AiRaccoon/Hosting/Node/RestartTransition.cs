@@ -12,19 +12,19 @@ internal static class RestartTransition
     ///     The outcome a probe settles on its own, or null when an ai-raccoon answered and the
     ///     cycle carries on to identify it.
     /// </summary>
-    public static RestartOutcome? FromProbe(ProbeVerdict verdict) => verdict switch
-    {
-        ProbeVerdict.Answered => null,
-        ProbeVerdict.NotListening => RestartOutcome.Nothing,
-        _ => RestartOutcome.Unknown
-    };
+    public static RestartOutcome? FromProbe(ProbeVerdict verdict) =>
+        verdict switch
+        {
+            ProbeVerdict.Answered => null,
+            ProbeVerdict.NotListening => RestartOutcome.Nothing,
+            _ => RestartOutcome.Unknown
+        };
 
     /// <summary>
     ///     True when `serve` may go on to bind rather than refusing with an operator line. Knowing
     ///     nothing is not a refusal — the bind is the only thing that can settle it.
     /// </summary>
-    public static bool MayBind(RestartOutcome outcome) =>
-        outcome is RestartOutcome.Nothing or RestartOutcome.Stopped or RestartOutcome.Unknown;
+    public static bool MayBind(RestartOutcome outcome) => outcome is RestartOutcome.Nothing or RestartOutcome.Stopped or RestartOutcome.Unknown;
 
     /// <summary>
     ///     What an address-in-use bind proves, given what the pre-check believed and what the port

@@ -32,8 +32,10 @@ public sealed class CodeTokenizer : ICodeTokenizer
     {
     }
 
-    internal CodeTokenizer(Func<SentencePieceEmbeddingTokenizer> factory) =>
+    internal CodeTokenizer(Func<SentencePieceEmbeddingTokenizer> factory)
+    {
         _tokenizer = new Lazy<SentencePieceEmbeddingTokenizer>(factory, LazyThreadSafetyMode.ExecutionAndPublication);
+    }
 
     /// <summary>Testability seam: whether the underlying tokenizer has been built yet.</summary>
     internal bool IsTokenizerBuilt => _tokenizer.IsValueCreated;

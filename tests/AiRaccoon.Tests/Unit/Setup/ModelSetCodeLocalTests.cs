@@ -1,5 +1,3 @@
-using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
@@ -9,11 +7,11 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Setup;
 
 /// <summary>
-///     §3.3 D-E9 at the CLI seam: `model set code local &lt;dir&gt;` refuses a manifest whose
-///     dimensions are not 768 — THE only gate protecting vec_code float[768], since code has no
-///     dimension-reconcile phase to fix up a wrong-dimension activation after the fact (unlike
-///     the memory bank's `model set local`). Also refuses a missing/invalid manifest, surfacing
-///     the loader's own message. Witness test (the non-768 refusal) is load-bearing.
+///     §3.3 D-E9 at the CLI seam: `model code set local &lt;dir&gt;` pre-flights the manifest
+///     (missing/invalid surfaces the loader's own message) and delegates to the store, which
+///     accepts ANY manifest dimension and reconciles vec_code to it (vec-code-unfix-dim — the
+///     old 768 refusal gate is gone from both the CLI and the store). Witness test (the non-768
+///     acceptance) is load-bearing.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -44,18 +42,17 @@ public sealed class ModelSetCodeLocalTests
     }
 
     [Fact]
-    public async Task ModelSetCodeLocal_Non768Manifest_RefusesBeforeActivation_WithActionableMessage()
+    public async Task ModelSetCodeLocal_Non768Manifest_ActivatesAndReconciles()
     {
         var dir = TempDir();
         SeedManifestDirectory(dir, "code-daemon-embed-v1-non768.json");
         var store = new FakeConfigStore();
 
-        var ex = await Should.ThrowAsync<InvalidOperationException>(() => Run(["model", "code", "set", "local", dir], store));
+        var (exit, _, _) = await Run(["model", "code", "set", "local", dir], store);
 
-        ex.Message.ShouldContain("1024", customMessage: "the refusal must name the declared dimensions");
-        ex.Message.ShouldContain(CodeCorpusSchema.EmbeddingDimensions.ToString(),
-            customMessage: "the refusal must name the required dimensions");
-        store.CodeActivated.ShouldBeNull("a refused code model set must not commit the activation transaction");
+        exit.ShouldBe(0, "any manifest dimension is accepted — the store reconciles vec_code to it");
+        store.CodeActivated.ShouldNotBeNull();
+        store.CodeActivated!.Value.Directory.ShouldBe(Path.GetFullPath(dir));
     }
 
     [Fact]

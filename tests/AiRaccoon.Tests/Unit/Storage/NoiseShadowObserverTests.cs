@@ -1,5 +1,4 @@
 using AiRaccoon.Core.Memory.Filtering;
-using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;

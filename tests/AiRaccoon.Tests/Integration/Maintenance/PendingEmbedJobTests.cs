@@ -46,7 +46,7 @@ public sealed class PendingEmbedJobTests : IDisposable
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private PendingEmbedJob NewJob(IEventPump<EmbedDrainRequest>? pump = null) =>
-        new(new EntryEmbedder(new CountingEmbeddingService(), _modelMigrationLease, _timeProvider),
+        new(new EntryEmbedder(new CountingEmbeddingService(), _modelMigrationLease, _timeProvider, new VecDimensionReconciler()),
             pump ?? TestData.NewEmbedDrainPump());
 
     /// <summary>

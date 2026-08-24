@@ -19,8 +19,11 @@ namespace AiRaccoon.Infrastructure.Ingestion;
 ///     are empty/zero.
 /// </summary>
 public sealed record ChunkPositionScan(
-    bool FileUsable, string Content, int TotalChunks,
-    IReadOnlyDictionary<long, int> PositionById, IReadOnlyDictionary<long, string?> SectionById);
+    bool FileUsable,
+    string Content,
+    int TotalChunks,
+    IReadOnlyDictionary<long, int> PositionById,
+    IReadOnlyDictionary<long, string?> SectionById);
 
 /// <summary>
 ///     Shared chunk-position detection (GH #371): re-chunks a source file with the current chunker
@@ -31,7 +34,6 @@ public sealed record ChunkPositionScan(
 /// </summary>
 public sealed class ChunkPositionScanner(IFileTypeMatcher fileTypeMatcher, IEmbeddingService embeddingService)
 {
-
     public ChunkPositionScan Scan(string sourceFile, IReadOnlyList<(long Id, string Hash)> rows,
         int maxTokens, int overlayTokens, TokenCount countTokens)
     {
@@ -83,7 +85,7 @@ public sealed class ChunkPositionScanner(IFileTypeMatcher fileTypeMatcher, IEmbe
         // local counts with the engine's own tokenizer; non-local uses the same o200k proxy the
         // ingest path's chunker-default counter uses (D9 — the repair family and the ingest path
         // must count with the same tokenizer per engine).
-        TokenCount countTokens = provider.Equals("local", StringComparison.OrdinalIgnoreCase)
+        var countTokens = provider.Equals("local", StringComparison.OrdinalIgnoreCase)
             ? new TokenCount(embeddingService.ResolveTokenizer(settings)!.CountTokens)
             : new TokenCount(new O200kTokenizer().CountTokens);
         return new ChunkBudget(budget, overlay, countTokens);

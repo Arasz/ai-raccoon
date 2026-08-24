@@ -200,8 +200,9 @@ digest-gated DDL block (no `CurrentVersion` bump — the metrics-table precedent
   curated knowledge).
 - `code_fts` — FTS5 external-content index over `code_entries(value, source_file)`, with the
   same insert/delete/update trigger family as `entries_fts`.
-- `vec_code` — vec0 virtual table, `float[768]` (`code-daemon-embed-v1`'s dimension, distinct
-  from `vec_entries`' 384) with `ctx = project_id` directly — no `ContextKeyExpression`
+- `vec_code` — vec0 virtual table, `float[768]` by default (`code-daemon-embed-v1`'s dimension,
+  distinct from `vec_entries`' 384; reconciled to any manifest dimension at activation —
+  vec-code-unfix-dim) with `ctx = project_id` directly — no `ContextKeyExpression`
   branching, since code is project-scoped only. `embed_state` UPDATE triggers keep it in sync
   with `code_entries`, mirroring `vec_entries`.
 

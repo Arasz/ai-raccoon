@@ -87,7 +87,9 @@ public static class ModelSlug
             // '/' becomes "__" — the plan's slug convention (BAAI/bge-m3 → BAAI__bge-m3).
             builder.Append(ch == '/'
                 ? "__"
-                : invalid.Contains(ch) || char.IsWhiteSpace(ch) || ch < 32 ? "_" : ch.ToString());
+                : invalid.Contains(ch) || char.IsWhiteSpace(ch) || ch < 32
+                    ? "_"
+                    : ch.ToString());
         }
 
         return builder.ToString();
@@ -127,7 +129,7 @@ public sealed class ModelDownloadService(
         var rawFiles = await FetchProvenanceAsync(request, tree, cancellationToken).ConfigureAwait(false);
 
         // Phase 1: glob-based plan (external data by filename pattern — nothing downloaded yet).
-        var preliminary = planner.BuildPlan(request.RepoId, request.Revision, tree, rawFiles, probe: null, request.ExplicitFiles);
+        var preliminary = planner.BuildPlan(request.RepoId, request.Revision, tree, rawFiles, null, request.ExplicitFiles);
         if (request.DryRun)
         {
             return new ModelDownloadResult(preliminary, request.TargetDirectory, null, []);
@@ -201,7 +203,7 @@ public sealed class ModelDownloadService(
     {
         var output = plan.TokenEmbeddingsOutput;
         if (plan.PoolingMode == PoolingMode.ModelOutput || string.IsNullOrWhiteSpace(output)
-            || !outputRanks.TryGetValue(output, out var rank) || rank != OnnxOutputRanks.PooledRank)
+                                                        || !outputRanks.TryGetValue(output, out var rank) || rank != OnnxOutputRanks.PooledRank)
         {
             return plan;
         }
@@ -268,8 +270,7 @@ public sealed class ModelDownloadService(
         return rawFiles;
     }
 
-    private static string ModelDirectoryOf(string modelFilePath) =>
-        modelFilePath.Contains('/') ? modelFilePath[..modelFilePath.LastIndexOf('/')] : string.Empty;
+    private static string ModelDirectoryOf(string modelFilePath) => modelFilePath.Contains('/') ? modelFilePath[..modelFilePath.LastIndexOf('/')] : string.Empty;
 
     private static string? TreeEntryAt(IReadOnlyList<HfTreeEntry> tree, string modelDir, string name)
     {
@@ -410,18 +411,21 @@ public sealed class ModelDownloadService(
 
     private async Task<string> WriteManifestAsync(ModelDownloadPlan plan, string targetDir, CancellationToken cancellationToken)
     {
-        ManifestFile Pinned(PinnedFile f) => new(TargetPath(f.Path, plan.ModelFilePath),
-            hasher.Sha256OfFile(Path.Combine(targetDir, TargetPath(f.Path, plan.ModelFilePath))));
+        ManifestFile Pinned(PinnedFile f)
+        {
+            return new ManifestFile(TargetPath(f.Path, plan.ModelFilePath),
+                hasher.Sha256OfFile(Path.Combine(targetDir, TargetPath(f.Path, plan.ModelFilePath))));
+        }
 
         var manifest = new EmbeddingManifest(
-            ManifestVersion: 1,
-            Model: plan.RepoId,
-            Source: new ManifestSource(plan.RepoId, plan.Revision),
-            Provider: ManifestProvider.Local,
-            Dimensions: plan.Dimensions,
-            ContextWindowTokens: plan.ContextWindowTokens,
-            Normalization: plan.Normalization,
-            QueryInstruction: null,
+            1,
+            plan.RepoId,
+            new ManifestSource(plan.RepoId, plan.Revision),
+            ManifestProvider.Local,
+            plan.Dimensions,
+            plan.ContextWindowTokens,
+            plan.Normalization,
+            null,
             RequiresTokenTypeIds: plan.RequiresTokenTypeIds,
             MRL: new MRLInfo(false, null),
             // D2: trust-on-first-download, same as the tokenizer/onnx pins below — not an
@@ -448,8 +452,7 @@ public sealed class ModelDownloadService(
         return path;
     }
 
-    private string ResolveUrl(ModelDownloadRequest request, string path) =>
-        $"{treeClient.Endpoint}/{request.RepoId}/resolve/{request.Revision}/{path}";
+    private string ResolveUrl(ModelDownloadRequest request, string path) => $"{treeClient.Endpoint}/{request.RepoId}/resolve/{request.Revision}/{path}";
 
     /// <summary>On-disk path for a repo file: files inside the model's directory land flat (the
     /// plan §8.4 layout); external data in deeper subdirectories keeps its relative path so ONNX

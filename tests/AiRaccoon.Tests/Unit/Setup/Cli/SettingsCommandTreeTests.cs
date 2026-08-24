@@ -1,7 +1,6 @@
 using System.CommandLine;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
-using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.Integration.Setup;

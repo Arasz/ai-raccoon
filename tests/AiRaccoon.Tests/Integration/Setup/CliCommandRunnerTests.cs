@@ -2,10 +2,8 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
-using AiRaccoon.Settings;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Tests.TestHelpers;
-using Microsoft.Extensions.Logging;
 using Shouldly;
 using Xunit;
 

@@ -11,6 +11,5 @@ public static class FusionConfigKeys
     public const bool DefaultNoRegressionEnabled = false;
 
     /// <summary>Off unless the setting explicitly says "true": an absent or unreadable value keeps the default.</summary>
-    public static bool ParseNoRegressionEnabled(string? value) =>
-        string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
+    public static bool ParseNoRegressionEnabled(string? value) => string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
 }

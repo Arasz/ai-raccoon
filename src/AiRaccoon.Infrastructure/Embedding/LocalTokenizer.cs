@@ -26,8 +26,10 @@ public sealed class LocalTokenizer : ILocalTokenizer
     {
     }
 
-    internal LocalTokenizer(Func<BertTokenizer> factory) =>
+    internal LocalTokenizer(Func<BertTokenizer> factory)
+    {
         _tokenizer = new Lazy<BertTokenizer>(factory, LazyThreadSafetyMode.ExecutionAndPublication);
+    }
 
     /// <summary>Testability seam: whether the underlying BertTokenizer has been built yet.</summary>
     internal bool IsTokenizerBuilt => _tokenizer.IsValueCreated;

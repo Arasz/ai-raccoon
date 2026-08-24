@@ -1,4 +1,3 @@
-using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Setup.Cli.Commands;
 
 namespace AiRaccoon.Settings;
@@ -14,8 +13,7 @@ namespace AiRaccoon.Settings;
 /// </summary>
 internal static class CliWriteOptOuts
 {
-    internal static bool WritesDirectly(IReadOnlyList<string> commandPath) =>
-        commandPath is ["encryption", ..];
+    internal static bool WritesDirectly(IReadOnlyList<string> commandPath) => commandPath is ["encryption", ..];
 }
 
 /// <summary>

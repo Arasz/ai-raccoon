@@ -10,7 +10,7 @@ Active records:
 
 | File | What it is |
 |---|---|
-| [2026-08-24-vec-code-unfix-dim-plan.md](2026-08-24-vec-code-unfix-dim-plan.md) | Plan (rev 1, review round 1 folded): make `vec_code` dimension-agnostic by generalizing the memory-bank `VecDimensionReconciler` (table list + optional caller transaction), persist `embedding.codeDimensions`, reconcile at activation/open/fingerprint-change, remove the two 768 gates. Plan-only — awaiting owner gate. |
+| [2026-08-24-vec-code-unfix-dim-plan.md](2026-08-24-vec-code-unfix-dim-plan.md) | Plan (rev 1, review round 1 folded) + implementation record: `vec_code` dimension-agnostic via the generalized `VecDimensionReconciler` (WP1-WP5, task `task/vec-code-unfix-dim`). Owner-gated 2026-08-24; implementation on the same branch. |
 | [2026-08-07-skill-discovery-mcp-server.md](2026-08-07-skill-discovery-mcp-server.md) | Active research, not yet implemented |
 | [2026-08-22-s6a-fixture-replacement-design.md](2026-08-22-s6a-fixture-replacement-design.md) | Design + execution record for replacing the private `jsaa-memory.db` retrieval fixture with a corpus built from this repo's own public docs (ai-raccoon#414 S6a, ADR-0090). §9 amends the plan with what execution measured differently. |
 

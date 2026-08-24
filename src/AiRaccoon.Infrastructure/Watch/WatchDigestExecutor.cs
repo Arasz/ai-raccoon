@@ -3,7 +3,6 @@ using System.Text;
 using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 
@@ -117,7 +116,7 @@ public sealed class WatchDigestExecutor(
         var ignoreRules = await ignoreRulesProvider.LoadAsync(normalizedWatch, cancellationToken)
             .ConfigureAwait(false);
         return ignoreRules.HasRules &&
-               ignoreRules.IsIgnored(Path.GetRelativePath(normalizedWatch, normalized), isDirectory: false);
+               ignoreRules.IsIgnored(Path.GetRelativePath(normalizedWatch, normalized), false);
     }
 
     /// <summary>SHA-256 over the normalized path concatenated with the full file content (docs/plans/file-watcher-implementation.md R5).</summary>

@@ -1,11 +1,9 @@
 using System.Globalization;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Degradation;
-using AiRaccoon;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.Memory.QueryGuard;
-using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;

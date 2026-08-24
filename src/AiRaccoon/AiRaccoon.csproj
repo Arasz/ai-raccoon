@@ -71,7 +71,7 @@
         </ReadLinesFromFile>
         <MakeDir Directories="$(IntermediateOutputPath)mcp"/>
         <WriteLinesToFile File="$(_McpServerJsonGenerated)" Overwrite="true"
-                           Lines="@(_McpServerJsonLine->Replace('__VERSION__', '$(Version)'))"/>
+                          Lines="@(_McpServerJsonLine->Replace('__VERSION__', '$(Version)'))"/>
         <ItemGroup>
             <None Include="$(_McpServerJsonGenerated)" Pack="true" PackagePath="/.mcp/"/>
         </ItemGroup>

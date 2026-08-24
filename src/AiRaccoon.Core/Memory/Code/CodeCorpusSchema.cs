@@ -1,10 +1,10 @@
 namespace AiRaccoon.Core.Memory.Code;
 
 /// <summary>
-///     Constants mirroring the code corpus's fixed vec_code shape (MemorySchema.cs:
-///     <c>vec0(ctx TEXT, embedding float[768] ...)</c>). Unlike the memory bank, code has no
-///     dimension-reconcile phase (§3.3 D-E9) — this is the only gate protecting vec_code, so a
-///     manifest declaring a different dimension is refused at configure time instead.
+///     Constants mirroring the code corpus's vec_code shape (MemorySchema.cs:
+///     <c>vec0(ctx TEXT, embedding float[768] ...)</c>). 768 is the dimension a FRESH code corpus
+///     is created at and legacy banks default to (vec-code-unfix-dim) — not a configure-time gate:
+///     activation accepts any manifest dimension and reconciles vec_code to it.
 /// </summary>
 public static class CodeCorpusSchema
 {

@@ -173,14 +173,14 @@ this gate demanded exactly 126 tokens, derived from an exploration note claiming
 128-token cap the ONNX graph does not have, and the flagship model could not be activated
 without hand-editing its manifest. The measurement is on issue #422.)
 
-`vec_code` is a fixed `float[768]` index — unlike the memory engine, there is **no**
-dimension-reconcile phase, so `model code set local` refuses a manifest whose
-`dimensions` is not `768` before anything commits, naming the declared value and the
-required `768`. A missing/invalid manifest is refused the same way, with the loader's
-own error.
+`vec_code` is a vec0 table like the memory bank's: fresh banks start at `float[768]` (the
+default model's dimension), and activation reconciles it to whatever dimension the manifest
+declares, in the same transaction — there is no configure-time dimension gate (vec-code-unfix-dim).
+A missing/invalid manifest is refused with the loader's own error.
 
-On success the settings write (`embedding.codeModel`/`embedding.codeEngine`) and
-invalidating every already-embedded code row to `pending` commit together in one
+On success the settings write (`embedding.codeModel`/`embedding.codeEngine`/
+`embedding.codeDimensions`), the `vec_code` reconcile and invalidating every
+already-embedded code row to `pending` commit together in one
 transaction — `vec_code` empties in that same commit, so there is no window where it
 holds vectors from the old engine. There is **no outbox and no migration wait**: the
 command returns immediately, memory tools are never blocked, and `kind=code` search

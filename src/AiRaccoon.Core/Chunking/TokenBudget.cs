@@ -21,7 +21,7 @@ public static class TokenBudget
         var hi = text.Length;
         while (lo < hi)
         {
-            var mid = lo + ((hi - lo + 1) / 2);
+            var mid = lo + (hi - lo + 1) / 2;
             if (countTokens(text[..mid]) <= maxTokens)
             {
                 lo = mid;

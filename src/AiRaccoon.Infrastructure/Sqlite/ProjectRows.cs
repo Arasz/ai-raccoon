@@ -25,6 +25,5 @@ internal static class ProjectRows
     ///     not a unique row — identical content written twice under different labels shares one — so
     ///     any single-row update or read of "the entry for this hash" needs a deterministic winner.
     /// </summary>
-    public static string CommittedFirst(string alias = "") =>
-        $"CASE WHEN {alias}scope = 'project' THEN 0 ELSE 1 END";
+    public static string CommittedFirst(string alias = "") => $"CASE WHEN {alias}scope = 'project' THEN 0 ELSE 1 END";
 }

@@ -359,7 +359,7 @@ public class ConfigCommandsAccessModelTests
         store.Settings["embedding.codeEngine"].ShouldBe("local:/models/code-daemon#deadbeef");
     }
 
-    /// <summary>§3.3: `settings model code reset` deletes ONLY the code rows.</summary>
+    /// <summary>§3.3: `settings model code reset` deletes ONLY the code rows (incl. codeDimensions).</summary>
     [Fact]
     public async Task ModelCodeReset_DeletesOnlyTheCodeRows()
     {
@@ -370,7 +370,8 @@ public class ConfigCommandsAccessModelTests
                 ["embedding.provider"] = "local",
                 ["embedding.engine"] = "local:bundled",
                 ["embedding.codeModel"] = "/models/code-daemon",
-                ["embedding.codeEngine"] = "local:/models/code-daemon#deadbeef"
+                ["embedding.codeEngine"] = "local:/models/code-daemon#deadbeef",
+                ["embedding.codeDimensions"] = "1024"
             }
         };
 
@@ -380,6 +381,8 @@ public class ConfigCommandsAccessModelTests
         stdout.ShouldContain("FTS5");
         store.Settings.ShouldNotContainKey("embedding.codeModel");
         store.Settings.ShouldNotContainKey("embedding.codeEngine");
+        store.Settings.ShouldNotContainKey("embedding.codeDimensions",
+            customMessage: "a stale codeDimensions row would make the next open reconcile to a dead engine's dimension");
         store.Settings["embedding.provider"].ShouldBe("local",
             customMessage: "the memory engine's rows must be untouched");
         store.Settings["embedding.engine"].ShouldBe("local:bundled");
