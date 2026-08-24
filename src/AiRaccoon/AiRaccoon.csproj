@@ -23,8 +23,30 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <None Include="..\..\README.md" Pack="true" PackagePath="/"/>
+        <!-- The rendered package readme (see RenderPackageReadme below); falls back to the
+             plain repo README.md when rendering is skipped. -->
+        <None Include="obj\package-readme.md" Condition="'$(AiRaccoonSkipReadmeRender)' != 'true'" Pack="true" PackagePath="/README.md" />
+        <None Include="..\..\README.md" Condition="'$(AiRaccoonSkipReadmeRender)' == 'true'" Pack="true" PackagePath="/"/>
     </ItemGroup>
+
+    <!--
+        nuget.org renders package readmes without JavaScript, so ```mermaid blocks show as raw
+        code. Before pack, render them to inline SVG via kroki.io and pack the rendered copy:
+        the repo keeps one hand-edited README.md; only the distributed package gets diagrams.
+        PackReadmePath feeds both PackageReadmeFile resolution and the None item below.
+        Set AiRaccoonSkipReadmeRender=true to pack the plain README (offline/emergency packs).
+    -->
+    <PropertyGroup>
+        <PackReadmeSource>$(MSBuildThisFileDirectory)../../README.md</PackReadmeSource>
+        <PackReadmeRendered>$(BaseIntermediateOutputPath)package-readme.md</PackReadmeRendered>
+    </PropertyGroup>
+
+    <Target Name="RenderPackageReadme" BeforeTargets="GenerateNuspec" Condition="'$(AiRaccoonSkipReadmeRender)' != 'true'">
+        <Message Text="Rendering package readme diagrams (kroki.io)..." Importance="high" />
+        <Exec Command="python3 &quot;$(MSBuildThisFileDirectory)../../scripts/render-package-readme.py&quot; -- &quot;$(PackReadmeRendered)&quot; &quot;$(PackReadmeSource)&quot;"
+              IgnoreExitCode="false"
+              ConsoleToMsBuild="true" />
+    </Target>
 
     <ItemGroup>
         <None Include="Models/vocab.txt" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="Models/"/>
