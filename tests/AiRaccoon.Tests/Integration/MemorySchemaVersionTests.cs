@@ -1333,6 +1333,45 @@ public sealed class MemorySchemaVersionTests
         (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
     }
 
+    /// <summary>
+    ///     A pre-ALTER legacy table has NO project_id column at all — the copy SELECT would
+    ///     throw 'no such column' and strand the bank. Nothing meaningful survives (every row
+    ///     would be unscoped), so the step must recreate empty and still stamp v11.
+    /// </summary>
+    [Fact]
+    public async Task EnsureAsync_OnAV10Bank_WithNoProjectIdColumn_RecreatesEmpty_AndStampsV11()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            DROP TABLE sync_tombstones;
+            CREATE TABLE sync_tombstones (
+                hash TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                deleted_at INTEGER NOT NULL
+            );
+            INSERT INTO sync_tombstones (hash, scope, deleted_at)
+                VALUES ('h1', 'project', 100);
+            PRAGMA user_version = 10;
+            """,
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        // The bank must have advanced past v11's gate: a fresh EnsureAsync must not re-enter
+        // the ladder for this table, and the table must carry the correct composite shape.
+        var columns = await connection.QueryAsync<ColumnRow>(
+            new CommandDefinition(
+                "SELECT name, type, \"notnull\", pk FROM pragma_table_info('sync_tombstones')",
+                cancellationToken: TestContext.Current.CancellationToken));
+        columns.ShouldContain(c => c.Name == "project_id" && c.Pk == 1L && c.NotNull == 1L);
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
+
+        // A second open must be a clean no-op (the regression the CI run caught).
+        await Should.NotThrowAsync(() => MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken));
+    }
+
     private static async Task<long> TableRowidAsync(SqliteConnection connection, string table) =>
         await connection.ExecuteScalarAsync<long>(new CommandDefinition(
             $"SELECT rowid FROM sqlite_master WHERE type = 'table' AND name = '{table}'",

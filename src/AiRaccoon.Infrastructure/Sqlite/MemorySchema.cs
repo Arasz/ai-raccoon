@@ -980,18 +980,28 @@ internal static class MemorySchema
             // timestamp; SQLite's TEXT affinity has already coerced any pre-affinity values to
             // text on disk, so reading every column through its declared type via CAST keeps the
             // copy total — no dynamic cast can throw and strand a bank that cannot reach v11.
-            var existingRows = (await connection.QueryAsync<TombstoneRow>(
-                    new CommandDefinition(
-                        """
-                        SELECT CAST(project_id AS TEXT) AS ProjectId,
-                               CAST(hash AS TEXT) AS Hash,
-                               CAST(scope AS TEXT) AS Scope,
-                               CAST(deleted_at AS INTEGER) AS DeletedAt
-                        FROM sync_tombstones
-                        WHERE project_id IS NOT NULL AND project_id != ''
-                        """,
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false)).ToList();
+            // A pre-ALTER legacy table has NO project_id column at all: there is nothing
+            // meaningful to keep (every row would be unscoped), so skip the copy entirely.
+            List<TombstoneRow> existingRows;
+            if (columnRows.Any(c => c.Name == "project_id"))
+            {
+                existingRows = (await connection.QueryAsync<TombstoneRow>(
+                        new CommandDefinition(
+                            """
+                            SELECT CAST(project_id AS TEXT) AS ProjectId,
+                                   CAST(hash AS TEXT) AS Hash,
+                                   CAST(scope AS TEXT) AS Scope,
+                                   CAST(deleted_at AS INTEGER) AS DeletedAt
+                            FROM sync_tombstones
+                            WHERE project_id IS NOT NULL AND project_id != ''
+                            """,
+                            cancellationToken: cancellationToken))
+                    .ConfigureAwait(false)).ToList();
+            }
+            else
+            {
+                existingRows = [];
+            }
 
             await connection.ExecuteAsync(
                     new CommandDefinition("DROP TABLE sync_tombstones", cancellationToken: cancellationToken))
