@@ -126,4 +126,4 @@ async function main(): Promise<number> {
   return 0;
 }
 
-process.exit(await main());
+main().then((code) => process.exit(code));

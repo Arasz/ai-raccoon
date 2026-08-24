@@ -43,7 +43,7 @@
 
     <Target Name="RenderPackageReadme" BeforeTargets="GenerateNuspec" Condition="'$(AiRaccoonSkipReadmeRender)' != 'true'">
         <Message Text="Rendering package readme diagrams (kroki.io)..." Importance="high" />
-        <Exec Command="bun run &quot;$(MSBuildThisFileDirectory)../../scripts/render-package-readme.ts&quot; -- &quot;$(PackReadmeRendered)&quot; &quot;$(PackReadmeSource)&quot;"
+        <Exec Command="npx tsx &quot;$(MSBuildThisFileDirectory)../../scripts/render-package-readme.ts&quot; -- &quot;$(PackReadmeRendered)&quot; &quot;$(PackReadmeSource)&quot;"
               IgnoreExitCode="false"
               ConsoleToMsBuild="true" />
     </Target>
