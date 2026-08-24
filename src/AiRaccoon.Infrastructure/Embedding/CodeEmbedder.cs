@@ -13,8 +13,6 @@ public sealed partial class CodeEmbedder(IEmbeddingService embeddings, ILogger<C
     IVecDimensionReconciler vecDimensions)
     : ICodeEmbedder
 {
-    private readonly IVecDimensionReconciler _vecDimensions = vecDimensions;
-
     /// <summary>Generator-call sub-batch size (§3.3 D-E9: "batches of 32"), mirroring
     /// EntryEmbedder.EmbedAsync (S8) — a smaller generator call also shrinks S1's stale-engine race
     /// window and S2's poison-row blast radius, so a caller's own drain-run limit (CodeReindexJob's
@@ -201,7 +199,7 @@ public sealed partial class CodeEmbedder(IEmbeddingService embeddings, ILogger<C
             await connection.ExecuteAsync(new CommandDefinition(MemorySql.UpsertSetting,
                 new { key = EmbeddingSettingsKeys.CodeDimensions, value = dimensions.ToString(CultureInfo.InvariantCulture) },
                 transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
-            await _vecDimensions.ReconcileAsync(connection, transaction, dimensions,
+            await vecDimensions.ReconcileAsync(connection, transaction, dimensions,
                 VecDimensionReconciler.CodeVecTables, cancellationToken).ConfigureAwait(false);
             await connection.ExecuteAsync(new CommandDefinition(MemorySql.MarkAllCodeEmbeddedPending,
                 transaction: transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
@@ -232,7 +230,7 @@ public sealed partial class CodeEmbedder(IEmbeddingService embeddings, ILogger<C
             ? parsed
             : CodeCorpusSchema.EmbeddingDimensions;
 
-        return await _vecDimensions.ReconcileAsync(connection, transaction: null, target,
+        return await vecDimensions.ReconcileAsync(connection, transaction: null, target,
             VecDimensionReconciler.CodeVecTables, cancellationToken).ConfigureAwait(false);
     }
 

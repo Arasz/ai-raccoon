@@ -17,8 +17,6 @@ namespace AiRaccoon.Infrastructure.Embedding;
 public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationLease migrationLease,
     TimeProvider timeProvider, IVecDimensionReconciler vecDimensions) : IEntryEmbedder
 {
-    private readonly IVecDimensionReconciler _vecDimensions = vecDimensions;
-
     /// <summary>Rows per generator call. Internal so PendingEmbedJob can derive its own per-run bound from it instead of duplicating the number.</summary>
     internal const int BatchSize = 32;
 
@@ -157,7 +155,7 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
             return;
         }
 
-        await _vecDimensions.ReconcileAsync(connection, transaction: null,
+        await vecDimensions.ReconcileAsync(connection, transaction: null,
             embeddings.ResolveDimensions(settings), VecDimensionReconciler.MemoryVecTables, cancellationToken)
             .ConfigureAwait(false);
     }
