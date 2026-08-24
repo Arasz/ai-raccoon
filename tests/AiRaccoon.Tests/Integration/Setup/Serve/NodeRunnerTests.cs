@@ -18,7 +18,7 @@ namespace AiRaccoon.Tests.Integration.Setup.Serve;
 ///     port-fallback / transport-warning surfaces.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
-[Trait(TestCategories.Speed, TestCategories.Fast)]
+[Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class NodeRunnerTests : IDisposable
 {
     private static readonly HttpClient HttpClient = new();
@@ -163,6 +163,9 @@ public sealed class NodeRunnerTests : IDisposable
             // diagnose-fast-tests: ReleaseForBind→bind is a real window in which a parallel serve
             // test can seize the freed port — both racers then see PortInUse, which is a third-party
             // steal, not a defect in the race under test. Retry the race on a fresh port before failing.
+            // The winner never exits on its own (it serves until stopped), so awaiting both Exit
+            // tasks directly would wait the full 90s harness lifetime; stop both once the loser
+            // (the first to complete) is known.
             ServeHarness first = null!, second = null!;
             var exits = Array.Empty<int>();
             for (var attempt = 0; attempt < 3; attempt++)
@@ -177,7 +180,10 @@ public sealed class NodeRunnerTests : IDisposable
                 gate.SetResult();
                 first = await firstTask;
                 second = await secondTask;
-                exits = await Task.WhenAll(first.Exit, second.Exit);
+
+                // The loser (PortInUse) completes first; the winner keeps serving until stopped.
+                await Task.WhenAny(first.Exit, second.Exit);
+                exits = [await first.StopAsync(), await second.StopAsync()];
                 if (exits.Count(exit => exit == ExitCode.Success) >= 1)
                 {
                     break;
