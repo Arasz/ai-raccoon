@@ -74,6 +74,75 @@ public sealed class VecDimensionReconcileTests
             "repopulating from entries.embedding would insert 384-dim blobs into a float[1024] table");
     }
 
+    // ── Code corpus tables (vec_code) — the vec-code-unfix-dim generalization ──
+
+    /// <summary>The code tables must move without touching the memory tables: vec_code is the
+    /// code corpus's own index, independent of the memory engine's dimension.</summary>
+    [Fact]
+    public async Task ReconcileAsync_CodeTables_TargetDiffers_RecreatesVecCodeOnly()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, Ct);
+
+        var changed = await new VecDimensionReconciler().ReconcileAsync(
+            connection, transaction: null, 1024, VecDimensionReconciler.CodeVecTables, Ct);
+
+        changed.ShouldBeTrue("768 → 1024 is a mismatch and must be reconciled");
+        (await TableSqlAsync(connection, "vec_code")).ShouldContain("float[1024]");
+        (await TableSqlAsync(connection, "vec_entries")).ShouldContain("float[384]",
+            customMessage: "the memory tables must not move with the code corpus");
+        (await TableSqlAsync(connection, "vec_structure")).ShouldContain("float[384]",
+            customMessage: "the memory tables must not move with the code corpus");
+    }
+
+    /// <summary>A matching dimension must not drop the populated code index either.</summary>
+    [Fact]
+    public async Task ReconcileAsync_CodeTables_TargetMatches_IsANoOp()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, Ct);
+
+        var changed = await new VecDimensionReconciler().ReconcileAsync(
+            connection, transaction: null, 768, VecDimensionReconciler.CodeVecTables, Ct);
+
+        changed.ShouldBeFalse("a matching dimension must not drop and recreate a populated index");
+        (await TableSqlAsync(connection, "vec_code")).ShouldContain("float[768]");
+    }
+
+    /// <summary>Presence is read explicitly for the code tables exactly as for the memory
+    /// tables — a dimension comparison alone would report "already correct" for a missing table.</summary>
+    [Fact]
+    public async Task ReconcileAsync_CodeTables_TableMissing_CreatesIt()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, Ct);
+        await connection.ExecuteAsync(new CommandDefinition("DROP TABLE vec_code", cancellationToken: Ct));
+
+        var changed = await new VecDimensionReconciler().ReconcileAsync(
+            connection, transaction: null, 768, VecDimensionReconciler.CodeVecTables, Ct);
+
+        changed.ShouldBeTrue("a missing table is not a matching table");
+        (await TableSqlAsync(connection, "vec_code")).ShouldContain("float[768]");
+    }
+
+    /// <summary>With a caller transaction the reconciler must NOT begin/commit its own: the
+    /// activation transaction (O3) owns the DDL, so an outer rollback undoes the reconcile too.</summary>
+    [Fact]
+    public async Task ReconcileAsync_CodeTables_InCallersTransaction_DoesNotCommitItself()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, Ct);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(Ct);
+
+        await new VecDimensionReconciler().ReconcileAsync(
+            connection, transaction, 1024, VecDimensionReconciler.CodeVecTables, Ct);
+        await transaction.RollbackAsync(CancellationToken.None);
+
+        (await TableSqlAsync(connection, "vec_code")).ShouldContain("float[768]",
+            customMessage: "the DDL must live inside the caller's transaction and roll back with it");
+        (await TableSqlAsync(connection, "vec_entries")).ShouldContain("float[384]");
+    }
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private static async Task SeedEmbeddedEntryAsync(SqliteConnection connection)
