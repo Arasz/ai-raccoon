@@ -10,10 +10,10 @@ namespace AiRaccoon.Infrastructure.Embedding;
 
 /// <inheritdoc cref="ICodeEmbedder" />
 public sealed partial class CodeEmbedder(IEmbeddingService embeddings, ILogger<CodeEmbedder> logger,
-    IVecDimensionReconciler? vecDimensions = null)
+    IVecDimensionReconciler vecDimensions)
     : ICodeEmbedder
 {
-    private readonly IVecDimensionReconciler _vecDimensions = vecDimensions ?? new VecDimensionReconciler();
+    private readonly IVecDimensionReconciler _vecDimensions = vecDimensions;
 
     /// <summary>Generator-call sub-batch size (§3.3 D-E9: "batches of 32"), mirroring
     /// EntryEmbedder.EmbedAsync (S8) — a smaller generator call also shrinks S1's stale-engine race
