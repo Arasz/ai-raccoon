@@ -89,12 +89,12 @@ public sealed class MemorySearchCodeIntegrationTests : IAsyncLifetime
     ///     same ones the golden fixture family pins) and asserts the JSON key itself is absent.
     /// </summary>
     [Fact]
-    public async Task Search_KindMemory_Default_ResponseHasNoCodeKeyAtAll_EvenWithCodeRowsInTheBank()
+    public async Task Search_KindMemory_Explicit_ResponseHasNoCodeKeyAtAll_EvenWithCodeRowsInTheBank()
     {
         await SeedAsync(id: 1, projectId: "acme", path: "src/Wombat.cs", value: "sealed class WombatRunner { }",
             lineStart: 1, lineEnd: 3);
 
-        var envelope = await _tools.Search("acme", "WombatRunner",
+        var envelope = await _tools.Search("acme", "WombatRunner", kind: "memory",
             cancellationToken: TestContext.Current.CancellationToken);
 
         var data = JsonSerializer.SerializeToNode(envelope, McpJsonUtilities.DefaultOptions)!.AsObject()["data"]!.AsObject();
