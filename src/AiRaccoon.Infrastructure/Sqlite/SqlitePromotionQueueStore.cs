@@ -10,8 +10,7 @@ public sealed class SqlitePromotionQueueStore(
     TimeProvider timeProvider) : IPromotionQueueStore, IPromotionQueuePruneStore
 {
     /// <inheritdoc cref="IPromotionQueuePruneStore.ReportPruneOrphansAsync" />
-    public Task<PromotionQueueOrphanReport> ReportPruneOrphansAsync(CancellationToken cancellationToken = default) =>
-        PruneOrphansAsync(apply: false, cancellationToken);
+    public Task<PromotionQueueOrphanReport> ReportPruneOrphansAsync(CancellationToken cancellationToken = default) => PruneOrphansAsync(false, cancellationToken);
 
     /// <inheritdoc cref="IPromotionQueuePruneStore.RequestPruneOrphansAsync" />
     public async Task RequestPruneOrphansAsync(CancellationToken cancellationToken = default)
@@ -227,6 +226,7 @@ public sealed class SqlitePromotionQueueStore(
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
     }
+
     public async Task<int> PruneRejectedAsync(string projectId,
         CancellationToken cancellationToken = default)
     {

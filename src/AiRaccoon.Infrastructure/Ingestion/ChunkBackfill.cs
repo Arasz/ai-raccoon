@@ -66,7 +66,7 @@ public sealed class ChunkBackfill(IMarkdownChunker chunker, TimeProvider timePro
             }
 
             await connection.ExecuteAsync(new CommandDefinition(
-                "DELETE FROM entries WHERE id = @id", new { id = row.Id }, cancellationToken: cancellationToken))
+                    "DELETE FROM entries WHERE id = @id", new { id = row.Id }, cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
 
             foreach (var piece in split)
@@ -113,10 +113,10 @@ public sealed class ChunkBackfill(IMarkdownChunker chunker, TimeProvider timePro
     internal async Task<ChunkBudget> BudgetAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var provider = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
-            "SELECT value FROM settings WHERE key = 'embedding.provider'", cancellationToken: cancellationToken))
+                "SELECT value FROM settings WHERE key = 'embedding.provider'", cancellationToken: cancellationToken))
             .ConfigureAwait(false);
         var model = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
-            "SELECT value FROM settings WHERE key = 'embedding.model'", cancellationToken: cancellationToken))
+                "SELECT value FROM settings WHERE key = 'embedding.model'", cancellationToken: cancellationToken))
             .ConfigureAwait(false);
         provider = string.IsNullOrWhiteSpace(provider) ? "local" : provider;
 
@@ -126,13 +126,22 @@ public sealed class ChunkBackfill(IMarkdownChunker chunker, TimeProvider timePro
         // local counts with the engine's own tokenizer; non-local uses the same o200k proxy the
         // ingest path's chunker-default counter uses (D9 — the repair family and the ingest path
         // must count with the same tokenizer per engine).
-        TokenCount countTokens = provider.Equals("local", StringComparison.OrdinalIgnoreCase)
+        var countTokens = provider.Equals("local", StringComparison.OrdinalIgnoreCase)
             ? new TokenCount(embeddingService.ResolveTokenizer(settings)!.CountTokens)
             : new TokenCount(new O200kTokenizer().CountTokens);
         return new ChunkBudget(budget, overlay, countTokens);
     }
 
     private sealed record Row(
-        long Id, string Hash, string? Path, string Value, string? SourceFile, string? Section,
-        string? Scope, string? ProjectId, string? ContextLabel, string? WorkspaceId, long? SourceId);
+        long Id,
+        string Hash,
+        string? Path,
+        string Value,
+        string? SourceFile,
+        string? Section,
+        string? Scope,
+        string? ProjectId,
+        string? ContextLabel,
+        string? WorkspaceId,
+        long? SourceId);
 }

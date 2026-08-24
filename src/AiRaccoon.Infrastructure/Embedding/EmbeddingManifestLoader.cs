@@ -116,6 +116,5 @@ public sealed class EmbeddingManifestLoader(
         return Path.Combine(modelDirectory, relativePath);
     }
 
-    private static string SchemaName<TEnum>(TEnum value) where TEnum : struct, Enum =>
-        KebabCaseEnumJsonConverter<TEnum>.SchemaNameOf(value);
+    private static string SchemaName<TEnum>(TEnum value) where TEnum : struct, Enum => KebabCaseEnumJsonConverter<TEnum>.SchemaNameOf(value);
 }

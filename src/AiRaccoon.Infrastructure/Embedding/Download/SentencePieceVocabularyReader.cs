@@ -15,6 +15,6 @@ public sealed class SentencePieceVocabularyReader : ISentencePieceVocabularyRead
     public IReadOnlyDictionary<string, int> Read(string modelPath)
     {
         using var stream = File.OpenRead(modelPath);
-        return SentencePieceTokenizer.Create(stream, addBeginningOfSentence: false, addEndOfSentence: false).Vocabulary;
+        return SentencePieceTokenizer.Create(stream, false, false).Vocabulary;
     }
 }

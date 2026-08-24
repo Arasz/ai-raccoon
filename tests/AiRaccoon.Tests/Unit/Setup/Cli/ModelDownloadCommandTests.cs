@@ -1,4 +1,3 @@
-using System.Net.Http;
 using AiRaccoon.Infrastructure.Embedding.Download;
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Setup.Cli.Commands;

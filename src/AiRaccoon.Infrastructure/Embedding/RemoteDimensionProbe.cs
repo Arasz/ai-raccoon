@@ -1,5 +1,3 @@
-using Microsoft.Extensions.AI;
-
 namespace AiRaccoon.Infrastructure.Embedding;
 
 /// <summary>Asks an OpenAI-compatible endpoint how wide its embeddings actually are (plan D10).</summary>

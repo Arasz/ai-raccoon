@@ -10,15 +10,13 @@ public static class MetricsConfigKeys
     /// <summary>Ceiling the CLI enforces on write: buffer capacity is otherwise an allocation an operator could set arbitrarily large.</summary>
     public const int MaxBufferCapacity = 1_000_000;
 
-    public static int ParseBufferCapacity(string? value) =>
-        int.TryParse(value, out var capacity) && capacity > 0 ? capacity : DefaultBufferCapacity;
+    public static int ParseBufferCapacity(string? value) => int.TryParse(value, out var capacity) && capacity > 0 ? capacity : DefaultBufferCapacity;
 
     public const string FlushIntervalSecondsGlobal = "metrics.flush-interval-seconds.global";
 
     public const int DefaultFlushIntervalSeconds = 30;
 
-    public static int ParseFlushIntervalSeconds(string? value) =>
-        int.TryParse(value, out var seconds) && seconds > 0 ? seconds : DefaultFlushIntervalSeconds;
+    public static int ParseFlushIntervalSeconds(string? value) => int.TryParse(value, out var seconds) && seconds > 0 ? seconds : DefaultFlushIntervalSeconds;
 
     /// <summary>Best-effort retention for the hot `metrics` table (docs/plans/2026-08-15-performance-metrics-implementation.md, WP4).</summary>
     public const string RetentionDaysGlobal = "metrics.retention-days.global";
@@ -28,8 +26,7 @@ public static class MetricsConfigKeys
     /// <summary>Ceiling the CLI enforces on write: MetricsRetentionJob computes DateTimeOffset.AddDays(-days), which throws beyond a bound far smaller than int.MaxValue.</summary>
     public const int MaxRetentionDays = 36500;
 
-    public static int ParseRetentionDays(string? value) =>
-        int.TryParse(value, out var days) && days > 0 ? days : DefaultRetentionDays;
+    public static int ParseRetentionDays(string? value) => int.TryParse(value, out var days) && days > 0 ? days : DefaultRetentionDays;
 
     /// <summary>
     ///     The sentinel project id self-metrics (flush duration/batch size, drop count) are tagged

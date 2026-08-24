@@ -1,11 +1,9 @@
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
-using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Infrastructure.Embedding;
-using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;

@@ -57,7 +57,7 @@ public sealed class PendingEmbedMaintenanceDrainTests : IDisposable
         await SeedPendingRowsAsync(3);
         await ConfigureProviderAsync();
         var pump = TestData.NewEmbedDrainPump();
-        var entryEmbedder = new EntryEmbedder(new CountingEmbeddingService(), _modelMigrationLease, _time);
+        var entryEmbedder = new EntryEmbedder(new CountingEmbeddingService(), _modelMigrationLease, _time, new VecDimensionReconciler());
         var jobs = new IMaintenanceJob[] { new PendingEmbedJob(entryEmbedder, pump) };
         var maintenance = ServiceWith(jobs);
         var drain = new EmbedDrainService(pump, _factory, entryEmbedder, new FakeCodeEmbedder(),

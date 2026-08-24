@@ -55,7 +55,7 @@ public static class PerformanceReportBuilder
         var effectiveBucket = boundedBucket < minBucketForCap ? minBucketForCap : boundedBucket;
         var bucketCount = Math.Max(1, (int)Math.Ceiling(window / effectiveBucket));
 
-        IReadOnlyList<string> seriesNames = phaseNames is { Count: > 0 } ? [.. toolNames, .. phaseNames] : toolNames;
+        var seriesNames = phaseNames is { Count: > 0 } ? [.. toolNames, .. phaseNames] : toolNames;
         var series = seriesNames
             .Select(name => BuildSeries(name, samples, start, now, effectiveBucket, bucketCount))
             .ToList();

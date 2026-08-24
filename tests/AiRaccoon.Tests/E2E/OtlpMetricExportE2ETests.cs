@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Net;
-using System.Net.Sockets;
 using Microsoft.Extensions.DependencyInjection;
 using OpenTelemetry.Metrics;
 using Shouldly;

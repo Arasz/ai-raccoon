@@ -48,7 +48,7 @@ public sealed class QueryTruncationTests : IDisposable
     public async Task ALongQuery_IsTrimmedByTheQueryPath_NotByTheGenerator()
     {
         await using var connection = await OpenConfiguredAsync();
-        var embedder = new EntryEmbedder(new EmbeddingService(_logger, new LocalTokenizer(), new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()), NoOpMeasurementRecorder.Instance, _timeProvider), _modelMigrationLease, _timeProvider);
+        var embedder = new EntryEmbedder(new EmbeddingService(_logger, new LocalTokenizer(), new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()), NoOpMeasurementRecorder.Instance, _timeProvider), _modelMigrationLease, _timeProvider, new VecDimensionReconciler());
 
         var vector = await embedder.EmbedQueryAsync(connection, LongQuery(), TestContext.Current.CancellationToken);
 
@@ -65,7 +65,7 @@ public sealed class QueryTruncationTests : IDisposable
     public async Task TheQueryMessage_SaysWhatWasCutAndWhatItMeans()
     {
         await using var connection = await OpenConfiguredAsync();
-        var embedder = new EntryEmbedder(new EmbeddingService(_logger, new LocalTokenizer(), new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()), NoOpMeasurementRecorder.Instance, _timeProvider), _modelMigrationLease, _timeProvider);
+        var embedder = new EntryEmbedder(new EmbeddingService(_logger, new LocalTokenizer(), new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()), NoOpMeasurementRecorder.Instance, _timeProvider), _modelMigrationLease, _timeProvider, new VecDimensionReconciler());
 
         await embedder.EmbedQueryAsync(connection, LongQuery(), TestContext.Current.CancellationToken);
 
@@ -79,7 +79,7 @@ public sealed class QueryTruncationTests : IDisposable
     public async Task AShortQuery_IsNotTrimmedAndSaysNothing()
     {
         await using var connection = await OpenConfiguredAsync();
-        var embedder = new EntryEmbedder(new EmbeddingService(_logger, new LocalTokenizer(), new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()), NoOpMeasurementRecorder.Instance, _timeProvider), _modelMigrationLease, _timeProvider);
+        var embedder = new EntryEmbedder(new EmbeddingService(_logger, new LocalTokenizer(), new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()), NoOpMeasurementRecorder.Instance, _timeProvider), _modelMigrationLease, _timeProvider, new VecDimensionReconciler());
 
         await embedder.EmbedQueryAsync(connection, "how does the promotion queue decide?",
             TestContext.Current.CancellationToken);
@@ -97,7 +97,7 @@ public sealed class QueryTruncationTests : IDisposable
             OnnxEmbeddingGenerator.MaxContentTokens, text => tokenizer.CountTokens(text));
         tokenizer.CountTokens(atLimit).ShouldBe(OnnxEmbeddingGenerator.MaxContentTokens,
             "the fixture must sit exactly on the limit, or this tests nothing");
-        var embedder = new EntryEmbedder(new EmbeddingService(_logger, new LocalTokenizer(), new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()), NoOpMeasurementRecorder.Instance, _timeProvider), _modelMigrationLease, _timeProvider);
+        var embedder = new EntryEmbedder(new EmbeddingService(_logger, new LocalTokenizer(), new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()), NoOpMeasurementRecorder.Instance, _timeProvider), _modelMigrationLease, _timeProvider, new VecDimensionReconciler());
 
         await embedder.EmbedQueryAsync(connection, atLimit, TestContext.Current.CancellationToken);
 

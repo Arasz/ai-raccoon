@@ -3,7 +3,6 @@ using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Settings;
 using AiRaccoon.Setup;
-using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 

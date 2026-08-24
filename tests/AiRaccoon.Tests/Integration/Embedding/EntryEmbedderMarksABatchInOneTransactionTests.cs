@@ -67,7 +67,7 @@ public sealed class EntryEmbedderMarksABatchInOneTransactionTests : IDisposable
         await InstallFailureTriggerAsync(connection, failingId, ct);
 
         var embedder = new EntryEmbedder(new CountingEmbeddingService(), Substitute.For<IModelMigrationLease>(),
-            TimeProvider.System);
+            TimeProvider.System, new VecDimensionReconciler());
 
         await Should.ThrowAsync<SqliteException>(() => embedder.EmbedPendingBatchAsync(connection, ids.Count, ct));
 

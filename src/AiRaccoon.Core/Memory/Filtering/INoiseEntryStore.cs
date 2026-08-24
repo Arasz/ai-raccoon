@@ -51,12 +51,9 @@ public sealed class NoOpNoiseEntryStore : INoiseEntryStore, INoiseSummaryStore
         long nowUnixSeconds, CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
 
-    public Task<NoiseEntrySummary> SummarizeAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(new NoiseEntrySummary(0, new Dictionary<string, int>(StringComparer.Ordinal)));
+    public Task<NoiseEntrySummary> SummarizeAsync(CancellationToken cancellationToken = default) => Task.FromResult(new NoiseEntrySummary(0, new Dictionary<string, int>(StringComparer.Ordinal)));
 
-    public Task<IReadOnlyList<NoiseEntry>> ListRecentAsync(int limit, CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<NoiseEntry>>([]);
+    public Task<IReadOnlyList<NoiseEntry>> ListRecentAsync(int limit, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<NoiseEntry>>([]);
 
-    public Task<int> PurgeExpiredAsync(long nowUnixSeconds, CancellationToken cancellationToken = default) =>
-        Task.FromResult(0);
+    public Task<int> PurgeExpiredAsync(long nowUnixSeconds, CancellationToken cancellationToken = default) => Task.FromResult(0);
 }

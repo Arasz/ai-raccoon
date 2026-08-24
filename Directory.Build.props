@@ -12,10 +12,10 @@
         <PackageOutputPath>$(MSBuildThisFileDirectory).nupkg/</PackageOutputPath>
     </PropertyGroup>
 
-    <Import Project="$(MSBuildThisFileDirectory)GitStamp.targets" />
+    <Import Project="$(MSBuildThisFileDirectory)GitStamp.targets"/>
 
     <Target Name="ValidateVersionFile" BeforeTargets="Restore;Build;Pack">
         <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(Version)', '^\d+\.\d+\.\d+$'))"
-               Text="VERSION at the repo root must hold a bare semver (e.g. 1.2.3); found '$(Version)'." />
+               Text="VERSION at the repo root must hold a bare semver (e.g. 1.2.3); found '$(Version)'."/>
     </Target>
 </Project>

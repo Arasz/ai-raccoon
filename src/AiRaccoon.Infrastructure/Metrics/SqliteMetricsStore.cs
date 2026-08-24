@@ -20,9 +20,9 @@ public sealed partial class SqliteMetricsStore(ISqliteConnectionFactory factory,
     : IMetricsStore
 {
     private const string InsertSql = """
-                                      INSERT INTO metrics (name, kind, value, unit, project_id, query_hash, correlation_id, tags, recorded_at)
-                                      VALUES (@Name, @Kind, @Value, @Unit, @ProjectId, @QueryHash, @CorrelationId, @Tags, @RecordedAt)
-                                      """;
+                                     INSERT INTO metrics (name, kind, value, unit, project_id, query_hash, correlation_id, tags, recorded_at)
+                                     VALUES (@Name, @Kind, @Value, @Unit, @ProjectId, @QueryHash, @CorrelationId, @Tags, @RecordedAt)
+                                     """;
 
     /// <summary>
     ///     Tags keys allowed at save time — a positive allowlist, not a list of known-bad keys to
@@ -74,18 +74,19 @@ public sealed partial class SqliteMetricsStore(ISqliteConnectionFactory factory,
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private static object ToParameters(Measurement measurement) => new
-    {
-        measurement.Name,
-        Kind = measurement.Kind.ToString(),
-        measurement.Value,
-        measurement.Unit,
-        measurement.ProjectId,
-        measurement.QueryHash,
-        measurement.CorrelationId,
-        measurement.Tags,
-        RecordedAt = measurement.RecordedAt.ToUnixTimeSeconds()
-    };
+    private static object ToParameters(Measurement measurement) =>
+        new
+        {
+            measurement.Name,
+            Kind = measurement.Kind.ToString(),
+            measurement.Value,
+            measurement.Unit,
+            measurement.ProjectId,
+            measurement.QueryHash,
+            measurement.CorrelationId,
+            measurement.Tags,
+            RecordedAt = measurement.RecordedAt.ToUnixTimeSeconds()
+        };
 
     /// <summary>
     ///     Fails closed: QueryHash/CorrelationId that do not match their real shape, and Tags that

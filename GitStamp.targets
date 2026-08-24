@@ -20,8 +20,8 @@
               StandardOutputImportance="Low"
               IgnoreExitCode="true"
               ContinueOnError="WarnAndContinue">
-            <Output TaskParameter="ConsoleOutput" ItemName="_GitCommitTimestampLines" />
-            <Output TaskParameter="ExitCode" PropertyName="_GitCommitTimestampExitCode" />
+            <Output TaskParameter="ConsoleOutput" ItemName="_GitCommitTimestampLines"/>
+            <Output TaskParameter="ExitCode" PropertyName="_GitCommitTimestampExitCode"/>
         </Exec>
 
         <PropertyGroup>
@@ -29,7 +29,7 @@
         </PropertyGroup>
 
         <ItemGroup Condition="'$(GitCommitTimestamp)' != ''">
-            <AssemblyMetadata Include="CommitTimestamp" Value="$(GitCommitTimestamp)" />
+            <AssemblyMetadata Include="CommitTimestamp" Value="$(GitCommitTimestamp)"/>
         </ItemGroup>
     </Target>
 

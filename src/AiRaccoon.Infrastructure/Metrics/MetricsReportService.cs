@@ -18,11 +18,11 @@ namespace AiRaccoon.Infrastructure.Metrics;
 public sealed class MetricsReportService(ISqliteConnectionFactory factory, TimeProvider timeProvider) : IMetricsReportService
 {
     private const string SelectSql = """
-                                      SELECT name, value, recorded_at
-                                      FROM metrics
-                                      WHERE project_id = @ProjectId AND name IN @SeriesNames
-                                        AND recorded_at >= @FromUnix AND recorded_at <= @ToUnix
-                                      """;
+                                     SELECT name, value, recorded_at
+                                     FROM metrics
+                                     WHERE project_id = @ProjectId AND name IN @SeriesNames
+                                       AND recorded_at >= @FromUnix AND recorded_at <= @ToUnix
+                                     """;
 
     /// <summary>
     ///     WP3 (#477) / WP11 (log-values-as-metrics): every internal-series family — job.&lt;name&gt;.*,
@@ -34,12 +34,12 @@ public sealed class MetricsReportService(ISqliteConnectionFactory factory, TimeP
     ///     it too.
     /// </summary>
     private static readonly string DiscoverInternalSeriesNamesSql = $"""
-                                                                       SELECT DISTINCT name
-                                                                       FROM metrics
-                                                                       WHERE project_id = @ProjectId AND ({string.Join(" OR ",
-                                                                           MetricsConfigKeys.InternalSeriesPrefixes.Select((_, i) => $"name LIKE @Prefix{i}"))})
-                                                                         AND recorded_at >= @FromUnix AND recorded_at <= @ToUnix
-                                                                       """;
+                                                                     SELECT DISTINCT name
+                                                                     FROM metrics
+                                                                     WHERE project_id = @ProjectId AND ({string.Join(" OR ",
+                                                                         MetricsConfigKeys.InternalSeriesPrefixes.Select((_, i) => $"name LIKE @Prefix{i}"))})
+                                                                       AND recorded_at >= @FromUnix AND recorded_at <= @ToUnix
+                                                                     """;
 
     public async Task<PerformanceReport> GetReportAsync(
         string projectId,
@@ -69,8 +69,8 @@ public sealed class MetricsReportService(ISqliteConnectionFactory factory, TimeP
         // toolNames + phaseNames can never be empty: SearchTimings.SeriesNames always holds at
         // least the phases plus the total, so this always goes through the query below — no
         // separate empty-list branch.
-        var phaseNames = (IReadOnlyList<string>) [.. SearchTimings.SeriesNames, .. selfMetricNames, .. internalMetricNames];
-        var seriesNames = (IReadOnlyList<string>) [.. toolNames, .. phaseNames];
+        var phaseNames = (IReadOnlyList<string>)[.. SearchTimings.SeriesNames, .. selfMetricNames, .. internalMetricNames];
+        var seriesNames = (IReadOnlyList<string>)[.. toolNames, .. phaseNames];
 
         var rows = await connection.QueryAsync<MetricRow>(new CommandDefinition(SelectSql, new
         {

@@ -95,14 +95,15 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     ///     budget — docs/adr/0036) uses an identically configured tokenizer rather than a
     ///     hand-duplicated copy of these options.
     /// </summary>
-    public static BertTokenizer CreateTokenizer(string vocabPath) => BertTokenizer.Create(vocabPath, new BertOptions
-    {
-        LowerCaseBeforeTokenization = true,
-        ApplyBasicTokenization = true,
-        SplitOnSpecialTokens = true,
-        IndividuallyTokenizeCjk = true,
-        RemoveNonSpacingMarks = true
-    });
+    public static BertTokenizer CreateTokenizer(string vocabPath) =>
+        BertTokenizer.Create(vocabPath, new BertOptions
+        {
+            LowerCaseBeforeTokenization = true,
+            ApplyBasicTokenization = true,
+            SplitOnSpecialTokens = true,
+            IndividuallyTokenizeCjk = true,
+            RemoveNonSpacingMarks = true
+        });
 
     public Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(IEnumerable<string> values,
         EmbeddingGenerationOptions? options = null, CancellationToken cancellationToken = default)
@@ -252,8 +253,7 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
         }
     }
 
-    private static string OutputNameFor(EngineDescriptor descriptor) =>
-        descriptor.Pooling == "model-output" ? descriptor.EmbeddingOutput! : descriptor.TokenEmbeddingsOutput;
+    private static string OutputNameFor(EngineDescriptor descriptor) => descriptor.Pooling == "model-output" ? descriptor.EmbeddingOutput! : descriptor.TokenEmbeddingsOutput;
 
     private static int ReadOutputDimension(InferenceSession session, string outputName, string modelName)
     {
@@ -284,7 +284,7 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
 
     private (int[] Ids, int[] Mask) Encode(string text)
     {
-        var ids = _tokenizer.EncodeToIds(text, addSpecialTokens: true);
+        var ids = _tokenizer.EncodeToIds(text, true);
         if (ids.Count > _window)
         {
             Log.ChunkTruncatedAtEmbedTime(_logger, ids.Count, _window);

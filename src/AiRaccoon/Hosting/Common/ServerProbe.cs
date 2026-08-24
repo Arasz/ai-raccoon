@@ -1,4 +1,3 @@
-using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Text;
@@ -39,8 +38,7 @@ public sealed class ServerProbe : IServerProbe
 
     public Task<bool> RespondsAsync(int port, CancellationToken ctx) => RespondsAsync(EndpointFor(port), ctx);
 
-    public async Task<bool> RespondsAsync(Uri endpoint, CancellationToken ctx) =>
-        await ProbeAsync(endpoint, ctx) is ProbeVerdict.Answered;
+    public async Task<bool> RespondsAsync(Uri endpoint, CancellationToken ctx) => await ProbeAsync(endpoint, ctx) is ProbeVerdict.Answered;
 
     public Task<ProbeVerdict> ProbeAsync(int port, CancellationToken ctx) => ProbeAsync(EndpointFor(port), ctx);
 
@@ -55,7 +53,6 @@ public sealed class ServerProbe : IServerProbe
 
                 try
                 {
-
                     using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
                     request.Content = new StringContent("x", Encoding.UTF8, new MediaTypeHeaderValue("application/json"));
                     request.Headers.Accept.ParseAdd("application/json, text/event-stream");

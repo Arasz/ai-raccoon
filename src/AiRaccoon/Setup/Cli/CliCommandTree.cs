@@ -176,7 +176,7 @@ internal static class CliCommandTree
                         "which never activates. Re-running it against an already-downloaded directory only re-activates."),
                     new Command("local",
                         "Activates a manifest directory for the code corpus and invalidates its embedded rows to 'pending'. " +
-                        "Refuses a manifest whose dimensions are not 768: vec_code is fixed float[768].")
+                        "Any manifest dimension is accepted — vec_code is reconciled to it.")
                     {
                         new Argument<string>("dir") { HelpName = "dir" }
                     }

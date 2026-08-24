@@ -70,8 +70,8 @@ public static class ResiliencePipelineFactory
     /// <summary>
     ///     Recognizes transient HTTP status codes eligible for automatic retry (5xx, 408, 429).
     /// </summary>
-    public static bool IsTransientHttpStatusCode(HttpStatusCode statusCode)
-        => (int)statusCode >= 500
-           || statusCode == HttpStatusCode.RequestTimeout
-           || statusCode == HttpStatusCode.TooManyRequests;
+    public static bool IsTransientHttpStatusCode(HttpStatusCode statusCode) =>
+        (int)statusCode >= 500
+        || statusCode == HttpStatusCode.RequestTimeout
+        || statusCode == HttpStatusCode.TooManyRequests;
 }

@@ -94,8 +94,7 @@ public sealed partial class BundledModel(ILogger<BundledModel> logger, IHttpClie
         ?? throw BundledAssetUnavailable("BERT vocab", VocabFileName, baseDirectory, MissingBundledVocabMessage(VocabFileName));
 
     /// <summary>Actionable message for a missing bundled vocab; points at 'ai-raccoon model set local'.</summary>
-    internal static string MissingBundledVocabMessage(string fileName) =>
-        $"Bundled BERT vocab '{fileName}' not found next to the tool. Run 'ai-raccoon model set local' to restore it.";
+    internal static string MissingBundledVocabMessage(string fileName) => $"Bundled BERT vocab '{fileName}' not found next to the tool. Run 'ai-raccoon model set local' to restore it.";
 
     /// <summary>
     ///     Distinguishes a genuinely-missing bundled asset (baseDirectory exists, the file does not —

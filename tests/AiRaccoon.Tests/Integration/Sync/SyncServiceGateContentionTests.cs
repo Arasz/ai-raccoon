@@ -1,4 +1,3 @@
-using AiRaccoon.Core.Sync;
 using AiRaccoon.Infrastructure.Sync;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;

@@ -172,15 +172,15 @@ Feature: Code corpus
             Then the tool errors with an actionable message naming the engine problem
             And memory_search with kind "memory" for the same project still succeeds
 
-    Rule: The code corpus's vector index accepts only 768-dimension manifests
-        # Plan §3.3: vec_code is a fixed float[768] index; unlike the memory bank's
-        # "model set local", code has no dimension-reconcile phase, so this is the
-        # only gate protecting it — refused at configure time, before anything commits.
-        Scenario: model set code local refuses a non-768-dimension manifest
+    Rule: The code corpus's vector index accepts any-dimension manifests and reconciles vec_code
+        # Plan §3.3 (vec-code-unfix-dim): vec_code is a vec0 table like the memory bank's —
+        # activation reconciles it to the manifest's dimension in the same transaction, so
+        # dimension is NOT a configure-time gate anymore (the chunk-budget gate still is).
+        Scenario: model set code local accepts any-dimension manifest and reconciles vec_code
             Given a local model manifest declaring 1024 embedding dimensions
             When the user runs model set code local against that manifest's directory
-            Then the command errors naming the required 768 dimensions
-            And no code engine setting is changed
+            Then the code embedding engine is activated
+            And vec_code is reconciled to 1024 dimensions
 
         Scenario: model set code local accepts a 768-dimension manifest
             Given a local model manifest declaring 768 embedding dimensions

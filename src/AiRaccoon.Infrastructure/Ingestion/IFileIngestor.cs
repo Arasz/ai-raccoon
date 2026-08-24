@@ -31,8 +31,7 @@ public readonly record struct FileIngestResult(
     /// <summary>Which corpus this ingest actually wrote new rows to — <see cref="CorpusKind.Neither" />
     /// when nothing was inserted (ignored/hidden/unrouted, or a rediscovered-unchanged file). One
     /// ingest call only ever touches one corpus — routing is by file type, never both at once.</summary>
-    public CorpusKind WrittenCorpus =>
-        RowsInserted == 0 ? CorpusKind.Neither : CodeChunkHashes is not null ? CorpusKind.Code : CorpusKind.Memory;
+    public CorpusKind WrittenCorpus => RowsInserted == 0 ? CorpusKind.Neither : CodeChunkHashes is not null ? CorpusKind.Code : CorpusKind.Memory;
 }
 
 /// <summary>
@@ -41,7 +40,9 @@ public readonly record struct FileIngestResult(
 ///     null-vs-empty contract (#485): null means the code chunker's zero chunks are not trustworthy
 ///     enough to prune by.
 /// </summary>
-public readonly record struct WalkedFile(string Path, IReadOnlyList<string> ChunkHashes,
+public readonly record struct WalkedFile(
+    string Path,
+    IReadOnlyList<string> ChunkHashes,
     IReadOnlyList<string>? CodeChunkHashes);
 
 /// <summary>A directory walk's outcome: files indexed, plus each walked file's current chunk set.</summary>

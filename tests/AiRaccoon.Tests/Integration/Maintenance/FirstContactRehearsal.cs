@@ -96,7 +96,7 @@ public sealed class FirstContactRehearsal(ITestOutputHelper output)
         {
             var project = await connection.ExecuteScalarAsync<string?>(
                 "SELECT project_id FROM entries WHERE embed_state = 'pending' AND project_id IS NOT NULL LIMIT 1");
-            var embedder = new EntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider);
+            var embedder = new EntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider, new VecDimensionReconciler());
             var started = DateTimeOffset.UtcNow;
             var embedded = await embedder.EmbedPendingAsync(connection, project ?? "acme", sample,
                 TestContext.Current.CancellationToken);

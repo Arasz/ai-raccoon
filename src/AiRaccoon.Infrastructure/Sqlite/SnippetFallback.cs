@@ -67,8 +67,7 @@ internal static partial class SnippetFallback
         return earliest < 0 ? null : Math.Clamp(earliest - WindowChars / 2, 0, maxStart);
     }
 
-    private static int HashSeededStart(string value, string hash, int maxStart) =>
-        (int)(BitConverter.ToUInt64(SHA256.HashData(Encoding.UTF8.GetBytes(hash)), 0) % (uint)(maxStart + 1));
+    private static int HashSeededStart(string value, string hash, int maxStart) => (int)(BitConverter.ToUInt64(SHA256.HashData(Encoding.UTF8.GetBytes(hash)), 0) % (uint)(maxStart + 1));
 
     [GeneratedRegex(@"\w{2,}")]
     private static partial Regex TokenPattern();

@@ -2,7 +2,6 @@ using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Watch;
-using AiRaccoon.Infrastructure.Sqlite;
 using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Settings;
@@ -27,8 +26,7 @@ internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationS
         _acquire = acquire;
     }
 
-    public async Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
-        await (await InnerAsync(cancellationToken)).GetSettingAsync(key, cancellationToken);
+    public async Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) => await (await InnerAsync(cancellationToken)).GetSettingAsync(key, cancellationToken);
 
     public async Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default) =>
         await (await InnerAsync(cancellationToken)).SetSettingAsync(key, value, cancellationToken);
@@ -37,8 +35,7 @@ internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationS
         CancellationToken cancellationToken = default) =>
         await (await InnerAsync(cancellationToken)).GetSettingsByPrefixAsync(prefix, cancellationToken);
 
-    public async Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) =>
-        await (await InnerAsync(cancellationToken)).DeleteSettingAsync(key, cancellationToken);
+    public async Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) => await (await InnerAsync(cancellationToken)).DeleteSettingAsync(key, cancellationToken);
 
     /// <inheritdoc />
     public async Task<EmbeddingConfig> StartModelMigrationAsync(string provider, string? model, string? baseUrl,
@@ -73,12 +70,10 @@ internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationS
         await AsPruneStore(await InnerAsync(cancellationToken)).ReportPruneOrphansAsync(cancellationToken);
 
     /// <inheritdoc />
-    public async Task RequestPruneOrphansAsync(CancellationToken cancellationToken = default) =>
-        await AsPruneStore(await InnerAsync(cancellationToken)).RequestPruneOrphansAsync(cancellationToken);
+    public async Task RequestPruneOrphansAsync(CancellationToken cancellationToken = default) => await AsPruneStore(await InnerAsync(cancellationToken)).RequestPruneOrphansAsync(cancellationToken);
 
     /// <inheritdoc />
-    public async Task<BankStats> GetStatsAsync(CancellationToken cancellationToken = default) =>
-        await AsMaintenanceStatsStore(await InnerAsync(cancellationToken)).GetStatsAsync(cancellationToken);
+    public async Task<BankStats> GetStatsAsync(CancellationToken cancellationToken = default) => await AsMaintenanceStatsStore(await InnerAsync(cancellationToken)).GetStatsAsync(cancellationToken);
 
     /// <inheritdoc />
     public async Task<NoiseEntrySummary> SummarizeAsync(CancellationToken cancellationToken = default) =>

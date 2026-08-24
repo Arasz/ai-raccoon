@@ -1,7 +1,6 @@
 using System.Net;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
-using AiRaccoon.Setup.Cli;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;

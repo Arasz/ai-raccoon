@@ -38,7 +38,7 @@ public sealed class ChunkIndexRepairJob(IFileTypeMatcher fileTypeMatcher, IEmbed
     public async ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         await new ChunkIndexRepair(fileTypeMatcher, embeddingService)
-            .RunAsync(connection, apply: true, cancellationToken).ConfigureAwait(false);
+            .RunAsync(connection, true, cancellationToken).ConfigureAwait(false);
 
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.FinishRepairRequest,
                 new { kind = RepairKinds.ChunkIndex, finishedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },

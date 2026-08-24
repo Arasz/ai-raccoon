@@ -5,16 +5,38 @@ using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 
+public static class VecDimensionReconcilerExtensions
+{
+    extension(IVecDimensionReconciler reconciler)
+    {
+        /// <summary>Recreates the memory bank's two vec0 tables at <paramref name="targetDimension" />.</summary>
+        public Task<bool> ReconcileMemoryAsync(SqliteConnection connection, int targetDimension, CancellationToken cancellationToken) =>
+            reconciler.ReconcileAsync(connection, null, targetDimension, VecDimensionReconciler.MemoryVecTables, cancellationToken);
+
+        /// <summary>Recreates the code corpus's vec0 table at <paramref name="targetDimension" />.</summary>
+        public Task<bool> ReconcileCodeAsync(SqliteConnection connection,
+            SqliteTransaction? transaction, int targetDimension, CancellationToken cancellationToken) =>
+            reconciler.ReconcileAsync(connection, transaction, targetDimension, VecDimensionReconciler.CodeVecTables, cancellationToken);
+
+
+        /// <summary>Recreates the code corpus's vec0 table at <paramref name="targetDimension" />.</summary>
+        public Task<bool> ReconcileCodeAsync(SqliteConnection connection, int targetDimension, CancellationToken cancellationToken) =>
+            reconciler.ReconcileAsync(connection, null, targetDimension, VecDimensionReconciler.CodeVecTables, cancellationToken);
+    }
+}
+
 /// <summary>Brings the vec0 tables to the dimension the active engine embeds at (plan D3).</summary>
 public interface IVecDimensionReconciler
 {
-    /// <summary>Recreates `vec_entries`/`vec_structure` at <paramref name="targetDimension" /> when
-    /// either is missing or declared at another dimension. True when the bank changed.</summary>
-    Task<bool> ReconcileAsync(SqliteConnection connection, int targetDimension, CancellationToken cancellationToken);
+    /// <summary>Recreates <paramref name="tables" /> at <paramref name="targetDimension" /> when
+    /// any is missing or declared at another dimension. When <paramref name="transaction" /> is
+    /// passed the caller owns it (the reconciler never begins, commits or rolls back); otherwise
+    /// the reconciler begins and commits its own. True when any table changed.</summary>
+    Task<bool> ReconcileAsync(SqliteConnection connection, SqliteTransaction? transaction, int targetDimension, IReadOnlyCollection<string> tables, CancellationToken cancellationToken);
 }
 
 /// <summary>
-///     Create-if-missing-or-mismatch in ONE `BEGIN IMMEDIATE` transaction, with no repopulate
+///     Create-if-missing-or-mismatch in ONE transaction, with no repopulate
 ///     (plan D3). Three things this deliberately does not do, each of which wedges the bank:
 ///     it never calls <c>RebuildVecTableAsync</c>, whose repopulate reads the `entries` blob columns
 ///     that still hold OLD-dimension vectors after `MarkAllEmbeddedPending`; it never infers presence
@@ -24,36 +46,50 @@ public interface IVecDimensionReconciler
 /// </summary>
 public sealed partial class VecDimensionReconciler : IVecDimensionReconciler
 {
-    private static readonly string[] VecTables = ["vec_entries", "vec_structure"];
+    /// <summary>The memory bank's two vec0 tables.</summary>
+    public static readonly IReadOnlyCollection<string> MemoryVecTables = ["vec_entries", "vec_structure"];
 
-    public async Task<bool> ReconcileAsync(SqliteConnection connection, int targetDimension,
-        CancellationToken cancellationToken)
+    /// <summary>The code corpus's vec0 table.</summary>
+    public static readonly IReadOnlyCollection<string> CodeVecTables = ["vec_code"];
+
+    public async Task<bool> ReconcileAsync(SqliteConnection connection, SqliteTransaction? transaction,
+        int targetDimension, IReadOnlyCollection<string> tables, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(tables);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(targetDimension, 0);
 
-        await using var transaction =
-            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var ownsTransaction = transaction is null;
+        var tx = transaction ?? (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken)
+            .ConfigureAwait(false);
         var changed = false;
         try
         {
-            foreach (var table in VecTables)
+            foreach (var table in tables)
             {
-                if (await NeedsRecreateAsync(connection, transaction, table, targetDimension, cancellationToken)
-                    .ConfigureAwait(false))
+                if (await NeedsRecreateAsync(connection, tx, table, targetDimension, cancellationToken)
+                        .ConfigureAwait(false))
                 {
-                    await RecreateAsync(connection, transaction, table, targetDimension, cancellationToken)
+                    await RecreateAsync(connection, tx, table, targetDimension, cancellationToken)
                         .ConfigureAwait(false);
                     changed = true;
                 }
             }
 
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            if (ownsTransaction)
+            {
+                await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
             return changed;
         }
         catch
         {
-            await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+            if (ownsTransaction)
+            {
+                await tx.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+
             throw;
         }
     }

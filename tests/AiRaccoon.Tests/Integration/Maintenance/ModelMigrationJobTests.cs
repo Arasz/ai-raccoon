@@ -53,7 +53,7 @@ public sealed class ModelMigrationJobTests : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
-    private ModelMigrationJob NewJob() => new(new EntryEmbedder(TestData.CreateEmbeddingService(), new SqliteModelMigrationLease(_time), _time));
+    private ModelMigrationJob NewJob() => new(new EntryEmbedder(TestData.CreateEmbeddingService(), new SqliteModelMigrationLease(_time), _time, new VecDimensionReconciler()));
 
     [Fact]
     public async Task HasWorkAsync_WithNoOpenMigration_IsFalse()
@@ -188,7 +188,7 @@ public sealed class ModelMigrationJobTests : IAsyncLifetime
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var perBatchAdvance = TimeSpan.FromSeconds(5);
         var embedder = new EntryEmbedder(new ClockAdvancingEmbeddingService(_time, perBatchAdvance),
-            new SqliteModelMigrationLease(_time), _time);
+            new SqliteModelMigrationLease(_time), _time, new VecDimensionReconciler());
         var beforeDrain = _time.GetUtcNow();
 
         await embedder.DrainMigrationAsync(connection, TestContext.Current.CancellationToken);

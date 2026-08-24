@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using AiRaccoon.Infrastructure.Assets;
 using AiRaccoon.Infrastructure.Embedding.Download;
 using AiRaccoon.Infrastructure.Embedding.Manifest;

@@ -1,4 +1,3 @@
-using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Shouldly;

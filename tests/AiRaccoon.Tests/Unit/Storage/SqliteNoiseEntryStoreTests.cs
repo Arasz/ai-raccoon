@@ -1,5 +1,4 @@
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Infrastructure.Sqlite;
 using Shouldly;
 using Xunit;

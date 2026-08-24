@@ -9,7 +9,6 @@ using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Settings;
 using AiRaccoon.Setup;
-using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
 using Dapper;
@@ -87,6 +86,48 @@ public sealed class VecDimensionReconcileAtStartTests : IDisposable
         (await VecRowCountAsync("vec_entries")).ShouldBe(1,
             customMessage: "a matching-dimension reconcile must not DROP+CREATE the table and lose its row");
         (await VecTableSqlAsync("vec_entries")).ShouldContain("float[384]");
+    }
+
+    [Fact]
+    public async Task AServerlessCodeActivationChangingDimensions_IsReconciledBeforeTheFirstToolCall()
+    {
+        using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
+
+        // Models a serverless code activation at 1024: the settings rows were written but no
+        // server was around to reconcile — vec_code is still at the schema default (768).
+        await SeedCodeEngineWithoutReconcileAsync(dimensions: 1024, withDimensionsRow: true);
+
+        await using var run = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+        await run.WaitForUrlAsync(TestContext.Current.CancellationToken);
+        var exit = await run.StopAsync();
+
+        exit.ShouldBe(ExitCode.Success);
+        (await VecTableSqlAsync("vec_code")).ShouldContain("float[1024]",
+            customMessage: "the next serve must reconcile vec_code to the code engine's dimension before a tool call");
+    }
+
+    [Fact]
+    public async Task ALegacyCodeBankWithoutCodeDimensionsRow_DefaultsTo768AndPerformsNoDdl()
+    {
+        using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
+
+        // A pre-1.35 bank: codeModel set, NO codeDimensions row, and a real vec_code row at 768.
+        await SeedCodeEngineWithoutReconcileAsync(dimensions: 768, withDimensionsRow: false, seedEmbeddedRow: true);
+
+        await using var run = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+        await run.WaitForUrlAsync(TestContext.Current.CancellationToken);
+        var exit = await run.StopAsync();
+
+        exit.ShouldBe(ExitCode.Success);
+        (await VecRowCountAsync("vec_code")).ShouldBe(1,
+            customMessage: "a missing codeDimensions row must default to 768 and NOT drop the populated index");
+        (await VecTableSqlAsync("vec_code")).ShouldContain("float[768]");
     }
 
     /// <summary>
@@ -328,6 +369,42 @@ public sealed class VecDimensionReconcileAtStartTests : IDisposable
         await connection.ExecuteAsync(new CommandDefinition(
             "UPDATE entries SET embed_state = 'embedded', embedding = @vector WHERE hash = 'h1'",
             new { vector }, cancellationToken: Ct));
+    }
+
+    /// <summary>Writes code-engine settings + optionally a 768-dim embedded code row straight into
+    /// the bank without ever going through activation — the state a serverless code activation or
+    /// a pre-1.35 bank leaves behind (vec_code still at the schema default).</summary>
+    private async Task SeedCodeEngineWithoutReconcileAsync(int dimensions, bool withDimensionsRow,
+        bool seedEmbeddedRow = false)
+    {
+        await using var connection = await _factory.OpenBankAsync(Ct);
+        var rows = new List<object>
+        {
+            new { key = EmbeddingSettingsKeys.CodeModel, value = "/models/code-engine" },
+            new { key = EmbeddingSettingsKeys.CodeEngine, value = "local:/models/code-engine" }
+        };
+        if (withDimensionsRow)
+        {
+            rows.Add(new { key = EmbeddingSettingsKeys.CodeDimensions, value = dimensions.ToString() });
+        }
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO settings(key, value) VALUES (@key, @value) " +
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            rows, cancellationToken: Ct));
+
+        if (seedEmbeddedRow)
+        {
+            var vector = new byte[768 * sizeof(float)];
+            await connection.ExecuteAsync(new CommandDefinition(
+                """
+                INSERT INTO code_entries (id, hash, path, value, source_file, line_start, line_end, project_id, created_at, updated_at)
+                VALUES (1, 'code-hash', 'src/foo.cs', 'seed row', 'src/foo.cs', 1, 1, 'acme', 1, 1)
+                """, cancellationToken: Ct));
+            await connection.ExecuteAsync(new CommandDefinition(
+                "UPDATE code_entries SET embed_state = 'embedded', embedding = @vector WHERE id = 1",
+                new { vector }, cancellationToken: Ct));
+        }
     }
 
     private async Task<string> VecTableSqlAsync(string table)

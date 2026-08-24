@@ -1,4 +1,5 @@
 namespace AiRaccoon.Core.Memory.Filtering;
+
 using System.Threading;
 using System.Threading.Tasks;
 

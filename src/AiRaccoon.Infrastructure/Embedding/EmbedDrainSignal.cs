@@ -14,7 +14,7 @@ public static class EmbedDrainSignal
             CorpusKind.Memory => EmbedCorpus.Memory,
             CorpusKind.Code => EmbedCorpus.Code,
             CorpusKind.Neither => (EmbedCorpus?)null,
-            _ => throw new ArgumentOutOfRangeException(nameof(written), written, null),
+            _ => throw new ArgumentOutOfRangeException(nameof(written), written, null)
         };
         if (corpus is { } c)
         {

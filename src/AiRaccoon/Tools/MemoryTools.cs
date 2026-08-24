@@ -6,7 +6,6 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.QueryGuard;
-using AiRaccoon.Core.Memory.QueryGuard.Structural;
 using AiRaccoon.Core.Metrics;
 using FluentValidation;
 using JetBrains.Annotations;
@@ -57,7 +56,8 @@ public sealed partial class MemoryTools(
         string? workspaceId = null,
         [Description("Provenance only: which agent wrote this.")]
         string? agentId = null,
-        [Description("Optional context label for this entry, instead of the default project/workspace context. A context organises entries inside the project; it does not hide them — a plain project search still finds them.")]
+        [Description(
+            "Optional context label for this entry, instead of the default project/workspace context. A context organises entries inside the project; it does not hide them — a plain project search still finds them.")]
         string? context = null,
         [Description("Optional original file path the content came from; chunks of one file share it.")]
         string? sourceFile = null,
@@ -223,13 +223,14 @@ public sealed partial class MemoryTools(
     }
 
     /// <summary>Mirrors the scope validation pattern: normalized case-insensitively, rejected fail-fast on a typo.</summary>
-    private static SearchKind ParseKind(string kind) => kind.ToLowerInvariant() switch
-    {
-        "memory" => SearchKind.Memory,
-        "code" => SearchKind.Code,
-        "both" => SearchKind.Both,
-        _ => throw new McpException($"invalid-params: Invalid kind '{kind}': expected memory, code, or both.")
-    };
+    private static SearchKind ParseKind(string kind) =>
+        kind.ToLowerInvariant() switch
+        {
+            "memory" => SearchKind.Memory,
+            "code" => SearchKind.Code,
+            "both" => SearchKind.Both,
+            _ => throw new McpException($"invalid-params: Invalid kind '{kind}': expected memory, code, or both.")
+        };
 
     /// <summary>S5: codeLimit/codeMinRelativeScore override limit/minRelativeScore for the code
     /// section only — SearchQueryValidator enforces the same two rules for their un-prefixed
@@ -249,13 +250,14 @@ public sealed partial class MemoryTools(
         }
     }
 
-    private static string? ComposeWarning(string? primary, string? extra) => (primary, extra) switch
-    {
-        (null, null) => null,
-        (not null, null) => primary,
-        (null, not null) => extra,
-        _ => $"{primary} {extra}"
-    };
+    private static string? ComposeWarning(string? primary, string? extra) =>
+        (primary, extra) switch
+        {
+            (null, null) => null,
+            (not null, null) => primary,
+            (null, not null) => extra,
+            _ => $"{primary} {extra}"
+        };
 
     /// <summary>
     ///     Builds the query from the wire values: enum strings are parsed and rejected on typo,
@@ -271,14 +273,14 @@ public sealed partial class MemoryTools(
         if (docScoreFormula is not null)
         {
             parsedFormula = SearchParameterSettingsKeys.ParseDocScoreFormula(docScoreFormula)
-                ?? throw new McpException($"invalid-params: Invalid docScoreFormula '{docScoreFormula}': expected 'max' or 'sum'.");
+                            ?? throw new McpException($"invalid-params: Invalid docScoreFormula '{docScoreFormula}': expected 'max' or 'sum'.");
         }
 
         CandidateWindowMode? parsedWindow = null;
         if (candidateWindow is not null)
         {
             parsedWindow = SearchParameterSettingsKeys.ParseCandidateWindow(candidateWindow)
-                ?? throw new McpException($"invalid-params: Invalid candidateWindow '{candidateWindow}': expected 'max3x100' or 'max5x50'.");
+                           ?? throw new McpException($"invalid-params: Invalid candidateWindow '{candidateWindow}': expected 'max3x100' or 'max5x50'.");
         }
 
         var searchQuery = new SearchQuery(projectId, query, scope, workspaceId, limit, minRelativeScore,

@@ -1,7 +1,6 @@
 using System.Reflection;
 using System.Text.RegularExpressions;
 using AiRaccoon.Prompts;
-using AiRaccoon.Tools;
 using ModelContextProtocol.Server;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;

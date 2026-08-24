@@ -1,4 +1,3 @@
-using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Metrics;
 using AiRaccoon.Infrastructure.Embedding;
@@ -54,7 +53,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
         var pump = TestData.NewEmbedDrainPump();
         await SeedProviderAndPendingRowsAsync(5);
         var entryEmbedder = new EntryEmbedder(new CountingEmbeddingService(),
-            Substitute.For<IModelMigrationLease>(), _time);
+            Substitute.For<IModelMigrationLease>(), _time, new VecDimensionReconciler());
         var job = new PendingEmbedJob(entryEmbedder, pump);
 
         await using (var connection1 = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))

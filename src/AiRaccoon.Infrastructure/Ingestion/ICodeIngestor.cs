@@ -24,7 +24,9 @@ public interface ICodeIngestor
 ///     content is empty/whitespace-only or because a stand-in chunker cannot chunk yet; the caller
 ///     decides which of those two zero-chunk cases is trustworthy enough to prune by.
 /// </param>
-public readonly record struct CodeIngestResult(int Rows, bool ContentWhitespaceOnly,
+public readonly record struct CodeIngestResult(
+    int Rows,
+    bool ContentWhitespaceOnly,
     IReadOnlyList<string>? ChunkHashes = null)
 {
 }

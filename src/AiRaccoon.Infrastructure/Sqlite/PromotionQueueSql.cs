@@ -91,21 +91,21 @@ internal static class PromotionQueueSql
 
     /// <summary>Orphans pre-dating the promotion_queue_entries_ad trigger (ADR-0023): rows whose (project_id, hash) has no backing entries row inside the project (<see cref="ProjectRows" />, ADR-0046), grouped per project for the dry-run report.</summary>
     public static readonly string OrphanCountsPerProject = $"""
-                                                 SELECT project_id AS ProjectId, count(*) AS Count
-                                                 FROM promotion_queue q
-                                                 WHERE NOT EXISTS (SELECT 1 FROM entries e
-                                                                   WHERE e.project_id = q.project_id AND e.hash = q.hash
-                                                                     AND {ProjectRows.Scope("e.")})
-                                                 GROUP BY project_id
-                                                 """;
+                                                            SELECT project_id AS ProjectId, count(*) AS Count
+                                                            FROM promotion_queue q
+                                                            WHERE NOT EXISTS (SELECT 1 FROM entries e
+                                                                              WHERE e.project_id = q.project_id AND e.hash = q.hash
+                                                                                AND {ProjectRows.Scope("e.")})
+                                                            GROUP BY project_id
+                                                            """;
 
     public static readonly string DeleteOrphans = $"""
-                                        DELETE FROM promotion_queue
-                                        WHERE NOT EXISTS (SELECT 1 FROM entries e
-                                                          WHERE e.project_id = promotion_queue.project_id
-                                                            AND e.hash = promotion_queue.hash
-                                                            AND {ProjectRows.Scope("e.")})
-                                        """;
+                                                   DELETE FROM promotion_queue
+                                                   WHERE NOT EXISTS (SELECT 1 FROM entries e
+                                                                     WHERE e.project_id = promotion_queue.project_id
+                                                                       AND e.hash = promotion_queue.hash
+                                                                       AND {ProjectRows.Scope("e.")})
+                                                   """;
 
     public const string EvictVictim = """
                                       DELETE FROM promotion_queue

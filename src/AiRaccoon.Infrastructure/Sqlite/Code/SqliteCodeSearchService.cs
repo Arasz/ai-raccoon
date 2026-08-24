@@ -156,7 +156,7 @@ public sealed class SqliteCodeSearchService(ISqliteConnectionFactory factory, IC
         {
             var (hash, payload) = at(i);
             var rank = i + 1;
-            scores[hash] = scores.GetValueOrDefault(hash) + ((double)weight / (k + rank));
+            scores[hash] = scores.GetValueOrDefault(hash) + (double)weight / (k + rank);
             payloads.TryAdd(hash, payload);
         }
     }
@@ -186,8 +186,9 @@ public sealed class SqliteCodeSearchService(ISqliteConnectionFactory factory, IC
         public double? SourceLambda => null;
         public double? ConsolidationThreshold => null;
         public DocScoreFormula? DocScoreFormula => null;
-        public CandidateWindowMode? CandidateWindow => SearchParameterSettingsKeys.ParseCandidateWindow(
-            Get(SearchParameterSettingsKeys.CandidateWindow));
+        public CandidateWindowMode? CandidateWindow =>
+            SearchParameterSettingsKeys.ParseCandidateWindow(
+                Get(SearchParameterSettingsKeys.CandidateWindow));
         public double? StructureAlpha => null; // deliberately never resolved from settings here (§12.2 H7): code has no structure modality
         public bool? FusionNoRegressionEnabled => null;
 

@@ -46,8 +46,7 @@ public static class QueryGuardConfigKeys
     public const double DefaultStructuralThreshold = 0.98939822280316;
 
     /// <summary>Falls back to <see cref="DefaultStructuralThreshold" /> when unset or unparsable.</summary>
-    public static double ParseStructuralThreshold(string? value) =>
-        double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var parsed) ? parsed : DefaultStructuralThreshold;
+    public static double ParseStructuralThreshold(string? value) => double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var parsed) ? parsed : DefaultStructuralThreshold;
 
     /// <summary>
     ///     Records which target FPR <see cref="DefaultStructuralThreshold" /> was calibrated for —
@@ -61,6 +60,5 @@ public static class QueryGuardConfigKeys
     public const double DefaultStructuralTargetFpr = 0.02;
 
     /// <summary>Falls back to <see cref="DefaultStructuralTargetFpr" /> when unset or unparsable.</summary>
-    public static double ParseStructuralTargetFpr(string? value) =>
-        double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var parsed) ? parsed : DefaultStructuralTargetFpr;
+    public static double ParseStructuralTargetFpr(string? value) => double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var parsed) ? parsed : DefaultStructuralTargetFpr;
 }

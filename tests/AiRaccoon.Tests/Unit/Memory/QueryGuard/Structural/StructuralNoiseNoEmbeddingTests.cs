@@ -1,4 +1,3 @@
-using System.Linq;
 using System.Reflection;
 using AiRaccoon.Core.Memory.QueryGuard.Structural;
 using Shouldly;

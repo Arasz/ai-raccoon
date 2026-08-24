@@ -1,6 +1,4 @@
-using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
-using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Watch;
 using Dapper;

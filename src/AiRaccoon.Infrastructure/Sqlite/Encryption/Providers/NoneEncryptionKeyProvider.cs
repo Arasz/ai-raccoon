@@ -8,6 +8,5 @@ public sealed class NoneEncryptionKeyProvider : IEncryptionKeyProvider
     public string Source => EncryptionSource;
     public bool IsForSource(string source) => string.IsNullOrWhiteSpace(source) || Source.Equals(source, StringComparison.Ordinal);
 
-    public Task<Passphrase> GetPassphraseAsync(EncryptionData encryptionData, CancellationToken cancellationToken = default) =>
-        Task.FromResult(new Passphrase(Source));
+    public Task<Passphrase> GetPassphraseAsync(EncryptionData encryptionData, CancellationToken cancellationToken = default) => Task.FromResult(new Passphrase(Source));
 }

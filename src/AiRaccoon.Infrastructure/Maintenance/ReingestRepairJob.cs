@@ -18,7 +18,10 @@ namespace AiRaccoon.Infrastructure.Maintenance;
 ///     list — see <c>ReingestRepairDoesNotAutoStartTests</c>).
 /// </summary>
 public sealed class ReingestRepairJob(
-    IFileTypeMatcher fileTypeMatcher, IEmbeddingService embeddingService, IMemoryStore store, TimeProvider timeProvider)
+    IFileTypeMatcher fileTypeMatcher,
+    IEmbeddingService embeddingService,
+    IMemoryStore store,
+    TimeProvider timeProvider)
     : IMaintenanceJob
 {
     public const string JobName = "repair-reingest";
@@ -39,7 +42,7 @@ public sealed class ReingestRepairJob(
     public async ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var report = await new ReingestRepair(new ChunkPositionScanner(fileTypeMatcher, embeddingService))
-            .RunAsync(connection, store, apply: true, cancellationToken).ConfigureAwait(false);
+            .RunAsync(connection, store, true, cancellationToken).ConfigureAwait(false);
 
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.FinishRepairRequest,
                 new { kind = RepairKinds.Reingest, finishedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },

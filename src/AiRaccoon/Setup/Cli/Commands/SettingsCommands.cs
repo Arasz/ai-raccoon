@@ -203,10 +203,10 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
     }
 
     /// <summary>
-    ///     §3.3 D-E9: refused HERE, before anything commits. vec_code is a fixed float[768] index
-    ///     and, unlike the memory bank's `model set local`, code has no dimension-reconcile phase to
-    ///     fix up a wrong-dimension activation afterward — this is the only gate protecting it. A
-    ///     missing/invalid manifest surfaces the loader's own actionable error unchanged.
+    ///     §3.3 D-E9: the CLI's fast pre-flight before the store's own checks (the store is the
+    ///     real gate for the HTTP path). Any manifest dimension is accepted — vec_code is
+    ///     reconciled to it by the store (vec-code-unfix-dim). A missing/invalid manifest
+    ///     surfaces the loader's own actionable error unchanged.
     /// </summary>
     public Task<int> ModelSetCodeLocalAsync(ParseResult parseResult, ICodeEngineStore codeEngine,
         StandardStreams streams, CancellationToken cancellationToken) =>
@@ -248,16 +248,8 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
     private async Task<int> ActivateCodeDirectoryAsync(string fullPath, ICodeEngineStore codeEngine,
         StandardStreams streams, CancellationToken cancellationToken)
     {
-        var descriptor = new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator())
+        new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator())
             .Load(fullPath);
-        if (descriptor.Dimensions != CodeCorpusSchema.EmbeddingDimensions)
-        {
-            throw new InvalidOperationException(
-                $"Manifest '{fullPath}' declares {descriptor.Dimensions}-dimension embeddings, but the code " +
-                $"corpus's vec_code index is fixed at {CodeCorpusSchema.EmbeddingDimensions} dimensions — there " +
-                "is no dimension-reconcile phase for code, unlike the memory bank. Point 'model set code local' " +
-                $"at a manifest with dimensions: {CodeCorpusSchema.EmbeddingDimensions}.");
-        }
 
         await codeEngine.ActivateCodeEngineAsync(fullPath, cancellationToken);
         await streams.WriteOutputLineAsync(
@@ -309,6 +301,7 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
     {
         await store.DeleteSettingAsync(EmbeddingSettingsKeys.CodeModel, cancellationToken);
         await store.DeleteSettingAsync(EmbeddingSettingsKeys.CodeEngine, cancellationToken);
+        await store.DeleteSettingAsync(EmbeddingSettingsKeys.CodeDimensions, cancellationToken);
         await streams.WriteOutputLineAsync("code embedding engine reset to default: no engine (FTS5-only code search)");
         return 0;
     }

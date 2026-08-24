@@ -1,7 +1,5 @@
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Setup;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Hosting.Node;
 

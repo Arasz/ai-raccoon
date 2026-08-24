@@ -11,12 +11,12 @@ internal static class ModalityCandidates
 {
     public static IReadOnlyList<MemorySearchResult> ByBm25(SearchResults searchResults) =>
     [
-        .. Deduplicated(searchResults.Fts, searchResults.Index.ValueByHash, ascending: true).OrderBy(result => result.Ranking)
+        .. Deduplicated(searchResults.Fts, searchResults.Index.ValueByHash, true).OrderBy(result => result.Ranking)
     ];
 
     public static IReadOnlyList<MemorySearchResult> ByCosine(SearchResults searchResults) =>
     [
-        .. Deduplicated(searchResults.Vector, searchResults.Index.ValueByHash, ascending: false).OrderByDescending(result => result.Ranking)
+        .. Deduplicated(searchResults.Vector, searchResults.Index.ValueByHash, false).OrderByDescending(result => result.Ranking)
     ];
 
     /// <summary>
@@ -37,11 +37,16 @@ internal static class ModalityCandidates
             ? groups.Select(group => group.OrderBy(IsSharedCopy).ThenBy(result => result.Ranking).First())
             : groups.Select(group => group.OrderBy(IsSharedCopy).ThenByDescending(result => result.Ranking).First());
 
-        string ContentKeyFor(MemorySearchResult result) =>
-            valueByHash.TryGetValue(result.Hash, out var value)
+        string ContentKeyFor(MemorySearchResult result)
+        {
+            return valueByHash.TryGetValue(result.Hash, out var value)
                 ? ContentHash.OfValue(value)
                 : result.Hash;
+        }
 
-        static bool IsSharedCopy(MemorySearchResult result) => result.Path.StartsWith("shared/", StringComparison.Ordinal);
+        static bool IsSharedCopy(MemorySearchResult result)
+        {
+            return result.Path.StartsWith("shared/", StringComparison.Ordinal);
+        }
     }
 }

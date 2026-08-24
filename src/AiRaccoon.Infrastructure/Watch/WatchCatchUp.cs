@@ -91,7 +91,7 @@ public sealed partial class WatchCatchUp(
 
     private static bool IsIgnoredFile(IgnoreRules rules, string root, string file) =>
         !string.Equals(Path.GetFileName(file), IgnoreRulesProvider.FileName, StringComparison.Ordinal) &&
-        rules.IsIgnored(Path.GetRelativePath(root, file), isDirectory: false);
+        rules.IsIgnored(Path.GetRelativePath(root, file), false);
 
     private static bool IsDue(string file, long? sinceWatermark, IReadOnlySet<string> fingerprinted) =>
         sinceWatermark is null ||
@@ -198,7 +198,7 @@ public sealed partial class WatchCatchUp(
             }
 
             if (!File.Exists(file) || WatchDenySet.Excludes(watchPath, file) ||
-                (ignoreRules.HasRules && IsIgnoredFile(ignoreRules, watchPath, file)))
+                ignoreRules.HasRules && IsIgnoredFile(ignoreRules, watchPath, file))
             {
                 pipeline.Enqueue(new WatchEvent(projectId, file, WatchEventKind.Deleted));
             }

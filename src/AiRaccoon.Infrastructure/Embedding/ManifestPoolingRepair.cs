@@ -56,7 +56,7 @@ public sealed partial class ManifestPoolingRepair(
         var tokenOutput = manifest.Onnx.TokenEmbeddingsOutput;
         var embeddingOutput = manifest.Onnx.EmbeddingOutput;
         if (manifest.Pooling.Mode == PoolingMode.ModelOutput || manifest.Onnx.Files.Count == 0
-            || (string.IsNullOrWhiteSpace(tokenOutput) && string.IsNullOrWhiteSpace(embeddingOutput)))
+                                                             || string.IsNullOrWhiteSpace(tokenOutput) && string.IsNullOrWhiteSpace(embeddingOutput))
         {
             return false;
         }
@@ -138,7 +138,7 @@ public sealed partial class ManifestPoolingRepair(
             }
 
             File.WriteAllText(temporaryPath, serializer.Serialize(repaired));
-            File.Move(temporaryPath, manifestPath, overwrite: true);
+            File.Move(temporaryPath, manifestPath, true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -166,8 +166,7 @@ public sealed partial class ManifestPoolingRepair(
         }
     }
 
-    private static bool GraphPools(IReadOnlyDictionary<string, int> ranks, string output) =>
-        ranks.TryGetValue(output, out var rank) && rank == OnnxOutputRanks.PooledRank;
+    private static bool GraphPools(IReadOnlyDictionary<string, int> ranks, string output) => ranks.TryGetValue(output, out var rank) && rank == OnnxOutputRanks.PooledRank;
 
     private static void Delete(string path)
     {

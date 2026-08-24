@@ -240,6 +240,5 @@ public sealed class EmbeddingManifestValidator : IEmbeddingManifestValidator
         }
     }
 
-    private static string Kebab(PoolingMode mode) =>
-        Enum.GetName(mode)!.Replace('_', '-').ToLowerInvariant();
+    private static string Kebab(PoolingMode mode) => Enum.GetName(mode)!.Replace('_', '-').ToLowerInvariant();
 }

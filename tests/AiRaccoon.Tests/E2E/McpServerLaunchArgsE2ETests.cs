@@ -1,4 +1,3 @@
-using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using ModelContextProtocol.Client;
 using Shouldly;

@@ -20,9 +20,14 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     endpoint. A fingerprint change triggers a full re-embed (D7: a manifest's content — including
 ///     per-file sha256s — is part of the local fingerprint, so re-downloaded weights re-embed).
 /// </summary>
-public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, ILocalTokenizer localTokenizer,
-    ITokenizerFactory tokenizerFactory, IEmbeddingManifestLoader manifestDescriptor, IMeasurementRecorder measurements,
-    TimeProvider timeProvider, ISettingsStore? settingsStore = null)
+public sealed partial class EmbeddingService(
+    ILogger<EmbeddingService> logger,
+    ILocalTokenizer localTokenizer,
+    ITokenizerFactory tokenizerFactory,
+    IEmbeddingManifestLoader manifestDescriptor,
+    IMeasurementRecorder measurements,
+    TimeProvider timeProvider,
+    ISettingsStore? settingsStore = null)
     : IEmbeddingService
 {
     public const string DefaultOpenAiEndpoint = "https://api.openai.com/v1";
@@ -69,23 +74,23 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
     ///     manifest path share one engine shape.
     /// </summary>
     internal static EngineDescriptor BundledDescriptor { get; } = new(
-        Model: "bundled all-MiniLM-L6-v2 (int8)",
-        SourceRepo: "sentence-transformers/all-MiniLM-L6-v2",
-        SourceRevision: null,
-        Dimensions: 384,
-        ContextWindowTokens: BundledModelContextTokens,
-        Normalization: "l2",
-        Pooling: "mean",
-        SpecialTokenReservation: EngineDescriptor.DefaultSpecialTokenReservation,
-        TokenizerFamily: "bert-wordpiece",
-        TokenizerFile: "vocab.txt",
-        SentencePieceOptions: null,
-        RequiresTokenTypeIds: true,
-        InputNames: ["input_ids", "attention_mask", "token_type_ids"],
-        TokenEmbeddingsOutput: "last_hidden_state",
-        EmbeddingOutput: null,
-        OnnxModelFile: BundledModel.ModelFileName,
-        Files: []);
+        "bundled all-MiniLM-L6-v2 (int8)",
+        "sentence-transformers/all-MiniLM-L6-v2",
+        null,
+        384,
+        BundledModelContextTokens,
+        "l2",
+        "mean",
+        EngineDescriptor.DefaultSpecialTokenReservation,
+        "bert-wordpiece",
+        "vocab.txt",
+        null,
+        true,
+        ["input_ids", "attention_mask", "token_type_ids"],
+        "last_hidden_state",
+        null,
+        BundledModel.ModelFileName,
+        []);
 
     public IEmbeddingGenerator<string, Embedding<float>> CreateGenerator(EmbeddingSettings settings)
     {
@@ -236,8 +241,7 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
     /// <summary>Loads (and caches per engine fingerprint) the manifest descriptor for a directory
     /// already confirmed to exist. Not cached on throw — a missing/invalid manifest keeps
     /// re-throwing its own actionable message on every call, same as before this cache existed.</summary>
-    private EngineDescriptor LoadManifestDescriptorCached(string model, string full) =>
-        _descriptors.GetOrAdd(EngineFingerprint("local", model, null), _ => manifestDescriptor.Load(full));
+    private EngineDescriptor LoadManifestDescriptorCached(string model, string full) => _descriptors.GetOrAdd(EngineFingerprint("local", model, null), _ => manifestDescriptor.Load(full));
 
     /// <summary>
     ///     The tokenizer the configured LOCAL engine will embed with (D9): the manifest tokenizer
@@ -314,16 +318,13 @@ public sealed partial class EmbeddingService(ILogger<EmbeddingService> logger, I
     internal static int HalvedCoreThreadDefault(int coreCount) => Math.Max(1, coreCount / 2);
 
     /// <summary>True when <paramref name="rawSetting" /> is a usable explicit thread count (0 = ORT default); shared with doctor (#522).</summary>
-    internal static bool TryParseThreadsSetting(string? rawSetting, out int threads) =>
-        int.TryParse(rawSetting, NumberStyles.Integer, CultureInfo.InvariantCulture, out threads) && threads >= 0;
+    internal static bool TryParseThreadsSetting(string? rawSetting, out int threads) => int.TryParse(rawSetting, NumberStyles.Integer, CultureInfo.InvariantCulture, out threads) && threads >= 0;
 
     /// <summary>#522: "setting" when <paramref name="rawSetting" /> resolved to an explicit value, else the halved-core default was used.</summary>
-    internal static string ThreadCountSource(string? rawSetting) =>
-        TryParseThreadsSetting(rawSetting, out _) ? "setting" : "halved-core default";
+    internal static string ThreadCountSource(string? rawSetting) => TryParseThreadsSetting(rawSetting, out _) ? "setting" : "halved-core default";
 
     /// <summary>#522/#524: 0 means ORT's own default, not zero threads — displayed as text so it never misreads as broken. The single producer of the phrase shared by the session log, doctor and settings (WP4/G4).</summary>
-    internal static string ThreadCountDisplay(int threads) =>
-        threads == 0 ? "ORT default" : threads.ToString(CultureInfo.InvariantCulture);
+    internal static string ThreadCountDisplay(int threads) => threads == 0 ? "ORT default" : threads.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>WP4/G4: the resolved count and its source for `embedding.threads`, in one place — doctor and settings both derived this ternary independently before.</summary>
     internal static (int Threads, string Source) ResolveThreadCountForDisplay(string? rawSetting) =>

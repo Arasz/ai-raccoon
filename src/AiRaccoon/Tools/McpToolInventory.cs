@@ -13,13 +13,13 @@ namespace AiRaccoon.Tools;
 public static class McpToolInventory
 {
     public static IReadOnlyList<string> Names() =>
-        [
-            .. typeof(McpToolInventory).Assembly.GetTypes()
-                .Where(t => t.Namespace == "AiRaccoon.Tools" && t.IsClass && !t.IsAbstract)
-                .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Instance))
-                .Select(m => m.GetCustomAttribute<McpServerToolAttribute>())
-                .Where(attr => attr is not null)
-                .Select(attr => attr!.Name!)
-                .OrderBy(name => name, StringComparer.Ordinal)
-        ];
+    [
+        .. typeof(McpToolInventory).Assembly.GetTypes()
+            .Where(t => t.Namespace == "AiRaccoon.Tools" && t.IsClass && !t.IsAbstract)
+            .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Instance))
+            .Select(m => m.GetCustomAttribute<McpServerToolAttribute>())
+            .Where(attr => attr is not null)
+            .Select(attr => attr!.Name!)
+            .OrderBy(name => name, StringComparer.Ordinal)
+    ];
 }

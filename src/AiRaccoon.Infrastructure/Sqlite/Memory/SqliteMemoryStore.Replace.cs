@@ -27,7 +27,7 @@ public sealed partial class SqliteMemoryStore
         ArgumentException.ThrowIfNullOrWhiteSpace(fileHash);
 
         return ReplaceIfChangedCoreAsync(projectId, path, fileHash,
-            guard: async connection =>
+            async connection =>
             {
                 var stored = await connection.ExecuteScalarAsync<string?>(
                         Def(MemorySql.SelectWatchFile, new { projectId, path }, cancellationToken))
@@ -47,7 +47,7 @@ public sealed partial class SqliteMemoryStore
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentException.ThrowIfNullOrWhiteSpace(fileHash);
 
-        await ReplaceIfChangedCoreAsync(projectId, path, fileHash, guard: null, cancellationToken)
+        await ReplaceIfChangedCoreAsync(projectId, path, fileHash, null, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -172,8 +172,8 @@ public sealed partial class SqliteMemoryStore
     private async Task<ReplaceResult> ReplaceIfChangedCoreAsync(string projectId, string path, string fileHash,
         Func<SqliteConnection, Task<bool>>? guard, CancellationToken cancellationToken)
     {
-        var result = await ReplaceCoreAsync(projectId, path, fileHash, guard, context: null,
-            fingerprint: true, cancellationToken).ConfigureAwait(false);
+        var result = await ReplaceCoreAsync(projectId, path, fileHash, guard, null,
+            true, cancellationToken).ConfigureAwait(false);
         return new ReplaceResult(result.Ran, result.Corpus);
     }
 

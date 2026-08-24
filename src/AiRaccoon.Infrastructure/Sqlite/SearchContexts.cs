@@ -19,7 +19,7 @@ internal static class SearchContexts
                           && string.IsNullOrWhiteSpace(query.ContextLabel);
         var labels = needsLabels
             ? (await connection.QueryAsync<string>(new CommandDefinition(MemorySql.CustomContextLabels,
-                new { projectId = query.ProjectId }, cancellationToken: cancellationToken))
+                    new { projectId = query.ProjectId }, cancellationToken: cancellationToken))
                 .ConfigureAwait(false)).ToList()
             : [];
         return For(query, labels);

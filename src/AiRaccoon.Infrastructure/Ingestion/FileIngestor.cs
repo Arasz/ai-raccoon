@@ -346,7 +346,7 @@ public sealed class FileIngestor(
         var settings = new EmbeddingSettings(provider, model, null, null);
         var maxTokens = embeddingService.ResolveChunkBudgetFor(settings);
         var overlayTokens = Math.Min(ChunkingDefaults.OverlayTokens, Math.Max(0, maxTokens - 1));
-        TokenCount? countTokens = provider.Equals("local", StringComparison.OrdinalIgnoreCase)
+        var countTokens = provider.Equals("local", StringComparison.OrdinalIgnoreCase)
             ? new TokenCount(embeddingService.ResolveTokenizer(settings)!.CountTokens)
             : null;
         return new ChunkSize(maxTokens, overlayTokens, countTokens);
@@ -433,7 +433,7 @@ public sealed class FileIngestor(
         }
 
         var relative = Path.GetRelativePath(root, path);
-        return rules.IsIgnored(relative, isDirectory: false);
+        return rules.IsIgnored(relative, false);
     }
 
     private static CommandDefinition Def(string sql, object? parameters = null,

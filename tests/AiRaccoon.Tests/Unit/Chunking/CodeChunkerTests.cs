@@ -1,4 +1,3 @@
-using AiRaccoon.Core.Chunking;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using Shouldly;

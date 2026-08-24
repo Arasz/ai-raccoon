@@ -1,4 +1,3 @@
-using AiRaccoon.Setup.Cli;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;

@@ -56,4 +56,11 @@ public interface ICodeEmbedder
     ///     not just on an explicit re-activation.
     /// </summary>
     Task<bool> ReconcileFingerprintAsync(SqliteConnection connection, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     Brings `vec_code` to the configured code engine's dimension (D3 mirror for the code
+    ///     corpus): recreates the table when missing or mismatched; DDL-only, never touches row
+    ///     state; missing `embedding.codeDimensions` defaults to 768. Server-only by construction.
+    /// </summary>
+    Task<bool> ReconcileVecCodeDimensionsAsync(SqliteConnection connection, CancellationToken cancellationToken);
 }

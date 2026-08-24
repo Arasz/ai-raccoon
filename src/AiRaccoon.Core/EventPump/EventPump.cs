@@ -76,8 +76,7 @@ public sealed class EventPump<T> : IEventPump<T>
         return batch;
     }
 
-    public async Task WaitForItemAsync(CancellationToken cancellationToken) =>
-        await _channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false);
+    public async Task WaitForItemAsync(CancellationToken cancellationToken) => await _channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false);
 
     public void ApplyCapacity(int capacity) => Volatile.Write(ref _capacity, capacity);
 

@@ -43,7 +43,7 @@ public sealed class CodeEmbedderPoisonLoggingTests : IAsyncLifetime
     public async Task EmbedPendingBatchAsync_RowCannotEmbed_LogsAWarningCarryingTheException()
     {
         var logger = new FakeLogger<CodeEmbedder>();
-        var embedder = new CodeEmbedder(PoisonService(), logger);
+        var embedder = new CodeEmbedder(PoisonService(), logger, new VecDimensionReconciler());
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         await ActivateCodeModelAsync(connection);
         await SeedPoisonCodeRowAsync(connection, id: 1);
@@ -62,7 +62,7 @@ public sealed class CodeEmbedderPoisonLoggingTests : IAsyncLifetime
     public async Task EmbedPendingBatchAsync_RowCrossesTheAttemptCeiling_LogsAnErrorNamingTheRow()
     {
         var logger = new FakeLogger<CodeEmbedder>();
-        var embedder = new CodeEmbedder(PoisonService(), logger);
+        var embedder = new CodeEmbedder(PoisonService(), logger, new VecDimensionReconciler());
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         await ActivateCodeModelAsync(connection);
         await SeedPoisonCodeRowAsync(connection, id: 1);
@@ -86,7 +86,7 @@ public sealed class CodeEmbedderPoisonLoggingTests : IAsyncLifetime
     public async Task EmbedPendingBatchAsync_EveryRowEmbeds_LogsNothingAtWarningOrAbove()
     {
         var logger = new FakeLogger<CodeEmbedder>();
-        var embedder = new CodeEmbedder(new FakeCodeEmbeddingService(), logger);
+        var embedder = new CodeEmbedder(new FakeCodeEmbeddingService(), logger, new VecDimensionReconciler());
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         await ActivateCodeModelAsync(connection);
         await SeedHealthyCodeRowAsync(connection, id: 1);

@@ -42,7 +42,7 @@ internal static class CliSettingsBackend
         }
 
         var executable = BackendLaunchArguments.Executable(processPath) ??
-            throw new SettingsServerUnavailableException($"ai-raccoon: {BackendLaunchArguments.UnavailableExecutableMessage(processPath, config)}");
+                         throw new SettingsServerUnavailableException($"ai-raccoon: {BackendLaunchArguments.UnavailableExecutableMessage(processPath, config)}");
 
         BackendResult acquired;
         try

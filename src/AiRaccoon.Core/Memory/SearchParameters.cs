@@ -61,12 +61,12 @@ public sealed record SearchParameters(
             First(sources, source => source.VectorWeight) ?? SearchParameterSettingsKeys.DefaultVectorWeight,
             First(sources, source => source.SourceLambda) ?? SearchParameterSettingsKeys.DefaultSourceLambda,
             First(sources, source => source.ConsolidationThreshold)
-                ?? SearchParameterSettingsKeys.DefaultConsolidationThreshold,
+            ?? SearchParameterSettingsKeys.DefaultConsolidationThreshold,
             First(sources, source => source.DocScoreFormula) ?? SearchParameterSettingsKeys.DefaultDocScoreFormula,
             First(sources, source => source.CandidateWindow) ?? SearchParameterSettingsKeys.DefaultCandidateWindow,
             First(sources, source => source.StructureAlpha) ?? SearchParameterSettingsKeys.DefaultStructureAlpha,
             First(sources, source => source.FusionNoRegressionEnabled)
-                ?? SearchParameterSettingsKeys.DefaultFusionNoRegressionEnabled);
+            ?? SearchParameterSettingsKeys.DefaultFusionNoRegressionEnabled);
 
         Validator.Instance.ValidateAndThrow(resolved);
         return resolved;

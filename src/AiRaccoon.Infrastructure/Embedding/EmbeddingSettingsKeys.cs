@@ -27,6 +27,9 @@ public static class EmbeddingSettingsKeys
     /// <summary>Code engine fingerprint; a change invalidates the code corpus's embedded rows to 'pending'.</summary>
     public const string CodeEngine = "embedding.codeEngine";
 
+    /// <summary>The code engine's output dimension; written at activation, read at server open.</summary>
+    public const string CodeDimensions = "embedding.codeDimensions";
+
     /// <summary>ORT intra-op thread cap (WP11-A/G16): unset halves the physical core count (min 1),
     /// "0" is ORT's own default. Takes effect on the next server restart — sessions are cached per fingerprint.</summary>
     public const string Threads = "embedding.threads";

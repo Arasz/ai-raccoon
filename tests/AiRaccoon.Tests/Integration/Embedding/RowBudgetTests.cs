@@ -1,11 +1,9 @@
 using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
-using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.TestHelpers;
 using Dapper;
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
 using NSubstitute;
@@ -137,8 +135,8 @@ public sealed class RowBudgetTests : IDisposable
 
     private EmbedDrainService NewService(IEventPump<EmbedDrainRequest> pump, ILogger<EmbedDrainService>? logger = null) =>
         new(pump, _factory,
-            new EntryEmbedder(new CountingEmbeddingService(), Substitute.For<IModelMigrationLease>(), TimeProvider.System),
-            new CodeEmbedder(new FakeCodeEmbeddingService(), NullLoggerFor<CodeEmbedder>()),
+            new EntryEmbedder(new CountingEmbeddingService(), Substitute.For<IModelMigrationLease>(), TimeProvider.System, new VecDimensionReconciler()),
+            new CodeEmbedder(new FakeCodeEmbeddingService(), NullLoggerFor<CodeEmbedder>(), new VecDimensionReconciler()),
             new SqliteSettingsStore(_factory), NoOpMeasurementRecorder.Instance, TimeProvider.System,
             TestTelemetry.None, logger ?? NullLoggerFor<EmbedDrainService>());
 
