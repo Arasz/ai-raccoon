@@ -1295,6 +1295,44 @@ public sealed class MemorySchemaVersionTests
         (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
     }
 
+    /// <summary>
+    ///     The copy is total: a legacy row whose project_id holds an INTEGER value (pre-affinity
+    ///     write) must survive as its text form — a dynamic cast would throw here and strand a
+    ///     bank that can never reach v11.
+    /// </summary>
+    [Fact]
+    public async Task EnsureAsync_OnAV10Bank_WithNonTextProjectIdValues_CopiesThemAsText()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            DROP TABLE sync_tombstones;
+            CREATE TABLE sync_tombstones (
+                project_id,
+                hash TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                deleted_at INTEGER NOT NULL
+            );
+            INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at)
+                VALUES (42, 'h1', 'project', 100);
+            PRAGMA user_version = 10;
+            """,
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var rows = (await connection.QueryAsync<(string ProjectId, string Hash)>(
+                new CommandDefinition(
+                    "SELECT project_id AS ProjectId, hash AS Hash FROM sync_tombstones",
+                    cancellationToken: TestContext.Current.CancellationToken)))
+            .ToList();
+        rows.ShouldHaveSingleItem("the integer-keyed row must survive the copy");
+        rows[0].ProjectId.ShouldBe("42", "an INTEGER project_id is copied through CAST AS TEXT, not thrown on");
+        rows[0].Hash.ShouldBe("h1");
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
+    }
+
     private static async Task<long> TableRowidAsync(SqliteConnection connection, string table) =>
         await connection.ExecuteScalarAsync<long>(new CommandDefinition(
             $"SELECT rowid FROM sqlite_master WHERE type = 'table' AND name = '{table}'",

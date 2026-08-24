@@ -935,11 +935,12 @@ internal static class MemorySchema
     ///     shape — <c>project_id TEXT NOT NULL PRIMARY KEY</c>, and <c>hash</c>/<c>scope</c> also
     ///     members of the composite <c>PRIMARY KEY (project_id, hash, scope)</c>. A legacy bank that
     ///     had <c>project_id</c> added via ALTER TABLE carries it as plain <c>TEXT</c> — the DDL's
-    ///     <c>CREATE TABLE IF NOT EXISTS</c> silently no-ops against that shape. The rebuild is
-    ///     atomic: read/drop/create/copy runs inside one <see cref="MigrateToV9Async" />-style
-    ///     <c>BEGIN IMMEDIATE</c> transaction, so a crash mid-rebuild leaves the legacy table
-    ///     intact for the next open instead of a half-migrated bank. Idempotent: a bank already at
-    ///     the correct shape is skipped.
+    ///     <c>CREATE TABLE IF NOT EXISTS</c> silently no-ops against that shape. The whole repair —
+    ///     inspect, copy, drop, create, reinsert — runs inside one <see cref="MigrateToV9Async" />-style
+    ///     <c>BEGIN IMMEDIATE</c> transaction: a concurrent opener cannot read the legacy rows and
+    ///     then clobber the repaired table with them, and a crash mid-rebuild rolls back to the
+    ///     intact legacy table. Idempotent: a table already at the correct shape is skipped, and
+    ///     the shape is re-checked under the write lock in case another opener migrated first.
     /// </summary>
     private static async Task MigrateToV11Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -952,64 +953,46 @@ internal static class MemorySchema
             return;
         }
 
-        var columnRows = (await connection.QueryAsync<PragmaColumnRow>(
-                new CommandDefinition(
-                    "SELECT name, type, \"notnull\", pk FROM pragma_table_info('sync_tombstones')",
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false)).ToList();
-
-        // Full-shape check, not just project_id: every column's declared type must match the Ddl
-        // and all three key members must be part of the composite PRIMARY KEY (pk 1..3). A table
-        // with an INTEGER key or a PK missing hash/scope would otherwise be stamped v11 while
-        // SchemaDoctor still reports a mismatch.
-        bool ShapeOk()
-        {
-            foreach (var expected in new[]
-                     {
-                         (Name: "project_id", Type: "TEXT", Pk: 1L),
-                         (Name: "hash", Type: "TEXT", Pk: 2L),
-                         (Name: "scope", Type: "TEXT", Pk: 3L),
-                         (Name: "deleted_at", Type: "INTEGER", Pk: 0L),
-                     })
-            {
-                var actual = columnRows.FirstOrDefault(c => c.Name == expected.Name);
-                if (actual is null
-                    || !string.Equals(actual.Type, expected.Type, StringComparison.OrdinalIgnoreCase)
-                    || actual.NotNull == 0
-                    || actual.Pk != expected.Pk)
-                {
-                    return false;
-                }
-            }
-
-            return columnRows.Count == 4;
-        }
-
-        if (ShapeOk())
-        {
-            return;
-        }
-
-        var projectIdColumn = columnRows.FirstOrDefault(c => c.Name == "project_id");
-
-        // Preserve existing data only when the columns exist in a readable shape. When they do
-        // not, there is nothing to keep. Read BEFORE opening the transaction: the copy is
-        // in-memory, so a crash between BEGIN and COMMIT cannot lose what was never dropped yet.
-        List<dynamic>? existingRows = null;
-        if (projectIdColumn is not null)
-        {
-            existingRows = (await connection.QueryAsync(
-                    new CommandDefinition(
-                        "SELECT project_id, hash, scope, deleted_at FROM sync_tombstones WHERE project_id IS NOT NULL AND project_id != ''",
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false)).ToList();
-        }
-
         await connection.ExecuteAsync(
                 new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
             .ConfigureAwait(false);
         try
         {
+            var columnRows = (await connection.QueryAsync<PragmaColumnRow>(
+                    new CommandDefinition(
+                        "SELECT name, type, \"notnull\", pk FROM pragma_table_info('sync_tombstones')",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false)).ToList();
+
+            // Full-shape check, not just project_id: every column's declared type must match the
+            // Ddl and all three key members must be part of the composite PRIMARY KEY (pk 1..3).
+            // Re-read under the lock — another opener may have migrated between our cheap probe
+            // above and this BEGIN.
+            if (ShapeMatchesDdl(columnRows))
+            {
+                await connection.ExecuteAsync(
+                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            // Copy policy: tombstone identity is (project_id, hash, scope) text + an integer
+            // timestamp; SQLite's TEXT affinity has already coerced any pre-affinity values to
+            // text on disk, so reading every column through its declared type via CAST keeps the
+            // copy total — no dynamic cast can throw and strand a bank that cannot reach v11.
+            var existingRows = (await connection.QueryAsync<TombstoneRow>(
+                    new CommandDefinition(
+                        """
+                        SELECT CAST(project_id AS TEXT) AS ProjectId,
+                               CAST(hash AS TEXT) AS Hash,
+                               CAST(scope AS TEXT) AS Scope,
+                               CAST(deleted_at AS INTEGER) AS DeletedAt
+                        FROM sync_tombstones
+                        WHERE project_id IS NOT NULL AND project_id != ''
+                        """,
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false)).ToList();
+
             await connection.ExecuteAsync(
                     new CommandDefinition("DROP TABLE sync_tombstones", cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
@@ -1028,17 +1011,14 @@ internal static class MemorySchema
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
 
-            if (existingRows is { Count: > 0 })
+            foreach (var row in existingRows)
             {
-                foreach (var row in existingRows)
-                {
-                    await connection.ExecuteAsync(
-                            new CommandDefinition(
-                                "INSERT OR IGNORE INTO sync_tombstones (project_id, hash, scope, deleted_at) VALUES (@project_id, @hash, @scope, @deleted_at)",
-                                new { project_id = (string)row.project_id, hash = (string)row.hash, scope = (string)row.scope, deleted_at = (long)row.deleted_at },
-                                cancellationToken: cancellationToken))
-                        .ConfigureAwait(false);
-                }
+                await connection.ExecuteAsync(
+                        new CommandDefinition(
+                            "INSERT OR IGNORE INTO sync_tombstones (project_id, hash, scope, deleted_at) VALUES (@ProjectId, @Hash, @Scope, @DeletedAt)",
+                            row,
+                            cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
             }
 
             // Drop the legacy unique index if it survived the table drop (it did not — SQLite
@@ -1060,6 +1040,30 @@ internal static class MemorySchema
                 .ConfigureAwait(false);
             throw;
         }
+    }
+
+    /// <summary>The exact Ddl shape of <c>sync_tombstones</c>: declared types, NOT NULL, and the pk position of every composite-key member.</summary>
+    private static bool ShapeMatchesDdl(IReadOnlyList<PragmaColumnRow> columnRows)
+    {
+        foreach (var expected in new[]
+                 {
+                     (Name: "project_id", Type: "TEXT", Pk: 1L),
+                     (Name: "hash", Type: "TEXT", Pk: 2L),
+                     (Name: "scope", Type: "TEXT", Pk: 3L),
+                     (Name: "deleted_at", Type: "INTEGER", Pk: 0L),
+                 })
+        {
+            var actual = columnRows.FirstOrDefault(c => c.Name == expected.Name);
+            if (actual is null
+                || !string.Equals(actual.Type, expected.Type, StringComparison.OrdinalIgnoreCase)
+                || actual.NotNull == 0
+                || actual.Pk != expected.Pk)
+            {
+                return false;
+            }
+        }
+
+        return columnRows.Count == 4;
     }
 
     /// <summary>
@@ -1891,6 +1895,8 @@ internal static class MemorySchema
     }
 
     private sealed record PragmaColumnRow(string Name, string Type, long NotNull, long Pk);
+
+    private sealed record TombstoneRow(string ProjectId, string Hash, string Scope, long DeletedAt);
 
     private sealed record WatchRow(string ProjectId, string Path, long CreatedAt);
 

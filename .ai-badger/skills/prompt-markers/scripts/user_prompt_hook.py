@@ -147,24 +147,34 @@ RESTART_ADVISORY = (
 )
 
 
-def advance_feedback_streak(cwd: str, is_feedback: bool) -> int:
-    """Advance the per-project feedback streak by one user turn.
+def advance_feedback_streak(cwd: str, is_feedback: bool, session_id: str = "") -> int:
+    """Advance the per-project, per-session feedback streak by one user turn.
 
     A feedback turn increments the streak; any other marker resets it to 0.
-    Returns the new streak.  Best-effort: silently returns 0 when no tracking
-    dir exists or the state file is unreadable.
+    Returns the new streak.  Keyed by the hook payload's session identifier so
+    two concurrent sessions in the same checkout cannot increment or reset each
+    other's streak; an empty session id falls back to the shared "default" key.
+    Best-effort: silently returns 0 when no tracking dir exists or the state
+    file is unreadable.
     """
     tracking_dir = find_tracking_dir(Path(cwd) if cwd else Path.cwd())
     if tracking_dir is None:
         return 0
     state_file = tracking_dir.joinpath(*STATE_SUBPATH)
+    session_key = session_id or "default"
     try:
         state = json.loads(state_file.read_text()) if state_file.exists() else {}
     except (OSError, ValueError):
         state = {}
-    streak = state.get("feedbackStreak", 0) + 1 if is_feedback else 0
+    streaks = state.get("feedbackStreaks", {})
+    if not isinstance(streaks, dict):
+        streaks = {}
+    streak = streaks.get(session_key, 0) + 1 if is_feedback else 0
     try:
-        state["feedbackStreak"] = streak
+        streaks[session_key] = streak
+        # Keep only live sessions: a stale key with no streak left is dropped so
+        # the state file cannot grow without bound across sessions.
+        state["feedbackStreaks"] = {k: v for k, v in streaks.items() if v > 0}
         state_file.parent.mkdir(parents=True, exist_ok=True)
         state_file.write_text(json.dumps(state, indent=2) + "\n")
         state_file.chmod(0o600)
@@ -189,7 +199,7 @@ def main() -> int:
         # interleaved normal prompt breaks a would-be restart advisory.
         cwd = payload.get("cwd", "")
         if find_tracking_dir(Path(cwd) if cwd else Path.cwd()) is not None:
-            advance_feedback_streak(cwd, is_feedback=False)
+            advance_feedback_streak(cwd, is_feedback=False, session_id=payload.get("session_id", ""))
         _debug("skip", reason="no_match")
         return 0
 
@@ -202,12 +212,12 @@ def main() -> int:
     # Consolidated restart: track consecutive *user turns* that were feedback.
     # Every recorded turn advances the streak; non-feedback markers reset it.
     if marker["id"] == "feedback":
-        streak = advance_feedback_streak(cwd, is_feedback=True)
+        streak = advance_feedback_streak(cwd, is_feedback=True, session_id=payload.get("session_id", ""))
         if streak >= RESTART_THRESHOLD:
             injected += "\n\n" + RESTART_ADVISORY.format(count=streak)
             _debug("restart_advisory", count=streak)
     else:
-        advance_feedback_streak(cwd, is_feedback=False)
+        advance_feedback_streak(cwd, is_feedback=False, session_id=payload.get("session_id", ""))
 
     _debug("fire", marker=marker["id"], prefix=prefix)
 

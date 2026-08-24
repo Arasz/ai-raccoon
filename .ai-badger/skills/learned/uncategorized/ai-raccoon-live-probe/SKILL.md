@@ -104,15 +104,15 @@ queryguard structural enable|disable`, `settings noise enable|disable`.
 
 ## Pitfalls
 
-- **Doctor "remedy: start the server" is misleading when the digest already matches.**
-  The schema repair (`EnsureSyncTombstonesProjectScopedAsync` in MemorySchema.cs:941) is
-  gated by `needsDigestStamp` — it only runs when `storedDigest != SchemaDigest`. If the
-  binary already stamped the digest (application_id matches), the repair never fires, even
-  when the table has the wrong shape from a legacy ALTER TABLE path. The DDL uses
-  `CREATE TABLE IF NOT EXISTS`, which silently no-ops against an existing table with a
-  different shape. Result: a bank opened by the current version gets the digest stamped
-  without the repair running, and the mismatch becomes permanent. See
-  `references/schema-mismatch-root-cause.md` for the full analysis.
+- **Doctor "remedy: start the server" was misleading on pre-1.33.8 binaries (historical).**
+  Before 1.33.8, the sync_tombstones shape repair (`EnsureSyncTombstonesProjectScopedAsync`)
+  ran only when the schema digest mismatched, so a bank whose digest already matched never
+  got repaired and `doctor` reported a permanent SHAPE MISMATCH. Since 1.33.8 (PR #576) the
+  repair is ladder step v11 (`MigrateToV11Async` in MemorySchema.cs): it runs on any bank
+  below schema v11 regardless of digest state, atomically, and `doctor` goes clean after one
+  server open. If you see the SHAPE MISMATCH finding on a 1.33.8+ binary, the bank has not
+  yet been opened by that binary — start the server once and re-run doctor. The full
+  pre-fix analysis lives in `references/schema-mismatch-root-cause.md`.
 
 - **`project_id_token_get` creates a new project if none exists.** Call it only when you
   know the project name. Speculative calls create orphan projects.

@@ -81,11 +81,26 @@ def _scan_file(path: Path) -> List[Finding]:
         return []
 
     findings: List[Finding] = []
+    seen_spans: set[tuple[int, int, int]] = set()
     for lineno, line in enumerate(text.splitlines(), start=1):
+        line_findings: List[Finding] = []
         for pattern, label in _PATTERNS:
             m = pattern.search(line)
-            if m and not _is_negated(line, m.start()):
-                findings.append(Finding(path=path, line=lineno, match=m.group(0), label=label))
+            if not m or (lineno, m.start(), m.end()) in seen_spans:
+                continue
+            if _is_negated(line, m.start()):
+                continue
+            # Dedupe overlapping matches: "let's think step by step" also matches
+            # "think step by step" — keep the more specific finding only.
+            overlapping = any(
+                s2 == lineno and m.start() < e2 and m.end() > s1
+                for s2, s1, e2 in seen_spans
+            )
+            if overlapping:
+                continue
+            seen_spans.add((lineno, m.start(), m.end()))
+            line_findings.append(Finding(path=path, line=lineno, match=m.group(0), label=label))
+        findings.extend(line_findings)
     return findings
 
 
