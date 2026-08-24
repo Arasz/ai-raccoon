@@ -147,7 +147,10 @@ public sealed class EmbedDrainMetricsTests : IDisposable
         public Task<bool> HasPendingWorkAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        public Task<bool> ReconcileFingerprintAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+        public Task<bool> ReconcileVecCodeDimensionsAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+            Task.FromResult(false);
+
+public Task<bool> ReconcileFingerprintAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
     }
 }

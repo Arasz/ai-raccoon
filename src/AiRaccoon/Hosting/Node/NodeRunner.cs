@@ -25,6 +25,7 @@ internal partial class NodeRunner(
     IEmbeddingAvailability
         embeddingAvailability,
     IEntryEmbedder entryEmbedder,
+    ICodeEmbedder codeEmbedder,
     ILogger<NodeRunner>
         logger) : INodeRunner
 {
@@ -116,11 +117,15 @@ internal partial class NodeRunner(
 
             // D3: vec0 must match the configured engine's dimension before the first tool call —
             // a serverless `model set` (no server around to drain it) leaves vec0 stale otherwise.
-            // Server-only by construction (`cli-asks-the-server-acts`): NodeRunner is the one path
-            // that becomes the server, never a CLI verb.
+            // The code corpus's vec_code gets the same reconcile (vec-code-unfix-dim): a
+            // serverless code activation, a hand-edited bank, or a crash that left the index at
+            // the wrong width is healed here. Server-only by construction
+            // (`cli-asks-the-server-acts`): NodeRunner is the one path that becomes the server,
+            // never a CLI verb.
             await using (var connection = await connectionFactory.OpenBankAsync(ctx).ConfigureAwait(false))
             {
                 await entryEmbedder.ReconcileVecDimensionsAsync(connection, ctx).ConfigureAwait(false);
+                await codeEmbedder.ReconcileVecCodeDimensionsAsync(connection, ctx).ConfigureAwait(false);
             }
 
             await serverHost.StartAsync(ctx);

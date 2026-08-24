@@ -1,3 +1,4 @@
+using System.Globalization;
 using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
@@ -8,9 +9,12 @@ using Microsoft.Extensions.Logging;
 namespace AiRaccoon.Infrastructure.Embedding;
 
 /// <inheritdoc cref="ICodeEmbedder" />
-public sealed partial class CodeEmbedder(IEmbeddingService embeddings, ILogger<CodeEmbedder> logger)
+public sealed partial class CodeEmbedder(IEmbeddingService embeddings, ILogger<CodeEmbedder> logger,
+    IVecDimensionReconciler? vecDimensions = null)
     : ICodeEmbedder
 {
+    private readonly IVecDimensionReconciler _vecDimensions = vecDimensions ?? new VecDimensionReconciler();
+
     /// <summary>Generator-call sub-batch size (§3.3 D-E9: "batches of 32"), mirroring
     /// EntryEmbedder.EmbedAsync (S8) — a smaller generator call also shrinks S1's stale-engine race
     /// window and S2's poison-row blast radius, so a caller's own drain-run limit (CodeReindexJob's
@@ -185,7 +189,10 @@ public sealed partial class CodeEmbedder(IEmbeddingService embeddings, ILogger<C
 
         // The SAME invalidation ICodeEngineStore.ActivateCodeEngineAsync performs: update the
         // stored fingerprint and mark every embedded code row pending, in one transaction — the
-        // vec_code_pending trigger empties vec_code the instant this commits.
+        // vec_code_pending trigger empties vec_code the instant this commits. The manifest's
+        // dimension is recorded and vec_code reconciled in the same transaction: a manifest
+        // swapped to another dimension (same path) must not leave the index at the old width.
+        var dimensions = embeddings.ResolveDimensions(SettingsFor(codeModel));
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken)
             .ConfigureAwait(false);
         try
@@ -193,6 +200,11 @@ public sealed partial class CodeEmbedder(IEmbeddingService embeddings, ILogger<C
             await connection.ExecuteAsync(new CommandDefinition(MemorySql.UpsertSetting,
                 new { key = EmbeddingSettingsKeys.CodeEngine, value = currentFingerprint }, transaction,
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
+            await connection.ExecuteAsync(new CommandDefinition(MemorySql.UpsertSetting,
+                new { key = EmbeddingSettingsKeys.CodeDimensions, value = dimensions.ToString(CultureInfo.InvariantCulture) },
+                transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            await _vecDimensions.ReconcileAsync(connection, transaction, dimensions,
+                VecDimensionReconciler.CodeVecTables, cancellationToken).ConfigureAwait(false);
             await connection.ExecuteAsync(new CommandDefinition(MemorySql.MarkAllCodeEmbeddedPending,
                 transaction: transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -204,6 +216,29 @@ public sealed partial class CodeEmbedder(IEmbeddingService embeddings, ILogger<C
         }
 
         return true;
+    }
+
+    public async Task<bool> ReconcileVecCodeDimensionsAsync(SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        var codeModel = await ReadCodeModelAsync(connection, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(codeModel))
+        {
+            return false;
+        }
+
+        // Missing/unparseable defaults to the pre-1.35 dimension (768) — every bank written
+        // before codeDimensions existed was gated to 768 by the activation refusal, so the
+        // default is the actual shape, not a guess (ADR-0083 fallback-to-constants precedent).
+        var stored = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+            MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.CodeDimensions },
+            cancellationToken: cancellationToken)).ConfigureAwait(false);
+        var target = int.TryParse(stored, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : CodeCorpusSchema.EmbeddingDimensions;
+
+        return await _vecDimensions.ReconcileAsync(connection, transaction: null, target,
+            VecDimensionReconciler.CodeVecTables, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<bool> HasPendingWorkAsync(SqliteConnection connection, CancellationToken cancellationToken)

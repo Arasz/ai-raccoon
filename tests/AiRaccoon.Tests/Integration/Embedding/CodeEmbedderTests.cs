@@ -278,13 +278,86 @@ public sealed class CodeEmbedderTests : IAsyncLifetime
     [Fact]
     public async Task HasPendingWorkAsync_ConfiguredNoPendingRows_False()
     {
-        var embedder = new CodeEmbedder(new FakeCodeEmbeddingService(), NullLogger<CodeEmbedder>.Instance);
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         await ActivateCodeModelAsync(connection, "/models/code-daemon-embed-v1");
 
-        var hasWork = await embedder.HasPendingWorkAsync(connection, TestContext.Current.CancellationToken);
+        var hasWork = await new CodeEmbedder(new FakeCodeEmbeddingService(), NullLogger<CodeEmbedder>.Instance)
+            .HasPendingWorkAsync(connection, TestContext.Current.CancellationToken);
 
         hasWork.ShouldBeFalse();
+    }
+
+    /// <summary>
+    ///     vec-code-unfix-dim: a manifest swapped IN PLACE (new dimensions, same codeModel path)
+    ///     changes the fingerprint; the reconcile must move vec_code to the new dimension and
+    ///     record embedding.codeDimensions in the SAME transaction as the invalidation — otherwise
+    ///     the drain re-embeds 1024-dim blobs into a still-768 table.
+    /// </summary>
+    [Fact]
+    public async Task ReconcileFingerprintAsync_ManifestDimensionsChangedInPlace_ReconcilesVecCodeAndUpdatesCodeDimensions()
+    {
+        var embeddings = TestData.CreateEmbeddingService();
+        var embedder = new CodeEmbedder(embeddings, NullLogger<CodeEmbedder>.Instance, new VecDimensionReconciler());
+        var dir = Path.Combine(_dataRoot, "code-model-swapped");
+        TestData.SeedCodeManifestDirectory(dir); // 768
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await UpsertSettingAsync(connection, EmbeddingSettingsKeys.CodeModel, Path.GetFullPath(dir));
+        await UpsertSettingAsync(connection, EmbeddingSettingsKeys.CodeEngine,
+            embeddings.EngineFingerprint("local", Path.GetFullPath(dir), null));
+        await SeedEmbeddedCodeRowAsync(connection);
+        (await connection.ExecuteScalarAsync<long>("SELECT count(*) FROM vec_code")).ShouldBe(1L);
+
+        TestData.SeedCodeManifestDirectory(dir, 1024); // in-place rewrite: new dims, same path
+        var changed = await embedder.ReconcileFingerprintAsync(connection, TestContext.Current.CancellationToken);
+
+        changed.ShouldBeTrue();
+        var ddl = (await connection.ExecuteScalarAsync<string>(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'vec_code'"))!;
+        ddl.ShouldContain("float[1024]", customMessage: "the fingerprint change must reconcile vec_code to the new dimension");
+        (await connection.ExecuteScalarAsync<string?>(
+            "SELECT value FROM settings WHERE key = @key", new { key = EmbeddingSettingsKeys.CodeDimensions }))
+            .ShouldBe("1024");
+        (await connection.ExecuteScalarAsync<string>(
+            "SELECT embed_state FROM code_entries WHERE id = 1")).ShouldBe("pending");
+        (await connection.ExecuteScalarAsync<long>("SELECT count(*) FROM vec_code")).ShouldBe(0L);
+    }
+
+    /// <summary>An unchanged fingerprint must perform no DDL — the reconcile runs on every 15s
+    /// poll, and a DROP on a match would empty the populated index.</summary>
+    [Fact]
+    public async Task ReconcileFingerprintAsync_UnchangedFingerprint_PerformsNoDdl()
+    {
+        var embeddings = TestData.CreateEmbeddingService();
+        var embedder = new CodeEmbedder(embeddings, NullLogger<CodeEmbedder>.Instance, new VecDimensionReconciler());
+        var dir = Path.Combine(_dataRoot, "code-model-stable");
+        TestData.SeedCodeManifestDirectory(dir);
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await UpsertSettingAsync(connection, EmbeddingSettingsKeys.CodeModel, Path.GetFullPath(dir));
+        await UpsertSettingAsync(connection, EmbeddingSettingsKeys.CodeEngine,
+            embeddings.EngineFingerprint("local", Path.GetFullPath(dir), null));
+        await SeedEmbeddedCodeRowAsync(connection);
+
+        var changed = await embedder.ReconcileFingerprintAsync(connection, TestContext.Current.CancellationToken);
+
+        changed.ShouldBeFalse();
+        (await connection.ExecuteScalarAsync<long>("SELECT count(*) FROM vec_code")).ShouldBe(1L,
+            customMessage: "an unchanged fingerprint must not DROP+CREATE the populated index");
+        var ddl = (await connection.ExecuteScalarAsync<string>(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'vec_code'"))!;
+        ddl.ShouldContain("float[768]");
+    }
+
+    private static async Task SeedEmbeddedCodeRowAsync(SqliteConnection connection)
+    {
+        var vector = new byte[768 * sizeof(float)];
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO code_entries (id, hash, path, value, source_file, line_start, line_end, project_id, created_at, updated_at)
+            VALUES (1, 'code-hash', 'src/foo.cs', 'seed row', 'src/foo.cs', 1, 1, 'acme', 1, 1)
+            """));
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE code_entries SET embed_state = 'embedded', embedding = @vector WHERE id = 1",
+            new { vector }));
     }
 
     /// <summary>Mirrors real activation (SqliteCodeEngineStore.ActivateCodeEngineAsync): codeModel
