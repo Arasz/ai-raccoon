@@ -982,10 +982,12 @@ internal static class MemorySchema
             // copy total — no dynamic cast can throw and strand a bank that cannot reach v11.
             // A pre-ALTER legacy table has NO project_id column at all: there is nothing
             // meaningful to keep (every row would be unscoped), so skip the copy entirely.
+            // Rows are read as untyped dynamics and converted in C#: sqlite3mc's reader reports
+            // field types that break Dapper's typed materializer on empty/edge result shapes.
             List<TombstoneRow> existingRows;
             if (columnRows.Any(c => c.Name == "project_id"))
             {
-                existingRows = (await connection.QueryAsync<TombstoneRow>(
+                var raw = (await connection.QueryAsync(
                         new CommandDefinition(
                             """
                             SELECT CAST(project_id AS TEXT) AS ProjectId,
@@ -997,6 +999,8 @@ internal static class MemorySchema
                             """,
                             cancellationToken: cancellationToken))
                     .ConfigureAwait(false)).ToList();
+                existingRows = raw.Select(r => new TombstoneRow(
+                    (string)r.ProjectId, (string)r.Hash, (string)r.Scope, (long)r.DeletedAt)).ToList();
             }
             else
             {
