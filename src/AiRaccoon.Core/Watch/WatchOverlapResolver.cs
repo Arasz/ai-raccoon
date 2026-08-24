@@ -92,7 +92,7 @@ public sealed class WatchOverlapResolver : IWatchOverlapResolver
         // by another is named by the deepest (most specific) surviving ancestor that contains it.
         var finalSurvivors = candidates
             .Where(c => candidates.All(other => ReferenceEquals(other, c) ||
-                                                 !IngestPath.IsWithinScope(c.Path, other.Path)))
+                                                !IngestPath.IsWithinScope(c.Path, other.Path)))
             .ToArray();
 
         foreach (var candidate in candidates)

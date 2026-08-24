@@ -1,7 +1,6 @@
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
-using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Observability;
 

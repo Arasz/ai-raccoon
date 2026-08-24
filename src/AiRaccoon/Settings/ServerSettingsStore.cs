@@ -1,11 +1,9 @@
 using System.Net;
-using System.Net.Http.Json;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Hosting.Node;
-using AiRaccoon.Infrastructure.Sqlite;
 using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Settings;

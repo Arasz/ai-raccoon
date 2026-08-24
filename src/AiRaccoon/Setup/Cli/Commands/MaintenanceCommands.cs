@@ -16,8 +16,7 @@ namespace AiRaccoon.Setup.Cli.Commands;
 /// </summary>
 public sealed class MaintenanceCommands(IMaintenanceStatsStore maintenanceStats, InfrastructureOptions options)
 {
-    private string StatsSidecarPath =>
-        Path.Combine(Path.GetDirectoryName(SqliteConnectionFactory.BankPathFor(options))!, "maintenance-stats.json");
+    private string StatsSidecarPath => Path.Combine(Path.GetDirectoryName(SqliteConnectionFactory.BankPathFor(options))!, "maintenance-stats.json");
 
     public async Task<int> SetCheckpointIntervalAsync(ParseResult parseResult, IMemoryStore store,
         StandardStreams streams, CancellationToken cancellationToken)

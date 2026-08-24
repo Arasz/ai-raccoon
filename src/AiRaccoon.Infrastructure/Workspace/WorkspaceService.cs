@@ -43,7 +43,7 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
         ArgumentNullException.ThrowIfNull(keep);
 
-        await ClaimAsync(projectId, workspaceId, consolidating: true, cancellationToken).ConfigureAwait(false);
+        await ClaimAsync(projectId, workspaceId, true, cancellationToken).ConfigureAwait(false);
 
         var workspaceContext = ContextNaming.WorkspaceContext(workspaceId);
         var entries = await store.ListContextAsync(projectId, workspaceContext, cancellationToken)
@@ -79,7 +79,7 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
 
-        await ClaimAsync(projectId, workspaceId, consolidating: false, cancellationToken).ConfigureAwait(false);
+        await ClaimAsync(projectId, workspaceId, false, cancellationToken).ConfigureAwait(false);
 
         var context = ContextNaming.WorkspaceContext(workspaceId);
         return await store.DeleteContextAsync(projectId, context, cancellationToken).ConfigureAwait(false);

@@ -1,6 +1,5 @@
 using System.CommandLine;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Infrastructure.Sqlite;
 
 namespace AiRaccoon.Setup.Cli.Commands;
 

@@ -1,4 +1,3 @@
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using Dapper;
 using Microsoft.Data.Sqlite;

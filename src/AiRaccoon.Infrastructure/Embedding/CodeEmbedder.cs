@@ -9,7 +9,9 @@ using Microsoft.Extensions.Logging;
 namespace AiRaccoon.Infrastructure.Embedding;
 
 /// <inheritdoc cref="ICodeEmbedder" />
-public sealed partial class CodeEmbedder(IEmbeddingService embeddings, ILogger<CodeEmbedder> logger,
+public sealed partial class CodeEmbedder(
+    IEmbeddingService embeddings,
+    ILogger<CodeEmbedder> logger,
     IVecDimensionReconciler vecDimensions)
     : ICodeEmbedder
 {
@@ -150,7 +152,7 @@ public sealed partial class CodeEmbedder(IEmbeddingService embeddings, ILogger<C
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 var attempts = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
-                    MemorySql.IncrementCodeEmbedAttempts, new { id = row.Id }, cancellationToken: cancellationToken))
+                        MemorySql.IncrementCodeEmbedAttempts, new { id = row.Id }, cancellationToken: cancellationToken))
                     .ConfigureAwait(false);
                 Log.CodeRowEmbedAttemptFailed(logger, row.Id, row.Path, attempts,
                     CodeCorpusSchema.MaxEmbedAttempts, ex);
@@ -167,7 +169,7 @@ public sealed partial class CodeEmbedder(IEmbeddingService embeddings, ILogger<C
     private static async Task<int> MarkEmbeddedAsync(SqliteConnection connection, long id,
         ReadOnlyMemory<float> vector, string? engine, CancellationToken cancellationToken) =>
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.MarkCodeEmbedded,
-            new { id, embedding = EmbeddingBlob.ToBytes(vector), engine }, cancellationToken: cancellationToken))
+                new { id, embedding = EmbeddingBlob.ToBytes(vector), engine }, cancellationToken: cancellationToken))
             .ConfigureAwait(false);
 
     public async Task<bool> ReconcileFingerprintAsync(SqliteConnection connection, CancellationToken cancellationToken)
@@ -185,9 +187,6 @@ public sealed partial class CodeEmbedder(IEmbeddingService embeddings, ILogger<C
             return false;
         }
 
-        // The SAME invalidation ICodeEngineStore.ActivateCodeEngineAsync performs: update the
-        // stored fingerprint and mark every embedded code row pending, in one transaction — the
-        // vec_code_pending trigger empties vec_code the instant this commits.
         var dimensions = embeddings.ResolveDimensions(SettingsFor(codeModel));
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -199,8 +198,7 @@ public sealed partial class CodeEmbedder(IEmbeddingService embeddings, ILogger<C
             await connection.ExecuteAsync(new CommandDefinition(MemorySql.UpsertSetting,
                 new { key = EmbeddingSettingsKeys.CodeDimensions, value = dimensions.ToString(CultureInfo.InvariantCulture) },
                 transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
-            await vecDimensions.ReconcileAsync(connection, transaction, dimensions,
-                VecDimensionReconciler.CodeVecTables, cancellationToken).ConfigureAwait(false);
+            await vecDimensions.ReconcileCodeAsync(connection, transaction, dimensions, cancellationToken).ConfigureAwait(false);
             await connection.ExecuteAsync(new CommandDefinition(MemorySql.MarkAllCodeEmbeddedPending,
                 transaction: transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -230,8 +228,7 @@ public sealed partial class CodeEmbedder(IEmbeddingService embeddings, ILogger<C
             ? parsed
             : CodeCorpusSchema.EmbeddingDimensions;
 
-        return await vecDimensions.ReconcileAsync(connection, transaction: null, target,
-            VecDimensionReconciler.CodeVecTables, cancellationToken).ConfigureAwait(false);
+        return await vecDimensions.ReconcileCodeAsync(connection, target, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<bool> HasPendingWorkAsync(SqliteConnection connection, CancellationToken cancellationToken)
@@ -253,13 +250,13 @@ public sealed partial class CodeEmbedder(IEmbeddingService embeddings, ILogger<C
     private static async Task<string?> ReadCodeModelAsync(SqliteConnection connection,
         CancellationToken cancellationToken) =>
         await connection.QuerySingleOrDefaultAsync<string?>(new CommandDefinition(MemorySql.SelectSetting,
-            new { key = EmbeddingSettingsKeys.CodeModel }, cancellationToken: cancellationToken))
+                new { key = EmbeddingSettingsKeys.CodeModel }, cancellationToken: cancellationToken))
             .ConfigureAwait(false);
 
     private static async Task<string?> ReadCodeEngineAsync(SqliteConnection connection,
         CancellationToken cancellationToken) =>
         await connection.QuerySingleOrDefaultAsync<string?>(new CommandDefinition(MemorySql.SelectSetting,
-            new { key = EmbeddingSettingsKeys.CodeEngine }, cancellationToken: cancellationToken))
+                new { key = EmbeddingSettingsKeys.CodeEngine }, cancellationToken: cancellationToken))
             .ConfigureAwait(false);
 
     /// <summary>

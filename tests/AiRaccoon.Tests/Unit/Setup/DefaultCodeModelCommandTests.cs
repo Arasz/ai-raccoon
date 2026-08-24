@@ -6,7 +6,6 @@ using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
-using System.Net.Http;
 using AiRaccoon.Tools;
 using Shouldly;
 using Xunit;

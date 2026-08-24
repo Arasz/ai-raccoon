@@ -1,4 +1,3 @@
-using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Metrics;
 using AiRaccoon.Infrastructure.Embedding;

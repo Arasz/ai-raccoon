@@ -14,8 +14,11 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     re-embed everything when the engine changes. Takes an open connection rather than opening
 ///     its own, since every caller is already inside one and embedding is never its own transaction.
 /// </summary>
-public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationLease migrationLease,
-    TimeProvider timeProvider, IVecDimensionReconciler vecDimensions) : IEntryEmbedder
+public sealed class EntryEmbedder(
+    IEmbeddingService embeddings,
+    IModelMigrationLease migrationLease,
+    TimeProvider timeProvider,
+    IVecDimensionReconciler vecDimensions) : IEntryEmbedder
 {
     /// <summary>Rows per generator call. Internal so PendingEmbedJob can derive its own per-run bound from it instead of duplicating the number.</summary>
     internal const int BatchSize = 32;
@@ -30,11 +33,8 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
             .ConfigureAwait(false);
         var engine = embeddings.EngineFingerprint(provider, model, baseUrl);
 
-        // A null `previous` is a bank being configured for the first time, not a migration: there is
-        // no prior engine's vectors to make stale, so there is nothing to owe and no lease to take.
         if (previous is null || string.Equals(previous, engine, StringComparison.Ordinal))
         {
-            // Nothing owed: still apply the discrete settings rows, no outbox row needed.
             await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.Provider, provider, cancellationToken)
                 .ConfigureAwait(false);
             await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.Model, model, cancellationToken)
@@ -72,9 +72,6 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
                     "ai-raccoon: a model migration is already in progress; wait for it to finish before starting another");
             }
 
-            // The outbox's payoff: every row this touches leaves the searchable vec0 index the
-            // instant this commits (vec_entries_pending/vec_structure_pending), so a crash right
-            // after COMMIT degrades to FTS5-only for those rows rather than mixing two models' vectors.
             await connection.ExecuteAsync(Def(MemorySql.MarkAllEmbeddedPending, cancellationToken, transaction))
                 .ConfigureAwait(false);
 
@@ -82,7 +79,7 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
         }
         catch (ModelMigrationInProgressException)
         {
-            throw; // already rolled back above
+            throw;
         }
         catch
         {
@@ -104,7 +101,7 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
 
         if (!await migrationLease.TryAcquireAsync(connection, cancellationToken).ConfigureAwait(false))
         {
-            return false; // another relay already owns it
+            return false;
         }
 
         try
@@ -113,12 +110,9 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
                 Def(MemorySql.HasOpenModelMigration, cancellationToken)).ConfigureAwait(false) > 0;
             if (!open)
             {
-                return false; // finished by another relay between the caller's check and our lease
+                return false;
             }
 
-            // Phase 1 (D3): bring vec0 to the new engine's dimension BEFORE the first row is
-            // embedded. After the loop the DROP would discard everything just written, and the rows
-            // are no longer pending, so nothing re-drives them — a green migration over empty tables.
             await ReconcileVecDimensionsAsync(connection, cancellationToken).ConfigureAwait(false);
 
             while (true)
@@ -155,9 +149,7 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
             return;
         }
 
-        await vecDimensions.ReconcileAsync(connection, transaction: null,
-            embeddings.ResolveDimensions(settings), VecDimensionReconciler.MemoryVecTables, cancellationToken)
-            .ConfigureAwait(false);
+        await vecDimensions.ReconcileMemoryAsync(connection, embeddings.ResolveDimensions(settings), cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Embeds one row when an engine is configured; a bank with no engine is left pending.</summary>
@@ -175,8 +167,6 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
         var generator = embeddings.CreateGenerator(settings);
         var headingPath = HeadingPathParser.Parse(value);
 
-        // One generator call carrying both inputs when a heading exists (was two): a per-chunk
-        // ingest loop turns a second call per row into a doubled inference count per document.
         var result = headingPath.Length > 0
             ? await generator.GenerateAsync([value, headingPath], cancellationToken: cancellationToken)
                 .ConfigureAwait(false)
@@ -218,8 +208,6 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
             processed += await EmbedAsync(connection, batch, cancellationToken).ConfigureAwait(false);
         }
 
-        // Structure heal shares the pending-embed loop's `limit` budget above, so a small
-        // `limit` bounds both instead of leaving structure backfill to run unbounded.
         var healBudget = (limit ?? int.MaxValue) - processed;
         if (healBudget > 0)
         {
@@ -296,13 +284,8 @@ public sealed class EntryEmbedder(IEmbeddingService embeddings, IModelMigrationL
             var result = await generator.GenerateAsync(batch.Select(r => r.Value),
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
-            // Heading paths repeat heavily within a document; embedding only the distinct non-empty
-            // ones once per batch is what keeps this affordable (docs/plans/2026-08-08-search-knn-perf.md §3.6).
             var headingPaths = batch.Select(r => HeadingPathParser.Parse(r.Value)).ToList();
-            var structure = await EmbedDistinctHeadingsAsync(generator, headingPaths, cancellationToken)
-                .ConfigureAwait(false);
-            // Converted before BEGIN IMMEDIATE (WP12 review): the vector-to-blob copy is CPU work,
-            // not part of the write — the lock is for the UPDATE statements only.
+            var structure = await EmbedDistinctHeadingsAsync(generator, headingPaths, cancellationToken).ConfigureAwait(false);
             var embeddingBlobs = result.Select(r => EmbeddingBlob.ToBytes(r.Vector)).ToList();
 
             await connection.ExecuteAsync(

@@ -114,11 +114,6 @@ internal partial class NodeRunner(
             }
 
             await embeddingAvailability.EnsureEmbeddingAvailabilityAsync(ctx);
-
-            // D3: vec0 must match the configured engine's dimension before the first tool call —
-            // a serverless `model set` (no server around to drain it) leaves vec0 stale otherwise.
-            // Server-only by construction (`cli-asks-the-server-acts`): NodeRunner is the one path
-            // that becomes the server, never a CLI verb.
             await using (var connection = await connectionFactory.OpenBankAsync(ctx).ConfigureAwait(false))
             {
                 await entryEmbedder.ReconcileVecDimensionsAsync(connection, ctx).ConfigureAwait(false);

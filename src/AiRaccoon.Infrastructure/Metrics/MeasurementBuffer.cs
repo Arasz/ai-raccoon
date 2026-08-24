@@ -14,7 +14,8 @@ namespace AiRaccoon.Infrastructure.Metrics;
 public sealed class MeasurementBuffer(int capacity) : IMeasurementBuffer
 {
     private readonly IEventPump<Measurement> _pump =
-        new EventPump<Measurement>(new PumpTopic(MetricsConfigKeys.MaxBufferCapacity, capacity, Coalesce: false));
+        new EventPump<Measurement>(new PumpTopic(MetricsConfigKeys.MaxBufferCapacity, capacity, false));
+
     private int _capacity = capacity;
 
     public int Capacity => Volatile.Read(ref _capacity);

@@ -47,8 +47,7 @@ internal static class CliArgs
     /// <summary>System.CommandLine 2.0.10 reports some parse errors (e.g. a missing required
     /// argument) twice in one ParseResult.Errors — collapse to one message per distinct text
     /// so nothing downstream has to.</summary>
-    private static List<string> DistinctErrors(ParseResult parseResult) =>
-        [.. parseResult.Errors.Select(e => e.Message).Distinct(StringComparer.Ordinal)];
+    private static List<string> DistinctErrors(ParseResult parseResult) => [.. parseResult.Errors.Select(e => e.Message).Distinct(StringComparer.Ordinal)];
 
     /// <summary>
     ///     True when the args name a top-level verb (skipping options and their values). The verb set

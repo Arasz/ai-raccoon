@@ -136,8 +136,7 @@ internal static partial class ToolRefusals
     ///     message stays server-side — a refusal's text is chosen for the caller, an unexpected
     ///     failure's is not, and may carry a bank path or a SQL fragment (docs/adr/0061).
     /// </summary>
-    internal static string UnexpectedText(Exception exception) =>
-        $"unexpected-error: {exception.GetType().Name}";
+    internal static string UnexpectedText(Exception exception) => $"unexpected-error: {exception.GetType().Name}";
 
     /// <summary>
     ///     Answers an unmapped exception instead of letting it escape, and logs it at Error itself:

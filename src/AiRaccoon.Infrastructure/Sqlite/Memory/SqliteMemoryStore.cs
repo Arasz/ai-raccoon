@@ -79,7 +79,7 @@ public sealed partial class SqliteMemoryStore(
                     .ConfigureAwait(false);
 
                 return new MemoryEntry(string.Empty, string.Empty, request.Context ?? string.Empty, request.Content,
-                    now, Stored: false, Reason: $"rejected by noise policy '{noiseResult.PolicyName}'");
+                    now, false, $"rejected by noise policy '{noiseResult.PolicyName}'");
             }
         }
 
@@ -605,7 +605,8 @@ public sealed partial class SqliteMemoryStore(
         return new Core.Memory.SearchResults(deferredResults.Results, searchTimingsCollector.ToCollected(timeProvider), deferredResults.FusionDiff);
     }
 
-    private async Task<AdjustedSearchResult> AdjustMergedResults(SqliteConnection connection, SearchQuery query, SearchParameters parameters, FtsQueryPlan queryPlan, QueryVector queryVector, FusedSearchResult fusedSearchResult,
+    private async Task<AdjustedSearchResult> AdjustMergedResults(SqliteConnection connection, SearchQuery query, SearchParameters parameters, FtsQueryPlan queryPlan, QueryVector queryVector,
+        FusedSearchResult fusedSearchResult,
         MergedSearchResult mergedSearchResult, CancellationToken cancellationToken)
     {
         var adjustmentStart = timeProvider.GetTimestamp();
@@ -649,7 +650,8 @@ public sealed partial class SqliteMemoryStore(
         };
     }
 
-    private async Task<SearchResults> ExecuteSearchForContexts(SqliteConnection connection, SearchQuery query, SearchParameters parameters, FtsQueryPlan plan, QueryVector queryVector, CancellationToken cancellationToken)
+    private async Task<SearchResults> ExecuteSearchForContexts(SqliteConnection connection, SearchQuery query, SearchParameters parameters, FtsQueryPlan plan, QueryVector queryVector,
+        CancellationToken cancellationToken)
     {
         var contexts = await SearchContexts.ResolveAsync(connection, query, cancellationToken).ConfigureAwait(false);
         var searchResults = new SearchResults();

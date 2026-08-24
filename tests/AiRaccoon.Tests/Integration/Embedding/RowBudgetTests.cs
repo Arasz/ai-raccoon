@@ -1,11 +1,9 @@
 using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
-using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.TestHelpers;
 using Dapper;
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
 using NSubstitute;

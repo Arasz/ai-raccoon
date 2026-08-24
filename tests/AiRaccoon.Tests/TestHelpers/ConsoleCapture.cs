@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace AiRaccoon.Tests.TestHelpers;
 
 /// <summary>

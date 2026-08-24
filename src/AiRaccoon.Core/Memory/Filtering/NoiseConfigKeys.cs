@@ -48,6 +48,5 @@ public static class NoiseConfigKeys
     /// <summary>ADR-0029's original hardcoded value, now a setting default rather than a constant.</summary>
     public const int DefaultRetentionDays = 14;
 
-    public static int ParseRetentionDays(string? value) =>
-        int.TryParse(value, out var days) && days > 0 ? days : DefaultRetentionDays;
+    public static int ParseRetentionDays(string? value) => int.TryParse(value, out var days) && days > 0 ? days : DefaultRetentionDays;
 }

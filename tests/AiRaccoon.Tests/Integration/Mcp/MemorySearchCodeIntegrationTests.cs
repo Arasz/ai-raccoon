@@ -9,7 +9,6 @@ using AiRaccoon.Infrastructure.Sqlite.Code;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Dapper;
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol;
 using Shouldly;

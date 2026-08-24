@@ -1,4 +1,3 @@
-using System.Linq;
 using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
@@ -77,6 +76,5 @@ public interface IPromotionQueueStore
     ///     it itself. Returns the count released. Default is a no-op (0) for stores with no claim
     ///     concept of their own.
     /// </summary>
-    Task<int> ReclaimStaleClaimsAsync(TimeSpan staleAfter, CancellationToken cancellationToken = default) =>
-        Task.FromResult(0);
+    Task<int> ReclaimStaleClaimsAsync(TimeSpan staleAfter, CancellationToken cancellationToken = default) => Task.FromResult(0);
 }

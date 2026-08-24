@@ -23,8 +23,7 @@ public sealed class MarkdownChunker : IMarkdownChunker
         _countTokens = countTokens;
     }
 
-    public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null) =>
-        Split(text, maxTokens, overlayTokens, countTokens ?? _countTokens);
+    public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null) => Split(text, maxTokens, overlayTokens, countTokens ?? _countTokens);
 
     /// <summary>
     ///     Same units, boundaries and budgets as <see cref="Chunk" /> (docs/adr/0036 untouched) —
@@ -433,7 +432,10 @@ public sealed class MarkdownChunker : IMarkdownChunker
     private static List<string> SplitForSubFence(string line, string opener, string closer, int maxTokens,
         TokenCount countTokens)
     {
-        int Wrapped(string text) => countTokens(SubFenceText(opener, [text], closer));
+        int Wrapped(string text)
+        {
+            return countTokens(SubFenceText(opener, [text], closer));
+        }
 
         List<string> pieces = [];
         var remaining = line;
@@ -463,8 +465,7 @@ public sealed class MarkdownChunker : IMarkdownChunker
         return lines;
     }
 
-    private static string SubFenceText(string opener, IReadOnlyList<string> content, string closer) =>
-        string.Concat(SubFenceLines(opener, content, closer));
+    private static string SubFenceText(string opener, IReadOnlyList<string> content, string closer) => string.Concat(SubFenceLines(opener, content, closer));
 
     /// <summary>The closing delimiter matching an opener's marker character and run length.</summary>
     private static string CloserFor(string openerLine)
@@ -531,7 +532,7 @@ public sealed class MarkdownChunker : IMarkdownChunker
         var hi = text.Length;
         while (lo < hi)
         {
-            var mid = lo + ((hi - lo + 1) / 2);
+            var mid = lo + (hi - lo + 1) / 2;
             if (countTokens(text[..mid]) <= maxTokens)
             {
                 lo = mid;
@@ -557,8 +558,7 @@ public sealed class MarkdownChunker : IMarkdownChunker
     /// <summary>The headings DeferOpenSection may cut a section on, and BuildContexts pushes onto
     /// the heading stack: levels 1-2, never the ingest "## Source:" provenance header — the same
     /// headings HeadingPathParser keeps (docs/adr/0004).</summary>
-    private static bool IsSectionOpenerUnit(Unit unit) =>
-        IsHeadingUnit(unit) && HeadingLevel(unit.Lines[0].TrimStart()) <= 2 && !IsSourceProvenanceUnit(unit);
+    private static bool IsSectionOpenerUnit(Unit unit) => IsHeadingUnit(unit) && HeadingLevel(unit.Lines[0].TrimStart()) <= 2 && !IsSourceProvenanceUnit(unit);
 
     /// <summary>The (level, text) HeadingStack.Push needs for a unit already known to be a section
     /// opener — same level scan IsHeadingLine/IsSectionOpenerUnit use, same text HeadingPathParser
@@ -570,8 +570,7 @@ public sealed class MarkdownChunker : IMarkdownChunker
         return (level, trimmed[level..].Trim());
     }
 
-    private static bool IsSourceProvenanceUnit(Unit unit) =>
-        unit.Lines.Count == 1 && unit.Lines[0].TrimStart().StartsWith("## Source:", StringComparison.OrdinalIgnoreCase);
+    private static bool IsSourceProvenanceUnit(Unit unit) => unit.Lines.Count == 1 && unit.Lines[0].TrimStart().StartsWith("## Source:", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsBlankUnit(Unit unit) => unit.Lines.Count == 1 && string.IsNullOrWhiteSpace(unit.Lines[0]);
 

@@ -13,16 +13,17 @@ public sealed class WordPieceEmbeddingTokenizer : IEmbeddingTokenizer
 {
     private readonly BertTokenizer _tokenizer;
 
-    private WordPieceEmbeddingTokenizer(BertTokenizer tokenizer) => _tokenizer = tokenizer;
+    private WordPieceEmbeddingTokenizer(BertTokenizer tokenizer)
+    {
+        _tokenizer = tokenizer;
+    }
 
-    public static WordPieceEmbeddingTokenizer Create(string vocabPath) =>
-        new(OnnxEmbeddingGenerator.CreateTokenizer(vocabPath));
+    public static WordPieceEmbeddingTokenizer Create(string vocabPath) => new(OnnxEmbeddingGenerator.CreateTokenizer(vocabPath));
 
     /// <summary>Content tokens, no [CLS]/[SEP] — the ADR-0036 budget unit.</summary>
     public int CountTokens(string text) => _tokenizer.CountTokens(text);
 
-    public IReadOnlyList<int> EncodeToIds(string text, bool addSpecialTokens) =>
-        _tokenizer.EncodeToIds(text, addSpecialTokens, true, true);
+    public IReadOnlyList<int> EncodeToIds(string text, bool addSpecialTokens) => _tokenizer.EncodeToIds(text, addSpecialTokens, true, true);
 
     /// <summary>[CLS] + [SEP] — the two tokens <c>EncodeToIds(text, true)</c> adds.</summary>
     public int SpecialTokenReservation => 2;

@@ -1,6 +1,4 @@
 using AiRaccoon.Access;
-using AiRaccoon.Core.Access;
-using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Infrastructure.Embedding;

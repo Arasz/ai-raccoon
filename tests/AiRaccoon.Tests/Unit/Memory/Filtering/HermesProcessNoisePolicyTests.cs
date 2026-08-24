@@ -1,4 +1,3 @@
-using System.Threading.Tasks;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering.Policies;
 using Shouldly;

@@ -120,7 +120,7 @@ public sealed class ChunkBackfillJob(IMarkdownChunker chunker, TimeProvider time
     {
         ArgumentNullException.ThrowIfNull(connection);
         var report = await new ChunkBackfill(chunker, timeProvider, embeddingService)
-            .RunAsync(connection, dryRun: false, cancellationToken).ConfigureAwait(false);
+            .RunAsync(connection, false, cancellationToken).ConfigureAwait(false);
         // Only a backfill that actually replaced rows leaves anything to embed.
         return report.RowsReplaced > 0;
     }

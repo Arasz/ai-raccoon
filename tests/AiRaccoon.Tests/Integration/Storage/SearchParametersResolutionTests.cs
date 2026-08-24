@@ -1,10 +1,8 @@
-using System.Data.Common;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
-using AiRaccoon.Infrastructure.Sqlite.Memory;
 using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;

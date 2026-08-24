@@ -36,14 +36,13 @@ public sealed class SyncBlobAuthenticator : ISyncBlobAuthenticator
         return false;
     }
 
-    public bool Verify(string passphrase, byte[] tag, byte[] data) =>
-        CryptographicOperations.FixedTimeEquals(ComputeTag(passphrase, data), tag);
+    public bool Verify(string passphrase, byte[] tag, byte[] data) => CryptographicOperations.FixedTimeEquals(ComputeTag(passphrase, data), tag);
 
     /// <summary>Derives a purpose-specific key from the passphrase via HKDF (platform primitive,
     /// not a hand-rolled scheme) and tags the data with HMAC-SHA256.</summary>
     private static byte[] ComputeTag(string passphrase, byte[] data)
     {
-        var key = HKDF.DeriveKey(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(passphrase), outputLength: 32,
+        var key = HKDF.DeriveKey(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(passphrase), 32,
             info: KeyInfo);
         return HMACSHA256.HashData(key, data);
     }

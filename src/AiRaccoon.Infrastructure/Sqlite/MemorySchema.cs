@@ -1064,7 +1064,7 @@ internal static class MemorySchema
                      (Name: "project_id", Type: "TEXT", Pk: 1L),
                      (Name: "hash", Type: "TEXT", Pk: 2L),
                      (Name: "scope", Type: "TEXT", Pk: 3L),
-                     (Name: "deleted_at", Type: "INTEGER", Pk: 0L),
+                     (Name: "deleted_at", Type: "INTEGER", Pk: 0L)
                  })
         {
             var actual = columnRows.FirstOrDefault(c => c.Name == expected.Name);

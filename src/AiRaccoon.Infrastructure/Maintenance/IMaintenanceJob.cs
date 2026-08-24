@@ -31,6 +31,5 @@ public interface IMaintenanceJob
     ///     again. Default false: every cadence-based job (vacuum, backfill, retention) is unaffected.
     ///     Called every pass, so it must be cheap (one indexed read).
     /// </summary>
-    ValueTask<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(false);
+    ValueTask<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken) => ValueTask.FromResult(false);
 }

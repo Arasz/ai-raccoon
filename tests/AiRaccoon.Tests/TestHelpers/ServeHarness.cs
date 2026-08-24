@@ -1,4 +1,3 @@
-using AiRaccoon.Hosting.Common;
 using AiRaccoon.Setup.Cli;
 using CommunityToolkit.Diagnostics;
 using Shouldly;

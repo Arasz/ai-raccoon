@@ -1,5 +1,4 @@
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Embedding.Manifest;

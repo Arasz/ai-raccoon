@@ -1,5 +1,3 @@
-using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;

@@ -21,8 +21,7 @@ internal static class BackendLaunchArguments
     /// </summary>
     public static string? Executable() => Executable(Environment.ProcessPath);
 
-    internal static string? Executable(string? processPath) =>
-        IsUnpackagedInvocation(processPath) ? null : processPath;
+    internal static string? Executable(string? processPath) => IsUnpackagedInvocation(processPath) ? null : processPath;
 
     /// <summary>
     ///     True when <paramref name="processPath" /> names the dotnet muxer rather than a packaged

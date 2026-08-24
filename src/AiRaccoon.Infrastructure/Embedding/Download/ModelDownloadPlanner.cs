@@ -120,8 +120,8 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
         var (poolingMode, normalization, poolingProvenance) = PoolingDecision(rawFiles, probe);
 
         var tokenizerEntry = TreeEntry(tree, tokenizerFilePath)
-            ?? throw new ModelDownloadPlanException(
-                $"the repo has no tokenizer file named '{tokenizerFileName}' (model_type '{ModelType(configJson)}'); expected it at '{tokenizerFilePath}' or '{tokenizerFileName}'");
+                             ?? throw new ModelDownloadPlanException(
+                                 $"the repo has no tokenizer file named '{tokenizerFileName}' (model_type '{ModelType(configJson)}'); expected it at '{tokenizerFilePath}' or '{tokenizerFileName}'");
         var tokenizerFiles = new List<PinnedFile> { Pinned(tree, tokenizerFilePath) };
 
         var provenanceFiles = new List<PinnedFile> { Pinned(tree, configPath), Pinned(tree, tokenizerConfigPath) };
@@ -218,8 +218,8 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
         else
         {
             foreach (var entry in tree.Where(e => e.Type == "file" && DirectoryOf(e.Path) == modelDir
-                                                  && e.Path != modelFilePath
-                                                  && Path.GetFileName(e.Path).Contains(".onnx_data", StringComparison.OrdinalIgnoreCase)))
+                                                                   && e.Path != modelFilePath
+                                                                   && Path.GetFileName(e.Path).Contains(".onnx_data", StringComparison.OrdinalIgnoreCase)))
             {
                 paths.Add(entry.Path);
             }
@@ -547,16 +547,13 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
     /// <summary>The first name a role's own recognized-names list matches, else the first
     /// candidate — candidates are already partitioned by rank, so no exclusion is needed here the
     /// way the pure name heuristic below needs one.</summary>
-    private static string PreferRecognizedName(IReadOnlyList<string> candidates, Func<string, bool> isRecognized) =>
-        candidates.FirstOrDefault(isRecognized) ?? candidates[0];
+    private static string PreferRecognizedName(IReadOnlyList<string> candidates, Func<string, bool> isRecognized) => candidates.FirstOrDefault(isRecognized) ?? candidates[0];
 
     private static bool IsTokenEmbeddingsName(string name) => name is "token_embeddings" or "last_hidden_state";
 
-    private static bool IsEmbeddingName(string name) =>
-        name == "sentence_embedding" || name.Contains("embedding", StringComparison.OrdinalIgnoreCase);
+    private static bool IsEmbeddingName(string name) => name == "sentence_embedding" || name.Contains("embedding", StringComparison.OrdinalIgnoreCase);
 
-    private static int? RankOf(OnnxGraphProbe probe, string output) =>
-        probe.OutputRanks is not null && probe.OutputRanks.TryGetValue(output, out var rank) ? rank : null;
+    private static int? RankOf(OnnxGraphProbe probe, string output) => probe.OutputRanks is not null && probe.OutputRanks.TryGetValue(output, out var rank) ? rank : null;
 
     private static string SelectTokenEmbeddingsOutput(IReadOnlyList<string> outputs)
     {
@@ -629,7 +626,7 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
     {
         using var doc = JsonDocument.Parse(configJson);
         if (doc.RootElement.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Number
-            && value.TryGetInt32(out var number) && number > 0)
+                                                                    && value.TryGetInt32(out var number) && number > 0)
         {
             return number;
         }
@@ -642,19 +639,19 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
         using var doc = JsonDocument.Parse(json);
         return doc.RootElement.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.True
             ? true
-            : value.ValueKind == JsonValueKind.False ? false : null;
+            : value.ValueKind == JsonValueKind.False
+                ? false
+                : null;
     }
 
-    private static bool BoolFlag(JsonElement root, string property) =>
-        root.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.True;
+    private static bool BoolFlag(JsonElement root, string property) => root.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.True;
 
-    private static HfTreeEntry? TreeEntry(IReadOnlyList<HfTreeEntry> tree, string path) =>
-        tree.FirstOrDefault(e => e.Path == path);
+    private static HfTreeEntry? TreeEntry(IReadOnlyList<HfTreeEntry> tree, string path) => tree.FirstOrDefault(e => e.Path == path);
 
     private static PinnedFile Pinned(IReadOnlyList<HfTreeEntry> tree, string path)
     {
         var entry = TreeEntry(tree, path)
-            ?? throw new ModelDownloadPlanException($"'{path}' is not in the repo tree");
+                    ?? throw new ModelDownloadPlanException($"'{path}' is not in the repo tree");
         return new PinnedFile(path, entry.Size, entry.LfsOid);
     }
 
@@ -664,6 +661,5 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
         return slash < 0 ? string.Empty : path[..slash];
     }
 
-    private static string JoinPath(string dir, string file) =>
-        dir.Length == 0 ? file : $"{dir}/{file}";
+    private static string JoinPath(string dir, string file) => dir.Length == 0 ? file : $"{dir}/{file}";
 }

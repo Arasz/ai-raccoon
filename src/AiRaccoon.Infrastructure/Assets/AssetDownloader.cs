@@ -1,4 +1,3 @@
-using System.Net;
 using AiRaccoon.Infrastructure.Resilience;
 using CommunityToolkit.Diagnostics;
 using Polly;

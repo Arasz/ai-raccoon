@@ -6,7 +6,6 @@ using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Code;
 using AiRaccoon.Tests.TestHelpers;
 using Dapper;
-using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
 

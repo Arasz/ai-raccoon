@@ -5,6 +5,26 @@ using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 
+public static class VecDimensionReconcilerExtensions
+{
+    extension(IVecDimensionReconciler reconciler)
+    {
+        /// <summary>Recreates the memory bank's two vec0 tables at <paramref name="targetDimension" />.</summary>
+        public Task<bool> ReconcileMemoryAsync(SqliteConnection connection, int targetDimension, CancellationToken cancellationToken) =>
+            reconciler.ReconcileAsync(connection, null, targetDimension, VecDimensionReconciler.MemoryVecTables, cancellationToken);
+
+        /// <summary>Recreates the code corpus's vec0 table at <paramref name="targetDimension" />.</summary>
+        public Task<bool> ReconcileCodeAsync(SqliteConnection connection,
+            SqliteTransaction? transaction, int targetDimension, CancellationToken cancellationToken) =>
+            reconciler.ReconcileAsync(connection, transaction, targetDimension, VecDimensionReconciler.CodeVecTables, cancellationToken);
+
+
+        /// <summary>Recreates the code corpus's vec0 table at <paramref name="targetDimension" />.</summary>
+        public Task<bool> ReconcileCodeAsync(SqliteConnection connection, int targetDimension, CancellationToken cancellationToken) =>
+            reconciler.ReconcileAsync(connection, null, targetDimension, VecDimensionReconciler.CodeVecTables, cancellationToken);
+    }
+}
+
 /// <summary>Brings the vec0 tables to the dimension the active engine embeds at (plan D3).</summary>
 public interface IVecDimensionReconciler
 {
@@ -12,8 +32,7 @@ public interface IVecDimensionReconciler
     /// any is missing or declared at another dimension. When <paramref name="transaction" /> is
     /// passed the caller owns it (the reconciler never begins, commits or rolls back); otherwise
     /// the reconciler begins and commits its own. True when any table changed.</summary>
-    Task<bool> ReconcileAsync(SqliteConnection connection, SqliteTransaction? transaction,
-        int targetDimension, IReadOnlyCollection<string> tables, CancellationToken cancellationToken);
+    Task<bool> ReconcileAsync(SqliteConnection connection, SqliteTransaction? transaction, int targetDimension, IReadOnlyCollection<string> tables, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -49,7 +68,7 @@ public sealed partial class VecDimensionReconciler : IVecDimensionReconciler
             foreach (var table in tables)
             {
                 if (await NeedsRecreateAsync(connection, tx, table, targetDimension, cancellationToken)
-                    .ConfigureAwait(false))
+                        .ConfigureAwait(false))
                 {
                     await RecreateAsync(connection, tx, table, targetDimension, cancellationToken)
                         .ConfigureAwait(false);

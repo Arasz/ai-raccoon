@@ -1,6 +1,5 @@
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using System.CommandLine;
-using System.Net.Http;
 using AiRaccoon.Infrastructure.Assets;
 using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Infrastructure.Embedding.Download;
@@ -40,7 +39,7 @@ internal sealed class ModelDownloadCommands(
 
         var request = new ModelDownloadRequest(repoId, revision, targetDir, explicitFiles, dryRun, yes,
             message => PromptConfirm(streams, message));
-        return await ExecuteAsync(request, streams, activationHint: true, cancellationToken).ConfigureAwait(false);
+        return await ExecuteAsync(request, streams, true, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -55,7 +54,7 @@ internal sealed class ModelDownloadCommands(
                 Confirm: message => PromptConfirm(streams, message)),
             // No "activate it next" hint: this call IS the download half of an activating verb, and
             // pointing at 'model set local' here would send the reader at the MEMORY engine.
-            streams, activationHint: false, cancellationToken);
+            streams, false, cancellationToken);
 
     private async Task<int> ExecuteAsync(ModelDownloadRequest request, StandardStreams streams,
         bool activationHint, CancellationToken cancellationToken)
@@ -83,7 +82,7 @@ internal sealed class ModelDownloadCommands(
             }
 
             await streams.WriteOutputLineAsync(
-                $"downloaded {repoId}@{revision} to {targetDir} ({result.DownloadedFiles.Count} file(s)); {AiRaccoon.Infrastructure.Embedding.Manifest.EmbeddingManifest.FileName} written. " +
+                $"downloaded {repoId}@{revision} to {targetDir} ({result.DownloadedFiles.Count} file(s)); {EmbeddingManifest.FileName} written. " +
                 (activationHint ? $"Activate with 'ai-raccoon model set local {targetDir}'. " : string.Empty) +
                 "Trust note: the SHA-256 pins were captured from Hugging Face's LFS oids before download — the first pin trusts the channel once; registry pins are the reviewed tier (plan D8).");
             return ExitCode.Success;

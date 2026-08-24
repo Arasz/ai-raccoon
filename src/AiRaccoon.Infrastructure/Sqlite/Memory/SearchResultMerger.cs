@@ -13,11 +13,9 @@ internal static class SearchResultMerger
         IReadOnlyList<MemorySearchResult> searchResults,
         SearchQuery searchQuery,
         SearchParameters parameters,
-        FtsQueryPlan queryPlan)
-    {
-        return Merge(searchResults, searchQuery.Limit, searchQuery.MinRelativeScore, parameters.RrfK, parameters.SourceLambdaFor(queryPlan), parameters.ConsolidationThreshold,
+        FtsQueryPlan queryPlan) =>
+        Merge(searchResults, searchQuery.Limit, searchQuery.MinRelativeScore, parameters.RrfK, parameters.SourceLambdaFor(queryPlan), parameters.ConsolidationThreshold,
             parameters.DocScoreFormula);
-    }
 
     public static IReadOnlyList<MemorySearchResult> Merge(
         IReadOnlyList<MemorySearchResult> searchResults,
@@ -28,7 +26,7 @@ internal static class SearchResultMerger
         double consolidationThreshold = double.PositiveInfinity,
         DocScoreFormula formula = DocScoreFormula.Max)
     {
-        var unitWeightResults = new WeightedResults(searchResults, Weight: 1.0);
+        var unitWeightResults = new WeightedResults(searchResults, 1.0);
         var fused = ReciprocalRankFusion.Fuse([unitWeightResults], rrfK, 0.0, int.MaxValue);
         var ranked = SourceAffinityRanker.Rank(fused, sourceLambda, consolidationThreshold, formula);
         return

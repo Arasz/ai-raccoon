@@ -45,7 +45,7 @@ public static partial class StructuralNoiseFeatures
     private static readonly HashSet<string> Pronouns = new(StringComparer.Ordinal)
     {
         "i", "we", "you", "my", "our", "your", "me", "us", "i'm", "we're",
-        "you're", "i've", "we've", "mine", "yours", "ours",
+        "you're", "i've", "we've", "mine", "yours", "ours"
     };
 
     private static readonly HashSet<string> Stopwords = new(StringComparer.Ordinal)
@@ -55,7 +55,7 @@ public static partial class StructuralNoiseFeatures
         "this", "it", "as", "at", "by", "from", "not", "no", "so", "if",
         "then", "than", "because", "which", "what", "when", "how", "why",
         "do", "does", "did", "has", "have", "had", "can", "could",
-        "should", "would", "will", "there", "their", "they", "its",
+        "should", "would", "will", "there", "their", "they", "its"
     };
 
     /// <summary>

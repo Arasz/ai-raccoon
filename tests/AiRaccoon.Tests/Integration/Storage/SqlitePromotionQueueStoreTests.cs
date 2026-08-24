@@ -1,4 +1,3 @@
-using System.Linq;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;

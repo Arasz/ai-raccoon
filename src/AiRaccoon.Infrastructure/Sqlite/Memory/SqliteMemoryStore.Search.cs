@@ -1,4 +1,3 @@
-using System.Globalization;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Infrastructure.Embedding;

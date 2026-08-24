@@ -1,5 +1,4 @@
 using AiRaccoon.Core.Chunking;
-using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using Microsoft.ML.Tokenizers;
 using Shouldly;
