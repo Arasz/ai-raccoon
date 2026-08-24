@@ -191,7 +191,7 @@ public class McpServerE2ETests : IAsyncLifetime
     {
         // FR-NM-3 s1 (see docs/work/features-native-memory/native-memory.feature): the CLI config channel configures the engine (memory_configure was
         // removed by the single-channel ruling); the running server hot-reloads the row.
-        await RunConfigCliAsync("model", "set", "local");
+        await RunConfigCliAsync("model", "embedding", "set", "local");
 
         await CallAsync("memory_write",
             ("projectId", "acme"), ("content", "locally embedded e2e fact"));
@@ -204,7 +204,7 @@ public class McpServerE2ETests : IAsyncLifetime
     public async Task Embeddings_ConfigureOpenAi_RoutesThroughTheConfiguredEndpoint()
     {
         // FR-NM-3 s3 (see docs/work/features-native-memory/native-memory.feature): any OpenAI-compatible baseUrl replaces the default engine.
-        await RunConfigCliAsync("model", "set", "openai", "nomic-embed-text", _openAi.BaseUrl,
+        await RunConfigCliAsync("model", "embedding", "set", "openai", "nomic-embed-text", _openAi.BaseUrl,
             "--api-key", "test-key-123");
 
         await CallAsync("memory_write",
@@ -231,7 +231,7 @@ public class McpServerE2ETests : IAsyncLifetime
         await CallAsync("memory_write",
             ("projectId", "acme"), ("content", "queued e2e fact"));
 
-        await RunConfigCliAsync("model", "set", "local");
+        await RunConfigCliAsync("model", "embedding", "set", "local");
 
         var embed = await CallAsync("memory_embed_pending", ("projectId", "acme"));
         var embedText = Text(embed);

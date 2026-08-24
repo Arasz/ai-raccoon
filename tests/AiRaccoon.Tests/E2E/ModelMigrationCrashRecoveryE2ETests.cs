@@ -127,14 +127,14 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
         await WaitForStartupCheckpointAsync();
 
         // 2. Configure the first engine and seed real, embedded rows through it.
-        (await RunCliAsync("model", "set", "local")).ExitCode.ShouldBe(0);
+        (await RunCliAsync("model", "embedding", "set", "local")).ExitCode.ShouldBe(0);
         await SeedEmbeddedRowsAsync(RowCount);
         (await CountByStateAsync("embedded")).ShouldBe(RowCount);
 
         // 3. Trigger the migration. The CLI call returns as soon as the outbox transaction commits —
         // no re-embedding has happened inside this call (ADR-0076: no inline execution).
         var otherModelPath = CopyBundledModelToATempPath();
-        var migrate = await RunCliAsync("model", "set", "local", otherModelPath);
+        var migrate = await RunCliAsync("model", "embedding", "set", "local", otherModelPath);
         migrate.ExitCode.ShouldBe(0);
 
         // 4. Kill server A NOW — before its periodic tick (checkpoint-interval defaults to 60
@@ -186,7 +186,7 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
         await WaitForServerAsync();
         await WaitForStartupCheckpointAsync();
 
-        (await RunCliAsync("model", "set", "local")).ExitCode.ShouldBe(0);
+        (await RunCliAsync("model", "embedding", "set", "local")).ExitCode.ShouldBe(0);
         // Seeded directly (not through memory_write): this test's subject is the relay's drain, not
         // the write path, and MidDrainRowCount real embeds must happen twice over (seed, then
         // migrate) if seeded through MCP — this way only the migration itself pays for real inference,
@@ -195,7 +195,7 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
         (await CountByStateAsync("embedded")).ShouldBe(MidDrainRowCount);
 
         var otherModelPath = CopyBundledModelToATempPath();
-        (await RunCliAsync("model", "set", "local", otherModelPath)).ExitCode.ShouldBe(0);
+        (await RunCliAsync("model", "embedding", "set", "local", otherModelPath)).ExitCode.ShouldBe(0);
         (await CountByStateAsync("pending")).ShouldBe(MidDrainRowCount); // the outbox's own atomic move
 
         // Phase 1 — wait for the on-demand relay to start draining. The lease it holds from its
