@@ -31,9 +31,10 @@
 
     <!--
         nuget.org renders package readmes without JavaScript, so ```mermaid blocks show as raw
-        code. Before pack, render them to inline SVG via kroki.io and pack the rendered copy:
-        the repo keeps one hand-edited README.md; only the distributed package gets diagrams.
-        PackReadmePath feeds both PackageReadmeFile resolution and the None item below.
+        code — and nuget.org only renders <img> sources from trusted domains via ABSOLUTE urls
+        (relative in-package paths are not rendered; NuGetGallery#9610). Before pack, render each
+        block to a committed PNG under docs/assets/readme/ (sha256-named so unchanged diagrams
+        never churn) and rewrite the block to an absolute raw.githubusercontent.com link.
         Set AiRaccoonSkipReadmeRender=true to pack the plain README (offline/emergency packs).
     -->
     <PropertyGroup>
