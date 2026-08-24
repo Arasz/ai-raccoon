@@ -931,12 +931,15 @@ internal static class MemorySchema
             .ConfigureAwait(false);
 
     /// <summary>
-    ///     Ladder step 11: the <c>sync_tombstones</c> table's <c>project_id</c> column must be
-    ///     <c>TEXT NOT NULL</c> as part of a composite <c>PRIMARY KEY (project_id, hash, scope)</c>.
-    ///     A legacy bank that had <c>project_id</c> added via ALTER TABLE carries it as <c>TEXT</c>
-    ///     (nullable, not PK) — the DDL's <c>CREATE TABLE IF NOT EXISTS</c> silently no-ops against
-    ///     that shape. This step detects the mismatch, preserves existing data, and recreates the
-    ///     table with the correct shape. Idempotent: a bank already at the correct shape is skipped.
+    ///     Ladder step 11: the <c>sync_tombstones</c> table must carry the Ddl's exact composite
+    ///     shape — <c>project_id TEXT NOT NULL PRIMARY KEY</c>, and <c>hash</c>/<c>scope</c> also
+    ///     members of the composite <c>PRIMARY KEY (project_id, hash, scope)</c>. A legacy bank that
+    ///     had <c>project_id</c> added via ALTER TABLE carries it as plain <c>TEXT</c> — the DDL's
+    ///     <c>CREATE TABLE IF NOT EXISTS</c> silently no-ops against that shape. The rebuild is
+    ///     atomic: read/drop/create/copy runs inside one <see cref="MigrateToV9Async" />-style
+    ///     <c>BEGIN IMMEDIATE</c> transaction, so a crash mid-rebuild leaves the legacy table
+    ///     intact for the next open instead of a half-migrated bank. Idempotent: a bank already at
+    ///     the correct shape is skipped.
     /// </summary>
     private static async Task MigrateToV11Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -951,20 +954,47 @@ internal static class MemorySchema
 
         var columnRows = (await connection.QueryAsync<PragmaColumnRow>(
                 new CommandDefinition(
-                    "SELECT name, \"notnull\", pk FROM pragma_table_info('sync_tombstones')",
+                    "SELECT name, type, \"notnull\", pk FROM pragma_table_info('sync_tombstones')",
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false)).ToList();
 
-        var projectIdColumn = columnRows.FirstOrDefault(c => c.Name == "project_id");
-        var needsRecreate = projectIdColumn is null || projectIdColumn.NotNull == 0 || projectIdColumn.Pk == 0;
+        // Full-shape check, not just project_id: every column's declared type must match the Ddl
+        // and all three key members must be part of the composite PRIMARY KEY (pk 1..3). A table
+        // with an INTEGER key or a PK missing hash/scope would otherwise be stamped v11 while
+        // SchemaDoctor still reports a mismatch.
+        bool ShapeOk()
+        {
+            foreach (var expected in new[]
+                     {
+                         (Name: "project_id", Type: "TEXT", Pk: 1L),
+                         (Name: "hash", Type: "TEXT", Pk: 2L),
+                         (Name: "scope", Type: "TEXT", Pk: 3L),
+                         (Name: "deleted_at", Type: "INTEGER", Pk: 0L),
+                     })
+            {
+                var actual = columnRows.FirstOrDefault(c => c.Name == expected.Name);
+                if (actual is null
+                    || !string.Equals(actual.Type, expected.Type, StringComparison.OrdinalIgnoreCase)
+                    || actual.NotNull == 0
+                    || actual.Pk != expected.Pk)
+                {
+                    return false;
+                }
+            }
 
-        if (!needsRecreate)
+            return columnRows.Count == 4;
+        }
+
+        if (ShapeOk())
         {
             return;
         }
 
-        // Preserve existing data only when project_id already exists (wrong shape but
-        // has the column). When the column is entirely missing, there is nothing to keep.
+        var projectIdColumn = columnRows.FirstOrDefault(c => c.Name == "project_id");
+
+        // Preserve existing data only when the columns exist in a readable shape. When they do
+        // not, there is nothing to keep. Read BEFORE opening the transaction: the copy is
+        // in-memory, so a crash between BEGIN and COMMIT cannot lose what was never dropped yet.
         List<dynamic>? existingRows = null;
         if (projectIdColumn is not null)
         {
@@ -976,43 +1006,60 @@ internal static class MemorySchema
         }
 
         await connection.ExecuteAsync(
-                new CommandDefinition("DROP TABLE sync_tombstones", cancellationToken: cancellationToken))
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
             .ConfigureAwait(false);
-
-        await connection.ExecuteAsync(
-                new CommandDefinition(
-                    """
-                    CREATE TABLE sync_tombstones (
-                        project_id TEXT NOT NULL,
-                        hash TEXT NOT NULL,
-                        scope TEXT NOT NULL,
-                        deleted_at INTEGER NOT NULL,
-                        PRIMARY KEY (project_id, hash, scope)
-                    )
-                    """,
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
-
-        if (existingRows is { Count: > 0 })
+        try
         {
-            foreach (var row in existingRows)
-            {
-                await connection.ExecuteAsync(
-                        new CommandDefinition(
-                            "INSERT OR IGNORE INTO sync_tombstones (project_id, hash, scope, deleted_at) VALUES (@project_id, @hash, @scope, @deleted_at)",
-                            new { project_id = (string)row.project_id, hash = (string)row.hash, scope = (string)row.scope, deleted_at = (long)row.deleted_at },
-                            cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
-            }
-        }
+            await connection.ExecuteAsync(
+                    new CommandDefinition("DROP TABLE sync_tombstones", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
 
-        // Drop the legacy unique index if it survived the table drop (it did not — SQLite
-        // drops indexes on the table — but be explicit for clarity).
-        await connection.ExecuteAsync(
-                new CommandDefinition(
-                    "DROP INDEX IF EXISTS uq_sync_tombstones_project_identity",
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        """
+                        CREATE TABLE sync_tombstones (
+                            project_id TEXT NOT NULL,
+                            hash TEXT NOT NULL,
+                            scope TEXT NOT NULL,
+                            deleted_at INTEGER NOT NULL,
+                            PRIMARY KEY (project_id, hash, scope)
+                        )
+                        """,
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+
+            if (existingRows is { Count: > 0 })
+            {
+                foreach (var row in existingRows)
+                {
+                    await connection.ExecuteAsync(
+                            new CommandDefinition(
+                                "INSERT OR IGNORE INTO sync_tombstones (project_id, hash, scope, deleted_at) VALUES (@project_id, @hash, @scope, @deleted_at)",
+                                new { project_id = (string)row.project_id, hash = (string)row.hash, scope = (string)row.scope, deleted_at = (long)row.deleted_at },
+                                cancellationToken: cancellationToken))
+                        .ConfigureAwait(false);
+                }
+            }
+
+            // Drop the legacy unique index if it survived the table drop (it did not — SQLite
+            // drops indexes on the table — but be explicit for clarity).
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "DROP INDEX IF EXISTS uq_sync_tombstones_project_identity",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
+        }
     }
 
     /// <summary>
@@ -1843,7 +1890,7 @@ internal static class MemorySchema
             : DefaultEmbeddingDimension;
     }
 
-    private sealed record PragmaColumnRow(string Name, long NotNull, long Pk);
+    private sealed record PragmaColumnRow(string Name, string Type, long NotNull, long Pk);
 
     private sealed record WatchRow(string ProjectId, string Path, long CreatedAt);
 

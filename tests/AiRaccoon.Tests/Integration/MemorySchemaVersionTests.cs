@@ -1241,6 +1241,11 @@ public sealed class MemorySchemaVersionTests
             """,
             cancellationToken: TestContext.Current.CancellationToken));
 
+        // Schema witness: the table's sqlite_master rowid is stable across a no-op but a
+        // drop/recreate allocates a new one — the count assertion alone cannot tell those apart
+        // (a rebuild that reinserts the single row keeps count at 1).
+        var witnessBefore = await TableRowidAsync(connection, "sync_tombstones");
+
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
 
         var count = await connection.ExecuteScalarAsync<long>(
@@ -1248,8 +1253,52 @@ public sealed class MemorySchemaVersionTests
                 "SELECT count(*) FROM sync_tombstones",
                 cancellationToken: TestContext.Current.CancellationToken));
         count.ShouldBe(1L, "the existing row must survive unchanged");
+        (await TableRowidAsync(connection, "sync_tombstones")).ShouldBe(witnessBefore,
+            "the table must not have been dropped and recreated — a rebuild would allocate a fresh sqlite_master rowid");
         (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
     }
+
+    /// <summary>
+    ///     The full-shape gate: a table whose project_id column happens to be NOT NULL + PK but
+    ///     whose hash/scope are not part of the composite key must still be recreated, not skipped
+    ///     and stamped v11 with SchemaDoctor still reporting a mismatch.
+    /// </summary>
+    [Fact]
+    public async Task EnsureAsync_OnAV10Bank_WithAPartiallyCorrectShape_StillRecreates()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        // project_id looks right (NOT NULL, pk=1) but the PK does not include hash/scope.
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            DROP TABLE sync_tombstones;
+            CREATE TABLE sync_tombstones (
+                project_id TEXT NOT NULL PRIMARY KEY,
+                hash TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                deleted_at INTEGER NOT NULL
+            );
+            INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at)
+                VALUES ('acme', 'h1', 'project', 100);
+            PRAGMA user_version = 10;
+            """,
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var columns = await connection.QueryAsync<ColumnRow>(
+            new CommandDefinition(
+                "SELECT name, type, \"notnull\", pk FROM pragma_table_info('sync_tombstones')",
+                cancellationToken: TestContext.Current.CancellationToken));
+        columns.First(c => c.Name == "hash").Pk.ShouldBe(2L, "hash must be a composite-PK member after the migration");
+        columns.First(c => c.Name == "scope").Pk.ShouldBe(3L, "scope must be a composite-PK member after the migration");
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
+    }
+
+    private static async Task<long> TableRowidAsync(SqliteConnection connection, string table) =>
+        await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            $"SELECT rowid FROM sqlite_master WHERE type = 'table' AND name = '{table}'",
+            cancellationToken: TestContext.Current.CancellationToken));
 
     private sealed record ColumnRow(string Name, string Type, long NotNull, long Pk);
 }
