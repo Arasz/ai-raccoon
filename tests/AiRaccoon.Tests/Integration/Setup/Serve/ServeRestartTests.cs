@@ -13,7 +13,7 @@ namespace AiRaccoon.Tests.Integration.Setup.Serve;
 ///     never a silent attach to the server it was asked to replace.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
-[Trait(TestCategories.Speed, TestCategories.Fast)]
+[Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class ServeRestartTests : IDisposable
 {
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-serve-restart");
