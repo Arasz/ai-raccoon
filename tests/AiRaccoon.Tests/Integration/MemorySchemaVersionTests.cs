@@ -1167,4 +1167,215 @@ public sealed class MemorySchemaVersionTests
         second.Pruned.ShouldBeEmpty();
         second.Warnings.ShouldBeEmpty();
     }
+
+    // ── v11: sync_tombstones project_id shape migration ──
+
+    /// <summary>
+    ///     The exact repro from the live bank: a legacy <c>sync_tombstones</c> table whose
+    ///     <c>project_id</c> is <c>TEXT</c> (nullable, not PK) instead of <c>TEXT NOT NULL</c> as
+    ///     part of a composite primary key. The v11 ladder step must detect the mismatch, recreate
+    ///     the table with the correct shape, and preserve existing data.
+    /// </summary>
+    [Fact]
+    public async Task EnsureAsync_OnAV10Bank_WithLegacySyncTombstones_RecreatesWithCorrectShape_AndPreservesData()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        // Simulate the legacy shape: drop the correct table and recreate with project_id as
+        // plain TEXT (no NOT NULL, no PK) — exactly what an ALTER TABLE ADD COLUMN produces.
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            DROP TABLE sync_tombstones;
+            CREATE TABLE sync_tombstones (
+                project_id TEXT,
+                hash TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                deleted_at INTEGER NOT NULL
+            );
+            CREATE UNIQUE INDEX uq_sync_tombstones_project_identity
+                ON sync_tombstones(project_id, hash, scope);
+            INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at)
+                VALUES ('acme', 'h1', 'project', 100);
+            INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at)
+                VALUES ('acme', 'h2', 'shared', 200);
+            PRAGMA user_version = 10;
+            """,
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        // Verify the table has the correct shape.
+        var columns = await connection.QueryAsync<ColumnRow>(
+            new CommandDefinition(
+                "SELECT name, type, \"notnull\", pk FROM pragma_table_info('sync_tombstones')",
+                cancellationToken: TestContext.Current.CancellationToken));
+        var projectIdCol = columns.First(c => c.Name == "project_id");
+        projectIdCol.Type.ShouldBe("TEXT");
+        projectIdCol.NotNull.ShouldBe(1L);
+        projectIdCol.Pk.ShouldBe(1L);
+
+        // Verify data was preserved.
+        var rows = (await connection.QueryAsync<(string ProjectId, string Hash, string Scope, long DeletedAt)>(
+                new CommandDefinition(
+                    "SELECT project_id AS ProjectId, hash AS Hash, scope AS Scope, deleted_at AS DeletedAt FROM sync_tombstones ORDER BY hash",
+                    cancellationToken: TestContext.Current.CancellationToken)))
+            .ToList();
+        rows.ShouldBe([
+            ("acme", "h1", "project", 100),
+            ("acme", "h2", "shared", 200)
+        ]);
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
+    }
+
+    /// <summary>A bank already at the correct shape must not be touched by the v11 step.</summary>
+    [Fact]
+    public async Task EnsureAsync_OnAV10Bank_WithCorrectSyncTombstones_SkipsTheMigration()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at)
+                VALUES ('acme', 'h1', 'project', 100);
+            PRAGMA user_version = 10;
+            """,
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        // Schema witness: the table's sqlite_master rowid is stable across a no-op but a
+        // drop/recreate allocates a new one — the count assertion alone cannot tell those apart
+        // (a rebuild that reinserts the single row keeps count at 1).
+        var witnessBefore = await TableRowidAsync(connection, "sync_tombstones");
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var count = await connection.ExecuteScalarAsync<long>(
+            new CommandDefinition(
+                "SELECT count(*) FROM sync_tombstones",
+                cancellationToken: TestContext.Current.CancellationToken));
+        count.ShouldBe(1L, "the existing row must survive unchanged");
+        (await TableRowidAsync(connection, "sync_tombstones")).ShouldBe(witnessBefore,
+            "the table must not have been dropped and recreated — a rebuild would allocate a fresh sqlite_master rowid");
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
+    }
+
+    /// <summary>
+    ///     The full-shape gate: a table whose project_id column happens to be NOT NULL + PK but
+    ///     whose hash/scope are not part of the composite key must still be recreated, not skipped
+    ///     and stamped v11 with SchemaDoctor still reporting a mismatch.
+    /// </summary>
+    [Fact]
+    public async Task EnsureAsync_OnAV10Bank_WithAPartiallyCorrectShape_StillRecreates()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        // project_id looks right (NOT NULL, pk=1) but the PK does not include hash/scope.
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            DROP TABLE sync_tombstones;
+            CREATE TABLE sync_tombstones (
+                project_id TEXT NOT NULL PRIMARY KEY,
+                hash TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                deleted_at INTEGER NOT NULL
+            );
+            INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at)
+                VALUES ('acme', 'h1', 'project', 100);
+            PRAGMA user_version = 10;
+            """,
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var columns = await connection.QueryAsync<ColumnRow>(
+            new CommandDefinition(
+                "SELECT name, type, \"notnull\", pk FROM pragma_table_info('sync_tombstones')",
+                cancellationToken: TestContext.Current.CancellationToken));
+        columns.First(c => c.Name == "hash").Pk.ShouldBe(2L, "hash must be a composite-PK member after the migration");
+        columns.First(c => c.Name == "scope").Pk.ShouldBe(3L, "scope must be a composite-PK member after the migration");
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
+    }
+
+    /// <summary>
+    ///     The copy is total: a legacy row whose project_id holds an INTEGER value (pre-affinity
+    ///     write) must survive as its text form — a dynamic cast would throw here and strand a
+    ///     bank that can never reach v11.
+    /// </summary>
+    [Fact]
+    public async Task EnsureAsync_OnAV10Bank_WithNonTextProjectIdValues_CopiesThemAsText()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            DROP TABLE sync_tombstones;
+            CREATE TABLE sync_tombstones (
+                project_id,
+                hash TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                deleted_at INTEGER NOT NULL
+            );
+            INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at)
+                VALUES (42, 'h1', 'project', 100);
+            PRAGMA user_version = 10;
+            """,
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var rows = (await connection.QueryAsync<(string ProjectId, string Hash)>(
+                new CommandDefinition(
+                    "SELECT project_id AS ProjectId, hash AS Hash FROM sync_tombstones",
+                    cancellationToken: TestContext.Current.CancellationToken)))
+            .ToList();
+        rows.ShouldHaveSingleItem("the integer-keyed row must survive the copy");
+        rows[0].ProjectId.ShouldBe("42", "an INTEGER project_id is copied through CAST AS TEXT, not thrown on");
+        rows[0].Hash.ShouldBe("h1");
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
+    }
+
+    /// <summary>
+    ///     A pre-ALTER legacy table has NO project_id column at all — the copy SELECT would
+    ///     throw 'no such column' and strand the bank. Nothing meaningful survives (every row
+    ///     would be unscoped), so the step must recreate empty and still stamp v11.
+    /// </summary>
+    [Fact]
+    public async Task EnsureAsync_OnAV10Bank_WithNoProjectIdColumn_RecreatesEmpty_AndStampsV11()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            DROP TABLE sync_tombstones;
+            CREATE TABLE sync_tombstones (
+                hash TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                deleted_at INTEGER NOT NULL
+            );
+            INSERT INTO sync_tombstones (hash, scope, deleted_at)
+                VALUES ('h1', 'project', 100);
+            PRAGMA user_version = 10;
+            """,
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        // The bank must have advanced past v11's gate: a fresh EnsureAsync must not re-enter
+        // the ladder for this table, and the table must carry the correct composite shape.
+        var columns = await connection.QueryAsync<ColumnRow>(
+            new CommandDefinition(
+                "SELECT name, type, \"notnull\", pk FROM pragma_table_info('sync_tombstones')",
+                cancellationToken: TestContext.Current.CancellationToken));
+        columns.ShouldContain(c => c.Name == "project_id" && c.Pk == 1L && c.NotNull == 1L);
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
+
+        // A second open must be a clean no-op (the regression the CI run caught).
+        await Should.NotThrowAsync(() => MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken));
+    }
+
+    private static async Task<long> TableRowidAsync(SqliteConnection connection, string table) =>
+        await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            $"SELECT rowid FROM sqlite_master WHERE type = 'table' AND name = '{table}'",
+            cancellationToken: TestContext.Current.CancellationToken));
+
+    private sealed record ColumnRow(string Name, string Type, long NotNull, long Pk);
 }

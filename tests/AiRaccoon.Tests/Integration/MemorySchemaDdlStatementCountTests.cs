@@ -34,14 +34,14 @@ public sealed class MemorySchemaDdlStatementCountTests
     }
 
     /// <summary>
-    ///     63 = the pre-code-corpus 42 plus the corpus's Ddl (code_entries/code_fts/vec_code,
+    ///     58 = the pre-code-corpus 42 plus the corpus's Ddl (code_entries/code_fts/vec_code,
     ///     trigger families, indexes, and the idx_code_entries_path DROP), plus 1 for the
-    ///     ADR-0089 <c>projects</c> table, plus 1 for the WP12 <c>watch_digest_claims</c> table,
-    ///     plus the project-scoped tombstone repair (legacy table recreated with the correct
-    ///     composite PRIMARY KEY when the shape drifts).
+    ///     ADR-0089 <c>projects</c> table, plus 1 for the WP12 <c>watch_digest_claims</c> table.
+    ///     The project-scoped tombstone repair moved to the v11 ladder step (MigrateToV11Async)
+    ///     and no longer runs in the digest-gated Ddl block.
     /// </summary>
     [Fact]
-    public async Task EnsureAsync_WhenTheDigestIsStale_RunsTheSixtyFourStatementDdlBlock()
+    public async Task EnsureAsync_WhenTheDigestIsStale_RunsTheFiftyEightStatementDdlBlock()
     {
         await using var connection = await OpenAsync();
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
@@ -56,10 +56,9 @@ public sealed class MemorySchemaDdlStatementCountTests
         // 39 measured at ADR-0075, +1 model_migration (ADR-0076), +1 repair_requests, +1
         // promotion_queue_prune_requests, +14 the code corpus (ADR-0085: code_entries + code_fts +
         // vec_code, their trigger families, indexes, and the idx_code_entries_path DROP), +1 the
-        // ADR-0089 projects table, +1 the WP12 watch_digest_claims table, +5 for the project-scoped
-        // tombstone repair (table-existence probe, pragma_table_info probe, DROP TABLE, CREATE TABLE
-        // with composite PK, DROP legacy index).
-        CountDdl(statements).ShouldBe(63, Report(statements));
+        // ADR-0089 projects table, +1 the WP12 watch_digest_claims table. The project-scoped
+        // tombstone repair (5 statements) moved to MigrateToV11Async in the version ladder.
+        CountDdl(statements).ShouldBe(58, Report(statements));
     }
 
     private static async Task<List<string>> TraceAsync(SqliteConnection connection)

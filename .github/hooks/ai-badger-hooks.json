@@ -51,6 +51,12 @@
         "bash": "python3 \".ai-badger/skills/semantica-knowledge-graph/scripts/semantica_export_autosave_hook.py\"",
         "timeoutSec": 10,
         "matcher": "export_graph"
+      },
+      {
+        "type": "command",
+        "bash": "python3 \".ai-badger/skills/prompt-markers/scripts/grounded_feedback_hook.py\"",
+        "timeoutSec": 10,
+        "matcher": "bash|Bash"
       }
     ],
     "preToolUse": [

@@ -9,6 +9,45 @@ description: >-
 The mechanics of talking to a running ai-raccoon server and reading its bank, learned the hard way on the 2026-08-20 1.27.2 checklist + fusion-retest sessions. Complements ai-raccoon-manual-checklist (the run protocol; this skill is the
 mechanics its items run on) — use it for manual checklist items, retrieval-quality investigations, settings-state questions, "does the running binary behave like X".
 
+## Finding the data root of a running server
+
+When the server was started without `--data-root` (or you don't know the flag), derive it
+from the running process:
+
+1. `pgrep -fl "ai-raccoon"` — find the PID.
+2. `lsof -p <pid> | grep "\.db"` — the `memory.db` path reveals the data root (e.g.
+   `~/.ai-raccoon/memory.db` → data root is `~/.ai-raccoon`).
+3. The bearer token is at `<data-root>/mcp-token`.
+
+The default data root on macOS is `~/.ai-raccoon` (not `~/Library/Application Support/`).
+
+## Health check protocol
+
+A complete health check runs these in order:
+
+1. **Server process**: `pgrep -fl "ai-raccoon"` + `lsof -iTCP -sTCP:LISTEN -P | grep 7721`
+2. **MCP init**: `POST /mcp` with `initialize` — confirms version, capabilities, protocol.
+3. **Doctor**: `ai-raccoon doctor` — verifies schema shape, user_version, application_id,
+   code engine, pending rows. Reports `Healthy`, `ShapeMismatch`, or `VersionAheadOfBinary`.
+   Doctor is read-only and never repairs; the remedy hint ("start the server") only works when
+   the schema digest differs from the binary's digest (see pitfalls below).
+4. **memory_stats**: call with the project's `projectId` — confirms entries, pending, contexts.
+5. **memory_search**: a short query — confirms hybrid retrieval works end-to-end.
+
+## Project ID resolution
+
+The Hermes ai-raccoon plugin derives the project ID as `{workspace}-{agent_identity}` where
+workspace defaults to `hermes` and agent_identity defaults to `default`, producing
+`hermes-default`. A custom `project_id` in the plugin config overrides this.
+
+To find the project ID for a specific project: check the plugin config, or call
+`project_id_token_get` with the desired project name to get/create its GUID. The GUID is
+what `memory_stats`/`memory_search` expect — but the human-readable name (e.g. `ai-raccoon`)
+also works as input to `project_id_token_get`.
+
+**Pitfall**: `project_id_token_get` creates a NEW project if none exists. Don't call it
+speculatively — know the project name first.
+
 ## Starting a scratch server (never touch the user's)
 
 - `ai-raccoon --data-root <scratch-dir> serve --port 0 > serve.log 2>&1` (backgrounded). The user's live server usually owns 7721 — never bind it; `--restart` would cycle it.
@@ -63,7 +102,27 @@ queryguard structural enable|disable`, `settings noise enable|disable`.
 - Query-guard refuse shapes require the FULL notification shape (prefix + `completed
   normally` + `Command:`), not just the prefix.
 
+## Pitfalls
+
+- **Doctor "remedy: start the server" was misleading on pre-1.33.8 binaries (historical).**
+  Before 1.33.8, the sync_tombstones shape repair (`EnsureSyncTombstonesProjectScopedAsync`)
+  ran only when the schema digest mismatched, so a bank whose digest already matched never
+  got repaired and `doctor` reported a permanent SHAPE MISMATCH. Since 1.33.8 (PR #576) the
+  repair is ladder step v11 (`MigrateToV11Async` in MemorySchema.cs): it runs on any bank
+  below schema v11 regardless of digest state, atomically, and `doctor` goes clean after one
+  server open. If you see the SHAPE MISMATCH finding on a 1.33.8+ binary, the bank has not
+  yet been opened by that binary — start the server once and re-run doctor. The full
+  pre-fix analysis lives in `references/schema-mismatch-root-cause.md`.
+
+- **`project_id_token_get` creates a new project if none exists.** Call it only when you
+  know the project name. Speculative calls create orphan projects.
+
+- **The encrypted bank is unreadable to system sqlite3.** The bank uses SQLCipher (e_sqlite3mc
+  with chacha20). Plain `sqlite3` can open it because the encryption library is loaded as an
+  extension, but if you get "not a database" errors, the encryption key isn't being resolved.
+
 ## References
 
 - ai-raccoon-manual-checklist (skill) — the run protocol this probe mechanics serves.
 - software-development/hybrid-retrieval-fusion — fusion/ranking analysis, including the live-but-query-insensitive vector-leg reference (alien-token liveness probe, FTS-leg isolation, vector inspection).
+- references/schema-mismatch-root-cause.md — the sync_tombstones repair-gate bug analysis.

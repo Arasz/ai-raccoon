@@ -53,11 +53,14 @@ public sealed class ProjectsTableDdlTests
         // CurrentVersion in one shot (the `fresh` branch), and the second call here never revisits
         // the ladder because storedVersion already equals CurrentVersion, so before == after holds
         // for any value of CurrentVersion and even with the projects table deleted from Ddl
-        // entirely (both measured against this exact test, review round 1, PR #546). A real v10
-        // bank is stamped 10 independently of what this binary's CurrentVersion compiles to — that
-        // independence is what makes a future CurrentVersion bump able to turn this test red.
+        // entirely (both measured against this exact test, review round 1, PR #546). A real
+        // current-version bank is stamped independently of what this binary's CurrentVersion
+        // compiles to. (Originally pinned at literal 10; the v11 tombstone migration in PR #576
+        // legitimately turned that red — a sub-current bank now climbs the ladder — so the pin
+        // moved to CurrentVersion. The fact under test stands: the digest rerun that recreates
+        // the projects table never moves user_version by itself.)
         await connection.ExecuteAsync(new CommandDefinition(
-            "PRAGMA user_version = 10", cancellationToken: TestContext.Current.CancellationToken));
+            $"PRAGMA user_version = {MemorySchema.CurrentVersion}", cancellationToken: TestContext.Current.CancellationToken));
         await connection.ExecuteAsync(new CommandDefinition(
             "DROP TABLE IF EXISTS projects", cancellationToken: TestContext.Current.CancellationToken));
         await connection.ExecuteAsync(new CommandDefinition(
@@ -66,9 +69,9 @@ public sealed class ProjectsTableDdlTests
 
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
 
-        (await TableExistsAsync(connection, "projects")).ShouldBeTrue("a v10 bank must gain the projects table on reopen");
-        (await ReadUserVersionAsync(connection)).ShouldBe(10,
-            "the projects table is additive Ddl, not a ladder step — a v10 bank must still be v10 after gaining it");
+        (await TableExistsAsync(connection, "projects")).ShouldBeTrue("a legacy bank must gain the projects table on reopen");
+        (await ReadUserVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion,
+            "the projects table is additive Ddl, not a ladder step — the digest rerun that recreates it must not move user_version");
     }
 
     [Fact]

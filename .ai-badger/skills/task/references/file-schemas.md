@@ -120,7 +120,7 @@ already claimed by a different, not-yet-FINISHED task — see `find_other_entry_
 The lean, always-loaded index of the project's per-task knowledge log — the equivalent of what a
 CLAUDE.md "Current state" section would otherwise accumulate. Holds the **8 most recent** lean
 `completedTasks` entries only; verbose detail lives in the two sibling files below. Updated as
-part of every task's Phase 4 finish protocol; freshness since a task's `startedAt` is what
+part of every task's Phase 5 finish protocol; freshness since a task's `startedAt` is what
 `state_json_updated_since()` (in `tracker_lib.py`) checks to gate `finish`.
 
 ```json
@@ -171,7 +171,7 @@ most-recent-8. Their notes stay in status-notes.json — history holds lean entr
 }
 ```
 
-## Finish-protocol write pattern (Phase 4 step 2)
+## Finish-protocol write pattern (Phase 5 step 2)
 
 1. Prepend the finished task's lean entry to `state.json`'s `completedTasks`; refresh
    `next` and `lastUpdated`.

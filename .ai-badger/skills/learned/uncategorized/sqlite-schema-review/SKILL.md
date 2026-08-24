@@ -98,6 +98,32 @@ EOF
 
 Bundled SQLite version: `strings libe_sqlite3mc.dylib | grep -i sqlite` (partial indexes ≥3.8, expression indexes ≥3.9 — ancient, rarely a risk).
 
+## Pitfall: digest-gated repairs that never fire
+
+When a schema system uses both a **digest gate** (hash of the DDL, checked on every open)
+and a **version ladder** (`PRAGMA user_version`, checked on every open), repairs placed
+inside the digest-gated block only fire once — when the digest changes. If the bank was
+already opened by the current binary (digest matches), the repair is skipped even if the
+table still has the wrong shape.
+
+**How it happens:** `CREATE TABLE IF NOT EXISTS` silently no-ops against an existing table
+with a different shape. The DDL block runs, the table already exists (wrong shape), the
+CREATE is a no-op, the digest is stamped, and the repair inside the same block either
+never ran or never retries on subsequent opens.
+
+**The fix:** move shape-fixing repairs into a **version-ladder step** (`MigrateToVNAsync`)
+that gates on `storedVersion < N`. This fires on every bank at a version below N,
+regardless of digest state. The step must be idempotent (check the actual column shape via
+`pragma_table_info` before recreating).
+
+**Impact on DDL statement count tests:** when moving logic from the digest-gated block to
+the version ladder, the stale-digest path's statement count decreases by the number of
+statements moved. Update the count test in the same commit.
+
+**Concrete example (ai-raccoon #576):** `sync_tombstones.project_id` was `TEXT` (nullable,
+not PK) instead of `TEXT NOT NULL PRIMARY KEY`. The repair was gated by `needsDigestStamp`
+— it never fired because the digest already matched. Fixed by promoting to `MigrateToV11Async`.
+
 ## Reporting shape
 
 Numbered findings with MUST-FIX / SHOULD-FIX / NIT severities, file:line evidence, an approve-with-changes verdict, and owner questions for every decision the plan left open (cross-project race failure mode, migration placement, test-seed

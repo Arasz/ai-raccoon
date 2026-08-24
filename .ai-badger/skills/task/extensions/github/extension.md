@@ -25,7 +25,7 @@ Resolve the task's scope from GitHub instead of freeform text alone:
   ```
 - A bare issue URL with no separate task id also works: derive the task id from the issue title.
 
-## PR flow (Phase 2 — Execute)
+## PR flow (Phase 3 — Execute)
 
 Open the PR **early**, as a **draft**, the first time there's a commit to show — don't wait for
 the task to finish. This lets a human watch the diff grow in the PR UI while work is still in
@@ -38,7 +38,7 @@ gh pr create --draft --title "<task title>" --body "<summary, links the issue>"
 Commit and push as each work package lands (small, focused commits — not one mega-diff at the
 end; these get squashed on merge). Push to the remote branch immediately after each commit.
 
-## Copilot review-round loop (Phase 4 — Finish protocol)
+## Copilot review-round loop (Phase 5 — Finish protocol)
 
 Required, spans multiple turns. Runs after marking the draft PR ready for review:
 
@@ -72,7 +72,7 @@ gh pr ready <n>
    Never leave a resolved-in-code thread open.
 7. **Repeat** from step 1 until a poll finds no new review round since the last pushed commit.
 
-## Merge (Phase 4 — Finish protocol)
+## Merge (Phase 5 — Finish protocol)
 
 Squash-merge once a review round returns with zero new findings since the last pushed commit —
 this is the default, no per-task confirmation needed. The user can always intervene by commenting
