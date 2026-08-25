@@ -100,6 +100,7 @@ jobs:
       # diagnose-fast-tests: a crashed build/pack step must not leave MSBuild node-reuse
       # processes spinning on the runner for the rest of the run.
       MSBUILDDISABLENODEREUSE: 1
+      TESTINGPLATFORM_TELEMETRY_OPTOUT: 1
     steps:
       - name: Skip (doc-only change)
         if: needs.changes.outputs.code != 'true'
@@ -130,7 +131,7 @@ jobs:
         # Performance trait still matches, which is what keeps this an exclusion and
         # not a second opt-in. Those tests still run in nightly.yml's unfiltered
         # backstop, and on demand with --filter "Performance=Benchmark".
-        run: dotnet test --filter "Speed=Fast&Performance!=Benchmark" --no-build --nologo -v m
+        run: dotnet test --project tests/AiRaccoon.Tests --filter "Speed=Fast&Performance!=Benchmark" --no-build -v m
 
   build-bdd:
     # Separate job, not a second step: it runs beside build-fast rather than after
@@ -141,6 +142,7 @@ jobs:
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: true
       MSBUILDDISABLENODEREUSE: 1
+      TESTINGPLATFORM_TELEMETRY_OPTOUT: 1
     steps:
       - name: Skip (doc-only change)
         if: needs.changes.outputs.code != 'true'
@@ -163,7 +165,7 @@ jobs:
         # carry no Speed trait, so Speed=Fast never matched them and they gated
         # nothing until this job existed. BddGateCoverageTests fails if a feature
         # file is ever added without the tag.
-        run: dotnet test --filter "Category=bdd" --no-build --nologo -v m
+        run: dotnet test --project tests/AiRaccoon.Tests --filter "Category=bdd" --no-build -v m
 
   build-slow:
     # The integration/E2E gate. Until 2026-08-08 nothing in the PR gate ran these:
@@ -191,6 +193,7 @@ jobs:
       DOTNET_DbgMiniDumpType: 2
       DOTNET_DbgMiniDumpName: ${{ github.workspace }}/dumps/coredump.%p.dmp
       MSBUILDDISABLENODEREUSE: 1
+      TESTINGPLATFORM_TELEMETRY_OPTOUT: 1
     steps:
       - name: Skip (doc-only change)
         if: needs.changes.outputs.code != 'true'
@@ -215,7 +218,7 @@ jobs:
         # GoldenFileTests skips itself off osx-arm64 — the golden reference is a
         # host-specific ONNX artifact, not a portable expectation.
         # Performance!=Benchmark: see the build-fast filter for why.
-        run: dotnet test --filter "Speed=Slow&Performance!=Benchmark" --no-build --nologo -v m
+        run: dotnet test --project tests/AiRaccoon.Tests --filter "Speed=Slow&Performance!=Benchmark" --no-build -v m
       - name: Triage crash dumps
         if: failure()
         # A test-host segfault reads as "Passed! 167" followed by a bare "exit code 1"; this
@@ -252,6 +255,7 @@ jobs:
     timeout-minutes: 30
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: true
+      TESTINGPLATFORM_TELEMETRY_OPTOUT: 1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
@@ -267,4 +271,4 @@ jobs:
         # red-nightly issue is for the scheduled unattended backstop, not a PR the author is
         # already looking at — a red here fails this check, full stop.
         # Performance!=Benchmark: see the build-fast filter for why.
-        run: dotnet test --filter "Speed=Nightly&Performance!=Benchmark" --no-build --nologo -v m
+        run: dotnet test --project tests/AiRaccoon.Tests --filter "Speed=Nightly&Performance!=Benchmark" --no-build -v m
