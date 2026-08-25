@@ -42,7 +42,7 @@ Task: `migrate-tests-to-mcp` — branch `task/migrate-tests-to-mcp-xunit4`, base
 | bdd | 172 / 5 / 0 (177) | **172 / 5 / 0 (177)** — identical (Reqnroll survived 4.0.0) |
 | slow | 968 / 4 / 0 (972) | CI build-slow job (identical expected) |
 | nightly-gates | 147 / 10 / 0 (157) | CI build-nightly-gates job (identical expected) |
-| discovery | 4615 | **4615** — identical (MTP) |
+| discovery | 4615 (WP1 state) | **4619** = 4615 + the 4 new fast-lane tests (2 probes + 2 gate-busting); WP1 measured the WP1-state count 4615 — identical to the pre-change 4615 |
 
 ## Witnessed REDs (prove-the-check-fails)
 
@@ -68,6 +68,16 @@ Task: `migrate-tests-to-mcp` — branch `task/migrate-tests-to-mcp-xunit4`, base
    RED + per-attempt lines on the Rider/vstest path. `--xunit-diagnostics on` NOT added to the
    lanes (zero value, output volume).
 3. **Fast-lane count +4** is the plan's own new tests (2 probes + 2 gate-busting), not drift.
+4. **Review-round-3 hardening (folded)**: RetryTheory probe extended with a second always-passing
+   row proving per-row isolation (a passing row is not re-run when another row retries); new
+   `Unit/RetrySurfaceGateTests` closes the surface-drift gap (a reverted `[Fact]` in the surface
+   would otherwise pass every gate — derive-or-delete); `scripts/nightly-triage.py` drops
+   `--nologo` (orphaned script, but would break under MTP if revived). Fixture semantics verified:
+   xRetry re-runs the failed METHOD inside the same test-case execution — class/collection
+   fixtures are NOT re-created per attempt, so a failed attempt's side effects on fixture state
+   persist into the retry; the E2E fixtures (McpServerE2ETests, ModelMigrationCrashRecoveryE2ETests)
+   must stay failure-transparent for retry to help rather than compound (noted, no change —
+   the E2E suite passed green in CI with retries active).
 
 ## Version
 
