@@ -1,15 +1,47 @@
 {
-    "lastUpdated": "2026-08-23T14:48:19.073923+02:00",
+    "lastUpdated": "2026-08-24T23:32:07.119504+00:00",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
     {
-        "id": "clean-readme",
-        "title": "README cleanup: what-s-new history doc, humanizer pass, mermaid/table refresh, code-corpus guide",
-        "pr": 569,
-        "merged": false,
-        "date": "2026-08-23",
-        "summary": "Moved pre-1.29.0 what-s-new entries to docs/reference/whats-new-history.md; humanized remaining entries and stripped PR links; added Code Corpus to mindmap/feature table/embeddings table/flowchart; fixed test count (1100+ to ~3700) and tool count (28 to 29); wrote docs/how-to/search-the-code-corpus.md; updated reference/README.md and how-to/README.md indexes. Docs-only, no version bump."
+        "id": "ci-stability-fixes",
+        "title": "Fast-lane fixes 1-4 + E2E CLI regression (pack crash, port race, crash dumps, MSBuild node reuse)",
+        "pr": 586,
+        "merged": true,
+        "date": "2026-08-24",
+        "summary": "E2E McpServer/ModelMigrationCrashRecovery tests used pre-#583 CLI argv (7 sites -> model embedding set); pack test moved to a Speed=Slow class (still gated by build-slow); ConcurrentStartsOnSamePort retries on fresh ports; build-fast gains crash-dump env; MSBUILDDISABLENODEREUSE=1 on all lanes. Follow-up #588: NodeRunnerTests + ServeRestartTests -> Slow (measured 92s/11.9s/7.2s/8.4s genuine server-lifetime waits); port-race winner stopped instead of awaiting its 90s harness lifetime. Fast suite 2m18s -> 26s locally."
+    },
+      {
+          "id": "diagnose-fast-tests",
+          "title": "Diagnose: fast-lane CI takes 15m; NodeRunnerTests port race + VersionContract pack crash",
+          "pr": 587,
+          "merged": true,
+          "date": "2026-08-24",
+          "summary": "docs/work/2026-08-25-fast-lane-flakes-diagnosis.md: main-run fast lane failed on two documented flake classes (pack host crash exit 134 untriagable without dump capture on build-fast; both port racers got PortInUse from a release->rebind steal). Lane ran 14m31s vs 168s on the identical PR run; fixed by #586 + #588."
+      },
+      {
+          "id": "vec_code_unfix_dim",
+          "title": "Unfix vec/vec_code dimensions: generalize the memory-bank dimension reconcile to the code corpus",
+          "pr": 585,
+          "merged": true,
+          "date": "2026-08-24",
+          "summary": "VecDimensionReconciler generalized (table list + optional caller transaction), reused for vec_code; embedding.codeDimensions persisted; activation/server-open/fingerprint reconcile; both 768 gates removed; ADR-0093; VERSION 1.35.0. Review rounds: no null ctor params (required reconciler on both embedders, primary-ctor param used directly), single reconciler API, comments removed, endpoint test flipped."
+      },
+      {
+          "id": "model-selection",
+          "title": "CLI settings model separation (code/embedding) + SFR-Embedding-Code-400M_R support",
+          "pr": 583,
+          "merged": true,
+          "date": "2026-08-24",
+          "summary": "CLI restructure: model embedding set local|openai / model code set default|local, kind-agnostic model download, settings model embedding|code show|reset; ModelDownloadPlanner supports model_type new/gte* (SFR-Embedding-Code-400M_R, 1024-dim, CLS pooling). Integrated with #585 (12-file conflict resolution; branch wins on CLI naming, main on dims behavior)."
+      },
+      {
+          "id": "clean-readme",
+          "title": "README cleanup: what-s-new history doc, humanizer pass, mermaid/table refresh, code-corpus guide",
+          "pr": 569,
+          "merged": false,
+          "date": "2026-08-23",
+          "summary": "Moved pre-1.29.0 what-s-new entries to docs/reference/whats-new-history.md; humanized remaining entries and stripped PR links; added Code Corpus to mindmap/feature table/embeddings table/flowchart; fixed test count (1100+ to ~3700) and tool count (28 to 29); wrote docs/how-to/search-the-code-corpus.md; updated reference/README.md and how-to/README.md indexes. Docs-only, no version bump."
     },
       {
           "id": "review-gh-issues",
