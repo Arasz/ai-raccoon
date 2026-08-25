@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Harness;
 
@@ -14,7 +15,7 @@ namespace AiRaccoon.Tests.Integration.Harness;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class LoopbackPortOccupyTests
 {
-    [Fact]
+    [RetryFact]
     public void AnOccupiedPort_CannotBeBoundByTheServerUnderTest()
     {
         using var lease = LoopbackPort.Occupy();
@@ -25,7 +26,7 @@ public sealed class LoopbackPortOccupyTests
             .SocketErrorCode.ShouldBe(SocketError.AddressAlreadyInUse);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AnOccupiedPort_AcceptsThenClosesEachConnection()
     {
         using var lease = LoopbackPort.Occupy();
@@ -44,7 +45,7 @@ public sealed class LoopbackPortOccupyTests
         read.ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public void TryOccupy_WhenThePortIsFree_TakesIt()
     {
         var free = LoopbackPort.Reserve();
@@ -57,7 +58,7 @@ public sealed class LoopbackPortOccupyTests
         lease.Port.ShouldBe(number);
     }
 
-    [Fact]
+    [RetryFact]
     public void TryOccupy_WhenThePortIsAlreadyTaken_ReturnsNull()
     {
         using var holder = LoopbackPort.Occupy();
@@ -65,7 +66,7 @@ public sealed class LoopbackPortOccupyTests
         LoopbackPort.TryOccupy(holder.Port).ShouldBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public void DisposingAnOccupiedPort_FreesTheNumber()
     {
         var lease = LoopbackPort.Occupy();

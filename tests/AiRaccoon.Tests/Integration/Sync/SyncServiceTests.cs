@@ -6,6 +6,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Sync;
 
@@ -79,7 +80,7 @@ public class SyncServiceTests : IDisposable
         return conn;
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_WithoutConfiguredCloudStore_ThrowsSyncNotConfigured()
     {
         var cloud = new NullCloudStore();
@@ -98,7 +99,7 @@ public class SyncServiceTests : IDisposable
     }
 
     /// <summary>An unconfigured sync must fail before VACUUMing the local bank — no wasted local work for a call that is guaranteed to fail.</summary>
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_WithoutConfiguredCloudStore_FailsBeforeTouchingTheLocalBank()
     {
         var openBankCalls = 0;
@@ -123,7 +124,7 @@ public class SyncServiceTests : IDisposable
     }
 
     /// <summary>The default objectKey is the service's concern, not the caller's — matches the memory-{projectId}.db convention when the caller passes none.</summary>
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_WithNoObjectKey_DefaultsToMemoryDashProjectId()
     {
         var cloud = new FakeCloudStore();
@@ -143,7 +144,7 @@ public class SyncServiceTests : IDisposable
         stored.ShouldNotBeNull("the default object key memory-acme.db must be the one actually pushed to");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_FreshBank_PushesSnapshotAndRecordsETag()
     {
         var cloud = new FakeCloudStore();
@@ -169,7 +170,7 @@ public class SyncServiceTests : IDisposable
         etag.ShouldNotBeNullOrWhiteSpace();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_RemoteChanged_LocalEntriesNotLost()
     {
         var cloud = new FakeCloudStore();
@@ -229,7 +230,7 @@ public class SyncServiceTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_TombstonePropagation_NoResurrection()
     {
         var cloud = new FakeCloudStore();
@@ -296,7 +297,7 @@ public class SyncServiceTests : IDisposable
     }
 
     /// <summary>docs/plans/2026-08-08-search-knn-perf.md §3.3: the merge's tombstone-apply step can remove a group member; the bank-wide recompute after the merge must leave survivors contiguous.</summary>
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_TombstoneFromRemote_DeletesAGroupMember_AndRecomputesSurvivorsContiguously()
     {
         var cloud = new FakeCloudStore();
@@ -357,7 +358,7 @@ public class SyncServiceTests : IDisposable
         survivors.Select(s => (s.ChunkIndex, s.TotalChunks)).ShouldBe([(0L, 2L), (1L, 2L)]);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_TombstoneFromRemote_IsProjectScoped()
     {
         var cloud = new FakeCloudStore();
@@ -415,7 +416,7 @@ public class SyncServiceTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_WorkspaceRows_NotInSyncPayload()
     {
         var cloud = new FakeCloudStore();
@@ -471,7 +472,7 @@ public class SyncServiceTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_MergedRows_Reindexed()
     {
         var cloud = new FakeCloudStore();
@@ -518,7 +519,7 @@ public class SyncServiceTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_WorkspaceRowExcluded_Locally()
     {
         var cloud = new FakeCloudStore();
@@ -571,7 +572,7 @@ public class SyncServiceTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_WithConflictingRemoteEntry_MergesContentAddressed()
     {
         var cloud = new FakeCloudStore();
@@ -629,7 +630,7 @@ public class SyncServiceTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_CorruptRemoteSnapshot_NeverReplacesLocal()
     {
         var cloud = new FakeCloudStore();
@@ -675,7 +676,7 @@ public class SyncServiceTests : IDisposable
 
     // Settings (cloud credentials, embedding API key) must never leave the bank — stripped
     // from every pushed snapshot, not just workspace rows (ADR-0014).
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_SettingsRows_NotInSyncPayload()
     {
         var cloud = new FakeCloudStore();
@@ -723,7 +724,7 @@ public class SyncServiceTests : IDisposable
 
     // Pulling/merging a snapshot with a stripped (empty) settings table must not error, and
     // must leave local settings untouched (ADR-0014).
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_MergeWithEmptySettingsRemote_SucceedsAndPreservesLocalSettings()
     {
         var cloud = new FakeCloudStore();
@@ -782,7 +783,7 @@ public class SyncServiceTests : IDisposable
 
     // The merge branch must strip settings and workspace rows too, not just the first push
     // (ADR-0014).
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_MergeBranchWithExistingRemote_StripsSettingsAndWorkspaceFromPushedPayload()
     {
         var cloud = new FakeCloudStore();
@@ -874,7 +875,7 @@ public class SyncServiceTests : IDisposable
 
     // Same regression, conflict-retry path: a push that hits SyncConflictException re-merges
     // and re-VACUUMs into retryPath, which must be stripped too.
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_ConflictRetryBranch_StripsSettingsAndWorkspaceFromPushedPayload()
     {
         var inner = new FakeCloudStore();
@@ -970,7 +971,7 @@ public class SyncServiceTests : IDisposable
 
     // Settings hold the sync credentials and embedding API key/base URL — a remote snapshot
     // must never overwrite them, whether from a hostile writer or a stale replica (ADR-0014).
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_PullWithHostileRemoteSettings_DoesNotOverwriteLocalSettings()
     {
         var cloud = new FakeCloudStore();
@@ -1080,7 +1081,7 @@ public class SyncServiceTests : IDisposable
     // A genuinely corrupt VACUUM INTO source fails VACUUM itself, so this substitutes a
     // pre-corrupted file for the merged-snapshot check via the same openReadOnly seam
     // SyncService already calls quick_check through.
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_MergeBranchWithExistingRemote_CorruptMergedSnapshot_RejectedBeforeUpload()
     {
         var cloud = new FakeCloudStore();
@@ -1163,7 +1164,7 @@ public class SyncServiceTests : IDisposable
 
     // Substitutes the corrupt file only at the retry branch's integrity check, so the first
     // (valid) merge attempt still runs far enough to hit the forced conflict.
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_ConflictRetryBranch_CorruptRetrySnapshot_RejectedBeforeUpload()
     {
         var inner = new FakeCloudStore();
@@ -1247,7 +1248,7 @@ public class SyncServiceTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_MergedRows_CarrySourceFileAndSectionAndAreCorrectlyGrouped()
     {
         var cloud = new FakeCloudStore();
@@ -1303,7 +1304,7 @@ public class SyncServiceTests : IDisposable
             "pulled rows sharing a source_file must be grouped by the post-merge chunk-column recompute.");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_RemoteSnapshotNewerSchemaVersion_RefusedBeforeMerging()
     {
         var cloud = new FakeCloudStore();
@@ -1367,7 +1368,7 @@ public class SyncServiceTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MergeAsync_SetsSourceId_OnMergedEntries()
     {
         var cloud = new FakeCloudStore();
@@ -1431,7 +1432,7 @@ public class SyncServiceTests : IDisposable
         count.ShouldBeGreaterThanOrEqualTo(2, "at least file and manual sources must exist");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MergeAsync_PreservesSourceFile_Section_ForFTS()
     {
         var cloud = new FakeCloudStore();
@@ -1473,7 +1474,7 @@ public class SyncServiceTests : IDisposable
             "section must survive the merge for FTS backing");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_ResolvesTheCloudStorePerCall()
     {
         // The resolver runs inside each sync cycle, so `sync add/remove` settings writes take

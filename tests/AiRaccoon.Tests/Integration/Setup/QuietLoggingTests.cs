@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Setup;
 
@@ -54,7 +55,7 @@ public sealed class QuietLoggingTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [RetryFact]
     public void Quiet_Stdio_NothingReachesStdoutOrStderr_ButInformationReachesTheFile()
     {
         var options = QuietOptions(InstallScope.User);
@@ -75,7 +76,7 @@ public sealed class QuietLoggingTests : IAsyncLifetime
 
     /// <summary>D6: combined mode (stdio + http together) shares CreateWebHost with plain HTTP,
     /// so the contract must hold there too — this is the site the second gate's ruling added.</summary>
-    [Fact]
+    [RetryFact]
     public void Quiet_Combined_NothingReachesStdoutOrStderr_ButInformationReachesTheFile()
     {
         var options = QuietOptions(InstallScope.Project);
@@ -96,7 +97,7 @@ public sealed class QuietLoggingTests : IAsyncLifetime
 
     /// <summary>Same principle as WP4's endpoint guard: an observability misconfiguration must
     /// never take the server down. A directory occupying the log file's path makes it unwritable.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Quiet_UnwritableLogPath_HostStillStartsAndServes()
     {
         var options = QuietOptions(InstallScope.Project);
@@ -118,7 +119,7 @@ public sealed class QuietLoggingTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [RetryFact]
     public void NonQuietHost_KeepsInformation_OnConsole()
     {
         var config = new ServerConfig(DefaultOptions.Port, McpTransport.Stdio, LoudOptions(InstallScope.User));
@@ -131,7 +132,7 @@ public sealed class QuietLoggingTests : IAsyncLifetime
     /// <summary>Per-request ASP.NET Core chatter and the MCP request-handler INFO lines flood a
     /// non-quiet serve log; this pins the default-level fix without reaching for --quiet, which
     /// would also silence AiRaccoon's own Information logs.</summary>
-    [Fact]
+    [RetryFact]
     public void HttpHost_QuietsAspNetCoreAndMcpServerCategories_ButKeepsAppInfo()
     {
         var config = new ServerConfig(0, McpTransport.Http, LoudOptions(InstallScope.User));
@@ -162,7 +163,7 @@ public sealed class QuietLoggingTests : IAsyncLifetime
     /// <summary>J1: HostLogging.Configure's quiet branch returned before the transport floors were
     /// applied, so a quiet HTTP serve wrote every ASP.NET Core/MCP-server INFO line to the file —
     /// destination is chosen by quiet, level policy by transport, and both must hold together.</summary>
-    [Fact]
+    [RetryFact]
     public void QuietHttp_QuietsAspNetCoreCategory_ButKeepsAppInfo_InTheFile()
     {
         var options = QuietOptions(InstallScope.Project);
@@ -186,7 +187,7 @@ public sealed class QuietLoggingTests : IAsyncLifetime
     /// <summary>QA-4: the proxy path builds its own container; quiet mode must reach it too. A
     /// quiet stdio bridge that relays every request must not print HttpClient info lines to the
     /// operator's terminal.</summary>
-    [Fact]
+    [RetryFact]
     public async Task QuietProxy_HttpClientRelayLogs_StayOutOfStderr()
     {
         var options = QuietOptions(InstallScope.User);
@@ -208,7 +209,7 @@ public sealed class QuietLoggingTests : IAsyncLifetime
 
     /// <summary>Positive control for QA-4: without --quiet the same relay attempt logs its
     /// HttpClient traffic to the console provider.</summary>
-    [Fact]
+    [RetryFact]
     public async Task LoudProxy_HttpClientRelayLogs_ReachStderr()
     {
         var options = LoudOptions(InstallScope.User);

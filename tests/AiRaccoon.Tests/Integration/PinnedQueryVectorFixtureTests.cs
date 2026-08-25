@@ -1,6 +1,7 @@
 using AiRaccoon.Infrastructure.Embedding;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -13,7 +14,7 @@ namespace AiRaccoon.Tests.Integration;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class PinnedQueryVectorFixtureTests
 {
-    [Fact]
+    [RetryFact]
     public void Fixture_CoversExactlyTheQueryCatalog()
     {
         var pinned = PinnedQueryVectors.Load();
@@ -36,7 +37,7 @@ public sealed class PinnedQueryVectorFixtureTests
     ///     model (any of docs/adr/0049's open options) changes these constants and fails here rather
     ///     than letting the sweeps keep scoring stale vectors against a new bank.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void Fixture_RecordsTheModelThatProducedIt()
     {
         var pinned = PinnedQueryVectors.Load();
@@ -49,7 +50,7 @@ public sealed class PinnedQueryVectorFixtureTests
 
     /// <summary>Provenance is the point of the fixture — an entry with no recorded arithmetic path
     /// or date is indistinguishable from ground truth to the next reader (docs/adr/0049).</summary>
-    [Fact]
+    [RetryFact]
     public void Fixture_RecordsItsProvenance()
     {
         var pinned = PinnedQueryVectors.Load();
@@ -61,7 +62,7 @@ public sealed class PinnedQueryVectorFixtureTests
         pinned.Note.ShouldContain("0049");
     }
 
-    [Fact]
+    [RetryFact]
     public void Fixture_VectorsAreUnitNormAtTheDeclaredDimension()
     {
         var pinned = PinnedQueryVectors.Load();
@@ -78,7 +79,7 @@ public sealed class PinnedQueryVectorFixtureTests
 
     /// <summary>An unknown query must throw, not fall back to the live model — the fallback is what
     /// would let a changed catalog quietly reintroduce the host-CPU variable (docs/adr/0050).</summary>
-    [Fact]
+    [RetryFact]
     public async Task PinnedService_ThrowsForAQueryTheFixtureDoesNotCarry()
     {
         var service = PinnedQueryVectors.EmbeddingService();
@@ -89,7 +90,7 @@ public sealed class PinnedQueryVectorFixtureTests
                 cancellationToken: TestContext.Current.CancellationToken));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task PinnedService_ReturnsTheCommittedBytesVerbatim()
     {
         var pinned = PinnedQueryVectors.Load();

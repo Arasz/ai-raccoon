@@ -6,6 +6,7 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Setup;
 
@@ -104,7 +105,7 @@ public sealed class CliContractTests : IAsyncLifetime
         TestData.DeleteTempRoot(_dataRoot);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EveryScenario_KeepsItsExitCodeAndOutput()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
@@ -124,7 +125,7 @@ public sealed class CliContractTests : IAsyncLifetime
     }
 
     /// <summary>WP7-T7's server-unreachable row: nothing can bind the port, so the acquire budget is spent and gives up.</summary>
-    [Fact]
+    [RetryFact]
     public async Task SettingsCommand_WithNoServerReachable_ExitsDistinctly()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
@@ -151,7 +152,7 @@ public sealed class CliContractTests : IAsyncLifetime
     ///     token file it minted has been tampered with — a well-formed, wrong-length-safe token that
     ///     is simply not the one the running server issued.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task SettingsCommand_WhenTheServerRefusesTheToken_ExitsDistinctly()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,

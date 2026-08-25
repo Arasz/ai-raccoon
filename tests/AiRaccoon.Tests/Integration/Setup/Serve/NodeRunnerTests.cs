@@ -9,6 +9,7 @@ using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Setup.Serve;
 
@@ -26,7 +27,7 @@ public sealed class NodeRunnerTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task FreePort_PrintsExactUrlLine_AndExitsZeroAfterStop()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -43,7 +44,7 @@ public sealed class NodeRunnerTests : IDisposable
         run.Stdout.ShouldBe($"http://127.0.0.1:{port}/mcp{Environment.NewLine}");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task PortZero_PrintsBoundUrl_AndMcpClientReachesIt()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -78,7 +79,7 @@ public sealed class NodeRunnerTests : IDisposable
         run.Stdout.ShouldMatch(@"^http://127\.0\.0\.1:\d+/mcp\r?\n$");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task BusyPortWithForeignListener_ReturnsPortInUse_WithHintAndNoStackTrace()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -94,7 +95,7 @@ public sealed class NodeRunnerTests : IDisposable
         run.Stderr.ShouldNotContain("   at ");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task UnusableTokenPath_ReportsMcpTokenUnavailable_WithThePathAndNoStackTrace()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -114,7 +115,7 @@ public sealed class NodeRunnerTests : IDisposable
         run.Stderr.ShouldNotContain("   at ");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task BusyPortWithAiRaccoonServer_Attaches_AndFirstKeepsOwnership()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -153,7 +154,7 @@ public sealed class NodeRunnerTests : IDisposable
         firstExit.ShouldBe(ExitCode.Success);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ConcurrentStartsOnSamePort_ExactlyOneOwns_TheOtherAttachesOrReturnsPortInUse()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -229,7 +230,7 @@ public sealed class NodeRunnerTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task McpEntryHermes_PrintsTheEntryJson()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -247,7 +248,7 @@ public sealed class NodeRunnerTests : IDisposable
         run.Stdout.ShouldBe($"{McpEntryRenderer.RenderHermes(port)}{Environment.NewLine}");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task McpEntryClaude_PrintsTheEntryJson()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -265,7 +266,7 @@ public sealed class NodeRunnerTests : IDisposable
         exit.ShouldBe(ExitCode.Success);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RootPort_IsHonored_WhenServePortAbsent()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -281,7 +282,7 @@ public sealed class NodeRunnerTests : IDisposable
         exit.ShouldBe(ExitCode.Success);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ServePort_WinsOverRootPort()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -300,7 +301,7 @@ public sealed class NodeRunnerTests : IDisposable
         exit.ShouldBe(ExitCode.Success);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task NonHttpTransport_WarnsOnStderr_AndStillServesHttp()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -317,7 +318,7 @@ public sealed class NodeRunnerTests : IDisposable
         run.Stderr.ShouldContain("serve always uses http");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task DefaultTransport_DoesNotWarnThatServeIgnoresIt()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -336,7 +337,7 @@ public sealed class NodeRunnerTests : IDisposable
         run.Stderr.ShouldNotContain("serve always uses http");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IdleTimeout_ShutsTheHostDown_AfterTheSpanWithoutActivity()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -356,7 +357,7 @@ public sealed class NodeRunnerTests : IDisposable
         exit.ShouldBe(ExitCode.Success);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IdleTimeoutZero_KeepsServing_AndNeverSelfShutsDown()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);

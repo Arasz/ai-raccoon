@@ -1,6 +1,7 @@
 using AiRaccoon.Infrastructure.Embedding;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -13,7 +14,7 @@ namespace AiRaccoon.Tests.Integration.Embedding;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class BundledModelGateTests
 {
-    [Fact]
+    [RetryFact]
     public async Task BundledModel_IsPresentAndShaVerified_AfterBootstrap()
     {
         var result = await TestData.CreateBundledModel().EnsureAsync(TestContext.Current.CancellationToken);

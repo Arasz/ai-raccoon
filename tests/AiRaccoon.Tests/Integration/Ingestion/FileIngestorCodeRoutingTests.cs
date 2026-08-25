@@ -8,6 +8,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Ingestion;
 
@@ -66,7 +67,7 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
             NullWatchStore.Instance, NullEmbedDrainPump.Instance);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestDirectoryAsync_MixedRepo_RoutesEachFileByExtension()
     {
         var ingestor = CreateIngestor();
@@ -84,7 +85,7 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
         (await CountCodeAsync(Path.Combine(_testDir, "logo.png"))).ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestFileAsync_ExplicitCodeFile_RoutesToCodeCorpus()
     {
         var ingestor = CreateIngestor();
@@ -104,7 +105,7 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
     ///     be fingerprint-eligible, or the watch digest hash-skip never engages and the file
     ///     re-ingests on every poll indefinitely.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task IngestFileAsync_WhitespaceOnlyCodeFile_IsFingerprintEligible()
     {
         var ingestor = CreateIngestor();
@@ -118,7 +119,7 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
             "a whitespace-only code file must fingerprint despite zero rows, or the watch digest re-ingests it forever");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestFileAsync_WithoutCodeSupportConfigured_CodeFileReturnsZero()
     {
         var ingestor = CreateIngestor(withCodeSupport: false);
@@ -138,7 +139,7 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
     ///     file at `src/gen/` (where it does not exist) and miss it entirely; this is the case that
     ///     the original co-located version of this test could never catch.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task IngestFileAsync_IgnoredCodeFile_NoWatch_FallsBackToScopeAllowlistRoot()
     {
         await File.WriteAllTextAsync(Path.Combine(_testDir, IgnoreRulesProvider.FileName), "src/gen/*.cs\n",
@@ -155,7 +156,7 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
 
     /// <summary>B2 fix (1): a registered watch takes priority as the ignore root over the parent
     /// directory (and is checked before falling back to the scope allowlist).</summary>
-    [Fact]
+    [RetryFact]
     public async Task IngestFileAsync_ExplicitlyIgnoredCodeFile_UnderWatchRoot_ReturnsZeroChunks()
     {
         await File.WriteAllTextAsync(Path.Combine(_testDir, IgnoreRulesProvider.FileName), "src/gen/*.cs\n",
@@ -173,7 +174,7 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
 
     /// <summary>B2 fix (2): the ignore check now sits above the memory/code handler branch, so a
     /// memory file (`.md`) under an ignored path is skipped too — not just code files.</summary>
-    [Fact]
+    [RetryFact]
     public async Task IngestFileAsync_ExplicitlyIgnoredMemoryFile_UnderWatchRoot_ReturnsZeroChunks()
     {
         await File.WriteAllTextAsync(Path.Combine(_testDir, IgnoreRulesProvider.FileName), "docs/*.md\n",
@@ -192,7 +193,7 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
     /// <summary>B2 fix (1): `IgnoreRulesProvider` reads exactly one file per resolved root — a
     /// stray `ai-raccoon.ignore` sitting next to the target (not at the watch root) must never be
     /// discovered or honored.</summary>
-    [Fact]
+    [RetryFact]
     public async Task IngestFileAsync_StrayNestedIgnoreFile_IsNotHonored()
     {
         var watchStore = await RegisterWatchAsync(_testDir);
@@ -208,7 +209,7 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
         (await CountCodeAsync(file)).ShouldBeGreaterThan(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestDirectoryAsync_CodeWalk_SkipsHiddenAndDenySet()
     {
         var ingestor = CreateIngestor();

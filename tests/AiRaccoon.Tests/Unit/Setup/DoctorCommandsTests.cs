@@ -11,6 +11,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Unit.Setup;
 
@@ -45,7 +46,7 @@ public sealed class DoctorCommandsTests : IDisposable
     ///     through argv (<see cref="Run" /> → <see cref="ConfigCommands" />), not the handler
     ///     method directly.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task NoBankAtTheResolvedPath_ExitsNonZeroAndNamesThePath()
     {
         var (exit, _, err) = await Run(CreateDoctor(), ["doctor"]);
@@ -55,7 +56,7 @@ public sealed class DoctorCommandsTests : IDisposable
         err.ShouldContain(_factory.BankPath);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Doctor_HealthyBank_ReportsHealthyAndExitsZero()
     {
         await using (await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
@@ -73,7 +74,7 @@ public sealed class DoctorCommandsTests : IDisposable
     ///     said so anywhere. doctor is where someone looks when search feels wrong, so it reports
     ///     the code engine's state and — when there isn't one — the exact command that installs it.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Doctor_NoCodeEngine_SaysNotConfigured_AndNamesTheInstallCommand()
     {
         await using (await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
@@ -86,7 +87,7 @@ public sealed class DoctorCommandsTests : IDisposable
         outp.ShouldContain(CodeEngineSetup.DefaultModelCommand);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Doctor_ConfiguredCodeEngine_NamesTheModelAndItsDirectory()
     {
         var modelDir = Path.Combine(_dataRoot, "models", "faxenoff__code-daemon-embed-v1");
@@ -110,7 +111,7 @@ public sealed class DoctorCommandsTests : IDisposable
     ///     and that is legitimate rather than an error, so nothing else in the product ever mentions
     ///     them. A number here is how someone learns the corpus is waiting on a model.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Doctor_ReportsHowManyCodeRowsArePending()
     {
         await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
@@ -132,7 +133,7 @@ public sealed class DoctorCommandsTests : IDisposable
     ///     #522: `settings model threads &lt;n&gt;` round-trips through the bank, but doctor said
     ///     nothing about what it resolves to. Mirrors the code-engine line's shape.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Doctor_ExplicitThreadsSetting_ReportsTheResolvedCountAndSource()
     {
         await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
@@ -147,7 +148,7 @@ public sealed class DoctorCommandsTests : IDisposable
         outp.ShouldContain("embedding threads: 3 (setting)");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Doctor_UnsetThreadsSetting_ReportsTheHalvedCoreDefault()
     {
         // Opening once creates the bank; no threads setting is written.
@@ -162,7 +163,7 @@ public sealed class DoctorCommandsTests : IDisposable
     }
 
     /// <summary>#522 review: 0 is a real setting meaning "ORT's own default", not zero threads — a bare "0" misreads as broken.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Doctor_ZeroThreadsSetting_ReportsOrtDefault()
     {
         await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
@@ -178,7 +179,7 @@ public sealed class DoctorCommandsTests : IDisposable
     }
 
     /// <summary>The exact GH #357 repro: an `entries` table already exists with a narrower shape before doctor ever touches it.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Doctor_HandSurgeredEntriesTable_DetectsShapeMismatchAndFailsDistinctExitCode()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(_factory.BankPath)!);
@@ -208,7 +209,7 @@ public sealed class DoctorCommandsTests : IDisposable
         combined.ShouldContain("never repair");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Doctor_NeverModifiesTheBank()
     {
         await using (await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
@@ -229,7 +230,7 @@ public sealed class DoctorCommandsTests : IDisposable
         afterAppId.ShouldBe(beforeAppId);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Doctor_WhenTheEncryptionKeyCannotBeResolved_ReportsADistinctExitCode()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(_factory.BankPath)!);

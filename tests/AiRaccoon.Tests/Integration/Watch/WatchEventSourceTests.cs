@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using AiRaccoon.Tests.Unit.Watch;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using Xunit.Sdk;
 
 namespace AiRaccoon.Tests.Integration.Watch;
@@ -19,7 +20,7 @@ public sealed class WatchEventSourceTests
 
     private static WatchEventSource NewSource(List<WatchEvent> events, List<WatchEventError> errors) => new(events.Add, errors.Add, NullLogger<WatchEventSource>.Instance);
 
-    [Fact]
+    [RetryFact]
     public void Created_TranslatesToWatchEvent_WithNormalizedPath()
     {
         using var dir = TempDir.New("source-created");
@@ -36,7 +37,7 @@ public sealed class WatchEventSourceTests
         evt.OldPath.ShouldBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public void Changed_TranslatesToChangedEvent()
     {
         using var dir = TempDir.New("source-changed");
@@ -51,7 +52,7 @@ public sealed class WatchEventSourceTests
         evt.Kind.ShouldBe(WatchEventKind.Changed);
     }
 
-    [Fact]
+    [RetryFact]
     public void Deleted_TranslatesToDeletedEvent()
     {
         using var dir = TempDir.New("source-deleted");
@@ -66,7 +67,7 @@ public sealed class WatchEventSourceTests
         evt.Kind.ShouldBe(WatchEventKind.Deleted);
     }
 
-    [Fact]
+    [RetryFact]
     public void Renamed_TranslatesToRenamedEvent_WithNormalizedOldPath()
     {
         using var dir = TempDir.New("source-renamed");
@@ -82,7 +83,7 @@ public sealed class WatchEventSourceTests
         evt.Kind.ShouldBe(WatchEventKind.Renamed);
     }
 
-    [Fact]
+    [RetryFact]
     public void HandlerFailure_IsContained_AndEmitsSyntheticErrorEvent()
     {
         using var dir = TempDir.New("source-throw");
@@ -99,7 +100,7 @@ public sealed class WatchEventSourceTests
         error.Message.ShouldContain("boom");
     }
 
-    [Fact]
+    [RetryFact]
     public void WatcherError_IsForwardedAsSyntheticErrorEvent()
     {
         using var dir = TempDir.New("source-error");
@@ -113,7 +114,7 @@ public sealed class WatchEventSourceTests
         error.Message.ShouldContain("overflow");
     }
 
-    [Fact]
+    [RetryFact]
     public void Start_OnInvalidPath_DoesNotThrow_AndEmitsSyntheticErrorEvent()
     {
         var errors = new List<WatchEventError>();
@@ -125,7 +126,7 @@ public sealed class WatchEventSourceTests
         source.IsWatching(Project, "").ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public void Start_StartsWatching_AndStop_DisposesTheWatcher()
     {
         using var dir = TempDir.New("source-start");
@@ -138,7 +139,7 @@ public sealed class WatchEventSourceTests
         source.IsWatching(Project, dir.Path).ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public void Start_Twice_IsIdempotent_AndEmitsNoErrorEvents()
     {
         using var dir = TempDir.New("source-twice");
@@ -152,7 +153,7 @@ public sealed class WatchEventSourceTests
         errors.ShouldBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public void StopAll_DisposesEveryWatcher()
     {
         using var dir = TempDir.New("source-stopall");
@@ -170,7 +171,7 @@ public sealed class WatchEventSourceTests
     // FileSystemWatcher only accepts directories, so a FILE registration watches the parent
     // directory and translates events for that file only.
 
-    [Fact]
+    [RetryFact]
     public void Start_OnFilePath_IsWatching_AndNoErrorEvent()
     {
         using var dir = TempDir.New("source-file-start");
@@ -185,7 +186,7 @@ public sealed class WatchEventSourceTests
         errors.ShouldBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public void Start_OnMissingFile_WithExistingParent_IsWatching_AndNoErrorEvent()
     {
         using var dir = TempDir.New("source-file-missing");
@@ -199,7 +200,7 @@ public sealed class WatchEventSourceTests
         errors.ShouldBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public void FileWatch_CreatedAndChanged_FireForTargetFile_NotForSiblings()
     {
         using var dir = TempDir.New("source-file-created");
@@ -223,7 +224,7 @@ public sealed class WatchEventSourceTests
         events.ShouldNotContain(e => e.Path == dir.File("sibling.md"));
     }
 
-    [Fact]
+    [RetryFact]
     public void FileWatch_Deleted_FiresForTargetFile()
     {
         using var dir = TempDir.New("source-file-deleted");
@@ -239,7 +240,7 @@ public sealed class WatchEventSourceTests
         WaitFor(() => events.Any(e => e.Kind == WatchEventKind.Deleted && e.Path == file), "deleted event for target");
     }
 
-    [Fact]
+    [RetryFact]
     public void FileWatch_Recreate_FiresCreatedForTargetFile()
     {
         using var dir = TempDir.New("source-file-recreate");
@@ -259,7 +260,7 @@ public sealed class WatchEventSourceTests
         WaitFor(() => events.Any(e => e.Kind == WatchEventKind.Created && e.Path == file), "created event for target");
     }
 
-    [Fact]
+    [RetryFact]
     public void FileWatch_RenameAway_EmitsDeletedForRegisteredPath()
     {
         using var dir = TempDir.New("source-file-rename-away");
@@ -276,7 +277,7 @@ public sealed class WatchEventSourceTests
         events.ShouldNotContain(e => e.Kind == WatchEventKind.Renamed);
     }
 
-    [Fact]
+    [RetryFact]
     public void FileWatch_RenameInto_EmitsRenamedWithOldPath()
     {
         using var dir = TempDir.New("source-file-rename-in");

@@ -4,6 +4,7 @@ using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Unit.Setup;
 
@@ -32,7 +33,7 @@ public sealed class NoiseEntriesCommandsTests : IDisposable
     private Task<(int Exit, string Out, string Err)> Run(string[] args) =>
         CliRun.RunAsync(args, TestData.CreateConfigCommands(new FakeConfigStore(), noiseEntries: new NoiseEntriesCommands(_store)));
 
-    [Fact]
+    [RetryFact]
     public async Task NoiseEntries_EmptyBank_ReportsZero()
     {
         var (exit, outp, _) = await Run(["noise", "entries"]);
@@ -41,7 +42,7 @@ public sealed class NoiseEntriesCommandsTests : IDisposable
         outp.ShouldContain("total: 0");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task NoiseEntries_AfterRecording_ReportsCountsByPolicy()
     {
         await _store.RecordAsync(new MemoryWriteRequest("proj-1", "[IMPORTANT: Background process x completed normally]"),

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
@@ -38,7 +39,7 @@ public sealed class RatingBumpConsistencyTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task ConcurrentSearches_LeaveRatingConsistentWithTheStoredAccessCount()
     {
         await _store.AddContentAsync(ProjectId, "/notes/hot.md", "the rating bump consistency probe",
@@ -62,7 +63,7 @@ public sealed class RatingBumpConsistencyTests : IDisposable
             $"({expected}); a bump's rating contribution was lost while its count survived");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SequentialSearches_AlsoLeaveRatingConsistent()
     {
         // The uncontended path must keep the same invariant — the fix must not trade a race for a

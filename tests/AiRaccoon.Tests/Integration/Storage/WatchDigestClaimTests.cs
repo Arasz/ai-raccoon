@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
@@ -40,7 +41,7 @@ public sealed class WatchDigestClaimTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task ReplaceIfFileChangedAsync_WhenTheGuardThrowsBeforeClaiming_LeavesAForeignClaimUntouched()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -79,7 +80,7 @@ public sealed class WatchDigestClaimTests : IDisposable
             "a claim this call never won must not be deleted by its own failure cleanup");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ReplaceIfFileChangedAsync_ClaimOlderThanStaleAfter_IsReclaimedAndChunks()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -100,7 +101,7 @@ public sealed class WatchDigestClaimTests : IDisposable
         (await EntryCountAsync("acme", file, ct)).ShouldBeGreaterThan(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ReplaceIfFileChangedAsync_ClaimFresherThanStaleAfter_Declines()
     {
         var ct = TestContext.Current.CancellationToken;

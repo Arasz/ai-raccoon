@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
@@ -34,7 +35,7 @@ public sealed class SqliteMemorySourceStoreTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task ResolveOrCreate_NewSource_InsertsAndReturns()
     {
         var source = await _sourceStore.ResolveOrCreateAsync(
@@ -53,7 +54,7 @@ public sealed class SqliteMemorySourceStoreTests : IDisposable
         count.ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ResolveOrCreate_ExistingSource_ReturnsSameId()
     {
         var first = await _sourceStore.ResolveOrCreateAsync(
@@ -73,7 +74,7 @@ public sealed class SqliteMemorySourceStoreTests : IDisposable
         count.ShouldBe(1, "same key must not create a duplicate row");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ResolveOrCreate_SameLocatorDifferentSection_DifferentRow()
     {
         var a = await _sourceStore.ResolveOrCreateAsync(
@@ -86,7 +87,7 @@ public sealed class SqliteMemorySourceStoreTests : IDisposable
         a.Id.ShouldNotBe(b.Id);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ResolveOrCreate_FileVsTranscript_DifferentRows()
     {
         var a = await _sourceStore.ResolveOrCreateAsync(

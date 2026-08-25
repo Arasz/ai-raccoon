@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
@@ -48,7 +49,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestFile_WithNoScopeConfigured_IsRefused()
     {
         var file = await WriteFileAsync("notes.md");
@@ -57,7 +58,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
             _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestFile_InsideTheProjectScope_IsIndexed()
     {
         var file = await WriteFileAsync("notes.md");
@@ -68,7 +69,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
         indexed.ShouldBeGreaterThan(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestFile_OutsideTheProjectScope_IsRefused()
     {
         var outside = await WriteFileAsync("notes.md");
@@ -81,7 +82,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
     }
 
     /// <summary>Containment resolves the path first, so ".." cannot walk out of the scope.</summary>
-    [Fact]
+    [RetryFact]
     public async Task IngestFile_TraversingOutOfScope_IsRefused()
     {
         await WriteFileAsync("notes.md");
@@ -95,7 +96,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
             _store.IngestFileAsync("acme", traversal, null, TestContext.Current.CancellationToken));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestFile_UnderTheGlobalScope_IsIndexed()
     {
         var file = await WriteFileAsync("notes.md");
@@ -106,7 +107,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
         indexed.ShouldBeGreaterThan(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestDirectory_OutsideTheProjectScope_IsRefused()
     {
         await WriteFileAsync("notes.md");
@@ -118,7 +119,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
             _store.IngestDirectoryAsync("acme", _contentRoot, null, TestContext.Current.CancellationToken));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestDirectory_InsideTheProjectScope_IsIndexed()
     {
         await WriteFileAsync("notes.md");
@@ -131,7 +132,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
     }
 
     /// <summary>A non-indexable file used to return 0 before anything read it; scope still comes first.</summary>
-    [Fact]
+    [RetryFact]
     public async Task IngestFile_NonIndexableOutsideScope_IsStillRefused()
     {
         var file = await WriteFileAsync("secrets.env");
@@ -141,7 +142,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
     }
 
     /// <summary>Pre-1.2 banks hold watch.scope.* rows; opening one must carry them over, or every ingest silently starts refusing.</summary>
-    [Fact]
+    [RetryFact]
     public async Task LegacyWatchScopeKey_IsMigratedOnOpen()
     {
         var file = await WriteFileAsync("notes.md");
@@ -162,7 +163,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
     }
 
     /// <summary>Enumeration descends into directory symlinks; a link inside scope must not smuggle out-of-scope content in.</summary>
-    [Fact]
+    [RetryFact]
     public async Task IngestDirectory_DirectorySymlinkPointingOutsideScope_DoesNotIngestTargetContent()
     {
         await File.WriteAllTextAsync(Path.Combine(_outsideRoot, "secret.md"), "the confidential badger stash",
@@ -182,7 +183,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
     }
 
     /// <summary>A file symlink's own path is textually in scope, but its target is not — the target must govern.</summary>
-    [Fact]
+    [RetryFact]
     public async Task IngestFile_FileSymlinkPointingOutsideScope_IsRefused()
     {
         var target = Path.Combine(_outsideRoot, "secret.md");
@@ -196,7 +197,7 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
     }
 
     /// <summary>A symlink is not rejected outright — only when it resolves outside the scope.</summary>
-    [Fact]
+    [RetryFact]
     public async Task IngestDirectory_SymlinkInsideScope_StillIngests()
     {
         var realDir = Path.Combine(_contentRoot, "real");

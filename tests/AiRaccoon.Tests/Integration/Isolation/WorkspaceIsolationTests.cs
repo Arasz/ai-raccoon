@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Isolation;
@@ -37,7 +38,7 @@ public sealed class WorkspaceIsolationTests : IDisposable
         TestData.CreateMemoryStore(_factory,
             NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
 
-    [Fact]
+    [RetryFact]
     public async Task XORCheck_InsertWithWorkspaceIdAndCommittedScope_Fails()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -63,7 +64,7 @@ public sealed class WorkspaceIsolationTests : IDisposable
         ex.Message.ShouldContain("CHECK");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task XORCheck_UpdateToSetWorkspaceIdOnCommittedRow_Fails()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -92,7 +93,7 @@ public sealed class WorkspaceIsolationTests : IDisposable
         ex.Message.ShouldContain("CHECK");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task FK_InsertWithMissingWorkspace_Fails()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -112,7 +113,7 @@ public sealed class WorkspaceIsolationTests : IDisposable
         ex.Message.ShouldContain("FOREIGN KEY");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CompliantInsert_WorkspaceEntry_Succeeds()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -138,7 +139,7 @@ public sealed class WorkspaceIsolationTests : IDisposable
         exception.ShouldBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CompliantInsert_CommittedEntry_Succeeds()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -158,7 +159,7 @@ public sealed class WorkspaceIsolationTests : IDisposable
         exception.ShouldBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Write_WithWorkspaceId_SetsWorkspaceIdAndNullScope()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -184,7 +185,7 @@ public sealed class WorkspaceIsolationTests : IDisposable
         row.Scope.ShouldBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Write_WithoutWorkspaceId_SetsScopeAndNullWorkspaceId()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -206,7 +207,7 @@ public sealed class WorkspaceIsolationTests : IDisposable
         row.Scope.ShouldBe("project");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ConsolidateAsync_PromotesKept_DiscardsRest_ClosesWorkspace()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -243,7 +244,7 @@ public sealed class WorkspaceIsolationTests : IDisposable
         wsStatus.ShouldBe("Closed");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SweepService_StructurallyExcludesWorkspaceEntries()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);

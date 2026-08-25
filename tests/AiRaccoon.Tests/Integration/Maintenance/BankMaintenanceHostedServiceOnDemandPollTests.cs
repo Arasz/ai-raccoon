@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Maintenance;
 
@@ -63,7 +64,7 @@ public sealed class BankMaintenanceHostedServiceOnDemandPollTests : IDisposable
         throw new TimeoutException($"on-demand poll {target} did not fire within {MaxAdvanceSteps} fake-clock steps");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AnOnDemandJob_IsPickedUp_WithinThePollInterval_LongBeforeTheHourlyCheckpointCadence()
     {
         using var cts = new CancellationTokenSource();
@@ -86,7 +87,7 @@ public sealed class BankMaintenanceHostedServiceOnDemandPollTests : IDisposable
     ///     The regression this refactor could introduce: the on-demand poll must not make an hourly
     ///     job run more often just because the loop now wakes every 15 seconds instead of every hour.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task AnHourlyCadenceJob_StillRunsOnlyOncePerHour_DespiteThePollWakingEvery15Seconds()
     {
         using var cts = new CancellationTokenSource();

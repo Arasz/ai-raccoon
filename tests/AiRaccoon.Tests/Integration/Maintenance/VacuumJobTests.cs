@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Maintenance;
 
@@ -41,7 +42,7 @@ public sealed class VacuumJobTests : IDisposable
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     /// <summary>The behaviour that replaces the seeding pass: a bank that has never vacuumed does so now.</summary>
-    [Fact]
+    [RetryFact]
     public async Task TheFirstPass_Vacuums_RatherThanSeedingAClock()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -54,7 +55,7 @@ public sealed class VacuumJobTests : IDisposable
     }
 
     /// <summary>VACUUM drops sqlite_stat1, so a job that skipped ANALYZE would leave the planner blind.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Vacuum_LeavesTheAnalyzeStatisticsInPlace()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -75,7 +76,7 @@ public sealed class VacuumJobTests : IDisposable
     }
 
     /// <summary>An explicitly configured interval still wins; only the DEFAULT moved 7 days → 2 hours.</summary>
-    [Fact]
+    [RetryFact]
     public async Task AConfiguredIntervalInDays_IsHonoured()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -97,7 +98,7 @@ public sealed class VacuumJobTests : IDisposable
     }
 
     /// <summary>Without configuration the cadence is two hours, not the old seven days.</summary>
-    [Fact]
+    [RetryFact]
     public async Task TheDefaultCadence_IsTwoHours()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);

@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Harness;
 
@@ -15,7 +16,7 @@ namespace AiRaccoon.Tests.Integration.Harness;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class LoopbackPortRetryTests
 {
-    [Fact]
+    [RetryFact]
     public void BindWithRetry_WhenTheFirstPortIsStolen_SucceedsOnAFreshOne()
     {
         var attempts = new List<int>();
@@ -36,7 +37,7 @@ public sealed class LoopbackPortRetryTests
         bound.ShouldBe(attempts[1]);
     }
 
-    [Fact]
+    [RetryFact]
     public void BindWithRetry_WhenTheBindSucceeds_DoesNotRetry()
     {
         var attempts = 0;
@@ -50,7 +51,7 @@ public sealed class LoopbackPortRetryTests
         attempts.ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public void BindWithRetry_WhenEveryAttemptLosesThePort_ThrowsNamingTheContention()
     {
         // Giving up silently would turn a lost race into an unexplained failure much later.
@@ -60,7 +61,7 @@ public sealed class LoopbackPortRetryTests
         thrown.Message.ShouldContain("2");
     }
 
-    [Fact]
+    [RetryFact]
     public void BindWithRetry_DoesNotSwallowAnUnrelatedFailure()
     {
         // Only a lost port is worth retrying; anything else is the test's own bug.
@@ -69,7 +70,7 @@ public sealed class LoopbackPortRetryTests
             .Message.ShouldBe("the server is misconfigured");
     }
 
-    [Fact]
+    [RetryFact]
     public void BindWithRetry_ReleasesTheLeaseBeforeTheBindRuns()
     {
         // The caller binds the port itself, so the lease must be gone by the time it tries.
@@ -85,7 +86,7 @@ public sealed class LoopbackPortRetryTests
         bound.ShouldBeGreaterThan(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task BindWithRetryAsync_WhenTheFirstPortIsStolen_RebuildsOnAFreshOne()
     {
         var attempts = new List<int>();
@@ -103,7 +104,7 @@ public sealed class LoopbackPortRetryTests
         bound.ShouldBe(attempts[1]);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task BindWithRetryAsync_UnwrapsTheBindFailureKestrelWraps()
     {
         // Kestrel surfaces the lost port as an IOException wrapping the SocketException.

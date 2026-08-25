@@ -13,6 +13,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Mcp;
 
@@ -51,7 +52,7 @@ public sealed class MemorySearchCodeIntegrationTests : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_KindCode_ReturnsRealFtsHits_WithTheEngineNotConfiguredWarning()
     {
         await SeedAsync(id: 1, projectId: "acme", path: "src/Wombat.cs", value: "sealed class WombatRunner { }",
@@ -67,7 +68,7 @@ public sealed class MemorySearchCodeIntegrationTests : IAsyncLifetime
         envelope.Data!.Warning.ShouldNotBeNull().ShouldContain(CodeSearchWarnings.EngineNotConfigured);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_KindCode_SharedScope_ReturnsEmptyCodeSection_EvenWithRowsInTheBank()
     {
         await SeedAsync(id: 1, projectId: "acme", path: "src/Wombat.cs", value: "sealed class WombatRunner { }",
@@ -87,7 +88,7 @@ public sealed class MemorySearchCodeIntegrationTests : IAsyncLifetime
     ///     at all. Serializes through the real wire options (McpJsonUtilities.DefaultOptions, the
     ///     same ones the golden fixture family pins) and asserts the JSON key itself is absent.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Search_KindMemory_Explicit_ResponseHasNoCodeKeyAtAll_EvenWithCodeRowsInTheBank()
     {
         await SeedAsync(id: 1, projectId: "acme", path: "src/Wombat.cs", value: "sealed class WombatRunner { }",

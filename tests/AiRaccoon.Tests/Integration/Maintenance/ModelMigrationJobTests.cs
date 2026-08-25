@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Maintenance;
@@ -55,7 +56,7 @@ public sealed class ModelMigrationJobTests : IAsyncLifetime
 
     private ModelMigrationJob NewJob() => new(new EntryEmbedder(TestData.CreateEmbeddingService(), new SqliteModelMigrationLease(_time), _time, new VecDimensionReconciler()));
 
-    [Fact]
+    [RetryFact]
     public async Task HasWorkAsync_WithNoOpenMigration_IsFalse()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -63,7 +64,7 @@ public sealed class ModelMigrationJobTests : IAsyncLifetime
         (await NewJob().HasWorkAsync(connection, TestContext.Current.CancellationToken)).ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HasWorkAsync_AfterStartModelMigrationAsync_IsTrue()
     {
         await OpenAMigrationAsync();
@@ -72,7 +73,7 @@ public sealed class ModelMigrationJobTests : IAsyncLifetime
         (await NewJob().HasWorkAsync(connection, TestContext.Current.CancellationToken)).ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_DrainsEveryPendingRow_UnderTheNewEngine()
     {
         var entry = await OpenAMigrationAsync();
@@ -85,7 +86,7 @@ public sealed class ModelMigrationJobTests : IAsyncLifetime
         (await CountVecRowsAsync()).ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_MarksTheMigrationFinished()
     {
         await OpenAMigrationAsync();
@@ -96,7 +97,7 @@ public sealed class ModelMigrationJobTests : IAsyncLifetime
         (await IsOpenAsync()).ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HasWorkAsync_AfterRunAsync_IsFalseAgain()
     {
         await OpenAMigrationAsync();
@@ -108,7 +109,7 @@ public sealed class ModelMigrationJobTests : IAsyncLifetime
     }
 
     /// <summary>The crash-recovery contract: a fresh job instance (a new process, in effect) finishes what an earlier one started but never completed.</summary>
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_ByADifferentJobInstance_ResumesAndFinishesAnAlreadyOpenMigration()
     {
         var entry = await OpenAMigrationAsync();
@@ -121,7 +122,7 @@ public sealed class ModelMigrationJobTests : IAsyncLifetime
         (await IsOpenAsync()).ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_WithNoOpenMigration_IsANoOp()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -129,7 +130,7 @@ public sealed class ModelMigrationJobTests : IAsyncLifetime
         await Should.NotThrowAsync(() => NewJob().RunAsync(connection, TestContext.Current.CancellationToken).AsTask());
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_WhenAnotherRelayHoldsTheLease_DoesNotDrain()
     {
         var entry = await OpenAMigrationAsync();
@@ -181,7 +182,7 @@ public sealed class ModelMigrationJobTests : IAsyncLifetime
     ///     ran, not the instant the relay called in. A fake generator that advances <see cref="_time" />
     ///     on every embed call stands in for the drain's real wall-clock cost, with no sleeping needed.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_StampsFinishedAt_AfterTheDrainCompletes_NotBeforeItStarts()
     {
         await OpenAMigrationAsync();

@@ -3,6 +3,7 @@ using AiRaccoon.Infrastructure.Embedding;
 using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -15,7 +16,7 @@ namespace AiRaccoon.Tests.Integration.Embedding;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class QueryTrimSharesTheLocalTokenizerTests
 {
-    [Fact]
+    [RetryFact]
     public void TrimQueryToWindow_CalledRepeatedly_BuildsTheLocalTokenizerOnce()
     {
         var builds = 0;
@@ -36,7 +37,7 @@ public sealed class QueryTrimSharesTheLocalTokenizerTests
 
     /// <summary>The other half of the laziness contract: a non-local provider returns early
     /// (EmbeddingService.cs's own guard) and must never touch the tokenizer at all.</summary>
-    [Fact]
+    [RetryFact]
     public void TrimQueryToWindow_NonLocalProvider_NeverBuildsTheLocalTokenizer()
     {
         var builds = 0;

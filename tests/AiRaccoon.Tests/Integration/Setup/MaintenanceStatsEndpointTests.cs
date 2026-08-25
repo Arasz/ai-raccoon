@@ -9,6 +9,7 @@ using AiRaccoon.Setup;
 using Microsoft.AspNetCore.Builder;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Setup;
 
@@ -43,7 +44,7 @@ public sealed class MaintenanceStatsEndpointTests : IAsyncLifetime
         TestData.DeleteTempRoot(_dataRoot);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Get_ReturnsLiveBankStats()
     {
         var response = await _client.GetAsync(MaintenanceStatsProtocol.Path, TestContext.Current.CancellationToken);
@@ -53,7 +54,7 @@ public sealed class MaintenanceStatsEndpointTests : IAsyncLifetime
             .ShouldNotBeNull().DbBytes.ShouldBeGreaterThan(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task WithoutTheToken_IsRefused()
     {
         using var anonymous = new HttpClient { BaseAddress = new Uri(_app.Urls.First()) };

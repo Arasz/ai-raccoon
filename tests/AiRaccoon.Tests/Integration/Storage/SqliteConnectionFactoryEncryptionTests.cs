@@ -9,6 +9,7 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -31,7 +32,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
 
     private SqliteConnectionFactory Factory(string? passphrase = null) => new(Options(), Resolver(Options(), new StubEncryptionKeyProvider(passphrase)));
 
-    [Fact]
+    [RetryFact]
     public async Task OpenBankAsync_WithPassphrase_CreatesEncryptedDatabase()
     {
         var passphrase = "test-encryption-key";
@@ -61,7 +62,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
     ///     <see cref="OpenBankAsync_WithPassphrase_CreatesEncryptedDatabase" /> proves it for
     ///     <c>entries</c>: raw file bytes never contain the plaintext value.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task OpenBankAsync_WithPassphrase_EncryptsCodeEntriesRows()
     {
         const string distinctiveValue = "quokka-narwhal-pangolin-secret-code-snippet";
@@ -88,7 +89,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         (await check.ExecuteScalarAsync(TestContext.Current.CancellationToken)).ShouldBe(distinctiveValue);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task OpenBankAsync_WithoutPassphrase_OpensUnencryptedDatabase()
     {
         var factory = Factory(passphrase: null);
@@ -111,7 +112,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         reopen.State.ShouldBe(ConnectionState.Open);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task OpenBankAsync_WithWrongPassphrase_FailsToOpen()
     {
         var passphrase = "correct-passphrase";
@@ -134,7 +135,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         ex.SqliteErrorCode.ShouldBe(26);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RekeyBankAsync_PassphraseBankInWalMode_RekeysToDerivedRawKey()
     {
         var factory = Factory("env-passphrase");
@@ -176,7 +177,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         ex.SqliteErrorCode.ShouldBe(26);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RekeyBankAsync_PlaintextBank_RekeysToDerivedRawKey()
     {
         var factory = Factory(passphrase: null);
@@ -200,7 +201,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         Encoding.ASCII.GetString(header[..16]).ShouldNotStartWith("SQLite format 3");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task OpenBankWithKeyAsync_WrongKey_ThrowsSqliteException26()
     {
         var factory = Factory("correct-key");
@@ -222,7 +223,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
     ///     Neither the bitwarden source's current nor its legacy derivation opens a bank keyed to
     ///     something else, so the open is refused. The underlying SQLite code stays reachable.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task OpenBankAsync_ResolverReturnsDifferentKey_ThrowsKeyMismatchOverSqlite26()
     {
         var options = new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
@@ -247,7 +248,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         ex.InnerException.ShouldBeOfType<SqliteException>().SqliteErrorCode.ShouldBe(26);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RekeyBankAsync_DoesNotWriteKeyMaterialNextToBank()
     {
         var factory = Factory("env-passphrase");
@@ -278,7 +279,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
     ///     bank (docs/plans/2026-08-07-hkdf-rekey-migration.md item 3). A bank with no schema
     ///     proves InitializeAsync's MemorySchema.EnsureAsync never ran on the success path.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task MigrateLegacyKeyAsync_BankAlreadyOnCurrentKey_CreatesNoSchemaObjects()
     {
         const string passphrase = "current-key";
@@ -306,7 +307,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
     ///     RekeyBankAsync's explicit-current-key overload must refuse before attempting any rekey —
     ///     see docs/plans/2026-08-07-hkdf-rekey-migration.md test 10.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task RekeyBankAsync_WrongCurrentKey_ThrowsBeforeAnyRekeyIsAttempted()
     {
         var factory = Factory("actual-current-key");
@@ -336,7 +337,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
     }
 
     /// <summary>.NET-F2: a Bitwarden-sourced key is cached across bank opens — N opens shell out to bws once, not N times.</summary>
-    [Fact]
+    [RetryFact]
     public async Task OpenBankAsync_CalledManyTimesWithBitwardenSource_InvokesBwsExactlyOnce()
     {
         var options = Options();

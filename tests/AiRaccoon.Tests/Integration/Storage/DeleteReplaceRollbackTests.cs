@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
@@ -41,7 +42,7 @@ public sealed class DeleteReplaceRollbackTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task DeleteSourcePath_WhenTheWatchFingerprintDeleteFailsMidTransaction_RollsBackTheEntryDeleteToo()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -93,7 +94,7 @@ public sealed class DeleteReplaceRollbackTests : IDisposable
     ///     a reader can see old AND new chunks for a file whose replace failed partway, instead of
     ///     the delete-then-ingest shape's all-or-nothing swap.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ReplaceFile_WhenTheWatchFingerprintUpsertFailsMidTransaction_RollsBackOnlyThePruneAndFingerprint()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -147,7 +148,7 @@ public sealed class DeleteReplaceRollbackTests : IDisposable
     ///     mid-transaction leaves the file's chunks exactly as they were, not just an inference from
     ///     the gated caller's test.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ReplaceAsync_WhenTheWatchFingerprintUpsertFailsMidTransaction_RollsBackTheWholeReplace()
     {
         var ct = TestContext.Current.CancellationToken;

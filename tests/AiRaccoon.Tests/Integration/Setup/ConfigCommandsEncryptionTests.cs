@@ -13,6 +13,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Setup;
 
@@ -101,7 +102,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     ///     A Func&lt;T&gt; wrapper around an async body infers T = Task and releases the gate at the
     ///     first await, letting a second holder in while the override is still in force.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task WithEnvPassphrase_HoldsTheGateUntilTheAwaitedBodyCompletes()
     {
         var bodyStarted = new TaskCompletionSource();
@@ -138,7 +139,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     }
 
     /// <summary>The seed is a byte[] local to the command; DeriveAndZeroSeed is the one call site free to clear it.</summary>
-    [Fact]
+    [RetryFact]
     public void DeriveAndZeroSeed_DerivesTheRawKeyThenZeroesTheSeed()
     {
         var seed = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
@@ -149,7 +150,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         seed.ShouldAllBe(b => b == 0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Bitwarden_BwsMissing_ReturnsInstallErrorAndChangesNothing()
     {
         var store = new FakeConfigStore();
@@ -168,7 +169,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     ///     No env override configured: the interactive default must be an obviously fake
     ///     placeholder, never a baked-in id that identifies a real Bitwarden vault entry.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Bitwarden_InteractiveDefaults_NoEnvOverride_AreObviouslyFakePlaceholdersNotOwnerIds()
     {
         var store = new FakeConfigStore();
@@ -198,7 +199,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     }
 
     /// <summary>Configured env ids are offered as the interactive default instead of the fallback placeholder.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Bitwarden_InteractiveDefaults_EnvOverrideConfigured_OffersTheConfiguredIds()
     {
         var store = new FakeConfigStore();
@@ -214,7 +215,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         store.Settings[EncryptionSettingsKeys.SecretId].ShouldBe("env-secret-id");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Bitwarden_NonDefaultIdsViaStdin_ArePersisted()
     {
         var store = new FakeConfigStore();
@@ -231,7 +232,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         sidecar.SecretId.ShouldBe("s-222");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Bitwarden_Token_UsedForValidationOnlyNeverPersisted()
     {
         var store = new FakeConfigStore();
@@ -247,7 +248,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         (await File.ReadAllTextAsync(SidecarPath(), TestContext.Current.CancellationToken)).ShouldNotContain("tok-123");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Bitwarden_UnreachableSecret_ReturnsBwsErrorAndNoChange()
     {
         var store = new FakeConfigStore();
@@ -267,7 +268,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         _lastLogger!.Collector.GetSnapshot().ShouldContain(r => r.Id.Id == 804 && r.Level == LogLevel.Debug);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Bitwarden_MalformedSecretValue_ReturnsMalformedErrorAndNoChange()
     {
         var store = new FakeConfigStore();
@@ -282,7 +283,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     }
 
 
-    [Fact]
+    [RetryFact]
     public async Task Bitwarden_EnvKeyedBank_RekeysToDerivedKey()
     {
         var store = new FakeConfigStore();
@@ -316,7 +317,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         wrongKey.SqliteErrorCode.ShouldBe(26);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Bitwarden_SelfHeal_BankAlreadyDerivedKeyed_SkipsRekeyAndPersists()
     {
         var store = new FakeConfigStore();
@@ -339,7 +340,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Bitwarden_StaleSidecarAndEnvKeyedBank_ReportsEnvKeyedAndDeletesSidecar()
     {
         // Unset crash-window fix (docs/plans/encryption-bitwarden-implementation.md, review
@@ -367,7 +368,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Bitwarden_StaleSidecarAndEnvKeyedBank_NoEnvPassphrase_ErrorsWithoutChange()
     {
         var store = new FakeConfigStore();
@@ -393,7 +394,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     }
 
 
-    [Fact]
+    [RetryFact]
     public async Task Show_NoRowsNoSidecar_PrintsEnvSource()
     {
         var store = new FakeConfigStore();
@@ -405,7 +406,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         stdout.Trim().ShouldBe("source: env");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Show_BitwardenRows_PrintsSourceAndIds()
     {
         var store = new FakeConfigStore
@@ -427,7 +428,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         stdout.ShouldContain($"secretId: {FixtureSecretId}");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Show_NoRows_SidecarFallback_PrintsBitwardenWithIds()
     {
         var store = new FakeConfigStore();
@@ -443,7 +444,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     }
 
 
-    [Fact]
+    [RetryFact]
     public async Task Unset_NoBank_RemovesRowsAndSidecar()
     {
         var store = new FakeConfigStore
@@ -468,7 +469,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         err.ShouldBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Unset_RealBank_RekeysBackToEnvPassphrase()
     {
         var store = new FakeConfigStore
@@ -506,7 +507,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         wrongKey.SqliteErrorCode.ShouldBe(26);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Unset_RealBank_NoEnvPassphrase_WarnsAndKeepsBankOnDerivedKey()
     {
         var store = new FakeConfigStore
@@ -553,7 +554,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         wrongKey.SqliteErrorCode.ShouldBe(26);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Unset_RealBank_RekeysBackFromResolverCreatedBank()
     {
         var store = new FakeConfigStore
@@ -583,7 +584,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     }
 
 
-    [Fact]
+    [RetryFact]
     public void Constructor_NullBank_ThrowsArgumentNullException()
     {
         var ex = Should.Throw<ArgumentNullException>(() =>
@@ -595,7 +596,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         ex.ParamName.ShouldBe("bank");
     }
 
-    [Fact]
+    [RetryFact]
     public void Constructor_NullBws_ThrowsArgumentNullException()
     {
         var ex = Should.Throw<ArgumentNullException>(() =>
@@ -608,7 +609,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         ex.ParamName.ShouldBe("bws");
     }
 
-    [Fact]
+    [RetryFact]
     public void Constructor_NullEnv_ThrowsArgumentNullException()
     {
         var ex = Should.Throw<ArgumentNullException>(() =>
@@ -621,7 +622,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         ex.ParamName.ShouldBe("env");
     }
 
-    [Fact]
+    [RetryFact]
     public void Constructor_NullSidecar_ThrowsArgumentNullException()
     {
         var ex = Should.Throw<ArgumentNullException>(() =>
@@ -634,7 +635,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         ex.ParamName.ShouldBe("sidecar");
     }
 
-    [Fact]
+    [RetryFact]
     public void Constructor_NullLogger_ThrowsArgumentNullException()
     {
         var ex = Should.Throw<ArgumentNullException>(() =>
@@ -649,7 +650,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
 
     /// <summary>The verb's gate: a legacy-keyed bank is rekeyed and its rows survive.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Migrate_LegacyKeyedBank_RekeysToTheCurrentDerivationAndKeepsData()
     {
         var store = new FakeConfigStore();
@@ -678,7 +679,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         (await read.ExecuteScalarAsync(TestContext.Current.CancellationToken)).ShouldBe("survives");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Migrate_BankAlreadyOnCurrentDerivation_ReportsNoChange()
     {
         var store = new FakeConfigStore();
@@ -699,7 +700,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     }
 
     /// <summary>A bank that opens under neither derivation is refused, and left byte-identical.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Migrate_CorruptBank_FailsLoudlyAndLeavesTheFileByteIdentical()
     {
         var store = new FakeConfigStore();

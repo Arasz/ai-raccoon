@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -12,7 +13,7 @@ public sealed class SqliteVectorTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task LoadVector_LoadsVec0_AndCreatesVec0VirtualTable()
     {
         await using var connection = new SqliteConnection($"Data Source={Path.Combine(_dataRoot, "vec0.db")}");

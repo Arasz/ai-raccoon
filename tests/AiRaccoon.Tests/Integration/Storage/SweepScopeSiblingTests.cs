@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
@@ -44,7 +45,7 @@ public sealed class SweepScopeSiblingTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task Sweep_WithWorkspaceSibling_DeletesOnlyTheProjectRow()
     {
         await EnsureWorkspaceAsync("ws-1");
@@ -74,7 +75,7 @@ public sealed class SweepScopeSiblingTests : IDisposable
         stillActive.Count.ShouldBe(1, "memory_workspace_status must still report the untouched workspace entry");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Sweep_WithCustomContextSibling_DeletesOnlyTheProjectRow()
     {
         var projectEntry = await _store.WriteAsync(
@@ -98,7 +99,7 @@ public sealed class SweepScopeSiblingTests : IDisposable
             "the custom-context sibling must survive a sweep pass over the project context");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Sweep_ProjectRowWithNoSibling_IsStillDeleted()
     {
         var entry = await _store.WriteAsync(

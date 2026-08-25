@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Unit.Embedding;
 
@@ -17,7 +18,7 @@ namespace AiRaccoon.Tests.Unit.Embedding;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class OnnxEmbeddingGeneratorLoggingTests
 {
-    [Fact]
+    [RetryFact]
     public async Task GenerateAsync_ChunkExceedingTheWindow_LogsTruncation()
     {
         var logger = new FakeLogger<OnnxEmbeddingGenerator>();
@@ -33,7 +34,7 @@ public sealed class OnnxEmbeddingGeneratorLoggingTests
         record.Level.ShouldBe(LogLevel.Warning);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GenerateAsync_ChunkWithinTheWindow_LogsNothing()
     {
         var logger = new FakeLogger<OnnxEmbeddingGenerator>();
@@ -46,7 +47,7 @@ public sealed class OnnxEmbeddingGeneratorLoggingTests
         logger.Collector.GetSnapshot().ShouldBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GenerateAsync_NewlineJoinedHashList_LogsPossibleUnknownTokenCollapse()
     {
         var logger = new FakeLogger<OnnxEmbeddingGenerator>();

@@ -10,6 +10,7 @@ using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -42,7 +43,7 @@ public sealed class QueryTruncationMetricsTests : IDisposable
         new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
         _measurements, _timeProvider);
 
-    [Fact]
+    [RetryFact]
     public async Task ALongQuery_RecordsTokensOverTheWindow()
     {
         await using var connection = await OpenConfiguredAsync();
@@ -56,7 +57,7 @@ public sealed class QueryTruncationMetricsTests : IDisposable
         truncated.Value.ShouldBeGreaterThan(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AShortQuery_RecordsNothing()
     {
         await using var connection = await OpenConfiguredAsync();

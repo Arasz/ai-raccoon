@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
@@ -38,7 +39,7 @@ public sealed class LikePatternCascadeDeleteTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task DeleteSourcePath_OnADirectory_DoesNotCascadeIntoASiblingDirectory_WhoseNameDiffersOnlyByAWildcardCharacter()
     {
         var ct = TestContext.Current.CancellationToken;

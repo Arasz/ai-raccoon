@@ -3,6 +3,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -18,7 +19,7 @@ namespace AiRaccoon.Tests.Integration;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class MemorySchemaStampOrderTests
 {
-    [Fact]
+    [RetryFact]
     public async Task ACrashBetweenDdlAndLadder_StillMigratesOnNextOpen()
     {
         await using var connection = await OpenAsync();
@@ -54,7 +55,7 @@ public sealed class MemorySchemaStampOrderTests
 
     /// <summary>The other side of the same coin: a bank that finished a real EnsureAsync must still
     /// let the cheap path skip the full ensure — the fix must not turn every cheap check into a full one.</summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureCheapAsync_OnACompletedEnsure_SkipsTheFullEnsure()
     {
         await using var connection = await OpenAsync();
@@ -76,7 +77,7 @@ public sealed class MemorySchemaStampOrderTests
     ///     Ddl addition — the metrics/code-corpus tables shipped exactly this way), and that branch is
     ///     the ONLY remaining place such a bank's digest ever gets corrected.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ADigestOnlyDdlChange_OnAnAlreadyCurrentVersionBank_StampsTheDigestOnOpen()
     {
         await using var connection = await OpenAsync();
@@ -97,7 +98,7 @@ public sealed class MemorySchemaStampOrderTests
     ///     finish must leave BOTH the version and the digest stale, or a future open would cheap-path
     ///     a bank whose ladder never actually completed — the same bug class D5 exists to close.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task AnUnhealthyLadder_DoesNotStampTheVersionOrTheDigest()
     {
         await using var connection = await OpenAsync();

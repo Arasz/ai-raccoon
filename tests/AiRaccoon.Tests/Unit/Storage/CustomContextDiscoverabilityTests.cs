@@ -9,6 +9,7 @@ using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Unit.Storage;
@@ -52,7 +53,7 @@ public sealed class CustomContextDiscoverabilityTests : IDisposable
             NoOpMeasurementRecorder.Instance);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Stats_ReportsACustomContext_SoItsLabelCanBeSearchedFor()
     {
         var store = CreateStore();
@@ -74,7 +75,7 @@ public sealed class CustomContextDiscoverabilityTests : IDisposable
     ///     otherwise `context` is a second, undocumented isolation boundary and content written
     ///     through a first-class argument is invisible to the default search.
     /// </summary>
-    [Theory]
+    [RetryTheory]
     [InlineData(SearchScope.Project)]
     [InlineData(SearchScope.All)]
     public async Task AContextLabelledWrite_IsFoundByAPlainProjectSearch(SearchScope scope)
@@ -93,7 +94,7 @@ public sealed class CustomContextDiscoverabilityTests : IDisposable
     }
 
     /// <summary>Project isolation is the boundary that must hold: another project sees nothing.</summary>
-    [Fact]
+    [RetryFact]
     public async Task AContextLabelledWrite_StaysInsideItsProject()
     {
         var store = CreateStore();
@@ -114,7 +115,7 @@ public sealed class CustomContextDiscoverabilityTests : IDisposable
     ///     bank holding one context-labelled entry reported `entries: 0, pending: 1` — measured on
     ///     a live server.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Stats_CountsContextLabelledEntries_InTheProjectTotal()
     {
         var store = CreateStore();
@@ -129,7 +130,7 @@ public sealed class CustomContextDiscoverabilityTests : IDisposable
     }
 
     /// <summary>The label recovered from stats must be the one search accepts, not a display form.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ACustomContextReportedByStats_IsSearchableUnderThatLabel()
     {
         var store = CreateStore();

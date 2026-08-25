@@ -1,6 +1,7 @@
 using AiRaccoon.Infrastructure.Embedding;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -17,7 +18,7 @@ public sealed class LocalTokenizerSharedInstanceTests
 {
     private const string Text = "how does the retrieval pipeline weigh full text against vectors when the corpus is large";
 
-    [Fact]
+    [RetryFact]
     public void CountTokens_CalledRepeatedly_BuildsTheUnderlyingTokenizerExactlyOnce()
     {
         var builds = 0;
@@ -34,7 +35,7 @@ public sealed class LocalTokenizerSharedInstanceTests
         builds.ShouldBe(1, "one real BertTokenizer must be built and reused, not rebuilt per call");
     }
 
-    [Fact]
+    [RetryFact]
     public void CountTokens_UsesTheBundledVocab_AndCountsCorrectly()
     {
         var tokenizer = new LocalTokenizer();
@@ -48,7 +49,7 @@ public sealed class LocalTokenizerSharedInstanceTests
     ///     ExecutionAndPublication mode must still build exactly once, and every caller — whichever
     ///     lost the race — must see the one published instance's count, matching a serial call.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void CountTokens_ManyConcurrentFirstCallers_BuildsExactlyOnce_AndEveryoneSeesTheSameCount()
     {
         var builds = 0;

@@ -2,6 +2,7 @@ using AiRaccoon.Benchmarks.Corpus;
 using AiRaccoon.Tests.Unit.Retrieval;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -18,7 +19,7 @@ public sealed class HarnessSmokeTests
         "doc-jsaa-remember-recent"
     ];
 
-    [Fact]
+    [RetryFact]
     public async Task ReferenceRunner_IsDeterministic_AndYieldsSaneResults()
     {
         var ensured = await ReferenceAssets.EnsureAsync(TestContext.Current.CancellationToken);

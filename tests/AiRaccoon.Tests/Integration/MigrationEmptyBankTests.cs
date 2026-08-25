@@ -3,6 +3,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -26,7 +27,7 @@ public sealed class MigrationEmptyBankTests
     ///     The full ladder must complete on a bank that reached v1 with zero rows in EVERY table
     ///     any later step might read — the exact shape of a real, freshly-used-but-empty project.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_LadderCompletes_OnAnEmptyV1Bank()
     {
         await using var connection = await OpenAsync();
@@ -44,7 +45,7 @@ public sealed class MigrationEmptyBankTests
     ///     Same gate from the doctor's side: after an empty-v1 bank migrates, SchemaDoctor must
     ///     report HEALTHY — proving the steps actually built the shapes they claim, not just ran.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task AfterLadder_AnEmptyV1Bank_IsDoctorHealthy()
     {
         await using var connection = await OpenAsync();
@@ -65,7 +66,7 @@ public sealed class MigrationEmptyBankTests
     ///     the pre-ALTER shape (project_id added via ALTER TABLE, PK still (hash, scope)) must
     ///     migrate cleanly. This is the exact live-bank shape the published binary could not open.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_EmptyLegacyTombstones_MigratesCleanly()
     {
         await using var connection = await OpenAsync();

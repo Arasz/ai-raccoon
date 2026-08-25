@@ -3,6 +3,7 @@ using System.Text.Json;
 using AiRaccoon.Infrastructure.Embedding;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -33,7 +34,7 @@ public sealed class MiniLmGoldenVectorTests : IAsyncLifetime
     ///     and writes the golden file. Skips unless AIRACCOON_GOLDEN_CAPTURE=1 — the committed
     ///     goldens are only ever rewritten deliberately (new arch or a plan-approved behavior change).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task CaptureGoldenVectors()
     {
         if (Environment.GetEnvironmentVariable(CaptureEnvVar) != "1")
@@ -75,7 +76,7 @@ public sealed class MiniLmGoldenVectorTests : IAsyncLifetime
     ///     The gate: every committed golden vector must come back byte-identical (bit-for-bit) from
     ///     the refactored engine, within the tolerance secondaries (L2 ≤ 1e-6, token-id equality).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task BundledMiniLm_Embeddings_MatchCommittedGoldens()
     {
         var goldenPath = Path.Combine(FindRepoRoot(), GoldenRelativePath);

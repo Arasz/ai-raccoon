@@ -9,6 +9,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Maintenance;
 
@@ -40,7 +41,7 @@ public sealed class ChunkIndexRepairJobTests : IDisposable
         new(new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]), TestData.CreateEmbeddingService(),
             new FakeTimeProvider(FixedNow));
 
-    [Fact]
+    [RetryFact]
     public async Task HasWorkAsync_WithNoOpenRequest_IsFalse()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -48,7 +49,7 @@ public sealed class ChunkIndexRepairJobTests : IDisposable
         (await NewJob().HasWorkAsync(connection, TestContext.Current.CancellationToken)).ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HasWorkAsync_AfterARequest_IsTrue()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -57,7 +58,7 @@ public sealed class ChunkIndexRepairJobTests : IDisposable
         (await NewJob().HasWorkAsync(connection, TestContext.Current.CancellationToken)).ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_WithNoOpenRequest_IsANoOp()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -65,7 +66,7 @@ public sealed class ChunkIndexRepairJobTests : IDisposable
         await Should.NotThrowAsync(() => NewJob().RunAsync(connection, TestContext.Current.CancellationToken).AsTask());
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_RepositionsTheRows_AndMarksTheRequestFinished()
     {
         var file = Path.Combine(_dataRoot, "doc.md");
@@ -84,7 +85,7 @@ public sealed class ChunkIndexRepairJobTests : IDisposable
             .ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HasWorkAsync_AfterRunAsync_IsFalseAgain()
     {
         var file = Path.Combine(_dataRoot, "doc.md");

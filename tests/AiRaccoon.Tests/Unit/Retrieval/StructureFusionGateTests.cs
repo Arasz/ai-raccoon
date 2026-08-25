@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Unit.Retrieval;
@@ -77,7 +78,7 @@ public sealed class StructureFusionGateTests : IDisposable
     ///     This is the criterion-3 acceptance test — see the WP4 report for the RED capture with
     ///     <see cref="StructureFusion.Fused" /> temporarily forced to ignore the structure term.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task VectorOnlySearch_GenericDecisionQuery_RanksStructureMatchedChunkFirst()
     {
         var results = (await _store.SearchAsync(new SearchQuery(

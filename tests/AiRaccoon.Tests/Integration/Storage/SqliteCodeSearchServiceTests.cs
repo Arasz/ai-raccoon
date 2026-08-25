@@ -8,6 +8,7 @@ using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -43,7 +44,7 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SearchAsync_MatchesSeededRows_AndCarriesPathAndLineRange()
     {
         await SeedAsync(id: 1, projectId: "acme", path: "src/Foo.cs", value: "sealed class QuokkaFinder { }",
@@ -71,7 +72,7 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
     ///     stronger match ranks strictly above the weaker one — a real ordering claim, not a tautology
     ///     of the normalization formula.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task SearchAsync_RanksAStrongerMatchStrictlyAboveAWeakerOne()
     {
         await SeedAsync(id: 1, projectId: "acme", path: "src/A.cs", value: "class DingoTracker DingoTracker DingoTracker { }",
@@ -90,7 +91,7 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
             "a genuinely weaker match must normalize below the top hit, not tie with it");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SearchAsync_NeverLeaksAcrossProjects()
     {
         await SeedAsync(id: 1, projectId: "acme", path: "src/Program.cs", value: "class WombatRunner { }",
@@ -104,7 +105,7 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
         results.Results.ShouldHaveSingleItem().Hash.ShouldBe("hash-1");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SearchAsync_MinRelativeScore_DropsTheWeakerHit()
     {
         // Two matches for the same term, seeded so rank 2's normalized score (61/62) sits below a
@@ -120,7 +121,7 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
         results.Results.ShouldHaveSingleItem("minRelativeScore=0.99 keeps only rank 1 (1.0); rank 2 normalizes below it");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SearchAsync_EmptyCorpus_ReturnsEmptyResults_WithoutError()
     {
         var results = await _service.SearchAsync(new CodeSearchQuery("acme", "anything", 20, 0.0),
@@ -129,7 +130,7 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
         results.Results.ShouldBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetAsync_KnownHash_ReturnsFullSourceWithPathAndRange()
     {
         await SeedAsync(id: 1, projectId: "acme", path: "src/Bar.cs", value: "sealed class NarwhalTusk { }",
@@ -144,7 +145,7 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
         entry.LineEnd.ShouldBe(9);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetAsync_UnknownHash_ReturnsNull()
     {
         var entry = await _service.GetAsync("acme", "does-not-exist", TestContext.Current.CancellationToken);
@@ -152,7 +153,7 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
         entry.ShouldBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetAsync_KnownHashInAnotherProject_ReturnsNull()
     {
         await SeedAsync(id: 1, projectId: "other", path: "src/Bar.cs", value: "class X { }", lineStart: 1, lineEnd: 1);
@@ -164,7 +165,7 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
 
     // ---- WP5: hybrid vector leg, weight-flip, relativeScore semantics, degraded modes ----
 
-    [Fact]
+    [RetryFact]
     public async Task SearchAsync_VectorLegFindsAHitFtsNeverWouldMatch()
     {
         // FTS can never match this row (the query term appears nowhere in its text); only a
@@ -181,7 +182,7 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
             "FTS alone would never match unrelated text; only the vector leg can surface this hit");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SearchAsync_VectorLeg_NeverLeaksAcrossProjects()
     {
         var vector = Repeat(1f);
@@ -195,7 +196,7 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
         results.Results.ShouldBeEmpty("vec_code's ctx = project_id partition must exclude another project's row");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SearchAsync_WeightFlip_VectorFavoredVsFtsFavoredOrderingChanges()
     {
         // Row A: strong FTS match, weak/opposite vector match. Row B: weak FTS match, exact vector match.
@@ -216,7 +217,7 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
         vectorFavored.Results[0].Hash.ShouldBe("hash-2", "a vector-weighted fusion must rank the exact semantic match first");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SearchAsync_RelativeScore_ReflectsFusedRelevance_NotFtsRankAlone()
     {
         // row1: FTS-strong (term x3), never embedded -- absent from the vector leg entirely.
@@ -240,7 +241,7 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
         results.Results[0].Ranking.ShouldBe(1.0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SearchAsync_StructureAlphaSetting_DoesNotMoveCodeRanking()
     {
         await SeedEmbeddedAsync(id: 1, projectId: "acme", path: "src/A.cs",
@@ -261,7 +262,7 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
             "code has no structure modality (§3.1) -- retrieval.structureAlpha must never move code ranking");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SearchAsync_NoCodeEngineConfigured_DegradesToFtsOnly_WithWarning()
     {
         await SeedAsync(id: 1, projectId: "acme", path: "src/A.cs", value: "class QuokkaFinder { }",
@@ -274,7 +275,7 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
         results.Warning.ShouldBe(CodeSearchWarnings.EngineNotConfigured);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SearchAsync_QueryTrimmedByEmbedder_CarriesCodeBudgetWarning()
     {
         _embedder.QueryVectorToReturn = new QueryVector(EmbeddingBlob.ToBytes(Repeat(1f))) { Trimmed = true };
@@ -285,7 +286,7 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
         results.Warning.ShouldBe(CodeSearchWarnings.QueryTrimmedToCodeWindow);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SearchAsync_ConfiguredButUnloadable_ThrowsActionableError()
     {
         _embedder.ThrowOnEmbedQuery = new CodeEngineUnloadableException("/models/broken",

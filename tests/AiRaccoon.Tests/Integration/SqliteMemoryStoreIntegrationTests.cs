@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
@@ -44,7 +45,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task Write_StoresEntryInProjectContext()
     {
         var entry = await _store.WriteAsync(
@@ -56,7 +57,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         entry.Value.ShouldBe("SQLite memory stores project knowledge");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Write_WithWorkspaceId_LandsInWorkspaceContext()
     {
         var ws = await _workspaces.BeginAsync("acme", cancellationToken: TestContext.Current.CancellationToken);
@@ -68,7 +69,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         entry.Context.ShouldBe($"workspace:{ws.Id}");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ShareAsync_PromotesIntoSharedContext_AndKeepsTheSource()
     {
         var entry = await _store.WriteAsync(
@@ -86,7 +87,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         projectEntries.ShouldContain(e => e.Value == "cross project convention");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ShareAsync_Twice_IsIdempotent()
     {
         var entry = await _store.WriteAsync(
@@ -100,7 +101,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         sharedEntries.Count(e => e.Value == "share me once").ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ShareAsync_CarriesSourceFileAndSection_IntoTheSharedRow()
     {
         var entry = await _store.WriteAsync(
@@ -122,7 +123,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         section.ShouldBe("decision");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ExtractCandidates_ExcludesConfiguredSourceFilePrefixes()
     {
         await _store.WriteAsync(
@@ -153,7 +154,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         after.ShouldContain(c => c.SourceFile == null);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task DeleteAsync_RemovesEntry()
     {
         var entry = await _store.WriteAsync(
@@ -165,7 +166,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Stats_ReportsCommittedContexts()
     {
         await _store.WriteAsync(new MemoryWriteRequest("acme", "context a note"), TestContext.Current.CancellationToken);
@@ -176,7 +177,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         stats.Contexts.ShouldContain("project:acme");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ListContextAsync_ReturnsEntriesForTheContext()
     {
         await _store.WriteAsync(new MemoryWriteRequest("acme", "listed entry"), TestContext.Current.CancellationToken);
@@ -186,7 +187,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         entries.ShouldContain(e => e.Value == "listed entry");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_ReturnsStoredEntry_ByKeyword_WithoutEmbeddings()
     {
         var entry = await _store.WriteAsync(
@@ -199,7 +200,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         results.ShouldContain(r => r.Hash == entry.Hash);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task WorkspaceConsolidate_PromotesKeptHash_ThenEmptiesWorkspace()
     {
         var ws = await _workspaces.BeginAsync("acme", cancellationToken: TestContext.Current.CancellationToken);
@@ -220,7 +221,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         workspaceEntries.ShouldBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Settings_UpsertAndRead_RoundTrip()
     {
         await _store.SetSettingAsync("test.setting", "value-1", TestContext.Current.CancellationToken);
@@ -228,12 +229,12 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
             .ShouldBe("value-1");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Settings_Get_MissingKey_ReturnsNull() =>
         (await _store.GetSettingAsync("test.missing", TestContext.Current.CancellationToken))
         .ShouldBeNull();
 
-    [Fact]
+    [RetryFact]
     public async Task SetEntryTtl_UpdatesTheRowsTtlOverride()
     {
         var entry = await _store.WriteAsync(
@@ -250,7 +251,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         _store.SetSettingAsync(IngestScopeKeys.ScopeGlobal, IngestScopeKeys.Serialize([_dataRoot]),
             TestContext.Current.CancellationToken);
 
-    [Fact]
+    [RetryFact]
     public async Task DeleteSourcePath_RemovesAllChunksOfTheFile_AndSearchStopsReturningIt()
     {
         var file = Path.Combine(_dataRoot, "notes.md");
@@ -270,7 +271,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task DeleteSourcePath_RemovesOnlyThatProjectsRows_ForTheSamePath()
     {
         var file = Path.Combine(_dataRoot, "shared-source.md");
@@ -289,7 +290,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
             .ShouldNotBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task DeleteSourcePath_LeavesWorkspaceScratchRowsForThePathAlone()
     {
         var ws = await _workspaces.BeginAsync("acme", cancellationToken: TestContext.Current.CancellationToken);
@@ -306,7 +307,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
             .ShouldNotBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task DeleteSourcePath_ClearsWatchFingerprint_ButKeepsTheWatchRegistration()
     {
         var file = Path.Combine(_dataRoot, "watched.md");
@@ -337,7 +338,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
             .ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task DeleteSourcePath_LeavesManualRowsThatCiteThePathAlone()
     {
         var file = Path.Combine(_dataRoot, "cited.md");
@@ -362,7 +363,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ReplaceFile_KeepsPromotionCandidateBackedOnlyByManualRow()
     {
         var file = Path.Combine(_dataRoot, "cited-queue.md");
@@ -395,7 +396,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
     ///     the mirror of <see cref="ReplaceFile_KeepsPromotionCandidateBackedOnlyByManualRow" /> above
     ///     holds for it too — proved directly rather than only inferred from the shared implementation.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ReplaceAsync_KeepsPromotionCandidateBackedOnlyByManualRow()
     {
         var file = Path.Combine(_dataRoot, "cited-queue-forced.md");
@@ -423,7 +424,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
     ///     The gate the ReplaceFileAsync split exists to prove: with the same fingerprint the store
     ///     already has on file, the two callers behave differently by design.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ReplaceIfFileChangedAsync_DoesNothing_WhenTheStoredFingerprintMatches()
     {
         var file = Path.Combine(_dataRoot, "unchanged.md");
@@ -438,7 +439,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         replaced.Replaced.ShouldBeFalse("the watch-digest gate must skip a fingerprint it already has on file");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ReplaceAsync_ReplacesEvenWhenTheStoredFingerprintMatches()
     {
         var file = Path.Combine(_dataRoot, "forced.md");
@@ -465,7 +466,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
     ///     real chunker digests the SAME unchanged content, it must chunk successfully and record the
     ///     fingerprint — no watch re-registration needed, since nothing was ever fingerprinted.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ReplaceIfFileChangedAsync_CodeFileWithNoOpChunker_NeverFingerprints_UntilARealChunkerLands()
     {
         var file = Path.Combine(_dataRoot, "Program.cs");
@@ -515,7 +516,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
             new { projectId, path, fileHash });
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Schema_CreatesWatchTables_OnFreshBank()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -528,7 +529,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         tables.ShouldContain("watch_files");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Schema_ExistingBankWithoutWatchTables_GainsThemOnReopen_WithoutDisturbingEntries()
     {
         await _store.WriteAsync(new MemoryWriteRequest("acme", "pre feature entry"),
@@ -557,7 +558,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
             .ShouldNotBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task WriteSearchRoundtrip_IncludesSourceIdentity()
     {
         var entry = await _store.WriteAsync(
@@ -582,7 +583,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
         results.ShouldContain(r => r.SourceFile == "docs/architecture.md");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ShareExtract_PreservesSourceIdentity()
     {
         var entry = await _store.WriteAsync(

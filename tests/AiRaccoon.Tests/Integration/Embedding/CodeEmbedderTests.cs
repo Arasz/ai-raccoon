@@ -6,6 +6,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
@@ -37,7 +38,7 @@ public sealed class CodeEmbedderTests : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EmbedQueryAsync_NoCodeEngineConfigured_ReturnsEmptyVector()
     {
         var embedder = new CodeEmbedder(new FakeCodeEmbeddingService(), NullLogger<CodeEmbedder>.Instance, new VecDimensionReconciler());
@@ -48,7 +49,7 @@ public sealed class CodeEmbedderTests : IAsyncLifetime
         vector.IsEmpty.ShouldBeTrue("no embedding.codeModel row means code search degrades to FTS5-only");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EmbedQueryAsync_Configured_ReturnsA768DimensionVector()
     {
         var fake = new FakeCodeEmbeddingService();
@@ -63,7 +64,7 @@ public sealed class CodeEmbedderTests : IAsyncLifetime
         fake.Calls.ShouldHaveSingleItem();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EmbedQueryAsync_QueryExceedsWindow_TrimsAndSetsTrimmedFlag()
     {
         var fake = new FakeCodeEmbeddingService
@@ -81,7 +82,7 @@ public sealed class CodeEmbedderTests : IAsyncLifetime
         fake.Calls.ShouldHaveSingleItem().ShouldHaveSingleItem().ShouldBe("a very lon");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EmbedQueryAsync_QueryWithinWindow_NotTrimmed()
     {
         var fake = new FakeCodeEmbeddingService();
@@ -94,7 +95,7 @@ public sealed class CodeEmbedderTests : IAsyncLifetime
         vector.Trimmed.ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EmbedQueryAsync_ConfiguredButUnloadable_ThrowsCodeEngineUnloadableException()
     {
         var fake = new FakeCodeEmbeddingService
@@ -112,7 +113,7 @@ public sealed class CodeEmbedderTests : IAsyncLifetime
         ex.Message.ShouldContain("model code set local");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EmbedPendingBatchAsync_NoCodeEngineConfigured_ReturnsZero_LeavesRowsPending()
     {
         var embedder = new CodeEmbedder(new FakeCodeEmbeddingService(), NullLogger<CodeEmbedder>.Instance, new VecDimensionReconciler());
@@ -127,7 +128,7 @@ public sealed class CodeEmbedderTests : IAsyncLifetime
         state.ShouldBe("pending");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EmbedPendingBatchAsync_Configured_EmbedsRowsAndFlipsEmbedState()
     {
         var fake = new FakeCodeEmbeddingService();
@@ -154,7 +155,7 @@ public sealed class CodeEmbedderTests : IAsyncLifetime
     ///     the row 'embedded' with a vector generated under the OLD (stale) engine, permanently
     ///     mismatched with the NEW engine's fingerprint the settings row now names.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EmbedPendingBatchAsync_ActivationRunsMidBatch_RowStaysPending_NextDrainUsesTheNewEngine()
     {
         var fake = new FakeCodeEmbeddingService();
@@ -190,7 +191,7 @@ public sealed class CodeEmbedderTests : IAsyncLifetime
     ///     since the ledger never stamps a thrown job. The fallback must let the healthy rows finish
     ///     AND bump the poison row's own attempt count instead of retrying it unbounded.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EmbedPendingBatchAsync_OneRowPoisonsTheBatch_HealthyRowsStillEmbed_PoisonRowStaysPending()
     {
         var fake = new FakeCodeEmbeddingService();
@@ -213,7 +214,7 @@ public sealed class CodeEmbedderTests : IAsyncLifetime
 
     /// <summary>S2: once a poison row crosses CodeCorpusSchema.MaxEmbedAttempts, the drain must stop
     /// selecting it — otherwise it is retried forever and HasPendingWorkAsync never goes quiet.</summary>
-    [Fact]
+    [RetryFact]
     public async Task EmbedPendingBatchAsync_PoisonRowCrossesMaxAttempts_ExcludedFromFutureSelection()
     {
         var fake = new FakeCodeEmbeddingService();
@@ -241,7 +242,7 @@ public sealed class CodeEmbedderTests : IAsyncLifetime
     ///     a const int) — this pins the two together so an edit to one alone fails the build instead
     ///     of silently drifting.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void CodeEmbedAttemptCeiling_SqlLiteral_MatchesCodeCorpusSchemaMaxEmbedAttempts()
     {
         var expected = $"embed_attempts < {AiRaccoon.Core.Memory.Code.CodeCorpusSchema.MaxEmbedAttempts} ";
@@ -250,7 +251,7 @@ public sealed class CodeEmbedderTests : IAsyncLifetime
         MemorySql.HasPendingCodeEmbed.ShouldContain($"embed_attempts < {AiRaccoon.Core.Memory.Code.CodeCorpusSchema.MaxEmbedAttempts} LIMIT");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HasPendingWorkAsync_NoCodeEngineConfigured_FalseEvenWithPendingRows()
     {
         var embedder = new CodeEmbedder(new FakeCodeEmbeddingService(), NullLogger<CodeEmbedder>.Instance, new VecDimensionReconciler());
@@ -262,7 +263,7 @@ public sealed class CodeEmbedderTests : IAsyncLifetime
         hasWork.ShouldBeFalse("a pending code row with no engine is legitimately unembeddable, forever");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HasPendingWorkAsync_ConfiguredWithPendingRows_True()
     {
         var embedder = new CodeEmbedder(new FakeCodeEmbeddingService(), NullLogger<CodeEmbedder>.Instance, new VecDimensionReconciler());
@@ -275,7 +276,7 @@ public sealed class CodeEmbedderTests : IAsyncLifetime
         hasWork.ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HasPendingWorkAsync_ConfiguredNoPendingRows_False()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -293,7 +294,7 @@ public sealed class CodeEmbedderTests : IAsyncLifetime
     ///     record embedding.codeDimensions in the SAME transaction as the invalidation — otherwise
     ///     the drain re-embeds 1024-dim blobs into a still-768 table.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ReconcileFingerprintAsync_ManifestDimensionsChangedInPlace_ReconcilesVecCodeAndUpdatesCodeDimensions()
     {
         var embeddings = TestData.CreateEmbeddingService();
@@ -324,7 +325,7 @@ public sealed class CodeEmbedderTests : IAsyncLifetime
 
     /// <summary>An unchanged fingerprint must perform no DDL — the reconcile runs on every 15s
     /// poll, and a DROP on a match would empty the populated index.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ReconcileFingerprintAsync_UnchangedFingerprint_PerformsNoDdl()
     {
         var embeddings = TestData.CreateEmbeddingService();

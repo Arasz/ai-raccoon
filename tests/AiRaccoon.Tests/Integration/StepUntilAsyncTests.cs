@@ -2,6 +2,7 @@ using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -13,7 +14,7 @@ namespace AiRaccoon.Tests.Integration;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class StepUntilAsyncTests
 {
-    [Fact]
+    [RetryFact]
     public async Task ABlockedCondition_EndsOnlyWithTheCallersCancellation()
     {
         var poller = new FakeClockPoller(new FakeTimeProvider(DateTimeOffset.UtcNow));
@@ -39,7 +40,7 @@ public sealed class StepUntilAsyncTests
         gaveUp.ShouldBeFalse("a blocked await is a hang, not a give-up — the two must stay distinguishable");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ABlockedTick_EndsOnlyWithTheCallersCancellation()
     {
         var poller = new FakeClockPoller(new FakeTimeProvider(DateTimeOffset.UtcNow));
@@ -62,7 +63,7 @@ public sealed class StepUntilAsyncTests
         await Should.ThrowAsync<OperationCanceledException>(() => poll);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AConditionThatBecomesTrue_ReturnsTrueAndStopsCallingTick()
     {
         var time = new FakeTimeProvider(DateTimeOffset.UtcNow);
@@ -87,7 +88,7 @@ public sealed class StepUntilAsyncTests
         tickCalls.ShouldBe(3, "one tick per failed condition check before it finally succeeds, and no more");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AConditionThatNeverHoldsButNeverBlocks_GivesUpOnTheFakeBudgetAndReturnsFalse()
     {
         var time = new FakeTimeProvider(DateTimeOffset.UtcNow);

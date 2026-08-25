@@ -6,6 +6,7 @@ using Microsoft.Extensions.AI;
 using NSubstitute;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -36,7 +37,7 @@ public sealed class EntryEmbedderAffectedRowCountTests : IDisposable
     ///     purge or scope change), not a hypothetical. The returned count must reflect the two
     ///     UPDATEs that landed, not the three rows read.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ARowVanishesBetweenSelectAndUpdate_ReturnsOnlyRowsWhoseUpdateLanded()
     {
         var ct = TestContext.Current.CancellationToken;

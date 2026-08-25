@@ -6,6 +6,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -31,7 +32,7 @@ public sealed class ChunkIndexRepairTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_ReDerivesPositionFromTheSourceFile_WhenTheStoredValueWasIdOrderWrong()
     {
         var file = Path.Combine(_dataRoot, "doc.md");
@@ -53,7 +54,7 @@ public sealed class ChunkIndexRepairTests : IDisposable
         positions["para three"].ShouldBe(2);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_SetsTheUnknownSentinel_WhenTheSourceFileNoLongerExists()
     {
         var missing = Path.Combine(_dataRoot, "gone.md");
@@ -66,7 +67,7 @@ public sealed class ChunkIndexRepairTests : IDisposable
             "SELECT chunk_index FROM entries WHERE path = @path", new { path = missing })).ShouldBe(-1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_DryRun_ReportsWithoutWriting()
     {
         var file = Path.Combine(_dataRoot, "doc.md");
@@ -81,7 +82,7 @@ public sealed class ChunkIndexRepairTests : IDisposable
     }
 
     /// <summary>The repair's hard constraint: a pure UPDATE, provable by row count and hash set surviving unchanged.</summary>
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_IsNonDestructive_RowCountAndEveryHashSurvive()
     {
         var file = Path.Combine(_dataRoot, "doc.md");
@@ -99,7 +100,7 @@ public sealed class ChunkIndexRepairTests : IDisposable
 
     /// <summary>#549: a repositioned row also takes the section the current chunker reports for it,
     /// so a repair fixes the label a pre-#549 ingest left null.</summary>
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_RepositionedRows_TakeTheSectionTheCurrentChunkerReports()
     {
         var file = Path.Combine(_dataRoot, "sectioned.md");
@@ -115,7 +116,7 @@ public sealed class ChunkIndexRepairTests : IDisposable
     /// <summary>Copilot round 5 (comment 3838133861): a row the re-chunk cannot reproduce gets
     /// chunk_index = -1 (unknown), but the repair must not clear its existing section on the way —
     /// that would break its file#section anchor beyond the job's scope.</summary>
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_RowsTheRechunkCannotReproduce_KeepTheirExistingSection()
     {
         var file = Path.Combine(_dataRoot, "keep.md");

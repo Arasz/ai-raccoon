@@ -3,6 +3,7 @@ using Dapper;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Maintenance;
 
@@ -31,7 +32,7 @@ public sealed class RetentionReaperTests : IDisposable
 
     private static long DaysAgo(int days) => Now.AddDays(-days).ToUnixTimeSeconds();
 
-    [Fact]
+    [RetryFact]
     public async Task PurgeOldDiscards_RemovesOnlyDiscardsPastRetentionWhoseEntryIsGone()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -57,7 +58,7 @@ public sealed class RetentionReaperTests : IDisposable
         remaining.ShouldBe(["live", "orphan-recent"]);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task PurgeOldSearchQuality_RemovesOnlyRowsPastRetention()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);

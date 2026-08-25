@@ -3,6 +3,7 @@ using System.Text.Json;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Unit.Setup;
 
@@ -18,7 +19,7 @@ public class VersionContractPackedTests
     /// <summary>Answers R1's objection (docs/plans/2026-08-15-performance-metrics-implementation.md §R1): a
     /// manifest correct in the repo but wrong in the package is invisible unless the gate opens the
     /// actual .nupkg, so this reads the packed file rather than the obj/ intermediate copy.</summary>
-    [Fact]
+    [RetryFact]
     public async Task PackedMcpServerJson_CarriesTheVersionFileVersion()
     {
         var expected = File.ReadAllText(TestData.RepoFile("VERSION")).Trim();

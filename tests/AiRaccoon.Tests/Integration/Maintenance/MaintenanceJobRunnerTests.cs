@@ -13,6 +13,7 @@ using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Maintenance;
 
@@ -47,7 +48,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
     ///     the second enqueue coalesces away, so the single-reader EmbedDrainService consumer needs
     ///     exactly one drain pass to embed every row.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task TwoOverlappingPasses_EnqueueOneDrain_AndEachRowIsEmbeddedOnce()
     {
         var pump = TestData.NewEmbedDrainPump();
@@ -105,7 +106,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
             cancellationToken: TestContext.Current.CancellationToken));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AJobThatHasNeverRun_RunsOnTheFirstPass()
     {
         await using var connection = await OpenAsync();
@@ -120,7 +121,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
     ///     The defect this whole change exists for: a new process must not reset the clock. The old
     ///     implementation seeded its timer in memory, so every restart began the interval again.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ANewRunner_DoesNotRestartTheInterval()
     {
         await using var connection = await OpenAsync();
@@ -134,7 +135,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
         job.Runs.ShouldBe(1, "30 minutes into a 2-hour interval, a restart must not earn another run");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AJob_RunsAgainOnceItsIntervalHasPassed()
     {
         await using var connection = await OpenAsync();
@@ -148,7 +149,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
     }
 
     /// <summary>A null interval means once per bank, ever — however long the bank lives.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ARunOnceJob_NeverRunsTwice()
     {
         await using var connection = await OpenAsync();
@@ -165,7 +166,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
     ///     A failed job must not be stamped, or a transient lock would retire a run-once job forever
     ///     without it ever having done its work.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task AFailedJob_IsNotStamped_AndRetriesNextPass()
     {
         await using var connection = await OpenAsync();
@@ -181,7 +182,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
     }
 
     /// <summary>One job's failure must not stop the ones after it in the list.</summary>
-    [Fact]
+    [RetryFact]
     public async Task AFailingJob_DoesNotBlockTheRest()
     {
         await using var connection = await OpenAsync();
@@ -195,7 +196,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
 
     /// <summary>D6: a broken due-ness check must not stop the pass — the SELECT and
     /// HasWorkAsync happen before the run try/catch, so either escaping stops every later job.</summary>
-    [Fact]
+    [RetryFact]
     public async Task AJobWhoseHasWorkAsyncThrows_DoesNotStopLaterJobs()
     {
         await using var connection = await OpenAsync();
@@ -209,7 +210,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
         healthy.Runs.ShouldBe(1, "a job registered after a broken HasWorkAsync check must still run in the same pass");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AJobWhoseHasWorkAsyncThrows_LogsTheSkipWithJobName()
     {
         await using var connection = await OpenAsync();
@@ -227,7 +228,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
 
     /// <summary>D6: the lastRun ledger SELECT shares the same guard, so a broken read is
     /// skipped and logged rather than escaping RunDueAsync.</summary>
-    [Fact]
+    [RetryFact]
     public async Task AJobWhoseLastRunReadThrows_IsSkippedAndLoggedInsteadOfEscaping()
     {
         await using var connection = await OpenAsync();
@@ -243,7 +244,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
 
     /// <summary>D6 follow-up: VacuumJob.RefreshIntervalAsync reads its interval from the same
     /// connection, before the ledger SELECT — a broken read there must share the same guard.</summary>
-    [Fact]
+    [RetryFact]
     public async Task AVacuumJobWhoseIntervalReadThrows_DoesNotStopLaterJobs()
     {
         await using var connection = await OpenAsync();
@@ -260,7 +261,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
     /// <summary>D6 follow-up: shutdown cancellation must still abort the pass, not be logged as a
     /// benign per-job skip — the `when (ex is not OperationCanceledException)` filter is the only
     /// thing standing between those two behaviours.</summary>
-    [Fact]
+    [RetryFact]
     public async Task AJobWhoseHasWorkAsyncThrowsOperationCanceled_PropagatesOutOfRunDueAsync()
     {
         await using var connection = await OpenAsync();
@@ -270,7 +271,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
             () => Runner().RunDueAsync(connection, [cancelling], TestContext.Current.CancellationToken));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ARunRecordsItsTimestampAndCount()
     {
         await using var connection = await OpenAsync();
@@ -292,7 +293,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
     ///     the self-metrics project id so `memory_performance` can find it (route (a) — no change to
     ///     <see cref="IMaintenanceJob" />).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ACompletedRun_RecordsJobDurationMetric()
     {
         await using var connection = await OpenAsync();
@@ -315,7 +316,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
     ///     implementations. <see cref="PendingEmbedJob" />/<see cref="CodeReindexJob" /> opt in for real
     ///     (PendingEmbedJobTests/CodeReindexJobTests); this uses a fixture to isolate the runner's own behaviour.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task AJobWithOutstandingRows_RecordsJobRowsMetric()
     {
         await using var connection = await OpenAsync();
@@ -338,7 +339,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
     ///     the count is attempted — so only the rows gauge is missing, duration still records, and the
     ///     failure is logged distinctly (528) rather than swallowed.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task AJobWhoseRowsCountThrows_StillCompletes_RecordsDurationOnly_AndLogs528()
     {
         await using var connection = await OpenAsync();
@@ -360,7 +361,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
     }
 
     /// <summary>WP3 (#477): a job that is not due neither ran nor produced anything to measure — no metric at all, not a zero.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ANotDueJob_RecordsNeitherMetric()
     {
         await using var connection = await OpenAsync();

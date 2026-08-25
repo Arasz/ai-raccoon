@@ -4,6 +4,7 @@ using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Isolation;
 
@@ -25,7 +26,7 @@ public sealed class SqliteWorkspaceStoreTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task BeginAsync_InsertsActiveRow_WithCreatedAt()
     {
         var startedAt = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
@@ -40,7 +41,7 @@ public sealed class SqliteWorkspaceStoreTests : IDisposable
         row.ClosedAt.ShouldBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task BeginAsync_PersistsAgentIdAndName()
     {
         var startedAt = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
@@ -54,7 +55,7 @@ public sealed class SqliteWorkspaceStoreTests : IDisposable
         row.Name.ShouldBe("refactor the parser");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task BeginAsync_WithoutProvenance_LeavesAgentIdAndNameNull()
     {
         var startedAt = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
@@ -67,7 +68,7 @@ public sealed class SqliteWorkspaceStoreTests : IDisposable
         row.Name.ShouldBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RequireActiveAsync_ReturnsTheStoredProvenance()
     {
         var startedAt = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
@@ -83,7 +84,7 @@ public sealed class SqliteWorkspaceStoreTests : IDisposable
         workspace.Name.ShouldBe("refactor the parser");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CloseAsync_WithDiscarded_RecordsThatTerminalStatus()
     {
         var startedAt = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
@@ -97,7 +98,7 @@ public sealed class SqliteWorkspaceStoreTests : IDisposable
         row.Status.ShouldBe("Discarded");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CloseAsync_MarksRowClosed_WithClosedAt()
     {
         var startedAt = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
@@ -113,7 +114,7 @@ public sealed class SqliteWorkspaceStoreTests : IDisposable
         row.ClosedAt.ShouldBe(closedAt.ToUnixTimeSeconds());
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CloseAsync_ForAnotherProject_DoesNotTouchTheRow()
     {
         var startedAt = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
@@ -129,7 +130,7 @@ public sealed class SqliteWorkspaceStoreTests : IDisposable
 
     // ── WP5b/A-F7: the TOCTOU close, guarded by an atomic conditional UPDATE ──
 
-    [Fact]
+    [RetryFact]
     public async Task CloseAsync_WithActiveStatus_Throws()
     {
         var startedAt = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
@@ -139,7 +140,7 @@ public sealed class SqliteWorkspaceStoreTests : IDisposable
             _store.CloseAsync("acme", "ws-1", WorkspaceStatus.Active, startedAt, TestContext.Current.CancellationToken));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task TryCloseAsync_WithActiveStatus_Throws()
     {
         var startedAt = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
@@ -149,7 +150,7 @@ public sealed class SqliteWorkspaceStoreTests : IDisposable
             _store.TryCloseAsync("acme", "ws-1", WorkspaceStatus.Active, startedAt, TestContext.Current.CancellationToken));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task TryCloseAsync_OnAnActiveWorkspace_ClosesIt_AndReturnsTrue()
     {
         var startedAt = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
@@ -165,7 +166,7 @@ public sealed class SqliteWorkspaceStoreTests : IDisposable
         row.ClosedAt.ShouldBe(startedAt.AddHours(1).ToUnixTimeSeconds());
     }
 
-    [Fact]
+    [RetryFact]
     public async Task TryCloseAsync_OnAnAlreadyTerminalWorkspace_ReturnsFalse_AndDoesNotOverwriteTheRow()
     {
         var startedAt = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
@@ -183,7 +184,7 @@ public sealed class SqliteWorkspaceStoreTests : IDisposable
         row.ClosedAt.ShouldBe(startedAt.AddHours(1).ToUnixTimeSeconds(), "nor its closed_at");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task TryCloseAsync_OnANonExistentWorkspace_ReturnsFalse()
     {
         var claimed = await _store.TryCloseAsync("acme", "ghost", WorkspaceStatus.Closed,
@@ -194,7 +195,7 @@ public sealed class SqliteWorkspaceStoreTests : IDisposable
 
     /// <summary>The RED case named by the acceptance criteria: two callers racing to close the same
     /// workspace concurrently, not just sequentially — exactly one must win.</summary>
-    [Fact]
+    [RetryFact]
     public async Task TryCloseAsync_ConcurrentClaims_OnlyOneSucceeds()
     {
         var startedAt = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);

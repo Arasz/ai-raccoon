@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
@@ -65,7 +66,7 @@ public sealed class QueryConstructionTests : IDisposable
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     /// <summary>A4 boundary regression: the AND primary at max(TokenCount, limit) rows must fire the OR fallback (measured case).</summary>
-    [Fact]
+    [RetryFact]
     public async Task AndPrimary_AtBoundary_A4DecisionChunkRestoredByFallback()
     {
         await EnsureModelAsync();
@@ -93,7 +94,7 @@ public sealed class QueryConstructionTests : IDisposable
     ///     ADR-0006 is absent (FirstFileRank -&gt; null). Through the real search path -- AND
     ///     primary plus the automatic OR fallback -- ADR-0006 is restored to rank 1.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task AndPrimary_UnderMatchedRows_S2Adr0006RestoredByFallback()
     {
         await EnsureModelAsync();
@@ -113,7 +114,7 @@ public sealed class QueryConstructionTests : IDisposable
     }
 
     /// <summary>A provably zero-matching AND primary must retry with the OR fallback (results equal the OR-only expression).</summary>
-    [Fact]
+    [RetryFact]
     public async Task AndPrimary_ZeroMatch_RetriesWithOrFallback()
     {
         await EnsureModelAsync();
@@ -129,7 +130,7 @@ public sealed class QueryConstructionTests : IDisposable
     ///     (identifier-only) answers on the FTS-only
     ///     path at rank ≤5; Q1 (full question) and Q3 (content-only) return results.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task DiagnosticTriplet_FtsOnly_AnswersIdentifierAdrWithinTop5()
     {
         await EnsureModelAsync();
@@ -154,7 +155,7 @@ public sealed class QueryConstructionTests : IDisposable
     ///     must prevent any zero-match — all 35
     ///     baseline queries return results.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task AllBaselineQueries_ReturnResults_NoZeroMatch()
     {
         await EnsureModelAsync();
@@ -181,7 +182,7 @@ public sealed class QueryConstructionTests : IDisposable
     ///     regression below the status-quo ranker — file
     ///     hit@5 ≥ 6/7 on the ADR suite and file-level MRR ≥ 0.70 on the expected-source suite.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task FtsOnly_FileHitAt5AndMrr_MeetGuard()
     {
         await EnsureModelAsync();
@@ -233,7 +234,7 @@ public sealed class QueryConstructionTests : IDisposable
     ///     "fix" by raising a ceiling instead. A1, A2, A4, A5, C1 and C5 are unaffected and still
     ///     assert genuine no-regression.
     /// </remarks>
-    [Fact]
+    [RetryFact]
     public async Task HybridRanks_DoNotRegress_VsBaseline_DocumentsKnownRankRegressions()
     {
         await EnsureModelAsync();

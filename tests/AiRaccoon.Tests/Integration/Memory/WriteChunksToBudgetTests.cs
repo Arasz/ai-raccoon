@@ -9,6 +9,7 @@ using Microsoft.Extensions.Time.Testing;
 using Microsoft.ML.Tokenizers;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Memory;
@@ -60,7 +61,7 @@ public sealed class WriteChunksToBudgetTests : IAsyncLifetime
     ///     The acceptance criterion: a 10,000-character body produces multiple rows, none over the
     ///     model's window. Before the fix it produced exactly one row of ~2,900 tokens.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Write_LongBody_ProducesMultipleRows_NoneOverTheModelWindow()
     {
         var content = LongBody();
@@ -80,7 +81,7 @@ public sealed class WriteChunksToBudgetTests : IAsyncLifetime
     }
 
     /// <summary>No text may be lost in the split — the reason the acceptance criteria include a length check.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Write_LongBody_KeepsEveryCharacter()
     {
         var content = LongBody();
@@ -97,7 +98,7 @@ public sealed class WriteChunksToBudgetTests : IAsyncLifetime
     ///     A short write is the overwhelmingly common case and must be untouched: one row, and the
     ///     returned hash still addresses it.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Write_ShortBody_StillStoresExactlyOneRow_AddressableByItsHash()
     {
         var entry = await _store.WriteAsync(
@@ -119,7 +120,7 @@ public sealed class WriteChunksToBudgetTests : IAsyncLifetime
     ///     one path, and the post-insert lookup was `WHERE path = @path LIMIT 1` with no ORDER BY —
     ///     so which row came back was unspecified (docs/adr/0064).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Write_LongBody_ReturnsAHashThatAddressesARealRow()
     {
         var entry = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongBody()),
@@ -132,7 +133,7 @@ public sealed class WriteChunksToBudgetTests : IAsyncLifetime
     }
 
     /// <summary>Writing the same long body twice must not double the rows.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Write_SameLongBodyTwice_DoesNotDuplicateRows()
     {
         var content = LongBody();

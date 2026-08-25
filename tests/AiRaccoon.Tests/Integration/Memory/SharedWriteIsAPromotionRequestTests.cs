@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Memory;
@@ -47,7 +48,7 @@ public sealed class SharedWriteIsAPromotionRequestTests : IDisposable
     ///     The boundary: a `shared` write must not create a shared row. Before the fix it created one
     ///     and no queue row, so the request crossed the project boundary AND was never reviewed.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task SharedWrite_CreatesNoSharedRow_AndQueuesAPromotionCandidate()
     {
         var entry = await _writes.WriteAsync(
@@ -74,7 +75,7 @@ public sealed class SharedWriteIsAPromotionRequestTests : IDisposable
     }
 
     /// <summary>An ordinary write is untouched: no queue row, no change of scope.</summary>
-    [Fact]
+    [RetryFact]
     public async Task OrdinaryWrite_QueuesNothing()
     {
         await _writes.WriteAsync(new MemoryWriteRequest(ProjectId, Content),

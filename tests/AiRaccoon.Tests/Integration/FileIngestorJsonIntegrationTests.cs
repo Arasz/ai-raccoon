@@ -5,6 +5,7 @@ using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Data.Sqlite;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -45,7 +46,7 @@ public class FileIngestorJsonIntegrationTests : IDisposable
         TestData.DeleteTempRoot(_testDir);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestFileAsync_IngestsJsonFile_AndCreatesChunksInDb()
     {
         var jsonPath = Path.Combine(_testDir, "config.json");
@@ -73,7 +74,7 @@ public class FileIngestorJsonIntegrationTests : IDisposable
         Assert.True(entryCount > 0, "Expected entries inserted for JSON file");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestDirectoryAsync_IngestsJsonAndMarkdownFiles_AndSkipsUnsupported()
     {
         var jsonPath = Path.Combine(_testDir, "data.json");

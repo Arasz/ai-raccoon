@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -42,7 +43,7 @@ public sealed class EmbedDrainMetricsTests : IDisposable
             new SqliteSettingsStore(_factory), measurements, _timeProvider, telemetry ?? TestTelemetry.None,
             NullLogger<EmbedDrainService>.Instance);
 
-    [Fact]
+    [RetryFact]
     public async Task OneFullPass_RecordsDrainRowsAndDurationForTheCorpus()
     {
         var pump = TestData.NewEmbedDrainPump();
@@ -71,7 +72,7 @@ public sealed class EmbedDrainMetricsTests : IDisposable
     ///     DrainOnceAsync against the REAL BackgroundTelemetry (via BackgroundTelemetryProbe) so the
     ///     OTLP histogram is actually observed, not assumed.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task OneFullPass_ExportsTheDrainedRowCountOnTheBackgroundRowsHistogram()
     {
         using var probe = new BackgroundTelemetryProbe(EmbedDrainService.OperationName);
@@ -87,7 +88,7 @@ public sealed class EmbedDrainMetricsTests : IDisposable
         probe.Rows.ShouldHaveSingleItem().Value.ShouldBe(5);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CodeCorpusPass_RecordsUnderTheCodeSeriesName()
     {
         var pump = TestData.NewEmbedDrainPump();

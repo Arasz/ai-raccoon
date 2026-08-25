@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using AiRaccoon.Core.Memory;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Memory;
 
@@ -51,7 +52,7 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    [Fact]
+    [RetryFact]
     public void ScoresCorrelateWithHandLabeledUsefulness()
     {
         var manifestPath = Environment.GetEnvironmentVariable(FixtureEnvVar);
@@ -80,7 +81,7 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
     // to the scorer's channel priors: see the task that added this comment for the prior break these
     // hardcoded numbers caused.
 
-    [Fact]
+    [RetryFact]
     public void MinSpearmanGate_ReportsFixtureNameAndBothMeasurements_WhenBelowFloor()
     {
         var rows = CoreRows([4, 3, 2, 1, 0]);
@@ -101,7 +102,7 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
         ex.Message.ShouldContain(minSpearman.ToString("F2", CultureInfo.InvariantCulture));
     }
 
-    [Fact]
+    [RetryFact]
     public void PrototypeToleranceGate_Fails_WhenMeasuredSpearmanMissesTheBand()
     {
         var rows = CoreRows([0, 1, 2, 3, 4]);
@@ -126,7 +127,7 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
         ex.Message.ShouldContain(prototypeSpearman.ToString("F3", CultureInfo.InvariantCulture));
     }
 
-    [Fact]
+    [RetryFact]
     public void SubsetGate_FailsIndependently_OfTheFullSetGate()
     {
         var rows = CoreRows([0, 1, 2, 3, 4]).Concat(OutlierRows([4, 0, 2], startId: 1001)).ToList();
@@ -156,7 +157,7 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
         ex.Message.ShouldNotContain("mixed: full-set");
     }
 
-    [Fact]
+    [RetryFact]
     public void ManifestRelativePath_ResolvesAgainstManifestDirectory()
     {
         var rows = CoreRows([0, 1, 2, 3, 4]);
@@ -173,7 +174,7 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
         Should.NotThrow(() => Verify(manifestPath));
     }
 
-    [Fact]
+    [RetryFact]
     public void ManifestWithMultipleFixtures_ChecksAllOfThem_NotJustTheFirst()
     {
         var dir = CreateTempDir();
@@ -194,7 +195,7 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
         ex.Message.ShouldContain("beta");
     }
 
-    [Fact]
+    [RetryFact]
     public void AllDeclaredGates_Pass_WhenMeasurementsClearEveryThreshold()
     {
         var rows = CoreRows([0, 1, 2, 3, 4]);

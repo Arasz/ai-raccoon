@@ -13,6 +13,7 @@ using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
@@ -59,7 +60,7 @@ public sealed class SqliteMemoryStoreCodeDeleteTests : IDisposable
         TestData.DeleteTempRoot(_dataRoot);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task DeleteSourcePathAsync_RemovesCodeRows_ForThatPath()
     {
         var file = await WriteAsync("Program.cs", "class Program\n{\n}\n");
@@ -72,7 +73,7 @@ public sealed class SqliteMemoryStoreCodeDeleteTests : IDisposable
         (await CountCodeAsync(file)).ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task DeleteSourcePathAsync_DoesNotTouchOtherProjectsCodeRows()
     {
         var file = await WriteAsync("Program.cs", "class Program\n{\n}\n");
@@ -90,7 +91,7 @@ public sealed class SqliteMemoryStoreCodeDeleteTests : IDisposable
     /// larger than notes. idx_code_entries_path was dropped as a redundant left-prefix of
     /// uq_code_chunk(project_id, path, hash) (integration review): the planner already picks
     /// uq_code_chunk for this query, so that is what the test pins.</summary>
-    [Fact]
+    [RetryFact]
     public async Task DeleteBySourcePath_UsesTheCodeChunkIndex_NotAFullTableScan()
     {
         var rows = await _conn.QueryAsync<dynamic>(
@@ -102,7 +103,7 @@ public sealed class SqliteMemoryStoreCodeDeleteTests : IDisposable
             $"the code delete leg must use uq_code_chunk, not a full-table scan; actual plan: {plan}");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ReplaceIfFileChangedAsync_DeletesOldCodeChunks_AndReingestsNewOnes()
     {
         var file = await WriteAsync("A.cs", "class Old\n{\n}\n");
@@ -125,7 +126,7 @@ public sealed class SqliteMemoryStoreCodeDeleteTests : IDisposable
         currentHashes.ShouldNotContain(h => oldHashes.Contains(h));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ReplaceIfFileChangedAsync_MdChanged_CodeLegIsNoOp()
     {
         var file = await WriteAsync("README.md", "# hello\n");

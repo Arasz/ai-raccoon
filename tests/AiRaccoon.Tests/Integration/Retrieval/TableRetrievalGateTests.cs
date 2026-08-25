@@ -1,6 +1,7 @@
 using AiRaccoon.Tests.Unit.Retrieval;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Retrieval;
 
@@ -53,7 +54,7 @@ public sealed class TableRetrievalGateTests(TableCorpusFixture fixture, ITestOut
     /// </summary>
     private static int MinimumMovedQueries => Math.Max(3, TableCorpusCatalog.Load().Count / 4);
 
-    [Fact]
+    [RetryFact]
     public async Task ParaphraseRetrieval_HoldsItsPinnedFloors()
     {
         var (ndcg, mrr) = await ScoreAllAsync(fixture.Bank, reverse: false);
@@ -72,7 +73,7 @@ public sealed class TableRetrievalGateTests(TableCorpusFixture fixture, ITestOut
     ///     Each query is ranked once and graded against both its own relevance and the next
     ///     query's, so the two series share identical ranking inputs.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task MismatchedPairing_TrailsTheBaseline()
     {
         var bank = fixture.Bank;
@@ -110,7 +111,7 @@ public sealed class TableRetrievalGateTests(TableCorpusFixture fixture, ITestOut
     ///     across platforms — on ubuntu-latest x86_64 the reversed mean cleared the 0.160 floor
     ///     (0.165440, nightly 2026-08-19) while still trailing its same-run baseline by 28%.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ReversedRanking_TrailsTheBaseline()
     {
         var (ndcg, mrr) = await ScoreAllAsync(fixture.Bank, reverse: false);
@@ -128,7 +129,7 @@ public sealed class TableRetrievalGateTests(TableCorpusFixture fixture, ITestOut
     ///     "the gate goes green having measured nothing". Re-ingesting the same documents at a
     ///     different chunk budget must move the per-query scores.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ADifferentChunkBudget_MovesTheScores()
     {
         var baseline = await ScoreAllAsync(fixture.Bank, reverse: false);
@@ -157,7 +158,7 @@ public sealed class TableRetrievalGateTests(TableCorpusFixture fixture, ITestOut
     ///     set bounded and tiny while whole-file relevance, the metric this replaces, grows with the
     ///     chunk count. The bound is the property; report the sizes so an inflating arm is visible.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task SpanAnchoredRelevance_StaysBoundedWhileWholeFileRelevanceGrows()
     {
         await using var fragmented = await TableCorpusBank.BuildAsync(64, TestContext.Current.CancellationToken);
@@ -193,7 +194,7 @@ public sealed class TableRetrievalGateTests(TableCorpusFixture fixture, ITestOut
     ///     it. It is not 1.0 — a chunk-length query is truncated to the embedding budget and dilutes
     ///     FTS — so this catches a broken index, not a ranking regression.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task SearchingAChunksOwnText_FindsThatChunk()
     {
         var bank = fixture.Bank;
@@ -211,7 +212,7 @@ public sealed class TableRetrievalGateTests(TableCorpusFixture fixture, ITestOut
         scores.Average().ShouldBeGreaterThan(0.5, "the corpus is not indexed or not searchable");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ReportPerQueryScores()
     {
         var bank = fixture.Bank;

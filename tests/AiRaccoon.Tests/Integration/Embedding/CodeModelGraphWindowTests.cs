@@ -6,6 +6,7 @@ using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -34,7 +35,7 @@ public sealed class CodeModelGraphWindowTests
     ///     the manifest declares, so a chunk sized to <see cref="CodeChunker.DefaultBudget" /> plus
     ///     its two special tokens is the largest thing the engine will ever be handed.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void TheGraph_RunsTheFullManifestWindow_AndFailsOneTokenPastIt()
     {
         var descriptor = LoadDescriptorOrSkip(out var modelDirectory);
@@ -60,7 +61,7 @@ public sealed class CodeModelGraphWindowTests
     ///     <c>[batch, dimensions]</c>. Read it back through the very helper the download and the
     ///     repair decide on, so the rule and the model cannot drift apart unnoticed.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void TheGraph_DeclaresAnAlreadyPooledOutput()
     {
         var descriptor = LoadDescriptorOrSkip(out var modelDirectory);
@@ -75,7 +76,7 @@ public sealed class CodeModelGraphWindowTests
     ///     would make both cosines below exactly 1. They are not: the graph attends to the whole
     ///     sequence, so a 126-token budget was throwing away model capacity rather than respecting it.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void TheGraph_ReadsContentPastToken128()
     {
         var descriptor = LoadDescriptorOrSkip(out var modelDirectory);

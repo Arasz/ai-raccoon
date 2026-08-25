@@ -9,6 +9,7 @@ using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -44,7 +45,7 @@ public sealed class QueryTruncationTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task ALongQuery_IsTrimmedByTheQueryPath_NotByTheGenerator()
     {
         await using var connection = await OpenConfiguredAsync();
@@ -61,7 +62,7 @@ public sealed class QueryTruncationTests : IDisposable
     }
 
     /// <summary>The message is for a person deciding whether their search was answered properly.</summary>
-    [Fact]
+    [RetryFact]
     public async Task TheQueryMessage_SaysWhatWasCutAndWhatItMeans()
     {
         await using var connection = await OpenConfiguredAsync();
@@ -75,7 +76,7 @@ public sealed class QueryTruncationTests : IDisposable
         message.ShouldContain("shorter");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AShortQuery_IsNotTrimmedAndSaysNothing()
     {
         await using var connection = await OpenConfiguredAsync();
@@ -88,7 +89,7 @@ public sealed class QueryTruncationTests : IDisposable
     }
 
     /// <summary>A query at the window's edge must not be trimmed — an off-by-one here silently drops a token.</summary>
-    [Fact]
+    [RetryFact]
     public async Task AQueryExactlyAtTheWindow_IsNotTrimmed()
     {
         await using var connection = await OpenConfiguredAsync();

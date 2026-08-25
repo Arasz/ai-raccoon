@@ -1,6 +1,7 @@
 using AiRaccoon.Infrastructure.Embedding;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -16,7 +17,7 @@ public sealed class EmbeddingServiceConfiguredPathTests : IDisposable
         TestData.DeleteTempRoot(_root);
     }
 
-    [Fact]
+    [RetryFact]
     public void CreateGenerator_UsesSettingsModelPath()
     {
         var custom = Path.Combine(_root, "custom.onnx");

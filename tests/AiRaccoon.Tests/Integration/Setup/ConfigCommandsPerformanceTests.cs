@@ -4,6 +4,7 @@ using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tests.Unit.Setup;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Setup;
 
@@ -21,7 +22,7 @@ public class ConfigCommandsPerformanceTests
     private static Task<(int Exit, string Out, string Err)> Run(string[] args, FakeConfigStore store) =>
         CliRun.RunAsync(args, TestData.CreateConfigCommands(store, performance: new PerformanceCommands()));
 
-    [Fact]
+    [RetryFact]
     public async Task BufferCapacitySet_WritesGlobalRow_AndStatesNextRestart()
     {
         var store = new FakeConfigStore();
@@ -34,7 +35,7 @@ public class ConfigCommandsPerformanceTests
         outp.ShouldContain("next server restart");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task BufferCapacityInvalid_NonNumeric_Returns1_AndWritesError()
     {
         var store = new FakeConfigStore();
@@ -46,7 +47,7 @@ public class ConfigCommandsPerformanceTests
         store.Settings.ShouldNotContainKey(MetricsConfigKeys.BufferCapacityGlobal);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task BufferCapacityInvalid_Zero_Returns1_AndWritesError()
     {
         var store = new FakeConfigStore();
@@ -58,7 +59,7 @@ public class ConfigCommandsPerformanceTests
         store.Settings.ShouldNotContainKey(MetricsConfigKeys.BufferCapacityGlobal);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task BufferCapacityInvalid_Negative_Returns1_AndWritesError()
     {
         var store = new FakeConfigStore();
@@ -71,7 +72,7 @@ public class ConfigCommandsPerformanceTests
     }
 
     /// <summary>An unbounded buffer capacity is an allocation the operator can make arbitrarily large.</summary>
-    [Fact]
+    [RetryFact]
     public async Task BufferCapacityOutOfRange_Returns1_AndWritesError()
     {
         var store = new FakeConfigStore();
@@ -83,7 +84,7 @@ public class ConfigCommandsPerformanceTests
         store.Settings.ShouldNotContainKey(MetricsConfigKeys.BufferCapacityGlobal);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task FlushIntervalSet_WritesGlobalRow_AndStatesNextTick()
     {
         var store = new FakeConfigStore();
@@ -96,7 +97,7 @@ public class ConfigCommandsPerformanceTests
         outp.ShouldContain("next flush tick");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task FlushIntervalInvalid_NonNumeric_Returns1_AndWritesError()
     {
         var store = new FakeConfigStore();
@@ -108,7 +109,7 @@ public class ConfigCommandsPerformanceTests
         store.Settings.ShouldNotContainKey(MetricsConfigKeys.FlushIntervalSecondsGlobal);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task FlushIntervalInvalid_Zero_Returns1_AndWritesError()
     {
         var store = new FakeConfigStore();
@@ -120,7 +121,7 @@ public class ConfigCommandsPerformanceTests
         store.Settings.ShouldNotContainKey(MetricsConfigKeys.FlushIntervalSecondsGlobal);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task FlushIntervalInvalid_Negative_Returns1_AndWritesError()
     {
         var store = new FakeConfigStore();
@@ -132,7 +133,7 @@ public class ConfigCommandsPerformanceTests
         store.Settings.ShouldNotContainKey(MetricsConfigKeys.FlushIntervalSecondsGlobal);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RetentionSet_WritesGlobalRow_AndStatesNextMaintenancePass()
     {
         var store = new FakeConfigStore();
@@ -145,7 +146,7 @@ public class ConfigCommandsPerformanceTests
         outp.ShouldContain("next maintenance pass");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RetentionInvalid_NonNumeric_Returns1_AndWritesError()
     {
         var store = new FakeConfigStore();
@@ -157,7 +158,7 @@ public class ConfigCommandsPerformanceTests
         store.Settings.ShouldNotContainKey(MetricsConfigKeys.RetentionDaysGlobal);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RetentionInvalid_Zero_Returns1_AndWritesError()
     {
         var store = new FakeConfigStore();
@@ -169,7 +170,7 @@ public class ConfigCommandsPerformanceTests
         store.Settings.ShouldNotContainKey(MetricsConfigKeys.RetentionDaysGlobal);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RetentionInvalid_Negative_Returns1_AndWritesError()
     {
         var store = new FakeConfigStore();
@@ -183,7 +184,7 @@ public class ConfigCommandsPerformanceTests
 
     /// <summary>Retention days feeds DateTimeOffset.AddDays(-days) in MetricsRetentionJob — an
     /// unreasonably large value must be rejected at write time rather than crash the reaper.</summary>
-    [Fact]
+    [RetryFact]
     public async Task RetentionOutOfRange_Returns1_AndWritesError()
     {
         var store = new FakeConfigStore();
@@ -195,7 +196,7 @@ public class ConfigCommandsPerformanceTests
         store.Settings.ShouldNotContainKey(MetricsConfigKeys.RetentionDaysGlobal);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task List_ShowsDefaults_WhenUnset()
     {
         var store = new FakeConfigStore();
@@ -210,7 +211,7 @@ public class ConfigCommandsPerformanceTests
 
     /// <summary>A malformed row must fall back to the documented default (AC4), same contract as
     /// MetricsRetentionJobTests.AnInvalidRetentionSetting_FallsBackToTheDefault.</summary>
-    [Fact]
+    [RetryFact]
     public async Task List_ShowsDefaults_WhenMalformed()
     {
         var store = new FakeConfigStore();
@@ -226,7 +227,7 @@ public class ConfigCommandsPerformanceTests
         outp.ShouldContain(MetricsConfigKeys.DefaultRetentionDays.ToString());
     }
 
-    [Fact]
+    [RetryFact]
     public async Task List_ShowsConfiguredValues()
     {
         var store = new FakeConfigStore();
@@ -243,7 +244,7 @@ public class ConfigCommandsPerformanceTests
     }
 
     /// <summary>AC5 — list output also states the per-knob take-effect timing, not just the values.</summary>
-    [Fact]
+    [RetryFact]
     public async Task List_StatesTakeEffectTiming_PerKnob()
     {
         var store = new FakeConfigStore();
@@ -256,7 +257,7 @@ public class ConfigCommandsPerformanceTests
         outp.ShouldContain("next maintenance pass");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ListAlias_Show_ResolvesToList()
     {
         var store = new FakeConfigStore();

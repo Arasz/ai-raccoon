@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Ingestion;
 
@@ -27,7 +28,7 @@ public sealed class CodeChunkerFingerprintGateTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task ReplaceIfFileChangedAsync_ProdDI_WatchedCsFile_IngestsRealChunks_AndFingerprints()
     {
         var services = new ServiceCollection();

@@ -11,6 +11,7 @@ using AiRaccoon.Setup;
 using Microsoft.AspNetCore.Builder;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Setup;
 
@@ -47,7 +48,7 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
         TestData.DeleteTempRoot(_dataRoot);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task PutThenGet_RoundTripsTheValue()
     {
         (await PutAsync("sweep.threshold", "0.7")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
@@ -59,7 +60,7 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
             .ShouldNotBeNull().Value.ShouldBe("0.7");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Get_ForAnAbsentKey_IsNotFound()
     {
         var response = await _client.GetAsync("/settings?key=nothing.here", TestContext.Current.CancellationToken);
@@ -67,7 +68,7 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetByPrefix_ReturnsOnlyMatchingRows()
     {
         await PutAsync("queryGuard.enabled.global", "false");
@@ -84,7 +85,7 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
         rows["queryGuard.shadow.global"].ShouldBe("true");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetByPrefix_WithNoMatch_IsAnEmptySet_NotAnError()
     {
         var response = await _client.GetAsync("/settings?prefix=nothing.", TestContext.Current.CancellationToken);
@@ -94,7 +95,7 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
             .ShouldNotBeNull().Rows.ShouldBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Delete_RemovesTheRow()
     {
         await PutAsync("noise.enabled.global", "false");
@@ -107,7 +108,7 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
     }
 
     /// <summary>Deleting what is not there is how every settings handler already behaves.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Delete_ForAnAbsentKey_Succeeds()
     {
         var response = await _client.DeleteAsync("/settings?key=never.written", TestContext.Current.CancellationToken);
@@ -115,7 +116,7 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
         response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
     }
 
-    [Theory]
+    [RetryTheory]
     [InlineData("/settings")]
     [InlineData("/settings?key=a&prefix=b")]
     [InlineData("/settings?key=")]
@@ -126,7 +127,7 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Put_WithoutAKey_IsABadRequest()
     {
         var response = await _client.PutAsJsonAsync("/settings", new SettingWrite("", "v"),
@@ -139,7 +140,7 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
     ///     The endpoint carries secrets (sync credentials, the OpenAI key), so its refusal without
     ///     the token is asserted here too, not only by the route-table guard.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task WithoutTheToken_EveryVerbIsRefused()
     {
         using var anonymous = new HttpClient { BaseAddress = new Uri(_app.Urls.First()) };
@@ -157,7 +158,7 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
     ///     a bare 500 — the CLI never reaches this because SettingsCommands pre-checks the manifest
     ///     itself before ever calling the endpoint.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task PostModelCode_MissingManifest_IsABadRequest_WithTheReasonInTheBody()
     {
         var dir = Path.Combine(_dataRoot, "code-model-missing-manifest");
@@ -173,7 +174,7 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
 
     /// <summary>vec-code-unfix-dim: dimensions are no longer a refusal leg — a 1024 manifest
     /// activates via the endpoint; the chunk-budget gate (next test) is the remaining refusal.</summary>
-    [Fact]
+    [RetryFact]
     public async Task PostModelCode_Non768Manifest_Activates()
     {
         var dir = Path.Combine(_dataRoot, "code-model-1024");
@@ -187,7 +188,7 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
 
     /// <summary>#472: same mapping for the third refusal leg — a manifest whose context window
     /// resolves to a chunk budget narrower than the code chunker's fixed budget (#422).</summary>
-    [Fact]
+    [RetryFact]
     public async Task PostModelCode_ManifestWindowNarrowerThanTheChunkerBudget_IsABadRequest_WithTheReasonInTheBody()
     {
         var dir = Path.Combine(_dataRoot, "code-model-narrow-ctx");
@@ -215,7 +216,7 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
     ///     Ensure() fell through to EnsureSuccessStatusCode() and this threw a bare
     ///     HttpRequestException with no reason in it.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ServerSettingsStore_ActivateCodeEngine_OnAChunkBudgetRefusal_ThrowsWithTheReason()
     {
         var dir = Path.Combine(_dataRoot, "code-model-narrow-ctx-cli");

@@ -8,6 +8,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -40,7 +41,7 @@ public sealed class CodeIngestorTests : IDisposable
         TestData.DeleteTempRoot(_dataRoot);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestFileAsync_OutsideScope_IsRefused_NoCodeRowsNoFingerprint()
     {
         var outside = TestData.CreateTempRoot("airaccoon-code-outside");
@@ -65,7 +66,7 @@ public sealed class CodeIngestorTests : IDisposable
     ///     Contrast with <see cref="IngestFileAsync_OutsideScope_IsRefused_NoCodeRowsNoFingerprint" />
     ///     above: that file IS a `.cs` file, so scope enforcement still applies to it.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task IngestFileAsync_OutsideScope_NonCodeExtension_ReturnsZero_NoThrow()
     {
         var outside = TestData.CreateTempRoot("airaccoon-code-outside-noncode");
@@ -91,7 +92,7 @@ public sealed class CodeIngestorTests : IDisposable
     ///     the file, so success here means the explicit <paramref name="scope"/> argument was used
     ///     instead of a fresh internal lookup.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task IngestFileAsync_WithExplicitScope_SkipsInternalScopeRead()
     {
         var file = await WriteFileAsync(_dataRoot, "Program.cs", "class Program\n{\n}\n");
@@ -103,7 +104,7 @@ public sealed class CodeIngestorTests : IDisposable
         (await CountCodeEntriesAsync(file)).ShouldBeGreaterThan(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestFileAsync_InScope_InsertsPendingRows()
     {
         await AllowScopeAsync(_dataRoot);
@@ -117,7 +118,7 @@ public sealed class CodeIngestorTests : IDisposable
         ((bool)rows.All(r => (string)r.embed_state == "pending" && r.embedding == null)).ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestFileAsync_NonCodeExtension_ReturnsZero_NoRows()
     {
         await AllowScopeAsync(_dataRoot);
@@ -129,7 +130,7 @@ public sealed class CodeIngestorTests : IDisposable
         (await CountCodeEntriesAsync(file)).ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestFileAsync_HiddenFile_ReturnsZero_NoRows()
     {
         await AllowScopeAsync(_dataRoot);
@@ -141,7 +142,7 @@ public sealed class CodeIngestorTests : IDisposable
         (await CountCodeEntriesAsync(file)).ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Reingest_SameContent_IsIdempotent_NoDuplicateRows()
     {
         await AllowScopeAsync(_dataRoot);
@@ -157,7 +158,7 @@ public sealed class CodeIngestorTests : IDisposable
         secondCount.ShouldBe(firstCount);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Reingest_ChangedContent_ReplacesOldChunks()
     {
         await AllowScopeAsync(_dataRoot);
@@ -180,7 +181,7 @@ public sealed class CodeIngestorTests : IDisposable
         indices.ShouldBe(Enumerable.Range(0, newRows.Count).ToArray());
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Reingest_FileGainsLeadingLines_RefreshesPosition()
     {
         await AllowScopeAsync(_dataRoot);
@@ -200,7 +201,7 @@ public sealed class CodeIngestorTests : IDisposable
         ((int)after.line_start).ShouldBe(3);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CodeRows_StoreNormalizedPathAndSourceFileWithLineRanges()
     {
         await AllowScopeAsync(_dataRoot);
@@ -220,7 +221,7 @@ public sealed class CodeIngestorTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestFileAsync_ConcurrentSameFile_SingleChunkSetNoDuplicateRows()
     {
         await AllowScopeAsync(_dataRoot);

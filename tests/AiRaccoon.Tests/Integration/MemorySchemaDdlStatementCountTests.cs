@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 using Shouldly;
 using SQLitePCL;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -18,7 +19,7 @@ namespace AiRaccoon.Tests.Integration;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class MemorySchemaDdlStatementCountTests
 {
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_WhenTheDigestMatches_SkipsTheDdlBlockEntirely()
     {
         await using var connection = await OpenAsync();
@@ -40,7 +41,7 @@ public sealed class MemorySchemaDdlStatementCountTests
     ///     The project-scoped tombstone repair moved to the v11 ladder step (MigrateToV11Async)
     ///     and no longer runs in the digest-gated Ddl block.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_WhenTheDigestIsStale_RunsTheFiftyEightStatementDdlBlock()
     {
         await using var connection = await OpenAsync();

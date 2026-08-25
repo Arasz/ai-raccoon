@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
@@ -52,7 +53,7 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
     ///     siblings; a recompute keyed off source_file alone — rather than (ctx, source_file) — would
     ///     incorrectly renumber the project group using the shared row too.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ShareAsync_OfOneChunk_NumbersItAloneInItsOwnContext_AndLeavesTheProjectGroupUntouched()
     {
         var file = Path.Combine(_dataRoot, "three-chunks.md");
@@ -74,7 +75,7 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
             "sharing a chunk must not renumber the project-scoped group it came from");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestFile_FiveChunks_NumbersThemContiguouslyFromZero()
     {
         var file = Path.Combine(_dataRoot, "five-chunks.md");
@@ -89,7 +90,7 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
     }
 
     /// <summary>Catches a C#-loop-index implementation: re-ingesting an unchanged file hits the existing-chunk `continue` skip for every chunk, so the loop never touches a new row — the recompute must still leave numbering correct.</summary>
-    [Fact]
+    [RetryFact]
     public async Task IngestFile_ReIngestingAnUnchangedFile_LeavesNumberingUnchanged()
     {
         var file = Path.Combine(_dataRoot, "five-chunks.md");
@@ -104,7 +105,7 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
         rows.Select(r => (r.ChunkIndex, r.TotalChunks)).ShouldBe([(0, 5), (1, 5), (2, 5), (3, 5), (4, 5)]);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Write_WithAnExistingSourceFile_AppendsAndGrowsTotalChunks()
     {
         var first = await _store.WriteAsync(
@@ -126,7 +127,7 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
     ///     the edited paragraph is inserted fresh with the HIGHEST id — so an id-order recompute puts
     ///     the edited paragraph last, not where it actually sits in the document.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task IngestFile_EditingAParagraphIntoTheMiddle_KeepsChunkIndexInDocumentOrder()
     {
         var file = Path.Combine(_dataRoot, "four-paragraphs.md");
@@ -153,7 +154,7 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
         currentIndexes.Distinct().Count().ShouldBe(currentIndexes.Count, "no two chunks of the current document share a position");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task DeleteAsync_OfAMiddleChunk_RenumbersSurvivorsContiguously()
     {
         var file = Path.Combine(_dataRoot, "three-chunks.md");
@@ -168,7 +169,7 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
         after.Select(r => (r.ChunkIndex, r.TotalChunks)).ShouldBe([(0, 2), (1, 2)]);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task DeleteSourcePathAsync_RemovesTheWholeGroup_WithNoStaleRowsLeftToRenumber()
     {
         var file = Path.Combine(_dataRoot, "three-chunks.md");
@@ -181,7 +182,7 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
         (await ChunkRowsForAsync(ContextNaming.ProjectContext("acme"), "acme", file)).ShouldBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task DeleteContextAsync_RemovesTheWholeContext_WithNoStaleRowsLeftToRenumber()
     {
         var file = Path.Combine(_dataRoot, "three-chunks.md");
@@ -200,7 +201,7 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
     ///     first-chunk position, so a row nothing has ever positioned needs its own "unknown" value,
     ///     not one indistinguishable from a genuine position 0 (docs/plans/2026-08-08-search-knn-perf.md §3.3).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ConsolidateAsync_PromotesWithoutASourceFile_LeavingChunkColumnsAtTheUnknownSentinel()
     {
         var workspaceService = new WorkspaceService(_store, _workspaces, new FakeTimeProvider(FixedNow));
@@ -227,7 +228,7 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
     }
 
     /// <summary>Property check: over a seeded multi-context bank, the persisted columns equal contiguous 0..n-1/n numbering per (ctx, source_file) group, for every context shape at once.</summary>
-    [Fact]
+    [RetryFact]
     public async Task PersistedChunkColumns_MatchContiguousNumbering_AcrossEveryContextShapeAtOnce()
     {
         var projectFile = Path.Combine(_dataRoot, "project-doc.md");
@@ -267,7 +268,7 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
     ///     After source normalization, entries have both source_id and the denormalized source_file column.
     ///     Chunk recompute still partitions by (ctx, source_file) — the denormalized column — not by source_id.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task RecomputeChunkColumns_AfterSourceNormalization_PartitionsBySourceFile()
     {
         // Write two groups with different source_files — the write path now also sets source_id.

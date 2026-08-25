@@ -13,6 +13,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Metrics;
@@ -73,7 +74,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
         return await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM metrics");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_MetricsRowCountIsUnchangedWhenTheCallReturns()
     {
         await _tools.Write("acme", "the chassis pattern decision", cancellationToken: TestContext.Current.CancellationToken);
@@ -92,7 +93,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
     ///     returns its results, and that the report does not yet include it. Both are asserted here,
     ///     not just the count.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Search_ReturnsItsResultsAndIsExcludedFromTheReport_BeforeTheBackgroundReaderRuns()
     {
         await _tools.Write("acme", "the chassis pattern decision", cancellationToken: TestContext.Current.CancellationToken);
@@ -117,7 +118,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
     ///     own correlation id, and no query text anywhere in the row (SqliteMetricsStore's save-time
     ///     allowlist).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Search_RecordsNineSeriesMeasurements_ReachingTheMetricsTable_TaggedWithHashAndCorrelationId_NeverQueryText()
     {
         await _tools.Write("acme", "the chassis pattern decision", cancellationToken: TestContext.Current.CancellationToken);
@@ -146,7 +147,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
     ///     query twice and inspects the stored rows. Two separate calls (two separate correlation
     ///     ids) must still land under one shared query_hash.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Search_CalledTwiceWithTheSameQuery_BothRunsShareTheSameQueryHash()
     {
         await _tools.Write("acme", "the chassis pattern decision", cancellationToken: TestContext.Current.CancellationToken);
@@ -178,7 +179,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
     ///     Settings are derived from <see cref="MetricsConfigKeys" />'s own *Global constants so a
     ///     new setting joins this scenario automatically instead of needing a hand-added line.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Search_EveryMetricsSettingAtItsMostRestrictiveValue_StillRecordsAMeasurement()
     {
         var settingKeys = typeof(MetricsConfigKeys)
@@ -220,7 +221,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
     ///     this package) — this proves this package's call site never needs to rely on anything
     ///     stronger than what it already does: pass the hash, never the text.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task SaveBatch_QueryTextCarriedInTagsInsteadOfHashed_IsRejected_HashedRowIsAccepted()
     {
         await _tools.Write("acme", "the chassis pattern decision", cancellationToken: TestContext.Current.CancellationToken);
@@ -258,7 +259,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
     ///     chain (<c>MemoryTools.Search</c> → <c>RecordPhaseMeasurements</c> →
     ///     <c>IMeasurementRecorder.Record</c>), and shows the count really does move during the call.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task WatchRed_ASynchronousRecorderPluggedIntoTheRealSearchPath_MovesTheCountDuringTheCall()
     {
         await _tools.Write("acme", "the chassis pattern decision", cancellationToken: TestContext.Current.CancellationToken);

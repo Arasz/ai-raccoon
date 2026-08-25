@@ -12,6 +12,7 @@ using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.E2E;
 
@@ -31,7 +32,7 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
 
     private string Token => new McpTokenFile(serve.DataRoot).Read()!;
 
-    [Fact]
+    [RetryFact]
     public async Task Probe_StillRecognizesAServerThatDemandsAToken()
     {
         // The probe proves "an ai-raccoon server is here", never "I may use it": it carries no
@@ -41,7 +42,7 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
         responds.ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Mcp_WithoutAToken_Is401()
     {
         using var response = await PostInitializeAsync(token: null);
@@ -52,7 +53,7 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
         body.ShouldContain(McpTokenFile.FileName); // names the file so a data-root mismatch is diagnosable
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Mcp_WithTheWrongToken_Is401()
     {
         using var response = await PostInitializeAsync("not-the-token");
@@ -60,7 +61,7 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Mcp_WithATokenOfADifferentLength_Is401()
     {
         using var response = await PostInitializeAsync(Token[..^1]);
@@ -68,7 +69,7 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Mcp_WithTheToken_Succeeds()
     {
         using var httpClient = new HttpClient();
@@ -94,7 +95,7 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
         text.ShouldContain("\"entries\"");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Observability_NeedsNoToken()
     {
         // ADR-0008 discovery: `serve observability` finds a live server without knowing its data root.

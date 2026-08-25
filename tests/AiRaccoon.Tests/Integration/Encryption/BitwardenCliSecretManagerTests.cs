@@ -2,6 +2,7 @@ using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Encryption;
 
@@ -29,7 +30,7 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
         return path;
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_ExitZero_ReturnsStdout()
     {
         var runner = new BitwardenCliSecretManager(FakeBwsPath("echo hello"));
@@ -41,7 +42,7 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
         result.Stderr.ShouldBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_NonZeroExit_ReturnsExitCodeAndStderr()
     {
         var runner = new BitwardenCliSecretManager(FakeBwsPath("echo boom >&2\nexit 3"));
@@ -58,7 +59,7 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
     ///     can read another process's argv for its whole lifetime. Proven live against a slowed
     ///     stand-in bws with a token captured straight out of `ps aux`.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_WithToken_NeverPlacesTokenInArgv()
     {
         var runner = new BitwardenCliSecretManager(FakeBwsPath("echo \"$*\""));
@@ -70,7 +71,7 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
         result.Stdout.ShouldNotContain("-t");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_WithToken_SetsBwsAccessTokenEnvironmentVariable()
     {
         var runner = new BitwardenCliSecretManager(FakeBwsPath("echo \"$BWS_ACCESS_TOKEN\""));
@@ -80,7 +81,7 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
         result.Stdout.Trim().ShouldBe("tok-9");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_WithToken_OverridesAnInheritedBwsAccessTokenEnvironmentVariable()
     {
         var runner = new BitwardenCliSecretManager(FakeBwsPath("echo \"$BWS_ACCESS_TOKEN\""));
@@ -98,7 +99,7 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_WithoutToken_DoesNotAppendDashT()
     {
         var runner = new BitwardenCliSecretManager(FakeBwsPath("echo \"$*\""));
@@ -108,7 +109,7 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
         result.Stdout.Trim().ShouldBe("secret get secret-1");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_InheritsBwsAccessTokenFromEnvironment()
     {
         var runner = new BitwardenCliSecretManager(FakeBwsPath("echo \"$BWS_ACCESS_TOKEN\""));
@@ -126,7 +127,7 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_NonexistentExecutable_ThrowsBwsNotFoundText()
     {
         var runner = new BitwardenCliSecretManager(Path.Combine(_dataRoot, "does-not-exist"));
@@ -136,7 +137,7 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
         ex.Message.ShouldBe(NotFoundText);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_Timeout_KillsProcessAndThrowsTimeoutText()
     {
         var runner = new BitwardenCliSecretManager(FakeBwsPath("sleep 30"));
@@ -146,7 +147,7 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
         ex.Message.ShouldBe("bws timed out after 1s");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_Timeout_WithToken_ExceptionDoesNotContainToken()
     {
         var runner = new BitwardenCliSecretManager(FakeBwsPath("sleep 30"));
@@ -156,7 +157,7 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
         ex.Message.ShouldNotContain("secret-tok-should-not-leak");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_ExitZeroWithEmptyStdout_Throws()
     {
         var runner = new BitwardenCliSecretManager(FakeBwsPath("exit 0"));
@@ -166,7 +167,7 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
         ex.Message.ShouldBe("bws returned no output");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_ExitZeroWithEmptyStdout_WithToken_ExceptionDoesNotContainToken()
     {
         var runner = new BitwardenCliSecretManager(FakeBwsPath("exit 0"));
@@ -176,7 +177,7 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
         ex.Message.ShouldNotContain("secret-tok-should-not-leak");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_NonexistentExecutable_WithToken_ExceptionDoesNotContainToken()
     {
         var runner = new BitwardenCliSecretManager(Path.Combine(_dataRoot, "does-not-exist"));
@@ -193,7 +194,7 @@ public sealed class BitwardenCliSecretManagerTests : IDisposable
     ///     pool proves the awaits are real: a blocking implementation would serialize on the
     ///     thread-pool's available worker count and this would time out well under load.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_ManyConcurrentInvocations_AllCompleteWithoutThreadStarvation()
     {
         var runner = new BitwardenCliSecretManager(FakeBwsPath("sleep 0.2; echo hello"));

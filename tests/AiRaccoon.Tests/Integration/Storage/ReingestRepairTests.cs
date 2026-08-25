@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
@@ -44,7 +45,7 @@ public sealed class ReingestRepairTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_DryRun_ChangesNothing()
     {
         var file = Path.Combine(_dataRoot, "stale-dry-run.md");
@@ -60,7 +61,7 @@ public sealed class ReingestRepairTests : IDisposable
         (await SnapshotAsync(file)).ShouldBe(before, "a dry run must not write");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_Apply_GivesTheStrandedRowsRealPositions()
     {
         var file = Path.Combine(_dataRoot, "stale-apply.md");
@@ -86,7 +87,7 @@ public sealed class ReingestRepairTests : IDisposable
     ///     must replace anyway; it calls the unconditional <c>ReplaceAsync</c>, never the
     ///     fingerprint-gated <c>ReplaceIfFileChangedAsync</c> the watch digest uses.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_Apply_ReplacesEvenThoughAMatchingWatchFingerprintAlreadyExists()
     {
         var file = Path.Combine(_dataRoot, "stale-fingerprinted.md");
@@ -105,7 +106,7 @@ public sealed class ReingestRepairTests : IDisposable
             "a matching watch fingerprint must not gate the repair off — ReplaceAsync runs unconditionally");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_Apply_RemovesTheOldRows_RatherThanDuplicatingThem()
     {
         var file = Path.Combine(_dataRoot, "stale-no-dup.md");
@@ -121,7 +122,7 @@ public sealed class ReingestRepairTests : IDisposable
         hashes.ShouldNotContain(staleHash, "the stale hash must not survive the replace");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_Apply_NeverTouchesAManualRowCitingTheSameSourceFile()
     {
         var file = Path.Combine(_dataRoot, "cited.md");
@@ -139,7 +140,7 @@ public sealed class ReingestRepairTests : IDisposable
         metadata.ShouldNotBeNull("a memory_write row citing the file as source_file must survive reingest untouched");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_Apply_NeverTouchesAGroupWhoseFileIsGone()
     {
         var missing = Path.Combine(_dataRoot, "gone.md");

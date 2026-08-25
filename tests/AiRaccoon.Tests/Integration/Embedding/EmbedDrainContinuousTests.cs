@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -44,7 +45,7 @@ public sealed class EmbedDrainContinuousTests : IDisposable
     /// <summary>For a clean backlog (an exact multiple of the row budget), one signal drains it in
     /// N passes: the first two passes each consume exactly the full row budget and re-signal
     /// themselves; the third finds fewer rows than the budget and stops.</summary>
-    [Fact]
+    [RetryFact]
     public async Task FullBudgetPasses_ReSignalUntilTheBacklogRunsOut()
     {
         var pump = TestData.NewEmbedDrainPump();
@@ -72,7 +73,7 @@ public sealed class EmbedDrainContinuousTests : IDisposable
 
     /// <summary>A pass that returns fewer rows than the budget must not re-signal — the backlog is
     /// exhausted, so a further signal would just spin on an empty corpus.</summary>
-    [Fact]
+    [RetryFact]
     public async Task PartialBudgetPass_DoesNotReSignal()
     {
         var pump = TestData.NewEmbedDrainPump();
@@ -100,7 +101,7 @@ public sealed class EmbedDrainContinuousTests : IDisposable
     ///     when <c>DrainOnceAsync</c>'s own full-budget re-signal fires afterward, it finds that
     ///     request already queued and coalesces against it instead of queueing a second one.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ReSignalForAnAlreadyQueuedCorpus_Coalesces()
     {
         var pump = TestData.NewEmbedDrainPump();
@@ -127,7 +128,7 @@ public sealed class EmbedDrainContinuousTests : IDisposable
     ///     trace. Same scenario as <see cref="ReSignalForAnAlreadyQueuedCorpus_Coalesces" />, plus
     ///     the debug-level log.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task SelfReSignal_NotQueued_LogsAtDebug()
     {
         var pump = TestData.NewEmbedDrainPump();

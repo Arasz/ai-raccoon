@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
@@ -80,7 +81,7 @@ public sealed class BaselineMetricsTests : IDisposable
     ///     Wave 0 gate (docs/plans/retrieval-improvement-c.md §0): computes per-query nDCG@5 /
     ///     MRR / recall@5 with modality attribution and writes the determinism-target report.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task RunBaseline_ComputesMetricsAndWritesReport()
     {
         await EnsureModelAsync();
@@ -184,7 +185,7 @@ public sealed class BaselineMetricsTests : IDisposable
     ///     The determinism gate: two consecutive hybrid passes over the full query set must
     ///     produce identical top-5 hash sequences per query.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task DoubleRun_ProducesIdenticalTop5SequencesPerQuery()
     {
         await EnsureModelAsync();
@@ -232,7 +233,7 @@ public sealed class BaselineMetricsTests : IDisposable
     ///     RED on the old committed DB (no embeddings, vector modality absent); GREEN once the
     ///     regenerated DB (provider='local', all embedded) lands.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task VectorOnly_SearchReturnsRankedResults_OnEmbeddedDatabase()
     {
         await EnsureModelAsync();

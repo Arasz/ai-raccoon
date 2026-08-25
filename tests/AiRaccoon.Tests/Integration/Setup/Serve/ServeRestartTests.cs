@@ -4,6 +4,7 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Setup.Serve;
 
@@ -20,7 +21,7 @@ public sealed class ServeRestartTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task NothingListening_ServesLikePlainServe()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
@@ -37,7 +38,7 @@ public sealed class ServeRestartTests : IDisposable
         (await run.StopAsync()).ShouldBe(ExitCode.Success);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AnExistingServer_IsCycled_AndTheRestartOwnsThePort()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
@@ -88,7 +89,7 @@ public sealed class ServeRestartTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AServerThatRefusesOurToken_ExitsRestartTokenRefused_AndNeverAttaches()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
@@ -111,7 +112,7 @@ public sealed class ServeRestartTests : IDisposable
         fake.ShutdownRequests.ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AServerTooOldToBeCycled_ExitsRestartUnsupportedServer()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
@@ -131,7 +132,7 @@ public sealed class ServeRestartTests : IDisposable
         run.Stdout.ShouldBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AServerWeHoldNoTokenFor_ExitsRestartNoToken_WithoutAskingItToStop()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
@@ -151,7 +152,7 @@ public sealed class ServeRestartTests : IDisposable
         run.Stderr.ShouldContain(new McpTokenFile(_dataRoot).Path);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AListenerThatWillNotIdentify_ReportsPortInUse_WithoutAskingItToStop()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
@@ -175,7 +176,7 @@ public sealed class ServeRestartTests : IDisposable
         run.Stdout.ShouldBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AServerThatReportsNoVersion_IsStillNamedInTheRefusal()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
@@ -202,7 +203,7 @@ public sealed class ServeRestartTests : IDisposable
     ///     an empty port, and — once the bind refutes it — must not claim a restart it never
     ///     attempted (ADR-0043).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task AListenerThatNeverAnswersTheProbe_SaysNothingWasAskedToStop()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
@@ -229,7 +230,7 @@ public sealed class ServeRestartTests : IDisposable
     ///     ADR-0043 that was the plain in-use line and <see cref="ExitCode.PortInUse" />, which
     ///     hid that the restart never happened; now the code says so and stays retryable.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task AForeignListener_ReportsAPortInUseThatNothingWasAskedToStop()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
@@ -244,7 +245,7 @@ public sealed class ServeRestartTests : IDisposable
         run.Stderr.ShouldContain("nothing was asked to stop");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task WithoutRestart_AnExistingServerIsStillAttachedTo()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,

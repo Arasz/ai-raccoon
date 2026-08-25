@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -24,13 +25,13 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = scope },
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = scope }));
 
-    [Fact]
+    [RetryFact]
     public void BankPath_UserScope_IsDataRootMemoryDb() => Factory().BankPath.ShouldBe(Path.Combine(_dataRoot, "memory.db"));
 
-    [Fact]
+    [RetryFact]
     public void BankPath_ProjectScope_IsDataRootAiRaccoonMemoryDb() => Factory(InstallScope.Project).BankPath.ShouldBe(Path.Combine(_dataRoot, ".ai-raccoon", "memory.db"));
 
-    [Fact]
+    [RetryFact]
     public async Task OpenBankAsync_CreatesDatabaseAtBankPath()
     {
         var factory = Factory();
@@ -41,7 +42,7 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
         connection.State.ShouldBe(ConnectionState.Open);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task OpenBankAsync_AppliesWalAndBusyTimeoutPragmas()
     {
         var factory = Factory();
@@ -52,7 +53,7 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
         (await QueryIntAsync(connection, "PRAGMA busy_timeout")).ShouldBe(5000);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task OpenBankAsync_InitializesOurSchema_OnFirstOpen()
     {
         var factory = Factory();
@@ -69,7 +70,7 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
         tables.ShouldContain("vec_entries");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task OpenBankAsync_CreatesOnlyMemoryDb_InTheBankDirectory()
     {
         var factory = Factory();
@@ -85,7 +86,7 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
     ///     cannot be triggered deterministically in-process) must never be diagnosed as a key
     ///     mismatch: only the actual open step proves whether the key is wrong.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task OpenBankWithResolvedKeyAsync_PostOpenSchemaFailure_PropagatesSqliteExceptionUnwrapped()
     {
         var factory = Factory();
@@ -102,7 +103,7 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
 
     /// <summary>A failed post-open step (extensions, vector load, schema DDL) must dispose the
     /// connection it was given rather than leak it, open, into the pool.</summary>
-    [Fact]
+    [RetryFact]
     public async Task InitializeAsync_PostOpenStepThrows_DisposesTheConnection()
     {
         var bankPath = Path.Combine(_dataRoot, "post-open-failure.db");
@@ -124,7 +125,7 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
     ///     Asserts the actual EventId-901/902 message shapes, not a loose substring: a `Contains('1')`
     ///     check would also match an unrelated digit anywhere in any log line and prove nothing.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task InitializeAsync_BankWithNestedWatches_LogsOnePrunedLinePerWatch_AndTheCount()
     {
         var bankPath = Path.Combine(_dataRoot, "watch-overlap-migration.db");

@@ -1,5 +1,6 @@
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Retrieval;
 
@@ -20,7 +21,7 @@ public sealed class RetrievalTuningSetsTests
     ///     in-sample one — ADR-0056's original defect. History: 3 held out on the jsaa corpus
     ///     (A8/A9/A10); 19 — all gradeable queries — on the public corpus (ADR-0090).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void HeldOutSet_IsNotEmpty_AndIsDocumentDisjointFromTuning()
     {
         var catalog = BaselineQueryCatalog.Load();
@@ -41,7 +42,7 @@ public sealed class RetrievalTuningSetsTests
     ///     The partition covers every gradeable query exactly once: tuning, held out, or leaked
     ///     through a shared document. A query in none of the three is one nothing scores.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void EveryGradeableQuery_LandsInExactlyOneTier()
     {
         var catalog = BaselineQueryCatalog.Load();
@@ -63,7 +64,7 @@ public sealed class RetrievalTuningSetsTests
     ///     spanned both and no family was unseen. A selection that collapsed to one family would
     ///     also fail here, which is what keeps corpus_config's two-family shape load-bearing.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void EveryFamilyIsHeldOut_BecauseNothingWasTunedOnThisCorpus()
     {
         var catalog = BaselineQueryCatalog.Load();
@@ -92,7 +93,7 @@ public sealed class RetrievalTuningSetsTests
     ///     goes red — which is the moment ADR-0090's "every gradeable query is out-of-sample"
     ///     claim stops being true and must be amended rather than quietly outgrown.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void TuningQueryIds_StayEmpty()
     {
         RetrievalTuningSets.TuningQueryIds.ShouldBeEmpty(

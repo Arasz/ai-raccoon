@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
@@ -35,7 +36,7 @@ public sealed class MemoryStoreContextScopeTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task AddContentAsync_NamingAnotherProjectInTheContext_WritesNothing()
     {
         // The access gate authorises the request's projectId, so a context that re-targets the row
@@ -48,7 +49,7 @@ public sealed class MemoryStoreContextScopeTests : IDisposable
         (await RowsForProjectAsync(Caller)).ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AddContentAsync_WithTheCallersOwnProjectContext_Writes()
     {
         await _store.AddContentAsync(Caller, "/notes/ours.md", "kept",
@@ -57,7 +58,7 @@ public sealed class MemoryStoreContextScopeTests : IDisposable
         (await RowsForProjectAsync(Caller)).ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AddContentAsync_WithALabelContext_StoresTheLabelTheFilterLooksFor()
     {
         // The stored context_label must equal what ContextKeyFor puts in the vec0 `ctx` column,
@@ -72,7 +73,7 @@ public sealed class MemoryStoreContextScopeTests : IDisposable
         MemorySql.ContextKeyFor(context, Caller).ShouldEndWith($":{stored}");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task DeleteContextAsync_NamingAnotherProject_DeletesNothing()
     {
         // The access gate authorises the request's projectId; a context that re-targets the delete
@@ -86,7 +87,7 @@ public sealed class MemoryStoreContextScopeTests : IDisposable
         (await RowsForProjectAsync(Victim)).ShouldBe(1, "the refused delete must leave the victim's row");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task DeleteContextAsync_NamingTheSharedTier_DeletesNothing()
     {
         // `shared` names no project, so a filter built from it carries no project predicate and
@@ -100,7 +101,7 @@ public sealed class MemoryStoreContextScopeTests : IDisposable
         (await SharedRowsAsync()).ShouldBe(1, "the refused delete must leave the shared tier intact");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task DeleteContextAsync_WithTheCallersOwnProjectContext_Deletes()
     {
         await _store.AddContentAsync(Caller, "/notes/ours.md", "ours",

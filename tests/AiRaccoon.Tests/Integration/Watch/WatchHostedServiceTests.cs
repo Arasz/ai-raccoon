@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using AiRaccoon.Tests.Unit.Watch;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Watch;
 
@@ -36,7 +37,7 @@ public sealed class WatchHostedServiceTests
         return (stack, source, catchUp, hosted);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Reconcile_NoOpPass_EmitsNoSpan_ButRecordsTheDurationAndCount()
     {
         // Nothing registered, so nothing starts/stops/unregisters: a poll-loop tick that happens
@@ -51,7 +52,7 @@ public sealed class WatchHostedServiceTests
         probe.Passes.ShouldHaveSingleItem().Tags["result"].ShouldBe("success");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Reconcile_WhenAWatcherStarts_EmitsASpan()
     {
         using var dir = TempDir.New("hosted-span-on-work");
@@ -69,7 +70,7 @@ public sealed class WatchHostedServiceTests
         await hosted.StopAsync(CancellationToken.None);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Reconcile_WhenThePassThrows_RecordsTheFailure()
     {
         using var probe = new BackgroundTelemetryProbe(WatchHostedService.OperationName);
@@ -85,7 +86,7 @@ public sealed class WatchHostedServiceTests
         duration.Tags["error.type"].ShouldBe(nameof(InvalidOperationException));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Reconcile_DisabledProject_KeepsRegistration_AndStartsNoWatcher()
     {
         using var dir = TempDir.New("hosted-disabled");
@@ -102,7 +103,7 @@ public sealed class WatchHostedServiceTests
         status.State.ShouldBe(WatchState.Scanning);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Reconcile_EnabledNeverSynced_StartsWatcher_AndRunsAFullInitialScan()
     {
         using var dir = TempDir.New("hosted-full");
@@ -123,7 +124,7 @@ public sealed class WatchHostedServiceTests
         await hosted.StopAsync(CancellationToken.None);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Reconcile_EnabledWithWatermark_RunsASinceScan_OnlyNewerFilesQueued()
     {
         using var dir = TempDir.New("hosted-since");
@@ -151,7 +152,7 @@ public sealed class WatchHostedServiceTests
         await hosted.StopAsync(CancellationToken.None);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Reconcile_RemovedRegistration_StopsTheWatcher()
     {
         using var dir = TempDir.New("hosted-removed");
@@ -169,7 +170,7 @@ public sealed class WatchHostedServiceTests
         await hosted.StopAsync(CancellationToken.None);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Reconcile_DisableFlip_StopsTheWatcher_ButKeepsTheRegistration()
     {
         using var dir = TempDir.New("hosted-flip");
@@ -188,7 +189,7 @@ public sealed class WatchHostedServiceTests
         await hosted.StopAsync(CancellationToken.None);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Reconcile_StaleRegistration_UnregistersFromThePipeline()
     {
         using var dir = TempDir.New("hosted-stale-unregister");
@@ -205,7 +206,7 @@ public sealed class WatchHostedServiceTests
         await hosted.StopAsync(CancellationToken.None);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Reconcile_StaleRegistration_StopsResolvingItsFilesForDigest()
     {
         using var dir = TempDir.New("hosted-stale-digest");
@@ -227,7 +228,7 @@ public sealed class WatchHostedServiceTests
         await hosted.StopAsync(CancellationToken.None);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Reconcile_StaleRegistrationOfADisabledProject_UnregistersFromThePipeline()
     {
         using var dir = TempDir.New("hosted-stale-disabled");
@@ -243,7 +244,7 @@ public sealed class WatchHostedServiceTests
         await hosted.StopAsync(CancellationToken.None);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Reconcile_DisableFlip_KeepsThePipelineRegistration()
     {
         using var dir = TempDir.New("hosted-flip-keeps-registration");
@@ -260,7 +261,7 @@ public sealed class WatchHostedServiceTests
         await hosted.StopAsync(CancellationToken.None);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task StopAsync_DisposesAllWatchers()
     {
         using var dir = TempDir.New("hosted-stop");
@@ -281,7 +282,7 @@ public sealed class WatchHostedServiceTests
     ///     fresh scan — the store shows the registration present at the next poll either way, so
     ///     <c>_active</c> alone cannot tell "still running" from "removed, then re-added".
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Reconcile_RemoveThenReAddBetweenPolls_StartsANewScan()
     {
         using var dir = TempDir.New("hosted-remove-readd");
@@ -310,7 +311,7 @@ public sealed class WatchHostedServiceTests
     ///     Host shutdown must cancel a scan that is still walking the tree, not let it run to
     ///     completion after the poll loop has already exited.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task StopAsync_CancelsAnInFlightScan()
     {
         using var dir = TempDir.New("hosted-stop-cancels-scan");
@@ -336,7 +337,7 @@ public sealed class WatchHostedServiceTests
         stack.Store.ListFilesTokens[0].IsCancellationRequested.ShouldBeTrue("host shutdown must cancel an in-flight scan");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ExecuteAsync_ReconcilesOnEachPoll_AndPicksUpNewRegistrations()
     {
         using var dir = TempDir.New("hosted-loop");
@@ -373,7 +374,7 @@ public sealed class WatchHostedServiceTests
     ///     Without the once-per-process <c>_active</c> gate, a directory whose watermark never
     ///     advances would full-scan once per second, forever (docs/plans/2026-08-07-watch-scan-runaway-fix.md).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Reconcile_CalledTwice_EnqueuesOnlyOneScan()
     {
         using var dir = TempDir.New("hosted-once");

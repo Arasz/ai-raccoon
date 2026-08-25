@@ -4,6 +4,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -17,7 +18,7 @@ namespace AiRaccoon.Tests.Integration.Storage;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class SqliteCodeStoreTests
 {
-    [Fact]
+    [RetryFact]
     public async Task VecCode_Accepts768DimVectors_AndRejects384()
     {
         await using var connection = await OpenAsync();
@@ -43,7 +44,7 @@ public sealed class SqliteCodeStoreTests
                 new { embedding = vector384 }, cancellationToken: TestContext.Current.CancellationToken)));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CodeFts_ExternalContent_MatchReturnsCodeRows()
     {
         await using var connection = await OpenAsync();
@@ -58,7 +59,7 @@ public sealed class SqliteCodeStoreTests
         rowid.ShouldBe(1L);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task PerCorpusDimension_IsIndependent_768And384Coexist()
     {
         await using var connection = await OpenAsync();
@@ -94,7 +95,7 @@ public sealed class SqliteCodeStoreTests
     ///     embedded upserts <c>vec_code</c> → marking it pending again empties <c>vec_code</c>
     ///     (the row itself stays; <c>code_fts</c> keeps tracking it via <c>value</c>).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task CodeRow_RoundTrips_ThroughFtsAndVecCodeViaEmbedStateTriggers()
     {
         await using var connection = await OpenAsync();

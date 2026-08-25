@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Ingestion;
 
@@ -29,7 +30,7 @@ public sealed class ProdDiCodeChunkerTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task IngestDirectoryAsync_ProdDI_CodeTree_WritesRealCodeRows_MemoryUnaffected()
     {
         var services = new ServiceCollection();

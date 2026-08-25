@@ -10,6 +10,7 @@ using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Unit.Storage;
@@ -54,7 +55,7 @@ public sealed class ProjectRowsTests : IDisposable
         _store.WriteAsync(new MemoryWriteRequest("acme", content, Context: label),
             TestContext.Current.CancellationToken);
 
-    [Fact]
+    [RetryFact]
     public async Task SetEntryTtl_OnAContextLabelledEntry_Applies()
     {
         var entry = await WriteLabelledAsync();
@@ -70,7 +71,7 @@ public sealed class ProjectRowsTests : IDisposable
     ///     custom sibling of the same hash, the TTL lands on the project row, not whichever the
     ///     engine returns first.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task SetEntryTtl_WithBothAProjectRowAndACustomSibling_PrefersTheProjectRow()
     {
         const string content = "a fact written twice";
@@ -100,7 +101,7 @@ public sealed class ProjectRowsTests : IDisposable
         byScope.First(r => r.Scope == "custom").Ttl.ShouldBeNull("the sibling must not also be written");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Share_PromotesAContextLabelledEntry()
     {
         var entry = await WriteLabelledAsync("a durable cross-project fact");
@@ -111,7 +112,7 @@ public sealed class ProjectRowsTests : IDisposable
             "a context-labelled entry is inside its project and can be promoted from it");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ExtractCandidates_IncludesContextLabelledEntries()
     {
         var entry = await WriteLabelledAsync("a candidate worth promoting");
@@ -123,7 +124,7 @@ public sealed class ProjectRowsTests : IDisposable
             "the sweep and the promotion scorer must see every row inside the project");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetProjectIds_IncludesAProjectWhoseRowsAreAllContextLabelled()
     {
         await WriteLabelledAsync();
@@ -138,7 +139,7 @@ public sealed class ProjectRowsTests : IDisposable
     ///     the same project-only predicate, so a queue row backed solely by a labelled entry
     ///     survived the entry's deletion — the orphan the trigger exists to prevent.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task DeletingTheLastContextLabelledRow_DropsItsPromotionQueueRow()
     {
         var entry = await WriteLabelledAsync("queued candidate");

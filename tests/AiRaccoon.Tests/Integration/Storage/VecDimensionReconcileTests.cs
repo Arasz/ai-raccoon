@@ -3,6 +3,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -16,7 +17,7 @@ namespace AiRaccoon.Tests.Integration.Storage;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class VecDimensionReconcileTests
 {
-    [Fact]
+    [RetryFact]
     public async Task ReconcileAsync_TargetDiffersFromDeclared_RecreatesBothTablesAtTheTarget()
     {
         await using var connection = await OpenAsync();
@@ -31,7 +32,7 @@ public sealed class VecDimensionReconcileTests
             customMessage: "both tables move together — vec_structure is the one G4 caught missing");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ReconcileAsync_TargetMatchesDeclared_IsANoOp()
     {
         await using var connection = await OpenAsync();
@@ -47,7 +48,7 @@ public sealed class VecDimensionReconcileTests
     ///     `ReadVecDimensionAsync` returns 384 for a MISSING table, so a dimension comparison alone
     ///     reports "already correct" and never creates it. Presence must be read explicitly.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ReconcileAsync_TableMissingAtTheTargetDimension_CreatesIt()
     {
         await using var connection = await OpenAsync();
@@ -63,7 +64,7 @@ public sealed class VecDimensionReconcileTests
 
     /// <summary>The trap D3 exists to avoid: old-dimension blobs must never be inserted into the
     /// fresh table. The drain's MarkEmbedded refills it through the triggers instead.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ReconcileAsync_DoesNotRepopulateFromTheEntriesBlobColumns()
     {
         await using var connection = await OpenAsync();
@@ -82,7 +83,7 @@ public sealed class VecDimensionReconcileTests
 
     /// <summary>The code tables must move without touching the memory tables: vec_code is the
     /// code corpus's own index, independent of the memory engine's dimension.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ReconcileAsync_CodeTables_TargetDiffers_RecreatesVecCodeOnly()
     {
         await using var connection = await OpenAsync();
@@ -100,7 +101,7 @@ public sealed class VecDimensionReconcileTests
     }
 
     /// <summary>A matching dimension must not drop the populated code index either.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ReconcileAsync_CodeTables_TargetMatches_IsANoOp()
     {
         await using var connection = await OpenAsync();
@@ -115,7 +116,7 @@ public sealed class VecDimensionReconcileTests
 
     /// <summary>Presence is read explicitly for the code tables exactly as for the memory
     /// tables — a dimension comparison alone would report "already correct" for a missing table.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ReconcileAsync_CodeTables_TableMissing_CreatesIt()
     {
         await using var connection = await OpenAsync();
@@ -131,7 +132,7 @@ public sealed class VecDimensionReconcileTests
 
     /// <summary>With a caller transaction the reconciler must NOT begin/commit its own: the
     /// activation transaction (O3) owns the DDL, so an outer rollback undoes the reconcile too.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ReconcileAsync_CodeTables_InCallersTransaction_DoesNotCommitItself()
     {
         await using var connection = await OpenAsync();

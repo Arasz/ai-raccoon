@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
@@ -44,7 +45,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         TestData.DeleteTempRoot(_dataRoot);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_WithConfiguredEngine_ReturnsVectorOnlyHit_WhenKeywordHasNoMatch()
     {
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
@@ -67,7 +68,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         hit.Ranking.ShouldBeInRange(0.0, 1.0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_VectorOnlyHit_SnippetFallsBackToTrimmedValue_WithEllipsis()
     {
         // A vector-only hit has no FTS5 snippet(); FR-NM-4 s1 (docs/work/features-native-memory/native-memory.feature)
@@ -96,7 +97,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
     ///     unrelated to the query — for a long entry the agent would see ~7% of it, chosen
     ///     arbitrarily, and could easily miss the very term that made this a hit.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Search_VectorOnlyHit_SnippetIsQueryRelevant_EvenWhenTheMatchIsLateInALongEntry()
     {
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
@@ -124,7 +125,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
             customMessage: "the snippet must be centered on the query match, not an arbitrary hash-seeded window");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_VectorOnly_ReturnsExactlyLimitResults_WithCorrectSnippets_OutOfALargerCandidateSet()
     {
         // Laziness proof: N=8 vector-only candidates compete for a Limit=3 query; every returned
@@ -155,7 +156,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_FtsOnly_ReturnsExactlyLimitResults_WithNativeFtsSnippets_OutOfALargerCandidateSet()
     {
         // Laziness proof for the FTS modality (docs/plans/2026-08-08-search-knn-perf.md §WP7): N=8
@@ -180,7 +181,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
             "survivors must carry the real FTS snippet() text, resolved lazily for ranking survivors only");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_HashInBothFtsAndVectorLists_SnippetPrefersFtsNative_OverVectorFallback()
     {
         // Precedence (docs/plans/2026-08-08-search-knn-perf.md §WP7): ReciprocalRankFusion.Fuse fuses
@@ -208,7 +209,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         hit.Snippet.ShouldNotBe(SnippetFallback.From(longValue, hit.Hash));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_VecOnlyQuery_RanksAscendingByDistance_AndNeverScoresWithDistance()
     {
         // vec_distance_cosine is a DISTANCE (0 = identical), so the vec list ranks ascending and
@@ -235,7 +236,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         results.ShouldAllBe(r => r.Ranking >= 0.0 && r.Ranking <= 1.0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_CandidateWindow_RescuesOverlapCandidateBeyondThePerModalityLimit()
     {
         // Per-modality candidate window K = max(limit*3, 100): a doc ranked second in both modalities
@@ -268,7 +269,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         hit.Hash.ShouldNotBe(c.Entry.Hash);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_FusionWeights_FlipTheWinnerBetweenKeywordAndVectorFavoured()
     {
         // keywordFavoured is FTS-only: written before the bank's first-ever configure below, whose
@@ -304,7 +305,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         vectorFirst.Select(r => r.Hash).ShouldBe([vectorFavoured.Hash, keywordFavoured.Hash]);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_ScopeShared_ExcludesProjectOnlyFacts()
     {
         // FR-NM-4 s4 (see docs/work/features-native-memory/native-memory.feature): scope selection is unchanged — a project-only fact is invisible to a

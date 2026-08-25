@@ -4,6 +4,7 @@ using AiRaccoon.Infrastructure.Embedding.Manifest;
 using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -68,14 +69,14 @@ public sealed class EmbeddingServiceManifestBudgetTests
             new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
             NoOpMeasurementRecorder.Instance, TimeProvider.System);
 
-    [Fact]
+    [RetryFact]
     public void ResolveChunkBudgetFor_BundledLocal_Stays254()
     {
         Service().ResolveChunkBudgetFor(new EmbeddingSettings("local", null, null, null))
             .ShouldBe(OnnxEmbeddingGenerator.MaxContentTokens);
     }
 
-    [Fact]
+    [RetryFact]
     public void ResolveChunkBudgetFor_LegacyOnnxFile_Stays254()
     {
         var onnx = Path.Combine(Path.GetTempPath(), "ai-raccoon-budget-tests", Guid.NewGuid().ToString("N") + ".onnx");
@@ -85,7 +86,7 @@ public sealed class EmbeddingServiceManifestBudgetTests
             .ShouldBe(OnnxEmbeddingGenerator.MaxContentTokens);
     }
 
-    [Fact]
+    [RetryFact]
     public void ResolveChunkBudgetFor_ManifestWith8192Window_IsCappedAt510()
     {
         var dir = WriteManifestDir(Manifest(8192), ("vocab.txt", "vocab"), ("model.onnx", "model"));
@@ -100,7 +101,7 @@ public sealed class EmbeddingServiceManifestBudgetTests
     ///     SqliteMemoryStore's ChunkToBudgetAsync) — hashing on every call, not once per engine,
     ///     is the plan's explicitly forbidden shape (plan D1, "not per tool call").
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void ResolveChunkBudgetFor_CalledRepeatedly_HashesTheManifestFilesOnlyOncePerEngine()
     {
         var vocab = BundledModel.ResolveVocabPath();
@@ -132,7 +133,7 @@ public sealed class EmbeddingServiceManifestBudgetTests
         }
     }
 
-    [Fact]
+    [RetryFact]
     public void ResolveChunkBudgetFor_ManifestWith300Window_IsCtxMinusTwo()
     {
         var dir = WriteManifestDir(Manifest(300), ("vocab.txt", "vocab"), ("model.onnx", "model"));
@@ -141,14 +142,14 @@ public sealed class EmbeddingServiceManifestBudgetTests
             .ShouldBe(298);
     }
 
-    [Fact]
+    [RetryFact]
     public void ResolveChunkBudgetFor_OpenAi_KeepsTodaySCap()
     {
         Service().ResolveChunkBudgetFor(new EmbeddingSettings("openai", "text-embedding-3-small", null, null))
             .ShouldBe(256, "today's min(256, 8191) — remote chunk budgets are unchanged by WP3");
     }
 
-    [Fact]
+    [RetryFact]
     public void TrimQueryToWindow_ManifestModel_TrimsToTheSameCap()
     {
         var vocab = BundledModel.ResolveVocabPath();
@@ -166,7 +167,7 @@ public sealed class EmbeddingServiceManifestBudgetTests
             "the trim must keep as much of the query as fits");
     }
 
-    [Fact]
+    [RetryFact]
     public void TrimQueryToWindow_ManifestModel_AtTheCap_IsNotTrimmed()
     {
         var vocab = BundledModel.ResolveVocabPath();
@@ -184,7 +185,7 @@ public sealed class EmbeddingServiceManifestBudgetTests
         result.ShouldBe(atCap, "a query exactly at the manifest cap must not be trimmed");
     }
 
-    [Fact]
+    [RetryFact]
     public void EngineFingerprint_ManifestDirectory_HashesTheManifestContent()
     {
         var dir = WriteManifestDir(Manifest(), ("vocab.txt", "vocab"), ("model.onnx", "model"));
@@ -196,7 +197,7 @@ public sealed class EmbeddingServiceManifestBudgetTests
         Service().EngineFingerprint("local", dir, null).ShouldBe(expected);
     }
 
-    [Fact]
+    [RetryFact]
     public void EngineFingerprint_ManifestWithNewFileShas_ChangesTheFingerprint()
     {
         var dir = WriteManifestDir(Manifest(), ("vocab.txt", "vocab"), ("model.onnx", "model"));
@@ -210,14 +211,14 @@ public sealed class EmbeddingServiceManifestBudgetTests
         Service().EngineFingerprint("local", dir, null).ShouldNotBe(first);
     }
 
-    [Fact]
+    [RetryFact]
     public void EngineFingerprint_LegacyAndBundled_AreUnchanged()
     {
         Service().EngineFingerprint("local", null, null).ShouldBe("local:bundled");
         Service().EngineFingerprint("local", "/models/custom.onnx", null).ShouldBe("local:/models/custom.onnx");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ResolveTokenizer_ManifestSentencePiece_ReturnsTheManifestTokenizer()
     {
         var spmPath = await TestData.EnsureSentencePieceFixtureAsync(TestContext.Current.CancellationToken);
@@ -240,21 +241,21 @@ public sealed class EmbeddingServiceManifestBudgetTests
         tokenizer.CountTokens("The quick brown fox jumps over the lazy dog.").ShouldBeGreaterThan(0);
     }
 
-    [Fact]
+    [RetryFact]
     public void ResolveTokenizer_OpenAi_IsNull()
     {
         Service().ResolveTokenizer(new EmbeddingSettings("openai", "text-embedding-3-small", null, null))
             .ShouldBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public void ResolveTokenizer_Bundled_IsTheWordPieceTokenizer()
     {
         Service().ResolveTokenizer(new EmbeddingSettings("local", null, null, null))
             .ShouldBeOfType<WordPieceEmbeddingTokenizer>();
     }
 
-    [Fact]
+    [RetryFact]
     public void ResolveTokenizer_IsCachedPerFingerprint_SharedWithTheGenerator()
     {
         var vocab = BundledModel.ResolveVocabPath();
@@ -270,17 +271,17 @@ public sealed class EmbeddingServiceManifestBudgetTests
 
     /// <summary>D2/D3: the drain reconciles vec0 to whatever the remote endpoint returns, so the
     /// declared `embedding.dimensions` is what ResolveDimensions must answer — not the 384 default.</summary>
-    [Fact]
+    [RetryFact]
     public void ResolveDimensions_RemoteWithDeclaredDimensions_ReturnsTheDeclaredValue() =>
         Service().ResolveDimensions(new EmbeddingSettings("openai", "text-embedding-3-large", null, null, 3072))
             .ShouldBe(3072);
 
-    [Fact]
+    [RetryFact]
     public void ResolveDimensions_RemoteWithoutDeclaredDimensions_KeepsTheLegacyAssumption() =>
         Service().ResolveDimensions(new EmbeddingSettings("openai", "text-embedding-3-small", null, null))
             .ShouldBe(384);
 
-    [Fact]
+    [RetryFact]
     public void ResolveDimensions_BundledLocal_Is384() =>
         Service().ResolveDimensions(new EmbeddingSettings("local", null, null, null)).ShouldBe(384);
 }

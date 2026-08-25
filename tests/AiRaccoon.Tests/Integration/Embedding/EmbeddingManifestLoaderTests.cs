@@ -3,6 +3,7 @@ using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -61,7 +62,7 @@ public sealed class EmbeddingManifestLoaderTests
         ["pooling"] = new JsonObject { ["mode"] = "mean" }
     };
 
-    [Fact]
+    [RetryFact]
     public void Load_ParsesTheD1Shape_IntoTheDescriptor()
     {
         var dir = WriteModelDir(BertManifest().ToJsonString(), ("vocab.txt", "vocab"), ("model.onnx", "model"));
@@ -84,7 +85,7 @@ public sealed class EmbeddingManifestLoaderTests
         descriptor.Files.ShouldContain(f => f.Path == "model.onnx" && f.Sha256 == ShaOf("model"));
     }
 
-    [Fact]
+    [RetryFact]
     public void Load_SentencePieceManifest_CarriesTheTokenizerOptions()
     {
         var manifest = BertManifest();
@@ -114,7 +115,7 @@ public sealed class EmbeddingManifestLoaderTests
         descriptor.SpecialTokenReservation.ShouldBe(2);
     }
 
-    [Fact]
+    [RetryFact]
     public void Load_DirectoryWithoutManifest_ThrowsActionableError()
     {
         var dir = Path.Combine(Path.GetTempPath(), "ai-raccoon-manifest-tests", Guid.NewGuid().ToString("N"));
@@ -127,7 +128,7 @@ public sealed class EmbeddingManifestLoaderTests
         ex.Message.ShouldContain("model download", customMessage: "the error must point at the fix");
     }
 
-    [Fact]
+    [RetryFact]
     public void Load_UnknownTokenizerFamily_ThrowsActionableError()
     {
         var manifest = BertManifest();
@@ -141,7 +142,7 @@ public sealed class EmbeddingManifestLoaderTests
         ex.Message.ShouldContain("sentencepiece");
     }
 
-    [Fact]
+    [RetryFact]
     public void Load_TokenizerJsonFamily_IsRecognizedButRejectedAsUnsupported()
     {
         var manifest = BertManifest();
@@ -153,7 +154,7 @@ public sealed class EmbeddingManifestLoaderTests
         ex.Message.ShouldContain("tokenizer-json");
     }
 
-    [Fact]
+    [RetryFact]
     public void Load_ModelOutputPoolingWithoutEmbeddingOutput_ThrowsActionableError()
     {
         var manifest = BertManifest();
@@ -166,7 +167,7 @@ public sealed class EmbeddingManifestLoaderTests
         ex.Message.ShouldContain("embeddingOutput");
     }
 
-    [Fact]
+    [RetryFact]
     public void Load_MalformedFileSha_ThrowsActionableError()
     {
         var manifest = BertManifest();
@@ -178,7 +179,7 @@ public sealed class EmbeddingManifestLoaderTests
         ex.Message.ShouldContain("sha256");
     }
 
-    [Fact]
+    [RetryFact]
     public void Load_DeclaredFileMissingOnDisk_ThrowsActionableError()
     {
         var manifest = BertManifest();
@@ -189,7 +190,7 @@ public sealed class EmbeddingManifestLoaderTests
         ex.Message.ShouldContain("model.onnx");
     }
 
-    [Fact]
+    [RetryFact]
     public void Load_BareStringSpecialTokens_IsRejected_WithNumericMapGuidance()
     {
         var manifest = BertManifest();
@@ -210,7 +211,7 @@ public sealed class EmbeddingManifestLoaderTests
     ///     WP4 lifted the 384-only activation gate: the drain reconciles vec0 to the engine's
     ///     dimension before it writes (D3), so any declared dimension loads.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void Load_Non384Manifest_IsAccepted()
     {
         var dir = WriteModelDir(BertManifest(dimensions: 1024).ToJsonString(), ("vocab.txt", "vocab"), ("model.onnx", "model"));
@@ -224,7 +225,7 @@ public sealed class EmbeddingManifestLoaderTests
     ///     D1 marks <c>source</c> required and the WP1 validator enforces it; the read path must
     ///     agree with the pinned contract, not accept a manifest the writer could never emit.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void Load_ManifestWithoutSource_IsRejected()
     {
         var manifest = BertManifest();

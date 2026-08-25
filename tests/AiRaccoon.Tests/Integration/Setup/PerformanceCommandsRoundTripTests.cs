@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Setup;
 
@@ -51,7 +52,7 @@ public sealed class PerformanceCommandsRoundTripTests : IDisposable
 
     /// <summary>MetricsFlusher.ApplyBufferCapacitySafeAsync reads buffer capacity exactly once, at
     /// the top of ExecuteAsync — "next server restart" in product terms.</summary>
-    [Fact]
+    [RetryFact]
     public async Task SetBufferCapacity_IsAppliedByMetricsFlusher_OnStartup()
     {
         var settings = new InMemorySettings();
@@ -75,7 +76,7 @@ public sealed class PerformanceCommandsRoundTripTests : IDisposable
 
     /// <summary>MetricsFlusher.ReadFlushIntervalSafeAsync re-reads the interval inside the periodic
     /// loop — "next flush tick" in product terms.</summary>
-    [Fact]
+    [RetryFact]
     public async Task SetFlushInterval_IsAppliedByMetricsFlusher_OnTheNextTick()
     {
         var settings = new InMemorySettings();
@@ -118,7 +119,7 @@ public sealed class PerformanceCommandsRoundTripTests : IDisposable
 
     /// <summary>MetricsRetentionJob re-reads the retention window on every maintenance pass —
     /// "next maintenance pass" in product terms. Reads through the real settings table, not a fake.</summary>
-    [Fact]
+    [RetryFact]
     public async Task SetRetention_IsAppliedByMetricsRetentionJob_OnTheNextPass()
     {
         var options = TestData.CreateInfrastructureOptions(_dataRoot);

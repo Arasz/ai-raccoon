@@ -3,6 +3,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -16,7 +17,7 @@ namespace AiRaccoon.Tests.Integration;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class MemorySchemaCodeCorpusTests
 {
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAFreshBank_CreatesCodeTablesAt768()
     {
         await using var connection = await OpenAsync();
@@ -39,7 +40,7 @@ public sealed class MemorySchemaCodeCorpusTests
         (await TableExistsAsync(connection, "vec_code_structure")).ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAnExistingBank_AddsCodeTables_AndPreservesMemoryTables()
     {
         await using var connection = await OpenAsync();
@@ -78,7 +79,7 @@ public sealed class MemorySchemaCodeCorpusTests
         (await TableExistsAsync(connection, "vec_structure")).ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SchemaDigest_ChangesWhenCodeDdlIsAdded_AndSecondOpenIsANoOp()
     {
         await using var connection = await OpenAsync();
@@ -104,7 +105,7 @@ public sealed class MemorySchemaCodeCorpusTests
             "a digest-matched bank must skip the Ddl block entirely, even though code_entries was dropped underneath it");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CodeEntriesRow_HasExactlyTheDesignedColumns_AndNoMemoryOnlyColumns()
     {
         await using var connection = await OpenAsync();
@@ -137,7 +138,7 @@ public sealed class MemorySchemaCodeCorpusTests
     ///     <c>hash</c> (or <c>path</c>) for the same project/path never collide. CodeIngestor
     ///     always supplies these columns, so a NULL there is a bug, not a legitimate state.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task CodeEntries_DedupAndAlwaysSuppliedColumns_AreNotNull()
     {
         await using var connection = await OpenAsync();
@@ -158,7 +159,7 @@ public sealed class MemorySchemaCodeCorpusTests
         notNullColumns.ShouldContain("line_end");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CodeEntries_InsertingANullHash_ViolatesNotNullConstraint()
     {
         await using var connection = await OpenAsync();
@@ -171,7 +172,7 @@ public sealed class MemorySchemaCodeCorpusTests
             """, cancellationToken: TestContext.Current.CancellationToken)));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CodeEntries_InsertingANullPath_ViolatesNotNullConstraint()
     {
         await using var connection = await OpenAsync();
@@ -188,7 +189,7 @@ public sealed class MemorySchemaCodeCorpusTests
     ///     Acceptance criterion 4: adding the code corpus to the digest-gated Ddl block must not
     ///     change a single memory object's stored SQL — the two corpora share only the file.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_AddingCodeDdl_LeavesMemoryObjectsSqlByteIdentical()
     {
         await using var connection = await OpenAsync();

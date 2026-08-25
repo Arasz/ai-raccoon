@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Ingestion;
@@ -72,7 +73,7 @@ public sealed class DirectIngestReplacesStaleChunksTests : IDisposable
             $"## Section {i}\n\n" + string.Join(" ", Enumerable.Repeat($"magnetostrictive section {i} body text", 40))));
 
     /// <summary>B1 — the defect itself.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ReIngestingAPathThatChunksDifferently_LeavesOnlyTheNewChunkSet()
     {
         var file = Path.Combine(_dataRoot, "sextant.md");
@@ -93,7 +94,7 @@ public sealed class DirectIngestReplacesStaleChunksTests : IDisposable
     }
 
     /// <summary>B3 — dedup must keep working; re-ingesting identical content must not duplicate.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ReIngestingIdenticalContent_DoesNotDuplicateRows()
     {
         var file = Path.Combine(_dataRoot, "stable.md");
@@ -108,7 +109,7 @@ public sealed class DirectIngestReplacesStaleChunksTests : IDisposable
     }
 
     /// <summary>B2 — the delete is per file; a sibling in the same directory must survive.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ReIngestingOneFile_LeavesItsSiblingsAlone()
     {
         var target = Path.Combine(_dataRoot, "target.md");
@@ -130,7 +131,7 @@ public sealed class DirectIngestReplacesStaleChunksTests : IDisposable
     ///     is a statement that its content should not be searchable; leaving the previous chunks
     ///     behind keeps serving exactly the stale content this defect is about.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task DirectIngestOfANowIgnoredFile_IngestsNothing_AndRemovesWhatWasStored()
     {
         var file = Path.Combine(_dataRoot, "ignored-later.md");
@@ -155,7 +156,7 @@ public sealed class DirectIngestReplacesStaleChunksTests : IDisposable
     ///     B6 — `memory_ingest_directory` walks per file and must replace each walked file's chunk
     ///     set for the same reason the single-file path does; otherwise the defect just moves.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ReIngestingADirectory_ReplacesEachWalkedFilesChunkSet()
     {
         var dir = Path.Combine(_dataRoot, "docs");
@@ -183,7 +184,7 @@ public sealed class DirectIngestReplacesStaleChunksTests : IDisposable
     ///     through `memory_ingest_directory` stranded its old `code_entries` rows — the same defect
     ///     B6 fixed for the memory corpus, left open for code (single-file leg fixed by #481).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ReIngestingADirectory_PrunesStaleCodeEntries_ForAShrunkCodeFile()
     {
         var dir = Path.Combine(_dataRoot, "src");

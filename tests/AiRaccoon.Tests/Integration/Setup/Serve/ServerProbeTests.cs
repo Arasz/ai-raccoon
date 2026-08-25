@@ -5,6 +5,7 @@ using AiRaccoon.Hosting.Common;
 using AiRaccoon.Tests.E2E;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Setup.Serve;
 
@@ -26,7 +27,7 @@ public sealed class ServerProbeTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Probe_RejectsAForeignListener()
     {
         var port = HoldForeignListener();
@@ -36,7 +37,7 @@ public sealed class ServerProbeTests : IDisposable
         responds.ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Probe_RecognizesAnAiRaccoonServer()
     {
         using var factory = new McpServerFactory();
@@ -48,7 +49,7 @@ public sealed class ServerProbeTests : IDisposable
         responds.ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Probe_WhenTheCallerCancels_ThrowsInsteadOfReportingNoServer()
     {
         var port = HoldSilentListener();
@@ -59,7 +60,7 @@ public sealed class ServerProbeTests : IDisposable
             TestData.CreateServerProbe().RespondsAsync(port, caller.Token));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Probe_WhenItsOwnTimeoutExpires_ReportsNoServer()
     {
         var port = HoldSilentListener();

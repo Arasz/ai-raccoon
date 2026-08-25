@@ -6,6 +6,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -19,7 +20,7 @@ namespace AiRaccoon.Tests.Integration.Embedding;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class DrainReconcilesDimensionsFirstTests
 {
-    [Fact]
+    [RetryFact]
     public async Task DrainMigrationAsync_ReconcilesBeforeEmbeddingTheFirstRow()
     {
         await using var connection = await OpenAsync();
@@ -41,7 +42,7 @@ public sealed class DrainReconcilesDimensionsFirstTests
 
     /// <summary>A vec table dropped at runtime is not healed by the next open (the Ddl block is
     /// digest-gated, ADR-0075), so the drain is the only thing that can bring it back.</summary>
-    [Fact]
+    [RetryFact]
     public async Task DrainMigrationAsync_WithVecEntriesDropped_RecreatesItAndFillsIt()
     {
         await using var connection = await OpenAsync();

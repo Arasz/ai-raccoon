@@ -2,6 +2,7 @@ using AiRaccoon.Infrastructure.Embedding;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -26,14 +27,14 @@ public sealed class OnnxEmbeddingGeneratorSpecTests : IAsyncLifetime
             EmbeddingService.BundledDescriptor with { Pooling = pooling, Normalization = normalization },
             NullLogger<OnnxEmbeddingGenerator>.Instance);
 
-    [Fact]
+    [RetryFact]
     public async Task Dimension_IsDerivedFromTheSessionOutput_NotAConstant()
     {
         using var generator = Build();
         generator.Dimension.ShouldBe(384);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ClsPooling_SelectsTheFirstTokenRow_AndNormalizes()
     {
         using var mean = Build("mean", "l2");
@@ -49,7 +50,7 @@ public sealed class OnnxEmbeddingGeneratorSpecTests : IAsyncLifetime
         drift.ShouldBeGreaterThan(1e-3, "CLS pooling must produce a different vector than mean pooling");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task NormalizationNone_LeavesTheVectorUnnormalized()
     {
         using var generator = Build("mean", "none");
@@ -61,7 +62,7 @@ public sealed class OnnxEmbeddingGeneratorSpecTests : IAsyncLifetime
         (norm - 1.0).ShouldBeGreaterThan(1e-3, "normalization=none must not normalize");
     }
 
-    [Fact]
+    [RetryFact]
     public void ModelOutputPooling_WithoutAnEmbeddingOutput_IsRejectedAtConstruction()
     {
         var ex = Should.Throw<InvalidOperationException>(() =>

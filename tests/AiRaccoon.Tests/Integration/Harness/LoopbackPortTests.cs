@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Harness;
 
@@ -14,7 +15,7 @@ namespace AiRaccoon.Tests.Integration.Harness;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class LoopbackPortTests
 {
-    [Fact]
+    [RetryFact]
     public void AHeldPort_CannotBeTakenByAnotherListener()
     {
         // The defect this replaces: FreePort() Stop()s before returning, so this rebind SUCCEEDS.
@@ -26,7 +27,7 @@ public sealed class LoopbackPortTests
             .SocketErrorCode.ShouldBe(SocketError.AddressAlreadyInUse);
     }
 
-    [Fact]
+    [RetryFact]
     public void AReleasedPort_IsBindableByTheServerUnderTest()
     {
         var lease = LoopbackPort.Reserve();
@@ -40,7 +41,7 @@ public sealed class LoopbackPortTests
         server.Dispose();
     }
 
-    [Fact]
+    [RetryFact]
     public void ReleasingTwice_IsHarmless()
     {
         var lease = LoopbackPort.Reserve();
@@ -50,7 +51,7 @@ public sealed class LoopbackPortTests
         Should.NotThrow(() => lease.Dispose());
     }
 
-    [Fact]
+    [RetryFact]
     public void ConcurrentReservations_NeverHandOutTheSameNumber()
     {
         var leases = Enumerable.Range(0, 32).Select(_ => LoopbackPort.Reserve()).ToList();

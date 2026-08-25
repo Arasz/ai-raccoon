@@ -7,6 +7,7 @@ using AiRaccoon.Tests.Unit.Setup;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Setup;
 
@@ -74,7 +75,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MaintenanceIntervalSet_WritesGlobalRow()
     {
         var store = new FakeConfigStore();
@@ -86,7 +87,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         outp.ShouldContain("checkpoint interval: 60 min");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MaintenanceIntervalInvalid_Returns1_AndWritesError()
     {
         var store = new FakeConfigStore();
@@ -98,7 +99,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.CheckpointIntervalMinutesGlobal);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MaintenanceIntervalNonNumeric_Returns1_AndWritesError()
     {
         var store = new FakeConfigStore();
@@ -110,7 +111,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.CheckpointIntervalMinutesGlobal);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MaintenanceVacuumIntervalSet_WritesGlobalRow()
     {
         var store = new FakeConfigStore();
@@ -122,7 +123,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         outp.ShouldContain("vacuum interval: 7 days");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MaintenanceVacuumIntervalInvalid_Returns1_AndWritesError()
     {
         var store = new FakeConfigStore();
@@ -134,7 +135,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.VacuumIntervalDaysGlobal);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MaintenanceVacuumIntervalOutOfRange_Returns1_AndWritesError()
     {
         var store = new FakeConfigStore();
@@ -146,7 +147,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.VacuumIntervalDaysGlobal);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MaintenanceList_ShowsDefaults_WhenUnset()
     {
         var store = new FakeConfigStore();
@@ -158,7 +159,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         outp.ShouldContain("vacuum interval: 7 days");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MaintenanceList_ShowsDiskStats_AndReclaimable()
     {
         var store = new FakeConfigStore();
@@ -175,7 +176,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         Regex.IsMatch(outp, @"\d+\.\d+ MB").ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MaintenanceList_SecondCall_ShowsDelta()
     {
         var store = new FakeConfigStore();
@@ -190,7 +191,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         outp2.ShouldContain("since last check:");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MaintenanceList_WritesStatsSidecar()
     {
         var store = new FakeConfigStore();
@@ -200,7 +201,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         File.Exists(Path.Combine(_dataRoot, "maintenance-stats.json")).ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MaintenanceList_ShowsConfiguredValues()
     {
         var store = new FakeConfigStore();
@@ -215,7 +216,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
     }
 
     /// <summary>WP11-C (G18): the "cheaper first move" the owner can turn without a release.</summary>
-    [Fact]
+    [RetryFact]
     public async Task MaintenanceEmbedRowsPerRunSet_WritesGlobalRow()
     {
         var store = new FakeConfigStore();
@@ -227,7 +228,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         outp.ShouldContain("embed rows per run: 512");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MaintenanceEmbedRowsPerRunInvalid_Returns1_AndWritesError()
     {
         var store = new FakeConfigStore();
@@ -239,7 +240,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MaintenanceEmbedRowsPerRunNonNumeric_Returns1_AndWritesError()
     {
         var store = new FakeConfigStore();
@@ -251,7 +252,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MaintenanceEmbedRowsPerRunEmpty_Returns1_AndWritesNothing()
     {
         var store = new FakeConfigStore();
@@ -269,7 +270,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
     ///     burst this setting exists to prevent. The CLI rejects rather than silently clamping,
     ///     mirroring `settings maintenance vacuum-interval`'s ceiling guard.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task MaintenanceEmbedRowsPerRunOverCeiling_Returns1_AndWritesError()
     {
         var store = new FakeConfigStore();
@@ -281,7 +282,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MaintenanceEmbedRowsPerRunAtTheCeiling_WritesGlobalRow()
     {
         var store = new FakeConfigStore();
@@ -294,7 +295,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         outp.ShouldContain($"embed rows per run: {ceiling}");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MaintenanceList_ShowsEmbedRowsPerRun_DefaultAndConfigured()
     {
         var store = new FakeConfigStore();

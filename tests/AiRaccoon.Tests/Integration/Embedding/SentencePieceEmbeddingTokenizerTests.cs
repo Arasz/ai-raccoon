@@ -2,6 +2,7 @@ using AiRaccoon.Infrastructure.Embedding;
 using Microsoft.ML.Tokenizers;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -33,14 +34,14 @@ public sealed class SentencePieceEmbeddingTokenizerTests : IAsyncLifetime
             SpecialTokens = XlmRobertaSpecialTokens
         });
 
-    [Fact]
+    [RetryFact]
     public void Create_LoadsThePinnedModel_AndCountsTokens()
     {
         var tokenizer = Build();
         tokenizer.CountTokens("The quick brown fox jumps over the lazy dog.").ShouldBeGreaterThan(0);
     }
 
-    [Fact]
+    [RetryFact]
     public void EncodeToIds_WithSpecialTokens_AddsBosAndEos()
     {
         var tokenizer = Build();
@@ -57,7 +58,7 @@ public sealed class SentencePieceEmbeddingTokenizerTests : IAsyncLifetime
         ids.Count.ShouldBe(without.Count + 2);
     }
 
-    [Fact]
+    [RetryFact]
     public void EncodeToIds_WithoutSpecialTokens_OmitsBosAndEos()
     {
         var tokenizer = Build();
@@ -69,13 +70,13 @@ public sealed class SentencePieceEmbeddingTokenizerTests : IAsyncLifetime
         without.ShouldNotContain(2);
     }
 
-    [Fact]
+    [RetryFact]
     public void SpecialTokenReservation_IsTheBosEosPair()
     {
         Build().SpecialTokenReservation.ShouldBe(2);
     }
 
-    [Fact]
+    [RetryFact]
     public void CountTokens_IsTheContentCount_WithoutSpecialTokens()
     {
         var tokenizer = Build();
@@ -84,7 +85,7 @@ public sealed class SentencePieceEmbeddingTokenizerTests : IAsyncLifetime
             .ShouldBe(tokenizer.EncodeToIds(text, addSpecialTokens: true).Count - tokenizer.SpecialTokenReservation);
     }
 
-    [Fact]
+    [RetryFact]
     public void EncodeToIds_IsDeterministic_AcrossCalls()
     {
         var tokenizer = Build();

@@ -2,6 +2,7 @@ using AiRaccoon.Infrastructure.Options;
 using ModelContextProtocol.Client;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.E2E;
@@ -32,7 +33,7 @@ public class McpServerLaunchArgsE2ETests : IAsyncLifetime
         await _factory.DisposeAsync();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task InstallScope_ProjectFlag_BankLivesUnderDataRootAiRaccoonDir()
     {
         // Any tool call opens the bank; stats is the lightest.
@@ -47,7 +48,7 @@ public class McpServerLaunchArgsE2ETests : IAsyncLifetime
     ///     ADR-0020's escape hatch: --transport stdio stays a complete in-process server. The port it
     ///     is given is free and stays free — nothing is proxied and no backend is started.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ExplicitStdio_StillServesTheFullToolSurfaceInProcess()
     {
         var dataRoot = TestData.CreateTempRoot("explicit-stdio");

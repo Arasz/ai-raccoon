@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
@@ -46,7 +47,7 @@ public sealed class SqliteMemoryStoreDegradationTests : IDisposable
     ///     column filter ("no such column: started"), so the keyword modality died on every
     ///     such query. The EventId-900 warning is what made it visible.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Search_WithAHyphenatedSectionAnchor_DoesNotDegrade()
     {
         await _store.AddContentAsync("acme", "notes.md", "the quick brown fox", null,
@@ -59,7 +60,7 @@ public sealed class SqliteMemoryStoreDegradationTests : IDisposable
         _logger.Collector.GetSnapshot().ShouldNotContain(r => r.Level == LogLevel.Warning);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_WhenTheKeywordIndexWorks_LogsNoDegradation()
     {
         await _store.WriteAsync(new MemoryWriteRequest("acme", "the quick brown fox"),

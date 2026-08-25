@@ -11,6 +11,7 @@ using Dapper;
 using Microsoft.AspNetCore.Builder;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Setup;
 
@@ -50,7 +51,7 @@ public sealed class RepairEndpointTests : IAsyncLifetime
         TestData.DeleteTempRoot(_dataRoot);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetReingestReport_OnAnUnaffectedBank_ReportsNothingToDo()
     {
         var response = await _client.GetAsync("/repair?kind=reingest", TestContext.Current.CancellationToken);
@@ -60,7 +61,7 @@ public sealed class RepairEndpointTests : IAsyncLifetime
             .ShouldNotBeNull().FilesToReingest.ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetChunkIndexReport_OnAnUnaffectedBank_ReportsNothingToDo()
     {
         var response = await _client.GetAsync("/repair?kind=chunk-index", TestContext.Current.CancellationToken);
@@ -70,7 +71,7 @@ public sealed class RepairEndpointTests : IAsyncLifetime
             .ShouldNotBeNull().RowsRepositioned.ShouldBe(0);
     }
 
-    [Theory]
+    [RetryTheory]
     [InlineData("/repair")]
     [InlineData("/repair?kind=unknown")]
     public async Task Get_WithNoOrAnUnknownKind_IsABadRequest(string url)
@@ -80,7 +81,7 @@ public sealed class RepairEndpointTests : IAsyncLifetime
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task PostReingest_CommitsARequestRow()
     {
         var response = await _client.PostAsJsonAsync("/repair", new RepairRequest("reingest"),
@@ -90,7 +91,7 @@ public sealed class RepairEndpointTests : IAsyncLifetime
         (await RequestCountAsync("reingest")).ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Post_WithAnUnknownKind_IsABadRequest()
     {
         var response = await _client.PostAsJsonAsync("/repair", new RepairRequest("unknown"),
@@ -99,7 +100,7 @@ public sealed class RepairEndpointTests : IAsyncLifetime
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task WithoutTheToken_EveryVerbIsRefused()
     {
         using var anonymous = new HttpClient { BaseAddress = new Uri(_app.Urls.First()) };

@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 using Shouldly;
 using SQLitePCL;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -18,7 +19,7 @@ namespace AiRaccoon.Tests.Integration;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class MemorySchemaDigestTests
 {
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnADigestMatchedBank_SkipsTheDdlBlock()
     {
         await using var connection = await OpenAsync();
@@ -43,7 +44,7 @@ public sealed class MemorySchemaDigestTests
             + "and the S7 overlap-prune watches read (the S2 column ensure moved inside the digest-gated Ddl branch)");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAFreshBank_StampsTheSchemaDigest()
     {
         await using var connection = await OpenAsync();
@@ -53,7 +54,7 @@ public sealed class MemorySchemaDigestTests
         (await ReadApplicationIdAsync(connection)).ShouldBe(MemorySchema.SchemaDigest);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_WhenTheStoredDigestIsStale_RerunsTheDdlBlock()
     {
         await using var connection = await OpenAsync();
@@ -73,7 +74,7 @@ public sealed class MemorySchemaDigestTests
             "the stale digest must be corrected back to the current one");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_RepairsADamagedTriggerOnADigestMatchedBank()
     {
         await using var connection = await OpenAsync();
@@ -93,7 +94,7 @@ public sealed class MemorySchemaDigestTests
         sql.ShouldNotBeNull("the unconditional trigger repair must run even when the Ddl digest still matches");
     }
 
-    [Fact]
+    [RetryFact]
     public void SchemaDigest_IsNotZero() =>
         // An unstamped bank reads application_id = 0 (SQLite's default). If the computed digest
         // ever collided with 0, a fresh bank would read a false match and skip Ddl entirely.

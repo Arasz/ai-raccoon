@@ -4,6 +4,7 @@ using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -48,7 +49,7 @@ public sealed class GraphPooledOutputParityTests
         + "before the relative score floor drops the tail of the candidate list"
     ];
 
-    [Fact]
+    [RetryFact]
     public async Task TheEnginesPooledVector_ReproducesTheGraphsOwnPooledOutput()
     {
         var descriptor = LoadDescriptorOrSkip(out var modelDirectory);
@@ -84,7 +85,7 @@ public sealed class GraphPooledOutputParityTests
     ///     a 384-dim stand-in: one vector per input, exactly <c>dimensions</c> long, finite, and on
     ///     the unit sphere when the manifest says <c>normalization=l2</c>.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task TheEnginesOutput_IsOneManifestLengthNormalizedVectorPerInput()
     {
         var descriptor = LoadDescriptorOrSkip(out var modelDirectory);

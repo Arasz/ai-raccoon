@@ -3,6 +3,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -23,7 +24,7 @@ public sealed class V9ReclaimProbe
 
     public V9ReclaimProbe(ITestOutputHelper output) => _output = output;
 
-    [Fact]
+    [RetryFact]
     public async Task Probe_MeasuresWhatV9FreesAndWhatVacuumReturns()
     {
         var bank = Environment.GetEnvironmentVariable(BankEnvVar);

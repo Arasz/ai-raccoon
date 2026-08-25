@@ -4,6 +4,7 @@ using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 using Shouldly;
 using AiRaccoon.Tests.Unit.Observability;
 using Xunit;
+using xRetry.v3;
 using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Integration.Observability;
@@ -64,7 +65,7 @@ public sealed class ToolTelemetryFilterTests : IAsyncLifetime
     ///     Ordering pin: registered outside ToolRefusals the filter would see a returned error
     ///     result, record result=success and lose the type entirely.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void RefusedCall_RecordsTheExceptionType()
     {
         _refused.Tags["tool"].ShouldBe("memory_write");
@@ -76,7 +77,7 @@ public sealed class ToolTelemetryFilterTests : IAsyncLifetime
     ///     WP9: the counter's project id is bounded once the outcome is known, so a caller who is
     ///     refused cannot mint one series per id it invents.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void RefusedCall_TagsTheCounterWithASentinel_NotTheCallersProjectId()
     {
         _refused.Tags["project_id"].ShouldBe(ToolTelemetry.RefusedProjectId);

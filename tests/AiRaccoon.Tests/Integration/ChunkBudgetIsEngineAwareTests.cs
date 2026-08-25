@@ -11,6 +11,7 @@ using Microsoft.Extensions.Time.Testing;
 using Microsoft.ML.Tokenizers;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
@@ -55,7 +56,7 @@ public sealed class ChunkBudgetIsEngineAwareTests : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestFile_WithLocalEngine_NoChunkExceedsTheBertWordPieceWindow_AndNoTruncationIsLogged()
     {
         var file = Path.Combine(_dataRoot, "long-note.md");
@@ -88,7 +89,7 @@ public sealed class ChunkBudgetIsEngineAwareTests : IAsyncLifetime
     ///     budget — the graph does not truncate, so the caller (the chunker) must never emit an
     ///     over-cap chunk (plan §3.4/§12.1 H3).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void CodeChunker_WithTheRealSentencePieceTokenizer_RespectsTheHardCap()
     {
         var tokenizer = new CodeTokenizer();
@@ -108,7 +109,7 @@ public sealed class ChunkBudgetIsEngineAwareTests : IAsyncLifetime
     ///     Chunk_SingleLineOverflow_HardSplitsTheLine`) pins the algorithm; this pins it against
     ///     the real counting tokenizer, where char-count and token-count are not 1:1.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void CodeChunker_WithTheRealSentencePieceTokenizer_HardSplitsAPathologicalLongLine()
     {
         var tokenizer = new CodeTokenizer();

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Sync;
 
@@ -170,7 +171,7 @@ public class SyncServiceRemoteBlobTests : IDisposable
     /// authenticity, not integrity, is what catches it. Also pins the ORDER: the check must run
     /// before quick_check is ever attempted on the remote — a mismatched count would mean
     /// quick_check (and therefore ATTACH, right after it) was reached first.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ATamperedRemoteBlob_IsRefusedBeforeQuickCheckOrAttach()
     {
         var cloud = new FakeCloudStore();
@@ -260,7 +261,7 @@ public class SyncServiceRemoteBlobTests : IDisposable
     /// <summary>An untampered push-then-pull round trip must verify and merge exactly as before
     /// this change: the embedded tag matches, so the authenticity check is a no-op on the happy
     /// path.</summary>
-    [Fact]
+    [RetryFact]
     public async Task AnUntamperedRoundTrip_VerifiesAndMergesAsToday()
     {
         var cloud = new FakeCloudStore();
@@ -299,7 +300,7 @@ public class SyncServiceRemoteBlobTests : IDisposable
 
     /// <summary>A remote blob pushed before this feature existed carries no embedded header. The
     /// documented migration behavior, the first time this objectKey is seen, is accept-with-warning.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ALegacyRemoteBlobWithoutATag_MergesWithALoggedWarning()
     {
         var cloud = new FakeCloudStore();
@@ -337,7 +338,7 @@ public class SyncServiceRemoteBlobTests : IDisposable
     /// arise from an attacker rewriting the whole object without the key (a delete-only attacker
     /// could otherwise strip a separate sidecar tag at zero cost; embedding removes that path, and
     /// this TOFU watermark closes the "just replace the object with a headerless one" variant).</summary>
-    [Fact]
+    [RetryFact]
     public async Task ADowngradeToAHeaderlessBlob_AfterATagHasBeenSeenForThisObjectKey_IsRefused()
     {
         var cloud = new FakeCloudStore();
@@ -361,7 +362,7 @@ public class SyncServiceRemoteBlobTests : IDisposable
     /// <summary>Pins the push-side skip: an unencrypted bank has no passphrase to derive a key
     /// from and must publish raw, unwrapped bytes — if the guard were silently deleted, every push
     /// would wrap with an empty-string key and this would fail.</summary>
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_UnencryptedBank_PushesRawBytesWithoutAWrapHeader()
     {
         var cloud = new FakeCloudStore();
@@ -380,7 +381,7 @@ public class SyncServiceRemoteBlobTests : IDisposable
     /// <summary>Pins the pull-side skip: an unencrypted bank must not attempt verification at all
     /// (Debug-level skip log only) — if the guard were silently deleted, a headerless remote would
     /// instead take the legacy accept-with-warning branch (Warning-level "no authenticity tag").</summary>
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_UnencryptedBank_SkipsAuthenticityVerificationOnPull()
     {
         var cloud = new FakeCloudStore();

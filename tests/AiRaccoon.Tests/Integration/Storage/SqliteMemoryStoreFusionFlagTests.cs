@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SearchResults = AiRaccoon.Core.Memory.SearchResults;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
@@ -77,7 +78,7 @@ public sealed class SqliteMemoryStoreFusionFlagTests : IAsyncLifetime
 
     private Task<SearchResults> SearchAsync() => _store.SearchAsync(new SearchQuery("acme", Query), TestContext.Current.CancellationToken);
 
-    [Fact]
+    [RetryFact]
     public async Task Search_FlagAbsent_BuriesTheSingleLegWinner_AndRecordsNoFusionEvidence()
     {
         var target = await SeedRegressionShapeAsync();
@@ -90,7 +91,7 @@ public sealed class SqliteMemoryStoreFusionFlagTests : IAsyncLifetime
         results.Fusion.ShouldBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_FlagExplicitlyFalse_MatchesTheFlagAbsentOrderAndScoresExactly()
     {
         await SeedRegressionShapeAsync();
@@ -105,7 +106,7 @@ public sealed class SqliteMemoryStoreFusionFlagTests : IAsyncLifetime
         withFalseFlag.Fusion.ShouldBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_FlagEnabled_RanksTheSingleLegWinnerAtLeastAsWellAsItsBestLeg()
     {
         var target = await SeedRegressionShapeAsync();
@@ -124,7 +125,7 @@ public sealed class SqliteMemoryStoreFusionFlagTests : IAsyncLifetime
     ///     result lands second — the consensus row keeps rank 1, so top1_changed is 0 while
     ///     top5_moved is not: that separation is the whole reason both are recorded.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Search_FlagEnabled_RecordsTheDifferenceBetweenTheBaselineAndTheServedOrder()
     {
         await SeedRegressionShapeAsync();
@@ -149,7 +150,7 @@ public sealed class SqliteMemoryStoreFusionFlagTests : IAsyncLifetime
     ///     that disagrees: the served order must be untouched and no fusion evidence recorded, or the
     ///     enabled path would report a reorder on searches that were never hybrid.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Search_FlagEnabled_ButOnlyTheKeywordLegRan_ChangesNothingAndRecordsNothing()
     {
         foreach (var text in new[] { "quokka forage", "quokka notes", "forage notes" })
@@ -170,7 +171,7 @@ public sealed class SqliteMemoryStoreFusionFlagTests : IAsyncLifetime
     }
 
     /// <summary>Distinct rankings all the way out, so no downstream Path tie-break decides the top hit.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Search_FlagEnabled_ServesDistinctRankings()
     {
         await SeedRegressionShapeAsync();

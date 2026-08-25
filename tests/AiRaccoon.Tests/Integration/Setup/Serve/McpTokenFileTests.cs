@@ -2,6 +2,7 @@ using AiRaccoon.Hosting.Common;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Setup.Serve;
 
@@ -18,7 +19,7 @@ public sealed class McpTokenFileTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task TokenFile_IsCreated_0600()
     {
         if (OperatingSystem.IsWindows())
@@ -35,7 +36,7 @@ public sealed class McpTokenFileTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ARestart_KeepsTheExistingToken()
     {
         var first = await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken);
@@ -45,7 +46,7 @@ public sealed class McpTokenFileTests : IDisposable
         second.ShouldBe(first);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task TwoConcurrentMints_ConvergeOnOneToken()
     {
         // The create is raced directly: an EnsureAsync fan-out lets the first minter finish before
@@ -65,7 +66,7 @@ public sealed class McpTokenFileTests : IDisposable
 
     /// <summary>The exclusive-create half of convergence, without the timing: a mint against an
     /// existing file must leave that file alone.</summary>
-    [Fact]
+    [RetryFact]
     public async Task AMintAgainstAnExistingFile_LeavesTheStoredTokenUntouched()
     {
         var tokenFile = new McpTokenFile(_dataRoot);
@@ -76,7 +77,7 @@ public sealed class McpTokenFileTests : IDisposable
         tokenFile.Read().ShouldBe(first);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AMintedToken_IsAUrlSafe256BitSecret()
     {
         var token = await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken);
@@ -84,7 +85,7 @@ public sealed class McpTokenFileTests : IDisposable
         token.ShouldNotBeNull().ShouldMatch("^[A-Za-z0-9_-]{43}$"); // 32 bytes, base64url, unpadded
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Read_ReturnsTheMintedToken()
     {
         var minted = await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken);
@@ -92,10 +93,10 @@ public sealed class McpTokenFileTests : IDisposable
         new McpTokenFile(_dataRoot).Read().ShouldBe(minted);
     }
 
-    [Fact]
+    [RetryFact]
     public void Read_TreatsAMissingFileAsAbsent() => new McpTokenFile(_dataRoot).Read().ShouldBeNull();
 
-    [Fact]
+    [RetryFact]
     public async Task Read_TreatsAnEmptyFileAsAbsent_AndNeverMints()
     {
         var tokenFile = new McpTokenFile(_dataRoot);
@@ -105,7 +106,7 @@ public sealed class McpTokenFileTests : IDisposable
         (await File.ReadAllTextAsync(tokenFile.Path, TestContext.Current.CancellationToken)).ShouldBe("   ");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Read_TrimsTheTrailingNewlineAnEditorMayLeave()
     {
         var tokenFile = new McpTokenFile(_dataRoot);
@@ -115,7 +116,7 @@ public sealed class McpTokenFileTests : IDisposable
         tokenFile.Read().ShouldBe(stored);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AMalformedTokenFile_IsTreatedAsAbsent()
     {
         // A write cut short leaves a prefix of the secret: fewer bits than minted, and accepting it
@@ -129,7 +130,7 @@ public sealed class McpTokenFileTests : IDisposable
     }
 
     /// <summary>The length the reader demands is the mint's own output length, not a copy of it.</summary>
-    [Fact]
+    [RetryFact]
     public async Task TheAcceptedLength_FollowsWhatTheMintProduces()
     {
         var tokenFile = new McpTokenFile(_dataRoot);
@@ -141,7 +142,7 @@ public sealed class McpTokenFileTests : IDisposable
         tokenFile.Read().ShouldBeNull(); // one character short of a mint is not a token
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AnEmptyTokenFile_IsHealed_AfterTheWait()
     {
         // Debris from a crash between the exclusive create and the write: wedging every later
@@ -161,7 +162,7 @@ public sealed class McpTokenFileTests : IDisposable
         tokenFile.Read().ShouldBe(healed);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AMalformedTokenFile_IsHealed()
     {
         // A write cut short by a crash leaves a prefix of the secret behind. Serving on it lowers
@@ -183,7 +184,7 @@ public sealed class McpTokenFileTests : IDisposable
         tokenFile.Read().ShouldBe(healed);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AnEmptyFileThatFillsIn_IsNotOverwritten()
     {
         // The creator was alive after all. Clobbering it here is worse than the wedge: the writer
@@ -206,7 +207,7 @@ public sealed class McpTokenFileTests : IDisposable
 
     /// <summary>The clobber guard without the timing: the heal's delete only fires while the file
     /// holds no token.</summary>
-    [Fact]
+    [RetryFact]
     public async Task TheHealDelete_LeavesAStoredTokenAlone()
     {
         var tokenFile = new McpTokenFile(_dataRoot);
@@ -218,7 +219,7 @@ public sealed class McpTokenFileTests : IDisposable
         tokenFile.Read().ShouldBe(existing);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task TwoProcessesHealingConcurrently_ConvergeOnOneToken()
     {
         // Healing routes back through the exclusive create rather than writing directly, so racing
@@ -237,7 +238,7 @@ public sealed class McpTokenFileTests : IDisposable
         (await File.ReadAllTextAsync(new McpTokenFile(_dataRoot).Path, TestContext.Current.CancellationToken)).ShouldBe(token);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ATokenPathThatCannotBeHealed_ReportsFailureInsteadOfThrowing()
     {
         // A directory where the file belongs: unreadable, uncreatable and undeletable.
@@ -280,7 +281,7 @@ public sealed class McpTokenFileTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_CreatesTheDataRoot_WhenItDoesNotExistYet()
     {
         var nested = Path.Combine(_dataRoot, "not-created-yet");

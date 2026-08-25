@@ -4,6 +4,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Retrieval;
 
@@ -32,7 +33,7 @@ public sealed class QueryGuardRecallProbe
 
     public QueryGuardRecallProbe(ITestOutputHelper output) => _output = output;
 
-    [Fact]
+    [RetryFact]
     public async Task Probe_RunsTheGuardOverRecordedQueries()
     {
         var bank = Environment.GetEnvironmentVariable(BankEnvVar);

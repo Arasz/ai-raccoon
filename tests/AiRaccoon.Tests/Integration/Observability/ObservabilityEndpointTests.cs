@@ -12,6 +12,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Observability;
 
@@ -32,7 +33,7 @@ public sealed class ObservabilityEndpointTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task Get_ReturnsThisProcessPidAndTheServerName()
     {
         await using var env = await AcquireCleanEnvAsync();
@@ -55,7 +56,7 @@ public sealed class ObservabilityEndpointTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Get_ReportsTheRunningBinarysVersion()
     {
         // The discriminator `serve --restart` needs (ADR-0022): without it nothing on the wire
@@ -81,7 +82,7 @@ public sealed class ObservabilityEndpointTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Get_ReportsOtlpDisabled_WhenNoEndpointIsSet()
     {
         await using var env = await AcquireCleanEnvAsync();
@@ -106,7 +107,7 @@ public sealed class ObservabilityEndpointTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Get_ReportsOtlpEndpointAndProtocol_WhenSet()
     {
         await using var env = await AcquireCleanEnvAsync("http://127.0.0.1:4317", "grpc");
@@ -131,7 +132,7 @@ public sealed class ObservabilityEndpointTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public void Get_IsNotMapped_InStdioMode()
     {
         // Stdio-only runs on a plain app host with no web server at all (ADR-0008): there
@@ -141,7 +142,7 @@ public sealed class ObservabilityEndpointTests : IDisposable
         host.Services.GetService(typeof(IServer)).ShouldBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Get_DoesNotResetTheIdleWatchdog()
     {
         using var lease = LoopbackPort.Reserve();

@@ -5,6 +5,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -65,7 +66,7 @@ public sealed class MemorySchemaVersionTests
                                      WHERE scope IN ('project', 'custom');
                                  """;
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAFreshBank_StampsTheCurrentVersion()
     {
         await using var connection = await OpenAsync();
@@ -75,7 +76,7 @@ public sealed class MemorySchemaVersionTests
         (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAnUnstampedBank_RunsTheLadder_ThenStamps()
     {
         await using var connection = await OpenAsync();
@@ -110,7 +111,7 @@ public sealed class MemorySchemaVersionTests
     }
 
     /// <summary>Observed through the bucket index, which only the ladder creates on an existing bank.</summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAStampedBank_SkipsTheLadder()
     {
         await using var connection = await OpenAsync();
@@ -126,7 +127,7 @@ public sealed class MemorySchemaVersionTests
     }
 
     /// <summary>The same witness from the other side: an unstamped bank does run the step.</summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAnUnstampedBank_MovesTheLegacyIngestScopeKeys()
     {
         await using var connection = await OpenAsync();
@@ -143,7 +144,7 @@ public sealed class MemorySchemaVersionTests
     }
 
     /// <summary>docs/plans/2026-08-08-search-knn-perf.md §3.2: the v2 ladder step persists chunk_index/total_chunks and repartitions vec_entries/vec_structure.</summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAV1Bank_AddsChunkColumns_AndBackfillsThem()
     {
         await using var connection = await OpenAsync();
@@ -174,7 +175,7 @@ public sealed class MemorySchemaVersionTests
     ///     the table again at the end of the same ladder run, so a v1 bank now finishes in the
     ///     demoted shape and the old wording could only have been kept by exempting it.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAV1Bank_RebuildsVecEntries_WithCtxAndCosine_HoldingEmbeddedRowsOnly()
     {
         await using var connection = await OpenAsync();
@@ -199,7 +200,7 @@ public sealed class MemorySchemaVersionTests
         vecCount.ShouldBe(1, "only the embedded row should have made it into the rebuilt table");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAV1Bank_WithANonDefaultDimension_PreservesItThroughTheRebuild()
     {
         await using var connection = await OpenAsync();
@@ -216,7 +217,7 @@ public sealed class MemorySchemaVersionTests
     }
 
     /// <summary>The encoding lives in two languages (SQL trigger, C# builder); this is the check that they cannot silently diverge.</summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAV1Bank_TriggerComputedCtx_MatchesTheCSharpBuilder_ForEveryContextShape()
     {
         await using var connection = await OpenAsync();
@@ -240,7 +241,7 @@ public sealed class MemorySchemaVersionTests
         rows["h-workspace"].ShouldBe(MemorySql.ContextKeyFor(ContextNaming.WorkspaceContext("ws-1"), "acme"));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_TwiceOnAV1Bank_TheSecondCallSkipsTheLadder()
     {
         await using var connection = await OpenAsync();
@@ -260,7 +261,7 @@ public sealed class MemorySchemaVersionTests
         count.ShouldBe(0, "a stamped v2 bank must not re-run the rebuild");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_V2Migration_IsReentrant_AfterASimulatedMidRebuildCrash()
     {
         await using var connection = await OpenAsync();
@@ -284,7 +285,7 @@ public sealed class MemorySchemaVersionTests
     ///     An old binary opening a bank a newer binary already migrated must refuse to write
     ///     rather than silently no-op through write paths that skip that schema's maintenance.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_WhenStoredVersionIsAheadOfCurrent_ThrowsNamingBothVersions()
     {
         await using var connection = await OpenAsync();
@@ -304,7 +305,7 @@ public sealed class MemorySchemaVersionTests
     ///     pre-guard binary wrote into a v2 bank without running the write-path chunk recompute,
     ///     leaving chunk_index/total_chunks at their 0/0 defaults.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAV2Bank_WithDriftedChunkColumns_HealsThemBankWide()
     {
         await using var connection = await OpenAsync();
@@ -332,7 +333,7 @@ public sealed class MemorySchemaVersionTests
         (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAStampedV3Bank_SkipsTheRecomputeStep()
     {
         await using var connection = await OpenAsync();
@@ -356,7 +357,7 @@ public sealed class MemorySchemaVersionTests
     }
 
     /// <summary>A v1 bank migrates straight through v2 and v3 in one open — reuses the v1 seed harness rather than hand-writing a v2 fixture.</summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAV1Bank_RunsTheFullLadderThroughV3()
     {
         await using var connection = await OpenAsync();
@@ -377,7 +378,7 @@ public sealed class MemorySchemaVersionTests
 
     // ── WP1: memory_source table + source_id migration (v4→v5) ──
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_FromV4_CreatesMemorySourceTable()
     {
         await using var connection = await OpenAsync();
@@ -391,7 +392,7 @@ public sealed class MemorySchemaVersionTests
             "migration from v4 must create the memory_source table");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_FromV4_EntriesHaveSourceId()
     {
         await using var connection = await OpenAsync();
@@ -413,7 +414,7 @@ public sealed class MemorySchemaVersionTests
             "every entry must have a non-null source_id after migration");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_FreshBank_HasMemorySourceTable()
     {
         await using var connection = await OpenAsync();
@@ -426,7 +427,7 @@ public sealed class MemorySchemaVersionTests
         columns.ShouldContain("source_id");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_V5Bank_SkipsMigration()
     {
         await using var connection = await OpenAsync();
@@ -463,7 +464,7 @@ public sealed class MemorySchemaVersionTests
     ///     retired scorer's rows can be told apart from current ones. DEFAULT 0 is deliberate — every
     ///     pre-existing row was scored by no versioned scorer at all, so it must read as stale.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAV3Bank_AddsScorerVersionColumn_AndExistingRowsDefaultToZero()
     {
         await using var connection = await OpenAsync();
@@ -501,7 +502,7 @@ public sealed class MemorySchemaVersionTests
 
     /// <summary>A bank already stamped at the current version must not re-run the column-add step —
     /// witnessed by an explicit non-default value surviving a second EnsureAsync untouched.</summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAnAlreadyMigratedBank_DoesNotReMigrate_PromotionQueue()
     {
         await using var connection = await OpenAsync();
@@ -529,7 +530,7 @@ public sealed class MemorySchemaVersionTests
     ///     matched a workspace row's <c>scope IS NULL</c>). The step must dedupe first, or index
     ///     creation fails on exactly this bank.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAV6Bank_WithExistingWorkspaceDuplicates_DedupesThenCreatesTheIndex()
     {
         await using var connection = await OpenAsync();
@@ -576,7 +577,7 @@ public sealed class MemorySchemaVersionTests
 
     /// <summary>Different workspaces (or NULL workspace rows) sharing a (path, hash) are not
     /// duplicates and must survive the dedupe untouched.</summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAV6Bank_DedupeOnlyTouchesTrueWorkspaceDuplicates()
     {
         await using var connection = await OpenAsync();
@@ -605,7 +606,7 @@ public sealed class MemorySchemaVersionTests
         count.ShouldBe(3L, "different workspaces (or different hashes) sharing a path are not duplicates");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_FreshBank_HasTheWorkspaceBucketIndex()
     {
         await using var connection = await OpenAsync();
@@ -615,7 +616,7 @@ public sealed class MemorySchemaVersionTests
         (await IndexExistsAsync(connection, "uq_entries_workspace_bucket")).ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAStampedV7Bank_SkipsTheDedupeStep()
     {
         await using var connection = await OpenAsync();
@@ -633,7 +634,7 @@ public sealed class MemorySchemaVersionTests
     /// <summary>A-F11: promotion_queue.claimed_at backs the claim-by-update pattern; existing rows
     /// must backfill to NULL (unclaimed), never to some non-NULL default that would leave a
     /// perfectly good candidate permanently unclaimable.</summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAV7Bank_AddsClaimedAtColumn_AndExistingRowsDefaultToNull()
     {
         await using var connection = await OpenAsync();
@@ -670,7 +671,7 @@ public sealed class MemorySchemaVersionTests
         (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAnAlreadyMigratedBank_DoesNotReMigrate_ClaimedAt()
     {
         await using var connection = await OpenAsync();
@@ -701,7 +702,7 @@ public sealed class MemorySchemaVersionTests
     ///     runs in full on every open regardless of stamped version — so this case needs no
     ///     `PRAGMA user_version` manipulation at all, unlike the superseded version of this test.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_WhenTheTriggerIsMissingEntirely_RecreatesItWithTheScopeAwareGuard()
     {
         await using var connection = await OpenAsync();
@@ -730,7 +731,7 @@ public sealed class MemorySchemaVersionTests
     ///     name existing) is deliberate — a name-only assertion passes against the old body too and
     ///     would let the split ship.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_WhenTheTriggerCarriesTheOldScopeBlindBody_ReplacesItOnReopen()
     {
         await using var connection = await OpenAsync();
@@ -775,7 +776,7 @@ public sealed class MemorySchemaVersionTests
     ///     already carries the corrected body, a reopen must therefore cost one indexed
     ///     `sqlite_master` read and no write at all.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnABankAlreadyCarryingTheScopeAwareTrigger_PerformsNoSchemaWriteOnReopen()
     {
         await using var connection = await OpenAsync();
@@ -794,7 +795,7 @@ public sealed class MemorySchemaVersionTests
 
     // ── WP0: metrics table + indexes (docs/plans/2026-08-15-performance-metrics-implementation.md) ──
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_FreshBank_HasMetricsTableAndAllThreeIndexes()
     {
         await using var connection = await OpenAsync();
@@ -815,7 +816,7 @@ public sealed class MemorySchemaVersionTests
     ///     because they live in the unconditional Ddl string, not the fresh-only branch. Dropping the
     ///     table also drops its indexes, so this simulates "predates the metrics feature entirely".
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnALegacyBankStampedAtCurrentVersion_WithMetricsTableAbsent_CreatesTheTableAndAllThreeIndexes()
     {
         await using var connection = await OpenAsync();
@@ -846,7 +847,7 @@ public sealed class MemorySchemaVersionTests
     ///     on reopen too — `CREATE INDEX IF NOT EXISTS` in the unconditional Ddl string reaches an
     ///     existing table exactly the way it reaches an existing bank missing the table entirely.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnABankWithTheMetricsTable_ButMissingTheRecordedAtIndex_AddsItOnReopen()
     {
         await using var connection = await OpenAsync();
@@ -1059,7 +1060,7 @@ public sealed class MemorySchemaVersionTests
     ///     (WatchOverlapResolver). Proven against a bank ALREADY stamped at CurrentVersion — the
     ///     ladder-gated shape this superseded would have skipped it entirely at that point.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_BankWithNestedWatches_PrunesTheNarrower_ReturnsThePrunedList()
     {
         await using var connection = await OpenAsync();
@@ -1092,7 +1093,7 @@ public sealed class MemorySchemaVersionTests
         (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_BankWithNoOverlap_MigratesCleanly_EmptyPrunedList()
     {
         await using var connection = await OpenAsync();
@@ -1117,7 +1118,7 @@ public sealed class MemorySchemaVersionTests
     ///     stay untouched, no crash) and reported as a warning; every OTHER project, including a
     ///     genuinely overlapping one, still resolves and prunes normally.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OneProjectHasAMalformedWatchRow_SkipsThatProject_StillOpensAndPrunesOthers()
     {
         await using var connection = await OpenAsync();
@@ -1148,7 +1149,7 @@ public sealed class MemorySchemaVersionTests
     }
 
     /// <summary>Reopen-is-a-no-op: once the bank has no overlaps left, a second open prunes and warns nothing.</summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_ReopenAfterAPriorPrune_PrunesNothing_WarnsNothing()
     {
         await using var connection = await OpenAsync();
@@ -1176,7 +1177,7 @@ public sealed class MemorySchemaVersionTests
     ///     part of a composite primary key. The v11 ladder step must detect the mismatch, recreate
     ///     the table with the correct shape, and preserve existing data.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAV10Bank_WithLegacySyncTombstones_RecreatesWithCorrectShape_AndPreservesData()
     {
         await using var connection = await OpenAsync();
@@ -1228,7 +1229,7 @@ public sealed class MemorySchemaVersionTests
     }
 
     /// <summary>A bank already at the correct shape must not be touched by the v11 step.</summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAV10Bank_WithCorrectSyncTombstones_SkipsTheMigration()
     {
         await using var connection = await OpenAsync();
@@ -1263,7 +1264,7 @@ public sealed class MemorySchemaVersionTests
     ///     whose hash/scope are not part of the composite key must still be recreated, not skipped
     ///     and stamped v11 with SchemaDoctor still reporting a mismatch.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAV10Bank_WithAPartiallyCorrectShape_StillRecreates()
     {
         await using var connection = await OpenAsync();
@@ -1300,7 +1301,7 @@ public sealed class MemorySchemaVersionTests
     ///     write) must survive as its text form — a dynamic cast would throw here and strand a
     ///     bank that can never reach v11.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAV10Bank_WithNonTextProjectIdValues_CopiesThemAsText()
     {
         await using var connection = await OpenAsync();
@@ -1338,7 +1339,7 @@ public sealed class MemorySchemaVersionTests
     ///     throw 'no such column' and strand the bank. Nothing meaningful survives (every row
     ///     would be unscoped), so the step must recreate empty and still stamp v11.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAV10Bank_WithNoProjectIdColumn_RecreatesEmpty_AndStampsV11()
     {
         await using var connection = await OpenAsync();

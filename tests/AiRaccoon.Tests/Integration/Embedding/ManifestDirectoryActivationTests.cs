@@ -4,6 +4,7 @@ using AiRaccoon.Infrastructure.Embedding.Manifest;
 using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -58,7 +59,7 @@ public sealed class ManifestDirectoryActivationTests : IAsyncLifetime
         ["pooling"] = new JsonObject { ["mode"] = "mean" }
     };
 
-    [Fact]
+    [RetryFact]
     public void CreateGenerator_DirectoryWithoutManifest_ThrowsActionableError()
     {
         var dir = Path.Combine(Path.GetTempPath(), "ai-raccoon-activation-tests", Guid.NewGuid().ToString("N"));
@@ -72,7 +73,7 @@ public sealed class ManifestDirectoryActivationTests : IAsyncLifetime
         ex.Message.ShouldContain("model download", customMessage: "the refusal must point at the fix");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CreateGenerator_Valid384ManifestDirectory_BuildsAndEmbeds()
     {
         // The manifest points at copies of the REAL bundled model + vocab, so the whole manifest

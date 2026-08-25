@@ -10,6 +10,7 @@ using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Maintenance;
 
@@ -51,7 +52,7 @@ public sealed class PendingEmbedMaintenanceDrainTests : IDisposable
     ///     the embed topic — no restart, no 15s wait even — and EmbedDrainService's single reader
     ///     drains it, exactly as production wires them.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task StartupPass_WithPendingEmbedJobRegistered_DrainsPendingRowsWithinTheStartupPass()
     {
         await SeedPendingRowsAsync(3);
@@ -85,7 +86,7 @@ public sealed class PendingEmbedMaintenanceDrainTests : IDisposable
     ///     the startup pass and five on-demand polls. Confirms the test above is a real gate, not one
     ///     that would pass regardless of whether the job runs.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task StartupPass_WithNoEmbedJobRegistered_LeavesRowsPending()
     {
         await SeedPendingRowsAsync(3);

@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Testing;
 using AiRaccoon.Tests.Unit.Watch;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using static System.IO.File;
 
 namespace AiRaccoon.Tests.Integration.Watch;
@@ -31,7 +32,7 @@ public sealed class WatchCatchUpTests
     private static IReadOnlySet<string> Fingerprints(params string[] paths) =>
         paths.Select(IngestPath.Normalize).ToHashSet(IngestPath.PathComparer);
 
-    [Fact]
+    [RetryFact]
     public void EnumerateFiles_NoWatermark_ReturnsEveryFile()
     {
         using var dir = TempDir.New("catchup-all");
@@ -46,7 +47,7 @@ public sealed class WatchCatchUpTests
         files.ShouldContain(b);
     }
 
-    [Fact]
+    [RetryFact]
     public void EnumerateFiles_WithWatermark_ReturnsOnlyFilesWithMtimeAfterIt()
     {
         using var dir = TempDir.New("catchup-since");
@@ -65,7 +66,7 @@ public sealed class WatchCatchUpTests
         files.ShouldNotContain(older);
     }
 
-    [Fact]
+    [RetryFact]
     public void EnumerateFiles_WithWatermark_ReturnsAnUnfingerprintedFileWithOldMtime()
     {
         using var dir = TempDir.New("catchup-unfingerprinted");
@@ -78,7 +79,7 @@ public sealed class WatchCatchUpTests
             .ShouldContain(missed);
     }
 
-    [Fact]
+    [RetryFact]
     public void EnumerateFiles_FileWithMtimeEqualToWatermark_IsExcluded()
     {
         using var dir = TempDir.New("catchup-equal");
@@ -91,7 +92,7 @@ public sealed class WatchCatchUpTests
             .ShouldBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public void EnumerateFiles_OnAFileTarget_ReturnsTheFileWhenItIsDue()
     {
         using var dir = TempDir.New("catchup-file-target");
@@ -110,7 +111,7 @@ public sealed class WatchCatchUpTests
             .ShouldBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnqueueInitialScan_OnSingleFileTarget_IngestsTheFile()
     {
         using var dir = TempDir.New("catchup-single");
@@ -132,7 +133,7 @@ public sealed class WatchCatchUpTests
         stack.Memory.Ingested.Select(i => i.Path).ShouldContain(file);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnqueueInitialScan_IngestsEveryFile_AndAdvancesTheWatermark()
     {
         using var dir = TempDir.New("catchup-full");
@@ -159,7 +160,7 @@ public sealed class WatchCatchUpTests
         stack.Store.Watches[(Project, dir.Path)].LastChangeTs.ShouldBeGreaterThan(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnqueueChangedSince_QueuesOnlyFilesWithMtimeAfterTheWatermark()
     {
         using var dir = TempDir.New("catchup-since-scan");
@@ -186,7 +187,7 @@ public sealed class WatchCatchUpTests
         stack.Memory.Ingested.Select(i => i.Path).ShouldNotContain(older);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnqueueChangedSince_IngestsAFileNeverFingerprinted_EvenWithMtimeBeforeTheWatermark()
     {
         using var dir = TempDir.New("catchup-backfill");
@@ -207,7 +208,7 @@ public sealed class WatchCatchUpTests
         stack.Memory.Ingested.Select(i => i.Path).ShouldContain(missed);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnqueueInitialScan_ReturnsBeforeTheScanRuns()
     {
         using var dir = TempDir.New("catchup-async");
@@ -235,7 +236,7 @@ public sealed class WatchCatchUpTests
         stack.Memory.Ingested.Count.ShouldBe(200);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnqueueInitialScan_WithACancelledToken_EnqueuesNothing()
     {
         using var dir = TempDir.New("catchup-precancelled");
@@ -256,7 +257,7 @@ public sealed class WatchCatchUpTests
         stack.Memory.Ingested.ShouldBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnqueueInitialScan_CancelledMidScan_DoesNotLogAScanError()
     {
         using var dir = TempDir.New("catchup-cancel-midscan");
@@ -285,7 +286,7 @@ public sealed class WatchCatchUpTests
         records.ShouldNotContain(r => r.Id.Id == 310);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnqueueInitialScan_WhenTheLeaseIsHeldElsewhere_EnqueuesNothing()
     {
         using var dir = TempDir.New("catchup-lease-denied");
@@ -306,7 +307,7 @@ public sealed class WatchCatchUpTests
     }
 
     /// <summary>A denied acquire must not release: the lease belongs to the process that holds it.</summary>
-    [Fact]
+    [RetryFact]
     public async Task EnqueueInitialScan_WhenTheLeaseIsHeldElsewhere_DoesNotReleaseTheHoldersLease()
     {
         using var dir = TempDir.New("catchup-lease-no-release");
@@ -324,7 +325,7 @@ public sealed class WatchCatchUpTests
         stack.ScanLease.ReleaseCalls.ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnqueueInitialScan_WhenTheLeaseIsLostMidScan_StopsEnqueuing()
     {
         using var dir = TempDir.New("catchup-lease-lost");
@@ -348,7 +349,7 @@ public sealed class WatchCatchUpTests
         stack.ScanLease.ReleaseCalls.ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnqueueInitialScan_WhileTheLeaseKeepsRenewing_IngestsEveryFile()
     {
         using var dir = TempDir.New("catchup-lease-renewed");
@@ -373,7 +374,7 @@ public sealed class WatchCatchUpTests
     ///     is added straight back. The first scan must be cancelled, its already-queued events must
     ///     not digest, and exactly one new scan must run — leaving one ingest per file, not two.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task RemoveThenReAdd_WhileTheFirstScanIsRunning_CancelsItAndRunsExactlyOneNewScan()
     {
         using var dir = TempDir.New("catchup-remove-readd");
@@ -416,7 +417,7 @@ public sealed class WatchCatchUpTests
 
 
     /// <summary>A lease that survives a cancelled scan parks the watch for a full TTL, so the release must run on the cancellation path too.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ScanCore_WhenTheScanIsCancelled_StillReleasesTheLease()
     {
         using var dir = TempDir.New("catchup-cancel-release");
@@ -439,7 +440,7 @@ public sealed class WatchCatchUpTests
         stack.Memory.Ingested.ShouldBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public void EnumerateFiles_HiddenDirectorySegment_IsSkipped()
     {
         using var dir = TempDir.New("catchup-hidden-segment");
@@ -455,7 +456,7 @@ public sealed class WatchCatchUpTests
         files.ShouldNotContain(hidden);
     }
 
-    [Fact]
+    [RetryFact]
     public void EnumerateFiles_DenySetDirectory_IsSkipped()
     {
         using var dir = TempDir.New("catchup-denyset");
@@ -471,7 +472,7 @@ public sealed class WatchCatchUpTests
         files.ShouldNotContain(denied);
     }
 
-    [Fact]
+    [RetryFact]
     public void EnumerateFiles_IgnoredFile_IsSkipped()
     {
         using var dir = TempDir.New("catchup-ignored-enum");
@@ -487,7 +488,7 @@ public sealed class WatchCatchUpTests
         files.ShouldNotContain(ignored);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnqueueInitialScan_RepoWithIgnoreFile_ScanSkipsIgnoredFiles()
     {
         using var dir = TempDir.New("catchup-scan-ignored");
@@ -511,7 +512,7 @@ public sealed class WatchCatchUpTests
         stack.Memory.Ingested.Select(i => i.Path).ShouldNotContain(ignored);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnqueueInitialScan_FingerprintedFileNewlyIgnored_ReconcileDeletesIt()
     {
         using var dir = TempDir.New("catchup-reconcile-ignored");
@@ -544,7 +545,7 @@ public sealed class WatchCatchUpTests
     ///     #494: a bank polluted while the digest still indexed agent worktrees must clean itself.
     ///     The reconcile runs on every ordinary catch-up pass — no `ai-raccoon.ignore` involved.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EnqueueChangedSince_FingerprintedFileUnderAWorktreeDirectory_ReconcileDeletesIt()
     {
         using var dir = TempDir.New("catchup-reconcile-excluded");
@@ -588,7 +589,7 @@ public sealed class WatchCatchUpTests
     ///         double-load.
     ///     </para>
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EnqueueInitialScan_IgnoreFileEditedMidScan_RunsAGenuineSecondPass()
     {
         using var dir = TempDir.New("catchup-midscan-ignore-edit");

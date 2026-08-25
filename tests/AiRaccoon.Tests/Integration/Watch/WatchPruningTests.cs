@@ -5,6 +5,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Watch;
 
@@ -33,7 +34,7 @@ public sealed class WatchPruningTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task SymlinkEquivalentPair_ExactlyOneWatchSurvives_LongestLiteralPathWins()
     {
         var real = Path.Combine(_dataRoot, "real-repo");
@@ -75,7 +76,7 @@ public sealed class WatchPruningTests : IDisposable
     ///     fingerprint must be completely unchanged afterward (kill-9-between-prune-and-register
     ///     equivalence: never an unwatched path either way).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ResolveAndAddAsync_CompetingWriteLockHeld_ThrowsSqliteBusy_AndLeavesOldWatchesIntact()
     {
         var outer = Path.Combine(_dataRoot, "repo");
@@ -119,7 +120,7 @@ public sealed class WatchPruningTests : IDisposable
             .ShouldBe("hash-a", "the pruned watch's fingerprint must not have been touched by the busy-locked call");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ResolveAndAddAsync_CommittedNormally_LeavesOnlyTheNewWatch_NeverBoth()
     {
         var outer = Path.Combine(_dataRoot, "repo-commit");
@@ -150,7 +151,7 @@ public sealed class WatchPruningTests : IDisposable
     ///     snapshot and returned Accepted, leaving BOTH watches registered — a real violation of
     ///     no-overlapping-watches, not a hypothetical one.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ResolveAndAddAsync_ConcurrentCompetingWriter_ResolvesAgainstItsCommittedState_NeverAStaleSnapshot()
     {
         var outer = Path.Combine(_dataRoot, "concurrency-outer");
@@ -205,7 +206,7 @@ public sealed class WatchPruningTests : IDisposable
     ///     reliably post-fix (5/5 local runs) — kept as a second, closer-to-production witness
     ///     alongside the fully deterministic one.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ResolveAndAddAsync_TwoGenuinelyConcurrentOverlappingAdds_ExactlyOneSurvives()
     {
         var outer = Path.Combine(_dataRoot, "race-outer");

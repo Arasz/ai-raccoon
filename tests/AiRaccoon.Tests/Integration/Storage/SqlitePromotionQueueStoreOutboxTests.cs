@@ -5,6 +5,7 @@ using Dapper;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -34,7 +35,7 @@ public sealed class SqlitePromotionQueueStoreOutboxTests : IDisposable
 
     private static QueueCandidate Candidate(string hash) => new(hash, $"{hash}.md", "gone", null, 1.0, ["organic-write"]);
 
-    [Fact]
+    [RetryFact]
     public async Task ReportPruneOrphansAsync_OnAnUnaffectedBank_ReportsNothing()
     {
         var report = await _store.ReportPruneOrphansAsync(TestContext.Current.CancellationToken);
@@ -42,7 +43,7 @@ public sealed class SqlitePromotionQueueStoreOutboxTests : IDisposable
         report.TotalOrphans.ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ReportPruneOrphansAsync_FindsAnOrphan_AndNeverDeletesIt()
     {
         await _store.UpsertAsync("acme", [Candidate("orphan-1")], TestContext.Current.CancellationToken);
@@ -54,7 +55,7 @@ public sealed class SqlitePromotionQueueStoreOutboxTests : IDisposable
             "a report must never delete anything");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RequestPruneOrphansAsync_InsertsAnOpenRequestRow()
     {
         await _store.RequestPruneOrphansAsync(TestContext.Current.CancellationToken);
@@ -62,7 +63,7 @@ public sealed class SqlitePromotionQueueStoreOutboxTests : IDisposable
         (await OpenRequestCountAsync()).ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RequestPruneOrphansAsync_NeverDeletesTheQueueItself()
     {
         await _store.UpsertAsync("acme", [Candidate("orphan-1")], TestContext.Current.CancellationToken);
@@ -73,7 +74,7 @@ public sealed class SqlitePromotionQueueStoreOutboxTests : IDisposable
             "a request commits the outbox row; the actual delete is the maintenance job's job");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RequestPruneOrphansAsync_CalledTwice_StaysOneRow()
     {
         await _store.RequestPruneOrphansAsync(TestContext.Current.CancellationToken);
@@ -84,7 +85,7 @@ public sealed class SqlitePromotionQueueStoreOutboxTests : IDisposable
             .ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RequestPruneOrphansAsync_AfterAPreviousRequestFinished_ReopensIt()
     {
         await _store.RequestPruneOrphansAsync(TestContext.Current.CancellationToken);

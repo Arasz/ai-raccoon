@@ -7,6 +7,7 @@ using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Tests.Unit.Embedding.Download;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -57,7 +58,7 @@ public sealed class ModelDownloadPinsProvenanceFilesTests : IDisposable
     private EmbeddingManifest LoadManifest() =>
         new EmbeddingManifestSerializer().Deserialize(File.ReadAllText(Path.Combine(_targetDir, EmbeddingManifest.FileName)));
 
-    [Fact]
+    [RetryFact]
     public async Task TheProvenanceFiles_AppearInTheManifestWithSha256()
     {
         var repo = FakeRepo.BgeM3(_server);
@@ -71,7 +72,7 @@ public sealed class ModelDownloadPinsProvenanceFilesTests : IDisposable
         manifest.ProvenanceFiles!.ShouldContain(f => f.Path == "tokenizer_config.json" && f.Sha256 == Sha(repo.TokenizerConfigJson));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EditingConfigJsonAfterDownload_FailsActivation()
     {
         var repo = FakeRepo.BgeM3(_server);

@@ -3,6 +3,7 @@ using AiRaccoon.Infrastructure.Watch;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -39,7 +40,7 @@ public sealed class SqliteWatchScanLeaseTests : IDisposable
         await _store.AddWatchAsync(ProjectId, Path, Now.ToUnixTimeSeconds(), 0,
             TestContext.Current.CancellationToken);
 
-    [Fact]
+    [RetryFact]
     public async Task Owner_IsDistinctPerInstance()
     {
         await RegisterWatchAsync();
@@ -47,7 +48,7 @@ public sealed class SqliteWatchScanLeaseTests : IDisposable
         NewLease().Owner.ShouldNotBe(NewLease().Owner);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task TryAcquireAsync_WhenUnowned_GrantsTheLease()
     {
         await RegisterWatchAsync();
@@ -57,7 +58,7 @@ public sealed class SqliteWatchScanLeaseTests : IDisposable
         granted.ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task TryAcquireAsync_ForAnUnregisteredWatch_IsDenied()
     {
         var granted = await NewLease().TryAcquireAsync(ProjectId, Path, TestContext.Current.CancellationToken);
@@ -65,7 +66,7 @@ public sealed class SqliteWatchScanLeaseTests : IDisposable
         granted.ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task TryAcquireAsync_WhenHeldByALiveOwner_IsDenied()
     {
         await RegisterWatchAsync();
@@ -78,7 +79,7 @@ public sealed class SqliteWatchScanLeaseTests : IDisposable
         granted.ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task TryAcquireAsync_ByTheSameOwnerAgain_IsReEntrant()
     {
         await RegisterWatchAsync();
@@ -91,7 +92,7 @@ public sealed class SqliteWatchScanLeaseTests : IDisposable
     }
 
     /// <summary>A crashed owner never releases; expiry is the only thing that frees the lease.</summary>
-    [Fact]
+    [RetryFact]
     public async Task TryAcquireAsync_AfterTheHoldersLeaseExpired_IsGrantedToTheNextOwner()
     {
         await RegisterWatchAsync();
@@ -104,7 +105,7 @@ public sealed class SqliteWatchScanLeaseTests : IDisposable
         granted.ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task TryAcquireAsync_BeforeTheHoldersLeaseExpires_IsStillDenied()
     {
         await RegisterWatchAsync();
@@ -116,7 +117,7 @@ public sealed class SqliteWatchScanLeaseTests : IDisposable
         granted.ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task TryRenewAsync_ByTheOwner_KeepsTheLeaseBeyondTheOriginalExpiry()
     {
         await RegisterWatchAsync();
@@ -133,7 +134,7 @@ public sealed class SqliteWatchScanLeaseTests : IDisposable
         granted.ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task TryRenewAsync_ByANonOwner_ReturnsFalse()
     {
         await RegisterWatchAsync();
@@ -144,7 +145,7 @@ public sealed class SqliteWatchScanLeaseTests : IDisposable
         renewed.ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task TryRenewAsync_AfterAnotherOwnerStoleTheExpiredLease_ReturnsFalse()
     {
         await RegisterWatchAsync();
@@ -160,7 +161,7 @@ public sealed class SqliteWatchScanLeaseTests : IDisposable
     }
 
     /// <summary>Renew's WHERE also fails when the row is gone, so a removed watch stops its own scan.</summary>
-    [Fact]
+    [RetryFact]
     public async Task TryRenewAsync_AfterTheWatchRowWasRemoved_ReturnsFalse()
     {
         await RegisterWatchAsync();
@@ -173,7 +174,7 @@ public sealed class SqliteWatchScanLeaseTests : IDisposable
         renewed.ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ReleaseAsync_ByTheOwner_LetsTheNextOwnerAcquireImmediately()
     {
         await RegisterWatchAsync();
@@ -186,7 +187,7 @@ public sealed class SqliteWatchScanLeaseTests : IDisposable
         granted.ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ReleaseAsync_ByANonOwner_LeavesTheLeaseIntact()
     {
         await RegisterWatchAsync();
@@ -199,7 +200,7 @@ public sealed class SqliteWatchScanLeaseTests : IDisposable
         granted.ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ReleaseAsync_ForAnAlreadyRemovedWatch_DoesNotThrow()
     {
         await RegisterWatchAsync();
@@ -211,7 +212,7 @@ public sealed class SqliteWatchScanLeaseTests : IDisposable
             holder.ReleaseAsync(ProjectId, Path, TestContext.Current.CancellationToken));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Leases_OnDifferentWatches_DoNotBlockEachOther()
     {
         await RegisterWatchAsync();

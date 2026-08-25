@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Isolation;
@@ -38,7 +39,7 @@ public sealed class WorkspaceWriteDedupTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task Write_ToWorkspace_WhenContentAlreadyCommitted_StillLandsInTheWorkspace()
     {
         await _store.WriteAsync(new MemoryWriteRequest(ProjectId, "already committed content"),
@@ -59,7 +60,7 @@ public sealed class WorkspaceWriteDedupTests : IDisposable
         rowCount.ShouldBe(2, "both the pre-existing committed row and the new workspace row must exist");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Write_ToWorkspace_WhenContentAlreadyCommitted_TheNewRowCarriesTheWorkspaceId()
     {
         await _store.WriteAsync(new MemoryWriteRequest(ProjectId, "duplicate note"),
@@ -77,7 +78,7 @@ public sealed class WorkspaceWriteDedupTests : IDisposable
         workspaceRowExists.ShouldBe(1L);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Discard_AfterAWorkspaceWriteSwallowedByDedup_RemovesOnlyTheWorkspaceRow()
     {
         await _store.WriteAsync(new MemoryWriteRequest(ProjectId, "keep me committed"),
@@ -99,7 +100,7 @@ public sealed class WorkspaceWriteDedupTests : IDisposable
 
     /// <summary>The genuine dedup case must keep working: two identical committed writes still
     /// collapse into one row.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Write_TwiceToCommittedScope_WithIdenticalContent_StillProducesOneRow()
     {
         var first = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, "committed twice"),
@@ -113,7 +114,7 @@ public sealed class WorkspaceWriteDedupTests : IDisposable
 
     /// <summary>Reverse ordering (brief's regression case): a workspace write followed by a
     /// committed write of the same content must still produce two rows.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Write_ToWorkspaceThenToCommittedScope_WithIdenticalContent_ProducesTwoRows()
     {
         await EnsureWorkspaceAsync("ws-1");

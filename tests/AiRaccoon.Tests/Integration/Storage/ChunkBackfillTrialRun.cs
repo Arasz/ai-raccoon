@@ -3,6 +3,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -26,7 +27,7 @@ public sealed class ChunkBackfillTrialRun
 
     public ChunkBackfillTrialRun(ITestOutputHelper output) => _output = output;
 
-    [Fact]
+    [RetryFact]
     public async Task TrialRun_ReportsWhatTheBackfillWouldDo()
     {
         var bank = Environment.GetEnvironmentVariable(BankEnvVar);

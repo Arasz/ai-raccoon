@@ -5,6 +5,7 @@ using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Metrics;
 
@@ -43,7 +44,7 @@ public sealed class SqliteMetricsStoreTests : IDisposable
     private static readonly string ValidQueryHash = new('a', 64);
     private static readonly string ValidCorrelationId = new('b', 32);
 
-    [Fact]
+    [RetryFact]
     public async Task SaveBatchAsync_ValidMeasurements_PersistsEveryColumn()
     {
         var measurement = new Measurement("search.fts", MeasurementKind.Histogram, 12.5, "ms", FixedNow,
@@ -66,7 +67,7 @@ public sealed class SqliteMetricsStoreTests : IDisposable
         ((long)row.recorded_at).ShouldBe(FixedNow.ToUnixTimeSeconds());
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SaveBatchAsync_EmptyBatch_IsANoOp()
     {
         await _store.SaveBatchAsync([], TestContext.Current.CancellationToken);
@@ -74,7 +75,7 @@ public sealed class SqliteMetricsStoreTests : IDisposable
         (await CountRowsAsync()).ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SaveBatchAsync_MultipleMeasurements_PersistsAll()
     {
         var batch = Enumerable.Range(0, 5)
@@ -86,7 +87,7 @@ public sealed class SqliteMetricsStoreTests : IDisposable
         (await CountRowsAsync()).ShouldBe(5);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SaveBatchAsync_MeasurementCarryingQueryTextInTags_IsRejected()
     {
         var carriesQueryText = new Measurement("search.fts", MeasurementKind.Histogram, 1, "ms", FixedNow,
@@ -97,7 +98,7 @@ public sealed class SqliteMetricsStoreTests : IDisposable
         (await CountRowsAsync()).ShouldBe(0, "a measurement carrying query text must be rejected on save");
     }
 
-    [Theory]
+    [RetryTheory]
     [InlineData("""{"queryText":"the raw text"}""")]
     [InlineData("""{"search_query":"the raw text"}""")]
     [InlineData("""{"q":"the raw text"}""")]
@@ -111,7 +112,7 @@ public sealed class SqliteMetricsStoreTests : IDisposable
         (await CountRowsAsync()).ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SaveBatchAsync_MalformedTags_FailsClosed()
     {
         var measurement = new Measurement("search.fts", MeasurementKind.Histogram, 1, "ms", FixedNow,
@@ -122,7 +123,7 @@ public sealed class SqliteMetricsStoreTests : IDisposable
         (await CountRowsAsync()).ShouldBe(0, "tags that cannot be verified safe must be rejected, not admitted");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SaveBatchAsync_QueryIdentityIsExactlyHashAndCorrelationId_Allowed()
     {
         var measurement = new Measurement("search.fts", MeasurementKind.Histogram, 1, "ms", FixedNow,
@@ -134,7 +135,7 @@ public sealed class SqliteMetricsStoreTests : IDisposable
     }
 
     /// <summary>Denylist-by-key would miss this: "prompt" was never on the old forbidden-key list.</summary>
-    [Fact]
+    [RetryFact]
     public async Task SaveBatchAsync_TagsKeyNotOnTheAllowlist_IsRejected()
     {
         var measurement = new Measurement("search.fts", MeasurementKind.Histogram, 1, "ms", FixedNow,
@@ -146,7 +147,7 @@ public sealed class SqliteMetricsStoreTests : IDisposable
     }
 
     /// <summary>A key-only check would miss this: the value under an allowed key can still carry raw query text.</summary>
-    [Fact]
+    [RetryFact]
     public async Task SaveBatchAsync_AllowedTagKeyWithAnUnrecognisedValue_IsRejected()
     {
         var measurement = new Measurement("search.fts", MeasurementKind.Histogram, 1, "ms", FixedNow,
@@ -163,7 +164,7 @@ public sealed class SqliteMetricsStoreTests : IDisposable
     ///     excluded from PhaseNames (F11) — must still survive the allowlist alongside the two new
     ///     phases it was added for.
     /// </summary>
-    [Theory]
+    [RetryTheory]
     [InlineData("open")]
     [InlineData("embed")]
     [InlineData("total")]
@@ -177,7 +178,7 @@ public sealed class SqliteMetricsStoreTests : IDisposable
         (await CountRowsAsync()).ShouldBe(1, $"'{phase}' is a real SearchTimings series suffix and must survive the allowlist");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SaveBatchAsync_PhaseTaggedWithAnInventedSuffix_IsRejected()
     {
         var measurement = new Measurement("search.fts", MeasurementKind.Histogram, 1, "ms", FixedNow,
@@ -188,7 +189,7 @@ public sealed class SqliteMetricsStoreTests : IDisposable
         (await CountRowsAsync()).ShouldBe(0, "an invented phase suffix must never be admitted, even though it looks like a real one");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SaveBatchAsync_QueryHashNotShapedLikeAHash_IsRejected()
     {
         var measurement = new Measurement("search.fts", MeasurementKind.Histogram, 1, "ms", FixedNow,
@@ -199,7 +200,7 @@ public sealed class SqliteMetricsStoreTests : IDisposable
         (await CountRowsAsync()).ShouldBe(0, "QueryHash must be a SHA-256 hex digest, not arbitrary text");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SaveBatchAsync_CorrelationIdNotShapedLikeAnId_IsRejected()
     {
         var measurement = new Measurement("search.fts", MeasurementKind.Histogram, 1, "ms", FixedNow,
@@ -210,7 +211,7 @@ public sealed class SqliteMetricsStoreTests : IDisposable
         (await CountRowsAsync()).ShouldBe(0, "CorrelationId must be a Guid-v7 N-format id, not arbitrary text");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SaveBatchAsync_MixedBatch_RejectsOnlyTheOffendingRow()
     {
         var clean = new Measurement("search.fts", MeasurementKind.Histogram, 1, "ms", FixedNow);

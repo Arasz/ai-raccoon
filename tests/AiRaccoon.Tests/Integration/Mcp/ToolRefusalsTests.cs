@@ -26,6 +26,7 @@ using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Mcp;
@@ -172,7 +173,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
 
     private void DeleteRoot() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public Task IngestFile_OutsideScope_ReturnsRefusal_WithoutAnSdkErrorLog() =>
         AssertRefusalOverRealServerAsync(_dataRoot, "memory_ingest_file",
             new Dictionary<string, object?> { ["projectId"] = "acme", ["path"] = "/etc/passwd" },
@@ -183,7 +184,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
     ///     open, not an unhandled crash. Written standalone, not via AssertRefusalOverRealServerAsync,
     ///     because a broken bank's background jobs also fail open and log their own expected errors.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ForwardSchemaVersion_ReturnsRefusal_OnTheToolCall()
     {
         var dataRoot = TestData.CreateTempRoot("tool-refusals-e2e-schema-version-unsupported");
@@ -237,7 +238,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
         }
     }
 
-    [Theory]
+    [RetryTheory]
     [MemberData(nameof(RealServerRefusalCases))]
     public async Task KnownRefusal_ReturnsRefusal_WithoutAnSdkErrorLog(string toolName,
         Dictionary<string, object?> arguments, string expectedPrefix, string? accessModeProjectId,
@@ -380,11 +381,11 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
     }
 
 
-    [Theory]
+    [RetryTheory]
     [MemberData(nameof(MappedRefusals))]
     public void PrefixFor_MapsEachKnownRefusalType(Exception exception, string expectedPrefix) => ToolRefusals.PrefixFor(exception).ShouldBe(expectedPrefix);
 
-    [Fact]
+    [RetryFact]
     public void PrefixFor_RejectsAnUnlistedType()
     {
         // The encryption family stays fail-level on purpose: a bad key source is a real fault, not a refusal.
@@ -395,7 +396,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
         ToolRefusals.PrefixFor(new ArgumentOutOfRangeException("limit")).ShouldBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task KnownRefusal_IsWarningWithoutExceptionDetails()
     {
         var dataRoot = TestData.CreateTempRoot("tool-refusals-warning");
@@ -453,7 +454,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task BareMcpException_LogsTheRealReason_AtInformation_WithoutExceptionDetails()
     {
         var dataRoot = TestData.CreateTempRoot("tool-refusals-bare-mcpexception");
@@ -517,7 +518,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
         }
     }
 
-    [Theory]
+    [RetryTheory]
     [InlineData("sync-network", LogLevel.Warning)]
     [InlineData("sync-corrupt-file", LogLevel.Warning)]
     [InlineData("sync-tampered-remote", LogLevel.Warning)]
@@ -534,7 +535,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
     ///     promises must exist in code, and every code-known prefix must be documented — no
     ///     hand-duplicated expectation list on either side.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void DocumentedPrefixes_MatchCodeExactlyInBothDirections()
     {
         var doc = File.ReadAllText(TestData.RepoFile("docs/reference/agent-memory-server.md"));

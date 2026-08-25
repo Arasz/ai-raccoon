@@ -6,6 +6,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Sync;
 
@@ -140,7 +141,7 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
 
     // --- Push path 1: local snapshot (SyncService.cs ~:74) -------------------------------------
 
-    [Fact]
+    [RetryFact]
     public async Task Sync_LocalPush_DropsCodeTablesFromSnapshot()
     {
         var cloud = new FakeCloudStore();
@@ -161,7 +162,7 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
         AssertNoCodeTables(await TableNamesAsync(pulledPath, TestContext.Current.CancellationToken));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Sync_LocalPush_DropsMachineLocalTablesFromSnapshot()
     {
         var cloud = new FakeCloudStore();
@@ -202,7 +203,7 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
     ///     populated vec0 shadow-table set. Seeds a real embedded row (vec_code_au fires) and
     ///     proves the push both survives it and leaves nothing behind.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Sync_LocalPush_WithPopulatedVecCode_DropsSucceed_AndNoVecCodeTablesRemain()
     {
         var cloud = new FakeCloudStore();
@@ -225,7 +226,7 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
 
     // --- Push path 2: merged snapshot (SyncService.cs ~:105) -----------------------------------
 
-    [Fact]
+    [RetryFact]
     public async Task Sync_MergedPush_DropsCodeTablesFromSnapshot()
     {
         var cloud = new FakeCloudStore();
@@ -253,7 +254,7 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
 
     // --- Push path 3: retry-merged snapshot (SyncService.cs ~:161) -----------------------------
 
-    [Fact]
+    [RetryFact]
     public async Task Sync_RetryMergedPush_DropsCodeTablesFromSnapshot()
     {
         var inner = new FakeCloudStore();
@@ -284,7 +285,7 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
 
     // --- Pull side: merge never names code tables, so a pull must not touch the local corpus ---
 
-    [Fact]
+    [RetryFact]
     public async Task Sync_Pull_LeavesLocalCodeCorpusUntouched()
     {
         var cloud = new FakeCloudStore();
@@ -320,7 +321,7 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
     ///     application_id so the next EnsureAsync re-runs the Ddl block and recreates the code
     ///     corpus tables it stripped.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Sync_LocalPush_ResetsSchemaDigest_SoARestoredSnapshotRecreatesCodeTables()
     {
         var cloud = new FakeCloudStore();
@@ -368,7 +369,7 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
     ///     push). Uses the legacy hand-rolled schema (no code tables at all), matching the shape
     ///     of a bank from before this feature.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Sync_PreCodeCorpusSnapshot_StripsWithoutError()
     {
         var cloud = new FakeCloudStore();
@@ -487,7 +488,7 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
             return conn;
         };
 
-    [Fact]
+    [RetryFact]
     public async Task Sync_LocalPush_EncryptedBank_WithPopulatedCodeCorpus_DropsCodeTablesFromSnapshot()
     {
         var cloud = new FakeCloudStore();

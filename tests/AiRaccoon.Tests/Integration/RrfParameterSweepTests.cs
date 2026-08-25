@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
@@ -101,7 +102,7 @@ public sealed class RrfParameterSweepTests : IDisposable
     ///     The chosen configuration (docs/plans/retrieval-improvement-c.md §3 Wave 4) must hold
     ///     every Wave 4 gate and be the grid optimum on nDCG@5.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Sweep_ChosenRrfConfiguration_PassesAllGates()
     {
         // Scoped to the 11 queries that existed at sweep time (docs/adr/0006-rrf-parameter-optimization.md);

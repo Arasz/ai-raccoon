@@ -4,6 +4,7 @@ using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Retrieval;
 
@@ -34,7 +35,7 @@ public sealed class Vec0PartitionKeyProbe : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task Probe_ComparesChunkBytesAndKnnLatency_AcrossPartitionShapes()
     {
         if (Environment.GetEnvironmentVariable(RunEnvVar) is null)

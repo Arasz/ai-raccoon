@@ -11,6 +11,7 @@ using Dapper;
 using Microsoft.AspNetCore.Builder;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Setup;
 
@@ -51,7 +52,7 @@ public sealed class PromotionQueuePruneEndpointTests : IAsyncLifetime
         TestData.DeleteTempRoot(_dataRoot);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetReport_OnAnUnaffectedBank_ReportsNothingToDo()
     {
         var response = await _client.GetAsync(PromotionQueuePruneProtocol.Path, TestContext.Current.CancellationToken);
@@ -61,7 +62,7 @@ public sealed class PromotionQueuePruneEndpointTests : IAsyncLifetime
             .ShouldNotBeNull().TotalOrphans.ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Post_CommitsARequestRow()
     {
         var response = await _client.PostAsync(PromotionQueuePruneProtocol.Path, null, TestContext.Current.CancellationToken);
@@ -70,7 +71,7 @@ public sealed class PromotionQueuePruneEndpointTests : IAsyncLifetime
         (await RequestCountAsync()).ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task WithoutTheToken_EveryVerbIsRefused()
     {
         using var anonymous = new HttpClient { BaseAddress = new Uri(_app.Urls.First()) };

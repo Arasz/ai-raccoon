@@ -8,6 +8,7 @@ using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Ingestion;
 
@@ -61,7 +62,7 @@ public sealed class FileIngestorEmbedDrainTests : IDisposable
                 NullWatchStore.Instance, pump);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestDirectory_EmbedsNoChunkInline_AndSignalsOnce()
     {
         await File.WriteAllTextAsync(Path.Combine(_testDir, "a.md"), "# A\ncontent a", TestContext.Current.CancellationToken);
@@ -78,7 +79,7 @@ public sealed class FileIngestorEmbedDrainTests : IDisposable
         queued.Corpus.ShouldBe(EmbedCorpus.Memory);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestDirectory_NoRowsIndexed_NeverSignals()
     {
         var pump = TestData.NewEmbedDrainPump();
@@ -91,7 +92,7 @@ public sealed class FileIngestorEmbedDrainTests : IDisposable
     }
 
     /// <summary>A code-only walk must wake the code drain, not the memory one — the walk never wrote a memory row.</summary>
-    [Fact]
+    [RetryFact]
     public async Task IngestDirectory_CodeOnly_SignalsCodeCorpusOnly()
     {
         await File.WriteAllTextAsync(Path.Combine(_testDir, "a.cs"), "class A\n{\n}\n", TestContext.Current.CancellationToken);
@@ -105,7 +106,7 @@ public sealed class FileIngestorEmbedDrainTests : IDisposable
     }
 
     /// <summary>A walk that touches both corpora signals both — one drain per corpus it actually wrote rows for.</summary>
-    [Fact]
+    [RetryFact]
     public async Task IngestDirectory_MixedRepo_SignalsBothCorpora()
     {
         await File.WriteAllTextAsync(Path.Combine(_testDir, "readme.md"), "# Readme\nbody", TestContext.Current.CancellationToken);

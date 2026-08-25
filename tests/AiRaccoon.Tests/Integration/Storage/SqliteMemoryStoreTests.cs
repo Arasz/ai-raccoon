@@ -14,6 +14,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
@@ -51,7 +52,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         await workspaceStore.BeginAsync(new Workspace(workspaceId, projectId), FixedNow, TestContext.Current.CancellationToken);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetProjectIdsAsync_ReturnsDistinctOrderedProjectScopeIdsOnly()
     {
         await _store.WriteAsync(
@@ -79,7 +80,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         projects.ShouldBe(["acme", "beta", "gamma"]);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Write_CreatesRowInProjectScope_WithPendingEmbedState_AndOnRowDefaults()
     {
         var entry = await _store.WriteAsync(
@@ -101,7 +102,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         row.Path.ShouldNotBeNullOrWhiteSpace();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Write_WithWorkspace_LandsInWorkspaceScope()
     {
         await EnsureWorkspaceAsync("ws-1");
@@ -118,7 +119,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         row.Scope.ShouldBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Write_WithNonexistentWorkspaceId_ThrowsUnknownWorkspaceException()
     {
         var ex = await Should.ThrowAsync<UnknownWorkspaceException>(() =>
@@ -129,7 +130,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         ex.Message.ShouldContain("acme");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Write_WithDiscardedWorkspaceId_ThrowsUnknownWorkspaceException()
     {
         // A stale workspaceId (post-close) must fail an active-status check, not merely a
@@ -144,7 +145,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
                 TestContext.Current.CancellationToken));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Write_WithExplicitContext_UsesCustomScope_AndStoresAgentId()
     {
         var entry = await _store.WriteAsync(
@@ -160,7 +161,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         row.AgentId.ShouldBe("agent-1");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_FindsKeywordMatch_AndCarriesTheContractFields()
     {
         var entry = await _store.WriteAsync(
@@ -181,7 +182,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     }
 
     /// <summary>WP1 envelope migration: WP2 fills in real phase timings, so this asserts Empty for now.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Search_ReturnsEnvelope_WithResultsAndEmptyTimings()
     {
         var entry = await _store.WriteAsync(
@@ -197,7 +198,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         envelope.Timings.ShouldBe(SearchTimings.Empty);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_WithoutEmbeddingEngine_KeywordOnlyQuery_ReturnsKeywordResultsAboveMinScore()
     {
         // No embedding engine means the vec modality is absent (docs/work/features-native-memory/native-memory.feature);
@@ -215,7 +216,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         hit.Ranking.ShouldBe(1.0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_ProjectScope_ExcludesOtherProjects_ButCoversItsOwnContexts()
     {
         var acmeEntry = await _store.WriteAsync(
@@ -236,7 +237,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             "the project is the isolation boundary; a context inside it is in scope (ADR-0045)");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_BumpsAccessCountAndRating_OnTheReturnedRow()
     {
         var entry = await _store.WriteAsync(
@@ -258,7 +259,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
     /// <summary>BumpAccess must not touch another project's row that happens
     /// to share the same content hash — searching one project must never age or rate-bump another's.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Search_BumpsAccessOnlyForTheSearchedProjectsRow_NotAnotherProjectsIdenticalHash()
     {
         var acme = await _store.WriteAsync(
@@ -281,7 +282,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         otherRow.Rating.ShouldBe(RatingPolicy.DefaultBaseScore);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Share_CopiesRowIntoSharedScope_PreservingPath()
     {
         var entry = await _store.WriteAsync(
@@ -303,7 +304,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     ///     original (ContentHash.Of(path, value) vs. shared/&lt;sha256(value)&gt;.md), so scope=all
     ///     used to return both. Dedup is on content, preferring the project-scoped copy.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Search_ScopeAll_DedupesAPromotedSharedCopy_AgainstItsProjectOriginal()
     {
         var entry = await _store.WriteAsync(
@@ -321,7 +322,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         results[0].Hash.ShouldBe(entry.Hash, "the project-scoped copy is preferred over the shared duplicate");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Share_Twice_IsIdempotent()
     {
         var entry = await _store.WriteAsync(
@@ -334,7 +335,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             .Count(e => e.Value == "share me once").ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ShareAsync_WithUnknownHash_ThrowsUnknownHashException()
     {
         var ex = await Should.ThrowAsync<UnknownHashException>(() =>
@@ -345,7 +346,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         ex.Message.ShouldContain("acme");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetAsync_ReturnsFullValue_ForAKnownHash()
     {
         var entry = await _store.WriteAsync(
@@ -361,7 +362,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         fetched.Context.ShouldBe("project:acme");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetAsync_WithUnknownHash_ReturnsNull()
     {
         var fetched = await _store.GetAsync("acme",
@@ -371,7 +372,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         fetched.ShouldBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetAsync_ResolvesASharedTierHash_RegardlessOfTheOwningProject()
     {
         var entry = await _store.WriteAsync(
@@ -386,7 +387,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         fetched.Value.ShouldBe("cross-project shared convention");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetAsync_DoesNotResolveAnotherProjectsPrivateRow()
     {
         var entry = await _store.WriteAsync(
@@ -399,7 +400,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         fetched.ShouldBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Delete_RemovesTheRows_AndTheFtsIndexEntry()
     {
         var entry = await _store.WriteAsync(
@@ -415,7 +416,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             .Results.ShouldBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Delete_ForAnotherProject_DoesNotRemoveTheRow()
     {
         var entry = await _store.WriteAsync(
@@ -427,7 +428,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Delete_WhenTombstoneInsertFails_RollsBackTheEntryDeleteToo()
     {
         // WP5a (ADR-0035): DeleteCoreAsync must not leave the entry gone with no tombstone — a
@@ -461,7 +462,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         tombstones.ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task DeleteContext_WorkspaceContext_RemovesWorkspaceRowsOnly()
     {
         await EnsureWorkspaceAsync("ws-1");
@@ -476,7 +477,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task DeleteContext_WithAnUnknownContext_ReturnsZero()
     {
         await _store.WriteAsync(new MemoryWriteRequest("acme", "committed fact"), TestContext.Current.CancellationToken);
@@ -488,7 +489,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Stats_CountsCommittedEntries_AndPendingFromEmbedState()
     {
         await _store.WriteAsync(new MemoryWriteRequest("acme", "committed fact"), TestContext.Current.CancellationToken);
@@ -503,7 +504,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         stats.Contexts.ShouldContain("project:acme");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Stats_ScopesContextsToTheCallingProject_PlusShared()
     {
         await _store.WriteAsync(new MemoryWriteRequest("acme", "acme fact"), TestContext.Current.CancellationToken);
@@ -516,7 +517,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         stats.Contexts.ShouldBe(["shared", "project:acme"]);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AddContent_IsIdempotent_ByPathInBucket()
     {
         var first = await _store.AddContentAsync("acme", "docs/note.md", "note content", null,
@@ -528,7 +529,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Write_SameContentTwice_ReturnsTheExistingEntry_AndStatsReportOneEntry()
     {
         var first = await _store.WriteAsync(
@@ -541,7 +542,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Share_CreatesARealSharedRow_WithDistinctPathScopedHash()
     {
         var entry = await _store.WriteAsync(
@@ -561,7 +562,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             .Count(e => e.Value == "cross project fact").ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AddContent_ConsolidationPromotion_PreservesTheLogicalPath_InTheCommittedRow()
     {
         await EnsureWorkspaceAsync("ws-1");
@@ -578,7 +579,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         committed.Entry.Hash.ShouldBe(ContentHash.Of("docs/note.md", "workspace draft"));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ListFiles_ReturnsJsonTree_FromEntryPaths()
     {
         await _store.AddContentAsync("acme", "docs/guide.md", "guide", null, cancellationToken: TestContext.Current.CancellationToken);
@@ -591,7 +592,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         tree.ShouldContain("notes.md");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EmbedPending_ReturnsZeroProcessed_AndPendingCount()
     {
         await _store.WriteAsync(new MemoryWriteRequest("acme", "pending note"), TestContext.Current.CancellationToken);
@@ -602,7 +603,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         result.Pending.ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ConfigureEmbedding_StoresProviderAndModel_InSettings()
     {
         var config = await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
@@ -623,7 +624,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         engine.ShouldBe("openai:nomic-embed-text@https://api.openai.com/v1");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestFile_ChunksContent_ThroughTheChunker_AndReturnsIndexedCount()
     {
         var file = Path.Combine(_dataRoot, "long-note.md");
@@ -643,7 +644,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         (await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken)).ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestDirectory_IndexesMarkdownFiles_AndSkipsUnchanged()
     {
         var dir = Path.Combine(_dataRoot, "docs");
@@ -662,7 +663,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         second.ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public void SearchContexts_AllScope_SpansSharedProjectAndNamedWorkspace()
     {
         var query = new SearchQuery("acme", "q", SearchScope.All, "ws-1");
@@ -673,7 +674,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         ]);
     }
 
-    [Fact]
+    [RetryFact]
     public void SearchContexts_AllScope_WithoutWorkspace_SpansSharedAndProject()
     {
         var query = new SearchQuery("acme", "q");
@@ -682,7 +683,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             [ContextNaming.SharedContext, ContextNaming.ProjectContext("acme")]);
     }
 
-    [Fact]
+    [RetryFact]
     public void SearchContexts_ProjectScope_SpansProjectAndNamedWorkspace()
     {
         var query = new SearchQuery("acme", "q", SearchScope.Project, "ws-1");
@@ -691,7 +692,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             [ContextNaming.ProjectContext("acme"), ContextNaming.WorkspaceContext("ws-1")]);
     }
 
-    [Fact]
+    [RetryFact]
     public void SearchContexts_ProjectScope_WithoutWorkspace_IsProjectOnly()
     {
         var query = new SearchQuery("acme", "q", SearchScope.Project);
@@ -699,7 +700,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         SearchContexts.For(query).ShouldBe([ContextNaming.ProjectContext("acme")]);
     }
 
-    [Fact]
+    [RetryFact]
     public void SearchContexts_SharedScope_IsSharedOnly_EvenWhenWorkspaceNamed()
     {
         var query = new SearchQuery("acme", "q", SearchScope.Shared, "ws-1");
@@ -708,7 +709,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     }
 
     /// <summary>A named context narrows to that context; it does not add to the unlabelled rows (ADR-0045).</summary>
-    [Fact]
+    [RetryFact]
     public void SearchContexts_ProjectScope_WithContextLabel_IsThatContextOnly()
     {
         var query = new SearchQuery("acme", "q", SearchScope.Project, ContextLabel: "docs:adr");
@@ -717,7 +718,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     }
 
     /// <summary>No context named means every context in the project, not just the unlabelled ones.</summary>
-    [Fact]
+    [RetryFact]
     public void SearchContexts_ProjectScope_WithoutContextLabel_CoversEveryContextInTheProject()
     {
         var query = new SearchQuery("acme", "q", SearchScope.Project);
@@ -729,7 +730,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         ]);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Write_WithSourceFile_StoresColumn_AndSearchCarriesIdentity()
     {
         var entry = await _store.WriteAsync(
@@ -748,7 +749,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         hit.ChunkIndex.ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Write_WithSection_IndexesSectionInFts_AndSectionQueriesMatchIt()
     {
         await _store.WriteAsync(new MemoryWriteRequest("acme", "the widget renderer decision",
@@ -764,7 +765,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     }
 
     /// <summary>Inverted by ADR-0045: a context is a label inside the project, not a wall around it.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Search_WithoutContextLabel_IncludesEveryContextInTheProject()
     {
         await _store.WriteAsync(new MemoryWriteRequest("acme", "docs only fact", "docs:adr"),
@@ -778,7 +779,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     }
 
     /// <summary>Narrowing, not augmenting (ADR-0045): naming a context excludes the other contexts.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Search_WithContextLabel_ReturnsThatContextOnly()
     {
         await _store.WriteAsync(new MemoryWriteRequest("acme", "custom labeled fact", "docs:adr"),
@@ -802,7 +803,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     ///     holding a single unrelated entry always tied the project tier's genuine top match at
     ///     "rank 1 of my own context" — a tie broken only by Path.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Search_ScopeAll_SmallSharedTier_DoesNotCaptureAnUnrelatedQuery()
     {
         const string query = "docker container deployment rollback pipeline";
@@ -859,7 +860,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     // batches first and hands Merge a single already-fused list (docs/adr/0006). Both halves are
     // pinned here in production order: the fusion promotes the dual-retrieved doc, Merge preserves
     // the order and re-normalizes.
-    [Fact]
+    [RetryFact]
     public void Merge_RrfAcrossContextBatches_PromotesDualRetrievedDocs_AndNormalizesToMax()
     {
         var shared = new[] { Hit("h1", "a.md"), Hit("h2", "b.md") };
@@ -877,7 +878,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         merged[0].Ranking.ShouldBe(1.0, "and re-normalizes its top hit");
     }
 
-    [Fact]
+    [RetryFact]
     public void Merge_SingleContextBatch_KeepsItsOrderAndNormalizesTopToOne()
     {
         var results = new[] { Hit("h1", "a.md"), Hit("h2", "b.md"), Hit("h3", "c.md") };
@@ -888,7 +889,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         merged[0].Ranking.ShouldBe(1.0);
     }
 
-    [Fact]
+    [RetryFact]
     public void Merge_AppliesMinScoreAfterNormalization()
     {
         var results = new[] { Hit("h1", "a.md"), Hit("h2", "b.md"), Hit("h3", "c.md") };
@@ -899,7 +900,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         merged.Select(r => r.Hash).ShouldBe(["h1", "h2"]);
     }
 
-    [Fact]
+    [RetryFact]
     public void Merge_SortsByFusedScoreDescending_AndLimits()
     {
         var results = new[]
@@ -915,7 +916,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         merged.Select(r => r.Hash).ShouldBe(["h1", "h2"]);
     }
 
-    [Fact]
+    [RetryFact]
     public void Merge_EmptyBatches_ReturnsEmpty() =>
         SearchResultMerger.Merge([], 10)
             .ShouldBeEmpty();
@@ -956,7 +957,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
     private static string CreateTempRoot() => TestData.CreateTempRoot("airaccoon-store-tests");
 
-    [Fact]
+    [RetryFact]
     public async Task SetSetting_RoundTripsStructureAlpha()
     {
         await _store.SetSettingAsync(SearchParameterSettingsKeys.StructureAlpha, "0.8",
@@ -971,7 +972,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         raw.ShouldBe("0.8", "the alpha setting must persist in the bank settings table");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AddContentAsync_ConcurrentSameBucket_ExactlyOneCreated()
     {
         var barrier = new Barrier(2);
@@ -994,7 +995,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         count.ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AddContentAsync_SecondSamePath_CreatedFalse()
     {
         var first = await _store.AddContentAsync("acme", "p.md", "identical fact",
@@ -1007,7 +1008,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         second.Entry.Hash.ShouldBe(first.Entry.Hash, "the existing row is returned, not a fresh hash");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ShareAsync_ConcurrentSameHash_SingleSharedRow()
     {
         var entry = await _store.WriteAsync(new MemoryWriteRequest("acme", "shared fact"),
@@ -1028,7 +1029,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         count.ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ShareAsync_ConcurrentSameHash_DifferentProjects_SingleSharedRow()
     {
         // The global shared index closes the cross-project promote race: project B's loser must
@@ -1061,7 +1062,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         count.ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task WriteAsync_ConcurrentSameContent_SingleRowNoThrow()
     {
         var barrier = new Barrier(2);
@@ -1081,7 +1082,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         count.ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestFileAsync_ConcurrentSameFile_SingleChunkSet()
     {
         var file = Path.Combine(_dataRoot, "multi.md");
@@ -1107,7 +1108,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         count.ShouldBe(3, "one ingest's chunk set, not two");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RejectedWrite_ReportsNotStored()
     {
         var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
@@ -1128,7 +1129,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         count.ShouldBe(0, "a rejected write must never land a row in entries");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task NoiseDisabled_StoresContentThatWouldOtherwiseBeRejected()
     {
         var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
@@ -1143,7 +1144,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         entry.Hash.ShouldNotBeNullOrWhiteSpace();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ShortOrganicWrite_IsStoredWithoutTtl()
     {
         // No heuristic TTL policy exists any more (ADR-0034): a sub-8-word organic write is
@@ -1159,7 +1160,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
     // ── WP2: source_id on write path ──
 
-    [Fact]
+    [RetryFact]
     public async Task WriteAsync_SetsSourceId_OnEntry()
     {
         var entry = await _store.WriteAsync(
@@ -1176,7 +1177,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         sourceId.Value.ShouldBeGreaterThan(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task WriteAsync_NullSourceFile_SetsManualSource()
     {
         var entry = await _store.WriteAsync(
@@ -1199,7 +1200,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         sourceType.ShouldBe("manual");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AddContentAsync_SetsSourceId_OnEntry()
     {
         var result = await _store.AddContentAsync(
@@ -1217,7 +1218,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         sourceId.Value.ShouldBeGreaterThan(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SelectSourceByHashAndProject_ReturnsSourceType()
     {
         var entry = await _store.WriteAsync(
@@ -1240,7 +1241,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             "SelectSourceByHashAndProject must resolve source_type via the memory_source JOIN");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SelectExtractionCandidates_IncludesSourceType()
     {
         var entry = await _store.WriteAsync(

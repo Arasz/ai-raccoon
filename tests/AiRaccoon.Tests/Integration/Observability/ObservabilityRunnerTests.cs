@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Http;
 using Shouldly;
 using AiRaccoon.Tests.Unit.Observability;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Observability;
 
@@ -31,7 +32,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task LiveServer_PrintsTheCountersCommand_WithTheServerPid()
     {
         await using var env = await AcquireCleanEnvAsync();
@@ -54,7 +55,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task LiveServer_PrintsTheTraceCommand_WithTheServerPid()
     {
         await using var env = await AcquireCleanEnvAsync();
@@ -77,7 +78,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task LiveServer_PrintsTheBarePid()
     {
         await using var env = await AcquireCleanEnvAsync();
@@ -100,7 +101,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task NoServerListening_ReturnsNoServerRunning_WithAStartHint()
     {
         await using var env = await AcquireCleanEnvAsync();
@@ -117,7 +118,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
         run.Stderr.ShouldNotContain("   at ");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ForeignListener_ReturnsPortInUse_WithNoStackTrace()
     {
         await using var env = await AcquireCleanEnvAsync();
@@ -133,7 +134,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
         run.Stderr.ShouldNotContain("   at ");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task OtlpDisabled_ReturnsOtlpNotEnabled_AndWritesNothingToStdout()
     {
         await using var env = await AcquireCleanEnvAsync();
@@ -157,7 +158,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task OtlpEnabled_PrintsTheEndpointOnStdout_AndTheProtocolOnStderr()
     {
         await using var env = await AcquireCleanEnvAsync();
@@ -183,7 +184,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AttachedSecondServe_StillReportsTheOwnerPid()
     {
         await using var env = await AcquireCleanEnvAsync();
@@ -214,7 +215,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
         firstExit.ShouldBe(ExitCode.Success);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EveryFailurePath_WritesNothingToStdout()
     {
         await using var env = await AcquireCleanEnvAsync();

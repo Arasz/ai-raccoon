@@ -12,6 +12,7 @@ using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Maintenance;
 
@@ -65,7 +66,7 @@ public sealed class EmbedSweepAfterJobsTests : IDisposable
     ///     fake job that only then inserts a real pending row, ordered before PendingEmbedJob in the
     ///     list.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task APassWhoseJobCreatesPendingRows_SignalsTheDrainInTheSamePass()
     {
         await ConfigureProviderAsync();

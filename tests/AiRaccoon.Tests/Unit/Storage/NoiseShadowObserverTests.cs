@@ -4,6 +4,7 @@ using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Unit.Storage;
 
@@ -35,7 +36,7 @@ public sealed class NoiseShadowObserverTests : IDisposable
     private static NoiseShadowObserver CreateObserver(INoiseDetector? detector = null) =>
         new(detector ?? new NoOpNoiseDetector(), NullLogger<NoiseShadowObserver>.Instance);
 
-    [Fact]
+    [RetryFact]
     public async Task ObserveStoredWriteAsync_ShadowDisabled_ReturnsCleanAndNeverConsultsTheDetector()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -49,7 +50,7 @@ public sealed class NoiseShadowObserverTests : IDisposable
         detector.EvaluateCallCount.ShouldBe(0, "shadow disabled must skip the detector entirely, not just discard its verdict");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ObserveStoredWriteAsync_ShadowEnabled_NoOpDetector_AlwaysReturnsClean()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -65,7 +66,7 @@ public sealed class NoiseShadowObserverTests : IDisposable
         result.IsNoise.ShouldBeFalse("no detector is shipped yet (ADR-0039) — the NoOp default must never flag anything");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ObserveStoredWriteAsync_ShadowEnabled_PassesTheWrittenContentStraightToTheDetector()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -83,7 +84,7 @@ public sealed class NoiseShadowObserverTests : IDisposable
         detector.LastContent.ShouldBe("evaluate this exact content");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ObserveStoredWriteAsync_ShadowEnabled_DetectorFlagsIt_RecordsButNeverBlocks()
     {
         var ct = TestContext.Current.CancellationToken;

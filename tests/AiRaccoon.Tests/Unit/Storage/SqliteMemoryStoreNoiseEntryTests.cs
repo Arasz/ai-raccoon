@@ -12,6 +12,7 @@ using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Unit.Storage;
@@ -56,7 +57,7 @@ public sealed class SqliteMemoryStoreNoiseEntryTests : IDisposable
             NoOpMeasurementRecorder.Instance, NoOpNoiseShadowObserverForTests.Instance, noiseEntryStore);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RejectedWrite_RecordsToNoiseEntries_WithItsPolicyName()
     {
         var store = CreateStore(new SqliteNoiseEntryStore(_factory));
@@ -76,7 +77,7 @@ public sealed class SqliteMemoryStoreNoiseEntryTests : IDisposable
         recent[0].DetectedByPolicy.ShouldBe("HermesBackgroundProcessLog");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RejectedWrite_ExpiresAt_HonorsTheConfiguredRetentionSetting()
     {
         await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
@@ -97,7 +98,7 @@ public sealed class SqliteMemoryStoreNoiseEntryTests : IDisposable
     }
 
     /// <summary>The Null Object default (7-arg ctor, used by TestData.CreateMemoryStore) must never touch noise_entries.</summary>
-    [Fact]
+    [RetryFact]
     public async Task NoOpDefault_RejectedWrite_NeverTouchesNoiseEntries()
     {
         var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,

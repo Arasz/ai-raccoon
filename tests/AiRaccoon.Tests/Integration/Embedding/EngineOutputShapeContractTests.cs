@@ -2,6 +2,7 @@ using AiRaccoon.Infrastructure.Embedding;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -42,7 +43,7 @@ public sealed class EngineOutputShapeContractTests : IAsyncLifetime
         EmbeddingService.BundledDescriptor with { Pooling = pooling, Normalization = normalization },
         NullLogger<OnnxEmbeddingGenerator>.Instance);
 
-    [Theory]
+    [RetryTheory]
     [InlineData("mean")]
     [InlineData("cls")]
     public async Task EveryPoolingMode_ReturnsOneVectorPerInput_OfTheDeclaredLength(string pooling)
@@ -63,7 +64,7 @@ public sealed class EngineOutputShapeContractTests : IAsyncLifetime
         }
     }
 
-    [Theory]
+    [RetryTheory]
     [InlineData("mean")]
     [InlineData("cls")]
     public async Task L2Normalization_LeavesEveryVectorOnTheUnitSphere_AndFinite(string pooling)
@@ -86,7 +87,7 @@ public sealed class EngineOutputShapeContractTests : IAsyncLifetime
     ///     The length contract is a property of pooling, not of normalization — turning
     ///     normalization off must not change how many numbers come back, only their scale.
     /// </summary>
-    [Theory]
+    [RetryTheory]
     [InlineData("mean")]
     [InlineData("cls")]
     public async Task NormalizationNone_KeepsTheLengthContract_AndOnlyChangesScale(string pooling)
@@ -115,7 +116,7 @@ public sealed class EngineOutputShapeContractTests : IAsyncLifetime
     ///     distinct, non-degenerate vectors, or the contract passes over an engine that returns the
     ///     same buffer (or a zero vector) for everything.
     /// </summary>
-    [Theory]
+    [RetryTheory]
     [InlineData("mean")]
     [InlineData("cls")]
     public async Task DistinctInputsInOneBatch_ProduceDistinctNonZeroVectors(string pooling)

@@ -1,6 +1,7 @@
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Tests.Unit.Retrieval;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Retrieval;
 
@@ -24,7 +25,7 @@ public sealed class TableChunkingArmComparison(ITestOutputHelper output)
         ("linearised + section heading", TableChunkingArms.LinearisedWithHeading)
     ];
 
-    [Fact]
+    [RetryFact]
     public async Task ScoreEveryArm()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

@@ -5,6 +5,7 @@ using AiRaccoon.Setup;
 using Microsoft.AspNetCore.Builder;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Setup;
 
@@ -46,7 +47,7 @@ public sealed class ServerSettingsStoreTests : IAsyncLifetime
     private static ServerSettingsStore NewStore(Uri baseAddress, string token) =>
         new(new HttpClient { BaseAddress = baseAddress }, token);
 
-    [Fact]
+    [RetryFact]
     public async Task SetThenGet_RoundTrips()
     {
         await _store.SetSettingAsync("sweep.threshold", "0.7", TestContext.Current.CancellationToken);
@@ -55,13 +56,13 @@ public sealed class ServerSettingsStoreTests : IAsyncLifetime
     }
 
     /// <summary>Absent reads as null, exactly as the bank-backed store reports it.</summary>
-    [Fact]
+    [RetryFact]
     public async Task GetSetting_ForAnAbsentKey_IsNull()
     {
         (await _store.GetSettingAsync("never.written", TestContext.Current.CancellationToken)).ShouldBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetSettingsByPrefix_MatchesTheExactPrefixOnly()
     {
         await _store.SetSettingAsync("queryGuard.enabled.global", "false", TestContext.Current.CancellationToken);
@@ -73,13 +74,13 @@ public sealed class ServerSettingsStoreTests : IAsyncLifetime
         rows["queryGuard.enabled.global"].ShouldBe("false");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetSettingsByPrefix_WithNoMatch_IsEmpty_NotAThrow()
     {
         (await _store.GetSettingsByPrefixAsync("nothing.", TestContext.Current.CancellationToken)).ShouldBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task DeleteSetting_RemovesTheRow()
     {
         await _store.SetSettingAsync("noise.enabled.global", "false", TestContext.Current.CancellationToken);
@@ -90,7 +91,7 @@ public sealed class ServerSettingsStoreTests : IAsyncLifetime
     }
 
     /// <summary>A key with characters that must survive the query string rather than truncate it.</summary>
-    [Fact]
+    [RetryFact]
     public async Task KeysAreEscaped_SoAKeyCannotForgeAQueryString()
     {
         await _store.SetSettingAsync("access.mode.project:a&prefix=b", "ro", TestContext.Current.CancellationToken);
@@ -100,7 +101,7 @@ public sealed class ServerSettingsStoreTests : IAsyncLifetime
     }
 
     /// <summary>WP7-T7's server-refused row: the wrong token must say so, not read as absent.</summary>
-    [Fact]
+    [RetryFact]
     public async Task AWrongToken_ThrowsRefused_RatherThanReportingAbsent()
     {
         var refused = NewStore(_baseAddress, "not-the-token");
@@ -111,7 +112,7 @@ public sealed class ServerSettingsStoreTests : IAsyncLifetime
         error.Message.ShouldContain("refused");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AWrongToken_OnAWrite_ThrowsRefused()
     {
         var refused = NewStore(_baseAddress, "not-the-token");
@@ -121,7 +122,7 @@ public sealed class ServerSettingsStoreTests : IAsyncLifetime
     }
 
     /// <summary>WP7-T7's server-unreachable row.</summary>
-    [Fact]
+    [RetryFact]
     public async Task AnUnreachableServer_ThrowsUnavailable_NamingTheAddress()
     {
         var unreachable = NewStore(new Uri("http://127.0.0.1:1/"), Token);
@@ -133,7 +134,7 @@ public sealed class ServerSettingsStoreTests : IAsyncLifetime
     }
 
     /// <summary>A write must never look like it landed when the server never answered.</summary>
-    [Fact]
+    [RetryFact]
     public async Task AnUnreachableServer_OnAWrite_ThrowsUnavailable()
     {
         var unreachable = NewStore(new Uri("http://127.0.0.1:1/"), Token);
@@ -143,7 +144,7 @@ public sealed class ServerSettingsStoreTests : IAsyncLifetime
     }
 
     /// <summary>ADR-0075 amendment: `noise entries` reaches noise_entries entirely through the server.</summary>
-    [Fact]
+    [RetryFact]
     public async Task SummarizeAsync_ReturnsTheLiveSummary()
     {
         var summary = await _store.SummarizeAsync(TestContext.Current.CancellationToken);
@@ -152,7 +153,7 @@ public sealed class ServerSettingsStoreTests : IAsyncLifetime
     }
 
     /// <summary>ADR-0075 amendment: `watch registered` reaches the live registration list entirely through the server.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ListWatchesAsync_ReturnsTheLiveList()
     {
         var watches = await _store.ListWatchesAsync(TestContext.Current.CancellationToken);

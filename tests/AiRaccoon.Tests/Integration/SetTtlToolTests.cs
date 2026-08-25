@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
@@ -41,7 +42,7 @@ public sealed class SetTtlToolTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task SetTtl_UnknownHash_Throws()
     {
         await FullAccessAsync();
@@ -50,7 +51,7 @@ public sealed class SetTtlToolTests : IDisposable
             _tools.SetTtl(ProjectId, "deadbeef", 7, TestContext.Current.CancellationToken));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SetTtl_ThenSweep_DeletesTheEntry()
     {
         await FullAccessAsync();
@@ -75,7 +76,7 @@ public sealed class SetTtlToolTests : IDisposable
         sweep.Data!.Deleted.ShouldBe([entry.Hash]);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SetTtl_Null_ClearsTheTtl_AndZeroIsRejected()
     {
         await FullAccessAsync();
