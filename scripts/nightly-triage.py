@@ -156,7 +156,9 @@ def run_dotnet_test(trx_name: str, extra: list[str] | None = None) -> subprocess
     """
     os.makedirs(TEST_RESULTS, exist_ok=True)
     command = [
-        "dotnet", "test", "--nologo",
+        "dotnet", "test",
+        # No --nologo: VSTest-only flag; under MTP (global.json test.runner) it is forwarded as an
+        # unmatched token and dotnet test reports "Zero tests ran / exit 5" (dotnet/sdk#55309).
         "--results-directory", str(TEST_RESULTS.resolve()),
         "--logger", f"trx;LogFileName={trx_name}",
     ]
