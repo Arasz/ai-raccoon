@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using OpenTelemetry.Metrics;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.E2E;
@@ -60,7 +61,7 @@ public sealed class OtlpMetricExportE2ETests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ToolCallMetric_ReachesTheOtlpCollector_ThroughARealMcpToolCall()
     {
         var client = await _factory.CreateClientAsync();

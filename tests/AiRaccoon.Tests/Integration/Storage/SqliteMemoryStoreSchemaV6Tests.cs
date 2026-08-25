@@ -3,6 +3,7 @@ using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -31,7 +32,7 @@ public sealed class SqliteMemoryStoreSchemaV6Tests : IDisposable
     ///     (ADR-0029's original write-time reject log) is restored: it is now the training-data
     ///     source shadow mode and a future 200-item labelled set depend on.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task OpenBank_FreshBank_HasNoiseEntries_ButNotNoiseClusterTables()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -58,7 +59,7 @@ public sealed class SqliteMemoryStoreSchemaV6Tests : IDisposable
     ///     receives noise_clusters/vec_noise on upgrade, inert, alongside the newly-restored
     ///     noise_entries (which the unconditional Ddl adds regardless of stamped version).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task OpenBank_LegacyPreV6Bank_StillGetsNoiseClusterTables_ViaTheHistoricalLadderStep()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);

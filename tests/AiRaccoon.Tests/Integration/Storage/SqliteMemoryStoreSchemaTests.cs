@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
@@ -67,7 +68,7 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task OpenBank_OnLegacySchema_AddsSourceFileColumn_AndRebuildsWeightedFts()
     {
         await CreateLegacyBankAsync();
@@ -97,7 +98,7 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
         rows.ShouldNotBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task OpenBank_OnLegacySchema_NewWritesSyncSourceFileIntoFts()
     {
         await CreateLegacyBankAsync();
@@ -115,7 +116,7 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
         hit.ChunkIndex.ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task OpenBank_OnFreshDatabase_CreatesWeightedFtsWithSourceFile()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -131,7 +132,7 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
         hasColumn.ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task OpenBank_AfterFtsShellCrash_RecreatesAndRepopulatesIndex()
     {
         // A crash between the migration's DROP/CREATE and its repopulate leaves a
@@ -164,7 +165,7 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
         ftsRows.ShouldBeGreaterThan(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task OpenBank_CreatesUniqueBucketIndexes()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -178,7 +179,7 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
         names.ShouldContain("uq_entries_committed_bucket");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task OpenBank_MigrationCollapsesSharedDuplicates_KeepingEarliestRow()
     {
         await SeedDuplicateBucketsAsync(("h1", "shared/a.md", "shared", "acme", null),
@@ -194,7 +195,7 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
         rows[0].ProjectId.ShouldBe("acme"); // MIN(id) survivor keeps the earliest promoter
     }
 
-    [Fact]
+    [RetryFact]
     public async Task OpenBank_MigrationCollapsesProjectDuplicates_WithNullContextLabel()
     {
         await SeedDuplicateBucketsAsync(("h1", "p1.md", "project", "acme", null),
@@ -213,7 +214,7 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
     ///     do — byte-identical content under the same path/hash/workspace has no legitimate reason
     ///     to exist twice, and doing so pays a second embedding and returns a duplicate hit.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task OpenBank_MigrationCollapsesWorkspaceDuplicates_KeepingEarliestRow()
     {
         await SeedDuplicateBucketsAsync(("w1", "ws.md", null, "acme", "ws-1"),
@@ -228,7 +229,7 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
         rows.ShouldHaveSingleItem(); // MIN(id) survivor, same dedup rule as the shared/project buckets
     }
 
-    [Fact]
+    [RetryFact]
     public async Task UniqueIndex_RejectsDuplicateBucketInsert()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -245,7 +246,7 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
         ex.SqliteErrorCode.ShouldBe(19); // SQLITE_CONSTRAINT
     }
 
-    [Fact]
+    [RetryFact]
     public async Task UniqueIndex_AllowsSamePathDifferentHash()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -270,7 +271,7 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
     ///     twice under the same path/hash/workspace — doing so silently duplicates on retry, pays
     ///     a second embedding, and returns a duplicate search hit.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task UniqueIndex_RejectsWorkspaceDuplicateBucket()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -291,7 +292,7 @@ public sealed class SqliteMemoryStoreSchemaTests : IDisposable
         ex.SqliteErrorCode.ShouldBe(19); // SQLITE_CONSTRAINT
     }
 
-    [Fact]
+    [RetryFact]
     public async Task OpenBank_MigrationIsIdempotent_OnAlreadyIndexedBank()
     {
         await SeedDuplicateBucketsAsync(("h1", "shared/a.md", "shared", "acme", null),

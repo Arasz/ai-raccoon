@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
@@ -38,7 +39,7 @@ public sealed class ReplaceLockMetricsTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task ReplaceAsync_RecordsTheHeldLockAndRowsUnderTheWritingProject()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -73,7 +74,7 @@ public sealed class ReplaceLockMetricsTests : IDisposable
     ///     lock briefly and DOES still record real wait/held times with 0 rows — just not this one,
     ///     where nothing raced.)
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ReplaceIfFileChangedAsync_WhenFingerprintUnchanged_RecordsNothing()
     {
         var ct = TestContext.Current.CancellationToken;

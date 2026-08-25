@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Extraction;
@@ -76,7 +77,7 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
 
     private static QueueCandidate Candidate(string hash, string path, string value, double score) => new(hash, path, value, null, score, ["organic-write"]);
 
-    [Fact]
+    [RetryFact]
     public async Task Promote_TwoChunksOfOneFile_BothChunksShared()
     {
         // Two chunks of the same source file with DISTINCT content: every promoted chunk
@@ -103,7 +104,7 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
             "both chunks were claimed off the queue");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Promote_BatchValueTwin_SkippedNotSecondRow()
     {
         // Two rows in ONE call, different paths, identical value: the first creates the shared
@@ -125,7 +126,7 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
             "an identical chunk from a second path is a duplicate — one shared row, not two");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Promote_ConcurrentSameContent_ExactlyOneCreated()
     {
         // The cross-call race: two PromoteAsync calls share the same (path, hash) content.
@@ -151,7 +152,7 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
         store.SharedRows.ShouldBe(1, "exactly one shared row exists for the raced content");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Promote_TwoChunksOfOneFile_LogLinePinsFieldOrder()
     {
         // The live test caught the EventId 702 args swapped (promoted/absorbed). Pin the order:

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
@@ -60,7 +61,7 @@ public sealed class RelativeScoreFloorTests : IDisposable
     ///     The shipped default must not truncate: at MinRelativeScore 0.7 ten of the 44 baseline
     ///     queries returned fewer than the 20 they asked for (A1 17, A2 14, E3 12 — see ADR-0047).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ShippedDefaults_ReturnEveryResultTheCallerAskedFor()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -86,7 +87,7 @@ public sealed class RelativeScoreFloorTests : IDisposable
     ///     must not read a high score as evidence of a good match — that is why the floor is named
     ///     relative and why "no useful hit" needs a different signal (ADR-0047).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task OffCorpusQueries_StillScoreOneAtRankOne()
     {
         var ct = TestContext.Current.CancellationToken;

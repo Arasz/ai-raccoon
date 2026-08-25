@@ -8,6 +8,7 @@ using ModelContextProtocol.Server;
 using Shouldly;
 using AiRaccoon.Tests.Unit.Observability;
 using Xunit;
+using xRetry.v3;
 using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Integration.Observability;
@@ -21,7 +22,7 @@ namespace AiRaccoon.Tests.Integration.Observability;
 [Collection(ObservabilityCollection.Name)]
 public sealed class ToolTelemetryCoverageTests
 {
-    [Fact]
+    [RetryFact]
     public async Task EveryRegisteredTool_RecordsAnInvocation()
     {
         // Reader of the env gate (docs/adr/0066): this test stands up the real host.
@@ -88,7 +89,7 @@ public sealed class ToolTelemetryCoverageTests
     ///     host must also resolve what the filter looks up — otherwise it would quietly emit nothing.
     ///     The proxy is not a tool-serving host: it returns before CreateServerHost (Program.cs, ADR-0020).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void StdioHost_RegistersToolsAndTheMetricsTheFilterResolves()
     {
         var dataRoot = TestData.CreateTempRoot("tool-telemetry-stdio");

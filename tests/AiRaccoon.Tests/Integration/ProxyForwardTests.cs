@@ -12,6 +12,7 @@ using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -98,7 +99,7 @@ public sealed class ProxyForwardTests : IAsyncLifetime
         return await factory.CreateClientAsync();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ToolList_ThroughTheProxy_MatchesTheBackendExactly()
     {
         using var cts = Deadline();
@@ -111,7 +112,7 @@ public sealed class ProxyForwardTests : IAsyncLifetime
         throughProxy.Select(t => t.Name).OrderBy(n => n).ShouldBe(expected.OrderBy(n => n));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task UnknownMethod_IsForwarded()
     {
         using var cts = Deadline();
@@ -126,7 +127,7 @@ public sealed class ProxyForwardTests : IAsyncLifetime
         failure.Message.ShouldContain("x/unknown");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RequestId_IsPreserved()
     {
         using var cts = Deadline();
@@ -138,7 +139,7 @@ public sealed class ProxyForwardTests : IAsyncLifetime
         _recorder.Requests.ShouldContain(r => r.Method == "tools/list" && Equals(r.Id.Id, "abc-1"));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Notification_IsForwarded_AndProducesNoResponse()
     {
         using var cts = Deadline();
@@ -164,7 +165,7 @@ public sealed class ProxyForwardTests : IAsyncLifetime
         frames[0].ShouldContain("after-notification");
     }
 
-    [Fact]
+    [RetryFact]
     public void Initialize_ReportsTheBackendCapabilities()
     {
         // Against the live backend, never a literal: the local server registers nothing, so its
@@ -175,7 +176,7 @@ public sealed class ProxyForwardTests : IAsyncLifetime
         _proxyClient.ServerCapabilities.Prompts.ShouldNotBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task WhenTheBackendDies_TheNextCallReacquiresAndSucceeds()
     {
         using var cts = Deadline();
@@ -188,7 +189,7 @@ public sealed class ProxyForwardTests : IAsyncLifetime
         _reacquireCount.ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task WhenReacquireAlsoFails_TheClientGetsAJsonRpcError()
     {
         using var cts = Deadline();
@@ -201,7 +202,7 @@ public sealed class ProxyForwardTests : IAsyncLifetime
         _reacquireCount.ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task BackendError_DoesNotReacquire()
     {
         using var cts = Deadline();

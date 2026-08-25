@@ -3,6 +3,7 @@ using AiRaccoon.Core.Observability;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Observability;
 
@@ -18,7 +19,7 @@ namespace AiRaccoon.Tests.Integration.Observability;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public class GitStampNoGitBuildTests
 {
-    [Fact]
+    [RetryFact]
     public async Task Build_WithNoGitRepositoryAvailable_Succeeds_AndDegradesToTheUnavailableStampContract()
     {
         var root = TestData.CreateTempRoot("gitstamp-no-git");

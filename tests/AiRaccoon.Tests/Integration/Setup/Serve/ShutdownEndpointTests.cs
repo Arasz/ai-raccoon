@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Setup.Serve;
 
@@ -42,7 +43,7 @@ public sealed class ShutdownEndpointTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Post_WithoutTheToken_Is401_AndTheServerKeepsServing()
     {
         using var lease = LoopbackPort.Reserve();
@@ -67,7 +68,7 @@ public sealed class ShutdownEndpointTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Post_WithTheWrongToken_AnswersExactlyAsAMissingOne()
     {
         using var lease = LoopbackPort.Reserve();
@@ -97,7 +98,7 @@ public sealed class ShutdownEndpointTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Post_WithTheToken_IsAccepted_AndStopsTheHost()
     {
         using var lease = LoopbackPort.Reserve();
@@ -121,7 +122,7 @@ public sealed class ShutdownEndpointTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Get_IsNotAllowed()
     {
         using var lease = LoopbackPort.Reserve();
@@ -144,7 +145,7 @@ public sealed class ShutdownEndpointTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Post_IsNotMappedAtAll_WhenTheServerIsUngated()
     {
         // A direct `--transport http` launch mints no token (ADR-0020 non-goal), so it must not

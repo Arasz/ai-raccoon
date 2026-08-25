@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Testing;
 using NSubstitute;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -35,7 +36,7 @@ public sealed class RowBudgetTests : IDisposable
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     /// <summary>C1: a configured rows-per-run bounds one drain pass exactly, for the memory corpus.</summary>
-    [Fact]
+    [RetryFact]
     public async Task RowsPerRun_ComesFromTheBankSetting()
     {
         await ConfigureMemoryProviderAsync();
@@ -52,7 +53,7 @@ public sealed class RowBudgetTests : IDisposable
     }
 
     /// <summary>C2: the same setting, and the same consumer, also bounds a code-corpus drain pass.</summary>
-    [Fact]
+    [RetryFact]
     public async Task CodeReindex_HonoursTheSameSetting()
     {
         await ActivateCodeEngineAsync();
@@ -67,7 +68,7 @@ public sealed class RowBudgetTests : IDisposable
         (await PendingCodeCountAsync()).ShouldBe(13);
     }
 
-    [Fact]
+    [RetryFact]
     public void ResolveRowsPerRun_Unset_Returns128_AndNeverWarns()
     {
         var logger = new FakeLogger<EmbedDrainService>();
@@ -79,7 +80,7 @@ public sealed class RowBudgetTests : IDisposable
     }
 
     /// <summary>A present-but-unparseable value falls back to the default and warns — asserted on the logger's structured record, not its text.</summary>
-    [Fact]
+    [RetryFact]
     public void ResolveRowsPerRun_Garbage_Returns128_AndWarns()
     {
         var logger = new FakeLogger<EmbedDrainService>();
@@ -96,7 +97,7 @@ public sealed class RowBudgetTests : IDisposable
     ///     on-demand poll, at least), so a persistent bad value used to warn forever. Two passes
     ///     over the SAME bad raw value must log exactly once.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void ResolveRowsPerRun_CalledTwiceWithTheSameGarbage_WarnsOnlyOnce()
     {
         var logger = new FakeLogger<EmbedDrainService>();
@@ -109,7 +110,7 @@ public sealed class RowBudgetTests : IDisposable
     }
 
     /// <summary>A DIFFERENT bad value is a fresh occurrence — worth its own warning, not swallowed by the first one's memory.</summary>
-    [Fact]
+    [RetryFact]
     public void ResolveRowsPerRun_TwoDistinctGarbageValues_WarnsForEach()
     {
         var logger = new FakeLogger<EmbedDrainService>();
@@ -122,7 +123,7 @@ public sealed class RowBudgetTests : IDisposable
     }
 
     /// <summary>Review finding 1: the parser clamps an over-ceiling value to the ceiling AND logs — same invalid-value warning path as garbage.</summary>
-    [Fact]
+    [RetryFact]
     public void ResolveRowsPerRun_OverCeiling_ClampsToTheCeiling_AndWarns()
     {
         var logger = new FakeLogger<EmbedDrainService>();

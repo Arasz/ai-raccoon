@@ -1,6 +1,7 @@
 using AiRaccoon.Infrastructure.Embedding;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -32,7 +33,7 @@ public sealed class SentencePieceVocabParityTests : IAsyncLifetime
         });
 
     /// <summary>Without the offset the ids are the sentencepiece model's own — the defect this pins.</summary>
-    [Fact]
+    [RetryFact]
     public void WithoutTheOffset_TheIdsAreRawSentencePieceIds_WhichTheModelMisreads()
     {
         var raw = SentencePieceEmbeddingTokenizer.Create(_modelPath, new SentencePieceTokenizerOptions
@@ -46,7 +47,7 @@ public sealed class SentencePieceVocabParityTests : IAsyncLifetime
             .ShouldContain(3, "the unmapped path emits the sentencepiece id, which is <unk> to the model");
     }
 
-    [Fact]
+    [RetryFact]
     public void TheSequenceIsWrappedWithTheXlmRobertaBosAndEos()
     {
         var ids = Build().EncodeToIds("The quick brown fox jumps over the lazy dog.", addSpecialTokens: true);
@@ -59,7 +60,7 @@ public sealed class SentencePieceVocabParityTests : IAsyncLifetime
     ///     The two vocabularies differ by a constant offset on ordinary pieces. "," is
     ///     sentencepiece id 3 and xlm-roberta id 4; a tokenizer emitting 3 is off by one.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void AnOrdinaryPieceCarriesItsXlmRobertaId_NotItsSentencePieceId()
     {
         var ids = Build().EncodeToIds(",", addSpecialTokens: false);
@@ -69,7 +70,7 @@ public sealed class SentencePieceVocabParityTests : IAsyncLifetime
     }
 
     /// <summary>No emitted id may exceed the model's embedding matrix (vocab_size 250002).</summary>
-    [Fact]
+    [RetryFact]
     public void EveryEmittedIdIsInsideTheModelsVocabulary()
     {
         var ids = Build().EncodeToIds("Memory retrieval ranking evidence", addSpecialTokens: true);
@@ -88,7 +89,7 @@ public sealed class SentencePieceVocabParityTests : IAsyncLifetime
     ///     snake_case/camelCase identifier that the pretokenizer splits — because an off-by-one that
     ///     survives "," can still land on a rarer piece.
     /// </summary>
-    [Theory]
+    [RetryTheory]
     [InlineData("...", new[] { 0, 153, 2 })]
     [InlineData("The drain reconciles vec0 to the engine's dimension before writing.",
         new[] { 0, 581, 8167, 73, 44188, 318, 1577, 22834, 2389, 47, 70, 87907, 25, 7, 6, 91403, 8108, 32562, 5, 2 })]

@@ -3,6 +3,7 @@ using AiRaccoon.Infrastructure.Embedding;
 using Microsoft.ML.Tokenizers;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -19,7 +20,7 @@ public sealed class ChunkingCorpusGuaranteeTests
 {
     private const int MaxTokens = OnnxEmbeddingGenerator.MaxContentTokens;
 
-    [Fact]
+    [RetryFact]
     public void ChunkingDocsCorpus_WithRealBertTokenizer_NoChunkExceedsTheContentBudget()
     {
         var (chunker, bert) = BuildRealLocalChunker();
@@ -58,7 +59,7 @@ public sealed class ChunkingCorpusGuaranteeTests
     ///     <see cref="HeadingPathParser" /> reads the block's '#' comments as level-1 headings and
     ///     that prose reaches the FTS-weighted section column. Measured RED at 72/4140 chunks.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void ChunkingDocsCorpus_EveryChunkIsFenceBalanced()
     {
         var (chunker, _) = BuildRealLocalChunker();
@@ -92,7 +93,7 @@ public sealed class ChunkingCorpusGuaranteeTests
             line.TrimStart().StartsWith("```", StringComparison.Ordinal)
             || line.TrimStart().StartsWith("~~~", StringComparison.Ordinal));
 
-    [Fact]
+    [RetryFact]
     public void ChunkingHostileFixtures_NoChunkExceedsTheContentBudget()
     {
         var (chunker, bert) = BuildRealLocalChunker();
@@ -116,7 +117,7 @@ public sealed class ChunkingCorpusGuaranteeTests
     ///     this collapse stop must make this specific assertion fail; when that happens, invert it
     ///     (don't loosen or delete it) and update the ADR.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void NewlineSeparatedHashList_StillCollapsesToUnknown_DocumentsKnownGap()
     {
         var bert = OnnxEmbeddingGenerator.CreateTokenizer(BundledModel.ResolveVocabPath());

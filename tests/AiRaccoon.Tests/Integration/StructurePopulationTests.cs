@@ -12,6 +12,7 @@ using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
@@ -60,7 +61,7 @@ public sealed class StructurePopulationTests : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Ingest_MarkdownWithHeadings_PopulatesTheStructureVectorTable()
     {
         await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),

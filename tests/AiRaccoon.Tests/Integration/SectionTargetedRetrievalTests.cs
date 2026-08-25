@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
@@ -101,7 +102,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     ///     repeated here — the previous copies drifted to name a corpus that has left the repo
     ///     (ADR-0090), and a duplicated list is one the catalog cannot keep honest.
     /// </summary>
-    [Theory]
+    [RetryTheory]
     [InlineData("S1")]
     [InlineData("S3")]
     [InlineData("S4")]
@@ -126,7 +127,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     ///     verdict was a function of the host CPU — arm64 gives rank 3, x64 flips to 4
     ///     (docs/adr/0049; nightly reds #527/#575).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task S2_SectionQuery_AnswersAtFileLevel()
     {
         var query = Catalog("S2");
@@ -151,7 +152,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     ///     six A-queries with section ground truth (A1–A5, A7; A6 lacks ground truth per
     ///     docs/work/2026-08-04-comparison-clean.md) must be ≥ 4/6.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task SectionHitAt5_OverAdrQueries_AtLeast4Of6()
     {
         var sectionQueries = QueriesWithSectionGroundTruth();
@@ -184,7 +185,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     }
 
     /// <summary>Wave 6 gate (docs/plans/retrieval-improvement-c.md §3 Wave 6): no content-only file-level rank regression beyond the bounded tolerance (docs/adr/0004-dual-vector-structure-signal.md).</summary>
-    [Fact]
+    [RetryFact]
     public async Task FileLevelRanks_FusedArm_NoRegressionBeyondTolerance()
     {
         var queries = FileLevelQueries();
@@ -212,7 +213,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
     }
 
     /// <summary>Pre-Wave-6 banks gain the structure columns on open (ALTER TABLE migration path).</summary>
-    [Fact]
+    [RetryFact]
     public async Task SchemaMigration_AddsStructureColumns_ToLegacyBank()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);

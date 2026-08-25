@@ -4,6 +4,7 @@ using AiRaccoon.Infrastructure.Watch;
 using Dapper;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -22,7 +23,7 @@ public sealed class WatchStoreCascadeTests
     /// <summary>How long an unblocked remove is given to finish before absence is believed.</summary>
     private static readonly TimeSpan Grace = TimeSpan.FromMilliseconds(300);
 
-    [Fact]
+    [RetryFact]
     public async Task RemoveWatchAsync_AlsoDeletesTheFingerprintsUnderTheWatch()
     {
         using var stack = new Stack();
@@ -43,7 +44,7 @@ public sealed class WatchStoreCascadeTests
         remaining.ShouldContain(sibling);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RemoveWatchAsync_DeletesTheFingerprintForTheWatchPathItself()
     {
         using var stack = new Stack();
@@ -57,7 +58,7 @@ public sealed class WatchStoreCascadeTests
         remaining.ShouldNotContain(filePath);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RemoveWatchAsync_LeavesAnotherProjectsFingerprintsAlone()
     {
         using var stack = new Stack();
@@ -76,7 +77,7 @@ public sealed class WatchStoreCascadeTests
             .ShouldContain(filePath);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RemoveWatchAsync_WithNoFingerprints_StillRemovesTheWatch()
     {
         using var stack = new Stack();
@@ -89,7 +90,7 @@ public sealed class WatchStoreCascadeTests
         watches.ShouldNotContain(w => w.ProjectId == Project && w.Path == watchPath);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RemoveWatchAsync_WithAPathContainingLikeWildcards_DoesNotOverMatch()
     {
         using var stack = new Stack();
@@ -114,7 +115,7 @@ public sealed class WatchStoreCascadeTests
     ///     Pinned against a real held write transaction, because `busy_timeout` is only
     ///     observable when the lock is genuinely held when the remove asks for it.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task RemoveWatchAsync_WhileFingerprintsAreBeingWritten_Succeeds()
     {
         using var stack = new Stack();

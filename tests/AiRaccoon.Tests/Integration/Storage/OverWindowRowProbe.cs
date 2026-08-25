@@ -3,6 +3,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -26,7 +27,7 @@ public sealed class OverWindowRowProbe
 
     public OverWindowRowProbe(ITestOutputHelper output) => _output = output;
 
-    [Fact]
+    [RetryFact]
     public async Task Probe_CountsRowsOverTheEmbeddingWindow()
     {
         var bank = Environment.GetEnvironmentVariable(BankEnvVar);

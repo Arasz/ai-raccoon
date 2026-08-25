@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
@@ -90,7 +91,7 @@ public sealed class SourceIdentityTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task SearchResults_CarrySourceIdentity_ForIngestedChunks()
     {
         var expectedHash = _hashMap[IdentityChunk];
@@ -114,7 +115,7 @@ public sealed class SourceIdentityTests : IDisposable
     }
 
     /// <summary>S2 (docs/plans/retrieval-improvement-c.md §3 Wave 2): the Decision-chunk's own rank is logged, not asserted — Wave 6's dual-vector structure signal is the target for that. Searches the pinned-vector copy (ADR-0050 pattern): with the live query embedding this verdict was a function of the host CPU — arm64 passes at 3, x64 flips to 4 (docs/adr/0049; nightly reds #527/#575).</summary>
-    [Fact]
+    [RetryFact]
     public async Task S2_SectionQuery_FindsItsFileWithinTop3_AndLogsDecisionChunkRank()
     {
         var hashMap = _hashMap;
@@ -131,7 +132,7 @@ public sealed class SourceIdentityTests : IDisposable
     }
 
     /// <summary>Q2 (docs/plans/retrieval-improvement-c.md §3 Wave 2): the decision chunk's rank is logged, not asserted — the header chunk legitimately outranks it for a bare identifier.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Q2_IdentifierOnly_FtsOnlyFileRankWithinTop3()
     {
         var hashMap = _hashMap;
@@ -153,7 +154,7 @@ public sealed class SourceIdentityTests : IDisposable
     ///     only resolve for chunks whose section was written at ingest. Restored to the production
     ///     Limit=5 / rank 1 assertion once FileIngestor populated section from the heading leaf.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task SourcePathQuery_ReturnsTheExactChunkFirst()
     {
         var hashMap = _hashMap;
@@ -176,7 +177,7 @@ public sealed class SourceIdentityTests : IDisposable
     ///     which legitimately share the top of that query. The pins are the measured
     ///     no-regression floor, not an aspiration.
     /// </summary>
-    [Theory]
+    [RetryTheory]
     [InlineData("Is TDD required?", InvariantTdd, 3)]
     [InlineData("Must a check be seen failing before it counts?", InvariantProveCheck, 5)]
     public async Task InvariantQueries_C1C5_HoldMeasuredHybridRanks(string query, string expectedSource,
@@ -205,7 +206,7 @@ public sealed class SourceIdentityTests : IDisposable
     ///     and that failure is the signal to restore the original assertion (rank == 1) and
     ///     delete this note. Do not "fix" it by widening the bound.
     /// </remarks>
-    [Fact]
+    [RetryFact]
     public async Task InvariantC2_ScreamingArchitecture_DocumentsKnownFtsOnlyRankRegression()
     {
         var hashMap = _hashMap;

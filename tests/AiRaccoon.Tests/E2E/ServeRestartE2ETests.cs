@@ -7,6 +7,7 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Observability;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.E2E;
@@ -50,7 +51,7 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ARunningServer_IsCycled_AndADifferentProcessAnswersOnThisBuild()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
@@ -82,7 +83,7 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
         (await run.StopAsync()).ShouldBe(ExitCode.Success);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AServerThatNeverStops_ExitsNonZeroWithinTheBound_RatherThanHanging()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,

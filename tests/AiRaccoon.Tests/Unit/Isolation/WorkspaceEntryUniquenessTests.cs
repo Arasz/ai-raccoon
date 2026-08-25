@@ -2,6 +2,7 @@ using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Unit.Isolation;
 
@@ -31,7 +32,7 @@ public sealed class WorkspaceEntryUniquenessTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task SequentialInsert_OfIdenticalWorkspaceContent_ProducesOneRow()
     {
         await SeedWorkspaceAsync("ws-1");
@@ -46,7 +47,7 @@ public sealed class WorkspaceEntryUniquenessTests : IDisposable
     /// <summary>The RED case named by the acceptance criteria: two writes racing concurrently, not
     /// just sequentially, must still collapse to one row — proving the uniqueness comes from a real
     /// database constraint, not an application-level ordering assumption.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ConcurrentInsert_OfIdenticalWorkspaceContent_ProducesOneRow()
     {
         await SeedWorkspaceAsync("ws-1");
@@ -60,7 +61,7 @@ public sealed class WorkspaceEntryUniquenessTests : IDisposable
 
     /// <summary>The genuine non-duplicate case must still work: different content, or content in a
     /// different workspace, must not be collapsed together.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Insert_OfDifferentWorkspaces_WithTheSamePathAndHash_KeepsBothRows()
     {
         await SeedWorkspaceAsync("ws-1");

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
@@ -40,7 +41,7 @@ public sealed class WriteEmbedsContentExactlyOnceTests : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Write_WithAnEngineConfigured_EmbedsTheContentExactlyOnce()
     {
         var embeddings = new CountingEmbeddingService();

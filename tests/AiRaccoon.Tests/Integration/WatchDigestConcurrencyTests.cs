@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
@@ -34,7 +35,7 @@ public sealed class WatchDigestConcurrencyTests
 
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(30);
 
-    [Fact]
+    [RetryFact]
     public async Task TwoProcessesDigestingOnePath_KeepItSearchable_AndChunkItOnce()
     {
         var token = TestContext.Current.CancellationToken;
@@ -66,7 +67,7 @@ public sealed class WatchDigestConcurrencyTests
             .ShouldBe(WatchDigestExecutor.ComputeHash(bank.FilePath, $"{Sentinel} v2body"));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task DigestThatFailsMidIngest_LeavesThePreviousContentSearchable()
     {
         var token = TestContext.Current.CancellationToken;

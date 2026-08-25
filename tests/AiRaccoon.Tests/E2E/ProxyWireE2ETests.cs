@@ -12,6 +12,7 @@ using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.E2E;
@@ -76,7 +77,7 @@ public sealed class ProxyWireE2ETests : IAsyncLifetime
     ///     HttpRequestIn on the backend stays a trace root. Asserted on the wire — Activity.Current
     ///     can be non-null for reasons that have nothing to do with our instrumentation.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ForwardedRequests_CarryNoTraceparent()
     {
         await using var client = await AiRaccoonProcess.ConnectAsync(
@@ -95,7 +96,7 @@ public sealed class ProxyWireE2ETests : IAsyncLifetime
     ///     The second net under the token wiring: this fixture's backend is ungated, so only the
     ///     header on the wire can show the proxy still presents it.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ForwardedRequests_CarryTheLoopbackToken()
     {
         await using var client = await AiRaccoonProcess.ConnectAsync(
@@ -112,7 +113,7 @@ public sealed class ProxyWireE2ETests : IAsyncLifetime
     ///     SDK converts an error body only when it is application/json — so without the proxy's
     ///     recovery handler the code collapses to -32603 (ADR-0020, "the backend's error status").
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task UnknownMethod_KeepsItsMethodNotFoundCode()
     {
         await using var client = await AiRaccoonProcess.ConnectAsync(

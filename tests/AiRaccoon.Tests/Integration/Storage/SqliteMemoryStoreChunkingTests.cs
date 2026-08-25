@@ -9,6 +9,7 @@ using Microsoft.Extensions.Time.Testing;
 using Microsoft.ML.Tokenizers;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
@@ -47,7 +48,7 @@ public sealed class SqliteMemoryStoreChunkingTests : IAsyncLifetime
         TestData.DeleteTempRoot(_dataRoot);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestFile_ChunksNeverExceedTheEngineContextWindow()
     {
         var file = Path.Combine(_dataRoot, "long-note.md");

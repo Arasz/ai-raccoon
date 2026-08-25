@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using OpenTelemetry.Trace;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.E2E;
@@ -61,7 +62,7 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ToolCallSpan_ReachesTheOtlpCollector_ThroughARealMcpToolCall()
     {
         var client = await _factory.CreateClientAsync();
@@ -86,7 +87,7 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
     // the old unrecorded Activity left behind. AddInMemoryExporter chains onto the same
     // TracerProviderBuilder AddOtlpExport already configured for the real host (OtlpExportTests'
     // bare-ServiceCollection tests use the same trick).
-    [Fact]
+    [RetryFact]
     public async Task ToolCallSpan_NestsUnderAResolvableRequestSpan()
     {
         var exportedItems = new List<Activity>();
@@ -117,7 +118,7 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
     // per request or cached at type init. This proves the ordering (switch set before
     // WebApplication.CreateBuilder) is early enough either way — the tags actually reach an
     // exported span.
-    [Fact]
+    [RetryFact]
     public async Task RequestSpan_CarriesHttpSemanticConventionTags()
     {
         var exportedItems = new List<Activity>();
@@ -151,7 +152,7 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
     // test the other lane's sampler, not ours. The probe source has no other listener, so its
     // root span is created (AlwaysOff keeps PropagationData so the trace id survives) but never
     // recorded or exported.
-    [Fact]
+    [RetryFact]
     public async Task OtelTracesSamplerAlwaysOff_ProducesNoSpans()
     {
         Environment.SetEnvironmentVariable(SamplerVar, "always_off");

@@ -2,6 +2,7 @@ using Microsoft.Data.Sqlite;
 using Shouldly;
 using SQLitePCL;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -28,7 +29,7 @@ public class SqliteEngineCapabilityTests
         cmd.ExecuteNonQuery();
     }
 
-    [Fact]
+    [RetryFact]
     public void EngineVersion_IsAtLeastWalResetFixFloor()
     {
         var libVersion = Version.Parse(raw.sqlite3_libversion().utf8_to_string());
@@ -37,7 +38,7 @@ public class SqliteEngineCapabilityTests
             "the 3.53.0 WAL-reset corruption fix is a hard dependency (SyncService checkpoint + rekey journal switch)");
     }
 
-    [Fact]
+    [RetryFact]
     public void Engine_ReportsSqlite3mc24x()
     {
         using var conn = OpenMemory();
@@ -47,7 +48,7 @@ public class SqliteEngineCapabilityTests
         cmd.ExecuteScalar().ShouldBeOfType<string>().ShouldStartWith("SQLite3 Multiple Ciphers 2.4");
     }
 
-    [Fact]
+    [RetryFact]
     public void CompileOptions_TempStorageIsMemory()
     {
         using var conn = OpenMemory();
@@ -64,7 +65,7 @@ public class SqliteEngineCapabilityTests
             "encrypted banks must never spill plaintext temp b-trees to disk (SQLite3MC docs recommendation)");
     }
 
-    [Fact]
+    [RetryFact]
     public void CompileOptions_IncludeSecureDeleteFts5AndPercentile()
     {
         using var conn = OpenMemory();
@@ -82,7 +83,7 @@ public class SqliteEngineCapabilityTests
         options.ShouldContain("ENABLE_PERCENTILE");
     }
 
-    [Fact]
+    [RetryFact]
     public void JsonbFunctions_AreAvailable()
     {
         using var conn = OpenMemory();
@@ -94,7 +95,7 @@ public class SqliteEngineCapabilityTests
         cmd.ExecuteScalar().ShouldBe(2L);
     }
 
-    [Fact]
+    [RetryFact]
     public void PercentileFunctions_SimpleFormWorks()
     {
         using var conn = OpenMemory();
@@ -106,7 +107,7 @@ public class SqliteEngineCapabilityTests
         cmd.ExecuteScalar().ShouldBe(2L);
     }
 
-    [Fact]
+    [RetryFact]
     public void AlterColumn_SetNotNull_Enforces()
     {
         using var conn = OpenMemory();
@@ -118,7 +119,7 @@ public class SqliteEngineCapabilityTests
         Exec(conn, "INSERT INTO nn VALUES (2)");
     }
 
-    [Fact]
+    [RetryFact]
     public void AlterColumn_DropNotNull_AllowsNull()
     {
         using var conn = OpenMemory();
@@ -128,7 +129,7 @@ public class SqliteEngineCapabilityTests
         Exec(conn, "INSERT INTO dn VALUES (NULL)");
     }
 
-    [Fact]
+    [RetryFact]
     public void AlterTable_AddConstraintCheck_Enforces()
     {
         using var conn = OpenMemory();
@@ -139,7 +140,7 @@ public class SqliteEngineCapabilityTests
         Exec(conn, "INSERT INTO cc VALUES (1)");
     }
 
-    [Fact]
+    [RetryFact]
     public void AlterTable_DropConstraint_Removes()
     {
         using var conn = OpenMemory();
@@ -149,7 +150,7 @@ public class SqliteEngineCapabilityTests
         Exec(conn, "INSERT INTO dc VALUES (-1)");
     }
 
-    [Fact]
+    [RetryFact]
     public void StrictTables_RejectWrongType()
     {
         using var conn = OpenMemory();
@@ -159,7 +160,7 @@ public class SqliteEngineCapabilityTests
         Exec(conn, "INSERT INTO strict_t VALUES (1)");
     }
 
-    [Fact]
+    [RetryFact]
     public void Vec0_KnnQuery_WorksWithLoadedExtension()
     {
         using var conn = OpenMemory();

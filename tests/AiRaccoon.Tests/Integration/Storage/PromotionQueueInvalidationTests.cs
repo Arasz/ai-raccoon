@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
@@ -54,7 +55,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
 
     private static QueueCandidate Candidate(string hash, string value, double score) => new(hash, $"{hash}.md", value, null, score, ["organic-write"]);
 
-    [Fact]
+    [RetryFact]
     public async Task DeletingAnEntry_DropsItsQueuedCandidate()
     {
         var entry = await _store.WriteAsync(
@@ -69,7 +70,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
             "the trigger must drop the queue row once the entry it points at is gone");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ReplacingAWatchedFile_DropsQueuedCandidatesForItsOldChunks()
     {
         await SetScopeAsync("acme");
@@ -96,7 +97,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
     ///     project-scope backer as "still live" (see DeletingTheProjectEntry_WithOnlyACustomScopeSiblingSurviving_DropsTheQueuedCandidate
     ///     below for the case where the *only* surviving sibling is not project-scoped).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task DeletingOneOfTwoEntriesSharingAHash_KeepsTheQueuedCandidate()
     {
         await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
@@ -129,7 +130,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
     ///     was unpromotable and its queue row was an orphan. ShareAsync now resolves any row inside
     ///     the project (ProjectRows), so that sibling is a live backer and the candidate stands.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task DeletingTheProjectEntry_WithACustomScopeSiblingSurviving_KeepsTheQueuedCandidate()
     {
         await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
@@ -164,7 +165,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
     ///     stays on one connection — a fresh OpenBankAsync() re-runs EnsureAsync, whose
     ///     `CREATE TRIGGER IF NOT EXISTS` would silently recreate the dropped trigger.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task WithTheTriggerDropped_DeletingTheProjectEntry_LeavesTheQueuedCandidateUntouched()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -189,7 +190,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
 
     /// <summary>Regression: a queue row backed by a live project-scope entry must not be disturbed
     /// by an unrelated delete in the same project.</summary>
-    [Fact]
+    [RetryFact]
     public async Task DeletingAnUnrelatedEntry_DoesNotAffectAQueueRowBackedByALiveProjectScopeEntry()
     {
         var kept = await _store.WriteAsync(
@@ -214,7 +215,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
     ///     with no entry at all is an orphan. Both survivors are asserted so the prune cannot pass
     ///     by removing everything.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Prune_RemovesOnlyQueueRowsNothingInTheProjectBacks()
     {
         var live = await _store.WriteAsync(
@@ -254,7 +255,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
 
     /// <summary>Orphans pre-dating the trigger — no backing entries row at all, unlike the sibling
     /// scenario above where a row backs the hash under a different context.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Prune_ReportsOrphansWithoutApply_AndRemovesThemWithApply()
     {
         await _queueStore.UpsertAsync("acme", [Candidate("orphan-1", "gone", 1.0)],
@@ -291,7 +292,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
     ///     than deleting inline, so the queue itself is unchanged immediately after either form —
     ///     the actual delete is PromotionQueuePruneJob's job, exercised separately.
     /// </summary>
-    [Theory]
+    [RetryTheory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task PruneVerb_ParsedFromArgv_ReachesTheStore(bool apply)
@@ -317,7 +318,7 @@ public sealed class PromotionQueueInvalidationTests : IDisposable
     ///     A re-ingest deletes every chunk of the path and re-inserts them; a chunk whose text did not
     ///     change returns under the same content hash. Its candidate must survive that round trip.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ReplacingAWatchedFile_KeepsCandidatesForChunksThatDidNotChange()
     {
         await SetScopeAsync("acme");

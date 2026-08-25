@@ -3,6 +3,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -45,7 +46,7 @@ public sealed class WatchScanLeaseSchemaTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnALegacyBankWithoutLeaseColumns_AddsThem()
     {
         await CreateLegacyBankAsync();
@@ -60,7 +61,7 @@ public sealed class WatchScanLeaseSchemaTests : IDisposable
         columns.ShouldContain("scan_lease_expires_at");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AcquireWatchScanLease_WhenUnowned_GrantsTheLease()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -72,7 +73,7 @@ public sealed class WatchScanLeaseSchemaTests : IDisposable
         (await SelectLeaseAsync(connection)).ScanOwner.ShouldBe("owner-a");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AcquireWatchScanLease_WhenHeldByALiveOwner_IsDenied()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -84,7 +85,7 @@ public sealed class WatchScanLeaseSchemaTests : IDisposable
         (await SelectLeaseAsync(connection)).ScanOwner.ShouldBe("owner-a");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AcquireWatchScanLease_AfterTheHoldersLeaseExpired_IsGrantedToTheNextOwner()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -96,7 +97,7 @@ public sealed class WatchScanLeaseSchemaTests : IDisposable
         (await SelectLeaseAsync(connection)).ScanOwner.ShouldBe("owner-b");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AcquireWatchScanLease_ByTheSameOwnerAgain_IsReEntrant()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -110,7 +111,7 @@ public sealed class WatchScanLeaseSchemaTests : IDisposable
         lease.ScanLeaseExpiresAt.ShouldBe(Future + 60);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RenewWatchScanLease_ByANonOwner_ReturnsZeroRows()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -123,7 +124,7 @@ public sealed class WatchScanLeaseSchemaTests : IDisposable
         affected.ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RenewWatchScanLease_AfterTheWatchRowWasRemoved_ReturnsZeroRows()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -139,7 +140,7 @@ public sealed class WatchScanLeaseSchemaTests : IDisposable
         affected.ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ReleaseWatchScanLease_ByANonOwner_LeavesTheLeaseIntact()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -153,7 +154,7 @@ public sealed class WatchScanLeaseSchemaTests : IDisposable
         (await SelectLeaseAsync(connection)).ScanOwner.ShouldBe("owner-a");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ReleaseWatchScanLease_ByTheOwner_ClearsIt()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);

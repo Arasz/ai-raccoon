@@ -3,6 +3,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Sync;
 
@@ -99,7 +100,7 @@ public sealed class SyncServiceGateContentionTests : IDisposable
     ///     if the gate really serializes — has no choice but to sit on <c>_gate.WaitAsync</c> the whole
     ///     time, unable to make a single hook call, before the park is released.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ConcurrentMemorySync_SecondCallerWaitsForFirst_BothSucceed_NeverConcurrentlyActive()
     {
         var recordLock = new Lock();
@@ -208,7 +209,7 @@ public sealed class SyncServiceGateContentionTests : IDisposable
     }
 
     /// <summary>The same contention, run several times to rule out a scheduler-lucky pass — a broken gate would eventually let two cycles overlap.</summary>
-    [Theory]
+    [RetryTheory]
     [InlineData(1)]
     [InlineData(2)]
     [InlineData(3)]

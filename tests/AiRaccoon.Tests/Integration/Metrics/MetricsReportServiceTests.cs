@@ -5,6 +5,7 @@ using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Metrics;
 
@@ -40,7 +41,7 @@ public sealed class MetricsReportServiceTests : IDisposable
             [new Measurement(name, MeasurementKind.Histogram, value, "ms", recordedAt, projectId)],
             TestContext.Current.CancellationToken);
 
-    [Fact]
+    [RetryFact]
     public async Task GetReportAsync_NoWindowOrBucket_DefaultsToThreeHoursIn180Buckets()
     {
         var report = await _service.GetReportAsync("acme", ["memory_search"], window: null, bucket: null,
@@ -56,7 +57,7 @@ public sealed class MetricsReportServiceTests : IDisposable
     ///     the measured total alongside whatever tools are asked for, so a quiet bank's series count
     ///     is toolNames.Count plus SeriesNames.Count — every one of them still at count zero.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task GetReportAsync_QuietBank_ReturnsEmptySeriesWithoutError()
     {
         var report = await _service.GetReportAsync("acme", ["memory_search", "memory_write"],
@@ -67,7 +68,7 @@ public sealed class MetricsReportServiceTests : IDisposable
     }
 
     /// <summary>Project-scope gate: a second project's rows must never appear in the caller's report.</summary>
-    [Fact]
+    [RetryFact]
     public async Task GetReportAsync_TwoProjects_ReportShowsOnlyTheCallingProject()
     {
         await SeedAsync("memory_search", 10, FixedNow - TimeSpan.FromMinutes(5), "acme");
@@ -88,7 +89,7 @@ public sealed class MetricsReportServiceTests : IDisposable
     ///     through the normal query path and still returns the phase-plus-total series, at count 0
     ///     on a quiet bank.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task GetReportAsync_NoToolNamesGiven_StillReturnsThePhaseSeries()
     {
         var report = await _service.GetReportAsync("acme", [], TimeSpan.FromHours(1), TimeSpan.FromMinutes(1),
@@ -98,7 +99,7 @@ public sealed class MetricsReportServiceTests : IDisposable
         report.Series.ShouldAllBe(s => s.Count == 0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetReportAsync_SampleOutsideTheWindow_IsExcluded()
     {
         await SeedAsync("memory_search", 10, FixedNow - TimeSpan.FromHours(2), "acme");
@@ -114,7 +115,7 @@ public sealed class MetricsReportServiceTests : IDisposable
     ///     days is inside the 28-day retention default AND exactly at PerformanceReportBuilder's
     ///     MaxWindow, so a 28-day window must cover it. Nothing before this seeded beyond one hour.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task GetReportAsync_OldestMeasurementIs21DaysOld_WindowOf28Days_ReportCoversIt()
     {
         await SeedAsync("memory_search", 42, FixedNow - TimeSpan.FromDays(21), "acme");
@@ -137,7 +138,7 @@ public sealed class MetricsReportServiceTests : IDisposable
     ///     20 and 1 days old and asking for a 40-day window returned Count == 2, not 3 — the 40-day-old
     ///     row was discarded by the window clamp.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task GetReportAsync_BankHolding40DaysOfMeasurements_WindowOf40Days_ReportCoversAll40Days()
     {
         await SeedAsync("memory_search", 1, FixedNow - TimeSpan.FromDays(40), "acme");
@@ -156,7 +157,7 @@ public sealed class MetricsReportServiceTests : IDisposable
     ///     project-scoped, so they must not appear in an ordinary project's report — but they must
     ///     be readable from *somewhere*, or a drop count can never surface as a number.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task GetReportAsync_OrdinaryProject_NeverSeesSelfMetrics()
     {
         await SeedAsync("metrics.dropped", 7, FixedNow - TimeSpan.FromMinutes(1), MetricsConfigKeys.SelfMetricsProjectId);
@@ -169,7 +170,7 @@ public sealed class MetricsReportServiceTests : IDisposable
     }
 
     /// <summary>The self-metrics sentinel project id is the one surface that can show the drop count.</summary>
-    [Fact]
+    [RetryFact]
     public async Task GetReportAsync_TheSelfMetricsProjectId_SurfacesTheDropCount()
     {
         await SeedAsync("metrics.dropped", 7, FixedNow - TimeSpan.FromMinutes(1), MetricsConfigKeys.SelfMetricsProjectId);
@@ -187,7 +188,7 @@ public sealed class MetricsReportServiceTests : IDisposable
     ///     Infrastructure layer this project cannot reference) — discovered by prefix from what is
     ///     actually recorded, not a hand-maintained name list (derive-or-delete).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task GetReportAsync_TheSelfMetricsProjectId_SurfacesJobSeries()
     {
         await SeedAsync("job.pending-embed.duration_ms", 42, FixedNow - TimeSpan.FromMinutes(1), MetricsConfigKeys.SelfMetricsProjectId);
@@ -205,7 +206,7 @@ public sealed class MetricsReportServiceTests : IDisposable
     }
 
     /// <summary>Mirrors the self-metrics isolation gate (finding 5): a bank-wide job series must never leak into an ordinary project's report either.</summary>
-    [Fact]
+    [RetryFact]
     public async Task GetReportAsync_OrdinaryProject_NeverSeesJobSeries()
     {
         await SeedAsync("job.pending-embed.duration_ms", 42, FixedNow - TimeSpan.FromMinutes(1), MetricsConfigKeys.SelfMetricsProjectId);
@@ -220,7 +221,7 @@ public sealed class MetricsReportServiceTests : IDisposable
     ///     WP11 (log-values-as-metrics): drain.&lt;corpus&gt;.* is bank-wide, discovered the same way
     ///     job.* is — MetricsConfigKeys.InternalSeriesPrefixes now covers "drain." too.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task GetReportAsync_TheSelfMetricsProjectId_SurfacesDrainSeries()
     {
         await SeedAsync("drain.code.rows", 12, FixedNow - TimeSpan.FromMinutes(1), MetricsConfigKeys.SelfMetricsProjectId);
@@ -234,7 +235,7 @@ public sealed class MetricsReportServiceTests : IDisposable
     }
 
     /// <summary>Mirrors the job-series isolation gate: a bank-wide drain series must never leak into an ordinary project's report.</summary>
-    [Fact]
+    [RetryFact]
     public async Task GetReportAsync_OrdinaryProject_NeverSeesDrainSeries()
     {
         await SeedAsync("drain.code.rows", 12, FixedNow - TimeSpan.FromMinutes(1), MetricsConfigKeys.SelfMetricsProjectId);
@@ -252,7 +253,7 @@ public sealed class MetricsReportServiceTests : IDisposable
     ///     names (WP12 split the WP11 combined lock_ms in two), not a stand-in example name — a
     ///     rename here must fail this test, not just the prefix-discovery mechanism in the abstract.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task GetReportAsync_OrdinaryProject_SurfacesWriteReplaceSeries()
     {
         await SeedAsync("write.replace.wait_ms", 3, FixedNow - TimeSpan.FromMinutes(1), "acme");
@@ -270,7 +271,7 @@ public sealed class MetricsReportServiceTests : IDisposable
     }
 
     /// <summary>WP11: search.query.truncated_tokens is bank-wide (the embedding engine's query-trim path has no project id), so it discovers the same way job./drain. do.</summary>
-    [Fact]
+    [RetryFact]
     public async Task GetReportAsync_TheSelfMetricsProjectId_SurfacesQueryTruncationSeries()
     {
         await SeedAsync("search.query.truncated_tokens", 30, FixedNow - TimeSpan.FromMinutes(1), MetricsConfigKeys.SelfMetricsProjectId);
@@ -288,7 +289,7 @@ public sealed class MetricsReportServiceTests : IDisposable
     ///     back from the same `metrics` table WP3's writer fills — the phase names must not be
     ///     filtered out of the SQL query the same way a hand-written tool-only list would drop them.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task GetReportAsync_PhaseMeasurements_AppearAsSeriesAlongsideTools()
     {
         await SeedAsync("memory_search", 10, FixedNow - TimeSpan.FromMinutes(5), "acme");

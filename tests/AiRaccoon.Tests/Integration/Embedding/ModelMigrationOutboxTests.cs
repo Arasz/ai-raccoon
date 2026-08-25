@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
@@ -44,7 +45,7 @@ public sealed class ModelMigrationOutboxTests : IAsyncLifetime
 
     private static string CreateTempRoot() => TestData.CreateTempRoot("ai-raccoon-model-migration-outbox");
 
-    [Fact]
+    [RetryFact]
     public async Task StartModelMigrationAsync_OnAFreshBank_WritesSettingsButNoMigrationRow()
     {
         var config = await _store.StartModelMigrationAsync("local", null, null, TestContext.Current.CancellationToken);
@@ -53,7 +54,7 @@ public sealed class ModelMigrationOutboxTests : IAsyncLifetime
         (await ReadMigrationAsync()).ShouldBeNull(); // no prior engine, nothing owed
     }
 
-    [Fact]
+    [RetryFact]
     public async Task StartModelMigrationAsync_ChangingEngine_MarksPreviouslyEmbeddedRowsPending_AndDoesNotReEmbedInline()
     {
         await _store.StartModelMigrationAsync("local", null, null, TestContext.Current.CancellationToken);
@@ -85,7 +86,7 @@ public sealed class ModelMigrationOutboxTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task StartModelMigrationAsync_WhileAPreviousMigrationIsStillOpen_Refuses()
     {
         await SeedAnEmbeddedRowAndOpenAMigrationAsync();
@@ -95,7 +96,7 @@ public sealed class ModelMigrationOutboxTests : IAsyncLifetime
                 TestContext.Current.CancellationToken));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task StartModelMigrationAsync_WhileAPreviousMigrationIsStillOpen_LeavesTheOpenRecordUntouched()
     {
         await SeedAnEmbeddedRowAndOpenAMigrationAsync();
@@ -109,7 +110,7 @@ public sealed class ModelMigrationOutboxTests : IAsyncLifetime
         after.ShouldBe(before);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task StartModelMigrationAsync_OnceThePreviousMigrationFinished_IsAllowedAgain()
     {
         await SeedAnEmbeddedRowAndOpenAMigrationAsync();

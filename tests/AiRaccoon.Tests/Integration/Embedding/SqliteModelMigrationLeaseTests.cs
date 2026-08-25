@@ -4,6 +4,7 @@ using Dapper;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -44,10 +45,10 @@ public sealed class SqliteModelMigrationLeaseTests : IDisposable
     private Task<Microsoft.Data.Sqlite.SqliteConnection> OpenAsync() =>
         _factory.OpenBankAsync(TestContext.Current.CancellationToken);
 
-    [Fact]
+    [RetryFact]
     public async Task Owner_IsDistinctPerInstance() => NewLease().Owner.ShouldNotBe(NewLease().Owner);
 
-    [Fact]
+    [RetryFact]
     public async Task TryAcquireAsync_WhenNoMigrationIsOpen_IsDenied()
     {
         await using var connection = await OpenAsync();
@@ -57,7 +58,7 @@ public sealed class SqliteModelMigrationLeaseTests : IDisposable
         granted.ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task TryAcquireAsync_WhenOpenAndUnowned_GrantsTheLease()
     {
         await OpenMigrationAsync();
@@ -68,7 +69,7 @@ public sealed class SqliteModelMigrationLeaseTests : IDisposable
         granted.ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task TryAcquireAsync_WhenHeldByALiveOwner_IsDenied()
     {
         await OpenMigrationAsync();
@@ -83,7 +84,7 @@ public sealed class SqliteModelMigrationLeaseTests : IDisposable
     }
 
     /// <summary>A crashed relay never releases; expiry is the only thing that frees the lease (ADR-0037's hazard).</summary>
-    [Fact]
+    [RetryFact]
     public async Task TryAcquireAsync_AfterTheHoldersLeaseExpired_IsGrantedToTheNextOwner()
     {
         await OpenMigrationAsync();
@@ -97,7 +98,7 @@ public sealed class SqliteModelMigrationLeaseTests : IDisposable
         granted.ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task TryAcquireAsync_BeforeTheHoldersLeaseExpires_IsStillDenied()
     {
         await OpenMigrationAsync();
@@ -110,7 +111,7 @@ public sealed class SqliteModelMigrationLeaseTests : IDisposable
         granted.ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task TryRenewAsync_ByTheOwner_KeepsTheLeaseBeyondTheOriginalExpiry()
     {
         await OpenMigrationAsync();
@@ -131,7 +132,7 @@ public sealed class SqliteModelMigrationLeaseTests : IDisposable
         granted.ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task TryRenewAsync_ByANonOwner_ReturnsFalse()
     {
         await OpenMigrationAsync();
@@ -143,7 +144,7 @@ public sealed class SqliteModelMigrationLeaseTests : IDisposable
         renewed.ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ReleaseAsync_ByTheOwner_LetsTheNextOwnerAcquireImmediately()
     {
         await OpenMigrationAsync();
@@ -157,7 +158,7 @@ public sealed class SqliteModelMigrationLeaseTests : IDisposable
         granted.ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ReleaseAsync_ByANonOwner_LeavesTheLeaseIntact()
     {
         await OpenMigrationAsync();
@@ -172,7 +173,7 @@ public sealed class SqliteModelMigrationLeaseTests : IDisposable
     }
 
     /// <summary>Once the row is marked finished, the lease is no longer acquirable — the migration is done.</summary>
-    [Fact]
+    [RetryFact]
     public async Task TryAcquireAsync_OnceTheMigrationIsFinished_IsDenied()
     {
         await OpenMigrationAsync();

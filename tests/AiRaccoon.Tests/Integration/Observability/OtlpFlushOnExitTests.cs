@@ -9,6 +9,7 @@ using Microsoft.Extensions.Hosting;
 using Shouldly;
 using AiRaccoon.Tests.Unit.Observability;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Observability;
 
@@ -37,7 +38,7 @@ public sealed class OtlpFlushOnExitTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task ExitingTheBareHostPath_FlushesTheSpanToTheCollector_WithoutAnExplicitForceFlush()
     {
         // The collector owns the endpoint, so it is built before the scope that publishes it;

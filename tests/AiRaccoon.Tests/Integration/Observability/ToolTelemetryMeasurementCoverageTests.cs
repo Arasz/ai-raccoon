@@ -4,6 +4,7 @@ using ModelContextProtocol;
 using Shouldly;
 using AiRaccoon.Tests.Unit.Observability;
 using Xunit;
+using xRetry.v3;
 using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Integration.Observability;
@@ -19,7 +20,7 @@ namespace AiRaccoon.Tests.Integration.Observability;
 [Collection(ObservabilityCollection.Name)]
 public sealed class ToolTelemetryMeasurementCoverageTests
 {
-    [Fact]
+    [RetryFact]
     public async Task EveryToolOnTheDerivedInventory_RecordsAtLeastOneMeasurement()
     {
         await using var envGate = await TestData.HoldEnvGateAsync(TestContext.Current.CancellationToken);

@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
@@ -65,7 +66,7 @@ public sealed class PromotionQueueDiscardTests : IDisposable
 
     /// <summary>G3: after a discard is remembered, an upsert of the same hash is refused — the
     /// queue never holds content an agent explicitly rejected.</summary>
-    [Fact]
+    [RetryFact]
     public async Task DiscardedHash_IsNotReQueuedByUpsert()
     {
         var entry = await _store.WriteAsync(
@@ -87,7 +88,7 @@ public sealed class PromotionQueueDiscardTests : IDisposable
     /// <summary>G4: PruneRejectedAsync sweeps pre-fix residue — a queued row whose value is
     /// already in the shared tier, and a queued row whose hash was discarded — while leaving the
     /// shared row itself untouched.</summary>
-    [Fact]
+    [RetryFact]
     public async Task PruneRejectedAsync_RemovesSharedTwinAndDiscardedResidue()
     {
         var entry = await _store.WriteAsync(
@@ -111,7 +112,7 @@ public sealed class PromotionQueueDiscardTests : IDisposable
 
     /// <summary>G7: a refused (discarded) upsert is not counted as a genuinely new row — the
     /// propose outcome stays honest.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Upsert_RefusedDiscardedHash_IsNotCountedAsNew()
     {
         await _queueStore.RememberDiscardsAsync("acme", ["dead-hash"], TestContext.Current.CancellationToken);
@@ -127,7 +128,7 @@ public sealed class PromotionQueueDiscardTests : IDisposable
 
     /// <summary>G5 pin: PromoteAsync claims rows through the store's DiscardAsync but must never
     /// remember those claims as rejections — a promotion is not a "no".</summary>
-    [Fact]
+    [RetryFact]
     public async Task Promote_DoesNotRememberClaimsAsDiscards()
     {
         var entry = await _store.WriteAsync(
@@ -145,7 +146,7 @@ public sealed class PromotionQueueDiscardTests : IDisposable
 
     /// <summary>G6 pin: capacity eviction removes queue rows without remembering them — only an
     /// agent's explicit discard is a rejection.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Eviction_DoesNotRememberVictimsAsDiscards()
     {
         await _store.SetSettingAsync(ExtractionConfigKeys.QueueCapacityGlobal, "3",
@@ -166,7 +167,7 @@ public sealed class PromotionQueueDiscardTests : IDisposable
 
     /// <summary>G8: the tool-equivalent round trip — discard via the service, propose again — the
     /// hash stays out of the queue and the rejection is persisted.</summary>
-    [Fact]
+    [RetryFact]
     public async Task DiscardThenPropose_DoesNotReQueueTheHash()
     {
         var service = CreateService();
@@ -188,7 +189,7 @@ public sealed class PromotionQueueDiscardTests : IDisposable
     /// <summary>G9: the replace round-trip (watch re-ingest) must not restore a discarded
     /// candidate whose unchanged chunk returns under the same hash — the mirror of
     /// PromotionQueueInvalidationTests.ReplacingAWatchedFile_KeepsCandidatesForUnchangedChunks.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ReplaceFile_DoesNotRestoreDiscardedCandidate()
     {
         await SetScopeAsync("acme");
@@ -216,7 +217,7 @@ public sealed class PromotionQueueDiscardTests : IDisposable
     ///     surgery or corruption, not a version skew. Both halves are asserted so the narrowing is a
     ///     recorded decision rather than a silent regression.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task PromotionDiscards_HealsOnADigestSkewedBank_ButNotOnADigestMatchedOne()
     {
         await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))

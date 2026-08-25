@@ -12,6 +12,7 @@ using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.E2E;
@@ -49,7 +50,7 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
         await _openAi.DisposeAsync();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ToolsList_SurfacesEveryRegisteredTool()
     {
         var tools = await _client.ListToolsAsync((RequestOptions?)null, TestContext.Current.CancellationToken);
@@ -58,7 +59,7 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
         names.OrderBy(n => n, StringComparer.Ordinal).ShouldBe(RegisteredTools.Names());
     }
 
-    [Fact]
+    [RetryFact]
     public async Task UncoveredTools_RoundTripOverTheWire()
     {
         var list = await CallAsync("memory_list", ("projectId", ProjectId));

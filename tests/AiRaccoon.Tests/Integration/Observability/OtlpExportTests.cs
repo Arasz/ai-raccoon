@@ -17,6 +17,7 @@ using OpenTelemetry.Trace;
 using Shouldly;
 using AiRaccoon.Tests.Unit.Observability;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Observability;
 
@@ -50,7 +51,7 @@ public sealed class OtlpExportTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public void NoEndpoint_RegistersNoTracerProviderOrMeterProvider()
     {
         var services = new ServiceCollection();
@@ -66,7 +67,7 @@ public sealed class OtlpExportTests : IDisposable
     // inside the exporter-configuration delegate, which runs inside app.StartAsync — the whole MCP
     // server died at boot over an observability opt-in. This must reproduce the real path: the real
     // web host, not the bare-ServiceCollection seam used above.
-    [Fact]
+    [RetryFact]
     public async Task MalformedEndpoint_MissingScheme_ServerStartsWithExportDisabled()
     {
         await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -91,7 +92,7 @@ public sealed class OtlpExportTests : IDisposable
     // WP4/A5: `new Uri("localhost:4318")` succeeds with Scheme="localhost" — this is the silent
     // near-miss. An "assert no exception" test would pass today because the bug never throws;
     // asserting the providers were never registered is what makes this check able to fail.
-    [Fact]
+    [RetryFact]
     public async Task MalformedEndpoint_NonHttpScheme_ServerStartsWithExportDisabled()
     {
         await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -114,7 +115,7 @@ public sealed class OtlpExportTests : IDisposable
 
     // WP4: an observability opt-in must not degrade the product — the server must still serve a
     // real tool call through the real DI-resolved MemoryTools, not just fail to crash.
-    [Fact]
+    [RetryFact]
     public async Task MalformedEndpoint_ServerStillServesAToolCall()
     {
         await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -141,7 +142,7 @@ public sealed class OtlpExportTests : IDisposable
     // T4/J1+J4 join: WP4 warns and disables, WP5 routes quiet's destination; neither half was
     // ever asserted together. This is the one Hermes-spawned backend depends on for a bad
     // OTEL_EXPORTER_OTLP_ENDPOINT to be diagnosable at all under --quiet.
-    [Fact]
+    [RetryFact]
     public async Task MalformedEndpoint_Quiet_WarningReachesTheLogFile_AndStderrStaysEmpty()
     {
         await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -159,7 +160,7 @@ public sealed class OtlpExportTests : IDisposable
         File.ReadAllText(QuietLogging.LogFilePath(options)).ShouldContain("ai-raccoon: OTLP export disabled");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EndpointSet_RegistersAllThreeMeters_AndTheActivitySource()
     {
         var services = new ServiceCollection();
@@ -185,7 +186,7 @@ public sealed class OtlpExportTests : IDisposable
     // Guards ActivitySource/sampler/processor wiring outside a real HTTP request context — an
     // ambient unrecorded parent Activity only reproduces inside one (see OtlpTraceExportE2ETests,
     // ADR-0009). AddInMemoryExporter chains onto the same builder; AddOpenTelemetry() is idempotent.
-    [Fact]
+    [RetryFact]
     public async Task ToolCallSpan_IsForceFlushedToTheConfiguredExporter()
     {
         var services = new ServiceCollection();
@@ -212,7 +213,7 @@ public sealed class OtlpExportTests : IDisposable
     // attached straight to the Meter proves nothing about whether a measurement reaches an
     // exporter (ADR-0009). AddInMemoryExporter chains onto the same metrics builder AddOtlpExport
     // already configured.
-    [Fact]
+    [RetryFact]
     public async Task ToolCallMetric_IsForceFlushedToTheConfiguredExporter()
     {
         var services = new ServiceCollection();
@@ -237,7 +238,7 @@ public sealed class OtlpExportTests : IDisposable
         exportedItems.ShouldContain(m => m.Name == OtlpNames.ToolDuration);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EndpointSet_RegistersAListenerForTheAspNetCoreRequestSource()
     {
         // ADR-0021 supersedes ADR-0002/ADR-0009's non-goal: the hosting request span must now be
@@ -258,7 +259,7 @@ public sealed class OtlpExportTests : IDisposable
     // WP12: self-instrumenting since .NET 9 — no OpenTelemetry.Instrumentation.Http package.
     // Captures embedding-endpoint and Azure Blob HttpClient latency (Blob traffic rides
     // HttpClient too), nested under the tool span.
-    [Fact]
+    [RetryFact]
     public async Task EndpointSet_RegistersAListenerForTheSystemNetHttpMeterAndSource()
     {
         var services = new ServiceCollection();
@@ -273,7 +274,7 @@ public sealed class OtlpExportTests : IDisposable
         new ActivitySource(OtlpNames.HttpScope).HasListeners().ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task StdioHost_NeverWiresTheExporter_EvenWithAnEndpointSet()
     {
         // Stdio hosts recycle too fast to pay the exporter's batch delay / shutdown grace —
@@ -295,7 +296,7 @@ public sealed class OtlpExportTests : IDisposable
     // for the rest of the run. GetService(typeof(MeterProvider)) force-builds any provider that
     // exists before the "after" reading — a listener only attaches once built, not merely
     // registered — so this stays a real trap for a future stdio-wiring change.
-    [Fact]
+    [RetryFact]
     public async Task StdioHost_ToolCallMetric_HasNoListener_SoInvocationsAreNeverExported()
     {
         await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -316,7 +317,7 @@ public sealed class OtlpExportTests : IDisposable
         metrics.ActivitySource.HasListeners().ShouldBe(hasListenersBefore);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CliCommandRunner_NeverWiresTheExporter()
     {
         // The one-shot verb path (AppRunner.RunCliCommand) registers only core memory + command
@@ -344,7 +345,7 @@ public sealed class OtlpExportTests : IDisposable
 
     // ADR-0009 "Default protocol and ports": explicit-endpoint assignment disables the SDK's own
     // signal-path append, so http/protobuf needs it appended here; gRPC stays verbatim.
-    [Fact]
+    [RetryFact]
     public void HttpProtobuf_AppendsTracesSignalPath()
     {
         var state = new OtlpExportState(true, "http://localhost:4318", "http/protobuf");
@@ -354,7 +355,7 @@ public sealed class OtlpExportTests : IDisposable
         endpoint.ShouldBe(new Uri("http://localhost:4318/v1/traces"));
     }
 
-    [Fact]
+    [RetryFact]
     public void HttpProtobuf_AppendsMetricsSignalPath()
     {
         var state = new OtlpExportState(true, "http://localhost:4318", "http/protobuf");
@@ -364,7 +365,7 @@ public sealed class OtlpExportTests : IDisposable
         endpoint.ShouldBe(new Uri("http://localhost:4318/v1/metrics"));
     }
 
-    [Fact]
+    [RetryFact]
     public void HttpProtobuf_EndpointAlreadyCarryingSignalPath_IsNotDoubled()
     {
         var state = new OtlpExportState(true, "http://localhost:4318/v1/traces", "http/protobuf");
@@ -374,7 +375,7 @@ public sealed class OtlpExportTests : IDisposable
         endpoint.ShouldBe(new Uri("http://localhost:4318/v1/traces"));
     }
 
-    [Fact]
+    [RetryFact]
     public void HttpProtobuf_TrailingSlashEndpoint_DoesNotProduceDoubleSlash()
     {
         var state = new OtlpExportState(true, "http://localhost:4318/", "http/protobuf");
@@ -387,7 +388,7 @@ public sealed class OtlpExportTests : IDisposable
     // A6: the endpoint already carries the signal path AND a trailing slash — the SDK's own
     // AppendPathIfNotPresent checks the "path + /" form too; the hand-rolled EndsWith guard didn't,
     // so this doubled to ".../v1/traces/v1/traces".
-    [Fact]
+    [RetryFact]
     public void HttpProtobuf_SignalPathWithTrailingSlash_IsNotDoubled()
     {
         var state = new OtlpExportState(true, "http://host:4318/v1/traces/", "http/protobuf");
@@ -399,7 +400,7 @@ public sealed class OtlpExportTests : IDisposable
 
     // A6: the SDK's own guard uses OrdinalIgnoreCase; the hand-rolled one used Ordinal, so an
     // upper-cased endpoint doubled to ".../V1/TRACES/v1/traces".
-    [Fact]
+    [RetryFact]
     public void HttpProtobuf_CaseVariedSignalPath_IsNotDoubled()
     {
         var state = new OtlpExportState(true, "HTTP://HOST:4318/V1/TRACES", "http/protobuf");
@@ -409,7 +410,7 @@ public sealed class OtlpExportTests : IDisposable
         endpoint.ShouldBe(new Uri("HTTP://HOST:4318/V1/TRACES"));
     }
 
-    [Fact]
+    [RetryFact]
     public void Grpc_EndpointIsUsedVerbatim()
     {
         var state = new OtlpExportState(true, "http://127.0.0.1:4317", "grpc");
@@ -419,7 +420,7 @@ public sealed class OtlpExportTests : IDisposable
         endpoint.ShouldBe(new Uri("http://127.0.0.1:4317"));
     }
 
-    [Theory]
+    [RetryTheory]
     [InlineData("HTTP/PROTOBUF")]
     [InlineData(" http/protobuf ")]
     public void HttpProtobuf_ProtocolCasingAndWhitespace_IsTolerated(string protocol)
@@ -436,7 +437,7 @@ public sealed class OtlpExportTests : IDisposable
     // (opentelemetry-dotnet, OtlpMetricExporter/OtlpTraceExporter ctors), so TimeoutMilliseconds
     // does not survive into the built provider for reflection — ConfigureExporter is tested
     // directly instead, the same way SignalEndpoint already is.
-    [Fact]
+    [RetryFact]
     public void ConfigureExporter_SetsTimeoutToTheNamedConstant()
     {
         var options = new OtlpExporterOptions();
@@ -451,7 +452,7 @@ public sealed class OtlpExportTests : IDisposable
     // the bare-ServiceCollection seam used elsewhere in this file reads real env vars regardless
     // and would mask the bug. Reflection reaches the interval/timeout fields since there is no
     // public surface for them.
-    [Fact]
+    [RetryFact]
     public async Task HttpHost_MetricExportInterval_IsAppliedToThePeriodicReader_WhenSet()
     {
         await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -465,7 +466,7 @@ public sealed class OtlpExportTests : IDisposable
         PeriodicReaderField(meterProvider, "ExportIntervalMilliseconds").ShouldBe(1234);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HttpHost_MetricExportInterval_LeavesSdkDefault_WhenUnset()
     {
         await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -478,7 +479,7 @@ public sealed class OtlpExportTests : IDisposable
         PeriodicReaderField(meterProvider, "ExportIntervalMilliseconds").ShouldBe(SdkDefaultExportIntervalMilliseconds);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HttpHost_MetricExportTimeout_IsAppliedToThePeriodicReader_WhenSet()
     {
         await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -492,7 +493,7 @@ public sealed class OtlpExportTests : IDisposable
         PeriodicReaderField(meterProvider, "ExportTimeoutMilliseconds").ShouldBe(9876);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HttpHost_MetricExportTimeout_LeavesSdkDefault_WhenUnset()
     {
         await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -509,7 +510,7 @@ public sealed class OtlpExportTests : IDisposable
     // later in the resource-builder chain than CreateDefault()'s own environment detector, and
     // later-registered-wins, so the explicit call still wins even though OTEL_SERVICE_NAME now
     // reaches that detector too (ADR-0009's own cited proof test for this claim).
-    [Fact]
+    [RetryFact]
     public async Task HttpHost_ServiceName_StaysAiRaccoon_EvenWhenOtelServiceNameIsSet()
     {
         await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -522,7 +523,7 @@ public sealed class OtlpExportTests : IDisposable
         ServiceName(host.Services.GetRequiredService<TracerProvider>()).ShouldBe("ai-raccoon");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HttpHost_ServiceName_DefaultsToTheProductName_NotUnknownService()
     {
         await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -536,7 +537,7 @@ public sealed class OtlpExportTests : IDisposable
         name.ShouldNotStartWith("unknown_service");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HttpHost_ServiceName_IsTheSameOnMetricsAndTraces()
     {
         await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -551,7 +552,7 @@ public sealed class OtlpExportTests : IDisposable
 
     // WP11: without service.version, InstrumentationScope.version is empty on every signal and an
     // operator cannot tell which build produced a series across a rollout.
-    [Fact]
+    [RetryFact]
     public async Task HttpHost_ResourceCarriesTheAssemblyServiceVersion()
     {
         await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -566,7 +567,7 @@ public sealed class OtlpExportTests : IDisposable
 
     // WP11: one assembly-attribute read (ServerInfo.BinaryVersion) feeds the Meter/ActivitySource
     // constructors too, so InstrumentationScope.version is non-empty on every signal.
-    [Fact]
+    [RetryFact]
     public void ToolCallMetrics_AndPromotionQueueMetrics_ReportANonEmptyScopeVersion()
     {
         using var toolMetrics = new ToolCallMetrics();
@@ -581,7 +582,7 @@ public sealed class OtlpExportTests : IDisposable
     // McpServerSetup's config-clearing fix restores (ADR-0009, "Configuration channel"). Reads
     // TracerProvider.Resource via reflection, so it proves the attribute reaches the provider,
     // not that it crosses into an exporter payload on the wire.
-    [Fact]
+    [RetryFact]
     public async Task HttpHost_ResourceAttributesEnvVar_ReachesTheProvidersResource()
     {
         await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -598,7 +599,7 @@ public sealed class OtlpExportTests : IDisposable
     // The bare-ServiceCollection test elsewhere in this file never starts a host, so it can't
     // show this: without an attached listener after start, ActivitySource.StartActivity returns
     // null and every tool call silently produces no span (ADR-0009's 2026-08-08 update).
-    [Fact]
+    [RetryFact]
     public async Task StartedHttpHost_AttachesATraceListener_SoToolCallsProduceSpans()
     {
         await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);

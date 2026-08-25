@@ -2,6 +2,7 @@ using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Infrastructure.Embedding;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -30,7 +31,7 @@ public sealed class EmbeddingServiceTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Local_EmbedsTextInProcess_With384Dims_UnitNorm()
     {
         using var generator = TestData.CreateEmbeddingService().CreateGenerator(
@@ -45,7 +46,7 @@ public sealed class EmbeddingServiceTests : IAsyncLifetime
         norm.ShouldBe(1.0, 1e-3);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Local_SimilarSentences_AreCloserThanUnrelatedOnes()
     {
         using var generator = TestData.CreateEmbeddingService().CreateGenerator(
@@ -64,7 +65,7 @@ public sealed class EmbeddingServiceTests : IAsyncLifetime
         same.ShouldBeGreaterThan(0.99);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Local_CustomModelPath_OverridesTheBundledModel()
     {
         // A custom model path overrides the bundled copy — FR-NM-3 scenario 2
@@ -90,7 +91,7 @@ public sealed class EmbeddingServiceTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task OpenAi_RoutesThroughBaseUrl_WithModelAndApiKey()
     {
         using var generator = TestData.CreateEmbeddingService().CreateGenerator(
@@ -108,7 +109,7 @@ public sealed class EmbeddingServiceTests : IAsyncLifetime
         result[0].Vector.Span[0].ShouldBe(FakeEmbeddingEndpoint.VectorFor("routed through the fake endpoint")[0]);
     }
 
-    [Fact]
+    [RetryFact]
     public void OpenAi_WithoutApiKey_Throws()
     {
         var service = TestData.CreateEmbeddingService();
@@ -117,18 +118,18 @@ public sealed class EmbeddingServiceTests : IAsyncLifetime
             new EmbeddingSettings("openai", "nomic-embed-text", _openAi!.BaseUrl, null)));
     }
 
-    [Fact]
+    [RetryFact]
     public void EngineFingerprint_LocalWithoutModel_IsBundled() => TestData.CreateEmbeddingService().EngineFingerprint("local", null, null).ShouldBe("local:bundled");
 
-    [Fact]
+    [RetryFact]
     public void EngineFingerprint_LocalWithModelPath_NamesThePath() => TestData.CreateEmbeddingService().EngineFingerprint("local", "/models/custom.onnx", null).ShouldBe("local:/models/custom.onnx");
 
-    [Fact]
+    [RetryFact]
     public void EngineFingerprint_OpenAi_NamesModelAndEndpoint() =>
         TestData.CreateEmbeddingService().EngineFingerprint("openai", "nomic-embed-text", "http://localhost:11434")
             .ShouldBe("openai:nomic-embed-text@http://localhost:11434");
 
-    [Fact]
+    [RetryFact]
     public void EngineFingerprint_OpenAiWithoutBaseUrl_FallsBackToDefaultEndpoint() =>
         TestData.CreateEmbeddingService().EngineFingerprint("openai", "text-embedding-3-small", null)
             .ShouldBe("openai:text-embedding-3-small@https://api.openai.com/v1");

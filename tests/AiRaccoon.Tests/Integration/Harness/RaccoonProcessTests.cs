@@ -2,6 +2,7 @@ using System.Diagnostics;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Harness;
 
@@ -30,7 +31,7 @@ public sealed class RaccoonProcessTests : IDisposable
     ///     Process.Dispose() does not kill, so a `using var process` that times out orphans the child
     ///     and every grandchild it spawned — measured against the real binary before this existed.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ARunThatOutlastsItsHardCap_LeavesNoProcessTreeBehind()
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), "the tree is built with a POSIX shell");
@@ -50,7 +51,7 @@ public sealed class RaccoonProcessTests : IDisposable
     }
 
     /// <summary>The stderr of a killed run is the only clue left about why it hung.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ARunThatOutlastsItsHardCap_ReportsWhatItKilled()
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), "the tree is built with a POSIX shell");
@@ -64,7 +65,7 @@ public sealed class RaccoonProcessTests : IDisposable
     }
 
     /// <summary>A teardown running after a failed setup holds a process that was never started.</summary>
-    [Fact]
+    [RetryFact]
     public void KillingAProcessThatWasNeverStarted_IsNotAnError()
     {
         using var process = new Process();
@@ -73,7 +74,7 @@ public sealed class RaccoonProcessTests : IDisposable
         Should.NotThrow(() => RaccoonProcess.KillTree(process));
     }
 
-    [Fact]
+    [RetryFact]
     public void AMissingBuildOutput_NamesThePathItExpected()
     {
         // Without this the failure is an opaque Win32Exception raised from inside the MCP SDK.

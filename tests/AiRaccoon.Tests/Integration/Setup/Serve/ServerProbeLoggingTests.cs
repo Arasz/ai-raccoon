@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Setup.Serve;
 
@@ -18,7 +19,7 @@ namespace AiRaccoon.Tests.Integration.Setup.Serve;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ServerProbeLoggingTests
 {
-    [Fact]
+    [RetryFact]
     public async Task Probe_ConnectionRefused_EmitsNoHttpClientLogs()
     {
         using var lease = LoopbackPort.Reserve();

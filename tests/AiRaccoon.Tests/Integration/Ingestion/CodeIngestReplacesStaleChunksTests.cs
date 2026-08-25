@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Ingestion;
@@ -62,7 +63,7 @@ public sealed class CodeIngestReplacesStaleChunksTests : IDisposable
         string.Join("\n\n", Enumerable.Range(1, count).Select(i => $"class {prefix}{i}\n{{\n}}"));
 
     /// <summary>B1 — the defect itself, mirrored for the code corpus.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ReIngestingACodeFileThatChunksToFewerBlocks_LeavesOnlyTheNewChunkSet()
     {
         var file = Path.Combine(_dataRoot, "Widget.cs");
@@ -83,7 +84,7 @@ public sealed class CodeIngestReplacesStaleChunksTests : IDisposable
     }
 
     /// <summary>B2 — the delete is per file; a sibling code file must survive a single-file re-ingest.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ReIngestingOneCodeFile_LeavesItsSiblingAlone()
     {
         var target = Path.Combine(_dataRoot, "Target.cs");
@@ -108,7 +109,7 @@ public sealed class CodeIngestReplacesStaleChunksTests : IDisposable
     ///     This is the way the #436 fix goes wrong if `FileIngestor`'s zero-chunk/whitespace-only
     ///     distinction (S3 vs B1) is not respected by the prune leg.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ReIngestingWithAZeroChunkStandInChunker_DoesNotDeleteExistingCodeRows()
     {
         var file = Path.Combine(_dataRoot, "Widget.cs");

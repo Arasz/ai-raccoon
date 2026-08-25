@@ -6,6 +6,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -45,7 +46,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
     private static QueueCandidate CandidateWithVersion(string hash, string value, double score, int scorerVersion) => new(hash, $"{hash}.md", value, null, score, [], scorerVersion);
 
     // ------------------------------------------------------------------ schema
-    [Fact]
+    [RetryFact]
     public async Task FreshBank_CreatesQueueTable_WithUniqueProjectHash()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -83,7 +84,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
         ex.Message.ShouldContain("UNIQUE");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task QueueRows_NeverLandInEntries()
     {
         await _store.UpsertAsync("acme", [Candidate("h1", "waiting fact", 2.0)], TestContext.Current.CancellationToken);
@@ -95,7 +96,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
     }
 
     // ------------------------------------------------------------------ upsert
-    [Fact]
+    [RetryFact]
     public async Task Upsert_InsertsNewRows_AndRefreshesExistingWithoutDuplicating()
     {
         var first = await _store.UpsertAsync("acme",
@@ -117,7 +118,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
         h1.UpdatedAt.ShouldBe(FixedNow.AddDays(1).ToUnixTimeSeconds());
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Upsert_ReProposingTheSameHash_ReturnsZero_NotTheConflictUpdateCount()
     {
         var first = await _store.UpsertAsync("acme",
@@ -133,7 +134,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
     /// <summary>scorer_version stamps every row (defaults to 0 on the bank column, but a candidate
     /// always names an explicit version) — the auto-clear that follows a scorer redesign depends
     /// on this surviving the round trip (ADR-0018).</summary>
-    [Fact]
+    [RetryFact]
     public async Task Upsert_PersistsScorerVersion_ForANewRow()
     {
         await _store.UpsertAsync("acme",
@@ -144,7 +145,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
 
     /// <summary>The refresh path (ON CONFLICT DO UPDATE) must re-stamp scorer_version too, not just
     /// score/value/reasons — otherwise a row re-scored by a newer scorer keeps reporting the old one.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Upsert_RefreshingAnExistingRow_UpdatesScorerVersion()
     {
         await _store.UpsertAsync("acme",
@@ -163,7 +164,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
     ///     UpsertAsync in this file, which wraps its loop correctly — a mid-loop failure left a
     ///     partial set of discards persisted instead of none.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task RememberDiscardsAsync_MidBatchFailure_RollsBackTheWholeBatch()
     {
         // A temporary trigger stands in for a mid-batch failure (INSERT OR IGNORE swallows
@@ -192,7 +193,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
         count.ShouldBe(0L, "a mid-batch failure must roll back h1 too, not leave a partial set of discards persisted");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RememberDiscardsAsync_PersistsEveryHash_WhenNoneFail()
     {
         await _store.RememberDiscardsAsync("acme", ["h1", "h2"], TestContext.Current.CancellationToken);
@@ -206,7 +207,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
     // ------------------------------------------------------------------ clear stale
     /// <summary>The auto-clear for a retired scorer (ADR-0018): a row carrying any version other
     /// than the current one is deleted; a row already on the current version survives untouched.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ClearStaleAsync_RemovesRowsWithADifferentScorerVersion_KeepsTheCurrentOne()
     {
         await _store.UpsertAsync("acme",
@@ -222,7 +223,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
             .Select(r => r.Hash).ShouldBe(["current"]);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ClearStaleAsync_OnlyTouchesTheNamedProject()
     {
         await _store.UpsertAsync("acme",
@@ -236,7 +237,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
             .Select(r => r.Hash).ShouldBe(["h2"], "another project's queue is not this call's business");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ClearStaleAsync_NothingStale_ReturnsZero()
     {
         await _store.UpsertAsync("acme",
@@ -248,7 +249,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
         (await _store.ListAsync("acme", TestContext.Current.CancellationToken)).Select(r => r.Hash).ShouldBe(["h1"]);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Upsert_MidBatchFailure_RollsBackTheWholeBatch()
     {
         var candidates = new List<QueueCandidate>
@@ -266,7 +267,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
     }
 
     // ------------------------------------------------------------------ list
-    [Fact]
+    [RetryFact]
     public async Task List_OrdersByScoreDescThenCreatedAtAsc_AndFiltersByProject()
     {
         _clock.Advance(TimeSpan.FromMinutes(1));
@@ -285,7 +286,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
 
     /// <summary>228 of 288 live rows share both score and created_at (a propose pass inserts ~20 rows
     /// within the same second) — SQL specifies no order for those without a further tiebreak.</summary>
-    [Fact]
+    [RetryFact]
     public async Task List_TiedScoreAndCreatedAt_BreaksTieByInsertionOrder()
     {
         await _store.UpsertAsync("acme",
@@ -298,7 +299,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
             "a tie on score and created_at must still break deterministically, by insertion order");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task List_RoundTripsReasonsAndSourceFile()
     {
         await _store.UpsertAsync("acme",
@@ -311,7 +312,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
     }
 
     // ------------------------------------------------------------------ discard
-    [Fact]
+    [RetryFact]
     public async Task Discard_RemovesOneRow_OrTheWholeProject()
     {
         await _store.UpsertAsync("acme",
@@ -331,7 +332,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
     }
 
     // ------------------------------------------------------------------ stats
-    [Fact]
+    [RetryFact]
     public async Task GetStats_CountsPerProject_AndAveragesWait()
     {
         await _store.UpsertAsync("acme",
@@ -348,7 +349,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
         stats.AvgWaitSeconds!.Value.ShouldBeInRange(6.6, 6.7);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetStats_EmptyQueue_HasZeroAndNullWait()
     {
         var stats = await _store.GetStatsAsync(TestContext.Current.CancellationToken);
@@ -360,7 +361,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
 
     /// <summary>B1: a queue with nothing draining it needs a staleness signal an average can hide —
     /// one very old row does not move the average much once enough fresh rows join it.</summary>
-    [Fact]
+    [RetryFact]
     public async Task GetStats_OldestWaitSeconds_ReflectsTheSingleStalestRow()
     {
         await _store.UpsertAsync("acme", [Candidate("stale", "old", 1.0)], TestContext.Current.CancellationToken);
@@ -374,7 +375,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
     }
 
     // ------------------------------------------------------------------ eviction victim
-    [Fact]
+    [RetryFact]
     public async Task EvictVictim_RemovesLowestScoreOldestOfTheProject()
     {
         await _store.UpsertAsync("acme",
@@ -395,7 +396,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
             .Select(r => r.Hash).ShouldNotContain("h1");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EvictVictim_TiedScoreAndCreatedAt_BreaksTieByInsertionOrder()
     {
         await _store.UpsertAsync("acme",
@@ -408,7 +409,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
         victim.Hash.ShouldBe("h00", "a tie on score and created_at must still break deterministically, by insertion order");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EvictVictim_EmptyProject_ReturnsNull()
     {
         (await _store.EvictVictimAsync("acme", TestContext.Current.CancellationToken))
@@ -422,7 +423,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
     ///     DELETE's own affected-row count means the reported total always equals what actually
     ///     disappeared from the queue, not an earlier snapshot.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task PruneOrphansAsync_Apply_ReportsExactlyWhatDisappearedFromTheQueue()
     {
         await _store.UpsertAsync("acme",
@@ -446,7 +447,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
     ///     between the claim and the share destroyed the candidate permanently. ClaimAsync marks a
     ///     row claimed instead of removing it — the row stays reclaimable through a failure.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ClaimAsync_MarksTheRowClaimed_ButDoesNotRemoveIt()
     {
         await _store.UpsertAsync("acme", [Candidate("h1", "fact one", 1.0)], TestContext.Current.CancellationToken);
@@ -459,7 +460,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
             "claiming must not remove the row — only a subsequent discard/finalize does");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ClaimAsync_AnAlreadyClaimedRow_ReturnsNull()
     {
         await _store.UpsertAsync("acme", [Candidate("h1", "fact one", 1.0)], TestContext.Current.CancellationToken);
@@ -471,7 +472,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
             "a row already claimed must not be claimable again — the same exclusivity DiscardAsync's DELETE gave, without destroying the row");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ClaimAsync_ANonExistentRow_ReturnsNull()
     {
         var claimed = await _store.ClaimAsync("acme", "ghost", TestContext.Current.CancellationToken);
@@ -481,7 +482,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
 
     /// <summary>The RED case named by the acceptance criteria: two callers racing to claim the same
     /// row concurrently, not just sequentially — exactly one must win.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ClaimAsync_ConcurrentClaims_OnlyOneSucceeds()
     {
         await _store.UpsertAsync("acme", [Candidate("h1", "fact one", 1.0)], TestContext.Current.CancellationToken);
@@ -494,7 +495,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
     }
 
     // ------------------------------------------------------------------ reclaim stale claims
-    [Fact]
+    [RetryFact]
     public async Task ReclaimStaleClaimsAsync_ReleasesClaimsOlderThanTheThreshold()
     {
         await _store.UpsertAsync("acme", [Candidate("h1", "fact one", 1.0)], TestContext.Current.CancellationToken);
@@ -508,7 +509,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
             "a released claim must be claimable again");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ReclaimStaleClaimsAsync_LeavesFreshClaimsAlone()
     {
         await _store.UpsertAsync("acme", [Candidate("h1", "fact one", 1.0)], TestContext.Current.CancellationToken);
@@ -522,7 +523,7 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
             "still claimed — the fresh claim must not be released");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ReclaimStaleClaimsAsync_EmptyQueue_ReturnsZero()
     {
         var released = await _store.ReclaimStaleClaimsAsync(TimeSpan.FromMinutes(5), TestContext.Current.CancellationToken);

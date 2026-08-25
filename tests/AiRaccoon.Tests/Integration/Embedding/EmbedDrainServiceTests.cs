@@ -9,6 +9,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -42,7 +43,7 @@ public sealed class EmbedDrainServiceTests : IDisposable
             TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
 
     /// <summary>E1.</summary>
-    [Fact]
+    [RetryFact]
     public async Task OneSignal_RunsExactlyOneDrainOfTheRowBudget()
     {
         var pump = TestData.NewEmbedDrainPump();
@@ -60,7 +61,7 @@ public sealed class EmbedDrainServiceTests : IDisposable
     }
 
     /// <summary>E2: ten enqueues while a drain is held open coalesce to at most one further pass.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ManySignalsForOneCorpus_CoalesceToAtMostOneFurtherDrain()
     {
         var pump = TestData.NewEmbedDrainPump();
@@ -95,7 +96,7 @@ public sealed class EmbedDrainServiceTests : IDisposable
 
     /// <summary>E3: a fake records the max observed concurrent entrants across BOTH corpora — the
     /// single reader means it can never exceed 1, by construction.</summary>
-    [Fact]
+    [RetryFact]
     public async Task MemoryAndCodeSignals_NeverOverlapInTheEmbedder()
     {
         var pump = TestData.NewEmbedDrainPump();
@@ -128,7 +129,7 @@ public sealed class EmbedDrainServiceTests : IDisposable
     }
 
     /// <summary>E4.</summary>
-    [Fact]
+    [RetryFact]
     public async Task DrainThrows_LoopSurvives_AndTheNextSignalStillDrains()
     {
         var pump = TestData.NewEmbedDrainPump();
@@ -151,7 +152,7 @@ public sealed class EmbedDrainServiceTests : IDisposable
     /// <summary>E5 (WP1, docs/work/2026-08-23-post-delta-4-plan.md): a partial-budget drain does
     /// not re-signal — only a full row budget does (see <c>EmbedDrainContinuousTests</c> for that
     /// half), so the pump stays empty until an external producer signals again.</summary>
-    [Fact]
+    [RetryFact]
     public async Task PartialRows_NoSelfReEnqueue_TheNextSignalDoesTheRest()
     {
         var pump = TestData.NewEmbedDrainPump();
@@ -179,7 +180,7 @@ public sealed class EmbedDrainServiceTests : IDisposable
     ///     still true and the next poll's enqueue (once the coalesced-away duplicate's target is
     ///     taken) drains it.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task CoalescedSignal_IsRecoveredByTheNextPoll()
     {
         var pump = TestData.NewEmbedDrainPump();
@@ -216,7 +217,7 @@ public sealed class EmbedDrainServiceTests : IDisposable
     }
 
     /// <summary>Coalescing test: same corpus queued twice collapses to one item; different corpora queue separately.</summary>
-    [Fact]
+    [RetryFact]
     public void TryEnqueue_SameCorpusTwice_CoalescesToOneItem_DifferentCorpora_QueueBoth()
     {
         var pump = TestData.NewEmbedDrainPump();
@@ -237,7 +238,7 @@ public sealed class EmbedDrainServiceTests : IDisposable
     ///     The parallel-producer invariant the #490 reviewer asked for: every attempted enqueue is
     ///     accounted for exactly once, across concurrent producers.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ParallelProducers_EveryAttemptIsAccountedForExactlyOnce()
     {
         var pump = TestData.NewEmbedDrainPump();

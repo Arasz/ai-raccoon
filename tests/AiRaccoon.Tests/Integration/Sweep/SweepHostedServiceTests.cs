@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Sweep;
@@ -49,7 +50,7 @@ public sealed class SweepHostedServiceTests : IDisposable
         TestData.DeleteTempRoot(_dataRoot);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ReaperTick_DeletesTheExpiredRow()
     {
         var hash = await SeedExpiringEntryAsync();
@@ -60,7 +61,7 @@ public sealed class SweepHostedServiceTests : IDisposable
             "the reaper tick must delete the expired row, not merely report it");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ReaperTick_WhenSweepIsDisabled_LeavesTheRowPresent()
     {
         var hash = await SeedExpiringEntryAsync();

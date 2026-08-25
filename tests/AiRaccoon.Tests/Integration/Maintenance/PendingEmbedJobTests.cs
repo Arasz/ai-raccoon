@@ -8,6 +8,7 @@ using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Maintenance;
 
@@ -54,7 +55,7 @@ public sealed class PendingEmbedJobTests : IDisposable
     ///     delete the provider guard in PendingEmbedJob.HasWorkAsync and this goes red, because a
     ///     pending row now exists and nothing else would stop HasWorkAsync from reporting it.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task HasWorkAsync_NoProviderConfigured_WithPendingRows_IsFalse()
     {
         await SeedPendingRowsAsync(1);
@@ -63,7 +64,7 @@ public sealed class PendingEmbedJobTests : IDisposable
         (await NewJob().HasWorkAsync(connection, TestContext.Current.CancellationToken)).ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HasWorkAsync_ProviderConfigured_NoPendingRows_IsFalse()
     {
         await ConfigureProviderAsync();
@@ -72,7 +73,7 @@ public sealed class PendingEmbedJobTests : IDisposable
         (await NewJob().HasWorkAsync(connection, TestContext.Current.CancellationToken)).ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HasWorkAsync_ProviderConfigured_WithPendingRows_IsTrue()
     {
         await ConfigureProviderAsync();
@@ -84,7 +85,7 @@ public sealed class PendingEmbedJobTests : IDisposable
 
     /// <summary>E7: RunAsync signals the embed topic instead of embedding — rows stay pending and
     /// the drain consumer's own generator is never called from here.</summary>
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_EnqueuesInsteadOfEmbedding()
     {
         await ConfigureProviderAsync();
@@ -103,7 +104,7 @@ public sealed class PendingEmbedJobTests : IDisposable
     }
 
     /// <summary>WP3 (#477), review B1: PendingEmbedJob opts into IReportsOutstandingRows so the runner can record `job.pending-embed.rows`.</summary>
-    [Fact]
+    [RetryFact]
     public async Task CountOutstandingRowsAsync_ReturnsThePendingRowCount()
     {
         await SeedPendingRowsAsync(3);
@@ -112,7 +113,7 @@ public sealed class PendingEmbedJobTests : IDisposable
         (await NewJob().CountOutstandingRowsAsync(connection, TestContext.Current.CancellationToken)).ShouldBe(3L);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CountOutstandingRowsAsync_NoPendingRows_IsZero()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);

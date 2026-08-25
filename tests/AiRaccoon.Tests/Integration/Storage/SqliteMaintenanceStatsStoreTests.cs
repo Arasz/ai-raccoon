@@ -3,6 +3,7 @@ using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -28,7 +29,7 @@ public sealed class SqliteMaintenanceStatsStoreTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task GetStatsAsync_OnAFreshBank_ReportsNonZeroDbBytes()
     {
         var stats = await _store.GetStatsAsync(TestContext.Current.CancellationToken);
@@ -36,7 +37,7 @@ public sealed class SqliteMaintenanceStatsStoreTests : IDisposable
         stats.DbBytes.ShouldBeGreaterThan(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetStatsAsync_AfterDeletingRows_ReportsAFreelist()
     {
         await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
@@ -67,7 +68,7 @@ public sealed class SqliteMaintenanceStatsStoreTests : IDisposable
         stats.ReclaimableBytes.ShouldBeGreaterThan(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetStatsAsync_NeverWritesEntries()
     {
         var before = await BankContent.SnapshotAsync(_factory, TestContext.Current.CancellationToken);

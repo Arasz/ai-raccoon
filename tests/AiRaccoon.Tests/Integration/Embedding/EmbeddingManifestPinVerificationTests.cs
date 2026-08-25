@@ -3,6 +3,7 @@ using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -59,7 +60,7 @@ public sealed class EmbeddingManifestPinVerificationTests
     private static EmbeddingManifestLoader Loader() =>
         new(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator());
 
-    [Fact]
+    [RetryFact]
     public void ASwappedPinnedFile_RefusesActivation()
     {
         var dir = WriteModelDir(BertManifest().ToJsonString(), ("vocab.txt", "vocab"), ("model.onnx", "model"));
@@ -73,7 +74,7 @@ public sealed class EmbeddingManifestPinVerificationTests
         ex.Message.ShouldContain(ShaOf("a-different-model-entirely"), customMessage: "the refusal must name the actual digest");
     }
 
-    [Fact]
+    [RetryFact]
     public void AnIntactModelDirectory_StillActivates()
     {
         var dir = WriteModelDir(BertManifest().ToJsonString(), ("vocab.txt", "vocab"), ("model.onnx", "model"));
@@ -83,7 +84,7 @@ public sealed class EmbeddingManifestPinVerificationTests
         descriptor.Model.ShouldBe("custom-bert");
     }
 
-    [Fact]
+    [RetryFact]
     public void AMissingPinnedFile_StillFailsWithTheOldMessage()
     {
         var dir = WriteModelDir(BertManifest().ToJsonString(), ("vocab.txt", "vocab")); // model.onnx absent

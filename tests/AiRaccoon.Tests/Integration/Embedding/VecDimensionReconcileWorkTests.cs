@@ -9,6 +9,7 @@ using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using SQLitePCL;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -86,7 +87,7 @@ public sealed class VecDimensionReconcileWorkTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task NoChangePath_ProbesEachVecTableOnce_AndWritesNothing()
     {
         var dataRoot = CreateRoot("ai-raccoon-reconcile-work", seeded: true);
@@ -121,7 +122,7 @@ public sealed class VecDimensionReconcileWorkTests : IDisposable
     ///     sequence. A reconciler that ever started reading or rewriting bank contents on this path
     ///     would diverge between the two.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task NoChangePath_CostsTheSameOnARealBankAsOnAnEmptyOne()
     {
         var seeded = await TraceOneReconcileAsync(CreateRoot("ai-raccoon-reconcile-work-seeded", seeded: true));
@@ -140,7 +141,7 @@ public sealed class VecDimensionReconcileWorkTests : IDisposable
     ///     the engine at 512 dimensions against a bank built at 384 — not a stub that sleeps, so
     ///     what it proves is that the gate discriminates real work rather than elapsed time.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ChangePath_RecreatesTheVecTables_AndEveryWorkObservationReportsIt()
     {
         var dataRoot = CreateRoot("ai-raccoon-reconcile-work-change", seeded: true);

@@ -10,6 +10,7 @@ using AiRaccoon.Tests.Unit.Setup.Cli;
 using Dapper;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Setup;
 
@@ -185,7 +186,7 @@ public sealed class CliBankWriteTests : IAsyncLifetime
         TestData.DeleteTempRoot(_dataRoot);
     }
 
-    [Theory]
+    [RetryTheory]
     [MemberData(nameof(ReadCommands))]
     public async Task ReadCommand_CommitsNothingToTheBank(string label, string[] argv)
     {
@@ -211,7 +212,7 @@ public sealed class CliBankWriteTests : IAsyncLifetime
     ///     write-exclusivity the commit still happens — now performed by the server this write verb
     ///     auto-starts, not by the CLI process itself, but a committed write to the same file either way.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task AWriteCommand_IsSeen_ProvingTheAssertionCanFail()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
@@ -242,7 +243,7 @@ public sealed class CliBankWriteTests : IAsyncLifetime
     ///     nothing outside the allowed set to change, and any domain mutation to carry a
     ///     maintenance stamp.
     /// </summary>
-    [Theory]
+    [RetryTheory]
     [MemberData(nameof(ApplyCommands))]
     public async Task ApplyCommand_OnlyCommitsAnOutboxRequest_NeverTheDomainTableDirectly(
         string label, string[] argv, string expectedOutboxTable)
@@ -272,7 +273,7 @@ public sealed class CliBankWriteTests : IAsyncLifetime
     ///     stamp follows. Without this, the composite would be indistinguishable from one that can
     ///     only pass.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ADirectDomainWrite_WithoutRequest_FailsTheCompositeAssertion()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,

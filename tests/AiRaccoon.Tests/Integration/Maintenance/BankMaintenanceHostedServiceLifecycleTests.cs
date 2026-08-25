@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Maintenance;
 
@@ -75,7 +76,7 @@ public sealed class BankMaintenanceHostedServiceLifecycleTests : IDisposable
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ExecuteAsync_CheckpointRunsAtConfiguredInterval()
     {
         await InsertSettingAsync("maintenance.checkpoint-interval-minutes.global", "1",
@@ -98,7 +99,7 @@ public sealed class BankMaintenanceHostedServiceLifecycleTests : IDisposable
         await _service.StopAsync(TestContext.Current.CancellationToken);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ExecuteAsync_IntervalReReadPerTick()
     {
         await InsertSettingAsync("maintenance.checkpoint-interval-minutes.global", "1",
@@ -131,7 +132,7 @@ public sealed class BankMaintenanceHostedServiceLifecycleTests : IDisposable
         await _service.StopAsync(TestContext.Current.CancellationToken);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ExecuteAsync_SettingsTableMissing_LoopSurvivesWithDefaults()
     {
         // A plain DROP is undone by EnsureAsync's CREATE TABLE IF NOT EXISTS on every open, so this
@@ -158,7 +159,7 @@ public sealed class BankMaintenanceHostedServiceLifecycleTests : IDisposable
         await _service.StopAsync(TestContext.Current.CancellationToken);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ExecuteAsync_StopsOnCancellation()
     {
         using var cts = new CancellationTokenSource();

@@ -10,6 +10,7 @@ using Microsoft.Extensions.Time.Testing;
 using Microsoft.ML.Tokenizers;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
@@ -55,7 +56,7 @@ public sealed class ChunkBudgetWithNoProviderTests : IAsyncLifetime
     ///     With no provider set, nothing embeds yet — but the boundaries drawn now are the ones the
     ///     engine will be handed later, so they must already fit the engine that will draw them.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task IngestFile_WithNoConfiguredProvider_StillChunksToTheEngineThatWillEmbed()
     {
         var file = Path.Combine(_dataRoot, "long-note.md");

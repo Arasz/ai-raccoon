@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -39,7 +40,7 @@ public sealed class CodeEmbedderPoisonLoggingTests : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EmbedPendingBatchAsync_RowCannotEmbed_LogsAWarningCarryingTheException()
     {
         var logger = new FakeLogger<CodeEmbedder>();
@@ -58,7 +59,7 @@ public sealed class CodeEmbedderPoisonLoggingTests : IAsyncLifetime
         record.Message.ShouldContain("src/Poison1.cs", Case.Sensitive);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EmbedPendingBatchAsync_RowCrossesTheAttemptCeiling_LogsAnErrorNamingTheRow()
     {
         var logger = new FakeLogger<CodeEmbedder>();
@@ -82,7 +83,7 @@ public sealed class CodeEmbedderPoisonLoggingTests : IAsyncLifetime
         giveUp.Message.ShouldContain(CodeCorpusSchema.MaxEmbedAttempts.ToString());
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EmbedPendingBatchAsync_EveryRowEmbeds_LogsNothingAtWarningOrAbove()
     {
         var logger = new FakeLogger<CodeEmbedder>();

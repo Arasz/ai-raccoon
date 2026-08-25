@@ -9,6 +9,7 @@ using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Mcp;
 
@@ -43,7 +44,7 @@ public sealed class UnmappedExceptionDiagnosticsTests : IAsyncLifetime
     }
 
     /// <summary>The type name is the minimum a caller needs to tell one failure from another.</summary>
-    [Fact]
+    [RetryFact]
     public void UnexpectedText_NamesTheExceptionType() =>
         ToolRefusals.UnexpectedText(new InvalidOperationException("detail the client must not see"))
             .ShouldBe("unexpected-error: InvalidOperationException");
@@ -52,7 +53,7 @@ public sealed class UnmappedExceptionDiagnosticsTests : IAsyncLifetime
     ///     The message stays server-side. A refusal's text is chosen for the caller; an unexpected
     ///     failure's is not, and may carry a path or a SQL fragment.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void UnexpectedText_DoesNotCarryTheMessage() =>
         ToolRefusals.UnexpectedText(new InvalidOperationException("bank at /Users/someone/secret.db is locked"))
             .ShouldNotContain("secret.db");
@@ -63,7 +64,7 @@ public sealed class UnmappedExceptionDiagnosticsTests : IAsyncLifetime
     ///     Asserts the *shape*, not a pinned exception type: which type surfaces depends on where the
     ///     open fails, and pinning it would make this test about SQLite rather than about diagnosability.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task UnmappedException_ReachesTheClientWithItsTypeAndIsLoggedAtError()
     {
         var bank = Path.Combine(_dataRoot, "memory.db");

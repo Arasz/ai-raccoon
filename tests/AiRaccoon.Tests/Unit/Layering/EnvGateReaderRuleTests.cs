@@ -55,7 +55,8 @@ public sealed class EnvGateReaderRuleTests
 
     /// <summary>A shared harness that never runs a test of its own is not the thing that must gate.</summary>
     private static bool IsTestClass(string file) =>
-        Contains(file, "[Fact]") || Contains(file, "[Theory]");
+        Contains(file, "[Fact]") || Contains(file, "[Theory]")
+        || Contains(file, "[RetryFact") || Contains(file, "[RetryTheory");
 
     private static bool Contains(string file, params string[] needles)
     {

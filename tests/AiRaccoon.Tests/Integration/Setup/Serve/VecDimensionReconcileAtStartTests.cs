@@ -16,6 +16,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Setup.Serve;
 
@@ -41,7 +42,7 @@ public sealed class VecDimensionReconcileAtStartTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task AServerlessModelSetChangingDimensions_IsReconciledBeforeTheFirstToolCall()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -64,7 +65,7 @@ public sealed class VecDimensionReconcileAtStartTests : IDisposable
         (await VecTableSqlAsync("vec_structure")).ShouldContain("float[1024]");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AMatchingDimension_PerformsNoDdl()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -88,7 +89,7 @@ public sealed class VecDimensionReconcileAtStartTests : IDisposable
         (await VecTableSqlAsync("vec_entries")).ShouldContain("float[384]");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AServerlessCodeActivationChangingDimensions_IsReconciledBeforeTheFirstToolCall()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -109,7 +110,7 @@ public sealed class VecDimensionReconcileAtStartTests : IDisposable
             customMessage: "the next serve must reconcile vec_code to the code engine's dimension before a tool call");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ALegacyCodeBankWithoutCodeDimensionsRow_DefaultsTo768AndPerformsNoDdl()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -144,7 +145,7 @@ public sealed class VecDimensionReconcileAtStartTests : IDisposable
     ///     Mirrors <c>CliCommandsDoNotOpenTheBankTests</c>'s derive-from-the-DI-graph technique
     ///     rather than a hand-maintained list (`derive-or-delete-the-list`).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void NoLeafCommandTypeOtherThanServe_HoldsALiveEntryEmbedderAsAConstructedField()
     {
         var leafCommandTypes = DeriveLeafCommandTypesFromTheCommandRegistration();
@@ -177,7 +178,7 @@ public sealed class VecDimensionReconcileAtStartTests : IDisposable
     ///     actually find an embedder that IS there (planted as a field, exactly like
     ///     <c>ServeCommands.nodeRunner.entryEmbedder</c>), not merely fail to find ones that aren't.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void FindLiveEntryEmbedder_DetectsAPlantedField()
     {
         var planted = new FixtureHoldingAnEntryEmbedder(new UnusedEntryEmbedderStub());

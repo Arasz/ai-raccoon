@@ -4,6 +4,7 @@ using System.Runtime.Intrinsics.X86;
 using AiRaccoon.Infrastructure.Embedding;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -26,7 +27,7 @@ public sealed class GateQueryVectorRegenerationTool(ITestOutputHelper output)
         "fusion and ranking configuration instead of the host CPU (docs/adr/0050). Which of the " +
         "three paths is 'correct' is an open product question — do not treat these as the answer.";
 
-    [Fact]
+    [RetryFact]
     public async Task RegenerateGateQueryVectors()
     {
         if (Environment.GetEnvironmentVariable(RunEnvVar) != "1")

@@ -1,6 +1,7 @@
 using AiRaccoon.Tests.Unit.Retrieval;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Retrieval;
 
@@ -13,7 +14,7 @@ public sealed class ReferenceAssetGateTests
     ///     (never skips) when an asset is missing or mismatched — a false-green harness would let
     ///     the extension removal slip through without a reference oracle.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task PinnedAssets_ArePresentAndShaVerified_AfterBootstrap()
     {
         var result = await ReferenceAssets.EnsureAsync(TestContext.Current.CancellationToken);

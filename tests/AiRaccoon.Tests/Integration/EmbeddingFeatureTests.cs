@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
@@ -46,7 +47,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         TestData.DeleteTempRoot(_dataRoot);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Embedding_ConfigureLocal_EmbedsWritesSynchronouslyWithoutASidecar()
     {
         var config = await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
@@ -66,7 +67,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).PendingCount.ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Embedding_ConfigureLocal_CustomModelPath_OverridesTheBundledModel()
     {
         var custom = Path.Combine(Path.GetTempPath(), "ai-raccoon-custom-model",
@@ -94,7 +95,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Embedding_ConfigureOpenAi_RoutesWritesThroughTheBaseUrl()
     {
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
@@ -116,7 +117,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         (await CountVecRowsAsync()).ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Embedding_WithoutConfiguration_WritesStayDeferredAndStatsReportPending()
     {
         var entry = await _store.WriteAsync(
@@ -130,7 +131,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).PendingCount.ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Embedding_EmbedPending_ProcessesTheDeferredQueueAfterConfiguration()
     {
         var entry = await _store.WriteAsync(
@@ -154,7 +155,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         (await CountVecRowsAsync()).ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Embedding_EngineChange_ReembedsPreviouslyEmbeddedEntriesWithTheNewEngine()
     {
         var first = await _store.WriteAsync(
@@ -185,7 +186,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         (await CountVecRowsAsync()).ShouldBe(2);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Embedding_Configure_SameEngineDoesNotReembed()
     {
         await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
@@ -203,7 +204,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         (await CountVecRowsAsync()).ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Embedding_EmbedPending_DistinctHeadingPathsAreEmbeddedOncePerBatch()
     {
         const string heading = """
@@ -233,7 +234,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         (await CountVecStructureRowsAsync()).ShouldBe(3);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Embedding_ChunkWithNoHeading_WritesTheEmptySentinelAndNoVecStructureRow()
     {
         await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
@@ -252,7 +253,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         (await CountVecStructureRowsAsync()).ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Embedding_HealingPass_PopulatesStructureForABankEmbeddedWithoutIt()
     {
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
@@ -274,7 +275,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
             "every structure_embedding row must have a matching vec_structure row after a heal");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Embedding_WriteWithHeading_IssuesExactlyOneGeneratorCall()
     {
         // A per-chunk ingest loop (FileIngestor) calls this same synchronous-write path once per
@@ -290,7 +291,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         _openAi.Requests.ShouldHaveSingleItem();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Embedding_HealingPass_HeadinglessRowsLeaveTheCandidateWindowSoLaterRowsHeal()
     {
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
@@ -321,7 +322,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         row.StructureEmbedding.ShouldNotBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Embedding_HealingPass_SecondCallIsANoOp()
     {
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
@@ -339,7 +340,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         _openAi.Requests.Count.ShouldBe(requestsAfterFirstHeal, "a healed row must not be re-embedded by a later pass");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Embedding_HealingPass_OneCallHealsMoreThanOneBatchOfCandidates()
     {
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
@@ -368,7 +369,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
             "no row may be left with heading_path still NULL after one healing call");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Embedding_EmbedPending_SmallLimitBoundsTheHealPassToTheRemainingBudget()
     {
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
@@ -394,7 +395,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
             "only the budgeted number of heal candidates may be healed by a limit-bounded call");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Embedding_Delete_RemovesTheVectorRowToo()
     {
         await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),

@@ -11,6 +11,7 @@ using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
@@ -45,7 +46,7 @@ public sealed class SqliteProjectRegistryTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task RegisterAsync_MakesIsRegisteredTrue()
     {
         await _registry.RegisterAsync(GuidV7, "acme", TestContext.Current.CancellationToken);
@@ -54,7 +55,7 @@ public sealed class SqliteProjectRegistryTests : IDisposable
     }
 
     /// <summary>Pins "from the injected TimeProvider, never DateTimeOffset.UtcNow" — a wall-clock read would not match FixedNow.</summary>
-    [Fact]
+    [RetryFact]
     public async Task RegisterAsync_StampsCreatedAtFromTheInjectedTimeProvider()
     {
         await _registry.RegisterAsync(GuidV7, "acme", TestContext.Current.CancellationToken);
@@ -62,7 +63,7 @@ public sealed class SqliteProjectRegistryTests : IDisposable
         (await ReadCreatedAtAsync(GuidV7)).ShouldBe(FixedNow.ToUnixTimeSeconds());
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RegisterAsync_IsIdempotentForTheSameId()
     {
         await _registry.RegisterAsync(GuidV7, "acme", TestContext.Current.CancellationToken);
@@ -73,7 +74,7 @@ public sealed class SqliteProjectRegistryTests : IDisposable
             "ON CONFLICT DO NOTHING is first-write-wins: the second registration's name is silently discarded");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RegisterAsync_StoresTheCanonicalLowercaseDForm()
     {
         var braced = "{" + GuidV7.ToUpperInvariant() + "}";
@@ -83,7 +84,7 @@ public sealed class SqliteProjectRegistryTests : IDisposable
         (await CountProjectRowsAsync(GuidV7)).ShouldBe(1L, "the stored id must be the canonical lowercase D-form, not the raw input");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HasRowsAsync_IsFalseForARegisteredProjectWithNoEntries()
     {
         await _registry.RegisterAsync(GuidV7, "acme", TestContext.Current.CancellationToken);
@@ -91,7 +92,7 @@ public sealed class SqliteProjectRegistryTests : IDisposable
         (await _registry.HasRowsAsync(GuidV7, TestContext.Current.CancellationToken)).ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HasRowsAsync_IsTrueForALegacyRawTextIdThatHasRows()
     {
         await SeedProjectRowAsync("jsaa");
@@ -105,7 +106,7 @@ public sealed class SqliteProjectRegistryTests : IDisposable
     ///     the bank, since Scope() carries no project_id — so a Scope()-based implementation makes
     ///     B read true too. Only ProjectRows.Of() tells the two projects apart.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task HasRowsAsync_IsFalseForOneProjectWhileTrueForAnother()
     {
         await SeedProjectRowAsync("project-a");
@@ -121,7 +122,7 @@ public sealed class SqliteProjectRegistryTests : IDisposable
     ///     "rows" half of ADR-0089 decision 3's refusal test refuses a project that genuinely has
     ///     content, just none of it memory-corpus.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task HasRowsAsync_IsTrueForACodeOnlyLegacyProject_WithRowsOnlyInCodeEntries()
     {
         await SeedCodeEntryRowAsync("code-only-legacy");

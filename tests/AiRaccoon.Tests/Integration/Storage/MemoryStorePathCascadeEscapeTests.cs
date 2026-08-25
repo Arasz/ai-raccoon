@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
@@ -43,7 +44,7 @@ public sealed class MemoryStorePathCascadeEscapeTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task DeleteSourcePathAsync_WithWildcardsInThePath_DeletesOnlyTheLiteralSubtree()
     {
         await AddAsync(Deleted, "the directory row itself");

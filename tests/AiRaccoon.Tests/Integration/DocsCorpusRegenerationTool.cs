@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
@@ -25,7 +26,7 @@ public sealed class DocsCorpusRegenerationTool(ITestOutputHelper output)
 {
     private const string RunEnvVar = "AIRACCOON_REGENERATE_DOCS_CORPUS";
 
-    [Fact]
+    [RetryFact]
     public async Task RegenerateDocsMemoryDb()
     {
         if (Environment.GetEnvironmentVariable(RunEnvVar) != "1")

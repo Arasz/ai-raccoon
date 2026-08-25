@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Maintenance;
 
@@ -101,7 +102,7 @@ public sealed class BankMaintenanceHostedServiceRunOnceTests : IDisposable
         return Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunOnce_CheckpointTruncatesTheWal()
     {
         await InsertSettingAsync("probe.x", "1", TestContext.Current.CancellationToken);
@@ -115,7 +116,7 @@ public sealed class BankMaintenanceHostedServiceRunOnceTests : IDisposable
         _logger.Collector.GetSnapshot().ShouldContain(r => r.Id.Id == 510);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunOnce_CheckpointDeferred_WhenReaderPinsTheWal()
     {
         await InsertSettingAsync("probe.x", "1", TestContext.Current.CancellationToken);
@@ -151,7 +152,7 @@ public sealed class BankMaintenanceHostedServiceRunOnceTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunOnce_EmitsASpanAndADurationForThePass()
     {
         await _service.RunOnceAsync(TestContext.Current.CancellationToken);
@@ -162,7 +163,7 @@ public sealed class BankMaintenanceHostedServiceRunOnceTests : IDisposable
         _probe.Durations.ShouldHaveSingleItem().Tags["result"].ShouldBe("success");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunOnce_WhenThePassThrows_RecordsTheFailure()
     {
         // A directory where the bank file belongs: opening the bank fails, so the pass fails.

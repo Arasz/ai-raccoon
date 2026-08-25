@@ -18,4 +18,8 @@
         <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(Version)', '^\d+\.\d+\.\d+$'))"
                Text="VERSION at the repo root must hold a bare semver (e.g. 1.2.3); found '$(Version)'."/>
     </Target>
+
+    <PropertyGroup Condition="$(MSBuildProjectName.EndsWith('.Tests'))">
+        <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+    </PropertyGroup>
 </Project>

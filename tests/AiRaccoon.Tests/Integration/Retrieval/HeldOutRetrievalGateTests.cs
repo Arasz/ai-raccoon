@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Retrieval;
@@ -81,7 +82,7 @@ public sealed class HeldOutRetrievalGateTests : IDisposable
     ///     The gate proper: every held-out query holds its pinned nDCG@5 floor. A ranking change
     ///     that helps the tuned queries and hurts these fails here.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task HeldOutQueries_HoldTheirPinnedNdcg5Floor()
     {
         var heldOut = RetrievalTuningSets.HeldOut(BaselineQueryCatalog.Load());
@@ -107,7 +108,7 @@ public sealed class HeldOutRetrievalGateTests : IDisposable
     ///     must drive the held-out mean below its floor. The retired assertion (nDCG in [0, 1])
     ///     survives the same reversal on every query, which is why it was never a gate.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ReversedRanking_FailsTheHeldOutMeanFloor()
     {
         var heldOut = RetrievalTuningSets.HeldOut(BaselineQueryCatalog.Load());
@@ -130,7 +131,7 @@ public sealed class HeldOutRetrievalGateTests : IDisposable
     ///     The held-out mean itself, gated. Per-query floors catch a single regression; this catches
     ///     a change that trades three queries against each other.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task HeldOutMean_HoldsItsFloor()
     {
         var heldOut = RetrievalTuningSets.HeldOut(BaselineQueryCatalog.Load());

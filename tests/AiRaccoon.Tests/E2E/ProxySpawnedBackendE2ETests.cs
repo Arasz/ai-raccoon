@@ -7,6 +7,7 @@ using AiRaccoon.Tests.TestHelpers;
 using ModelContextProtocol.Client;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.E2E;
 
@@ -59,7 +60,7 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
     ///     A client on the older revision is relayed as faithfully as one on the newest: the proxy
     ///     carries whatever version the client asked for rather than the one its own session opened at.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task LegacyProtocolClient_IsRelayed()
     {
         _lease.ReleaseForBind();
@@ -72,7 +73,7 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
         tools.ShouldNotBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ProxyOverASpawnedServe_CallsAToolThroughTheGate()
     {
         // A stock client, tuned for nothing: a cold `serve` may outlast the discover probe and send

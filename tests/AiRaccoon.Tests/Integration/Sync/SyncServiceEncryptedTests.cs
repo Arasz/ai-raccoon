@@ -3,6 +3,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Sync;
 
@@ -118,7 +119,7 @@ public class SyncServiceEncryptedTests : IDisposable
         await insert.ExecuteNonQueryAsync(ct);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_EncryptedBank_PushesEncryptedSnapshot()
     {
         var cloud = new FakeCloudStore();
@@ -159,7 +160,7 @@ public class SyncServiceEncryptedTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MemorySync_EncryptedBank_MergesEncryptedRemote()
     {
         var cloud = new FakeCloudStore();

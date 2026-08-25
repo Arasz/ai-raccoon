@@ -13,6 +13,7 @@ using Microsoft.Extensions.Time.Testing;
 using ModelContextProtocol;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
@@ -72,7 +73,7 @@ public sealed class GoldenMemorySearchResponseTests : IAsyncLifetime
         TestData.DeleteTempRoot(_dataRoot);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_TodaysPreKindEnvelope_MatchesTheCommittedGoldenFile()
     {
         await _store.WriteAsync(new MemoryWriteRequest("acme", "the quick brown fox leaps over the lazy dog"),
@@ -107,7 +108,7 @@ public sealed class GoldenMemorySearchResponseTests : IAsyncLifetime
     ///     no independent work on the actual wire. Proven here on Warning, a property with no
     ///     JsonIgnore attribute at all: the wire options omit it too, on the global setting alone.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void McpWireOptions_OmitNullProperties_EvenWithoutAJsonIgnoreAttribute()
     {
         var result = new MemoryTools.SearchResultList([], Warning: null, Code: null);

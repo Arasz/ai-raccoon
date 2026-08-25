@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Client;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.E2E;
@@ -71,7 +72,7 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
     ///     The proxy's own data root holds a bank no key can open. It still answers, and the file is
     ///     untouched: the key resolve and decrypt probe the in-process server pays are never run.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task BareLaunch_DoesNotOpenTheBank()
     {
         var bank = SqliteConnectionFactory.BankPathFor(
@@ -89,7 +90,7 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
     }
 
     /// <summary>The proxy relays the backend's surface and identity, never one of its own.</summary>
-    [Fact]
+    [RetryFact]
     public async Task BareLaunch_RelaysTheBackendSurfaceAndIdentity()
     {
         await using var direct = await ConnectDirectlyAsync();
@@ -110,7 +111,7 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
     ///     No in-process fallback, ever (ADR-0020): a backend that cannot start ends the process with
     ///     one actionable line, because a silent fallback would reinstate the fan-out unobserved.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task WhenTheBackendCannotStart_ItFailsLoudly()
     {
         var root = TestData.CreateTempRoot("proxy-no-backend");

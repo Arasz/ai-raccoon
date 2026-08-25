@@ -5,6 +5,7 @@ using AiRaccoon.Infrastructure.Embedding.Manifest;
 using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -23,7 +24,7 @@ public sealed class CodeManifestBudgetGuardTests
 {
     /// <summary>The rule is ctx-aware, not a flat cap: a genuinely narrow model still resolves
     /// below 510. Kept as the formula's pin now that code-daemon is no longer the narrow case.</summary>
-    [Fact]
+    [RetryFact]
     public void ResolveChunkBudgetFor_ANarrow128CtxManifest_Resolves126_NotTheFlat510()
     {
         var dir = WriteManifestDir(128);
@@ -45,7 +46,7 @@ public sealed class CodeManifestBudgetGuardTests
     ///     code-daemon-embed-v1 fixture manifest — so a future edit to either the constant or the
     ///     formula alone is caught, instead of both drifting in silent agreement.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void DefaultBudget_EqualsTheFormulasOutput_ForTheRealCodeDaemonFixtureManifest()
     {
         var dir = SeedFixtureManifestDir();

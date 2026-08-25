@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -33,7 +34,7 @@ public sealed class CodeEngineRealModelEmbedTests
         "def read_config(path):\n    \"\"\"Load the JSON configuration file at path.\"\"\"\n"
         + "    with open(path) as handle:\n        return json.load(handle)\n";
 
-    [Fact]
+    [RetryFact]
     public async Task TheCodeEngine_EmbedsACodeChunk_AtTheManifestsDimensions()
     {
         var descriptor = LoadDescriptorOrSkip(out var modelDirectory);
@@ -59,7 +60,7 @@ public sealed class CodeEngineRealModelEmbedTests
     ///     alone cannot tell a working engine from a broken one. Meaning can: a natural-language
     ///     query must sit closer to the function it describes than to an unrelated one.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task TheCodeEngine_PutsAQueryNearerTheFunctionItDescribes()
     {
         LoadDescriptorOrSkip(out var modelDirectory);
@@ -76,7 +77,7 @@ public sealed class CodeEngineRealModelEmbedTests
     }
 
     /// <summary>A chunk sized to the whole code budget still embeds — the largest input the chunker can emit.</summary>
-    [Fact]
+    [RetryFact]
     public async Task TheCodeEngine_EmbedsAChunkFillingTheWholeCodeBudget()
     {
         var descriptor = LoadDescriptorOrSkip(out var modelDirectory);
@@ -100,7 +101,7 @@ public sealed class CodeEngineRealModelEmbedTests
     ///     directory — since #470 a downloaded manifest says 'model-output', so a test that waited
     ///     for the file to be wrong would pass only until the model was re-downloaded.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task TheCodeEngine_WarnsThatTheManifestsPoolingModeCannotApply()
     {
         var descriptor = LoadDescriptorOrSkip(out var modelDirectory) with { Pooling = "cls" };

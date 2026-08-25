@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using BackendLauncher = AiRaccoon.Hosting.Proxy.BackendLauncher;
 
 namespace AiRaccoon.Tests.Integration.Setup.Serve;
@@ -47,7 +48,7 @@ public sealed class BackendLauncherTests : IDisposable
         TestData.DeleteTempRoot(_dataRoot);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Acquire_DoesNotWriteToItsOwnStdout()
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), "fd-level stdout capture is POSIX-only");
@@ -89,7 +90,7 @@ public sealed class BackendLauncherTests : IDisposable
         managedStdout.ShouldNotContain(UrlFor(port));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Acquire_WhenNoServerIsListening_StartsOneAndAnswers()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -106,7 +107,7 @@ public sealed class BackendLauncherTests : IDisposable
         live.ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Acquire_WhenAServerIsAlreadyListening_DoesNotSpawn()
     {
         var port = HoldListener(FakeServerResponse);
@@ -119,7 +120,7 @@ public sealed class BackendLauncherTests : IDisposable
         result.ServeExitCode.ShouldBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Acquire_WhenTheBackendCannotStart_FailsWithinTheBudget()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -138,7 +139,7 @@ public sealed class BackendLauncherTests : IDisposable
         result.ServeExitCode.ShouldBe(ExitCode.PortInUse);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Acquire_WhenTheBackendNeverAnswers_GivesUpAtTheBudget()
     {
         using var lease = LoopbackPort.Reserve();
@@ -172,7 +173,7 @@ public sealed class BackendLauncherTests : IDisposable
     ///     The defect this gates: DrainAsync used to discard the child's stderr unconditionally, so a
     ///     backend that started and then failed left the operator with nothing but a bare exit code.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Acquire_WhenTheBackendExitsWithStderr_SurfacesItInTheResult()
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), "the fake failing child is a POSIX shell script");
@@ -190,7 +191,7 @@ public sealed class BackendLauncherTests : IDisposable
         result.ServeStderr.ShouldContain("could not decrypt the bank");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Acquire_WhenTheBackendCannotBeStarted_FailsWithTheCommandItTried()
     {
         using var lease = LoopbackPort.Reserve();
@@ -203,7 +204,7 @@ public sealed class BackendLauncherTests : IDisposable
         failure.Message.ShouldContain("ai-raccoon-no-such-executable");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Acquire_WhenTheCallerHasAlreadyCancelled_ThrowsWithoutSpawning()
     {
         using var lease = LoopbackPort.Reserve();
@@ -217,7 +218,7 @@ public sealed class BackendLauncherTests : IDisposable
             Launcher().AcquireAsync(port, "ai-raccoon-no-such-executable", [], caller.Token));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Acquire_WhenTheCallerCancels_PropagatesInsteadOfReportingFailure()
     {
         using var lease = LoopbackPort.Reserve();

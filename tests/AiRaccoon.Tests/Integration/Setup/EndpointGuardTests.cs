@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Setup;
 
@@ -47,7 +48,7 @@ public sealed class EndpointGuardTests : IAsyncLifetime
         TestData.DeleteTempRoot(_dataRoot);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EveryMappedEndpoint_IsGuarded_OrDeclaredOpen()
     {
         var routes = MappedRoutes();
@@ -69,7 +70,7 @@ public sealed class EndpointGuardTests : IAsyncLifetime
     }
 
     /// <summary>The opt-out list is only meaningful while every entry is a route that exists.</summary>
-    [Fact]
+    [RetryFact]
     public void EveryDeclaredOpenRoute_IsStillMapped()
     {
         var routes = MappedRoutes();

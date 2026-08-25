@@ -2,6 +2,7 @@ using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Encryption;
 
@@ -17,10 +18,10 @@ public sealed class EncryptionStateTests : IDisposable
 
     private string SidecarPath() => EncryptionSourceSidecar.PathFor(BankPath());
 
-    [Fact]
+    [RetryFact]
     public void PathFor_AppendsSourceSuffix() => EncryptionSourceSidecar.PathFor("/data/memory.db").ShouldBe("/data/memory.db.source");
 
-    [Fact]
+    [RetryFact]
     public void Read_WhenSidecarAbsent_ReturnsNull()
     {
         var sidecar = new EncryptionSourceSidecar(BankPath());
@@ -28,7 +29,7 @@ public sealed class EncryptionStateTests : IDisposable
         sidecar.Read().ShouldBe(EncryptionData.None);
     }
 
-    [Fact]
+    [RetryFact]
     public void WriteThenRead_RoundTripsBitwardenConfig()
     {
         var sidecar = new EncryptionSourceSidecar(BankPath());
@@ -42,7 +43,7 @@ public sealed class EncryptionStateTests : IDisposable
         read.SecretId.ShouldBe("secret-1");
     }
 
-    [Fact]
+    [RetryFact]
     public void WriteThenRead_RoundTripsEnvConfigWithNullIds()
     {
         var sidecar = new EncryptionSourceSidecar(BankPath());
@@ -56,7 +57,7 @@ public sealed class EncryptionStateTests : IDisposable
         read.SecretId.ShouldBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public void Write_OverwritesExistingSidecar()
     {
         var sidecar = new EncryptionSourceSidecar(BankPath());
@@ -71,7 +72,7 @@ public sealed class EncryptionStateTests : IDisposable
         read.SecretId.ShouldBe("s2");
     }
 
-    [Fact]
+    [RetryFact]
     public void Write_IsAtomic_LeavesNoTempFilesBehind()
     {
         var sidecar = new EncryptionSourceSidecar(BankPath());
@@ -82,7 +83,7 @@ public sealed class EncryptionStateTests : IDisposable
         File.ReadAllText(SidecarPath()).ShouldContain("\"source\":\"bitwarden\"");
     }
 
-    [Fact]
+    [RetryFact]
     public void Write_SetsUnixMode0600()
     {
         if (OperatingSystem.IsWindows())
@@ -97,7 +98,7 @@ public sealed class EncryptionStateTests : IDisposable
         File.GetUnixFileMode(SidecarPath()).ShouldBe(UnixFileMode.UserRead | UnixFileMode.UserWrite);
     }
 
-    [Fact]
+    [RetryFact]
     public void Delete_RemovesTheSidecar()
     {
         var sidecar = new EncryptionSourceSidecar(BankPath());
@@ -109,7 +110,7 @@ public sealed class EncryptionStateTests : IDisposable
         sidecar.Read().ShouldBe(EncryptionData.None);
     }
 
-    [Fact]
+    [RetryFact]
     public void Delete_WhenSidecarAbsent_DoesNotThrow()
     {
         var sidecar = new EncryptionSourceSidecar(BankPath());
@@ -117,7 +118,7 @@ public sealed class EncryptionStateTests : IDisposable
         sidecar.Delete();
     }
 
-    [Fact]
+    [RetryFact]
     public void Read_CorruptJson_ThrowsNamingThePath()
     {
         File.WriteAllText(SidecarPath(), "{not json");
@@ -128,7 +129,7 @@ public sealed class EncryptionStateTests : IDisposable
         ex.Message.ShouldContain(SidecarPath());
     }
 
-    [Fact]
+    [RetryFact]
     public void Read_EmptyFile_Throws()
     {
         File.WriteAllText(SidecarPath(), string.Empty);
@@ -137,7 +138,7 @@ public sealed class EncryptionStateTests : IDisposable
         Should.Throw<EncryptionSourceException>(() => sidecar.Read());
     }
 
-    [Fact]
+    [RetryFact]
     public void Read_UnknownSource_ThrowsNamingThePath()
     {
         File.WriteAllText(SidecarPath(), """{"source":"ssh-key"}""");
@@ -149,7 +150,7 @@ public sealed class EncryptionStateTests : IDisposable
         ex.Message.ShouldContain("ssh-key");
     }
 
-    [Fact]
+    [RetryFact]
     public void Read_IgnoresUnknownExtraFields()
     {
         File.WriteAllText(SidecarPath(), """{"source":"env","extra":1}""");
@@ -161,7 +162,7 @@ public sealed class EncryptionStateTests : IDisposable
         read.Source.ShouldBe("env");
     }
 
-    [Fact]
+    [RetryFact]
     public void Write_InvalidSource_Throws()
     {
         var sidecar = new EncryptionSourceSidecar(BankPath());

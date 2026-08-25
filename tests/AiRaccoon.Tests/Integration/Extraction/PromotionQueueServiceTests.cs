@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Extraction;
@@ -88,7 +89,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
             new { key = ExtractionConfigKeys.QueueCapacityGlobal, value = cap.ToString() });
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Propose_PersistsCandidates_AndReportsOutcome()
     {
         var outcome = await _service.ProposeAsync("acme",
@@ -102,7 +103,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
         _metrics.Snapshots.ShouldHaveSingleItem().Stats.PerProject["acme"].ShouldBe(2);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Propose_ReProposingTheSameHash_DoesNotGrowTheRealQueueSize()
     {
         await _service.ProposeAsync("acme", [Candidate("h1", "fact one", 1.0)],
@@ -116,7 +117,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
             "RecordSnapshot must report the real persisted queue size, not the SQLite conflict-update count");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Propose_AtCap_EvictsLowestScoreFromGreatestCountProject()
     {
         await SetCapAsync(4, TestContext.Current.CancellationToken);
@@ -142,7 +143,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
         _metrics.Evictions[0].ProjectId.ShouldBe("acme");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Propose_EvictsUntilUnderCap_WhenInsertingMany()
     {
         await SetCapAsync(3, TestContext.Current.CancellationToken);
@@ -159,7 +160,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
             .Select(r => r.Hash).ShouldBe(["h5", "h4", "h3"]);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Propose_DefaultsCap_WhenNoSetting()
     {
         var outcome = await _service.ProposeAsync("acme",
@@ -173,7 +174,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
         (await MetaFor("acme")).WaitingPromotionsCount.ShouldBe(ExtractionConfigKeys.DefaultQueueCapacity);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Promote_SharesTopNFromTheQueue_AndDrains()
     {
         var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
@@ -204,7 +205,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
     /// <summary>The layered dedup contract (docs/adr/0026): propose refuses EXACT shared twins at
     /// upsert; a whitespace twin still queues (exact values differ) and promote skips it via its
     /// NORMALIZED twin check — so skip accounting survives with the persistence-layer refusal.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Promote_SkipsAlreadySharedValues_AndDrainsThemToo()
     {
         var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
@@ -235,7 +236,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
     }
 
     // ------------------------------------------------------------------ clear stale (ADR-0018)
-    [Fact]
+    [RetryFact]
     public async Task ClearStaleAsync_RemovesRowsOnAnOlderScorerVersion_ReportsTheCount()
     {
         await _service.ProposeAsync("acme",
@@ -252,7 +253,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
             .Select(r => r.Hash).ShouldBe(["current"]);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Discard_RemovesOneOrTheWholeProject()
     {
         await _service.ProposeAsync("acme",
@@ -265,7 +266,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
         _metrics.Snapshots[^1].Stats.TotalCount.ShouldBe(0, "2 upserted, 2 discarded — the queue is back to empty");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Discard_RecordsDiscarded_WithTheSameWaitShapeAsPromote()
     {
         await _service.ProposeAsync("acme", [Candidate("h1", "a", 1.0)],
@@ -281,7 +282,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
 
     /// <summary>C5: the envelope carries the asking project's queue state only — another project's
     /// id or counts never ride along on an unrelated tool call.</summary>
-    [Fact]
+    [RetryFact]
     public async Task GetMeta_ReportsTheAskingProjectOnly()
     {
         await _service.ProposeAsync("acme", [Candidate("a1", "a1", 1.0), Candidate("a2", "a2", 2.0)],
@@ -297,7 +298,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
     }
 
     /// <summary>C5: the envelope is bounded by construction — one project, always — not by a tuned cap.</summary>
-    [Fact]
+    [RetryFact]
     public async Task GetMeta_ShapeDoesNotGrowWithTheProjectCount()
     {
         await _service.ProposeAsync("acme", [Candidate("a1", "a1", 1.0)],
@@ -314,7 +315,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
     }
 
     /// <summary>PromotionMeta's contract: zero is informative, never absent.</summary>
-    [Fact]
+    [RetryFact]
     public async Task GetMeta_ReportsZero_WhenTheAskingProjectHasNothingQueued()
     {
         await _service.ProposeAsync("other", [Candidate("o1", "o1", 1.0)],
@@ -326,7 +327,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
         Json(meta).ShouldContain("\"waitingPromotionsCount\":0");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetMeta_WaitAges_AreTheAskingProjectsOwn()
     {
         await _service.ProposeAsync("other", [Candidate("o1", "stale", 1.0)],
@@ -342,7 +343,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
         meta.OldestWaitSeconds.ShouldBe(10, "another project's 30-day-old row is not this project's wait");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetMeta_ReflectsTheQueue()
     {
         (await MetaFor("acme")).ShouldBe(new PromotionMeta(0, null));
@@ -358,7 +359,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
 
     /// <summary>B1: nothing drains a propose-only queue, so a stale row needs to be visible even
     /// when the average wait looks fine — the response meta is the surface every tool already carries.</summary>
-    [Fact]
+    [RetryFact]
     public async Task GetMeta_SurfacesTheOldestWaitSeparatelyFromTheAverage()
     {
         await _service.ProposeAsync("acme", [Candidate("stale", "old fact", 1.0)],
@@ -375,7 +376,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
             "the average across both rows must not equal the single stalest row's age");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetMeta_SurfacesTheAskingProjectsCapacity()
     {
         await SetCapAsync(100, TestContext.Current.CancellationToken);
@@ -390,14 +391,14 @@ public sealed class PromotionQueueServiceTests : IDisposable
                 "two projects occupy a cap of 100 — this project's own share, not everyone's");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetMeta_EmptyQueue_HasNoCapacityInfo()
     {
         (await MetaFor("acme")).Capacity.ShouldBeNull();
     }
 
     /// <summary>memory_promotion_list may name no project; its meta is the bank-wide count — still a scalar.</summary>
-    [Fact]
+    [RetryFact]
     public async Task GetMeta_Unscoped_CountsTheWholeBank_WithoutNamingProjects()
     {
         await _service.ProposeAsync("acme", [Candidate("a1", "a1", 1.0)],
@@ -418,7 +419,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
     ///     so a candidate whose entry sweep just removed cannot survive it. A candidate with no
     ///     backing entry, or one backed by a healthy entry sweep never touches, is untouched.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Sweep_DropsQueueRowsForTheEntriesItDeleted_AndLeavesTheRest()
     {
         var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);

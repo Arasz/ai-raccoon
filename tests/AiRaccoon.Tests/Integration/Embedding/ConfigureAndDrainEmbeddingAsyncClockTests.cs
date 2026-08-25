@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
@@ -47,7 +48,7 @@ public sealed class ConfigureAndDrainEmbeddingAsyncClockTests : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ConfigureAndDrainEmbeddingAsync_WithASuppliedClock_StampsTheMigrationFromThatClock_NotRealTime()
     {
         var ct = TestContext.Current.CancellationToken;

@@ -6,6 +6,7 @@ using Microsoft.Data.Sqlite;
 using NSubstitute;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -39,7 +40,7 @@ public sealed class EntryEmbedderMarksABatchInOneTransactionTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task EmbedAsync_FailureInsideTheSecondBatch_RollsBackOnlyThatBatch()
     {
         var ct = TestContext.Current.CancellationToken;

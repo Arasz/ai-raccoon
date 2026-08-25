@@ -1,4 +1,5 @@
 using System.Reflection;
+using AiRaccoon.Tests.Unit.TestInfra;
 using Shouldly;
 using Xunit;
 
@@ -33,6 +34,17 @@ public sealed class SpeedGateCoverageTests
         TestClasses().Count.ShouldBeGreaterThan(100);
     }
 
+    [Fact]
+    public void RetryAttributeClasses_RemainVisibleToTheGuard()
+    {
+        // Retry attributes derive from FactAttribute; the exact-FullName HasFactOrTheory drops
+        // every retried class (a silently vacuous pass). This test pins the IsAssignableFrom fix.
+        var names = TestClasses().Select(t => t.FullName ?? t.Name).ToList();
+
+        names.ShouldContain(typeof(RetryFactRetriesOnTransientFailureTests).FullName!);
+        names.ShouldContain(typeof(RetryTheoryRetriesDataRowTests).FullName!);
+    }
+
     /// <summary>Handwritten xUnit classes: any type with a [Fact] or [Theory], minus Reqnroll's generated features (gated by Category=bdd).</summary>
     private static List<Type> TestClasses() =>
     [
@@ -46,7 +58,9 @@ public sealed class SpeedGateCoverageTests
 
     private static bool HasFactOrTheory(MethodInfo method) =>
         method.GetCustomAttributesData().Any(a =>
-            a.AttributeType.FullName is "Xunit.FactAttribute" or "Xunit.TheoryAttribute");
+            a.AttributeType.FullName is "Xunit.FactAttribute" or "Xunit.TheoryAttribute"
+            || typeof(FactAttribute).IsAssignableFrom(a.AttributeType)
+            || typeof(TheoryAttribute).IsAssignableFrom(a.AttributeType));
 
     private static List<(string Name, string Value)> Traits(MemberInfo member) =>
     [

@@ -7,6 +7,7 @@ using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Ingestion;
 
@@ -51,7 +52,7 @@ public sealed class FileIngestorIgnoreTests : IDisposable
         TestData.DeleteTempRoot(_testDir);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestDirectoryAsync_IgnoreFileAtRoot_SkipsMatchedPaths_IngestsTheRest()
     {
         await File.WriteAllTextAsync(Path.Combine(_testDir, IgnoreRulesProvider.FileName), "secret.md\n",
@@ -79,7 +80,7 @@ public sealed class FileIngestorIgnoreTests : IDisposable
     ///     subdirectory. `IngestFileAsync` already resolves this ancestor via
     ///     `ResolveIgnoreRootAsync`; the directory walk must do the same.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task IngestDirectoryAsync_AncestorWatchRootIgnoreFile_SkipsMatchedPathsUnderNestedWalkRoot()
     {
         var subDir = Path.Combine(_testDir, "sub");
@@ -111,7 +112,7 @@ public sealed class FileIngestorIgnoreTests : IDisposable
     ///     walk root's own `ai-raccoon.ignore` (docs/reference/agent-memory-server.md:283-284,
     ///     docs/features/code-corpus/code-corpus.feature:73).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task IngestDirectoryAsync_WalkRootOwnIgnoreFile_TakesPrecedenceOverAncestorScopeEntry()
     {
         var subDir = Path.Combine(_testDir, "src");

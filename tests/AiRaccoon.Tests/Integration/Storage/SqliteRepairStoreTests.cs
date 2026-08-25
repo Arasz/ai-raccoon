@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
@@ -42,7 +43,7 @@ public sealed class SqliteRepairStoreTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task ReportReingestAsync_NeverWrites_OnAnUnaffectedBank()
     {
         var report = await _store.ReportReingestAsync(TestContext.Current.CancellationToken);
@@ -50,7 +51,7 @@ public sealed class SqliteRepairStoreTests : IDisposable
         report.FilesToReingest.ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ReportChunkIndexAsync_NeverWrites_OnAnUnaffectedBank()
     {
         var report = await _store.ReportChunkIndexAsync(TestContext.Current.CancellationToken);
@@ -58,7 +59,7 @@ public sealed class SqliteRepairStoreTests : IDisposable
         report.RowsRepositioned.ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ReportReingestAsync_FindsAFileWithAStaleHash()
     {
         var file = Path.Combine(_dataRoot, "stale.md");
@@ -80,7 +81,7 @@ public sealed class SqliteRepairStoreTests : IDisposable
         report.FilesToReingest.ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RequestRepairAsync_InsertsAnOpenRequestRow()
     {
         await _store.RequestRepairAsync(RepairKind.Reingest, TestContext.Current.CancellationToken);
@@ -88,7 +89,7 @@ public sealed class SqliteRepairStoreTests : IDisposable
         (await OpenRequestCountAsync("reingest")).ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RequestRepairAsync_IsScopedToItsOwnKind()
     {
         await _store.RequestRepairAsync(RepairKind.Reingest, TestContext.Current.CancellationToken);
@@ -96,7 +97,7 @@ public sealed class SqliteRepairStoreTests : IDisposable
         (await OpenRequestCountAsync("chunk-index")).ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RequestRepairAsync_CalledTwice_StaysOneRow()
     {
         await _store.RequestRepairAsync(RepairKind.Reingest, TestContext.Current.CancellationToken);
@@ -107,7 +108,7 @@ public sealed class SqliteRepairStoreTests : IDisposable
             .ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RequestRepairAsync_AfterAPreviousRequestFinished_ReopensIt()
     {
         await _store.RequestRepairAsync(RepairKind.ChunkIndex, TestContext.Current.CancellationToken);

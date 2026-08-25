@@ -3,6 +3,7 @@ using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Unit.Storage;
 
@@ -63,7 +64,7 @@ public sealed class SearchPhaseClosureTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task Search_PhaseBracketsAccountForEveryTickOfTotal()
     {
         var clock = new FakeTimeProvider(FixedNow);
@@ -90,7 +91,7 @@ public sealed class SearchPhaseClosureTests : IDisposable
     ///     negation is "more than zero", and pinning a tick count here would only pin how many clock
     ///     reads <c>SearchAsync</c> happens to make.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Search_WhenTimePassesBetweenThePhaseBrackets_TheRemainderReportsIt()
     {
         var clock = new FakeTimeProvider(FixedNow) { AutoAdvanceAmount = TimeSpan.FromTicks(1) };

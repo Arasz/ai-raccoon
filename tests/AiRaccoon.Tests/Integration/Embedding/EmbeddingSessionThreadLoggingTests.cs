@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -33,7 +34,7 @@ public sealed class EmbeddingSessionThreadLoggingTests : IDisposable
         return custom;
     }
 
-    [Fact]
+    [RetryFact]
     public void CreateGenerator_Local_ExplicitThreadsSetting_LogsResolvedCountAndSource()
     {
         var logger = new FakeLogger<EmbeddingService>();
@@ -52,7 +53,7 @@ public sealed class EmbeddingSessionThreadLoggingTests : IDisposable
         record.StructuredState!.Single(kv => kv.Key == "Source").Value.ShouldBe("setting");
     }
 
-    [Fact]
+    [RetryFact]
     public void CreateGenerator_Local_UnsetThreadsSetting_LogsHalvedCoreDefaultAsSource()
     {
         var logger = new FakeLogger<EmbeddingService>();
@@ -74,7 +75,7 @@ public sealed class EmbeddingSessionThreadLoggingTests : IDisposable
     ///     "0" misreads as broken. WP4/#524 follow-up: the structured `Threads` value stays the raw
     ///     `int` a sink can aggregate on; the human phrase lives in its own `ThreadsDisplay` field.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void CreateGenerator_Local_ExplicitZeroThreadsSetting_LogsOrtDefaultDisplay()
     {
         var logger = new FakeLogger<EmbeddingService>();

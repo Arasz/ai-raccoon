@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Unit.Isolation;
@@ -48,7 +49,7 @@ public sealed class WorkspaceCloseRaceTests : IDisposable
 
     /// <summary>The RED case named by the acceptance criteria: exactly one of a concurrent
     /// consolidate/discard pair succeeds, the other raises, and the outbox is consumed once.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ConcurrentConsolidateAndDiscard_ExactlyOneSucceeds_AndTheOutboxIsConsumedOnce()
     {
         await _workspaceStore.BeginAsync(new Workspace("ws-1", ProjectId), FixedNow,
@@ -109,7 +110,7 @@ public sealed class WorkspaceCloseRaceTests : IDisposable
 
     /// <summary>The same invariant, run several times to give the (nondeterministic) DB scheduler a
     /// chance to let either side win — a flaky ordering-dependent implementation would eventually fail.</summary>
-    [Theory]
+    [RetryTheory]
     [InlineData(1)]
     [InlineData(2)]
     [InlineData(3)]

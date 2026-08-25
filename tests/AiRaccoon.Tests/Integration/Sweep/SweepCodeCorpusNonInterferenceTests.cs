@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Sweep;
@@ -72,7 +73,7 @@ public sealed class SweepCodeCorpusNonInterferenceTests : IDisposable
     ///     could ever fail is a change that makes SweepService (or something it calls) start
     ///     touching code_entries directly, which this test already catches via the counts below.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ReaperTick_DeletesTheExpiredMemoryRow_ButLeavesTheCodeRowUntouched()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

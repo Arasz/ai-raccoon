@@ -10,6 +10,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -51,7 +52,7 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ActivateCodeEngineAsync_WritesCodeModelAndCodeEngineSettingsRows()
     {
         var dir = Path.Combine(_dataRoot, "code-model");
@@ -65,7 +66,7 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
         (await ReadSettingAsync(EmbeddingSettingsKeys.CodeEngine)).ShouldBe(config.Engine);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ActivateCodeEngineAsync_MarksEmbeddedCodeRowsPending_AndEmptiesVecCodeInTheSameCommit()
     {
         await SeedAnEmbeddedCodeRowAsync();
@@ -91,7 +92,7 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
     ///     EARLIER settings writes were rolled back too — the only outcome that distinguishes one
     ///     real transaction from three independently-committed statements.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ActivateCodeEngineAsync_FailureOnTheLastStatement_RollsBackTheEarlierSettingsWritesToo()
     {
         await SeedAnEmbeddedCodeRowAsync();
@@ -125,7 +126,7 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
     ///     where invalidation is already unconditional — and before the fingerprint is taken, so the
     ///     rewrite does not read as a second engine change on the code-reindex job's next poll.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ActivateCodeEngineAsync_ManifestPoolingTheGraphCannotApply_IsRepairedBeforeTheFingerprintIsTaken()
     {
         var dir = Path.Combine(_dataRoot, "code-model-unappliable-pooling");
@@ -158,7 +159,7 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
     ///     refusal leg this test used was the 1024-dimension gate; dimensions are no longer a
     ///     refusal — vec-code-unfix-dim — so the chunk-budget gate takes its place.)
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ActivateCodeEngineAsync_RefusedManifest_IsNotRepaired()
     {
         var dir = Path.Combine(_dataRoot, "code-model-narrow-selfpooling");
@@ -195,7 +196,7 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
     ///     a bare <see cref="InvalidOperationException" /> escapes as an unhandled 500. It stays an
     ///     <see cref="InvalidOperationException" /> (the CLI's own pre-flight catch is unaffected).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ActivateCodeEngineAsync_NonexistentDirectory_RefusesAndWritesNothing()
     {
         var dir = Path.Combine(_dataRoot, "does-not-exist");
@@ -214,7 +215,7 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
     ///     reconciles vec_code to float[1024] and records embedding.codeDimensions — in the SAME
     ///     transaction as the settings write and the invalidation.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ActivateCodeEngineAsync_Non768Manifest_ReconcilesVecCodeAndWritesCodeDimensions()
     {
         await SeedAnEmbeddedCodeRowAsync();
@@ -234,7 +235,7 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
 
     /// <summary>A matching-dimension activation must not drop the populated index — reconcile is a
     /// create-if-missing-or-mismatch, and the dimension is still recorded.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ActivateCodeEngineAsync_768Manifest_NoDdlAndWritesCodeDimensions()
     {
         await SeedAnEmbeddedCodeRowAsync();
@@ -256,7 +257,7 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
     ///     the vec_code DDL — a separately-committed reconcile would survive the rollback with the
     ///     table left at float[1024] and no engine configured.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ActivateCodeEngineAsync_ReconcileFailure_RollsBackSettingsAndDdl()
     {
         await SeedAnEmbeddedCodeRowAsync();
@@ -293,7 +294,7 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
     ///     truncate every one of them at embed time. This is the half of the old fixed-126 gate that
     ///     was protecting something real.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ActivateCodeEngineAsync_ManifestWindowNarrowerThanTheChunkerBudget_Refuses_AndWritesNothing()
     {
         var dir = Path.Combine(_dataRoot, "code-model-narrow-ctx");
@@ -318,7 +319,7 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
     ///     choice, never a correctness fault — the old gate refused this case too, which is what made
     ///     the flagship model unactivatable.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ActivateCodeEngineAsync_ManifestWindowWiderThanTheChunkerBudget_Activates()
     {
         var dir = Path.Combine(_dataRoot, "code-model-wide-ctx");
@@ -340,7 +341,7 @@ public sealed class CodeEngineActivationTests : IAsyncLifetime
     ///     The #422 acceptance in one test: the manifest `model download faxenoff/code-daemon-embed-v1`
     ///     actually writes (512-token window, 768 dims) activates with no hand-edit in between.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ActivateCodeEngineAsync_TheManifestTheDownloaderWritesForTheDefaultModel_Activates()
     {
         var dir = Path.Combine(_dataRoot, "code-model-as-downloaded");

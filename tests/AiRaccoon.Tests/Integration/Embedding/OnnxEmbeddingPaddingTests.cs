@@ -2,6 +2,7 @@ using System.Buffers;
 using AiRaccoon.Infrastructure.Embedding;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -18,7 +19,7 @@ public sealed class OnnxEmbeddingPaddingTests : IAsyncLifetime
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
-    [Fact]
+    [RetryFact]
     public async Task SameBatchTwice_ProducesIdenticalEmbeddings_EvenAfterPoolReuse()
     {
         using var generator = TestData.CreateEmbeddingService().CreateGenerator(

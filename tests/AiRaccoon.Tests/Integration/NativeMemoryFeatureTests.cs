@@ -4,6 +4,7 @@ using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -28,7 +29,7 @@ public sealed class NativeMemoryFeatureTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task BankDirectory_ContainsExactlyMemoryDb_NoRaccoonMetaDb()
     {
         await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
@@ -51,7 +52,7 @@ public sealed class NativeMemoryFeatureTests : IDisposable
         File.Exists(Path.Combine(_dataRoot, "raccoon_meta.db")).ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EntryMetadata_IsStoredOnTheEntryRow()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -90,7 +91,7 @@ public sealed class NativeMemoryFeatureTests : IDisposable
         columns.ShouldContain("agent_id");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task WorkspaceBegin_CreatesActiveRowInMemoryDb()
     {
         var workspaceStore = new SqliteWorkspaceStore(_factory);

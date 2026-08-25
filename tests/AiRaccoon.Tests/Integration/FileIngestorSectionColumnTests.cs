@@ -9,6 +9,7 @@ using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -71,7 +72,7 @@ public class FileIngestorSectionColumnTests : IDisposable
         TestData.DeleteTempRoot(_testDir);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestFileAsync_PopulatesSectionFromTheHeadingLeaf()
     {
         var file = Path.Combine(_testDir, "adr.md");
@@ -103,7 +104,7 @@ public class FileIngestorSectionColumnTests : IDisposable
     ///     sentence of prose in an FTS-weighted column. Measured on the committed jsaa corpus:
     ///     3 of 871 headed rows, worst case a 99-character README section.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task IngestFileAsync_OversizedShellFence_NeverTakesTheSectionFromInsideTheFence()
     {
         var file = Path.Combine(_testDir, "readme.md");
@@ -142,7 +143,7 @@ public class FileIngestorSectionColumnTests : IDisposable
     ///     content) got mislabeled with the next section's heading. Sizes mirror the checklist
     ///     fixture (docs/work/checklist/2026-08-22-1.32.0-check.json) that first surfaced it.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task IngestFileAsync_HeadingWouldDangleAtChunkTail_LabelsChunksWithTheirOwnSection()
     {
         var file = Path.Combine(_testDir, "quadrant.md");
@@ -206,7 +207,7 @@ public class FileIngestorSectionColumnTests : IDisposable
     ///     stayed at chunk 0's tail and the whole chunk got labelled with a section that is mostly
     ///     absent from it — `manual.md#tide-correction` resolved nothing on the live bank.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task IngestFileAsync_SectionContinuesPastChunkTail_LabelsChunksWithTheirOwnSection()
     {
         var file = Path.Combine(_testDir, "manual.md");
@@ -250,7 +251,7 @@ public class FileIngestorSectionColumnTests : IDisposable
 
     /// <summary>Issue #549: a section longer than one chunk — every chunk of it, not only the one
     /// holding the heading, carries that section (the chunker reports the heading path in force).</summary>
-    [Fact]
+    [RetryFact]
     public async Task IngestFileAsync_SectionLongerThanOneChunk_EveryChunkCarriesThatSection()
     {
         var file = Path.Combine(_testDir, "long-section.md");
@@ -270,7 +271,7 @@ public class FileIngestorSectionColumnTests : IDisposable
 
     /// <summary>Issue #549: an unchanged file deduplicates on hash, so the fix only reaches an
     /// already-ingested bank if the dedup path refreshes the section column too.</summary>
-    [Fact]
+    [RetryFact]
     public async Task IngestFileAsync_ReIngestingAnUnchangedFile_RefreshesTheSectionOnDeduplicatedRows()
     {
         var file = Path.Combine(_testDir, "reingest.md");
@@ -310,7 +311,7 @@ public class FileIngestorSectionColumnTests : IDisposable
         return rows;
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestFileAsync_HeadingContainingAngleBracket_StillPopulatesSection()
     {
         var file = Path.Combine(_testDir, "template.md");

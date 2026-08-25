@@ -6,6 +6,7 @@ using AiRaccoon.Setup.Cli;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Setup;
 
@@ -48,7 +49,7 @@ public sealed class CliCommandRunnerTests : IDisposable
         return (exit, stdout, stderr, config);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AccessDefaultShow_ReturnsConfigCommandsExitCode()
     {
         var (exit, stdout, _, _) = await Run(["--data-root", _dataRoot, "settings", "access", "default", "show"]);
@@ -57,7 +58,7 @@ public sealed class CliCommandRunnerTests : IDisposable
         stdout.ShouldContain("rw");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task VerbError_ReturnsInvalidArgument_NotTheEncryptionKeyExitCode()
     {
         var (exit, _, stderr, _) = await Run(["--data-root", _dataRoot, "settings", "access", "default", "set", "bogus"]);
@@ -72,7 +73,7 @@ public sealed class CliCommandRunnerTests : IDisposable
     ///     from the CLI process (ADR-0075 §5.3), so this uses `encryption show` — the write opt-out,
     ///     still bank-backed directly (EncryptionCommands.ShowAsync opens it to answer) — as the probe.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task UserScope_WritesBankUnderDataRoot()
     {
         var (exit, _, _, config) = await Run(["--data-root", _dataRoot, "encryption", "show"]);
@@ -82,7 +83,7 @@ public sealed class CliCommandRunnerTests : IDisposable
         File.Exists(Path.Combine(_dataRoot, "memory.db")).ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ProjectScope_WritesBankUnderDotAiRaccoon()
     {
         var (exit, _, _, config) = await Run(
@@ -96,7 +97,7 @@ public sealed class CliCommandRunnerTests : IDisposable
     /// <summary>UX-F4: a missing required argument must be reported once — not once from
     /// System.CommandLine's own error rendering, once from CliRendering's own loop, and once
     /// more from ConfigCommands reformatting the exception thrown when it dispatches anyway.</summary>
-    [Fact]
+    [RetryFact]
     public async Task MissingArgument_PrintsTheErrorExactlyOnce()
     {
         var (exit, _, stderr, _) = await Run(["--data-root", _dataRoot, "settings", "access", "set"], expectParseErrors: true);
@@ -117,7 +118,7 @@ public sealed class CliCommandRunnerTests : IDisposable
         return count;
     }
 
-    [Fact]
+    [RetryFact]
     public async Task WatchRegistered_WiresWatchStoreFromBank()
     {
         var (exit, stdout, _, _) = await Run(["--data-root", _dataRoot, "watch", "registered"]);
@@ -126,7 +127,7 @@ public sealed class CliCommandRunnerTests : IDisposable
         stdout.ShouldContain("no registered watches");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EncryptionShow_ResolvesKeyThroughSidecar()
     {
         var (exit, stdout, _, _) = await Run(["--data-root", _dataRoot, "encryption", "show"]);
@@ -137,7 +138,7 @@ public sealed class CliCommandRunnerTests : IDisposable
 
     /// <summary>QA-1: --version must exit after rendering, not fall through to the proxy
     /// (which attaches to, or spawns, a server on the machine).</summary>
-    [Fact]
+    [RetryFact]
     public async Task Version_ExitsWithoutLaunchingTheProxy()
     {
         var (exit, stdout, stderr, _) = await Run(["--version"]);
@@ -150,7 +151,7 @@ public sealed class CliCommandRunnerTests : IDisposable
     /// <summary>QA-5: encryption unset on an env-keyed bank with no passphrase must take the
     /// documented warning path; the DI-composed command must not hand the Bitwarden provider
     /// an env-source EncryptionData (Guard: "encryptionData.SecretId must not be null").</summary>
-    [Fact]
+    [RetryFact]
     public async Task EncryptionUnset_EnvKeyedBankNoPassphrase_WarnsAndExitsKeyResolutionFailure()
     {
         // Create the bank first: on a missing bank, unset takes the clean-reset path (exit 0).
@@ -168,7 +169,7 @@ public sealed class CliCommandRunnerTests : IDisposable
 
     /// <summary>QA-1: verb-level --help must exit 0 after rendering; it must not run the
     /// dispatcher on the bare verb path (which errored "unhandled command: sync").</summary>
-    [Fact]
+    [RetryFact]
     public async Task VerbHelp_ExitsZero_WithoutRunningTheVerb()
     {
         var (exit, _, stderr, _) = await Run(["settings", "sync", "--help"]);

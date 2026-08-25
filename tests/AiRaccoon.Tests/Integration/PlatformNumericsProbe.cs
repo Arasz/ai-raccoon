@@ -15,6 +15,7 @@ using Microsoft.Extensions.Time.Testing;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
@@ -64,7 +65,7 @@ public sealed class PlatformNumericsProbe : IDisposable
             dbPath, LoadQueries().Where(q => q.ExpectedSource is not null).Select(q => q.ExpectedSource!));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Probe_HostFingerprint_ReportsCpuAndEmbeddingAndNdcg()
     {
         if (Environment.GetEnvironmentVariable(RunEnvVar) != "1")

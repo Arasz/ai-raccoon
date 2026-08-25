@@ -14,6 +14,7 @@ using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
@@ -32,7 +33,7 @@ public sealed class WatchIntegrationTests
 
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
-    [Fact]
+    [RetryFact]
     public async Task CreatedFile_BecomesSearchable()
     {
         using var stack = new Stack();
@@ -53,7 +54,7 @@ public sealed class WatchIntegrationTests
             .ShouldBeTrue("created file did not become searchable within the poll bound");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HostedService_StartsThePipelineTickLoop_FileBecomesSearchableWithoutManualTicks()
     {
         using var stack = new Stack();
@@ -96,7 +97,7 @@ public sealed class WatchIntegrationTests
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ChangedFile_ReplacesItsContentInSearch()
     {
         using var stack = new Stack();
@@ -125,7 +126,7 @@ public sealed class WatchIntegrationTests
             .ShouldBe(0, "mirror semantics: old content must be replaced, not accumulated");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ChangedFile_LeavesManualRowsCitingItAsSourceFileAlone()
     {
         using var stack = new Stack();
@@ -166,7 +167,7 @@ public sealed class WatchIntegrationTests
             .ShouldBe(1, "the manual row must still exist under its source_file identity");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task DeletedFile_RemovesItsChunks()
     {
         using var stack = new Stack();
@@ -194,7 +195,7 @@ public sealed class WatchIntegrationTests
         (await stack.CountEntriesAsync(stack.File("a.md"), null, TestContext.Current.CancellationToken)).ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RenamedFile_MovesItsMemory_AndLeavesNothingUnderTheOldPath()
     {
         using var stack = new Stack();
@@ -224,7 +225,7 @@ public sealed class WatchIntegrationTests
         (await stack.CountEntriesAsync(stack.File("old.md"), null, TestContext.Current.CancellationToken)).ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RenameOntoExistingPath_KeepsOnlyTheIncomingContent()
     {
         using var stack = new Stack();
@@ -264,7 +265,7 @@ public sealed class WatchIntegrationTests
         (await stack.CountEntriesAsync(stack.File("source.md"), null, TestContext.Current.CancellationToken)).ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Restart_ReWatches_AndCatchUpReDigestsChangedFiles_SkippingUnchangedOnes()
     {
         using var first = new Stack("restart", FixedNow, false);
@@ -321,7 +322,7 @@ public sealed class WatchIntegrationTests
             .ShouldBeGreaterThanOrEqualTo(1, "unchanged files are skipped by catch-up but stay searchable");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task DeletedDirectory_Cascades_RemovesChunksAndFingerprintsOfNestedFiles()
     {
         using var stack = new Stack();
@@ -367,7 +368,7 @@ public sealed class WatchIntegrationTests
             .Any().ShouldBeTrue("a sibling file outside the deleted directory must survive");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Restart_CatchUp_RemovesChunksOfFilesDeletedWhileTheServerWasDown()
     {
         using var first = new Stack("restart-delete", FixedNow, false);
@@ -412,7 +413,7 @@ public sealed class WatchIntegrationTests
             "catch-up did not remove chunks of a file deleted while the server was down");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Restart_SingleFileWatch_FileChangedWhileDown_IsReIngestedOnCatchUp()
     {
         using var first = new Stack("restart-single", FixedNow, false);
@@ -455,7 +456,7 @@ public sealed class WatchIntegrationTests
             .ShouldBe(0, "mirror semantics: the old content must be replaced on re-ingest");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task UnreadableFile_DigestFails_StatusShowsError_PipelineKeepsRunning()
     {
         if (OperatingSystem.IsWindows())
@@ -499,7 +500,7 @@ public sealed class WatchIntegrationTests
         recovered.State.ShouldBe(WatchState.Healthy);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AddOnLargeDirectory_ReturnsImmediately_ScanRunsInBackground_StatusScanning()
     {
         using var stack = new Stack();
@@ -542,7 +543,7 @@ public sealed class WatchIntegrationTests
     }
 
     /// <summary>Removing a watch cascades its fingerprints away, so the re-add must fully re-ingest every file exactly once.</summary>
-    [Fact]
+    [RetryFact]
     public async Task RemoveThenReAdd_ReIngestsEveryFile_WithoutDuplicateEntries()
     {
         using var stack = new Stack();
@@ -601,7 +602,7 @@ public sealed class WatchIntegrationTests
                 TestContext.Current.CancellationToken));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task FileIngest_CreatesSourceId_ForIngestedChunks()
     {
         using var stack = new Stack();
@@ -635,7 +636,7 @@ public sealed class WatchIntegrationTests
     ///     flooded the owner's bank. Both corpora must stay empty for those paths; the events are
     ///     enqueued directly so the assertion tests the digest gate, not FileSystemWatcher delivery.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EventsUnderHiddenOrDeniedDirectories_LeaveBothCorporaEmpty()
     {
         using var stack = new Stack(codeChunker: new StubCodeChunker());

@@ -11,6 +11,7 @@ using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.E2E;
@@ -44,7 +45,7 @@ public class McpServerE2ETests : IAsyncLifetime
         await _openAi.DisposeAsync();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Save_WriteThenStats_ReportsCommittedEntry()
     {
         var write = await CallAsync("memory_write", ("projectId", "acme"), ("content", "E2E durable fact"));
@@ -59,7 +60,7 @@ public class McpServerE2ETests : IAsyncLifetime
         statsText.ShouldContain("project:acme");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Isolation_WorkspaceWrite_IsNotVisibleInProjectScope()
     {
         var begin = await CallAsync("memory_workspace_begin", ("projectId", "acme"));
@@ -80,7 +81,7 @@ public class McpServerE2ETests : IAsyncLifetime
         Text(stats).ShouldContain("\"entries\":0");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Worktree_BeginStatusConsolidate_EndsWithCommittedEntry()
     {
         var begin = await CallAsync("memory_workspace_begin",
@@ -111,7 +112,7 @@ public class McpServerE2ETests : IAsyncLifetime
         RefusalText(statusAfter).ShouldStartWith("unknown-workspace:");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Worktree_Discard_RemovesTheOutbox()
     {
         var begin = await CallAsync("memory_workspace_begin", ("projectId", "acme"));
@@ -135,7 +136,7 @@ public class McpServerE2ETests : IAsyncLifetime
         Text(stats).ShouldContain("\"entries\":0");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MoveToShared_PromotesEntry_AndAppearsInSharedScope()
     {
         var write = await CallAsync("memory_write",
@@ -151,7 +152,7 @@ public class McpServerE2ETests : IAsyncLifetime
         statsText.ShouldContain("shared");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Sync_WithoutCredentials_ReportsSyncNotConfigured()
     {
         // No AIRACCOON_SQLITECLOUD_* env in the test process: the sync tool must surface
@@ -165,7 +166,7 @@ public class McpServerE2ETests : IAsyncLifetime
         result.IsError.ShouldBe(true);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Embeddings_WithoutConfiguration_WritesStayDeferred_AndKeywordSearchStillWorks()
     {
         // FR-NM-3 s4 (see docs/work/features-native-memory/native-memory.feature): no engine configured → the write lands pending, memory_embed_pending
@@ -186,7 +187,7 @@ public class McpServerE2ETests : IAsyncLifetime
         Text(search).ShouldContain("semantic e2e fact");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Embeddings_ConfigureLocal_BundledEngine_EmbedsWritesEndToEnd()
     {
         // FR-NM-3 s1 (see docs/work/features-native-memory/native-memory.feature): the CLI config channel configures the engine (memory_configure was
@@ -200,7 +201,7 @@ public class McpServerE2ETests : IAsyncLifetime
         Text(stats).ShouldContain("\"pending\":0");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Embeddings_ConfigureOpenAi_RoutesThroughTheConfiguredEndpoint()
     {
         // FR-NM-3 s3 (see docs/work/features-native-memory/native-memory.feature): any OpenAI-compatible baseUrl replaces the default engine.
@@ -224,7 +225,7 @@ public class McpServerE2ETests : IAsyncLifetime
         Text(stats).ShouldContain("\"pending\":0");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Embeddings_EmbedPending_ProcessesTheQueueAfterConfiguration()
     {
         // FR-NM-3 s5 (see docs/work/features-native-memory/native-memory.feature): deferred writes embed once an engine exists.

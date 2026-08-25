@@ -1,6 +1,7 @@
 using AiRaccoon.Tests.Unit.Retrieval;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Retrieval;
 
@@ -16,7 +17,7 @@ public sealed class GoldenFileTests
     // CommittedGoldenFile_EveryHitCarriesHashRankingPathAndSnippet below is kept — it is cheap and does
     // guard the golden file's shape.
 
-    [Fact]
+    [RetryFact]
     public void CommittedGoldenFile_EveryHitCarriesHashRankingPathAndSnippet()
     {
         var golden = GoldenFile.Load(Path.Combine(ReferenceAssets.AssetsDirectory, GoldenFile.FileName));

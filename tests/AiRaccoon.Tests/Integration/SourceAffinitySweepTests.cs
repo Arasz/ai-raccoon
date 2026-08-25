@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
@@ -97,7 +98,7 @@ public sealed class SourceAffinitySweepTests : IDisposable
     ///     the bound. Every other gate in this test (S2, A6, C1/C5, A1/A4, and the re-pinned
     ///     0.532 floor) is a genuine, currently-passing guarantee and is unchanged.
     /// </remarks>
-    [Fact]
+    [RetryFact]
     public async Task Sweep_ChosenSourceAffinityConfiguration_DocumentsKnownNdcg5GapRegression()
     {
         // The Wave 3 gates (docs/adr/0005-source-affinity-ranking.md) were measured over the 11

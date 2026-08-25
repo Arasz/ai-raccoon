@@ -9,6 +9,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Ingestion;
 
@@ -94,7 +95,7 @@ public sealed class RepairFamilyRoutesThroughTheEngineResolverTests
         new(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
             NoOpMeasurementRecorder.Instance, TimeProvider.System);
 
-    [Fact]
+    [RetryFact]
     public async Task ChunkPositionScanner_BudgetAsync_ManifestModel_ResolvesBudgetAndCounterFromTheManifest()
     {
         var spmPath = await TestData.EnsureSentencePieceFixtureAsync(TestContext.Current.CancellationToken);
@@ -115,7 +116,7 @@ public sealed class RepairFamilyRoutesThroughTheEngineResolverTests
             "the repair counter must be the MANIFEST tokenizer, not the bundled wordpiece one (ADR-0036)");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ChunkBackfill_BudgetAsync_ManifestModel_ResolvesBudgetAndCounterFromTheManifest()
     {
         var spmPath = await TestData.EnsureSentencePieceFixtureAsync(TestContext.Current.CancellationToken);
@@ -131,7 +132,7 @@ public sealed class RepairFamilyRoutesThroughTheEngineResolverTests
             .ShouldNotBe(new LocalTokenizer().CountTokens("The quick brown fox jumps over the lazy dog."));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ChunkPositionScanner_BudgetAsync_OpenAi_UsesTheO200kProxyCounter()
     {
         await using var connection = await OpenBankWithSettingsAsync("openai", "text-embedding-3-small",

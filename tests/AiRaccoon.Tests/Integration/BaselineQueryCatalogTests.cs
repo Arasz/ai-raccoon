@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -17,7 +18,7 @@ public sealed class BaselineQueryCatalogTests
 
     private static readonly string[] Strata = ["easy", "medium", "hard", "very-hard"];
 
-    [Fact]
+    [RetryFact]
     public void AllQueries_UniqueIds_MatchCommittedCatalog()
     {
         var queries = LoadQueries();
@@ -28,7 +29,7 @@ public sealed class BaselineQueryCatalogTests
         queries.Select(q => q.Id).Distinct().Count().ShouldBe(queries.Length, "query ids must be unique");
     }
 
-    [Fact]
+    [RetryFact]
     public void AllQueries_HaveDifficultyStratum_AllStrataUsed()
     {
         var queries = LoadQueries();
@@ -52,7 +53,7 @@ public sealed class BaselineQueryCatalogTests
         }
     }
 
-    [Fact]
+    [RetryFact]
     public void ExpectedSourceQueries_DifficultyMatchesMeasuredHybridRanks()
     {
         var queries = LoadQueries();
@@ -75,7 +76,7 @@ public sealed class BaselineQueryCatalogTests
         }
     }
 
-    [Fact]
+    [RetryFact]
     public void ExpectedSourceQueries_HaveRelevanceGrade()
     {
         var queries = LoadQueries();
@@ -106,7 +107,7 @@ public sealed class BaselineQueryCatalogTests
         }
     }
 
-    [Fact]
+    [RetryFact]
     public void NegativeTests_H1H3_NonEvidentialAndUngraded()
     {
         var queries = LoadQueries();

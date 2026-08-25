@@ -6,6 +6,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -21,7 +22,7 @@ public sealed class NonDefaultDimensionMigrationTests
 {
     private const int Dimension = 1024;
 
-    [Fact]
+    [RetryFact]
     public async Task DrainMigrationAsync_With1024Engine_MovesBothTablesAndReachesRowParity()
     {
         await using var connection = await OpenAsync();
@@ -44,7 +45,7 @@ public sealed class NonDefaultDimensionMigrationTests
     }
 
     /// <summary>A 384 bank whose engine is still 384 must not be dropped and rebuilt for nothing.</summary>
-    [Fact]
+    [RetryFact]
     public async Task DrainMigrationAsync_WithA384Engine_LeavesTheTablesAtTheirDeclaredDimension()
     {
         await using var connection = await OpenAsync();

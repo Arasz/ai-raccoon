@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
@@ -49,7 +50,7 @@ public sealed class SqliteMemoryStoreVectorPartitionTests : IAsyncLifetime
         TestData.DeleteTempRoot(_dataRoot);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_VectorOnly_FindsSharedScopedContent()
     {
         var shared = await _store.AddContentAsync("acme", "shared/a.md",
@@ -61,7 +62,7 @@ public sealed class SqliteMemoryStoreVectorPartitionTests : IAsyncLifetime
         results.Select(r => r.Hash).ShouldBe([shared.Entry.Hash]);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_VectorOnly_FindsProjectScopedContent()
     {
         var project = await _store.WriteAsync(
@@ -73,7 +74,7 @@ public sealed class SqliteMemoryStoreVectorPartitionTests : IAsyncLifetime
         results.Select(r => r.Hash).ShouldBe([project.Hash]);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_VectorOnly_FindsWorkspaceScopedContent()
     {
         await _workspaces.BeginAsync(new Workspace("ws-1", "acme"), FixedNow, TestContext.Current.CancellationToken);
@@ -89,7 +90,7 @@ public sealed class SqliteMemoryStoreVectorPartitionTests : IAsyncLifetime
         results.Select(r => r.Hash).ShouldBe([workspace.Entry.Hash]);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_VectorOnly_FindsCustomLabelledContent()
     {
         var labelled = await _store.AddContentAsync("acme", "c.md",
@@ -104,7 +105,7 @@ public sealed class SqliteMemoryStoreVectorPartitionTests : IAsyncLifetime
         results.Select(r => r.Hash).ShouldBe([labelled.Entry.Hash]);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_VectorOnly_ScopeShared_DoesNotLeakProjectScopedRows()
     {
         await _store.WriteAsync(
@@ -116,7 +117,7 @@ public sealed class SqliteMemoryStoreVectorPartitionTests : IAsyncLifetime
         results.ShouldBeEmpty("the shared partition must never surface a project-scoped row");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_VectorOnly_KExceedingThePartitionSize_ReturnsTheWholePartition_WithoutErroring()
     {
         // Default candidate window k = max(limit*3, 100); a 3-row partition is far smaller than

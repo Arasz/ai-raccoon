@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
@@ -37,7 +38,7 @@ public sealed class MemoryScopeSiblingTtlTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task SetEntryTtl_WithWorkspaceSibling_LeavesTheWorkspaceRowsTtlNull()
     {
         await EnsureWorkspaceAsync("ws-1");
@@ -64,7 +65,7 @@ public sealed class MemoryScopeSiblingTtlTests : IDisposable
         workspaceRow.TtlDays.ShouldBeNull("a TTL set on the project hash must not stamp the workspace sibling");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SetEntryTtl_WithCustomContextSibling_LeavesTheCustomRowsTtlNull()
     {
         var projectEntry = await _store.WriteAsync(

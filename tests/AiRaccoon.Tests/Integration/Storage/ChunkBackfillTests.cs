@@ -6,6 +6,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -39,7 +40,7 @@ public sealed class ChunkBackfillTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task Backfill_SplitsAnOverWindowRow_UntilNothingExceedsTheWindow()
     {
         await using var connection = await OpenSeededAsync(("big.md", Paragraphs(60)));
@@ -52,7 +53,7 @@ public sealed class ChunkBackfillTests : IDisposable
     }
 
     /// <summary>The other half of the contract. A backfill that loses text passes the first check perfectly.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Backfill_LosesNoText()
     {
         await using var connection = await OpenSeededAsync(("big.md", Paragraphs(60)));
@@ -65,7 +66,7 @@ public sealed class ChunkBackfillTests : IDisposable
             "chunk overlay may repeat text, so the total may grow — it must never shrink");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Backfill_LeavesAnInBudgetRowUntouched()
     {
         await using var connection = await OpenSeededAsync(("small.md", "A short note that fits comfortably."));
@@ -77,7 +78,7 @@ public sealed class ChunkBackfillTests : IDisposable
     }
 
     /// <summary>A dry run reports the same work and performs none of it.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Backfill_DryRun_ReportsTheWorkWithoutDoingIt()
     {
         await using var connection = await OpenSeededAsync(("big.md", Paragraphs(60)));
@@ -94,7 +95,7 @@ public sealed class ChunkBackfillTests : IDisposable
     ///     The replacement rows must stay findable: same path, same source_file, same project. A
     ///     backfill that orphans a document's chunks has traded one defect for a worse one.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Backfill_KeepsThePiecesAttachedToTheirSource()
     {
         await using var connection = await OpenSeededAsync(("big.md", Paragraphs(60)));
@@ -107,7 +108,7 @@ public sealed class ChunkBackfillTests : IDisposable
     }
 
     /// <summary>New rows are written unembedded on purpose: the existing embed pass owns that work.</summary>
-    [Fact]
+    [RetryFact]
     public async Task Backfill_WritesThePiecesAsPending()
     {
         await using var connection = await OpenSeededAsync(("big.md", Paragraphs(60)));

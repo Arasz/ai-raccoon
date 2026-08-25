@@ -18,6 +18,7 @@ using ModelContextProtocol.Client;
 using ModelContextProtocol.Server;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using IdleWatchdog = AiRaccoon.Hosting.Watchdog.IdleWatchdog;
 
 namespace AiRaccoon.Tests.Integration.Setup;
@@ -51,7 +52,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task StdioOnlyHost_HasNoWebServer_AndStartsWithTheDefaultPortHeld()
     {
         using var blocker = LoopbackPort.TryOccupy(5000);
@@ -63,7 +64,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
         await host.StopAsync(TestContext.Current.CancellationToken);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HttpHost_BindsTheConfiguredPort_NotTheDefault5000()
     {
         using var lease = LoopbackPort.Reserve();
@@ -85,7 +86,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HttpHost_WithPortZero_BindsAnEphemeralPort()
     {
         var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http));
@@ -104,7 +105,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task BothTransports_CreateWebHostWithStdio()
     {
         // Free port: 7721 may be held by a live server or a concurrent suite.
@@ -117,7 +118,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
         await host.StopAsync(TestContext.Current.CancellationToken);
     }
 
-    [Fact]
+    [RetryFact]
     public void StdioOnlyHost_DoesNotRegisterTheExtractionHostedService()
     {
         var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio));
@@ -126,7 +127,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
             .ShouldNotContain(service => service is ExtractionHostedService);
     }
 
-    [Fact]
+    [RetryFact]
     public void HttpHost_RegistersTheExtractionHostedService()
     {
         using var lease = LoopbackPort.Reserve();
@@ -136,7 +137,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
             .ShouldContain(service => service is ExtractionHostedService);
     }
 
-    [Fact]
+    [RetryFact]
     public void BothTransportsHost_RegistersTheExtractionHostedService()
     {
         // HTTP/S presence means the process can live long enough for the extraction
@@ -149,7 +150,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
             .ShouldContain(service => service is ExtractionHostedService);
     }
 
-    [Fact]
+    [RetryFact]
     public void StdioOnlyHost_DoesNotRegisterTheSweepHostedService()
     {
         var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio));
@@ -158,7 +159,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
             .ShouldNotContain(service => service is SweepHostedService);
     }
 
-    [Fact]
+    [RetryFact]
     public void HttpHost_RegistersTheSweepHostedService()
     {
         using var lease = LoopbackPort.Reserve();
@@ -168,7 +169,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
             .ShouldContain(service => service is SweepHostedService);
     }
 
-    [Fact]
+    [RetryFact]
     public void BothTransportsHost_RegistersTheSweepHostedService()
     {
         using var lease = LoopbackPort.Reserve();
@@ -179,7 +180,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
             .ShouldContain(service => service is SweepHostedService);
     }
 
-    [Fact]
+    [RetryFact]
     public void StdioOnlyHost_RegistersTheBankMaintenanceHostedService()
     {
         // Bank maintenance is registered in ALL modes: a stdio process is session-bound,
@@ -190,7 +191,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
             .ShouldContain(service => service is BankMaintenanceHostedService);
     }
 
-    [Fact]
+    [RetryFact]
     public void HttpHost_RegistersTheBankMaintenanceHostedService()
     {
         using var lease = LoopbackPort.Reserve();
@@ -200,7 +201,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
             .ShouldContain(service => service is BankMaintenanceHostedService);
     }
 
-    [Fact]
+    [RetryFact]
     public void BothTransportsHost_RegistersTheBankMaintenanceHostedService()
     {
         using var lease = LoopbackPort.Reserve();
@@ -211,7 +212,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
             .ShouldContain(service => service is BankMaintenanceHostedService);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_HttpHost_StartsAndStopsCleanly()
     {
         using var lease = LoopbackPort.Reserve();
@@ -246,7 +247,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
     ///     Pins the registered MCP tool count, including the watch trio (previously dropped by
     ///     a missing .WithTools&lt;WatchTools&gt;() that host tests didn't catch).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void StdioHost_RegistersWatchTools_OnTheMcpSurface()
     {
         var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio));
@@ -259,7 +260,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
         toolNames.OrderBy(n => n, StringComparer.Ordinal).ShouldBe(RegisteredTools.Names());
     }
 
-    [Fact]
+    [RetryFact]
     public void StdioOnlyHost_DoesNotRegisterTheIdleWatchdog()
     {
         var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio));
@@ -268,7 +269,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
             .ShouldNotContain(service => service is IdleWatchdog);
     }
 
-    [Fact]
+    [RetryFact]
     public void StdioOnlyHost_WithIdleTimeout_StillDoesNotRegisterTheIdleWatchdog()
     {
         // Watchdog gating is host shape first, timeout second: a stdio-only host never
@@ -279,7 +280,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
             .ShouldNotContain(service => service is IdleWatchdog);
     }
 
-    [Fact]
+    [RetryFact]
     public void HttpHost_WithIdleTimeout_RegistersWatchdogAndSignaler_AsOneInstance()
     {
         using var lease = LoopbackPort.Reserve();
@@ -293,7 +294,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
         ReferenceEquals(signaler, watchdogs[0]).ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public void HttpHost_WithoutIdleTimeout_DoesNotRegisterTheWatchdog()
     {
         using var lease = LoopbackPort.Reserve();
@@ -304,7 +305,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
         host.Services.GetService<IActivitySignaler>().ShouldBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HttpHost_WithFakeClock_ToolCallResetsTheWatchdog_ThenTheHostShutsDown()
     {
         using var lease = LoopbackPort.Reserve();

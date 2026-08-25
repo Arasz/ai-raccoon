@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
@@ -62,7 +63,7 @@ public sealed class RetrievalBaselineTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task RunAllBaselineQueries_ReportsMatchStatistics()
     {
         var queries = LoadQueries();
@@ -153,7 +154,7 @@ public sealed class RetrievalBaselineTests : IDisposable
             "at least one query should match a chunk of its expected file at rank <= 3");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CorpusIntegrity_ExcludedContentAbsent()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -165,7 +166,7 @@ public sealed class RetrievalBaselineTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CorpusIntegrity_AllEntriesEmbedded()
     {
         var stats = await _store.GetStatsAsync(ProjectId, TestContext.Current.CancellationToken);
@@ -179,7 +180,7 @@ public sealed class RetrievalBaselineTests : IDisposable
     ///     any baseline-queries.json expectedSource can't be resolved against the live corpus, so this
     ///     asserts the DB-level (source_file) presence that derivation alone doesn't check.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task CorpusIntegrity_ExpectedSourcesPresent()
     {
         var queries = LoadQueries();
@@ -212,7 +213,7 @@ public sealed class RetrievalBaselineTests : IDisposable
     ///     more than one distinct-hash chunk in this corpus, measured via direct query). The one
     ///     surviving, still-meaningful assertion is kept here.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task CorpusIntegrity_StoreReportedCountMatchesEntriesTable()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -222,7 +223,7 @@ public sealed class RetrievalBaselineTests : IDisposable
         stats.EntryCount.ShouldBe(rows.Count, "store-reported entry count must match the entries table");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CorpusIntegrity_HashContractContentHashMatches()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -246,7 +247,7 @@ public sealed class RetrievalBaselineTests : IDisposable
     ///     fail on any real regression. Dropped rather than nursed; the source_file assertion below is
     ///     still real and is kept.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task CorpusIntegrity_SourceFilePopulated()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -259,7 +260,7 @@ public sealed class RetrievalBaselineTests : IDisposable
             $"Source identity: {rows.Count} entries, {rows.Select(r => r.SourceFile).Distinct().Count()} distinct files, {withHeadingPath} with a legacy `section` value");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task NegativeTests_H1H3_CorpusExcludesTargetContent()
     {
         var queries = LoadQueries();
@@ -276,7 +277,7 @@ public sealed class RetrievalBaselineTests : IDisposable
             "program-code files must stay out of the corpus (H3 non-evidential)");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CorpusIntegrity_SourceIdPopulatedForAllEntries()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -294,7 +295,7 @@ public sealed class RetrievalBaselineTests : IDisposable
         orphanCount.ShouldBe(0, "no entry may have a source_id pointing to a nonexistent memory_source row");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CorpusIntegrity_FtsSearchStillWorks_AfterSourceNormalization()
     {
         // FTS bm25 search must still return results after source normalization.

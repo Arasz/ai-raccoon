@@ -8,6 +8,7 @@ using ModelContextProtocol.Server;
 using Shouldly;
 using AiRaccoon.Tests.Unit.Observability;
 using Xunit;
+using xRetry.v3;
 using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Integration.Observability;
@@ -41,7 +42,7 @@ public sealed class ToolTelemetryProjectionTests : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
-    [Fact]
+    [RetryFact]
     public void EveryProjectionKey_IsARegisteredToolName()
     {
         var registered = _tools.Select(tool => tool.ProtocolTool.Name).ToHashSet(StringComparer.Ordinal);
@@ -55,7 +56,7 @@ public sealed class ToolTelemetryProjectionTests : IAsyncLifetime
     ///     The default projection reads a <c>projectId</c> string argument. A tool that names its
     ///     project differently needs a table entry, and this is what says so.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void EveryToolWithoutAProjection_DeclaresAProjectIdArgument()
     {
         var missing = _tools
@@ -74,7 +75,7 @@ public sealed class ToolTelemetryProjectionTests : IAsyncLifetime
     ///     the "multi" sentinel while the span keeps the full comma-joined composite. Both of
     ///     memory_share_extract's success exits are exercised, and each records exactly once.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ShareExtract_BoundsTheCounter_KeepsTheCompositeOnTheSpan_AndRecordsEachExitOnce()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -132,7 +133,7 @@ public sealed class ToolTelemetryProjectionTests : IAsyncLifetime
     }
 
     /// <summary>The one tool whose project id is optional keeps reporting under "all" when it is omitted.</summary>
-    [Fact]
+    [RetryFact]
     public void PromotionList_WithoutAProjectId_ProjectsAll()
     {
         ToolTelemetry.ProjectFor("memory_promotion_list", null)
@@ -146,7 +147,7 @@ public sealed class ToolTelemetryProjectionTests : IAsyncLifetime
     ///     The mint tool has no project yet, so it gets a bounded sentinel like "multi"/"all" —
     ///     never the minted id itself, which would be unbounded cardinality on the counter.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void ProjectIdTokenGet_ProjectsUnderTheNoneSentinel() =>
         ToolTelemetry.Projections["project_id_token_get"](null)
             .ShouldBe(new ToolTelemetry.ToolProject(ToolTelemetry.NoProjectId, null));

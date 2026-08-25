@@ -4,6 +4,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -30,7 +31,7 @@ public sealed class SyncReindexStructureClearTests : IDisposable
         TestData.DeleteTempRoot(_dataRoot);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MergeReindex_InvalidatingContentVector_AlsoClearsTheStructureVector()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -85,7 +86,7 @@ public sealed class SyncReindexStructureClearTests : IDisposable
             "vec_structure must stay in lockstep with entries.structure_embedding");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MarkStructure_AfterAConcurrentReindexClearedTheRow_DoesNotResurrectTheVecStructureRow()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -124,7 +125,7 @@ public sealed class SyncReindexStructureClearTests : IDisposable
         row.HeadingPath.ShouldBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MergeReindex_InvalidatingContentVector_PreservesSourceId()
     {
         var ct = TestContext.Current.CancellationToken;

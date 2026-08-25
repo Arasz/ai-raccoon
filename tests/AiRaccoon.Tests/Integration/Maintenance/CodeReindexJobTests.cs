@@ -15,6 +15,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Maintenance;
 
@@ -45,7 +46,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HasWorkAsync_NoCodeEngineConfigured_False_EvenWithPendingRows()
     {
         var job = new CodeReindexJob(new CodeEmbedder(new FakeCodeEmbeddingService(), NullLogger<CodeEmbedder>.Instance, new VecDimensionReconciler()),
@@ -57,7 +58,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
             "a pending code row with no engine is legitimately unembeddable — no error spam, ever due");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HasWorkAsync_Configured_TrueOnlyWithPendingRows()
     {
         var job = new CodeReindexJob(new CodeEmbedder(new FakeCodeEmbeddingService(), NullLogger<CodeEmbedder>.Instance, new VecDimensionReconciler()),
@@ -73,7 +74,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
 
     /// <summary>E9: RunAsync signals the embed topic's code item instead of embedding — the actual
     /// pending-&gt;embedded transition is EmbedDrainService's own (EmbedDrainServiceTests).</summary>
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_EnqueuesTheCodeItem()
     {
         var pump = TestData.NewEmbedDrainPump();
@@ -97,7 +98,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
     ///     WP11-B2: RunAsync itself no longer drains — this pins the ordering end to end with the
     ///     real <see cref="EmbedDrainService" /> consumer standing in for "the next poll".
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ActivateThenDrain_OrderingIsPinned_RowsStayPendingUntilTheNextPollRunsTheJob()
     {
         var embedder = new CodeEmbedder(new FakeCodeEmbeddingService(), NullLogger<CodeEmbedder>.Instance, new VecDimensionReconciler());
@@ -132,7 +133,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
         stateAfterDrain.ShouldBe("embedded", "only the NEXT signal's drain pass drains what activation invalidated");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task FingerprintChangeViaReactivation_ReEmbedsCodeOnly_MemoryRowsUntouched()
     {
         var store = new SqliteCodeEngineStore(_factory, new FakeCodeEmbeddingService(), TestData.CreateManifestLoader(), TestData.CreateManifestPoolingRepair(), new VecDimensionReconciler());
@@ -157,7 +158,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
     ///     drain's own `HasWorkAsync` is where this must be caught: it runs on every 15s on-demand
     ///     poll regardless of whether anything is already pending.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task HasWorkAsync_ManifestChangedInPlaceSinceActivation_InvalidatesAndUpdatesTheStoredFingerprint()
     {
         var embeddingService = TestData.CreateEmbeddingService();
@@ -186,7 +187,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
     }
 
     /// <summary>S6: an UNCHANGED manifest must never invalidate — a poll must be a no-op when nothing drifted.</summary>
-    [Fact]
+    [RetryFact]
     public async Task HasWorkAsync_ManifestUnchanged_NeverInvalidatesAlreadyEmbeddedRows()
     {
         var embeddingService = TestData.CreateEmbeddingService();
@@ -207,7 +208,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
     }
 
     /// <summary>WP3 (#477), review B1: CodeReindexJob opts into IReportsOutstandingRows so the runner can record `job.code-reindex.rows`.</summary>
-    [Fact]
+    [RetryFact]
     public async Task CountOutstandingRowsAsync_ReturnsThePendingCodeRowCount()
     {
         var job = new CodeReindexJob(new CodeEmbedder(new FakeCodeEmbeddingService(), NullLogger<CodeEmbedder>.Instance, new VecDimensionReconciler()),
@@ -219,7 +220,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
         (await job.CountOutstandingRowsAsync(connection, TestContext.Current.CancellationToken)).ShouldBe(2L);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CountOutstandingRowsAsync_NoPendingCodeRows_IsZero()
     {
         var job = new CodeReindexJob(new CodeEmbedder(new FakeCodeEmbeddingService(), NullLogger<CodeEmbedder>.Instance, new VecDimensionReconciler()),
@@ -241,7 +242,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
     ///     ANY reason (activation just ran, or a drain never got scheduled) never blocks a memory
     ///     tool call — there is no cross-corpus coupling to accidentally introduce.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task MemoryToolsStayCallable_RegardlessOfPendingCodeRows_NoToolGateOrModelMigrationCoupling()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);

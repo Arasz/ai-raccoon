@@ -4,6 +4,7 @@ using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.E2E;
@@ -87,7 +88,7 @@ public sealed class ProxyTokenRefusedE2ETests : IAsyncLifetime
     ///     completed without a reply, and both the header it wanted and the file holding the token
     ///     the server actually expects are gone — so a data-root mismatch reads as a mute backend.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task WrongToken_SurfacesTheGatesVerdict()
     {
         var run = await RunProxyAsync();

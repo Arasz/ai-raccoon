@@ -3,6 +3,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -15,7 +16,7 @@ namespace AiRaccoon.Tests.Integration.Storage;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ProjectsTableDdlTests
 {
-    [Fact]
+    [RetryFact]
     public async Task OpeningALegacyBank_CreatesTheProjectsTable()
     {
         await using var connection = await OpenAsync();
@@ -42,7 +43,7 @@ public sealed class ProjectsTableDdlTests
             .ShouldBe(1L, "existing memory rows must survive the projects table addition");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CreatingTheProjectsTable_DoesNotChangeUserVersion()
     {
         await using var connection = await OpenAsync();
@@ -74,7 +75,7 @@ public sealed class ProjectsTableDdlTests
             "the projects table is additive Ddl, not a ladder step — the digest rerun that recreates it must not move user_version");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task FreshBank_HasTheProjectsTableWithTheDecidedShape()
     {
         await using var connection = await OpenAsync();

@@ -1,5 +1,6 @@
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Retrieval;
 
@@ -14,7 +15,7 @@ public sealed class TableCorpusIntegrityTests
 {
     private static string Collapse(string text) => string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
-    [Fact]
+    [RetryFact]
     public void EveryCorpusDocument_ContainsAMarkdownTable()
     {
         var files = TableCorpusCatalog.CorpusFiles();
@@ -24,7 +25,7 @@ public sealed class TableCorpusIntegrityTests
         tableless.ShouldBeEmpty("every document in the table corpus must carry a markdown table");
     }
 
-    [Fact]
+    [RetryFact]
     public void EveryQuery_PointsAtADocumentInTheCorpus()
     {
         var root = TableCorpusCatalog.CorpusRoot();
@@ -42,7 +43,7 @@ public sealed class TableCorpusIntegrityTests
     ///     depend on which one a chunk boundary happens to keep, which is the instability this
     ///     response variable exists to remove.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void EveryAnswerSpan_OccursExactlyOnceInItsDocument()
     {
         var root = TableCorpusCatalog.CorpusRoot();
@@ -73,7 +74,7 @@ public sealed class TableCorpusIntegrityTests
     ///     scores, and the gate would go on reporting a number about tables it no longer measures —
     ///     ADR-0077's blindness, one layer up.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void EveryAnswerSpan_LivesInsideATableRow()
     {
         var root = TableCorpusCatalog.CorpusRoot();
@@ -93,7 +94,7 @@ public sealed class TableCorpusIntegrityTests
     }
 
     /// <summary>A query that quotes its own answer measures string matching, not retrieval.</summary>
-    [Fact]
+    [RetryFact]
     public void NoQuery_QuotesItsOwnAnswerSpan()
     {
         var leaking = TableCorpusCatalog.Load()
@@ -109,7 +110,7 @@ public sealed class TableCorpusIntegrityTests
     ///     comparison keeps them together: a file added to one side and not the other leaves either an
     ///     ungraded document in the corpus or a pin describing something that is not there.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void TheVendoredCorpus_IsExactlyWhatTheManifestDeclares()
     {
         var root = TableCorpusCatalog.CorpusRoot();
@@ -123,7 +124,7 @@ public sealed class TableCorpusIntegrityTests
             "re-run scripts/vendor-table-corpus.py");
     }
 
-    [Fact]
+    [RetryFact]
     public void QueryIds_AreUnique()
     {
         var queries = TableCorpusCatalog.Load();

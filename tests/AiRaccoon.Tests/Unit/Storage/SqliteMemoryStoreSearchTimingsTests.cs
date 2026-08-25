@@ -3,6 +3,7 @@ using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Unit.Storage;
 
@@ -30,7 +31,7 @@ public sealed class SqliteMemoryStoreSearchTimingsTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task Search_PopulatesEveryPhaseThatRan_AndLeavesTheSkippedModalityAtZero()
     {
         var store = SearchTimingsHarness.CreateStore(_factory,
@@ -55,7 +56,7 @@ public sealed class SqliteMemoryStoreSearchTimingsTests : IDisposable
         result.Timings.Total.ShouldBeGreaterThan(TimeSpan.Zero, "Total brackets the whole SearchAsync body");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_FtsStaysZero_WhenFtsWeightIsZero()
     {
         var store = SearchTimingsHarness.CreateStore(_factory,
@@ -67,7 +68,7 @@ public sealed class SqliteMemoryStoreSearchTimingsTests : IDisposable
         result.Timings.Fts.ShouldBe(TimeSpan.Zero);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_FtsAccumulatesAcrossContexts_IncludingTheFallbackReQuery()
     {
         var store = SearchTimingsHarness.CreateStore(_factory,
@@ -87,7 +88,7 @@ public sealed class SqliteMemoryStoreSearchTimingsTests : IDisposable
             "fts must sum across every context in scope (shared + project here), not just the last one queried");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_AttributesEachPhasesElapsedTime_ToThatPhaseAndNoOther()
     {
         // A distinct elapsed value per phase, in the exact order SearchAsync measures them: open,

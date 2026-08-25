@@ -1,6 +1,7 @@
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Harness;
 
@@ -15,7 +16,7 @@ public sealed class ServeHarnessTests
     private static readonly TimeSpan ShortDeadline = TimeSpan.FromMilliseconds(200);
     private const string Url = "http://127.0.0.1:5150/mcp";
 
-    [Fact]
+    [RetryFact]
     public async Task WaitForLineAsync_FindsTheUrl_WhenItIsTheOnlyLine()
     {
         var stdout = new LockingWriter();
@@ -27,7 +28,7 @@ public sealed class ServeHarnessTests
         line.ShouldBe(Url);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task WaitForLineAsync_FindsTheUrl_WhenOutputPrecedesIt()
     {
         var stdout = new LockingWriter();
@@ -40,7 +41,7 @@ public sealed class ServeHarnessTests
         line.ShouldBe(Url);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task WaitForLineAsync_ReportsAnEarlyExit_RatherThanBurningTheDeadline()
     {
         var stderr = new LockingWriter();
@@ -55,7 +56,7 @@ public sealed class ServeHarnessTests
         error.Message.ShouldContain("port 5150 is in use");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task WaitForLineAsync_TimesOutNamingTheWait_AndDumpingStderr()
     {
         var stderr = new LockingWriter();

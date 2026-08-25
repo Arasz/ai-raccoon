@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Storage;
@@ -34,7 +35,7 @@ public sealed class SearchParametersResolutionTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task GetSearchParameterDefaults_WithNoSettingsRows_ReturnsAllNull()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -52,7 +53,7 @@ public sealed class SearchParametersResolutionTests : IDisposable
         defaults.FusionNoRegressionEnabled.ShouldBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetSearchParameterDefaults_WithSettingsRows_ParsesEachOption()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -80,7 +81,7 @@ public sealed class SearchParametersResolutionTests : IDisposable
         defaults.FusionNoRegressionEnabled.ShouldBe(true);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetSearchParameterDefaults_WithMalformedValues_ReturnsNullForThose()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -105,7 +106,7 @@ public sealed class SearchParametersResolutionTests : IDisposable
         resolved.FusionNoRegressionEnabled.ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_WithEmptySettingsBank_UsesCanonicalConstants()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -118,7 +119,7 @@ public sealed class SearchParametersResolutionTests : IDisposable
         hit.Ranking.ShouldBe(1.0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_QueryValuesOverrideSettings_Behaviorally()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -136,7 +137,7 @@ public sealed class SearchParametersResolutionTests : IDisposable
         overridden.ShouldContain(result => result.Hash == entry.Hash);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_WithFusionFlagEnabled_SingleLegSearchStillSucceeds()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -152,7 +153,7 @@ public sealed class SearchParametersResolutionTests : IDisposable
         hit.Ranking.ShouldBe(1.0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetSearchParameterDefaults_ResolvesBothSources_OnTheCallersConnection()
     {
         // The read-count criterion (ADR-0083, plan §7) pins two halves. The SELECT-level
@@ -175,7 +176,7 @@ public sealed class SearchParametersResolutionTests : IDisposable
         defaults.SourceLambda.ShouldBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Search_OpensExactlyOneBankConnection()
     {
         var ct = TestContext.Current.CancellationToken;

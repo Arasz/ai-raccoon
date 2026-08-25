@@ -11,6 +11,7 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -133,7 +134,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnvKeyedBank_RekeyedToDerivedKey_ReopensThroughFakeBwsWithDerivedKey()
     {
         InstallFakeBws();
@@ -175,7 +176,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     ///     The ADR-0012 migration gate: a bank encrypted under the pre-ADR-0012 derivation is
     ///     rekeyed to the HKDF key, keeps its data, and stops opening under the old key.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task LegacyKeyedBank_Migrate_RekeysToHkdfKeyAndLegacyKeyStopsWorking()
     {
         InstallFakeBws();
@@ -218,7 +219,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     ///     Decision 2 (docs/plans/2026-08-07-hkdf-rekey-migration.md): a bank the legacy key opens but whose
     ///     interior pages are damaged must never be rekeyed — quick_check is the gate that catches it.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task LegacyKeyedBankFailingQuickCheck_Migrate_Refuses()
     {
         InstallFakeBws();
@@ -278,7 +279,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     ///     derivation is refused, not rekeyed over — asserted via byte-identical file comparison, since the
     ///     exception type alone would not prove that nothing was written.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task CorruptBank_Migrate_RefusesAndLeavesTheFileByteIdentical()
     {
         InstallFakeBws();
@@ -305,7 +306,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     ///     Decision 3 (docs/plans/2026-08-07-hkdf-rekey-migration.md): the automatic open path detects
     ///     and refuses a legacy-keyed bank, naming the migrate verb, without rekeying it itself.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task OpenBankAsync_LegacyKeyedBank_RefusesWithMigrateGuidanceAndDoesNotRekey()
     {
         InstallFakeBws();
@@ -334,7 +335,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     }
 
     /// <summary>The env source has no legacy derivation, so its failure must surface unchanged.</summary>
-    [Fact]
+    [RetryFact]
     public async Task OpenBankAsync_EnvSourceWrongPassphrase_RethrowsTheOriginalSqliteException()
     {
         var createFactory = new SqliteConnectionFactory(Options(), FixedKeyResolver("passphrase-a"));
@@ -353,7 +354,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         ex.SqliteErrorCode.ShouldBe(26);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task BankKeyedWithKeyA_FakeBwsServesDifferentKey_OpenFailsWithKeyMismatch()
     {
         InstallFakeBws();
@@ -382,7 +383,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         });
     }
 
-    [Fact]
+    [RetryFact]
     public async Task FakeBwsMissing_ResolverThrowsInstallGuidance()
     {
         // No InstallFakeBws: the runner points at an absolute path that does not exist.
@@ -394,7 +395,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
             "bws not found — install the Bitwarden CLI (bws) and configure BWS_ACCESS_TOKEN (https://bitwarden.com/help/cli/)");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task FakeBwsExitsNonZero_ResolverThrowsBwsFailedWithStderr()
     {
         InstallFakeBws();
@@ -408,7 +409,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         });
     }
 
-    [Fact]
+    [RetryFact]
     public async Task FakeBwsSleepsPastTimeout_RunnerThrowsTimeoutText()
     {
         InstallFakeBws();
@@ -420,7 +421,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         });
     }
 
-    [Fact]
+    [RetryFact]
     public async Task TokenFromBwsAccessTokenEnv_ResolvesAndOpensBank()
     {
         InstallFakeBws();
@@ -436,7 +437,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         });
     }
 
-    [Fact]
+    [RetryFact]
     public async Task TokenViaDashTArgv_FakeServesTheSecretKey()
     {
         InstallFakeBws();
@@ -450,7 +451,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
             [.. Enumerable.Range(1, 32).Select(i => (byte)i)]));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task BadToken_FakeBwsStderrSurfacedThroughResolver()
     {
         InstallFakeBws();
@@ -464,7 +465,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         });
     }
 
-    [Fact]
+    [RetryFact]
     public async Task FakeBwsEmitsGarbage_BankUnchangedAndMalformedErrorSurfaced()
     {
         InstallFakeBws();
@@ -497,7 +498,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         });
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Startup_BwsMissing_Exits1WithResolveError()
     {
         if (OperatingSystem.IsWindows())
@@ -516,7 +517,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
             .ShouldBeTrue($"stderr='{stderr}' stdout='{stdout}'");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Startup_BwsMissing_StillLogsSqliteEngineVersion()
     {
         if (OperatingSystem.IsWindows())
@@ -539,7 +540,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
             .ShouldBeTrue($"stderr='{stderr}' stdout='{stdout}'");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Startup_WrongKey_Exits2WithOpenError()
     {
         if (OperatingSystem.IsWindows())

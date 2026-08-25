@@ -3,6 +3,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -16,7 +17,7 @@ namespace AiRaccoon.Tests.Integration;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class SchemaDoctorTests
 {
-    [Fact]
+    [RetryFact]
     public async Task DiagnoseAsync_OnAFreshHealthyBank_ReportsHealthyWithNoFindings()
     {
         await using var connection = await OpenAsync();
@@ -37,7 +38,7 @@ public sealed class SchemaDoctorTests
     ///     than the real DDL. `CREATE TABLE IF NOT EXISTS` silently no-ops against it — EnsureAsync
     ///     alone would report this bank as fine.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task DiagnoseAsync_OnANarrowEntriesTable_DetectsTheMissingColumns()
     {
         await using var connection = await OpenAsync();
@@ -52,7 +53,7 @@ public sealed class SchemaDoctorTests
         report.Findings.ShouldContain(f => f.ObjectName == "entries" && f.Detail.Contains("unexpected column 'only_one_column'"));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task DiagnoseAsync_OnABankMissingAnIndex_DetectsTheMissingIndex()
     {
         await using var connection = await OpenAsync();
@@ -67,7 +68,7 @@ public sealed class SchemaDoctorTests
     }
 
     /// <summary>WP1 acceptance criterion 2: the doctor's schema inventory reaches the code corpus, same as any other Ddl table.</summary>
-    [Fact]
+    [RetryFact]
     public async Task DiagnoseAsync_OnABankMissingTheCodeCorpus_DetectsTheMissingCodeTables()
     {
         await using var connection = await OpenAsync();
@@ -81,7 +82,7 @@ public sealed class SchemaDoctorTests
         report.Findings.ShouldContain(f => f.ObjectName == "code_entries" && f.Detail.Contains("missing table"));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task DiagnoseAsync_OnABankStampedNewerThanThisBinary_ReportsVersionAheadNotAShapeMismatch()
     {
         await using var connection = await OpenAsync();

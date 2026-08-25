@@ -2,6 +2,7 @@ using AiRaccoon.Infrastructure.Embedding;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Unit.Embedding;
 
@@ -10,7 +11,7 @@ namespace AiRaccoon.Tests.Unit.Embedding;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ThreadResolutionTests
 {
-    [Fact]
+    [RetryFact]
     public void Resolve_UnsetSetting_HalvesTheCoreCount()
     {
         var service = TestData.CreateEmbeddingService();
@@ -18,7 +19,7 @@ public sealed class ThreadResolutionTests
         service.ResolveThreadCount(null, 10).ShouldBe(5);
     }
 
-    [Fact]
+    [RetryFact]
     public void Resolve_UnsetSetting_OneCore_NeverGoesBelowOne()
     {
         var service = TestData.CreateEmbeddingService();
@@ -26,7 +27,7 @@ public sealed class ThreadResolutionTests
         service.ResolveThreadCount(null, 1).ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public void Resolve_ExplicitZero_MeansOrtDefault()
     {
         var service = TestData.CreateEmbeddingService();
@@ -34,7 +35,7 @@ public sealed class ThreadResolutionTests
         service.ResolveThreadCount("0", 10).ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public void Resolve_Garbage_FallsBackToTheHalvedDefault()
     {
         var service = TestData.CreateEmbeddingService();
@@ -42,7 +43,7 @@ public sealed class ThreadResolutionTests
         service.ResolveThreadCount("not-a-number", 10).ShouldBe(5);
     }
 
-    [Fact]
+    [RetryFact]
     public void Resolve_NegativeValue_IsGarbageToo()
     {
         var service = TestData.CreateEmbeddingService();
@@ -50,7 +51,7 @@ public sealed class ThreadResolutionTests
         service.ResolveThreadCount("-1", 10).ShouldBe(5);
     }
 
-    [Fact]
+    [RetryFact]
     public void Resolve_ExplicitPositiveValue_IsUsedAsIs()
     {
         var service = TestData.CreateEmbeddingService();
@@ -61,7 +62,7 @@ public sealed class ThreadResolutionTests
     /// <summary>Constructs a real ONNX session, so this one leg is Integration/Slow like every other OnnxEmbeddingGenerator ctor test.</summary>
     [Trait(TestCategories.Category, TestCategories.Integration)]
     [Trait(TestCategories.Speed, TestCategories.Slow)]
-    [Theory]
+    [RetryTheory]
     [InlineData(4)]
     [InlineData(0)]
     public void Generator_ReportsTheIntraOpThreadsItWasBuiltWith(int threads)

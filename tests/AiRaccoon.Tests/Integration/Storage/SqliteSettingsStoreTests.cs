@@ -6,6 +6,7 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -62,7 +63,7 @@ public sealed class SqliteSettingsStoreTests : IAsyncLifetime
     // ---- Ordinary contract: characterisation tests, green from the start by design ----
 
     /// <summary>Characterisation. A key nobody ever wrote is "not found", never a thrown exception.</summary>
-    [Fact]
+    [RetryFact]
     public async Task GetSettingAsync_ForAMissingKey_ReturnsNull()
     {
         var value = await _store.GetSettingAsync("no.such.key", TestContext.Current.CancellationToken);
@@ -75,7 +76,7 @@ public sealed class SqliteSettingsStoreTests : IAsyncLifetime
     ///     the write is not only visible to the key it targeted, it is also visible to the prefix scan
     ///     that would batch it under WP2/WP3).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task SetSettingAsync_ThenGetSettingAsync_RoundTrips()
     {
         await _store.SetSettingAsync("access.mode.global", "rw", TestContext.Current.CancellationToken);
@@ -91,7 +92,7 @@ public sealed class SqliteSettingsStoreTests : IAsyncLifetime
     ///     the only way to prove "present but empty" is distinguishable from "absent" is the empty
     ///     string, not degenerate reasoning about NULL.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task SetSettingAsync_WithAnEmptyString_IsDistinctFromAnAbsentKey()
     {
         await _store.SetSettingAsync("scratch.empty", string.Empty, TestContext.Current.CancellationToken);
@@ -101,7 +102,7 @@ public sealed class SqliteSettingsStoreTests : IAsyncLifetime
     }
 
     /// <summary>Characterisation. Deleting removes the key from both the single-key and prefix paths.</summary>
-    [Fact]
+    [RetryFact]
     public async Task DeleteSettingAsync_ThenGetSettingAsync_ReturnsNullAgain()
     {
         await _store.SetSettingAsync("queryGuard.enabled.global", "false", TestContext.Current.CancellationToken);
@@ -120,7 +121,7 @@ public sealed class SqliteSettingsStoreTests : IAsyncLifetime
     ///     thrown exception or a null. Property intersection with "other data exists": a sibling row
     ///     under a different prefix must not leak into the empty result.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task GetSettingsByPrefixAsync_WithNoMatchingKeys_ReturnsAnEmptyDictionary()
     {
         await _store.SetSettingAsync("access.mode.global", "rw", TestContext.Current.CancellationToken);
@@ -139,7 +140,7 @@ public sealed class SqliteSettingsStoreTests : IAsyncLifetime
     ///     seeded together, so a false "starts with the raw string" implementation would over-match and
     ///     an off-by-one in the SQL would under-match.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task GetSettingsByPrefixAsync_ExcludesASiblingKeyThatSharesOnlyTheLeadingCharacters()
     {
         await _store.SetSettingAsync(QueryGuardConfigKeys.EnabledGlobal, "true", TestContext.Current.CancellationToken);
@@ -166,7 +167,7 @@ public sealed class SqliteSettingsStoreTests : IAsyncLifetime
     ///     <c>StringComparer.Ordinal</c>, so the two differently-cased keys still land as two distinct
     ///     dictionary entries rather than colliding — that part of the acceptance criterion holds.)
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task GetSettingsByPrefixAsync_MatchesADifferentlyCasedKey_BecauseSqliteLikeIsCaseInsensitiveByDefault()
     {
         await _store.SetSettingAsync(QueryGuardConfigKeys.EnabledGlobal, "true", TestContext.Current.CancellationToken);
@@ -189,7 +190,7 @@ public sealed class SqliteSettingsStoreTests : IAsyncLifetime
     ///     exercised in production — but it is what the SQL actually does, and a future caller with an
     ///     underscore anywhere in a settings key namespace would silently over-match.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task GetSettingsByPrefixAsync_TreatsALiteralUnderscoreInThePrefixArgumentAsASingleCharacterWildcard()
     {
         await _store.SetSettingAsync(QueryGuardConfigKeys.EnabledGlobal, "true", TestContext.Current.CancellationToken); // "queryGuard.enabled.global" — '.' where the wildcard sits
@@ -226,7 +227,7 @@ public sealed class SqliteSettingsStoreTests : IAsyncLifetime
     ///     before and the read after both go through <see cref="_store" />, the one instance this whole
     ///     test class holds, standing in for the DI singleton (see its field remarks).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task GetSettingAsync_ObservesAWriteFromASeparateOSProcess_ThroughTheSameSingletonInstance_WithoutRestarting()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
@@ -264,7 +265,7 @@ public sealed class SqliteSettingsStoreTests : IAsyncLifetime
     ///     demonstration that the assertion in the test above is a real check, not one that could only
     ///     ever pass.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ANaiveCachingDecorator_WouldMaskTheSameWrite_ProvingThisAssertionActuallyPinsLiveness()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,

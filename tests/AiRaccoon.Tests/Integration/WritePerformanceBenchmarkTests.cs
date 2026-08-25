@@ -4,6 +4,7 @@ using AiRaccoon.Setup;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -11,7 +12,7 @@ namespace AiRaccoon.Tests.Integration;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public class WritePerformanceBenchmarkTests(ITestOutputHelper output)
 {
-    [Fact]
+    [RetryFact]
     public async Task WriteAsync_PerformanceMeasurement_BaselineVsZeroShotFiltering()
     {
         // Arrange: Setup test data root

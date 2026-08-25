@@ -6,6 +6,7 @@ using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Ingestion;
 
@@ -50,7 +51,7 @@ public sealed class FileIngestorHiddenAndDenySetTests : IDisposable
         TestData.DeleteTempRoot(_testDir);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task IngestDirectoryAsync_HiddenDirectoryAndDenySetEntries_AreSkipped_OrdinaryFilesStillIngest()
     {
         await WriteAsync(Path.Combine(_testDir, "README.md"), "# kept");

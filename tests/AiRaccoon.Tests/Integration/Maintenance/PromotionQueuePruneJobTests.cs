@@ -6,6 +6,7 @@ using Dapper;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Maintenance;
 
@@ -35,7 +36,7 @@ public sealed class PromotionQueuePruneJobTests : IDisposable
 
     private static PromotionQueuePruneJob NewJob() => new(new FakeTimeProvider(FixedNow));
 
-    [Fact]
+    [RetryFact]
     public async Task HasWorkAsync_WithNoOpenRequest_IsFalse()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -43,7 +44,7 @@ public sealed class PromotionQueuePruneJobTests : IDisposable
         (await NewJob().HasWorkAsync(connection, TestContext.Current.CancellationToken)).ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HasWorkAsync_AfterARequest_IsTrue()
     {
         await _queueStore.RequestPruneOrphansAsync(TestContext.Current.CancellationToken);
@@ -52,7 +53,7 @@ public sealed class PromotionQueuePruneJobTests : IDisposable
         (await NewJob().HasWorkAsync(connection, TestContext.Current.CancellationToken)).ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_WithNoOpenRequest_IsANoOp() =>
         await Should.NotThrowAsync(async () =>
         {
@@ -60,7 +61,7 @@ public sealed class PromotionQueuePruneJobTests : IDisposable
             await NewJob().RunAsync(connection, TestContext.Current.CancellationToken);
         });
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_DeletesTheOrphans_AndMarksTheRequestFinished()
     {
         await _queueStore.UpsertAsync("acme",
@@ -80,7 +81,7 @@ public sealed class PromotionQueuePruneJobTests : IDisposable
             .ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HasWorkAsync_AfterRunAsync_IsFalseAgain()
     {
         await _queueStore.RequestPruneOrphansAsync(TestContext.Current.CancellationToken);

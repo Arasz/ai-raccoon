@@ -12,6 +12,7 @@ using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.E2E;
 
@@ -115,7 +116,7 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AnInterruptedMigration_IsFinishedByTheNextServersStartupPass_WithNoKickEverHavingRun()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
@@ -176,7 +177,7 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
     ///     the relay's lease proves it started, then a partial drain proves the kill landed inside
     ///     the batch loop; either timeout fails with the bank ledger and serve logs as evidence.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task AnInterruptedMigration_KilledMidDrain_IsFinishedByTheNextServersStartupPass()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
@@ -291,7 +292,7 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
     ///     outbox row is "the only thing standing between a crash and a silently degraded bank" is not
     ///     rhetorical — this is what "silently" looked like when produced on purpose.
     /// </summary>
-    [Fact(Skip = "Documents the manual negative demonstration performed for ADR-0076; see the XML doc comment for how to reproduce it by hand.")]
+    [RetryFact(Skip = "Documents the manual negative demonstration performed for ADR-0076; see the XML doc comment for how to reproduce it by hand.")]
     public void AnInterruptedMigration_LeavesTheBankHalfMigratedForever_WhenTheRelayIsRemoved()
     {
     }

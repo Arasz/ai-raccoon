@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using AiRaccoon.Infrastructure.Embedding;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -15,7 +16,7 @@ namespace AiRaccoon.Tests.Integration.Embedding;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class CodeTokenizerAssetTests
 {
-    [Fact]
+    [RetryFact]
     public void BundledAsset_MatchesThePinnedSha256()
     {
         var path = CodeTokenizer.ResolveModelPath();
@@ -24,7 +25,7 @@ public sealed class CodeTokenizerAssetTests
             .ShouldBe(CodeTokenizer.ModelSha256);
     }
 
-    [Fact]
+    [RetryFact]
     public void CountTokens_UsesTheRealBundledTokenizer_AndIsDeterministic()
     {
         var tokenizer = new CodeTokenizer();

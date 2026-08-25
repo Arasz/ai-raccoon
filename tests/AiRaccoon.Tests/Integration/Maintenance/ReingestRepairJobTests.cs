@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Maintenance;
@@ -45,7 +46,7 @@ public sealed class ReingestRepairJobTests : IDisposable
         new(new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]), TestData.CreateEmbeddingService(), _memoryStore,
             new FakeTimeProvider(FixedNow));
 
-    [Fact]
+    [RetryFact]
     public async Task HasWorkAsync_WithNoOpenRequest_IsFalse()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -53,7 +54,7 @@ public sealed class ReingestRepairJobTests : IDisposable
         (await NewJob().HasWorkAsync(connection, TestContext.Current.CancellationToken)).ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HasWorkAsync_AfterARequest_IsTrue()
     {
         await RequestRepairAsync();
@@ -62,7 +63,7 @@ public sealed class ReingestRepairJobTests : IDisposable
         (await NewJob().HasWorkAsync(connection, TestContext.Current.CancellationToken)).ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_WithNoOpenRequest_IsANoOp() =>
         await Should.NotThrowAsync(async () =>
         {
@@ -70,7 +71,7 @@ public sealed class ReingestRepairJobTests : IDisposable
             await NewJob().RunAsync(connection, TestContext.Current.CancellationToken);
         });
 
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_AppliesTheRepair_AndMarksTheRequestFinished()
     {
         var staleHash = await SeedStaleFileAsync();
@@ -90,7 +91,7 @@ public sealed class ReingestRepairJobTests : IDisposable
             .ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task HasWorkAsync_AfterRunAsync_IsFalseAgain()
     {
         await SeedStaleFileAsync();

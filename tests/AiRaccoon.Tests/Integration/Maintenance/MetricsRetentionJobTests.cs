@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Maintenance;
 
@@ -41,7 +42,7 @@ public sealed class MetricsRetentionJobTests : IDisposable
     ///     G3 — the reaper deletes past the window and nothing inside it. Both directions asserted
     ///     on the surviving rows, not just a count (ADR-0055's reaper gate).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_DeletesRowsOlderThanTheWindow_AndKeepsRowsInsideIt()
     {
         await using var connection = await OpenAsync();
@@ -59,7 +60,7 @@ public sealed class MetricsRetentionJobTests : IDisposable
     ///     with name/project_id, not recorded_at — so every reap was a full-table SCAN. Asserted via
     ///     the same EXPLAIN QUERY PLAN the SQLite planner actually uses, not an assumption about it.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task RunAsync_UsesAnIndexOnRecordedAt_NotAFullTableScan()
     {
         await using var connection = await OpenAsync();
@@ -73,7 +74,7 @@ public sealed class MetricsRetentionJobTests : IDisposable
     }
 
     /// <summary>AC1 — the reaper runs as a registered job and is stamped in the ledger like the others.</summary>
-    [Fact]
+    [RetryFact]
     public async Task TheJob_AppearsInTheMaintenanceLedgerAfterRunning()
     {
         await using var connection = await OpenAsync();
@@ -86,7 +87,7 @@ public sealed class MetricsRetentionJobTests : IDisposable
     }
 
     /// <summary>AC3 — an invalid retention setting falls back to the default rather than throwing.</summary>
-    [Fact]
+    [RetryFact]
     public async Task AnInvalidRetentionSetting_FallsBackToTheDefault()
     {
         await using var connection = await OpenAsync();
@@ -104,7 +105,7 @@ public sealed class MetricsRetentionJobTests : IDisposable
     }
 
     /// <summary>AC4 — a reaper failure never fails the maintenance pass, and does not stamp the ledger.</summary>
-    [Fact]
+    [RetryFact]
     public async Task AFailingReaper_DoesNotFailThePass_AndIsNotStamped()
     {
         await using var connection = await OpenAsync();

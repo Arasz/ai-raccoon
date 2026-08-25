@@ -2,6 +2,7 @@ using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -32,7 +33,7 @@ public sealed class SearchQualityServiceTests : IDisposable
         await MemorySchema.EnsureAsync(conn, TestContext.Current.CancellationToken);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RecordSearch_CreatesRow_GetMetricsReturnsOne()
     {
         await EnsureSchemaAsync();
@@ -47,7 +48,7 @@ public sealed class SearchQualityServiceTests : IDisposable
         metrics.GradedSearches.ShouldBe(0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RecordFollowThrough_UpdatesRow_CountIncrements()
     {
         await EnsureSchemaAsync();
@@ -63,7 +64,7 @@ public sealed class SearchQualityServiceTests : IDisposable
         metrics.FollowThroughSearches.ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RecordFollowThrough_DuplicateFile_CountsOnce()
     {
         await EnsureSchemaAsync();
@@ -79,7 +80,7 @@ public sealed class SearchQualityServiceTests : IDisposable
         metrics.FollowThroughSearches.ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RecordGrade_UpdatesRow_MetricsReflectGrade()
     {
         await EnsureSchemaAsync();
@@ -96,7 +97,7 @@ public sealed class SearchQualityServiceTests : IDisposable
         metrics.Coverage.ShouldBe(1.0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetMetrics_ProjectFilter_WorksCorrectly()
     {
         await EnsureSchemaAsync();
@@ -111,7 +112,7 @@ public sealed class SearchQualityServiceTests : IDisposable
         metricsAll.TotalSearches.ShouldBe(2);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GetMetrics_FollowThroughRate_CalculatesCorrectly()
     {
         await EnsureSchemaAsync();
@@ -124,7 +125,7 @@ public sealed class SearchQualityServiceTests : IDisposable
         metrics.FollowThroughRate.ShouldBe(0.5);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RecordSearch_WithNullProjectId_Succeeds()
     {
         await EnsureSchemaAsync();

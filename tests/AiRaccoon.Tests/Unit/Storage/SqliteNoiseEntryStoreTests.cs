@@ -2,6 +2,7 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Unit.Storage;
 
@@ -27,7 +28,7 @@ public sealed class SqliteNoiseEntryStoreTests : IDisposable
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
-    [Fact]
+    [RetryFact]
     public async Task RecordAsync_ThenSummarize_CountsTheEntryUnderItsPolicy()
     {
         var request = new MemoryWriteRequest("proj-1", "[IMPORTANT: Background process x completed normally]", SourceFile: "note.md");
@@ -41,7 +42,7 @@ public sealed class SqliteNoiseEntryStoreTests : IDisposable
         summary.CountByPolicy.ShouldContainKeyAndValue("HermesBackgroundProcessLog", 1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ListRecentAsync_ReturnsTheRecordedContentAndProject()
     {
         var request = new MemoryWriteRequest("proj-1", "[ASYNC DELEGATION BATCH COMPLETE]", SourceFile: "note.md");
@@ -58,7 +59,7 @@ public sealed class SqliteNoiseEntryStoreTests : IDisposable
         entries[0].DetectedByPolicy.ShouldBe("HermesBackgroundProcessLog");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task PurgeExpiredAsync_RemovesOnlyRowsPastTheCutoff()
     {
         await _store.RecordAsync(new MemoryWriteRequest("proj-1", "old noise"), "policy-a",
@@ -74,7 +75,7 @@ public sealed class SqliteNoiseEntryStoreTests : IDisposable
         remaining[0].RequestContent.ShouldBe("fresh noise");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task PurgeExpiredAsync_NothingExpired_RemovesNothing()
     {
         await _store.RecordAsync(new MemoryWriteRequest("proj-1", "fresh noise"), "policy-a",

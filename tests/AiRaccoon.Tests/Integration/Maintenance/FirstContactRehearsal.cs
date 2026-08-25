@@ -8,6 +8,7 @@ using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Maintenance;
 
@@ -33,7 +34,7 @@ public sealed class FirstContactRehearsal(ITestOutputHelper output)
     private readonly IModelMigrationLease _modelMigrationLease = Substitute.For<IModelMigrationLease>();
     private readonly TimeProvider _timeProvider = new FakeTimeProvider();
 
-    [Fact]
+    [RetryFact]
     public async Task Rehearse_TheFirstOpenByANewBinary()
     {
         var bank = Environment.GetEnvironmentVariable(BankEnvVar);

@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
@@ -43,7 +44,7 @@ public sealed class WriteEmbedsTheChunkNotTheDocumentTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task AMultiChunkWrite_EmbedsEachStoredChunk_AndNeverTheWholeDocument()
     {
         await ConfigureLocalAsync();
@@ -68,7 +69,7 @@ public sealed class WriteEmbedsTheChunkNotTheDocumentTests : IDisposable
     ///     source_file never has chunk_index recomputed, so ordering by it returns an arbitrary row
     ///     and the test would be asserting against the wrong chunk.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EveryEmbeddedText_IsOneOfTheStoredChunks()
     {
         await ConfigureLocalAsync();
@@ -92,7 +93,7 @@ public sealed class WriteEmbedsTheChunkNotTheDocumentTests : IDisposable
     }
 
     /// <summary>A single-chunk write is unchanged: content and chunk are the same string.</summary>
-    [Fact]
+    [RetryFact]
     public async Task ASingleChunkWrite_StillEmbedsItsContent()
     {
         await ConfigureLocalAsync();

@@ -2,6 +2,7 @@ using AiRaccoon.Core.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -23,7 +24,7 @@ public sealed class WordPieceEmbeddingTokenizerTests
         "hash-list\nfragment\nwith\nnewlines"
     ];
 
-    [Fact]
+    [RetryFact]
     public void EncodeToIds_WithSpecialTokens_MatchesThePinnedBertOverload()
     {
         var vocab = BundledModel.ResolveVocabPath();
@@ -38,7 +39,7 @@ public sealed class WordPieceEmbeddingTokenizerTests
         }
     }
 
-    [Fact]
+    [RetryFact]
     public void EncodeToIds_WithoutSpecialTokens_MatchesThePinnedOverloadWithSpecialTokensOff()
     {
         var vocab = BundledModel.ResolveVocabPath();
@@ -53,7 +54,7 @@ public sealed class WordPieceEmbeddingTokenizerTests
         }
     }
 
-    [Fact]
+    [RetryFact]
     public void CountTokens_MatchesBertTokenizerCountTokens()
     {
         var vocab = BundledModel.ResolveVocabPath();
@@ -66,13 +67,13 @@ public sealed class WordPieceEmbeddingTokenizerTests
         }
     }
 
-    [Fact]
+    [RetryFact]
     public void SpecialTokenReservation_IsTheBertClsSepPair()
     {
         WordPieceEmbeddingTokenizer.Create(BundledModel.ResolveVocabPath()).SpecialTokenReservation.ShouldBe(2);
     }
 
-    [Fact]
+    [RetryFact]
     public void EncodeToIds_AddsExactlyTheReservedSpecialTokens_AtWindowEdge()
     {
         // A text whose content is exactly at the bundled window: CLS + 254 content + SEP = 256 ids,

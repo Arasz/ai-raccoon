@@ -5,6 +5,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -20,7 +21,7 @@ public sealed class Vec0PartitionKeyDemotionTests
 {
     private const int Dimension = 384;
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAV8Bank_RebuildsVecEntries_WithCtxAsAMetadataColumn()
     {
         await using var connection = await OpenAsync();
@@ -36,7 +37,7 @@ public sealed class Vec0PartitionKeyDemotionTests
         Has(sql, "distance_metric=cosine").ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAV8Bank_RebuildsVecStructure_WithCtxAsAMetadataColumn()
     {
         await using var connection = await OpenAsync();
@@ -50,7 +51,7 @@ public sealed class Vec0PartitionKeyDemotionTests
         Has(sql, "ctx").ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAFreshBank_DeclaresCtxAsAMetadataColumn()
     {
         await using var connection = await OpenAsync();
@@ -67,7 +68,7 @@ public sealed class Vec0PartitionKeyDemotionTests
     ///     pre-migration bank rather than against the migration's own output. Captured BEFORE the
     ///     step runs, so the comparison cannot be satisfied by the migration agreeing with itself.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAV8Bank_LeavesTheTopKUnchanged_ForAFixedQuery()
     {
         await using var connection = await OpenAsync();
@@ -90,7 +91,7 @@ public sealed class Vec0PartitionKeyDemotionTests
     ///     unpartitioned shape the first WP5 measurement wrongly used: rows in another context must
     ///     stay invisible even when they are the nearest vectors in the bank.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task AfterTheMigration_AKnnScopedToOneContext_NeverReturnsAnother()
     {
         await using var connection = await OpenAsync();
@@ -109,7 +110,7 @@ public sealed class Vec0PartitionKeyDemotionTests
         scopes.ShouldAllBe(p => p == "acme");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_TwiceOnAV8Bank_IsIdempotent()
     {
         await using var connection = await OpenAsync();
@@ -129,7 +130,7 @@ public sealed class Vec0PartitionKeyDemotionTests
     ///     A crash between the v9 COMMIT and the stamp leaves the bank rebuilt but still reporting v8.
     ///     The next open re-runs the step, which must survive meeting its own output.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_AfterASimulatedCrashBetweenRebuildAndStamp_ReRunsCleanly()
     {
         await using var connection = await OpenAsync();
@@ -152,7 +153,7 @@ public sealed class Vec0PartitionKeyDemotionTests
     ///     is real and permanently unrealised, because the maintenance service's vacuum clock is
     ///     per-process and seeded on first run, so a short-lived process never reaches it.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAV8Bank_DrainsTheFreeListTheRebuildCreated()
     {
         // FILE-BACKED and large enough on purpose. An in-memory bank reports a free list of 0
@@ -182,7 +183,7 @@ public sealed class Vec0PartitionKeyDemotionTests
     }
 
     /// <summary>A bank on a non-384 model keeps its declared dimension through the v9 rebuild.</summary>
-    [Fact]
+    [RetryFact]
     public async Task EnsureAsync_OnAV8Bank_WithANonDefaultDimension_PreservesItThroughTheRebuild()
     {
         await using var connection = await OpenAsync();

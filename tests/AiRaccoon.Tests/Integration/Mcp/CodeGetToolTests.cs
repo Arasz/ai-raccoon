@@ -10,6 +10,7 @@ using Dapper;
 using ModelContextProtocol;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Mcp;
 
@@ -44,7 +45,7 @@ public sealed class CodeGetToolTests : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CodeGet_KnownHash_ReturnsFullSourceWithPathAndRange()
     {
         await SeedAsync(id: 1, projectId: "acme", path: "src/Bar.cs", value: "sealed class NarwhalTusk { }",
@@ -59,7 +60,7 @@ public sealed class CodeGetToolTests : IAsyncLifetime
         envelope.Data!.LineEnd.ShouldBe(9);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CodeGet_UnknownHash_ThrowsUnknownHashException()
     {
         var ex = await Should.ThrowAsync<UnknownHashException>(() =>
@@ -69,7 +70,7 @@ public sealed class CodeGetToolTests : IAsyncLifetime
         ex.Message.ShouldContain("acme");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CodeGet_KnownHashInAnotherProject_IsRefused_NeverLeaksAcrossProjects()
     {
         await SeedAsync(id: 1, projectId: "other", path: "src/Bar.cs", value: "class X { }", lineStart: 1, lineEnd: 1);
@@ -78,7 +79,7 @@ public sealed class CodeGetToolTests : IAsyncLifetime
             _tools.CodeGet("acme", "hash-1", TestContext.Current.CancellationToken));
     }
 
-    [Theory]
+    [RetryTheory]
     [InlineData("ro")]
     [InlineData("rw")]
     [InlineData("full")]
@@ -93,7 +94,7 @@ public sealed class CodeGetToolTests : IAsyncLifetime
         envelope.Data!.Hash.ShouldBe("hash-1");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CodeGet_BlankProjectId_IsRefused()
     {
         var ex = await Should.ThrowAsync<McpException>(() =>

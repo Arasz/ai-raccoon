@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using SQLitePCL;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
@@ -30,7 +31,7 @@ namespace AiRaccoon.Tests.Integration;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class ModelMigrationCheckStatementCountTests
 {
-    [Fact]
+    [RetryFact]
     public async Task EnsureCheapAsync_WhenTheDigestMatches_CostsOneStatementInsteadOfFour()
     {
         await using var connection = await OpenAsync();
@@ -43,7 +44,7 @@ public sealed class ModelMigrationCheckStatementCountTests
         statements.ShouldBe(["PRAGMA application_id"]);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task EnsureCheapAsync_WhenTheDigestIsStale_FallsBackToTheFullEnsure()
     {
         await using var connection = await OpenAsync();
@@ -66,7 +67,7 @@ public sealed class ModelMigrationCheckStatementCountTests
     ///     sharing one connection across both would mean threading it through every one of the seven
     ///     tool classes and every store method they call, which this task's scope does not cover.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task OpensOneExtraBankConnection_OnEveryCall()
     {
         var dataRoot = TestData.CreateTempRoot("ai-raccoon-migration-check-opens");

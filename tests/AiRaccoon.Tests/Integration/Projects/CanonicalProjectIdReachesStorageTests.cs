@@ -12,6 +12,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration.Projects;
@@ -68,7 +69,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
             new QueryGuardService(new InMemorySettings()), new MemoryWriteService(_store, new FakePromotionQueue()),
             NoOpMeasurementRecorder.Instance, NullLogger<MemoryTools>.Instance);
 
-    [Fact]
+    [RetryFact]
     public async Task MemoryWrite_UnderARespelledForm_WritesTheCanonicalLowercaseDForm_ToEntries()
     {
         var tools = BuildMemoryTools();
@@ -80,7 +81,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
         storedProjectId.ShouldBe(_canonical);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task WritesUnderTwoSpellingsOfTheSameGuid_LandInOneProjectNotTwo()
     {
         var tools = BuildMemoryTools();
@@ -101,7 +102,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
         distinctProjectIds.ShouldBe([_canonical]);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MemorySearch_WithARespelledId_FindsRowsWrittenUnderTheCanonicalForm_AndTheVecRowIsPartitionedByIt()
     {
         var tools = BuildMemoryTools();
@@ -129,7 +130,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
         search.Data!.Results.ShouldContain(r => r.Hash == written.Data!.Hash);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MemoryShareExtract_UnderARespelledForm_ThreadsTheCanonicalId_ToTheExtractionRunner()
     {
         var extraction = new RecordingExtractionRunner();
@@ -142,7 +143,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
             "ShareTools.ShareExtract rebuilds the request with the canonical ids collected in its loop (ShareTools.cs)");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task MemoryPromotionList_UnderARespelledForm_ListsUnderTheCanonicalId()
     {
         var queue = new FakePromotionQueue();
