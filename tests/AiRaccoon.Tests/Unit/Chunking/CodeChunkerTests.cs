@@ -216,6 +216,7 @@ public sealed class CodeChunkerTests
     [Fact(Timeout = 5000)]
     public void Chunk_NoSplitPoints_StillBoundedAndComplete()
     {
+        TestContext.Current.CancellationToken.ThrowIfCancellationRequested();
         var lines = new List<string> { "public class Dense", "{", "    void Big()", "    {" };
         lines.AddRange(Enumerable.Range(0, 40).Select(i => $"        statement{i:D2} = compute({i});"));
         lines.Add("    }");
