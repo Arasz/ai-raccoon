@@ -24,6 +24,7 @@
         <PackageReference Include="Shouldly"/>
         <PackageReference Include="xunit.v3"/>
         <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all"/>
+        <PackageReference Include="xRetry.v3"/>
     </ItemGroup>
 
     <ItemGroup>
