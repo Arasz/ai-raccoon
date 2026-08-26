@@ -365,8 +365,8 @@ represent, so recreating it is a data-loss decision, not a schema decision — o
 with the bank in front of you.
 
 It opens the bank **read-only** and does not modify it, so it is safe to run against a live bank or
-a backup. Exit code is `0` when healthy, `24` while a model migration is open (schema shape is
-still healthy), and non-zero on a mismatch, so it composes into a script:
+a backup. Exit code is `0` when healthy, non-zero on a mismatch (`19`/`20`/`22`), and `24` while a
+model migration is open (schema shape is still healthy), so it composes into a script:
 
 | Exit code | Meaning |
 |---|---|
