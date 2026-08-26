@@ -82,6 +82,12 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     {
         Guard.IsNotNullOrWhiteSpace(key);
         var response = await SendAsync(() => _client.DeleteAsync(SettingsProtocol.ForKey(key), cancellationToken));
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            // Mirror of StartModelMigrationAsync: the endpoint's 409 body is the refusal reason.
+            throw new ModelMigrationInProgressException(await response.Content.ReadAsStringAsync(cancellationToken));
+        }
+
         Ensure(response);
     }
 

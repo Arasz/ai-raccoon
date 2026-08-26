@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Hosting.Node;
+using AiRaccoon.Infrastructure.Embedding;
 
 namespace AiRaccoon.Settings;
 
@@ -11,6 +12,10 @@ namespace AiRaccoon.Settings;
 /// </summary>
 internal static partial class SettingsEndpoint
 {
+    /// <summary>The one refusal message #592 ships: endpoint throw → 409 body → client exception → stderr, verbatim.</summary>
+    private const string ModelResetRefusedMessage =
+        "ai-raccoon: model reset refused: a model migration is in progress — every MCP tool call is refused until it finishes; nothing was deleted";
+
     extension(WebApplication webApplication)
     {
         internal void MapSettings()
@@ -52,16 +57,35 @@ internal static partial class SettingsEndpoint
 
             // Absent is the same as removed, matching every settings handler that deletes a row.
             webApplication.MapDelete(SettingsProtocol.Path,
-                async (string? key, ISettingsStore store, CancellationToken ctx) =>
+                async (string? key, ISettingsStore store, IModelMigrationStore migrations, CancellationToken ctx) =>
                 {
                     if (string.IsNullOrEmpty(key))
                     {
                         return Results.BadRequest("ai-raccoon: a settings delete needs ?key=");
                     }
 
-                    await store.DeleteSettingAsync(key, ctx);
-                    Log.KeyDeleted(logger, key);
-                    return Results.NoContent();
+                    try
+                    {
+                        // ADR-0076 (#592): deleting embedding.provider while a migration is open
+                        // would strand the outbox — the one key only ModelResetAsync deletes. This
+                        // route is the ADR-0075 write choke point; a future server-side
+                        // IMemoryStore.DeleteSettingAsync caller would bypass this guard (R1 F12).
+                        if (key == EmbeddingSettingsKeys.Provider && await migrations.HasOpenModelMigrationAsync(ctx))
+                        {
+                            throw new ModelMigrationInProgressException(ModelResetRefusedMessage);
+                        }
+
+                        await store.DeleteSettingAsync(key, ctx);
+                        Log.KeyDeleted(logger, key);
+                        return Results.NoContent();
+                    }
+                    catch (ModelMigrationInProgressException ex)
+                    {
+                        // Plain text, not Results.Conflict(ex.Message): the 409 body must be the
+                        // frozen message itself so it reaches stderr verbatim (Conflict would
+                        // JSON-quote it).
+                        return Results.Text(ex.Message, "text/plain", statusCode: StatusCodes.Status409Conflict);
+                    }
                 });
 
             // ADR-0076: commits the outbox transaction and returns — no inline re-embed, no

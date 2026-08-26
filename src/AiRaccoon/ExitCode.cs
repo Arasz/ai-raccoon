@@ -77,5 +77,11 @@ public static class ExitCode
     /// (review R1 Ruling 4).</summary>
     public const int ModelMigrationOpen = 24;
 
+    /// <summary>`settings model reset` / `settings model embedding reset` (#592): refused by the
+    /// settings server because a model_migration outbox row is open (ADR-0076) — deleting
+    /// embedding.provider would strand the outbox and ToolGate would refuse every tool forever.
+    /// Same species as <see cref="ModelMigrationOpen" /> (24), but a settings-verb refusal.</summary>
+    public const int ModelResetRefused = 25;
+
     public const int Success = 0;
 }
