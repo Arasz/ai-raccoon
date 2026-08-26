@@ -327,7 +327,7 @@ ai-raccoon doctor                          # verifies the configured bank
 ai-raccoon --data-root /path/to/dir doctor # verifies a bank elsewhere (a copy, a restore)
 ```
 
-A healthy bank with both embedding engines configured:
+A healthy bank:
 
 ```
 ai-raccoon doctor: /tmp/doctor-demo-healthy/memory.db
