@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -136,6 +137,45 @@ public sealed class CorpusEngineLinesTests
 
         source.ShouldContain("EmbeddingEngineSetup.DefaultModelCommand");
         source.ShouldNotContain("\"ai-raccoon model embedding set local\"");
+    }
+
+    /// <summary>
+    ///     R2 N6: the how-to's healthy-bank sample has drifted twice already (v10 shapes at a v11
+    ///     binary), so this derived gate freezes it against the report's own label set instead of
+    ///     trusting a hand edit. The doc pass regenerates the fenced block from real output; this
+    ///     test is RED against the committed stale block until that pass lands.
+    /// </summary>
+    [Fact]
+    public void HowToHealthyBankSample_MatchesTheReportContract()
+    {
+        var howTo = File.ReadAllText(TestData.RepoFile("docs/how-to/configure-ai-raccoon-server.md"));
+        var block = Regex.Match(howTo, @"A healthy bank:\n\n```\n(?<block>.*?)\n```", RegexOptions.Singleline)
+            .Groups["block"].Value;
+        block.ShouldNotBeEmpty("the how-to must show a fenced 'A healthy bank:' sample");
+
+        var lines = block.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(l => l.TrimEnd('\r')).ToArray();
+        lines.Length.ShouldBe(11, "the sample is the whole 11-line report; a deleted line is a drifted sample");
+
+        var expectedPrefixes = new List<string>
+        {
+            "ai-raccoon doctor: ",
+            "user_version: ",
+            "application_id: "
+        };
+        expectedPrefixes.AddRange(CorpusEngineProbe.All.Select(p => $"{p.Label} engine: "));
+        expectedPrefixes.Add("embedding threads: ");
+        expectedPrefixes.AddRange(CorpusEngineProbe.All.Select(p => $"{p.Label} rows pending: "));
+        expectedPrefixes.Add("model migration: ");
+        expectedPrefixes.Add("doctor verifies schema shape only; it never repairs a bank");
+        expectedPrefixes.Add("status: ");
+
+        for (var i = 0; i < lines.Length; i++)
+        {
+            lines[i].StartsWith(expectedPrefixes[i], StringComparison.Ordinal).ShouldBeTrue(
+                $"line {i + 1} of the healthy-bank sample must start with '{expectedPrefixes[i]}'");
+        }
+
+        lines[^1].ShouldBe("status: HEALTHY");
     }
 
     /// <summary>
