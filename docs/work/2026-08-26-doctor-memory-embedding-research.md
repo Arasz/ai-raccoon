@@ -270,4 +270,18 @@ migration path that actually owns those 47,723 rows has no logging of its own. L
 - CI test lanes: `dotnet test --project tests/AiRaccoon.Tests --filter "Speed=Fast&Performance!=Benchmark"`,
   `--filter "Category=bdd"`, `--filter "Speed=Slow&Performance!=Benchmark"` (`.github/workflows/build.yml:134,168,221`).
   `DoctorCommandsTests` is `Integration`+`Slow`, so it runs in the slow lane.
+- **Gate command witnessed, not assumed** (2026-08-26, in this task's worktree): the runner is
+  Microsoft.Testing.Platform (`global.json` `test.runner`, plus `UseMicrosoftTestingPlatformRunner`
+  for `*.Tests` in the root `Directory.Build.props`; see `docs/work/2026-08-25-mtp-xunit4-migration.md:15-20`),
+  and a class-scoped filter **does** work through the `dotnet test` bridge:
+
+  ```
+  TESTINGPLATFORM_TELEMETRY_OPTOUT=1 \
+  dotnet test --project tests/AiRaccoon.Tests --filter "FullyQualifiedName~DoctorCommandsTests" -v m
+  → Test run summary: Passed!  total: 11  failed: 0  succeeded: 11  skipped: 0  duration: 6s 545ms
+  ```
+
+  So the plan may hand that command to an implementer, and **11 green doctor tests are the baseline**
+  any refactor must preserve. One flag is forbidden: `--nologo` is a VSTest-only flag and under MTP
+  produces "Zero tests ran / exit 5" (`docs/work/2026-08-25-mtp-xunit4-migration.md:18-20`).
 
