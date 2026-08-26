@@ -219,6 +219,49 @@ public sealed class EntryEmbedderMigrationDrainReportingTests : IDisposable
         logger.Collector.GetSnapshot().ShouldNotContain(r => r.Id.Id == 1009);
     }
 
+    /// <summary>WP-P4-5: a drain whose elapsed time crosses one lease-TTL stride reports exactly
+    /// ONE 1013 — the clock advances 61s on the second generator call, i.e. inside the second
+    /// batch, so the heartbeat fires once and the remaining batches stay inside the next stride.
+    /// The anti-flood assertion: a 5×BatchSize drain emits one line, not five.</summary>
+    [RetryFact]
+    public async Task Drain_CrossingOneLeaseTtlStride_EmitsExactlyOne1013()
+    {
+        await using var connection = await _factory.OpenBankAsync(Ct);
+        await SeedPendingRowsAsync(connection, 5 * EntryEmbedder.BatchSize);
+        await ConfigureProviderAsync(connection);
+        await OpenMigrationAsync(connection, startedAt: 0);
+
+        var logger = new FakeLogger<EntryEmbedder>();
+        var embedder = NewEmbedder(logger, new RecordingMeasurementRecorder(),
+            embeddings: new StridedClockEmbeddingService(_time, callNumber: 2, TimeSpan.FromSeconds(61)));
+
+        (await embedder.DrainMigrationAsync(connection, Ct)).ShouldBeTrue();
+
+        var progress = logger.Collector.GetSnapshot().Where(r => r.Id.Id == 1013).ToList();
+        progress.Count.ShouldBe(1, "one 1013 per lease-TTL stride crossed, not one per batch");
+        progress[0].Level.ShouldBe(LogLevel.Information);
+        progress[0].Message.ShouldBe("Embed drain for Memory under the model migration: 64 row(s) in 00:01:01");
+    }
+
+    /// <summary>WP-P4-5's zero arm: a whole drain that fits inside one lease-TTL stride emits no
+    /// 1013 at all — the heartbeat exists for long drains, not for every drain.</summary>
+    [RetryFact]
+    public async Task Drain_WithinOneLeaseTtlStride_EmitsNo1013()
+    {
+        await using var connection = await _factory.OpenBankAsync(Ct);
+        await SeedPendingRowsAsync(connection, 5 * EntryEmbedder.BatchSize);
+        await ConfigureProviderAsync(connection);
+        await OpenMigrationAsync(connection, startedAt: 0);
+
+        var logger = new FakeLogger<EntryEmbedder>();
+        var embedder = NewEmbedder(logger, new RecordingMeasurementRecorder());
+
+        (await embedder.DrainMigrationAsync(connection, Ct)).ShouldBeTrue();
+
+        logger.Collector.GetSnapshot().ShouldNotContain(r => r.Id.Id == 1013,
+            "a drain that fits inside one stride must not report progress at all");
+    }
+
     private static async Task SeedPendingRowsAsync(SqliteConnection connection, int count)
     {
         var values = string.Join(", ", Enumerable.Range(0, count)
@@ -275,5 +318,60 @@ public sealed class EntryEmbedderMigrationDrainReportingTests : IDisposable
         public int ResolveDimensions(EmbeddingSettings settings) => 384;
 
         public IEmbeddingTokenizer? ResolveTokenizer(EmbeddingSettings settings) => null;
+    }
+
+    /// <summary>Advances the fake clock by <paramref name="advance" /> on exactly the
+    /// <paramref name="callNumber" />-th generator call — the heartbeat test's seam for a batch
+    /// that takes longer than the lease TTL. One GenerateAsync call per 32-row batch (heading
+    /// paths are empty here), so call 2 lands inside the second batch.</summary>
+    private sealed class StridedClockEmbeddingService(FakeTimeProvider time, int callNumber, TimeSpan advance)
+        : IEmbeddingService
+    {
+        // One generator for the whole drain: EmbedAsync calls CreateGenerator once per batch, so
+        // a per-batch generator would reset the call counter and the stride advance would never fire.
+        private readonly Generator _generator = new(time, callNumber, advance);
+
+        public string EngineFingerprint(string provider, string? model, string? baseUrl) =>
+            $"test:{provider}:{model}@{baseUrl}";
+
+        public IEmbeddingGenerator<string, Embedding<float>> CreateGenerator(EmbeddingSettings settings) => _generator;
+
+        public string TrimQueryToWindow(EmbeddingSettings settings, string query) => query;
+
+        public int ResolveChunkBudgetFor(EmbeddingSettings settings) => OnnxEmbeddingGenerator.MaxContentTokens;
+
+        public int ResolveDimensions(EmbeddingSettings settings) => 384;
+
+        public IEmbeddingTokenizer? ResolveTokenizer(EmbeddingSettings settings) => null;
+
+        private sealed class Generator(FakeTimeProvider time, int callNumber, TimeSpan advance)
+            : IEmbeddingGenerator<string, Embedding<float>>
+        {
+            private int _calls;
+
+            public Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(IEnumerable<string> values,
+                EmbeddingGenerationOptions? options = null, CancellationToken cancellationToken = default)
+            {
+                if (Interlocked.Increment(ref _calls) == callNumber)
+                {
+                    time.Advance(advance);
+                }
+
+                var items = values.ToList();
+                var embeddings = new GeneratedEmbeddings<Embedding<float>>(items.Count);
+                foreach (var _ in items)
+                {
+                    embeddings.Add(new Embedding<float>(new float[384]));
+                }
+
+                return Task.FromResult(embeddings);
+            }
+
+            public void Dispose()
+            {
+            }
+
+            object? IEmbeddingGenerator.GetService(Type serviceType, object? serviceKey) => null;
+        }
     }
 }

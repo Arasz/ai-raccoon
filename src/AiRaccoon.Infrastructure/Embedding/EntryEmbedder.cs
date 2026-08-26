@@ -164,6 +164,10 @@ public sealed class EntryEmbedder(
 
             await ReconcileVecDimensionsAsync(connection, cancellationToken).ConfigureAwait(false);
 
+            // Time-strided, NOT per-batch: a per-batch line floods (1,492 lines on the owner's
+            // 47,723-row backlog) and the metric buffer would drop records. One 1013 per lease
+            // TTL crossed — O(elapsed time), and a drain that renews is a drain that reports.
+            var nextReport = timeProvider.GetUtcNow() + EmbedDrainReporter.ProgressStride;
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -176,6 +180,11 @@ public sealed class EntryEmbedder(
 
                 drained += await EmbedAsync(connection, batch, cancellationToken).ConfigureAwait(false);
                 await migrationLease.TryRenewAsync(connection, cancellationToken).ConfigureAwait(false);
+                if (timeProvider.GetUtcNow() >= nextReport)
+                {
+                    reporter.MigrationProgress(logger, corpus, drained, timeProvider.GetElapsedTime(startedAt));
+                    nextReport = timeProvider.GetUtcNow() + EmbedDrainReporter.ProgressStride;
+                }
             }
 
             await connection.ExecuteAsync(Def(MemorySql.FinishModelMigration,

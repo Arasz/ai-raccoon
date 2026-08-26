@@ -10,6 +10,10 @@ namespace AiRaccoon.Infrastructure.Embedding;
 /// </summary>
 public sealed partial class EmbedDrainReporter(IMeasurementRecorder measurements, TimeProvider timeProvider)
 {
+    /// <summary>Progress heartbeat stride: the lease TTL, so a drain that renews is a drain that
+    /// reports — one 1013 per stride crossed, O(elapsed time) not O(rows).</summary>
+    internal static TimeSpan ProgressStride => SqliteModelMigrationLease.LeaseTtl;
+
     public void PassStarted(ILogger logger, EmbedCorpus corpus) => Log.DrainStarted(logger, corpus);
 
     /// <summary>The migration relay's start line — Information, with the rows owed (LANE P4).</summary>
@@ -25,6 +29,9 @@ public sealed partial class EmbedDrainReporter(IMeasurementRecorder measurements
 
     public void MigrationResumedAfterStall(ILogger logger, EmbedCorpus corpus, string previousOwner, TimeSpan age) =>
         Log.MigrationDrainResumedAfterStall(logger, corpus, previousOwner, age);
+
+    public void MigrationProgress(ILogger logger, EmbedCorpus corpus, int rows, TimeSpan elapsed) =>
+        Log.MigrationDrainProgress(logger, corpus, rows, elapsed);
 
     public void PassFailed(ILogger logger, EmbedCorpus corpus, Exception exception) =>
         Log.DrainFailed(logger, corpus, exception);
@@ -101,5 +108,10 @@ public sealed partial class EmbedDrainReporter(IMeasurementRecorder measurements
             Message = "Embed drain for {Corpus} resumed a model migration opened {Age} ago; its previous holder '{PreviousOwner}' stopped renewing the lease")]
         public static partial void MigrationDrainResumedAfterStall(ILogger logger, EmbedCorpus corpus,
             string previousOwner, TimeSpan age);
+
+        [LoggerMessage(EventId = 1013, Level = LogLevel.Information,
+            Message = "Embed drain for {Corpus} under the model migration: {Rows} row(s) in {Elapsed}")]
+        public static partial void MigrationDrainProgress(ILogger logger, EmbedCorpus corpus, int rows,
+            TimeSpan elapsed);
     }
 }
