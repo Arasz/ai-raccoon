@@ -31,6 +31,10 @@ public sealed class EntryEmbedder(
 
     private const string BundledModel = "bundled";
 
+    /// <summary>The open migration (its started_at) whose blank-provider state already produced
+    /// the 1012 Warning — one per process per migration, so the 15s relay poll cannot flood (M8).</summary>
+    private long? _warnedNoProviderMigration;
+
     /// <inheritdoc />
     public async Task<EmbeddingConfig> StartMigrationAsync(SqliteConnection connection, string provider,
         string? model, string? baseUrl, DateTimeOffset now, CancellationToken cancellationToken)
@@ -107,8 +111,13 @@ public sealed class EntryEmbedder(
 
         const EmbedCorpus corpus = EmbedCorpus.Memory;
 
+        // The lease's pre-state, read BEFORE acquiring: after acquisition the row carries OUR
+        // owner, so the previous holder is only knowable here (1009, LANE P4).
+        var preState = await ReadOpenMigrationStateAsync(connection, cancellationToken).ConfigureAwait(false);
+
         if (!await migrationLease.TryAcquireAsync(connection, cancellationToken).ConfigureAwait(false))
         {
+            reporter.MigrationLeaseHeld(logger, corpus);
             return false;
         }
 
@@ -124,7 +133,23 @@ public sealed class EntryEmbedder(
                 Def(MemorySql.HasOpenModelMigration, cancellationToken)).ConfigureAwait(false) > 0;
             if (!open)
             {
+                reporter.MigrationAlreadyFinished(logger, corpus);
                 return false;
+            }
+
+            if (!await HasProviderAsync(connection, cancellationToken).ConfigureAwait(false))
+            {
+                if (preState?.StartedAt != _warnedNoProviderMigration)
+                {
+                    _warnedNoProviderMigration = preState?.StartedAt;
+                    reporter.MigrationNoProvider(logger, corpus);
+                }
+
+                // Observability only (M8): the drain keeps throwing — the bank stays ToolGate-locked
+                // until the model-reset guard closes or refuses the migration, a separate follow-up.
+                throw new InvalidOperationException(
+                    "ai-raccoon: no embedding provider is configured; the open model migration cannot drain " +
+                    "and the bank stays ToolGate-locked until a provider is set or the migration is closed");
             }
 
             var owed = await connection.ExecuteScalarAsync<long>(Def(MemorySql.CountPendingEmbed, cancellationToken))
@@ -424,6 +449,35 @@ public sealed class EntryEmbedder(
         CancellationToken cancellationToken) =>
         await connection.QuerySingleOrDefaultAsync<string?>(
             Def(MemorySql.SelectSetting, new { key }, cancellationToken)).ConfigureAwait(false);
+
+    private static async Task<bool> HasProviderAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var provider = await ReadSettingAsync(connection, EmbeddingSettingsKeys.Provider, cancellationToken)
+            .ConfigureAwait(false);
+        return !string.IsNullOrWhiteSpace(provider);
+    }
+
+    private static async Task<OpenMigrationState?> ReadOpenMigrationStateAsync(SqliteConnection connection,
+        CancellationToken cancellationToken) =>
+        await connection.QuerySingleOrDefaultAsync<OpenMigrationState>(
+            Def(MemorySql.SelectOpenModelMigrationLease, cancellationToken)).ConfigureAwait(false);
+
+    /// <summary>The open migration's pre-acquisition lease state (LANE P4): the previous holder
+    /// and the row's age, read before the lease is taken — after acquisition the row carries our
+    /// owner, so the pre-state is the only place 1009's facts exist.</summary>
+    internal sealed record OpenMigrationState
+    {
+        public string? LeaseOwner { get; init; }
+
+        public long? LeaseExpiresAt { get; init; }
+
+        public long? StartedAt { get; init; }
+
+        public bool LeaseWasStale(long now) =>
+            LeaseOwner is not null && LeaseExpiresAt is { } expiresAt && expiresAt < now;
+
+        public TimeSpan Age(long now) => TimeSpan.FromSeconds(Math.Max(0, now - (StartedAt ?? now)));
+    }
 
     private static async Task UpsertOrDeleteAsync(SqliteConnection connection, string key, string? value,
         CancellationToken cancellationToken, SqliteTransaction? transaction = null) =>

@@ -16,6 +16,13 @@ public sealed partial class EmbedDrainReporter(IMeasurementRecorder measurements
     public void MigrationStarted(ILogger logger, EmbedCorpus corpus, long owed) =>
         Log.MigrationDrainStarted(logger, corpus, owed);
 
+    public void MigrationLeaseHeld(ILogger logger, EmbedCorpus corpus) => Log.MigrationDrainLeaseHeld(logger, corpus);
+
+    public void MigrationAlreadyFinished(ILogger logger, EmbedCorpus corpus) =>
+        Log.MigrationAlreadyFinished(logger, corpus);
+
+    public void MigrationNoProvider(ILogger logger, EmbedCorpus corpus) => Log.MigrationDrainNoProvider(logger, corpus);
+
     public void PassFailed(ILogger logger, EmbedCorpus corpus, Exception exception) =>
         Log.DrainFailed(logger, corpus, exception);
 
@@ -74,5 +81,17 @@ public sealed partial class EmbedDrainReporter(IMeasurementRecorder measurements
         [LoggerMessage(EventId = 1008, Level = LogLevel.Information,
             Message = "Embed drain for {Corpus} started under the model migration: {Owed} row(s) owed")]
         public static partial void MigrationDrainStarted(ILogger logger, EmbedCorpus corpus, long owed);
+
+        [LoggerMessage(EventId = 1010, Level = LogLevel.Debug,
+            Message = "Embed drain for {Corpus} skipped: another relay pass holds the model migration lease")]
+        public static partial void MigrationDrainLeaseHeld(ILogger logger, EmbedCorpus corpus);
+
+        [LoggerMessage(EventId = 1011, Level = LogLevel.Debug,
+            Message = "Embed drain for {Corpus} skipped: the model migration was already finished by another relay pass")]
+        public static partial void MigrationAlreadyFinished(ILogger logger, EmbedCorpus corpus);
+
+        [LoggerMessage(EventId = 1012, Level = LogLevel.Warning,
+            Message = "Embed drain for {Corpus} cannot run: no embedding provider is configured; the model migration stays open and bank tools remain refused")]
+        public static partial void MigrationDrainNoProvider(ILogger logger, EmbedCorpus corpus);
     }
 }

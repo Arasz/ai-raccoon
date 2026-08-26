@@ -474,6 +474,12 @@ internal static class MemorySql
     public const string HasOpenModelMigration =
         "SELECT count(*) FROM model_migration WHERE id = 1 AND finished_at IS NULL";
 
+    /// <summary>The open migration's lease pre-state — read BEFORE acquiring, so the acquirer can
+    /// name a stale lease's previous holder (LANE P4, 1009). One indexed row (id = 1).</summary>
+    public const string SelectOpenModelMigrationLease =
+        "SELECT lease_owner AS LeaseOwner, lease_expires_at AS LeaseExpiresAt, started_at AS StartedAt " +
+        "FROM model_migration WHERE id = 1 AND finished_at IS NULL";
+
     // The DO UPDATE's WHERE clause is the state-machine guard: Start only ever moves a closed (or
     // absent) row to open, never overwrites one already open. When the row is open, the WHERE is
     // false, SQLite treats the upsert as a no-op for it, and this affects 0 rows — the caller's
