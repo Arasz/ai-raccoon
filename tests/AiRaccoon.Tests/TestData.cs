@@ -116,7 +116,8 @@ public static class TestData
         CancellationToken cancellationToken = default)
     {
         var service = new EmbedDrainService(pump, factory, entryEmbedder, codeEmbedder ?? new FakeCodeEmbedder(),
-            new SqliteSettingsStore(factory), NoOpMeasurementRecorder.Instance, TimeProvider.System,
+            new SqliteSettingsStore(factory), new EmbedDrainReporter(NoOpMeasurementRecorder.Instance, TimeProvider.System),
+            TimeProvider.System,
             TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
         foreach (var request in pump.DrainUpTo(int.MaxValue))
         {

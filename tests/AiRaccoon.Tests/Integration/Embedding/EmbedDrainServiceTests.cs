@@ -39,7 +39,8 @@ public sealed class EmbedDrainServiceTests : IDisposable
     private EmbedDrainService NewService(IEventPump<EmbedDrainRequest> pump, IEntryEmbedder? entry = null,
         ICodeEmbedder? code = null) =>
         new(pump, _factory, entry ?? new RecordingEntryEmbedder(), code ?? new RecordingCodeEmbedder(),
-            new SqliteSettingsStore(_factory), NoOpMeasurementRecorder.Instance, TimeProvider.System,
+            new SqliteSettingsStore(_factory), new EmbedDrainReporter(NoOpMeasurementRecorder.Instance, TimeProvider.System),
+            TimeProvider.System,
             TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
 
     /// <summary>E1.</summary>

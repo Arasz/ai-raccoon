@@ -138,7 +138,8 @@ public sealed class RowBudgetTests : IDisposable
         new(pump, _factory,
             TestData.CreateEntryEmbedder(new CountingEmbeddingService(), Substitute.For<IModelMigrationLease>(), TimeProvider.System, new VecDimensionReconciler()),
             new CodeEmbedder(new FakeCodeEmbeddingService(), NullLoggerFor<CodeEmbedder>(), new VecDimensionReconciler()),
-            new SqliteSettingsStore(_factory), NoOpMeasurementRecorder.Instance, TimeProvider.System,
+            new SqliteSettingsStore(_factory), new EmbedDrainReporter(NoOpMeasurementRecorder.Instance, TimeProvider.System),
+            TimeProvider.System,
             TestTelemetry.None, logger ?? NullLoggerFor<EmbedDrainService>());
 
     private static ILogger<T> NullLoggerFor<T>() => Microsoft.Extensions.Logging.Abstractions.NullLogger<T>.Instance;

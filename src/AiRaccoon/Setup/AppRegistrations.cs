@@ -361,6 +361,10 @@ public static partial class AppRegistrations
             // before IEntryEmbedder so constructor injection resolves it.
             services.AddRequiredSingleton<IModelMigrationLease, SqliteModelMigrationLease>();
             services.AddRequiredSingleton<IVecDimensionReconciler, VecDimensionReconciler>();
+            // The drain's one log + metric surface (LANE P4): registered beside EntryEmbedder so
+            // the narrower CLI graph RegisterCoreMemoryServices builds on its own can resolve it
+            // too — EmbedDrainService (RegisterEmbedDrainServices) resolves the same singleton.
+            services.AddSingleton<EmbedDrainReporter>();
             services.AddRequiredSingleton<IEntryEmbedder, EntryEmbedder>();
             services.AddRequiredSingleton<IEmbeddingAvailability, EmbeddingAvailability>();
             // The code corpus's own embedder (docs/work/2026-08-21-code-search-implementation-plan.md

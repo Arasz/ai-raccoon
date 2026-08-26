@@ -1,6 +1,5 @@
 using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Metrics;
 using AiRaccoon.Core.Observability;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -39,7 +38,7 @@ public sealed partial class EmbedDrainService(
     IEntryEmbedder entryEmbedder,
     ICodeEmbedder codeEmbedder,
     ISettingsStore settings,
-    IMeasurementRecorder measurements,
+    EmbedDrainReporter reporter,
     TimeProvider timeProvider,
     IOperationTelemetry telemetry,
     ILogger<EmbedDrainService> logger)
@@ -79,7 +78,7 @@ public sealed partial class EmbedDrainService(
                 // Single reader: nothing else can have taken it first. Only reachable if the
                 // channel reported readable and then had nothing — logged so a real occurrence is
                 // visible rather than silently swallowed.
-                Log.DrainSkippedCoalesced(logger);
+                reporter.SkippedCoalesced(logger);
                 Drains.Increment();
                 continue;
             }
@@ -94,7 +93,7 @@ public sealed partial class EmbedDrainService(
             }
             catch (Exception ex)
             {
-                Log.DrainFailed(logger, taken[0].Corpus, ex);
+                reporter.PassFailed(logger, taken[0].Corpus, ex);
             }
             finally
             {
@@ -106,7 +105,7 @@ public sealed partial class EmbedDrainService(
     /// <summary>One drain pass for one request: open a connection, drain up to the configured rows-per-run for its corpus. Test seam.</summary>
     internal async Task DrainOnceAsync(EmbedDrainRequest request, CancellationToken cancellationToken)
     {
-        Log.DrainStarted(logger, request.Corpus);
+        reporter.PassStarted(logger, request.Corpus);
         using var pass = telemetry.Begin(OperationName);
         var startedAt = timeProvider.GetTimestamp();
         try
@@ -131,7 +130,7 @@ public sealed partial class EmbedDrainService(
             {
                 // Already queued (coalesced) or, in principle, capacity-dropped — either way the
                 // 15s poll still recovers it off the durable outbox, but this is worth seeing.
-                Log.SelfReSignalNotQueued(logger, request.Corpus);
+                reporter.SelfReSignalNotQueued(logger, request.Corpus);
             }
 
             // RecordRows MUST run before Succeeded() (#548 review, B1): Succeeded() claims the
@@ -139,8 +138,7 @@ public sealed partial class EmbedDrainService(
             // already-spent scope and the OTLP histogram never receives it.
             pass.RecordRows(drained);
             pass.Succeeded();
-            Log.DrainFinished(logger, request.Corpus, drained);
-            RecordDrainMetrics(request.Corpus, drained, timeProvider.GetElapsedTime(startedAt));
+            reporter.PassFinished(logger, request.Corpus, drained, timeProvider.GetElapsedTime(startedAt));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -153,20 +151,6 @@ public sealed partial class EmbedDrainService(
         }
     }
 
-    /// <summary>
-    ///     WP11 (log-values-as-metrics): EventId 1003's row count, plus the pass duration, recorded
-    ///     beside the log line above — same values, not a second computation. Bank-wide (like
-    ///     job.*): a drain pass has a corpus, not a project.
-    /// </summary>
-    private void RecordDrainMetrics(EmbedCorpus corpus, int rows, TimeSpan elapsed)
-    {
-        var corpusName = corpus.ToString().ToLowerInvariant();
-        var now = timeProvider.GetUtcNow();
-        measurements.Record(new Measurement(MetricsConfigKeys.DrainRowsMetricName(corpusName),
-            MeasurementKind.Histogram, rows, "count", now, MetricsConfigKeys.SelfMetricsProjectId));
-        measurements.Record(new Measurement(MetricsConfigKeys.DrainDurationMetricName(corpusName),
-            MeasurementKind.Histogram, elapsed.TotalMilliseconds, "ms", now, MetricsConfigKeys.SelfMetricsProjectId));
-    }
 
     /// <summary>The most recently warned-about invalid raw value, or null once a valid one is seen — this pass runs every drain, so warning on every pass for a persistent bad value would never stop (review finding 2, #517).</summary>
     private string? _lastWarnedRowsPerRun;
@@ -178,7 +162,7 @@ public sealed partial class EmbedDrainService(
         {
             if (raw != _lastWarnedRowsPerRun)
             {
-                Log.InvalidRowsPerRunSetting(logger, raw!, BankMaintenanceConfigKeys.MaxEmbedRowsPerRun);
+                reporter.InvalidRowsPerRunSetting(logger, raw!, BankMaintenanceConfigKeys.MaxEmbedRowsPerRun);
                 _lastWarnedRowsPerRun = raw;
             }
         }
@@ -190,28 +174,4 @@ public sealed partial class EmbedDrainService(
         return rows;
     }
 
-    private static partial class Log
-    {
-        [LoggerMessage(EventId = 1002, Level = LogLevel.Debug, Message = "Embed drain pass started for {Corpus}")]
-        public static partial void DrainStarted(ILogger logger, EmbedCorpus corpus);
-
-        [LoggerMessage(EventId = 1003, Level = LogLevel.Information,
-            Message = "Embed drain pass finished for {Corpus}: {Rows} row(s)")]
-        public static partial void DrainFinished(ILogger logger, EmbedCorpus corpus, int rows);
-
-        [LoggerMessage(EventId = 1004, Level = LogLevel.Debug,
-            Message = "Embed drain signalled but the pump was already empty when taken (coalesced away)")]
-        public static partial void DrainSkippedCoalesced(ILogger logger);
-
-        [LoggerMessage(EventId = 1005, Level = LogLevel.Warning, Message = "Embed drain pass failed for {Corpus}")]
-        public static partial void DrainFailed(ILogger logger, EmbedCorpus corpus, Exception exception);
-
-        [LoggerMessage(EventId = 1006, Level = LogLevel.Warning,
-            Message = "Invalid maintenance.embed-rows-per-run.global setting '{Value}': expected a positive integer, at most {Max}. Falling back to the default or clamped value.")]
-        public static partial void InvalidRowsPerRunSetting(ILogger logger, string value, int max);
-
-        [LoggerMessage(EventId = 1007, Level = LogLevel.Debug,
-            Message = "Embed drain's self re-signal for {Corpus} did not enqueue (already queued, or the pump is full); the next poll recovers it")]
-        public static partial void SelfReSignalNotQueued(ILogger logger, EmbedCorpus corpus);
-    }
 }
