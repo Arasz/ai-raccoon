@@ -30,6 +30,8 @@ flowchart LR
 
 ## What's new
 
+- **`settings model reset` no longer strands an open model migration.** While the ADR-0076 outbox row is open, the reset is refused with exit `25` and the frozen reason on stderr — nothing is deleted, and the bank recovers when the migration finishes. (1.36.1) [ADR-0076](docs/adr/0076-model-set-is-an-outbox-drained-by-an-on-demand-relay.md) · [How-to](docs/how-to/configure-ai-raccoon-server.md)
+
 - **`ai-raccoon doctor` now reports both embedding engines and the migration outbox.** Memory and code engine lines print side by side, pending-row counts follow each, and an open model migration is a named verdict — `status: MIGRATION IN PROGRESS`, exit `24` — instead of a misleading `HEALTHY`/`0` while every MCP tool call is refused. The embed relay's migration drain logs progress (event ids 1008-1013) through the same corpus-tagged lines as the regular drain. (1.36.0) [ADR-0076](docs/adr/0076-model-set-is-an-outbox-drained-by-an-on-demand-relay.md) · [How-to](docs/how-to/configure-ai-raccoon-server.md)
 
 - **Memory and code engines are now configured separately.** `model embedding set local|openai` selects the memory bank's engine; `model code set default|local` the code corpus's; `model download` stays fetch-only (it never activates). Configuration reads back under `settings model embedding show|reset` and `settings model code show|reset`. (1.35.0)
