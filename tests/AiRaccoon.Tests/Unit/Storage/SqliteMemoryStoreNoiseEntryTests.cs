@@ -46,7 +46,7 @@ public sealed class SqliteMemoryStoreNoiseEntryTests : IDisposable
 
     private SqliteMemoryStore CreateStore(INoiseEntryStore noiseEntryStore)
     {
-        var entryEmbedder = new EntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider, new VecDimensionReconciler());
+        var entryEmbedder = TestData.CreateEntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider, new VecDimensionReconciler());
         var noiseFilteringService = new NoiseFilteringService([new HermesProcessNoisePolicy()]);
         var fileIngestor = new FileIngestor(new FileTypeMatcher([]), new SqliteMemorySourceStore(_factory), new FakeTimeProvider(FixedNow),
             TestData.CreateEmbeddingService(), NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance,

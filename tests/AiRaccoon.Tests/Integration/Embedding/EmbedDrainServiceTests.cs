@@ -195,7 +195,7 @@ public sealed class EmbedDrainServiceTests : IDisposable
         // a fresh PendingEmbedJob poll enqueues again once the queued item is taken and drained.
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         await SeedPendingProviderAndRowAsync(connection);
-        var job = new PendingEmbedJob(new EntryEmbedder(new CountingEmbeddingService(),
+        var job = new PendingEmbedJob(TestData.CreateEntryEmbedder(new CountingEmbeddingService(),
             NSubstitute.Substitute.For<IModelMigrationLease>(), TimeProvider.System, new VecDimensionReconciler()), pump);
         (await job.HasWorkAsync(connection, TestContext.Current.CancellationToken)).ShouldBeTrue(
             "the coalesced signal cost nothing durable — the row is still pending");

@@ -227,7 +227,7 @@ public sealed class CodeCorpusFeatureContext : IDisposable
             new JsonFileTypeHandler(TestData.RealJsonChunker(markdownChunker))
         ]);
         var embeddings = TestData.CreateEmbeddingService();
-        var embedder = new EntryEmbedder(embeddings, ModelMigrationLease, TimeProvider, new VecDimensionReconciler());
+        var embedder = TestData.CreateEntryEmbedder(embeddings, ModelMigrationLease, TimeProvider, new VecDimensionReconciler());
         var codeFileTypeMatcher = new CodeFileTypeMatcher();
         var codeIngestor = new CodeIngestor(codeFileTypeMatcher, new StubCodeChunker(), TimeProvider);
         var fileIngestor = new FileIngestor(matcher, sourceStore, TimeProvider, embeddings,

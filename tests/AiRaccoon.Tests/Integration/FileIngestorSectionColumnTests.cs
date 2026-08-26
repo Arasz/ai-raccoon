@@ -43,7 +43,7 @@ public class FileIngestorSectionColumnTests : IDisposable
         _conn = factory.OpenBankAsync(CancellationToken.None).GetAwaiter().GetResult();
 
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker())]);
-        _embedder = new EntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider, new VecDimensionReconciler());
+        _embedder = TestData.CreateEntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider, new VecDimensionReconciler());
         _ingestor = new FileIngestor(matcher, new SqliteMemorySourceStore(factory), TimeProvider.System,
             TestData.CreateEmbeddingService(), NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance,
             NullCodeIngestor.Instance, NullWatchStore.Instance, NullEmbedDrainPump.Instance);

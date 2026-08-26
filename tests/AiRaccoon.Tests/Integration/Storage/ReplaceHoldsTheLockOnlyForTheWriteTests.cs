@@ -58,7 +58,7 @@ public sealed class ReplaceHoldsTheLockOnlyForTheWriteTests : IDisposable
             NullWatchStore.Instance, NullEmbedDrainPump.Instance);
         var blockingIngestor = new BlockingFileIngestor(realIngestor);
         var store = new SqliteMemoryStore(_factory, sourceStore, blockingIngestor,
-            new EntryEmbedder(embeddings, Substitute.For<IModelMigrationLease>(), time, new VecDimensionReconciler()), time,
+            TestData.CreateEntryEmbedder(embeddings, Substitute.For<IModelMigrationLease>(), time, new VecDimensionReconciler()), time,
             NullLogger<SqliteMemoryStore>.Instance, new NoiseFilteringService([]), new SqliteSettingsStore(_factory),
             NullEmbedDrainPump.Instance, NoOpMeasurementRecorder.Instance);
 

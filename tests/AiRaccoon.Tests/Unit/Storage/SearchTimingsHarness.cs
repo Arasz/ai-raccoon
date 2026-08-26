@@ -26,7 +26,7 @@ internal static class SearchTimingsHarness
     public static SqliteMemoryStore CreateStore(ISqliteConnectionFactory factory, TimeProvider timeProvider,
         IEntryEmbedder? embedder = null)
     {
-        embedder ??= new EntryEmbedder(TestData.CreateEmbeddingService(), ModelMigrationLease, TimeProvider, new VecDimensionReconciler());
+        embedder ??= TestData.CreateEntryEmbedder(TestData.CreateEmbeddingService(), ModelMigrationLease, TimeProvider, new VecDimensionReconciler());
         var fileIngestor = new FileIngestor(new FileTypeMatcher([]), new SqliteMemorySourceStore(factory), timeProvider,
             TestData.CreateEmbeddingService(), NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance,
             NullCodeIngestor.Instance, NullWatchStore.Instance, NullEmbedDrainPump.Instance);

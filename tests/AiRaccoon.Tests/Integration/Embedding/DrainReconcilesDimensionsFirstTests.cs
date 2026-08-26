@@ -30,7 +30,7 @@ public sealed class DrainReconcilesDimensionsFirstTests
         await OpenMigrationAsync(connection);
 
         var reconciler = new RecordingReconciler(connection);
-        var embedder = new EntryEmbedder(new CountingEmbeddingService(), new SqliteModelMigrationLease(TimeProvider.System),
+        var embedder = TestData.CreateEntryEmbedder(new CountingEmbeddingService(), new SqliteModelMigrationLease(TimeProvider.System),
             new FakeTimeProvider(), reconciler);
 
         await embedder.DrainMigrationAsync(connection, Ct);
@@ -52,7 +52,7 @@ public sealed class DrainReconcilesDimensionsFirstTests
         await OpenMigrationAsync(connection);
         await connection.ExecuteAsync(new CommandDefinition("DROP TABLE vec_entries", cancellationToken: Ct));
 
-        var embedder = new EntryEmbedder(new CountingEmbeddingService(), new SqliteModelMigrationLease(TimeProvider.System),
+        var embedder = TestData.CreateEntryEmbedder(new CountingEmbeddingService(), new SqliteModelMigrationLease(TimeProvider.System),
             new FakeTimeProvider(), new VecDimensionReconciler());
 
         await embedder.DrainMigrationAsync(connection, Ct);

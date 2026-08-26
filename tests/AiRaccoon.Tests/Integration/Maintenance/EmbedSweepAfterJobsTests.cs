@@ -72,7 +72,7 @@ public sealed class EmbedSweepAfterJobsTests : IDisposable
         await ConfigureProviderAsync();
         var pendingCreatingJob = new PendingCreatingJob(ProjectId);
         var pump = TestData.NewEmbedDrainPump();
-        var pendingEmbedJob = new PendingEmbedJob(new EntryEmbedder(new CountingEmbeddingService(), _modelMigrationLease, _time, new VecDimensionReconciler()), pump);
+        var pendingEmbedJob = new PendingEmbedJob(TestData.CreateEntryEmbedder(new CountingEmbeddingService(), _modelMigrationLease, _time, new VecDimensionReconciler()), pump);
 
         await ServiceWith(pendingCreatingJob, pendingEmbedJob).RunOnceAsync(TestContext.Current.CancellationToken);
 

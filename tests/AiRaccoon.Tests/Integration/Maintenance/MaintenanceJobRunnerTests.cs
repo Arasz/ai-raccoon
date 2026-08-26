@@ -53,7 +53,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
     {
         var pump = TestData.NewEmbedDrainPump();
         await SeedProviderAndPendingRowsAsync(5);
-        var entryEmbedder = new EntryEmbedder(new CountingEmbeddingService(),
+        var entryEmbedder = TestData.CreateEntryEmbedder(new CountingEmbeddingService(),
             Substitute.For<IModelMigrationLease>(), _time, new VecDimensionReconciler());
         var job = new PendingEmbedJob(entryEmbedder, pump);
 
