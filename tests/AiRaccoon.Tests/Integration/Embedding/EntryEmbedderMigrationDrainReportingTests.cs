@@ -170,6 +170,55 @@ public sealed class EntryEmbedderMigrationDrainReportingTests : IDisposable
             "1012 must not flood the 15s poll — one Warning per process per migration");
     }
 
+    /// <summary>WP-P4-4: an expired lease from a dead holder — the owner's exact bank state
+    /// (open row, lease_owner='dead:1:x', lease_expires_at in the past) — is reclaimed; 1009
+    /// Warning names the previous holder and the age, then the drain proceeds and finishes.</summary>
+    [RetryFact]
+    public async Task Drain_ReclaimsAStaleLeaseAndEmits1009NamingTheDeadHolder()
+    {
+        await using var connection = await _factory.OpenBankAsync(Ct);
+        await SeedPendingRowsAsync(connection, 2);
+        await ConfigureProviderAsync(connection);
+        var now = FixedNow.ToUnixTimeSeconds();
+        await OpenMigrationAsync(connection, startedAt: now - 20 * 60, leaseOwner: "dead:1:x",
+            leaseExpiresAt: now - 60);
+
+        var logger = new FakeLogger<EntryEmbedder>();
+        var measurements = new RecordingMeasurementRecorder();
+        var embedder = NewEmbedder(logger, measurements);
+
+        (await embedder.DrainMigrationAsync(connection, Ct)).ShouldBeTrue(
+            "the expired lease must be reclaimed and the drain must proceed");
+
+        var record = logger.Collector.GetSnapshot().Single(r => r.Id.Id == 1009);
+        record.Level.ShouldBe(LogLevel.Warning);
+        record.Message.ShouldBe(
+            "Embed drain for Memory resumed a model migration opened 00:20:00 ago; its previous holder 'dead:1:x' stopped renewing the lease");
+        record.StructuredState!.Single(kv => kv.Key == "PreviousOwner").Value.ShouldBe("dead:1:x");
+        record.StructuredState!.Single(kv => kv.Key == "Age").Value.ShouldBe("00:20:00");
+
+        measurements.Recorded.Single(m => m.Name == "drain.memory.rows").Value.ShouldBe(2);
+        (await ReadFinishedAtAsync(connection)).ShouldNotBeNull();
+    }
+
+    /// <summary>WP-P4-4's negative arm: a drain acquiring a FREE lease emits no 1009 — the
+    /// warning is for a reclaimed stale lease only.</summary>
+    [RetryFact]
+    public async Task Drain_WithAFreeLease_EmitsNo1009()
+    {
+        await using var connection = await _factory.OpenBankAsync(Ct);
+        await SeedPendingRowsAsync(connection, 1);
+        await ConfigureProviderAsync(connection);
+        await OpenMigrationAsync(connection, startedAt: 0); // lease_owner IS NULL
+
+        var logger = new FakeLogger<EntryEmbedder>();
+        var embedder = NewEmbedder(logger, new RecordingMeasurementRecorder());
+
+        (await embedder.DrainMigrationAsync(connection, Ct)).ShouldBeTrue();
+
+        logger.Collector.GetSnapshot().ShouldNotContain(r => r.Id.Id == 1009);
+    }
+
     private static async Task SeedPendingRowsAsync(SqliteConnection connection, int count)
     {
         var values = string.Join(", ", Enumerable.Range(0, count)

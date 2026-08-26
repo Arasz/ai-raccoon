@@ -137,6 +137,12 @@ public sealed class EntryEmbedder(
                 return false;
             }
 
+            var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
+            if (preState is { } state && state.LeaseWasStale(now))
+            {
+                reporter.MigrationResumedAfterStall(logger, corpus, state.LeaseOwner!, state.Age(now));
+            }
+
             if (!await HasProviderAsync(connection, cancellationToken).ConfigureAwait(false))
             {
                 if (preState?.StartedAt != _warnedNoProviderMigration)

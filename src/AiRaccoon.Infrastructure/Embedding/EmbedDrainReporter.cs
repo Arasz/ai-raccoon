@@ -23,6 +23,9 @@ public sealed partial class EmbedDrainReporter(IMeasurementRecorder measurements
 
     public void MigrationNoProvider(ILogger logger, EmbedCorpus corpus) => Log.MigrationDrainNoProvider(logger, corpus);
 
+    public void MigrationResumedAfterStall(ILogger logger, EmbedCorpus corpus, string previousOwner, TimeSpan age) =>
+        Log.MigrationDrainResumedAfterStall(logger, corpus, previousOwner, age);
+
     public void PassFailed(ILogger logger, EmbedCorpus corpus, Exception exception) =>
         Log.DrainFailed(logger, corpus, exception);
 
@@ -93,5 +96,10 @@ public sealed partial class EmbedDrainReporter(IMeasurementRecorder measurements
         [LoggerMessage(EventId = 1012, Level = LogLevel.Warning,
             Message = "Embed drain for {Corpus} cannot run: no embedding provider is configured; the model migration stays open and bank tools remain refused")]
         public static partial void MigrationDrainNoProvider(ILogger logger, EmbedCorpus corpus);
+
+        [LoggerMessage(EventId = 1009, Level = LogLevel.Warning,
+            Message = "Embed drain for {Corpus} resumed a model migration opened {Age} ago; its previous holder '{PreviousOwner}' stopped renewing the lease")]
+        public static partial void MigrationDrainResumedAfterStall(ILogger logger, EmbedCorpus corpus,
+            string previousOwner, TimeSpan age);
     }
 }
