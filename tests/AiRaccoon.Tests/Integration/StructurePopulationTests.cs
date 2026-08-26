@@ -48,7 +48,7 @@ public sealed class StructurePopulationTests : IAsyncLifetime
         var fileIngestor = new FileIngestor(matcher, sourceStore, _clock, embeddings,
             NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
             NullWatchStore.Instance, _pump);
-        var embedder = new EntryEmbedder(embeddings, Substitute.For<IModelMigrationLease>(), _clock, new VecDimensionReconciler());
+        var embedder = TestData.CreateEntryEmbedder(embeddings, Substitute.For<IModelMigrationLease>(), _clock, new VecDimensionReconciler());
         _store = new SqliteMemoryStore(_factory, sourceStore, fileIngestor, embedder, _clock,
             NullLogger<SqliteMemoryStore>.Instance, new NoiseFilteringService([]), new SqliteSettingsStore(_factory), _pump,
             NoOpMeasurementRecorder.Instance);
@@ -90,7 +90,7 @@ public sealed class StructurePopulationTests : IAsyncLifetime
         // Ingest only leaves the row pending and enqueues the signal; drain it explicitly to
         // exercise the real embed pass this test is actually about.
         await TestData.DrainEmbedTopicAsync(_factory, _pump,
-            new EntryEmbedder(TestData.CreateEmbeddingService(), Substitute.For<IModelMigrationLease>(), _clock, new VecDimensionReconciler()),
+            TestData.CreateEntryEmbedder(TestData.CreateEmbeddingService(), Substitute.For<IModelMigrationLease>(), _clock, new VecDimensionReconciler()),
             cancellationToken: TestContext.Current.CancellationToken);
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         (await Scalar(connection, "SELECT count(*) FROM vec_entries")).ShouldBeGreaterThan(0,

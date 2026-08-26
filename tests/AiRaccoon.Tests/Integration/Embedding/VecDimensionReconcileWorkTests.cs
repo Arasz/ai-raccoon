@@ -204,7 +204,7 @@ public sealed class VecDimensionReconcileWorkTests : IDisposable
     private async Task<EntryEmbedder> ArrangeAsync(string dataRoot, int dimensions)
     {
         await ConfigureManifestEngineAsync(dataRoot, WriteManifestDir(dimensions));
-        return new EntryEmbedder(RealEmbeddingService(), new SqliteModelMigrationLease(TimeProvider.System),
+        return TestData.CreateEntryEmbedder(RealEmbeddingService(), new SqliteModelMigrationLease(TimeProvider.System),
             new FakeTimeProvider(), new VecDimensionReconciler());
     }
 

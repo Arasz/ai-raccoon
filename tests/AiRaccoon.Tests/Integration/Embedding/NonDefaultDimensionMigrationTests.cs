@@ -31,7 +31,7 @@ public sealed class NonDefaultDimensionMigrationTests
         await SeedPendingEntriesAsync(connection, 3);
         await OpenMigrationAsync(connection);
 
-        var embedder = new EntryEmbedder(new FixedDimensionEmbeddingService(Dimension),
+        var embedder = TestData.CreateEntryEmbedder(new FixedDimensionEmbeddingService(Dimension),
             new SqliteModelMigrationLease(TimeProvider.System), new FakeTimeProvider(), new VecDimensionReconciler());
 
         await embedder.DrainMigrationAsync(connection, Ct);
@@ -54,7 +54,7 @@ public sealed class NonDefaultDimensionMigrationTests
         await SeedPendingEntriesAsync(connection, 1);
         await OpenMigrationAsync(connection);
 
-        var embedder = new EntryEmbedder(new FixedDimensionEmbeddingService(384),
+        var embedder = TestData.CreateEntryEmbedder(new FixedDimensionEmbeddingService(384),
             new SqliteModelMigrationLease(TimeProvider.System), new FakeTimeProvider(), new VecDimensionReconciler());
 
         await embedder.DrainMigrationAsync(connection, Ct);

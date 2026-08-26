@@ -75,7 +75,7 @@ public static class TestData
         IMeasurementRecorder? measurements)
     {
         jsonChunker ??= RealJsonChunker(markdownChunker);
-        var embedder = new EntryEmbedder(embeddings, modelMigrationLease ?? ModelMigrationLease, timeProvider, new VecDimensionReconciler());
+        var embedder = CreateEntryEmbedder(embeddings, modelMigrationLease ?? ModelMigrationLease, timeProvider, new VecDimensionReconciler());
         var matcher = new FileTypeMatcher(
             [new MarkdownFileTypeHandler(markdownChunker), new JsonFileTypeHandler(jsonChunker)]);
         // This helper's own documented contract is "omitted, the store behaves as a memory-only
@@ -95,6 +95,18 @@ public static class TestData
     }
 
     /// <summary>
+    ///     The one test-side constructor of <see cref="EntryEmbedder" /> (docs/work/2026-08-26-doctor-parity-integrated-brief.md,
+    ///     R1 M5): every test construction routes through here, so the production constructor can
+    ///     change once instead of across 38 call sites. The factory's own body absorbs the extra
+    ///     dependencies the production constructor gains.
+    /// </summary>
+    public static EntryEmbedder CreateEntryEmbedder(IEmbeddingService embeddings, IModelMigrationLease migrationLease,
+        TimeProvider timeProvider, IVecDimensionReconciler vecDimensionReconciler) =>
+        new(embeddings, migrationLease, timeProvider, vecDimensionReconciler,
+            new EmbedDrainReporter(NoOpMeasurementRecorder.Instance, timeProvider),
+            TestTelemetry.None, NullLogger<EntryEmbedder>.Instance);
+
+    /// <summary>
     ///     Drains every embed-topic request currently queued the same way
     ///     <see cref="EmbedDrainService" />'s own consumer would — one <c>DrainOnceAsync</c> pass per
     ///     queued item — without starting the hosted service. The one place tests share this instead
@@ -106,7 +118,8 @@ public static class TestData
         CancellationToken cancellationToken = default)
     {
         var service = new EmbedDrainService(pump, factory, entryEmbedder, codeEmbedder ?? new FakeCodeEmbedder(),
-            new SqliteSettingsStore(factory), NoOpMeasurementRecorder.Instance, TimeProvider.System,
+            new SqliteSettingsStore(factory), new EmbedDrainReporter(NoOpMeasurementRecorder.Instance, TimeProvider.System),
+            TimeProvider.System,
             TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
         foreach (var request in pump.DrainUpTo(int.MaxValue))
         {
@@ -134,7 +147,7 @@ public static class TestData
             .ConfigureAwait(false);
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
         var resolvedClock = clock ?? TimeProvider.System;
-        var embedder = new EntryEmbedder(embeddings, new SqliteModelMigrationLease(resolvedClock), resolvedClock, new VecDimensionReconciler());
+        var embedder = CreateEntryEmbedder(embeddings, new SqliteModelMigrationLease(resolvedClock), resolvedClock, new VecDimensionReconciler());
         await embedder.DrainMigrationAsync(connection, cancellationToken).ConfigureAwait(false);
         return config;
     }

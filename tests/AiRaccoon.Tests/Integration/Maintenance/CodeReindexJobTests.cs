@@ -122,9 +122,10 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
         var stateAfterSignal = await connection.ExecuteScalarAsync<string>("SELECT embed_state FROM code_entries WHERE id = 1");
         stateAfterSignal.ShouldBe("pending", "RunAsync only signals — it must not drain itself");
 
-        var drainService = new EmbedDrainService(pump, _factory, new EntryEmbedder(new CountingEmbeddingService(),
+        var drainService = new EmbedDrainService(pump, _factory, TestData.CreateEntryEmbedder(new CountingEmbeddingService(),
             Substitute.For<IModelMigrationLease>(), TimeProvider.System, new VecDimensionReconciler()), embedder,
-            new SqliteSettingsStore(_factory), NoOpMeasurementRecorder.Instance, TimeProvider.System,
+            new SqliteSettingsStore(_factory), new EmbedDrainReporter(NoOpMeasurementRecorder.Instance, TimeProvider.System),
+            TimeProvider.System,
             TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
         var request = pump.DrainUpTo(1).ShouldHaveSingleItem();
         await drainService.DrainOnceAsync(request, TestContext.Current.CancellationToken);

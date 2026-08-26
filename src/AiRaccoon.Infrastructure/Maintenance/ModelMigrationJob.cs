@@ -1,4 +1,5 @@
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
@@ -24,8 +25,7 @@ public sealed class ModelMigrationJob(IEntryEmbedder embedder) : IMaintenanceJob
 
     public async ValueTask<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
         await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                "SELECT count(*) FROM model_migration WHERE id = 1 AND finished_at IS NULL",
-                cancellationToken: cancellationToken))
+                MemorySql.HasOpenModelMigration, cancellationToken: cancellationToken))
             .ConfigureAwait(false) > 0;
 
     /// <summary>

@@ -1,0 +1,74 @@
+{
+  "_note": "Manual live verification for 1.36.0 (PR #591). Run AFTER the release tool is installed (dotnet tool update -g ai-raccoon). Rows 3-5 are reproducible against the captured evidence bank; row 3 is the exit-24 surface and must run read-only against a COPY — doctor never writes, but the evidence bank must stay pristine.",
+  "run": "1.36.0-doctor-memory-engine",
+  "derived": {
+    "version": "1.36.0",
+    "pr": 591,
+    "anchor": "task doctor-feature-match; docs/work/2026-08-26-doctor-parity-integrated-brief.md"
+  },
+  "items": [
+    {
+      "item": "fresh-install-not-configured-state",
+      "expected-result": "On a brand-new data root with no engine configured, `ai-raccoon doctor` prints `memory engine: not configured — run 'ai-raccoon model embedding set local' …` (wording matches `model embedding show`'s FTS5-only state) and `model migration: none open`, and exits 0.",
+      "anchor": "src/AiRaccoon/Setup/Diagnostics/CorpusEngineReport.cs; EmbeddingEngineSetup.DefaultModelCommand",
+      "command": "DR=$(mktemp -d); ai-raccoon --data-root $DR serve --port 43441 & sleep 4; kill %1; ai-raccoon --data-root $DR doctor; echo EXIT=$?; ai-raccoon --data-root $DR settings model embedding show",
+      "evidence": "<paste both outputs; EXIT=0; the two not-configured wordings agree>",
+      "observed-result": "",
+      "status": "pending"
+    },
+    {
+      "item": "healthy-configured-bank-11-line-report",
+      "expected-result": "With both engines configured (or the owner's bank once settled), doctor prints the full 11-line report: memory engine + code engine lines adjacent, both pending counts, `model migration: none open`, `status: HEALTHY`, exit 0. The memory and code engine lines make `embedding.model == embedding.codeModel` visible if that is the state.",
+      "anchor": "docs/work/2026-08-26-doctor-parity-integrated-brief.md (frozen contract); CorpusEngineLinesTests.HowToHealthyBankSample_MatchesTheReportContract",
+      "command": "ai-raccoon doctor; echo EXIT=$?",
+      "evidence": "<paste output; count 11 lines; EXIT=0>",
+      "observed-result": "",
+      "status": "pending"
+    },
+    {
+      "item": "stuck-bank-reproducible-on-copy-exit-24",
+      "expected-result": "On a COPY of the captured evidence bank (docs/work/evidence-2026-08-26-stuck-bank/README.md), doctor prints `model migration: open since … (all MCP tool calls are refused until it finishes)`, `status: MIGRATION IN PROGRESS (schema shape is healthy; …)`, exits 24 — and the copy's SHA-256 is unchanged after the run (doctor never writes).",
+      "anchor": "ExitCode.ModelMigrationOpen; DoctorCommands.cs (status switch); evidence README hashes",
+      "command": "cp -p <evidence-dir>/memory.db /tmp/ev-copy.db; shasum -a 256 /tmp/ev-copy.db; ai-raccoon --data-root /tmp/ev-copy-doctor doctor; echo EXIT=$?; shasum -a 256 /tmp/ev-copy.db",
+      "evidence": "<paste output; EXIT=24; both hashes identical>",
+      "observed-result": "",
+      "status": "pending"
+    },
+    {
+      "item": "settled-bank-still-healthy-0",
+      "expected-result": "A bank whose model_migration row has finished_at set (or the owner's live bank once drained) reports HEALTHY and exits 0 — exit 24 must not leak past an open migration.",
+      "anchor": "R1 Ruling 4 (24 only from the Healthy arm, only on a positively-read open row); R2 B3",
+      "command": "ai-raccoon doctor; echo EXIT=$?",
+      "evidence": "<paste output; EXIT=0; no MIGRATION IN PROGRESS>",
+      "observed-result": "",
+      "status": "pending"
+    },
+    {
+      "item": "shape-mismatch-outranks-migration",
+      "expected-result": "A bank with an open migration AND a hand-dropped index reports SHAPE MISMATCH and exits 19, not 24.",
+      "anchor": "DoctorCommands.cs status switch (19/20 precedence); R2 B3 row 2",
+      "command": "<copy the evidence bank, DROP INDEX idx_entries_embed_state, run doctor; echo EXIT=$?>",
+      "evidence": "<paste output; EXIT=19; findings list shows the dropped index>",
+      "observed-result": "",
+      "status": "pending"
+    },
+    {
+      "item": "migration-drain-logs-1008-1013",
+      "expected-result": "While a migration drains (serve against the stuck bank or a seeded scratch bank), the server log shows `Embed drain for Memory started under the model migration: <N> row(s) owed` (1008), then 1003-style finish with the row count, and — if the previous holder died with an expired lease — the 1009 warning naming the previous holder.",
+      "anchor": "EmbedDrainReporter (1008-1013); docs/reference/logging-event-ids.md row 1002-1013",
+      "command": "ai-raccoon --data-root <stuck-or-seeded-bank> serve --port 43442 2>&1 | grep -E 'Embed drain|model migration' | head -20",
+      "evidence": "<paste the drain log lines with event ids>",
+      "observed-result": "",
+      "status": "pending"
+    },
+    {
+      "item": "event-id-registry-and-drift-gates",
+      "expected-result": "LoggerMessageEventIdTests and the fast lane are green on the released build; `docs/reference/logging-event-ids.md` count is 174 and the 1002-1013 row names EmbedDrainReporter; the how-to sample still matches the report contract (drift gate).",
+      "anchor": "LoggerMessageEventIdTests; CorpusEngineLinesTests.HowToHealthyBankSample_MatchesTheReportContract",
+      "command": "dotnet test tests/AiRaccoon.Tests --filter \"FullyQualifiedName~LoggerMessageEventIdTests|FullyQualifiedName~CorpusEngineLinesTests\" --no-build",
+      "evidence": "<paste summary; all green>",
+      "observed-result": "",
+      "status": "pending"
+    }
+  ]
+}

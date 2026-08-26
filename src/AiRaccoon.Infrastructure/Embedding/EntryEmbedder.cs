@@ -1,11 +1,14 @@
 using System.Globalization;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Observability;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Infrastructure.Embedding;
 
@@ -18,12 +21,19 @@ public sealed class EntryEmbedder(
     IEmbeddingService embeddings,
     IModelMigrationLease migrationLease,
     TimeProvider timeProvider,
-    IVecDimensionReconciler vecDimensions) : IEntryEmbedder
+    IVecDimensionReconciler vecDimensions,
+    EmbedDrainReporter reporter,
+    IOperationTelemetry telemetry,
+    ILogger<EntryEmbedder> logger) : IEntryEmbedder
 {
     /// <summary>Rows per generator call. Internal so PendingEmbedJob can derive its own per-run bound from it instead of duplicating the number.</summary>
     internal const int BatchSize = 32;
 
     private const string BundledModel = "bundled";
+
+    /// <summary>The open migration (its started_at) whose blank-provider state already produced
+    /// the 1012 Warning — one per process per migration, so the 15s relay poll cannot flood (M8).</summary>
+    private long? _warnedNoProviderMigration;
 
     /// <inheritdoc />
     public async Task<EmbeddingConfig> StartMigrationAsync(SqliteConnection connection, string provider,
@@ -99,22 +109,65 @@ public sealed class EntryEmbedder(
                 "ai-raccoon: EntryEmbedder was built without an IModelMigrationLease; DrainMigrationAsync needs one");
         }
 
+        const EmbedCorpus corpus = EmbedCorpus.Memory;
+
+        // The lease's pre-state, read BEFORE acquiring: after acquisition the row carries OUR
+        // owner, so the previous holder is only knowable here (1009, LANE P4).
+        var preState = await ReadOpenMigrationStateAsync(connection, cancellationToken).ConfigureAwait(false);
+
         if (!await migrationLease.TryAcquireAsync(connection, cancellationToken).ConfigureAwait(false))
         {
+            reporter.MigrationLeaseHeld(logger, corpus);
             return false;
         }
 
+        using var pass = telemetry.Begin(EmbedDrainService.OperationName);
+        var startedAt = timeProvider.GetTimestamp();
+        var drained = 0;
         try
         {
+            // The open-migration re-check stays UNDER the lease (S7): acquiring first is what
+            // makes it race-free. False here means the migration finished between the relay's
+            // due-check and this pass.
             var open = await connection.QuerySingleOrDefaultAsync<long?>(
                 Def(MemorySql.HasOpenModelMigration, cancellationToken)).ConfigureAwait(false) > 0;
             if (!open)
             {
+                reporter.MigrationAlreadyFinished(logger, corpus);
                 return false;
             }
 
+            var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
+            if (preState is { } state && state.LeaseWasStale(now))
+            {
+                reporter.MigrationResumedAfterStall(logger, corpus, state.LeaseOwner!, state.Age(now));
+            }
+
+            if (!await HasProviderAsync(connection, cancellationToken).ConfigureAwait(false))
+            {
+                if (preState?.StartedAt != _warnedNoProviderMigration)
+                {
+                    _warnedNoProviderMigration = preState?.StartedAt;
+                    reporter.MigrationNoProvider(logger, corpus);
+                }
+
+                // Observability only (M8): the drain keeps throwing — the bank stays ToolGate-locked
+                // until the model-reset guard closes or refuses the migration, a separate follow-up.
+                throw new InvalidOperationException(
+                    "ai-raccoon: no embedding provider is configured; the open model migration cannot drain " +
+                    "and the bank stays ToolGate-locked until a provider is set or the migration is closed");
+            }
+
+            var owed = await connection.ExecuteScalarAsync<long>(Def(MemorySql.CountPendingEmbed, cancellationToken))
+                .ConfigureAwait(false);
+            reporter.MigrationStarted(logger, corpus, owed);
+
             await ReconcileVecDimensionsAsync(connection, cancellationToken).ConfigureAwait(false);
 
+            // Time-strided, NOT per-batch: a per-batch line floods (1,492 lines on the owner's
+            // 47,723-row backlog) and the metric buffer would drop records. One 1013 per lease
+            // TTL crossed — O(elapsed time), and a drain that renews is a drain that reports.
+            var nextReport = timeProvider.GetUtcNow() + EmbedDrainReporter.ProgressStride;
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -125,14 +178,35 @@ public sealed class EntryEmbedder(
                     break;
                 }
 
-                await EmbedAsync(connection, batch, cancellationToken).ConfigureAwait(false);
+                drained += await EmbedAsync(connection, batch, cancellationToken).ConfigureAwait(false);
                 await migrationLease.TryRenewAsync(connection, cancellationToken).ConfigureAwait(false);
+                if (timeProvider.GetUtcNow() >= nextReport)
+                {
+                    reporter.MigrationProgress(logger, corpus, drained, timeProvider.GetElapsedTime(startedAt));
+                    nextReport = timeProvider.GetUtcNow() + EmbedDrainReporter.ProgressStride;
+                }
             }
 
             await connection.ExecuteAsync(Def(MemorySql.FinishModelMigration,
                     new { finishedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() }, cancellationToken))
                 .ConfigureAwait(false);
+            if (drained > 0)
+            {
+                pass.NoteWork();
+            }
+
+            // RecordRows MUST run before Succeeded() (#548 review, B1) — the same rule as
+            // EmbedDrainService.DrainOnceAsync: Succeeded() claims the scope's one measurement.
+            pass.RecordRows(drained);
+            pass.Succeeded();
+            reporter.PassFinished(logger, corpus, drained, timeProvider.GetElapsedTime(startedAt));
             return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            pass.Failed(ex);
+            reporter.PassFailed(logger, corpus, ex);
+            throw;
         }
         finally
         {
@@ -390,6 +464,35 @@ public sealed class EntryEmbedder(
         CancellationToken cancellationToken) =>
         await connection.QuerySingleOrDefaultAsync<string?>(
             Def(MemorySql.SelectSetting, new { key }, cancellationToken)).ConfigureAwait(false);
+
+    private static async Task<bool> HasProviderAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var provider = await ReadSettingAsync(connection, EmbeddingSettingsKeys.Provider, cancellationToken)
+            .ConfigureAwait(false);
+        return !string.IsNullOrWhiteSpace(provider);
+    }
+
+    private static async Task<OpenMigrationState?> ReadOpenMigrationStateAsync(SqliteConnection connection,
+        CancellationToken cancellationToken) =>
+        await connection.QuerySingleOrDefaultAsync<OpenMigrationState>(
+            Def(MemorySql.SelectOpenModelMigrationLease, cancellationToken)).ConfigureAwait(false);
+
+    /// <summary>The open migration's pre-acquisition lease state (LANE P4): the previous holder
+    /// and the row's age, read before the lease is taken — after acquisition the row carries our
+    /// owner, so the pre-state is the only place 1009's facts exist.</summary>
+    internal sealed record OpenMigrationState
+    {
+        public string? LeaseOwner { get; init; }
+
+        public long? LeaseExpiresAt { get; init; }
+
+        public long? StartedAt { get; init; }
+
+        public bool LeaseWasStale(long now) =>
+            LeaseOwner is not null && LeaseExpiresAt is { } expiresAt && expiresAt < now;
+
+        public TimeSpan Age(long now) => TimeSpan.FromSeconds(Math.Max(0, now - (StartedAt ?? now)));
+    }
 
     private static async Task UpsertOrDeleteAsync(SqliteConnection connection, string key, string? value,
         CancellationToken cancellationToken, SqliteTransaction? transaction = null) =>

@@ -330,11 +330,23 @@ ai-raccoon --data-root /path/to/dir doctor # verifies a bank elsewhere (a copy, 
 A healthy bank:
 
 ```
-user_version: 10 (this binary: 10)
-application_id: -519479064 (expected: -519479064)
+ai-raccoon doctor: /tmp/doctor-demo-healthy/memory.db
+user_version: 11 (this binary: 11)
+application_id: -1765263351 (expected: -1765263351)
+memory engine: faxenoff/code-daemon-embed-v1 (/tmp/doctor-demo-healthy/models/faxenoff__code-daemon-embed-v1)
+code engine: faxenoff/code-daemon-embed-v1 (/tmp/doctor-demo-healthy/models/code-daemon-embed-v1)
+embedding threads: 5 (halved-core default)
+memory rows pending: 0
+code rows pending: 0
+model migration: none open
 doctor verifies schema shape only; it never repairs a bank
 status: HEALTHY
 ```
+
+The engine lines print the model each corpus embeds with, side by side — if `embedding.model` and
+`embedding.codeModel` point at the same directory, that is where it shows. `memory rows pending` /
+`code rows pending` count rows waiting on an engine; `model migration` reports the ADR-0076 outbox
+(`none open` when settled).
 
 The same bank with one index dropped by hand:
 
@@ -352,16 +364,18 @@ represent, so recreating it is a data-loss decision, not a schema decision — o
 with the bank in front of you.
 
 It opens the bank **read-only** and does not modify it, so it is safe to run against a live bank or
-a backup. Exit code is `0` when healthy and non-zero on a mismatch, so it composes into a script:
+a backup. Exit code is `0` when healthy, `24` while a model migration is open (schema shape is
+still healthy), and non-zero on a mismatch, so it composes into a script:
 
 | Exit code | Meaning |
 |---|---|
-| `0` | HEALTHY |
+| `0` | HEALTHY — including `model migration: none open` |
 | `1` | the encryption key could not be resolved |
 | `2` | the bank could not be opened read-only |
 | `19` | SHAPE MISMATCH — the bank's actual schema differs from this binary's DDL |
 | `20` | the bank's `user_version` is newer than this binary supports |
 | `22` | no bank file exists at the resolved path — distinct from HEALTHY, so a wrong `--data-root` is never mistaken for a healthy bank |
+| `24` | MODEL MIGRATION OPEN — an embedding-engine re-embed is in progress; every MCP tool call is refused until it finishes (ADR-0076). Only reported when the schema shape is healthy (`19`/`20` take precedence), so `exit == 24` is itself a positive statement that the shape is clean. Scripts that want the old semantics test `rc == 0 || rc == 24` |
 
 If the bank is encrypted and the passphrase cannot be resolved, that is reported as a *read* failure
 and is distinguishable from a shape problem — a locked bank is not a broken one.

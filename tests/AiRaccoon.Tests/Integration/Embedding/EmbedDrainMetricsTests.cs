@@ -6,7 +6,9 @@ using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.Unit.Observability;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
@@ -38,10 +40,12 @@ public sealed class EmbedDrainMetricsTests : IDisposable
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private EmbedDrainService NewService(IEventPump<EmbedDrainRequest> pump, RecordingMeasurementRecorder measurements,
-        IEntryEmbedder? entry = null, ICodeEmbedder? code = null, IOperationTelemetry? telemetry = null) =>
+        IEntryEmbedder? entry = null, ICodeEmbedder? code = null, IOperationTelemetry? telemetry = null,
+        ILogger<EmbedDrainService>? logger = null) =>
         new(pump, _factory, entry ?? new StubEntryEmbedder(), code ?? new StubCodeEmbedder(),
-            new SqliteSettingsStore(_factory), measurements, _timeProvider, telemetry ?? TestTelemetry.None,
-            NullLogger<EmbedDrainService>.Instance);
+            new SqliteSettingsStore(_factory), new EmbedDrainReporter(measurements, _timeProvider), _timeProvider,
+            telemetry ?? TestTelemetry.None,
+            logger ?? NullLogger<EmbedDrainService>.Instance);
 
     [RetryFact]
     public async Task OneFullPass_RecordsDrainRowsAndDurationForTheCorpus()
@@ -101,6 +105,38 @@ public sealed class EmbedDrainMetricsTests : IDisposable
 
         measurements.Recorded.Single(m => m.Name == "drain.code.rows").Value.ShouldBe(3);
         measurements.Recorded.ShouldContain(m => m.Name == "drain.code.duration_ms");
+    }
+
+    /// <summary>
+    ///     WP-P4-1's load-bearing acceptance criterion (J5): the move must keep the log CATEGORY —
+    ///     the exact string in the owner's excerpt. A <c>FakeLogger&lt;T&gt;</c> stamps its own
+    ///     category, so this resolves the logger from a real ILoggerFactory through a
+    ///     FakeLoggerProvider; the mutation it catches is the reporter taking its own
+    ///     <c>ILogger&lt;EmbedDrainReporter&gt;</c>, which would rewrite every existing 1002-1007
+    ///     line's category.
+    /// </summary>
+    [RetryFact]
+    public async Task OneFullPass_Logs1003UnderTheServiceCategory()
+    {
+        var pump = TestData.NewEmbedDrainPump();
+        var measurements = new RecordingMeasurementRecorder();
+        var entry = new StubEntryEmbedder { RowsToReturn = 5 };
+        var provider = new FakeLoggerProvider();
+        var factory = LoggerFactory.Create(builder => builder.AddProvider(provider));
+        var service = NewService(pump, measurements, entry: entry, logger: factory.CreateLogger<EmbedDrainService>());
+
+        try
+        {
+            await service.DrainOnceAsync(new EmbedDrainRequest(EmbedCorpus.Memory), TestContext.Current.CancellationToken);
+
+            provider.Collector.GetSnapshot().Single(r => r.Id.Id == 1003)
+                .Category.ShouldBe("AiRaccoon.Infrastructure.Embedding.EmbedDrainService",
+                    "the reporter must take the CALLER's ILogger, not its own");
+        }
+        finally
+        {
+            factory.Dispose();
+        }
     }
 
     private sealed class StubEntryEmbedder : IEntryEmbedder

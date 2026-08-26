@@ -63,7 +63,7 @@ public sealed class DigestConvoyDoesNotStarveTheDrainTests : IDisposable
             NullWatchStore.Instance, NullEmbedDrainPump.Instance);
         var slowIngestor = new SlowFileIngestor(realIngestor, ChunkDelay);
         var store = new SqliteMemoryStore(_factory, sourceStore, slowIngestor,
-            new EntryEmbedder(embeddings, Substitute.For<IModelMigrationLease>(), time, new VecDimensionReconciler()), time,
+            TestData.CreateEntryEmbedder(embeddings, Substitute.For<IModelMigrationLease>(), time, new VecDimensionReconciler()), time,
             NullLogger<SqliteMemoryStore>.Instance, new NoiseFilteringService([]), new SqliteSettingsStore(_factory),
             NullEmbedDrainPump.Instance, NoOpMeasurementRecorder.Instance);
 
@@ -79,7 +79,7 @@ public sealed class DigestConvoyDoesNotStarveTheDrainTests : IDisposable
         }
 
         var busyErrors = new ConcurrentBag<SqliteException>();
-        var drainEmbedder = new EntryEmbedder(embeddings, Substitute.For<IModelMigrationLease>(), time, new VecDimensionReconciler());
+        var drainEmbedder = TestData.CreateEntryEmbedder(embeddings, Substitute.For<IModelMigrationLease>(), time, new VecDimensionReconciler());
         using var stopDrain = new CancellationTokenSource();
 
         var drainLoop = Task.Run(async () =>

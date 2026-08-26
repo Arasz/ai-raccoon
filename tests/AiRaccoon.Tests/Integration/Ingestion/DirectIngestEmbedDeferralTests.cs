@@ -35,7 +35,7 @@ public sealed class DirectIngestEmbedDeferralTests : IDisposable
     {
         var options = TestData.CreateInfrastructureOptions(_dataRoot);
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
-        _entryEmbedder = new EntryEmbedder(_embeddings, Substitute.For<IModelMigrationLease>(), TimeProvider.System, new VecDimensionReconciler());
+        _entryEmbedder = TestData.CreateEntryEmbedder(_embeddings, Substitute.For<IModelMigrationLease>(), TimeProvider.System, new VecDimensionReconciler());
         var sourceStore = new SqliteMemorySourceStore(_factory);
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker())]);
         var fileIngestor = new FileIngestor(matcher, sourceStore, TimeProvider.System, _embeddings,

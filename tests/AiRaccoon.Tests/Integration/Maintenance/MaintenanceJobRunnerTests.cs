@@ -53,7 +53,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
     {
         var pump = TestData.NewEmbedDrainPump();
         await SeedProviderAndPendingRowsAsync(5);
-        var entryEmbedder = new EntryEmbedder(new CountingEmbeddingService(),
+        var entryEmbedder = TestData.CreateEntryEmbedder(new CountingEmbeddingService(),
             Substitute.For<IModelMigrationLease>(), _time, new VecDimensionReconciler());
         var job = new PendingEmbedJob(entryEmbedder, pump);
 
@@ -72,7 +72,8 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
 
         var request = pump.DrainUpTo(1).ShouldHaveSingleItem();
         var drainService = new EmbedDrainService(pump, _factory, entryEmbedder, new FakeCodeEmbedder(),
-            new SqliteSettingsStore(_factory), NoOpMeasurementRecorder.Instance, TimeProvider.System,
+            new SqliteSettingsStore(_factory), new EmbedDrainReporter(NoOpMeasurementRecorder.Instance, TimeProvider.System),
+            TimeProvider.System,
             TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
         await drainService.DrainOnceAsync(request, TestContext.Current.CancellationToken);
 

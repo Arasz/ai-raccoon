@@ -39,7 +39,8 @@ public sealed class EmbedDrainServiceTests : IDisposable
     private EmbedDrainService NewService(IEventPump<EmbedDrainRequest> pump, IEntryEmbedder? entry = null,
         ICodeEmbedder? code = null) =>
         new(pump, _factory, entry ?? new RecordingEntryEmbedder(), code ?? new RecordingCodeEmbedder(),
-            new SqliteSettingsStore(_factory), NoOpMeasurementRecorder.Instance, TimeProvider.System,
+            new SqliteSettingsStore(_factory), new EmbedDrainReporter(NoOpMeasurementRecorder.Instance, TimeProvider.System),
+            TimeProvider.System,
             TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
 
     /// <summary>E1.</summary>
@@ -195,7 +196,7 @@ public sealed class EmbedDrainServiceTests : IDisposable
         // a fresh PendingEmbedJob poll enqueues again once the queued item is taken and drained.
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         await SeedPendingProviderAndRowAsync(connection);
-        var job = new PendingEmbedJob(new EntryEmbedder(new CountingEmbeddingService(),
+        var job = new PendingEmbedJob(TestData.CreateEntryEmbedder(new CountingEmbeddingService(),
             NSubstitute.Substitute.For<IModelMigrationLease>(), TimeProvider.System, new VecDimensionReconciler()), pump);
         (await job.HasWorkAsync(connection, TestContext.Current.CancellationToken)).ShouldBeTrue(
             "the coalesced signal cost nothing durable — the row is still pending");
