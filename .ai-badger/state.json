@@ -1,8 +1,16 @@
 {
-  "lastUpdated": "2026-08-26T15:45:00+02:00",
+  "lastUpdated": "2026-08-26T16:50:00+02:00",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "doctor-feature-match-cont",
+      "title": "follow-ups: refuse model reset during open migration (exit 25); complete the 1.36.0 checklist; derive the doctor exit table",
+      "pr": 593,
+      "merged": true,
+      "date": "2026-08-26",
+      "summary": "Plan -> 2-lane review -> brief -> impl (4 WPs, TDD, 2 RED witnesses) -> QA review (SHIP-AFTER-FIXES; 2 MAJOR checklist-SQL fixes landed). Guard in SettingsEndpoint.MapDelete (409 + frozen message verbatim, exit 25, embedding-set stays 15); 12-row manual checklist; HowToExitTableTests + HowToSettingsExitTableTests derive gates; 1.36.1. Fast 3375/0; guard gate 8/8; derive gate 4/4; VC 7/7; CI green; live E2E exit 25 verified."
+    },
     {
       "id": "doctor-feature-match",
       "title": "doctor reports the memory embedding engine + migration verdict (exit 24); the embed relay's migration drain logs (1008-1013)",
@@ -74,7 +82,7 @@
       "summary": "Waited for 1.33.0 on nuget.org (publish run 32607919528, listed 05:42Z), `dotnet tool update -g ai-raccoon` 1.32.3→1.33.0 proven by SHA (1.33.0+0d43ef56 = v1.33.0; nupkg sha256 d9da823c… = flatcontainer). Owner's live servers (pid 48190 on 7721 + stdio) deliberately NOT restarted — still 1.32.3 binaries. Template: four 1.33.0 items (threads effect via EventId 428 + doctor, embed-rows-per-run, drain proof, watch code-corpus signal) + `source-path-anchor-resolves-its-chunk` rewritten so it can fail (vectorWeight 0, no-such-section control). Run: 32 items via four sonnet test-engineer lanes on scratch roots (~13 min wall-clock), orchestrator seam review, opus code-reviewer confirmed every claim + 5 template fixes (exit 15 not 1, threads anchor, 1003 observable, anchor item as lookup), ox-alpha rounds 1–3 → approve. Findings: (a) file#section IS query syntax (ADR-0003 SourcePathQuery) — five runs substituted it believing otherwise; driving it exposed #538 (a chunk that swallows the next heading + a few body lines is labelled with the later section; #489 residual); (b) exit 23 is drivable live with a fake jsonrpc-answering server — two runs said it could not be; #539 (ServerProbe doc claims a {400,401,405,406} gate the code lacks). Incident: 703ee3d4 (5-line template edit) pushed directly to main — shell cwd had reset to the main checkout; not reverted, merged back, memory written (always git -C <worktree>)."
     }
   ],
-  "next": "Follow-up: model reset vs open model_migration leaves the bank ToolGate-locked forever (liveness defect, ADR-0076 amendment, filed as issue); run the 1.36.0 manual checklist (docs/work/checklist/2026-08-26-1.36.0-doctor-memory-engine.json).",
+  "next": "Publish 1.36.1 (publish.yml workflow_dispatch), then run the 12-row manual checklist (docs/work/checklist/2026-08-26-1.36.0-doctor-memory-engine.json): both reset verbs EXIT=25 + frozen message, close-row -> EXIT=0, 1012 once / 526 zero, exit-24 surface rows.",
   "filedNotStarted": [
     "#477 no job-level metrics (feature gap)",
     "#479 unattributed force-pushes on task branches (post-delta-3 investigation)",
