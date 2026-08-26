@@ -1,9 +1,9 @@
-using System.Globalization;
-using AiRaccoon.Core.Memory.Code;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
+using AiRaccoon.Setup.Diagnostics;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
@@ -52,26 +52,23 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         await using (connection)
         {
             var report = await SchemaDoctor.DiagnoseAsync(connection, cancellationToken);
-            var code = await ReadCodeEngineStateAsync(connection, cancellationToken);
+            var code = await ReadCorpusEngineStateAsync(connection, CorpusEngineProbe.Code, cancellationToken);
             var threads = await ReadEmbeddingThreadsStateAsync(connection, cancellationToken);
             return await ReportAsync(bankPath, report, code, threads, streams);
         }
     }
 
     private static async Task<int> ReportAsync(string bankPath, SchemaDoctorReport report,
-        CodeEngineState code, EmbeddingThreadsState threads, StandardStreams streams)
+        CorpusEngineState? code, EmbeddingThreadsState threads, StandardStreams streams)
     {
         await streams.WriteOutputLineAsync($"ai-raccoon doctor: {bankPath}");
         await streams.WriteOutputLineAsync($"user_version: {report.StoredVersion} (this binary: {report.CurrentVersion})");
         await streams.WriteOutputLineAsync($"application_id: {report.StoredDigest} (expected: {report.ExpectedDigest})");
-        await streams.WriteOutputLineAsync(code.Directory is null
-            ? $"code engine: not configured — run '{CodeEngineSetup.DefaultModelCommand}' to enable semantic code search"
-            : $"code engine: {code.Model} ({code.Directory})");
+        await streams.WriteOutputLineAsync(CorpusEngineLines.EngineLine(CorpusEngineProbe.Code, code));
         // #522: what `embedding.threads` resolves to, via EmbeddingService's own resolver.
         await streams.WriteOutputLineAsync(
             $"embedding threads: {EmbeddingService.ThreadCountDisplay(threads.Threads)} ({threads.Source})");
-        await streams.WriteOutputLineAsync(
-            $"code rows pending: {code.PendingRows?.ToString(CultureInfo.InvariantCulture) ?? "unreadable"}");
+        await streams.WriteOutputLineAsync(CorpusEngineLines.PendingLine(CorpusEngineProbe.Code, code));
         await streams.WriteOutputLineAsync("doctor verifies schema shape only; it never repairs a bank");
 
         switch (report.Status)
@@ -99,35 +96,74 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
     }
 
     /// <summary>
-    ///     #422: the code corpus is the one subsystem that can be completely inert without anything
-    ///     saying so — rows ingest and sit `pending` forever with no engine, which is legitimate
-    ///     rather than an error, so no log line and no failure ever mentions it. doctor is where
-    ///     someone looks when search feels wrong, so the state and its remedy are reported here.
-    ///     The count is a plain COUNT, tolerant of a bank predating `code_entries`.
+    ///     One corpus's engine state (#422 for code, this task for memory). A shape-mismatched bank is
+    ///     exactly the bank doctor exists to diagnose, so this extra read must never be what decides the
+    ///     exit code: every table it touches may be missing or the wrong shape. Guarded by existence and
+    ///     by catch, and the report says so. A null return is "unreadable"; Value null is "not configured".
     /// </summary>
-    private static async Task<CodeEngineState> ReadCodeEngineStateAsync(SqliteConnection connection,
-        CancellationToken cancellationToken)
+    private static async Task<CorpusEngineState?> ReadCorpusEngineStateAsync(SqliteConnection connection,
+        CorpusEngineProbe probe, CancellationToken cancellationToken)
     {
-        // A shape-mismatched bank is exactly the bank doctor exists to diagnose, so this extra
-        // read must never be what decides the exit code: every table it touches may be missing or
-        // the wrong shape. Guarded by existence and by catch, and the report says so.
         try
         {
-            var directory = await TableExistsAsync(connection, "settings", cancellationToken)
-                ? await ReadSettingAsync(connection, EmbeddingSettingsKeys.CodeModel, cancellationToken)
-                : null;
-            var pending = await CountPendingCodeRowsAsync(connection, cancellationToken);
-            return string.IsNullOrWhiteSpace(directory)
-                ? new CodeEngineState(null, null, pending)
-                : new CodeEngineState(ModelNameFor(directory), directory, pending);
+            var settingsExist = await TableExistsAsync(connection, "settings", cancellationToken);
+            var provider = probe.ProviderKey is null || !settingsExist
+                ? null
+                : await ReadSettingAsync(connection, probe.ProviderKey, cancellationToken);
+            var model = !settingsExist
+                ? null
+                : await ReadSettingAsync(connection, probe.ModelKey, cancellationToken);
+            var baseUrl = probe.BaseUrlKey is null || !settingsExist
+                ? null
+                : await ReadSettingAsync(connection, probe.BaseUrlKey, cancellationToken);
+            // Presence only, never the value: embedding.apiKey is a persisted secret (R1 S5).
+            var apiKeySet = probe.ApiKeyKey is null || !settingsExist
+                ? true
+                : await SettingExistsAsync(connection, probe.ApiKeyKey, cancellationToken);
+
+            var pending = await CountPendingRowsAsync(connection, probe, cancellationToken);
+
+            return probe.ProviderKey is null
+                ? string.IsNullOrWhiteSpace(model)
+                    ? new CorpusEngineState(null, null, null, pending)
+                    : DescribeLocalModel(model, pending)
+                : string.IsNullOrWhiteSpace(provider)
+                    ? new CorpusEngineState(null, null, null, pending)
+                    : DescribeMemoryEngine(provider, model, baseUrl, apiKeySet, pending);
         }
         catch (SqliteException)
         {
-            return new CodeEngineState(null, null, null);
+            return new CorpusEngineState(null, null, null, null);
         }
     }
 
-    /// <summary>#522: what `embedding.threads` resolves to, guarded like <see cref="ReadCodeEngineStateAsync" /> — a shape mismatch must never become doctor's own exit code.</summary>
+    /// <summary>A local model value: a manifest directory, a legacy .onnx file, or a missing path — only a directory gets the manifest read (P1 §1.3).</summary>
+    private static CorpusEngineState DescribeLocalModel(string model, long? pending) =>
+        Directory.Exists(model)
+            ? new CorpusEngineState(ModelNameFor(model), model, null, pending)
+            : new CorpusEngineState(model, null, null, pending);
+
+    /// <summary>The memory engine's four arms (P1 §2.3): bundled when no model is set, openai:&lt;model&gt; when remote, else the local directory/file form.</summary>
+    private static CorpusEngineState DescribeMemoryEngine(string provider, string? model, string? baseUrl,
+        bool apiKeySet, long? pending)
+    {
+        if (string.IsNullOrWhiteSpace(model))
+        {
+            return new CorpusEngineState("bundled", null, null, pending);
+        }
+
+        if (provider == "openai")
+        {
+            return new CorpusEngineState($"openai:{model}",
+                string.IsNullOrWhiteSpace(baseUrl) ? null : baseUrl,
+                apiKeySet ? null : EmbeddingEngineSetup.NoApiKeyRemedy,
+                pending);
+        }
+
+        return DescribeLocalModel(model, pending);
+    }
+
+    /// <summary>#522: what `embedding.threads` currently resolves to, and why (an explicit setting vs the halved-core default).</summary>
     private static async Task<EmbeddingThreadsState> ReadEmbeddingThreadsStateAsync(SqliteConnection connection,
         CancellationToken cancellationToken)
     {
@@ -146,11 +182,28 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         }
     }
 
+    private static async Task<long?> CountPendingRowsAsync(SqliteConnection connection,
+        CorpusEngineProbe probe, CancellationToken cancellationToken) =>
+        await TableExistsAsync(connection, probe.PendingTable, cancellationToken)
+            ? await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                probe.PendingSql, cancellationToken: cancellationToken))
+            : 0;
+
     private static async Task<bool> TableExistsAsync(SqliteConnection connection, string table,
         CancellationToken cancellationToken) =>
         await connection.ExecuteScalarAsync<long>(new CommandDefinition(
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = @table",
             new { table }, cancellationToken: cancellationToken)) > 0;
+
+    private static async Task<bool> SettingExistsAsync(SqliteConnection connection, string key,
+        CancellationToken cancellationToken) =>
+        await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT EXISTS(SELECT 1 FROM settings WHERE key = @key)", new { key }, cancellationToken: cancellationToken)) > 0;
+
+    private static async Task<string?> ReadSettingAsync(SqliteConnection connection, string key,
+        CancellationToken cancellationToken) =>
+        await connection.QuerySingleOrDefaultAsync<string?>(new CommandDefinition(
+            MemorySql.SelectSetting, new { key }, cancellationToken: cancellationToken));
 
     /// <summary>The manifest's own model name when it is still readable, else the directory's leaf —
     /// doctor reports, so an unreadable manifest must not stop it printing the rest.</summary>
@@ -166,23 +219,6 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
             return $"{Path.GetFileName(directory.TrimEnd(Path.DirectorySeparatorChar))} (manifest unreadable)";
         }
     }
-
-    private static async Task<long?> CountPendingCodeRowsAsync(SqliteConnection connection,
-        CancellationToken cancellationToken)
-    {
-        if (!await TableExistsAsync(connection, "code_entries", cancellationToken))
-        {
-            return 0;
-        }
-
-        return await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-            MemorySql.CountPendingCodeEmbed, cancellationToken: cancellationToken));
-    }
-
-    private static async Task<string?> ReadSettingAsync(SqliteConnection connection, string key,
-        CancellationToken cancellationToken) =>
-        await connection.QuerySingleOrDefaultAsync<string?>(new CommandDefinition(
-            "SELECT value FROM settings WHERE key = @key", new { key }, cancellationToken: cancellationToken));
 
     /// <summary>Mirrors AppRegistrations.OpenSnapshotReadOnly, aimed at the live bank instead of a sync snapshot: open, enable extensions, load vec0 — never EnsureAsync.</summary>
     private static async Task<SqliteConnection> OpenBankReadOnlyAsync(string bankPath, string? passphrase, CancellationToken cancellationToken)
@@ -203,9 +239,6 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         connection.LoadVector();
         return connection;
     }
-
-    /// <summary>Null <paramref name="Directory" /> is "no code engine configured".</summary>
-    private sealed record CodeEngineState(string? Model, string? Directory, long? PendingRows);
 
     /// <summary>#522: what `embedding.threads` currently resolves to, and why (an explicit setting vs the halved-core default).</summary>
     private sealed record EmbeddingThreadsState(int Threads, string Source);

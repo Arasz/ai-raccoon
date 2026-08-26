@@ -361,7 +361,7 @@ public sealed partial class EmbeddingService(
             {
                 throw new InvalidOperationException(
                     $"Configured embedding model '{modelPath}' does not exist (it may be a model name, not a path; ~ is not expanded). " +
-                    "Run 'ai-raccoon model embedding set local' for the bundled model, or 'ai-raccoon model embedding set local <path-to-onnx>' for a custom path.");
+                    $"Run '{EmbeddingEngineSetup.DefaultModelCommand}' for the bundled model, or '{EmbeddingEngineSetup.DefaultModelCommand} <path-to-onnx>' for a custom path.");
             }
 
             var bundledTokenizer = _tokenizers.GetOrAdd("bundled",
