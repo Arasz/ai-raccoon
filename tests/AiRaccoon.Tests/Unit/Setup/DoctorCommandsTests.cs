@@ -342,8 +342,9 @@ public sealed class DoctorCommandsTests : IDisposable
     }
 
     /// <summary>
-    ///     R2 M1/M2: the keys/query-swap killer. Two DIFFERENT model directories and TWO DIFFERENT
-    ///     pending counts (2 code, 3 memory): swapping either the settings keys or the two COUNT
+    ///     R2 M1/M2/B2: the keys/query-swap killer. Two DIFFERENT model directories and TWO DIFFERENT
+    ///     pending counts (2 code, 3 memory) with mixed embed states on both corpora (so deleting
+    ///     the WHERE clause reads 3/4, not 2/3): swapping either the settings keys or the two COUNT
     ///     queries in the shared component's per-corpus descriptors reddens this test in both
     ///     directions. Whole lines only — an unanchored directory or count passes under a swap.
     /// </summary>
@@ -370,9 +371,10 @@ public sealed class DoctorCommandsTests : IDisposable
 
             await connection.ExecuteAsync(new CommandDefinition(
                 """
-                INSERT INTO code_entries (hash, path, value, source_file, line_start, line_end, project_id, created_at, updated_at)
-                VALUES ('c1', 'src/A.cs', 'a', 'src/A.cs', 1, 2, 'acme', 1, 1),
-                       ('c2', 'src/B.cs', 'b', 'src/B.cs', 1, 2, 'acme', 1, 1)
+                INSERT INTO code_entries (hash, path, value, source_file, line_start, line_end, project_id, created_at, updated_at, embed_state)
+                VALUES ('c1', 'src/A.cs', 'a', 'src/A.cs', 1, 2, 'acme', 1, 1, 'pending'),
+                       ('c2', 'src/B.cs', 'b', 'src/B.cs', 1, 2, 'acme', 1, 1, 'pending'),
+                       ('c3', 'src/C.cs', 'c', 'src/C.cs', 1, 2, 'acme', 1, 1, 'embedded')
                 """, cancellationToken: TestContext.Current.CancellationToken));
             await connection.ExecuteAsync(new CommandDefinition(
                 """
