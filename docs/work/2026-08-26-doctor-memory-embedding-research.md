@@ -80,7 +80,28 @@ Code-side twins for contrast: `CodeModel` (25), `CodeEngine` (28), `CodeDimensio
   (`MemorySql.cs:415-420`) says doctor deliberately reports the literal count including poison rows —
   the memory count needs no such caveat.
 
-### 3.3 There is no "not configured" state for the memory engine
+### 3.3 The memory engine's "not configured" state — CORRECTED 2026-08-26
+
+> **Correction (grounded-feedback).** This section originally claimed *"there is no 'not configured'
+> state for the memory engine — it is always resolved"*. That is **wrong**, and two planning lanes
+> caught it independently (P1 §0.1, P2 §0.1). The `model ?? "bundled"` fallback cited below is a
+> **model** fallback *inside* an already-configured provider; the corpus's configured-ness is
+> `embedding.provider`, and **nothing seeds that row**. Its only writers are
+> `EntryEmbedder.StartMigrationAsync` (`EntryEmbedder.cs:38,54`), reached only from
+> `ai-raccoon model embedding set local|openai` (`SettingsCommands.cs:119,158`). With the row absent,
+> memory embedding is skipped outright — `EmbedIfConfiguredAsync` returns early
+> (`EntryEmbedder.cs:159-164`), `EmbedQueryAsync` returns `QueryVector.Empty` (`:238-241`),
+> `FileIngestor` gates on the same key (`FileIngestor.cs:339`) — and the CLI already has a name for
+> the state: `model embedding show` prints `provider: (none — FTS5-only search)`
+> (`SettingsCommands.cs:314-317`).
+>
+> **Why it matters:** the memory corpus's degraded state is *structurally identical* to the code
+> corpus's (absent key → "not configured"), same predicate, different settings key. So it is a
+> **parameter of the shared component**, not a divergence — which strengthens the owner's extraction
+> ruling instead of complicating it. The paragraphs below are kept as written, with the incorrect
+> conclusion struck, so the mistake and its correction stay auditable.
+
+The bundled-model facts below are accurate; only the conclusion drawn from them was wrong.
 
 - `EntryEmbedder.StartMigrationAsync` returns `new EmbeddingConfig(provider, model ?? BundledModel, engine)`
   where `BundledModel = "bundled"` (`src/AiRaccoon.Infrastructure/Embedding/EntryEmbedder.cs:26,47,90`).
@@ -92,11 +113,13 @@ Code-side twins for contrast: `CodeModel` (25), `CodeEngine` (28), `CodeDimensio
 - `EmbeddingService.cs:364,430` — the two runtime failure messages (missing local model; missing
   OpenAI key) name their own remedy commands.
 
-Consequence: the code engine's headline state ("absent, and the corpus is inert but legitimate",
+~~Consequence: the code engine's headline state ("absent, and the corpus is inert but legitimate",
 `DoctorCommands.cs:101-107`, #422) **has no memory analogue**. The memory engine is always resolved;
 its real failure modes are *assets missing under a configured path*, *remote engine with no API key*,
 and *a migration owed*. A memory line copied verbatim from the code line would report a state that
-cannot exist.
+cannot exist.~~ **Struck — see the correction at the head of §3.3.** The code engine's "not configured"
+state *does* have a memory analogue (`embedding.provider` absent → FTS5-only search); the additional
+failure modes named here are real but are not the headline state.
 
 ### 3.4 The migration outbox — the state doctor is silent about, and it blocks everything
 
