@@ -63,7 +63,8 @@ public sealed class CorpusEngineLinesTests
 
     [Fact]
     public void EngineLine_UnreadableState_NamesTheDegradedArm() =>
-        CorpusEngineLines.EngineLine(CorpusEngineProbe.Code, null)
+        CorpusEngineLines.EngineLine(CorpusEngineProbe.Code,
+                new CorpusEngineState(null, null, null, null, Unreadable: true))
             .ShouldBe("code engine: unreadable (settings table missing or unreadable)");
 
     [Fact]

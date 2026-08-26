@@ -1,3 +1,4 @@
+using System.Globalization;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Embedding.Manifest;
@@ -52,23 +53,39 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         await using (connection)
         {
             var report = await SchemaDoctor.DiagnoseAsync(connection, cancellationToken);
-            var code = await ReadCorpusEngineStateAsync(connection, CorpusEngineProbe.Code, cancellationToken);
+            var engines = new Dictionary<CorpusEngineProbe, CorpusEngineState>();
+            foreach (var probe in CorpusEngineProbe.All)
+            {
+                engines[probe] = await ReadCorpusEngineStateAsync(connection, probe, cancellationToken);
+            }
+
             var threads = await ReadEmbeddingThreadsStateAsync(connection, cancellationToken);
-            return await ReportAsync(bankPath, report, code, threads, streams);
+            var migration = await ReadModelMigrationStateAsync(connection, cancellationToken);
+            return await ReportAsync(bankPath, report, engines, threads, migration, streams);
         }
     }
 
     private static async Task<int> ReportAsync(string bankPath, SchemaDoctorReport report,
-        CorpusEngineState? code, EmbeddingThreadsState threads, StandardStreams streams)
+        IReadOnlyDictionary<CorpusEngineProbe, CorpusEngineState> engines,
+        EmbeddingThreadsState threads, MigrationState migration, StandardStreams streams)
     {
         await streams.WriteOutputLineAsync($"ai-raccoon doctor: {bankPath}");
         await streams.WriteOutputLineAsync($"user_version: {report.StoredVersion} (this binary: {report.CurrentVersion})");
         await streams.WriteOutputLineAsync($"application_id: {report.StoredDigest} (expected: {report.ExpectedDigest})");
-        await streams.WriteOutputLineAsync(CorpusEngineLines.EngineLine(CorpusEngineProbe.Code, code));
+        foreach (var probe in CorpusEngineProbe.All)
+        {
+            await streams.WriteOutputLineAsync(CorpusEngineLines.EngineLine(probe, engines[probe]));
+        }
+
         // #522: what `embedding.threads` resolves to, via EmbeddingService's own resolver.
         await streams.WriteOutputLineAsync(
             $"embedding threads: {EmbeddingService.ThreadCountDisplay(threads.Threads)} ({threads.Source})");
-        await streams.WriteOutputLineAsync(CorpusEngineLines.PendingLine(CorpusEngineProbe.Code, code));
+        foreach (var probe in CorpusEngineProbe.All)
+        {
+            await streams.WriteOutputLineAsync(CorpusEngineLines.PendingLine(probe, engines[probe]));
+        }
+
+        await streams.WriteOutputLineAsync(MigrationLine(migration));
         await streams.WriteOutputLineAsync("doctor verifies schema shape only; it never repairs a bank");
 
         switch (report.Status)
@@ -79,6 +96,15 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
                 return ExitCode.SchemaNewerThanBinary;
 
             case SchemaDoctorStatus.Healthy:
+                // P1 §3 Decisions C/D/E: 24 is emitted only on a positively-read open row — a
+                // guard-tripped read stays HEALTHY — and the schema verdicts (19/20) outrank it.
+                if (migration.Result == MigrationRead.Open)
+                {
+                    await streams.WriteOutputLineAsync(
+                        "status: MIGRATION IN PROGRESS (schema shape is healthy; MCP tool calls are refused until the re-embed finishes)");
+                    return ExitCode.ModelMigrationOpen;
+                }
+
                 await streams.WriteOutputLineAsync("status: HEALTHY");
                 return ExitCode.Success;
 
@@ -99,9 +125,10 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
     ///     One corpus's engine state (#422 for code, this task for memory). A shape-mismatched bank is
     ///     exactly the bank doctor exists to diagnose, so this extra read must never be what decides the
     ///     exit code: every table it touches may be missing or the wrong shape. Guarded by existence and
-    ///     by catch, and the report says so. A null return is "unreadable"; Value null is "not configured".
+    ///     by catch, and the report says so. <see cref="CorpusEngineState.Unreadable" /> is the degraded
+    ///     arm — never the false "not configured" remedy (P1 §1.3).
     /// </summary>
-    private static async Task<CorpusEngineState?> ReadCorpusEngineStateAsync(SqliteConnection connection,
+    private static async Task<CorpusEngineState> ReadCorpusEngineStateAsync(SqliteConnection connection,
         CorpusEngineProbe probe, CancellationToken cancellationToken)
     {
         try
@@ -123,6 +150,14 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
 
             var pending = await CountPendingRowsAsync(connection, probe, cancellationToken);
 
+            // P1 §1.3 / R1 S6: "not configured" is reserved for a positively absent settings row —
+            // a missing settings table is the unreadable arm; the pending count still reads off
+            // its own table, so it survives on the same state (R2 N4).
+            if (!settingsExist)
+            {
+                return new CorpusEngineState(null, null, null, pending, Unreadable: true);
+            }
+
             return probe.ProviderKey is null
                 ? string.IsNullOrWhiteSpace(model)
                     ? new CorpusEngineState(null, null, null, pending)
@@ -133,7 +168,7 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         }
         catch (SqliteException)
         {
-            return new CorpusEngineState(null, null, null, null);
+            return new CorpusEngineState(null, null, null, null, Unreadable: true);
         }
     }
 
@@ -238,6 +273,67 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         connection.EnableExtensions();
         connection.LoadVector();
         return connection;
+    }
+
+    /// <summary>
+    ///     The outbox's reportable state (ADR-0076): an open row makes the server refuse every MCP
+    ///     tool call (ADR-0087, ToolGate), and doctor must say so. Guarded like the engine reads —
+    ///     and the exit code only ever reflects a positively-read open row: absent table, no row,
+    ///     `finished_at` set or a failed read all degrade (P1 §3 Decisions C/D). The catch is
+    ///     broader than <see cref="SqliteException" /> on purpose: a malformed row (TEXT in an
+    ///     INTEGER column) fails the Dapper mapping with InvalidCastException, and a diagnostic
+    ///     must never crash on the bank it is diagnosing.
+    /// </summary>
+    private static async Task<MigrationState> ReadModelMigrationStateAsync(SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (!await TableExistsAsync(connection, "model_migration", cancellationToken))
+            {
+                return new MigrationState(MigrationRead.Unreadable, null);
+            }
+
+            var row = await connection.QuerySingleOrDefaultAsync<ModelMigrationRow>(new CommandDefinition(
+                MemorySql.SelectModelMigration, cancellationToken: cancellationToken));
+            return row is null || row.FinishedAt is not null
+                ? new MigrationState(MigrationRead.None, null)
+                : new MigrationState(MigrationRead.Open, row.StartedAt);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return new MigrationState(MigrationRead.Unreadable, null);
+        }
+    }
+
+    private static string MigrationLine(MigrationState migration) => migration.Result switch
+    {
+        MigrationRead.Open =>
+            $"model migration: open since {FormatTimestamp(migration.StartedAtUnix!.Value)} (all MCP tool calls are refused until it finishes)",
+        MigrationRead.Unreadable => "model migration: unreadable",
+        _ => "model migration: none open"
+    };
+
+    /// <summary>Unix seconds as an absolute UTC instant — mirrors WatchCommands.FormatTimestamp (:185); the second copy is deliberate (R1 S8).</summary>
+    private static string FormatTimestamp(long unixSeconds) =>
+        DateTimeOffset.FromUnixTimeSeconds(unixSeconds).UtcDateTime
+            .ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+
+    private enum MigrationRead
+    {
+        None,
+        Open,
+        Unreadable
+    }
+
+    private sealed record MigrationState(MigrationRead Result, long? StartedAtUnix);
+
+    /// <summary>model_migration's INTEGER unix-seconds columns as they are stored — Dapper has no DateTimeOffset handler in this solution, so mapping onto Core.Memory.ModelMigration would throw InvalidCastException (P2 §3.4).</summary>
+    private sealed record ModelMigrationRow
+    {
+        public long StartedAt { get; init; }
+
+        public long? FinishedAt { get; init; }
     }
 
     /// <summary>#522: what `embedding.threads` currently resolves to, and why (an explicit setting vs the halved-core default).</summary>

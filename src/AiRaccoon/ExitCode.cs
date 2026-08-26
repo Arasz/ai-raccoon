@@ -70,5 +70,12 @@ public static class ExitCode
     /// tell "the server broke" from "you mistyped".</summary>
     public const int SettingsServerError = 23;
 
+    /// <summary>`doctor`: the schema shape is healthy but a model_migration outbox row is open
+    /// (ADR-0076) — every MCP tool call is refused until the re-embed finishes (ADR-0087), so the
+    /// bank is not healthy even though its shape is. Same species as <see cref="SchemaNewerThanBinary" />:
+    /// legitimate, transient, self-clearing. Reachable only from the Healthy arm — 19/20 outrank it
+    /// (review R1 Ruling 4).</summary>
+    public const int ModelMigrationOpen = 24;
+
     public const int Success = 0;
 }
