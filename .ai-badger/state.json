@@ -1,72 +1,80 @@
 {
-    "lastUpdated": "2026-08-25T12:00:00+02:00",
+  "lastUpdated": "2026-08-26T15:45:00+02:00",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
     {
-        "id": "migrate-tests-to-mcp",
-        "title": "Migrate tests to Microsoft Testing Platform + xunit 4.0.0 (jsaa guide); retry for all slow/E2E/integration tests",
-        "pr": 589,
-        "merged": true,
-        "date": "2026-08-25",
-        "summary": "Followed jsaa how-to (docs/how-to/migrate-to-microsoft-testing-platform.md, PR #911): xunit.v3/xunit.v3.extensibility.core/xunit.runner.visualstudio -> 4.0.0 (co-released vstest adapter kept for Rider), coverlet.collector dropped (no consumer), Microsoft.NET.Test.Sdk kept; global.json test.runner=MTP + Directory.Build.props UseMicrosoftTestingPlatformRunner (*.Tests); build.yml four lanes -> --project form + TESTINGPLATFORM_TELEMETRY_OPTOUT:1 + --nologo DROPPED (VSTest-only; MTP reports Zero tests ran/exit 5, dotnet/sdk#55309). Reqnroll 3.3.4 + ArchUnitNET 0.13.4 proved compatible with 4.0.0 (bdd 172/5/0 exact). Retry: xRetry.v3 1.0.0 per-method [RetryFact]/[RetryTheory] on the slow/E2E/integration surface (281 files/1,634 lines swapped; ParityGateTests benchmark excluded; BDD out of scope). THREE gates affected, not two: SpeedGate + CategoryGate IsAssignableFrom fix + EnvGateReaderRuleTests source-text scan (witnessed 13->2->13). xUnit1069 analyzer fix (CodeChunkerTests token). MTP drops xRetry's message-bus per-attempt lines (documented deviation; visibility = permanent probes + exhaustion still red). Baselines: fast 3330/1/0 -> 3334/1/0 (+4 new tests), bdd/slow/nightly identical, discovery 4615=4615 (WP1 state). CI all four lanes green (one transient fast-lane SIGSEGV re-run green \u2014 known crash class #150). Reviews: architect plan + code-reviewer plan review + Phase-4 code-reviewer APPROVE_WITH_CHANGES + review-tests APPROVE; round-3 hardening in follow-up PR #590 (per-row retry probe, RetrySurfaceGateTests drift gate, triage script --nologo). No VERSION bump (test-only)."
+      "id": "doctor-feature-match",
+      "title": "doctor reports the memory embedding engine + migration verdict (exit 24); the embed relay's migration drain logs (1008-1013)",
+      "pr": 591,
+      "merged": true,
+      "date": "2026-08-26",
+      "summary": "MoE plan (4 lanes) -> 3-expert review -> integrated brief -> 2 parallel implementation lanes. Shared CorpusEngineProbe/State/Lines (AiRaccoon.Setup.Diagnostics) keyed on EmbedCorpus; EmbedDrainReporter takes the whole 1002-1007 block, adds 1008-1013; exit 24 only from the Healthy arm. Evidence bundle of the stuck bank captured pre-drain; 1GB blob kept out of history. Fast 3368/0, doctor 38/0, evtid 5/0, VC 7/0, CI green, merged by owner."
     },
-      {
-          "id": "ci-stability-fixes",
-          "title": "Fast-lane fixes 1-4 + E2E CLI regression (pack crash, port race, crash dumps, MSBuild node reuse)",
-          "pr": 586,
-          "merged": true,
-          "date": "2026-08-24",
-          "summary": "E2E McpServer/ModelMigrationCrashRecovery tests used pre-#583 CLI argv (7 sites -> model embedding set); pack test moved to a Speed=Slow class (still gated by build-slow); ConcurrentStartsOnSamePort retries on fresh ports; build-fast gains crash-dump env; MSBUILDDISABLENODEREUSE=1 on all lanes. Follow-up #588: NodeRunnerTests + ServeRestartTests -> Slow (measured 92s/11.9s/7.2s/8.4s genuine server-lifetime waits); port-race winner stopped instead of awaiting its 90s harness lifetime. Fast suite 2m18s -> 26s locally."
+    {
+      "id": "migrate-tests-to-mcp",
+      "title": "Migrate tests to Microsoft Testing Platform + xunit 4.0.0 (jsaa guide); retry for all slow/E2E/integration tests",
+      "pr": 589,
+      "merged": true,
+      "date": "2026-08-25",
+      "summary": "Followed jsaa how-to (docs/how-to/migrate-to-microsoft-testing-platform.md, PR #911): xunit.v3/xunit.v3.extensibility.core/xunit.runner.visualstudio -> 4.0.0 (co-released vstest adapter kept for Rider), coverlet.collector dropped (no consumer), Microsoft.NET.Test.Sdk kept; global.json test.runner=MTP + Directory.Build.props UseMicrosoftTestingPlatformRunner (*.Tests); build.yml four lanes -> --project form + TESTINGPLATFORM_TELEMETRY_OPTOUT:1 + --nologo DROPPED (VSTest-only; MTP reports Zero tests ran/exit 5, dotnet/sdk#55309). Reqnroll 3.3.4 + ArchUnitNET 0.13.4 proved compatible with 4.0.0 (bdd 172/5/0 exact). Retry: xRetry.v3 1.0.0 per-method [RetryFact]/[RetryTheory] on the slow/E2E/integration surface (281 files/1,634 lines swapped; ParityGateTests benchmark excluded; BDD out of scope). THREE gates affected, not two: SpeedGate + CategoryGate IsAssignableFrom fix + EnvGateReaderRuleTests source-text scan (witnessed 13->2->13). xUnit1069 analyzer fix (CodeChunkerTests token). MTP drops xRetry's message-bus per-attempt lines (documented deviation; visibility = permanent probes + exhaustion still red). Baselines: fast 3330/1/0 -> 3334/1/0 (+4 new tests), bdd/slow/nightly identical, discovery 4615=4615 (WP1 state). CI all four lanes green (one transient fast-lane SIGSEGV re-run green — known crash class #150). Reviews: architect plan + code-reviewer plan review + Phase-4 code-reviewer APPROVE_WITH_CHANGES + review-tests APPROVE; round-3 hardening in follow-up PR #590 (per-row retry probe, RetrySurfaceGateTests drift gate, triage script --nologo). No VERSION bump (test-only)."
     },
-      {
-          "id": "diagnose-fast-tests",
-          "title": "Diagnose: fast-lane CI takes 15m; NodeRunnerTests port race + VersionContract pack crash",
-          "pr": 587,
-          "merged": true,
-          "date": "2026-08-24",
-          "summary": "docs/work/2026-08-25-fast-lane-flakes-diagnosis.md: main-run fast lane failed on two documented flake classes (pack host crash exit 134 untriagable without dump capture on build-fast; both port racers got PortInUse from a release->rebind steal). Lane ran 14m31s vs 168s on the identical PR run; fixed by #586 + #588."
-      },
-      {
-          "id": "vec_code_unfix_dim",
-          "title": "Unfix vec/vec_code dimensions: generalize the memory-bank dimension reconcile to the code corpus",
-          "pr": 585,
-          "merged": true,
-          "date": "2026-08-24",
-          "summary": "VecDimensionReconciler generalized (table list + optional caller transaction), reused for vec_code; embedding.codeDimensions persisted; activation/server-open/fingerprint reconcile; both 768 gates removed; ADR-0093; VERSION 1.35.0. Review rounds: no null ctor params (required reconciler on both embedders, primary-ctor param used directly), single reconciler API, comments removed, endpoint test flipped."
-      },
-      {
-          "id": "model-selection",
-          "title": "CLI settings model separation (code/embedding) + SFR-Embedding-Code-400M_R support",
-          "pr": 583,
-          "merged": true,
-          "date": "2026-08-24",
-          "summary": "CLI restructure: model embedding set local|openai / model code set default|local, kind-agnostic model download, settings model embedding|code show|reset; ModelDownloadPlanner supports model_type new/gte* (SFR-Embedding-Code-400M_R, 1024-dim, CLS pooling). Integrated with #585 (12-file conflict resolution; branch wins on CLI naming, main on dims behavior)."
-      },
-      {
-          "id": "clean-readme",
-          "title": "README cleanup: what-s-new history doc, humanizer pass, mermaid/table refresh, code-corpus guide",
-          "pr": 569,
-          "merged": false,
-          "date": "2026-08-23",
-          "summary": "Moved pre-1.29.0 what-s-new entries to docs/reference/whats-new-history.md; humanized remaining entries and stripped PR links; added Code Corpus to mindmap/feature table/embeddings table/flowchart; fixed test count (1100+ to ~3700) and tool count (28 to 29); wrote docs/how-to/search-the-code-corpus.md; updated reference/README.md and how-to/README.md indexes. Docs-only, no version bump."
+    {
+      "id": "ci-stability-fixes",
+      "title": "Fast-lane fixes 1-4 + E2E CLI regression (pack crash, port race, crash dumps, MSBuild node reuse)",
+      "pr": 586,
+      "merged": true,
+      "date": "2026-08-24",
+      "summary": "E2E McpServer/ModelMigrationCrashRecovery tests used pre-#583 CLI argv (7 sites -> model embedding set); pack test moved to a Speed=Slow class (still gated by build-slow); ConcurrentStartsOnSamePort retries on fresh ports; build-fast gains crash-dump env; MSBUILDDISABLENODEREUSE=1 on all lanes. Follow-up #588: NodeRunnerTests + ServeRestartTests -> Slow (measured 92s/11.9s/7.2s/8.4s genuine server-lifetime waits); port-race winner stopped instead of awaiting its 90s harness lifetime. Fast suite 2m18s -> 26s locally."
     },
-      {
-          "id": "review-gh-issues",
-          "title": "Review open GH issues: closed #381/#382/#422 as already-fixed (evidence comments); grouped the rest under defect/feature umbrellas with domain groups (#551-#560) and attached all 24 remaining issues + new #549/#550 as GitHub sub-issues; labels defect/feature/epic created",
-          "finishedAt": "2026-08-23T10:04:39+02:00",
-          "tokens": 0
+    {
+      "id": "diagnose-fast-tests",
+      "title": "Diagnose: fast-lane CI takes 15m; NodeRunnerTests port race + VersionContract pack crash",
+      "pr": 587,
+      "merged": true,
+      "date": "2026-08-24",
+      "summary": "docs/work/2026-08-25-fast-lane-flakes-diagnosis.md: main-run fast lane failed on two documented flake classes (pack host crash exit 134 untriagable without dump capture on build-fast; both port racers got PortInUse from a release->rebind steal). Lane ran 14m31s vs 168s on the identical PR run; fixed by #586 + #588."
     },
-      {
+    {
+      "id": "vec_code_unfix_dim",
+      "title": "Unfix vec/vec_code dimensions: generalize the memory-bank dimension reconcile to the code corpus",
+      "pr": 585,
+      "merged": true,
+      "date": "2026-08-24",
+      "summary": "VecDimensionReconciler generalized (table list + optional caller transaction), reused for vec_code; embedding.codeDimensions persisted; activation/server-open/fingerprint reconcile; both 768 gates removed; ADR-0093; VERSION 1.35.0. Review rounds: no null ctor params (required reconciler on both embedders, primary-ctor param used directly), single reconciler API, comments removed, endpoint test flipped."
+    },
+    {
+      "id": "model-selection",
+      "title": "CLI settings model separation (code/embedding) + SFR-Embedding-Code-400M_R support",
+      "pr": 583,
+      "merged": true,
+      "date": "2026-08-24",
+      "summary": "CLI restructure: model embedding set local|openai / model code set default|local, kind-agnostic model download, settings model embedding|code show|reset; ModelDownloadPlanner supports model_type new/gte* (SFR-Embedding-Code-400M_R, 1024-dim, CLS pooling). Integrated with #585 (12-file conflict resolution; branch wins on CLI naming, main on dims behavior)."
+    },
+    {
+      "id": "clean-readme",
+      "title": "README cleanup: what-s-new history doc, humanizer pass, mermaid/table refresh, code-corpus guide",
+      "pr": 569,
+      "merged": false,
+      "date": "2026-08-23",
+      "summary": "Moved pre-1.29.0 what-s-new entries to docs/reference/whats-new-history.md; humanized remaining entries and stripped PR links; added Code Corpus to mindmap/feature table/embeddings table/flowchart; fixed test count (1100+ to ~3700) and tool count (28 to 29); wrote docs/how-to/search-the-code-corpus.md; updated reference/README.md and how-to/README.md indexes. Docs-only, no version bump."
+    },
+    {
+      "id": "review-gh-issues",
+      "title": "Review open GH issues: closed #381/#382/#422 as already-fixed (evidence comments); grouped the rest under defect/feature umbrellas with domain groups (#551-#560) and attached all 24 remaining issues + new #549/#550 as GitHub sub-issues; labels defect/feature/epic created",
+      "finishedAt": "2026-08-23T10:04:39+02:00",
+      "tokens": 0
+    },
+    {
       "id": "release-1.33.1-checklist",
-          "title": "1.33.0 release manual checklist on the published nuget.org package (owner: test 1.33.0; 1.33.1 is README-only) \u2014 global tool updated, template carries the 1.33.0 items, 30 pass / 1 substituted / 1 fail (#538), two findings against prior runs, #538 #539 filed",
+      "title": "1.33.0 release manual checklist on the published nuget.org package (owner: test 1.33.0; 1.33.1 is README-only) — global tool updated, template carries the 1.33.0 items, 30 pass / 1 substituted / 1 fail (#538), two findings against prior runs, #538 #539 filed",
       "pr": 531,
       "merged": true,
       "date": "2026-08-23",
-          "summary": "Waited for 1.33.0 on nuget.org (publish run 32607919528, listed 05:42Z), `dotnet tool update -g ai-raccoon` 1.32.3\u21921.33.0 proven by SHA (1.33.0+0d43ef56 = v1.33.0; nupkg sha256 d9da823c\u2026 = flatcontainer). Owner's live servers (pid 48190 on 7721 + stdio) deliberately NOT restarted \u2014 still 1.32.3 binaries. Template: four 1.33.0 items (threads effect via EventId 428 + doctor, embed-rows-per-run, drain proof, watch code-corpus signal) + `source-path-anchor-resolves-its-chunk` rewritten so it can fail (vectorWeight 0, no-such-section control). Run: 32 items via four sonnet test-engineer lanes on scratch roots (~13 min wall-clock), orchestrator seam review, opus code-reviewer confirmed every claim + 5 template fixes (exit 15 not 1, threads anchor, 1003 observable, anchor item as lookup), ox-alpha rounds 1\u20133 \u2192 approve. Findings: (a) file#section IS query syntax (ADR-0003 SourcePathQuery) \u2014 five runs substituted it believing otherwise; driving it exposed #538 (a chunk that swallows the next heading + a few body lines is labelled with the later section; #489 residual); (b) exit 23 is drivable live with a fake jsonrpc-answering server \u2014 two runs said it could not be; #539 (ServerProbe doc claims a {400,401,405,406} gate the code lacks). Incident: 703ee3d4 (5-line template edit) pushed directly to main \u2014 shell cwd had reset to the main checkout; not reverted, merged back, memory written (always git -C <worktree>)."
+      "summary": "Waited for 1.33.0 on nuget.org (publish run 32607919528, listed 05:42Z), `dotnet tool update -g ai-raccoon` 1.32.3→1.33.0 proven by SHA (1.33.0+0d43ef56 = v1.33.0; nupkg sha256 d9da823c… = flatcontainer). Owner's live servers (pid 48190 on 7721 + stdio) deliberately NOT restarted — still 1.32.3 binaries. Template: four 1.33.0 items (threads effect via EventId 428 + doctor, embed-rows-per-run, drain proof, watch code-corpus signal) + `source-path-anchor-resolves-its-chunk` rewritten so it can fail (vectorWeight 0, no-such-section control). Run: 32 items via four sonnet test-engineer lanes on scratch roots (~13 min wall-clock), orchestrator seam review, opus code-reviewer confirmed every claim + 5 template fixes (exit 15 not 1, threads anchor, 1003 observable, anchor item as lookup), ox-alpha rounds 1–3 → approve. Findings: (a) file#section IS query syntax (ADR-0003 SourcePathQuery) — five runs substituted it believing otherwise; driving it exposed #538 (a chunk that swallows the next heading + a few body lines is labelled with the later section; #489 residual); (b) exit 23 is drivable live with a fake jsonrpc-answering server — two runs said it could not be; #539 (ServerProbe doc claims a {400,401,405,406} gate the code lacks). Incident: 703ee3d4 (5-line template edit) pushed directly to main — shell cwd had reset to the main checkout; not reverted, merged back, memory written (always git -C <worktree>)."
     }
   ],
-    "next": "PR #590 (review-round-3 hardening for migrate-tests-to-mcp) to merge after CI.",
+  "next": "Follow-up: model reset vs open model_migration leaves the bank ToolGate-locked forever (liveness defect, ADR-0076 amendment, filed as issue); run the 1.36.0 manual checklist (docs/work/checklist/2026-08-26-1.36.0-doctor-memory-engine.json).",
   "filedNotStarted": [
     "#477 no job-level metrics (feature gap)",
     "#479 unattributed force-pushes on task branches (post-delta-3 investigation)",
@@ -75,17 +83,17 @@
     "#497 repair for bge-m3 manifests downloaded before #496",
     "#504 embedding fallback-chain shapes",
     "#519 TestData.CreateMemoryStore optional Null defaults (from #518)",
-      "#538 chunker labels a chunk that swallows the next heading + a few body lines with the later section (#489 residual; file#section anchor unsatisfiable \u2014 1.33.0 checklist)",
+    "#538 chunker labels a chunk that swallows the next heading + a few body lines with the later section (#489 residual; file#section anchor unsatisfiable — 1.33.0 checklist)",
     "#539 ServerProbe doc comment claims a {400,401,405,406} status gate the code does not implement"
   ],
   "research": [],
   "stillTrue": [
     "dotnet_env=local must be set per-directory for the DeployToLocalSource build target to push to .nupkg-local",
     "Transport is the --transport flag (stdio|http|https|proxy), default proxy since ADR-0020. MCP_TRANSPORT and AIRACCOON_DATA_ROOT do NOT exist - ServerConfig records that the env layer was removed by the single-channel ruling, and McpServerFactory injects the data root via WebApplicationFactory.UseSetting, not the environment",
-      "sqlite-memory's content-hash dedup is global \u2014 cross-context duplicates need preserve_duplicate_paths=1 + distinct logical paths",
-      "Dapper 2.1.79 parameter binding is case-sensitive against SQL param names and its record ctor matching chokes on nullable params \u2014 alias columns and use a settable DTO",
+    "sqlite-memory's content-hash dedup is global — cross-context duplicates need preserve_duplicate_paths=1 + distinct logical paths",
+    "Dapper 2.1.79 parameter binding is case-sensitive against SQL param names and its record ctor matching chokes on nullable params — alias columns and use a settable DTO",
     "sqlite-memory/vector/sync are native SQLite extensions loaded via Microsoft.Data.Sqlite LoadExtension; deferred embeddings (defer_embeddings=1) let writes work before any model is configured",
-      "MCP protocol CallToolResult.IsError is null on success (absent), true only on failure \u2014 assert ShouldNotBe(true), not ShouldBe(false)",
+    "MCP protocol CallToolResult.IsError is null on success (absent), true only on failure — assert ShouldNotBe(true), not ShouldBe(false)",
     "Bare `ai-raccoon` is a proxy: it opens no bank, resolves no key and loads no ONNX model. `--transport stdio` is the in-process server and the escape hatch when a backend cannot start",
     "`serve` mints <data-root>/mcp-token (0600) BEFORE it binds, so a port that answers guarantees the file exists; the probe accepts 401 as proof of a live server so it still recognises one across data roots",
     "/mcp and /shutdown accept the loopback token in either envelope: X-AiRaccoon-Token or Authorization: Bearer *** one credential compared with FixedTimeEquals on both paths and neither shadowing the other. /mcp alone renders a second 401 body for a credential that was presented but did not match; /shutdown keeps one body for every failure because ADR-0022 pins the refusal not to reveal whether a token exists. `serve --mcp-entry` prints a headers map carrying ${AIRACCOON_MCP_TOKEN}, never a live token - Hermes resolves it from ~/.hermes/.env, Claude Code from the environment, and an unset variable in Claude Code warns in `claude mcp list` but still sends the literal placeholder."
