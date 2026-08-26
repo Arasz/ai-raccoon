@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
@@ -67,6 +68,76 @@ public sealed class DoctorCommandsTests : IDisposable
 
         exit.ShouldBe(0);
         outp.ShouldContain("HEALTHY");
+    }
+
+    /// <summary>
+    ///     The extraction's characterisation gate: the whole report, in order, line for line.
+    ///     Nothing else in this suite asserts the header lines, the line count or the order — so
+    ///     an extraction that dropped `user_version` would otherwise stay green. Literals on
+    ///     purpose: this test IS the output contract, and it changes in the same commit the
+    ///     wording does.
+    /// </summary>
+    [RetryFact]
+    public async Task Doctor_HealthyBank_PrintsExactlyTheseLinesInThisOrder()
+    {
+        await using (await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+        }
+
+        var (exit, outp, err) = await Run(CreateDoctor(), ["doctor"]);
+
+        exit.ShouldBe(ExitCode.Success);
+        err.ShouldBeEmpty();
+        var threads = Math.Max(1, Environment.ProcessorCount / 2);
+        Lines(outp).ShouldBe([
+            $"ai-raccoon doctor: {_factory.BankPath}",
+            $"user_version: {MemorySchema.CurrentVersion} (this binary: {MemorySchema.CurrentVersion})",
+            $"application_id: {MemorySchema.SchemaDigest} (expected: {MemorySchema.SchemaDigest})",
+            $"code engine: not configured — run '{CodeEngineSetup.DefaultModelCommand}' to enable semantic code search",
+            $"embedding threads: {threads} (halved-core default)",
+            "code rows pending: 0",
+            "doctor verifies schema shape only; it never repairs a bank",
+            "status: HEALTHY"
+        ]);
+    }
+
+    /// <summary>
+    ///     The threads line is shared by both corpora and must survive the extraction as exactly
+    ///     one line — every existing threads assertion is a ShouldContain, which passes on 1 or 2
+    ///     occurrences, so only a count can see the per-corpus-loop slip.
+    /// </summary>
+    [RetryFact]
+    public async Task Doctor_SharedThreadsLine_AppearsExactlyOnce()
+    {
+        await using (await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+        }
+
+        var (_, outp, _) = await Run(CreateDoctor(), ["doctor"]);
+
+        Regex.Matches(outp, "embedding threads: ").Count.ShouldBe(1);
+    }
+
+    /// <summary>
+    ///     #422 review: the code-engine line's value is the manifest's model NAME, not the raw
+    ///     directory — the existing assertions check the label and the directory separately, so
+    ///     an extraction that dropped `ModelNameFor` entirely would keep them green.
+    /// </summary>
+    [RetryFact]
+    public async Task Doctor_ConfiguredCodeEngine_NamesTheModelNameNotJustTheDirectory()
+    {
+        var modelDir = Path.Combine(_dataRoot, "models", "faxenoff__code-daemon-embed-v1");
+        Directory.CreateDirectory(modelDir);
+        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await connection.ExecuteAsync(new CommandDefinition(MemorySql.UpsertSetting,
+                new { key = EmbeddingSettingsKeys.CodeModel, value = modelDir },
+                cancellationToken: TestContext.Current.CancellationToken));
+        }
+
+        var (_, outp, _) = await Run(CreateDoctor(), ["doctor"]);
+
+        outp.ShouldContain($"code engine: {Path.GetFileName(modelDir)} (manifest unreadable) ({modelDir})");
     }
 
     /// <summary>
@@ -258,6 +329,9 @@ public sealed class DoctorCommandsTests : IDisposable
         var appId = (int)(long)(await appIdCmd.ExecuteScalarAsync(TestContext.Current.CancellationToken))!;
         return (version, appId);
     }
+
+    private static string[] Lines(string output) =>
+        [.. output.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(l => l.TrimEnd('\r'))];
 
     private static string FileSha256(string path) => Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path)));
 
