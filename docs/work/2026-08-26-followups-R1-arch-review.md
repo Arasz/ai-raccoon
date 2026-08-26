@@ -1,0 +1,95 @@
+# REVIEW R1-arch — independent review of the follow-ups plan
+
+# Independent architecture + correctness review — integrated plan, `doctor-feature-match-cont`
+
+**Verdict: implementable after two MUST corrections.** A1 (endpoint guard), A2 (409 mapping + frozen message), A3 (exit 25) and Ruling B/C's shape are verified against source and sound. Two MUSTs: (1) WP3's per-code phrase assertion cannot pass for rows `1`/`2` — `ExitCode.cs:5-6` have no doc comments and the plan's exception list names only `0`; (2) the how-to's **settings** exit table (`configure-ai-raccoon-server.md:185-189`, rows 17/18/23) — the user-facing home of settings-command exit codes — is missing from the plan's files-touched lists and needs the `25` row (the plan's own scope question answers "yes", and no gate covers that table). Plus five SHOULDs and eight NICE-level refinements.
+
+Every claim below was re-read from the worktree; where the plan's number disagreed with the file, the file wins.
+
+---
+
+## Rulings on the seven attacks
+
+### (1) Endpoint vs store guard placement — **AGREE with the endpoint; claim verified**
+
+- "Endpoint is the only write route" holds **today**: all 32 `DeleteSettingAsync` sites in `src/` were enumerated (grep) — `embedding.provider` (`EmbeddingSettingsKeys.cs:9`) is deleted **only** at `SettingsCommands.cs:270` (`ModelResetAsync`'s foreach); the other deleters touch `access.*`, `code.*`, `sync.*`, `watch.*`, `encryption.*`, `extract.*` keys. Server-side, the only caller of `SqliteSettingsStore.DeleteSettingAsync` (`SqliteSettingsStore.cs:43-51`, a plain per-call-open KV delete) is `SettingsEndpoint.MapDelete` (`SettingsEndpoint.cs:62`); `SqliteMemoryStore.cs:567` forwards `IMemoryStore.DeleteSettingAsync` to the injected `ISettingsStore`, and **no MCP tool or hosted service calls it** in the server process.
+- The guard composes ToolGate's own check: `IModelMigrationStore` → `SqliteMemoryStore` (`AppRegistrations.cs:327`), `HasOpenModelMigrationAsync` (`SqliteMemoryStore.ModelMigration.cs:15-22`, `OpenBankSkippingEnsureAsync` + `EnsureCheapAsync`) — identical to `ToolGate.cs:25-29`. One predicate, no fourth spelling; a store-level guard would protect zero additional current callers (verified). Simplest correct shape; owner's "just block reset" is honored.
+- Two residuals to keep recorded (one is already): (a) check-then-delete spans **two connections** (check via `IModelMigrationStore`, delete via `ISettingsStore`) — non-transactional; plan documents it (risks table) and rejects the `NOT EXISTS` variant — defensible. (b) **Latent gap the plan doesn't name**: any *future* server-side `IMemoryStore.DeleteSettingAsync` caller bypasses the endpoint guard. No such caller exists; note it in the guard's doc comment (NICE-12).
+- **Ordering dependency**: atomicity rests on Provider being first in the array (`SettingsCommands.cs:263-268`). The `DeletesNothing` integration test pins this (a reorder → Model deleted before Provider's refusal → test RED), but the plan should say so explicitly — a future reorder silently converting "abort before any key is gone" into "five keys gone, provider refused" is otherwise a comment away (NICE-11).
+
+### (2) The 409 client mapping and the frozen message — **SOUND; message survives byte-for-byte**
+
+Traced end to end: endpoint catch → `Results.Conflict(ex.Message)` (mirrors `SettingsEndpoint.cs:84-87`) → 409 body **is** the frozen message → `ServerSettingsStore.DeleteSettingAsync`'s new `Conflict` check placed **before** `Ensure` (mirrors `:96-99`) → `ReadAsStringAsync` → `new ModelMigrationInProgressException(body)` → propagates through `LazyServerSettingsStore.cs:38` and `SqliteMemoryStore.cs:567` (neither catches) → `ModelResetAsync`'s new inner catch prints `ex.Message` verbatim. **No interception**: `SendAsync` wraps only transport exceptions (`ServerSettingsStore.cs:198-209`); `Ensure` (`:211-226`) is reached only after the Conflict check; the `ConfigCommands` generic catch (exit 15) is bypassed by the inner catch — which also correctly keeps `model embedding set`-while-open on today's exit 15 (nothing pins it; verified).
+
+Today's DELETE-409 path is exactly as the plan describes: `Ensure` falls to `EnsureSuccessStatusCode` → raw `HttpRequestException` → generic catch → `CliFailureFormatting.Format` → `ai-raccoon: {ex.Message}` → exit 15 (`ServerSettingsStore.cs:85`, `ConfigCommands.cs:165-169`, `CliFailureFormatting.cs:7-16` — the double-prefix claim is real: `CliFailureFormatting` prepends unconditionally). The repo already fixed this exact failure mode once for 400s (`SettingsEndpointTests.cs:212-218` doc comment; client mapping at `ServerSettingsStore.cs:119-122`).
+
+**Gap**: the 4-test list has no direct client-mapping test. The precedent sits at `SettingsEndpointTests.cs:220-236` (`ServerSettingsStore_ActivateCodeEngine_OnAChunkBudgetRefusal_ThrowsWithTheReason` — same shape: real app + `new ServerSettingsStore(client, Token)` + assert the mapped exception's message). Add the DELETE sibling and bump `--minimum-expected-tests` to 5 (SHOULD-3).
+
+### (3) The invented CLI adapter vs `CliCommandsDoNotOpenTheBankTests` — **NO violation**
+
+The gate derives leaf command types from **`ConfigCommands`' constructor** (unchanged by the plan; `CliCommandsDoNotOpenTheBankTests.cs:103-115`), resolves them from **its own** DI graph (`BuildCliServiceProvider :118-138`, whose `LazyServerSettingsStore` acquire delegate must never run), and walks object fields for a live `ISqliteConnectionFactory` (`:148-221`). A test-local `IMemoryStore` adapter holding an `HttpClient` is not in that graph and holds no factory — the walk cannot reach it. Criterion (e) is trivially green; the plan adds no production DI change. The Fast test's `FakeMemoryStore` follows the existing `SettingsCommandsTests`/`ModelSetOpenAiDimensionsTests.cs:63-69` harness; `TestData.CreateConfigCommands` (`TestData.cs:172-189`) accepts a caller-supplied store, so the Integration test can inject the adapter.
+
+Two wording caveats: "tiny adapter" understates it — `IMemoryStore` is a large interface; only `DeleteSettingAsync` needs a real body (the only member `ModelResetAsync` calls, `SettingsCommands.cs:270`), the rest throw. And it is not quite "the real CLI→server path": it skips `SqliteMemoryStore`'s settings-forwarding and `LazyServerSettingsStore`'s lazy acquire. The seam under test (HTTP → endpoint → `SqliteSettingsStore` → bank) is real, and the Fast test covers the CLI-side catch — an honest composition, but the plan's wording should say so (NICE-14).
+
+### (4) Exit code 25 — **reasoning sound; one registration MISSING**
+
+Verified: `23` is documented 5xx-only (`ExitCode.cs:68-71`); `24` is doctor-scoped (`:73-78`); 25 is free (highest const is 24, `:78`); house style = named const + doc comment citing the issue (`:44-78`). The doctor how-to table (`:370-378`) correctly must **not** gain 25 — doctor never returns it — which is exactly why WP3's expected set must be the hand-enumerated doctor-reachable list, not "all `ExitCode` members" (all-members fails today: `{0..24}` ≠ table `{0,1,2,19,20,22,24}`) (SHOULD-6).
+
+**The missed registration (MUST-2)**: `docs/how-to/configure-ai-raccoon-server.md:185-189` carries the settings-command exit table (`17`/`18`/`23` + the `15` note) — the exact class of code 25 is. The plan's files-touched lists (WP1, WP4) never touch it, and WP3's gate only pins the doctor table. The fix PR ships a user-facing exit code whose documentation table (same file, 200 lines up) silently omits it — the precise drift class follow-up 3 exists to kill, and `derive-or-delete-the-list` applies to this table identically. Correction: add the `25` row in WP1's commit (with the const) and extend the derive gate to pin the settings table as well (same regex pattern; 17/18/23 all have doc comments, 25's new one included).
+
+### (5) Atomic-by-ordering and concurrent deleters — **TRUE for Provider**
+
+Verified: Provider is first in the foreach (`SettingsCommands.cs:263-268`); the refusal fires on the first of six HTTP calls, so no key is gone. No other CLI verb deletes Provider (full `src/` grep). **But** the six keys have a second, concurrent deleter the plan doesn't acknowledge: `ModelSetLocalAsync` deletes `ApiKey`+`Dimensions` (`SettingsCommands.cs:117-118`) **before** its `StartModelMigrationAsync` call — so `model embedding set local` while a migration is open performs two deletes, then 409s → exit 15. Not strand-relevant (Provider untouched) and pre-existing, but the plan's "atomic" section should record it as an explicit out-of-scope partial-mutation so it doesn't read as covering the set verbs (SHOULD-7). The `embedding set openai` path writes `ApiKey`/`Dimensions` pre-409 (`:137-156`) — same note.
+
+### (6) The unreachability claim — **TRUE as a forward-creation claim; wording must be scoped**
+
+The plan's mechanism is verified: the birth path is **atomic** — settings upserts + outbox row + `MarkAllEmbeddedPending` commit in **one transaction** (`EntryEmbedder.cs:60-88`), so there is **no crash window** between "outbox committed" and "settings written"; a blank provider is impossible at the store (`SqliteMemoryStore.ModelMigration.cs:28`) and the endpoint (`SettingsEndpoint.cs:72-75`); the only Provider deleter is now refused. So "cannot be newly created through any supported product surface after 1.36.1" holds.
+
+**Overbroad as written** ("unreachable through any supported surface"): (a) existing stranded banks — the evidence bank, every #592 victim — **remain in the state**; unreachability is about creation, not existence, and the doctor 24 / 1012 observability legs stay load-bearing; (b) the row's own raw-SQL seed is a deliberate exception route; (c) hand-edited/restored banks are out of product scope. Reword the row to "cannot be newly created …" and add a line that remediation for already-stranded banks is out of scope (SHOULD-5, NICE-15).
+
+### (7) What the plan missed
+
+- **MUST-1 (WP3/Ruling C)**: "assert the Meaning cell contains a key phrase asserted against the const's doc comment in `ExitCode.cs`" — with the exception list naming **only `Success = 0`** (`ExitCode.cs:80`) — is unimplementable: `FailedToResolveEncryptionKey = 1` and `FailedToOpenEncryptedBank = 2` (`ExitCode.cs:5-6`) have **no doc comments** (the first comment in the file is on line 11). This is an M7-class gate (red by construction) exactly like the previous review's WP1 grep. Correction: treat `1`/`2` as table-own-claim rows (pin the table's own wording, same as `0`/HEALTHY), and **freeze the phrase-pair table in the plan** — the doc comment and table wording share substrings but not sentences (e.g. 24's doc says "a model_migration outbox row is open…every MCP tool call is refused until the re-embed finishes", the table says "MODEL MIGRATION OPEN — …every MCP tool call is refused until it finishes (ADR-0076)" — only the shared substring "every MCP tool call is refused until" works; 19 shares "the bank's actual schema"+"this binary's DDL"; 20 shares "user_version"; 22 shares "no bank file exists at the resolved path"). Without frozen pairs an implementer picks a non-shared phrase → RED by construction, or a trivially-common word → vacuous.
+- **MUST-2 (A3/WP1/WP4)**: settings exit table `:185-189` needs the `25` row (see ruling 4).
+- SHOULD-3: direct `ServerSettingsStore` 409-mapping test (precedent `SettingsEndpointTests.cs:220-236`); bump minimum-expected-tests 4→5.
+- SHOULD-4: acceptance (a) names **both** reset verbs, but the Integration list exercises one verb; both dispatch to the same `ModelResetAsync` (`ConfigCommands.cs:58,62`), so equivalence holds — make the refused test a theory over both verb paths (or state the equivalence) so (a) is directly evidenced.
+- SHOULD-5/6/7: as in rulings 4/5/6.
+- NICE-8: `MemorySql.cs:495-497` is a citation drift — the lease `WHERE` is at `:501-503` (substance correct).
+- NICE-9: checklist metadata — `derived.run/version/pr` still `1.36.0`/`591` for a file that now gates a 1.36.1 run; update `_note`/`derived` in WP2.
+- NICE-10: `docs/work/README.md` index — the #591 brief's release section updates it per PR; the two new follow-up docs aren't in any files-touched list.
+- NICE-11: Provider-first ordering is load-bearing; state it and note the `DeletesNothing` test pins it.
+- NICE-12: latent server-side `IMemoryStore.DeleteSettingAsync` surface bypasses the endpoint guard; record in the guard's doc comment.
+- NICE-13: how-to prose at `:367-368` still says "non-zero on a **mismatch**" — stale since exit 24 landed (24 is non-zero on a *healthy* shape); WP3 touches this doc, fix the prose in the same PR.
+- NICE-14: "tiny adapter" is a full-`IMemoryStore` stub; only `DeleteSettingAsync` real, and it skips the lazy-acquire leg — say so.
+- NICE-15: already-stranded banks need documented remediation (manual row close); the guard only prevents new occurrences.
+
+## Findings table (schema-last)
+
+| id | severity | plan section | source (worktree) | finding | correction |
+|---|---|---|---|---|---|
+| F1 | MUST | Ruling C / WP3 | `src/AiRaccoon/ExitCode.cs:5-6` (no doc comments on 1, 2); plan's exception names only `0` (`:80`) | WP3's per-code doc-comment phrase assertion is red by construction for rows 1 and 2 | Exempt 1/2 as table-own-claim rows (like 0/HEALTHY); freeze the phrase-pair table (24→"every MCP tool call is refused until", 19→"the bank's actual schema", 20→"user_version", 22→"no bank file exists at the resolved path", 0/1/2→table-own wording) in the plan |
+| F2 | MUST | A3 / WP1 / WP4 | `docs/how-to/configure-ai-raccoon-server.md:185-189` (settings exit table 17/18/23) | Exit 25 ships with no row in the settings-command exit table; nothing in WP1-WP4 touches it and WP3's gate covers only the doctor table (`:370-378`) | Add the `25` row in WP1's commit with the const; extend the derive gate to pin the settings table too (17/18/23/25 vs `ExitCode` doc comments) |
+| F3 | SHOULD | WP1 tests | `tests/AiRaccoon.Tests/Integration/Setup/SettingsEndpointTests.cs:220-236` | No direct client 409-mapping test in the 4-test list; the exact precedent exists | Add `ServerSettingsStore_DeleteSetting_OnConflict_ThrowsModelMigrationInProgressWithTheReason`; `--minimum-expected-tests 5` |
+| F4 | SHOULD | WP1 acceptance (a) | `src/AiRaccoon/Setup/Cli/Commands/ConfigCommands.cs:58,62` | (a) demands both reset verbs exit 25; the Integration list exercises one verb (equivalence holds via the shared handler but is not evidenced) | Run the refused test as a theory over both verb paths, or state the equivalence in the plan |
+| F5 | SHOULD | Ruling B / WP2 | `docs/work/2026-08-26-followups-research.md:64-67`; `src/AiRaccoon.Infrastructure/Embedding/EntryEmbedder.cs:60-88` | "Unreachable through any supported surface" overstates: existing stranded banks remain in the state; the row's own raw-SQL seed is an exception; hand-edited/restored banks are out of scope | Reword to "cannot be newly created through any supported product surface after 1.36.1"; birth-path atomicity (one transaction) is verified and worth citing in the row |
+| F6 | SHOULD | Ruling C / WP3 | `src/AiRaccoon/ExitCode.cs` (24 consts vs table's 7) | "A list built from the `ExitCode` members" is ambiguous; all-members fails today and would fail again when 25 lands | Specify the hand-enumerated doctor-reachable list referencing the consts by name (`Success`, `FailedToResolveEncryptionKey`, `FailedToOpenEncryptedBank`, `SchemaVerificationFailed`, `SchemaNewerThanBinary`, `NoBank`, `ModelMigrationOpen`) |
+| F7 | SHOULD | Risks / residual | `src/AiRaccoon/Setup/Cli/Commands/SettingsCommands.cs:117-118,137-156` | The set verbs mutate `ApiKey`/`Dimensions` **before** the refused 409 — a pre-existing partial-write the plan's "atomic" section doesn't acknowledge | Record both set-verb partial-mutations as explicit out-of-scope pre-existing behavior in the residual-risk row |
+| F8 | NICE | Risks / Table 1 | `src/AiRaccoon.Infrastructure/Sqlite/MemorySql.cs:501-503` | Lease `WHERE` cited as `:495-497` | Re-point to `:501-503` |
+| F9 | NICE | WP2 | `docs/work/checklist/2026-08-26-1.36.0-doctor-memory-engine.json:3-8` | `derived.run/version/pr` still 1.36.0/591 while the file now gates the 1.36.1 run | Update `_note`/`derived` (or note the combined run) in WP2 |
+| F10 | NICE | WP1-WP4 | `docs/work/README.md` (index per #591 brief) | Two new follow-up docs unindexed | Add index rows in the same PR |
+| F11 | NICE | A1 | `src/AiRaccoon/Setup/Cli/Commands/SettingsCommands.cs:263-268` | Atomicity rests on Provider-first array order; only the integration test pins it | State the dependency in the plan/guard comment; note the `DeletesNothing` test covers it |
+| F12 | NICE | A1 | `src/AiRaccoon.Infrastructure/Sqlite/Memory/SqliteMemoryStore.cs:567` | Future server-side `IMemoryStore.DeleteSettingAsync` callers bypass the endpoint guard (latent, no current caller) | Record in the guard's doc comment |
+| F13 | NICE | WP3 (docs) | `docs/how-to/configure-ai-raccoon-server.md:367-368` | "non-zero on a mismatch" is stale since exit 24 (non-zero on a healthy shape) | Fix prose in the same PR that touches the table |
+| F14 | NICE | WP1 test design | `src/AiRaccoon.Core/Memory/IMemoryStore.cs:107` | "Tiny adapter" is a full-`IMemoryStore` stub; skips `LazyServerSettingsStore`'s lazy acquire | Say only `DeleteSettingAsync` is real and the lazy leg is skipped |
+| F15 | NICE | Ruling B / WP1 | evidence bank (`docs/work/evidence-2026-08-26-stuck-bank`) | Guard prevents new strands only; already-stranded banks still need manual remediation | State remediation as out of scope in the residual-risk row so operators aren't left guessing |
+
+## Recommended WP sequence (differs from the plan's order)
+
+Plan order WP1 → WP2 → WP3 → WP4 is *valid* (dependencies: WP2 needs WP1's frozen literals; WP4 needs all). I recommend **WP3 first, then WP1, WP2, WP4**:
+
+1. **WP3 (fixed per F1/F6) — first**: pure Fast test, zero production risk, pins the tables as they exist today, and surfaces the F1 doc-comment gap (and F13 prose) before any implementation starts. Extend it per F2 to also pin the settings table — that gate then *proves* the 25 row when WP1 lands.
+2. **WP1 — guard + client mapping**: `ExitCode.cs` 25 + doc comment, `SettingsEndpoint.MapDelete` guard (409), `ServerSettingsStore.DeleteSettingAsync` Conflict mapping, `ModelResetAsync` inner catch, the 5 tests (F3), and the settings-table `25` row in the same commit as the const (F2).
+3. **WP2 — checklist** (12 rows, reworded blank-provider row per F5, metadata per F9).
+4. **WP4 — release** (VERSION 1.36.1, README, PR title) plus the `docs/work/README.md` index rows (F10).
+
+Nothing else changes: one PR, TDD with the two witnessed RED runs as specified (both mechanisms verified real: exit-0-today and exit-15-with-doubled-prefix-today), `CliCommandsDoNotOpenTheBankTests` untouched and green, no event-id changes, no ADR amendment (owner ruling is consistent with R1 Ruling 6, which required an amendment only for the close-the-row option).
