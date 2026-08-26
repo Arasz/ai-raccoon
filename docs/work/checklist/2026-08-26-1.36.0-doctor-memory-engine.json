@@ -1,10 +1,10 @@
 {
-  "_note": "Manual live verification for 1.36.0 (PR #591). Run AFTER the release tool is installed (dotnet tool update -g ai-raccoon). Rows 3-5 are reproducible against the captured evidence bank; row 3 is the exit-24 surface and must run read-only against a COPY — doctor never writes, but the evidence bank must stay pristine.",
-  "run": "1.36.0-doctor-memory-engine",
+  "_note": "Manual live verification for 1.36.1 (follow-ups to PR #591; issue #592). Run AFTER the release tool is installed (dotnet tool update -g ai-raccoon). The 1.36.1 tool refuses `settings model reset` while the ADR-0076 outbox row is open (exit 25), so rows 11-12 are only executable on 1.36.1. Rows 3-5 are reproducible against the captured evidence bank; row 3 is the exit-24 surface and must run read-only against a COPY — doctor never writes, but the evidence bank must stay pristine. Coverage decisions (R2 F10a): the live-stuck-bank leg is covered by row 3 (a copy is strictly safer than the live bank) and the stale-lease drain case by row 6 (its command greps the 1009 line) — no extra rows. `derived.pr` is filled in at execution time once this task's PR is open.",
+  "run": "1.36.1-doctor-memory-engine",
   "derived": {
-    "version": "1.36.0",
-    "pr": 591,
-    "anchor": "task doctor-feature-match; docs/work/2026-08-26-doctor-parity-integrated-brief.md"
+    "version": "1.36.1",
+    "pr": null,
+    "anchor": "task doctor-feature-match-cont; docs/work/2026-08-26-followups-brief.md"
   },
   "items": [
     {
@@ -29,7 +29,7 @@
       "item": "stuck-bank-reproducible-on-copy-exit-24",
       "expected-result": "On a COPY of the captured evidence bank (docs/work/evidence-2026-08-26-stuck-bank/README.md), doctor prints `model migration: open since … (all MCP tool calls are refused until it finishes)`, `status: MIGRATION IN PROGRESS (schema shape is healthy; …)`, exits 24 — and the copy's SHA-256 is unchanged after the run (doctor never writes).",
       "anchor": "ExitCode.ModelMigrationOpen; DoctorCommands.cs (status switch); evidence README hashes",
-      "command": "cp -p <evidence-dir>/memory.db /tmp/ev-copy.db; shasum -a 256 /tmp/ev-copy.db; ai-raccoon --data-root /tmp/ev-copy-doctor doctor; echo EXIT=$?; shasum -a 256 /tmp/ev-copy.db",
+      "command": "mkdir -p /tmp/ev-copy; cp -p <evidence-dir>/memory.db /tmp/ev-copy/memory.db; shasum -a 256 /tmp/ev-copy/memory.db; ai-raccoon --data-root /tmp/ev-copy doctor; echo EXIT=$?; shasum -a 256 /tmp/ev-copy/memory.db",
       "evidence": "<paste output; EXIT=24; both hashes identical>",
       "observed-result": "",
       "status": "pending"
@@ -56,7 +56,7 @@
       "item": "migration-drain-logs-1008-1013",
       "expected-result": "While a migration drains (serve against the stuck bank or a seeded scratch bank), the server log shows `Embed drain for Memory started under the model migration: <N> row(s) owed` (1008), then 1003-style finish with the row count, and — if the previous holder died with an expired lease — the 1009 warning naming the previous holder.",
       "anchor": "EmbedDrainReporter (1008-1013); docs/reference/logging-event-ids.md row 1002-1013",
-      "command": "ai-raccoon --data-root <stuck-or-seeded-bank> serve --port 43442 2>&1 | grep -E 'Embed drain|model migration' | head -20",
+      "command": "ai-raccoon --data-root <stuck-or-seeded-bank> serve --port 43442 2>&1 | grep -E 'Embed drain|model migration|1009' | head -20",
       "evidence": "<paste the drain log lines with event ids>",
       "observed-result": "",
       "status": "pending"
@@ -67,6 +67,51 @@
       "anchor": "LoggerMessageEventIdTests; CorpusEngineLinesTests.HowToHealthyBankSample_MatchesTheReportContract",
       "command": "dotnet test tests/AiRaccoon.Tests --filter \"FullyQualifiedName~LoggerMessageEventIdTests|FullyQualifiedName~CorpusEngineLinesTests\" --no-build",
       "evidence": "<paste summary; all green>",
+      "observed-result": "",
+      "status": "pending"
+    },
+    {
+      "item": "doctor-memory-rows-pending-is-alive",
+      "expected-result": "On a bank with an engine configured but real un-embedded rows (or after a real ingest with no engine), doctor's `memory rows pending: N` prints N > 0, and N agrees with an independent read-only COUNT of the entries table's pending rows — the pending count must not be a hardcoded zero (R2 B2 honest-count bar).",
+      "anchor": "CorpusEngineReport.cs (rows-pending line); R2 B2",
+      "command": "ai-raccoon doctor; echo EXIT=$?; sqlite3 <data-root>/memory.db \"SELECT COUNT(*) FROM entries WHERE embed_state = 'pending';\"",
+      "evidence": "<paste both counts; they agree and N > 0>",
+      "observed-result": "",
+      "status": "pending"
+    },
+    {
+      "item": "doctor-unreadable-settings-says-unreadable-not-a-false-remedy",
+      "expected-result": "With the settings table missing or shape-broken, doctor prints `memory engine: unreadable (settings table missing or unreadable)` — not the not-configured remedy (`run 'ai-raccoon model embedding set local' …`): a broken settings table is not a fresh install, so the remedy would be a false one (R1 S6).",
+      "anchor": "CorpusEngineReport.cs:71 (unreadable arm); R1 S6",
+      "command": "<copy the evidence bank, DROP TABLE settings, run doctor; echo EXIT=$?>",
+      "evidence": "<paste output; the unreadable wording, no not-configured remedy>",
+      "observed-result": "",
+      "status": "pending"
+    },
+    {
+      "item": "doctor-unreadable-migration-falls-back-to-exit-0",
+      "expected-result": "With a corrupted model_migration row (e.g. started_at NULL), doctor prints `model migration: unreadable` and exits 0 — the unreadable arm is not the open arm, so exit 24 must not fire (R1 Ruling 4 Decision D; R2 B3).",
+      "anchor": "DoctorCommands.cs (MigrationRead.Unreadable arm); R1 Ruling 4 Decision D",
+      "command": "<copy the evidence bank, UPDATE model_migration SET started_at = NULL, run doctor; echo EXIT=$?>",
+      "evidence": "<paste output; EXIT=0; `model migration: unreadable`>",
+      "observed-result": "",
+      "status": "pending"
+    },
+    {
+      "item": "blank-provider-migration-warns-once-and-stops-the-throw-loop",
+      "expected-result": "The blank-provider open-migration state cannot be newly created through any supported product surface after 1.36.1: a migration is born only via StartModelMigrationAsync, whose outbox transaction always writes the provider (and refuses a blank one), and `settings model reset` — the only deleter of embedding.provider — is refused while the row is open (exit 25). Raw-SQL-seeded (the same route the automated test uses), the 1.36.1 tool must (a) print the 1012 blank-provider warning at most once per process with no 526 throw-loop, (b) leave finished_at NULL, and (c) refuse `settings model reset` with EXIT=25, deleting nothing. Already-stranded pre-1.36.1 banks still need manual row close — out of scope here (R1 F15).",
+      "anchor": "EntryEmbedderMigrationDrainReportingTests (1012 once-per-process); SqliteMemoryStore.ModelMigration.cs:28 (provider-required birth); SettingsEndpoint.MapDelete guard (#592)",
+      "command": "DR=$(mktemp -d); ai-raccoon --data-root $DR serve --port 43443 > /tmp/blank-provider-serve.log 2>&1 & sleep 4; sqlite3 $DR/memory.db \"DELETE FROM settings WHERE key = 'embedding.provider'; INSERT INTO entries(hash, value, project_id, scope, created_at, updated_at, embed_state) VALUES ('bp-1', 'value', 'p', 'project', 0, 0, 'pending'); INSERT INTO model_migration(id, provider, model, base_url, engine, started_at, finished_at) VALUES (1, 'openai', 'text-embedding-3-small', NULL, 0, NULL);\"; ai-raccoon --data-root $DR settings model reset; echo EXIT=$?; kill %1; grep -c '1012' /tmp/blank-provider-serve.log; grep -c '526' /tmp/blank-provider-serve.log",
+      "evidence": "<paste output; EXIT=25; 1012 count = 1; 526 count = 0; the migration row still has finished_at NULL>",
+      "observed-result": "",
+      "status": "pending"
+    },
+    {
+      "item": "model-reset-refused-while-migration-open",
+      "expected-result": "On a 1.36.1 bank with all six embedding keys set and an open model_migration row carrying an unexpired lease, both `settings model reset` and `settings model embedding reset` exit 25, print the frozen message verbatim on stderr (`ai-raccoon: model reset refused: a model migration is in progress — every MCP tool call is refused until it finishes; nothing was deleted`), and delete nothing. After closing the row (UPDATE model_migration SET finished_at = <now>), the same reset exits 0 and clears all six keys.",
+      "anchor": "SettingsEndpoint.MapDelete guard; ModelResetGuardEndpointTests (automated twin); ExitCode.ModelResetRefused = 25",
+      "command": "DR=$(mktemp -d); ai-raccoon --data-root $DR serve --port 43444 & sleep 4; sqlite3 $DR/memory.db \"INSERT INTO settings(key, value) VALUES ('embedding.provider','openai'),('embedding.model','text-embedding-3-small'),('embedding.baseUrl','https://api.openai.com/v1'),('embedding.engine','openai'),('embedding.apiKey','sk-test'),('embedding.dimensions','1536'); INSERT INTO model_migration(id, provider, model, base_url, engine, started_at, finished_at, lease_owner, lease_expires_at) VALUES (1, 'openai', 'text-embedding-3-small', NULL, 0, NULL, 'test-holder', strftime('%s','now') + 3600);\"; ai-raccoon --data-root $DR settings model reset; echo EXIT=$?; ai-raccoon --data-root $DR settings model embedding reset; echo EXIT=$?; sqlite3 $DR/memory.db \"UPDATE model_migration SET finished_at = strftime('%s','now') WHERE id = 1;\"; ai-raccoon --data-root $DR settings model reset; echo EXIT=$?; sqlite3 $DR/memory.db \"SELECT COUNT(*) FROM settings WHERE key LIKE 'embedding.%';\"; kill %1",
+      "evidence": "<paste output; EXIT=25 with the frozen message on both refused verbs; then EXIT=0; final embedding.% count = 0>",
       "observed-result": "",
       "status": "pending"
     }
