@@ -57,6 +57,11 @@ public static partial class AppRegistrations
             // buffer + best-effort recorder register here. Only the persistence side (IMetricsStore,
             // MetricsFlusher, IMetricsReportService) stays server-only in RegisterMetricsServices.
             services.RegisterMeasurementRecording();
+            // EntryEmbedder (RegisterEmbeddingServices below) takes IOperationTelemetry; the
+            // narrower CLI graph that calls only this method still constructs it through
+            // SqliteMemoryStore, so the port must be resolvable there too. BackgroundTelemetry is
+            // cheap to build and unused by CLI verbs.
+            services.AddSingleton<IOperationTelemetry, BackgroundTelemetry>();
             services.RegisterEmbeddingServices();
             services.RegisterFileIngestionServices();
             services.RegisterStores();
@@ -154,7 +159,6 @@ public static partial class AppRegistrations
         private void RegisterObservabilityServices()
         {
             services.AddRequiredSingleton<ISearchQualityService, SqliteSearchQualityService>();
-            services.AddSingleton<IOperationTelemetry, BackgroundTelemetry>();
             services.AddRequiredSingleton<IToolCallMetrics, ToolCallMetrics>();
             // typeof(MemoryTools).Assembly matches VersionContractTests' convention for "the built AiRaccoon binary".
             services.AddSingleton<IBuildStamp>(new AssemblyBuildStamp(typeof(MemoryTools).Assembly));

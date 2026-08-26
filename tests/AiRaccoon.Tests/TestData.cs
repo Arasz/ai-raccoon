@@ -102,7 +102,9 @@ public static class TestData
     /// </summary>
     public static EntryEmbedder CreateEntryEmbedder(IEmbeddingService embeddings, IModelMigrationLease migrationLease,
         TimeProvider timeProvider, IVecDimensionReconciler vecDimensionReconciler) =>
-        new(embeddings, migrationLease, timeProvider, vecDimensionReconciler);
+        new(embeddings, migrationLease, timeProvider, vecDimensionReconciler,
+            new EmbedDrainReporter(NoOpMeasurementRecorder.Instance, timeProvider),
+            TestTelemetry.None, NullLogger<EntryEmbedder>.Instance);
 
     /// <summary>
     ///     Drains every embed-topic request currently queued the same way

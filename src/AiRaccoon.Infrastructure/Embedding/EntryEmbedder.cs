@@ -1,11 +1,14 @@
 using System.Globalization;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Observability;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Infrastructure.Embedding;
 
@@ -18,7 +21,10 @@ public sealed class EntryEmbedder(
     IEmbeddingService embeddings,
     IModelMigrationLease migrationLease,
     TimeProvider timeProvider,
-    IVecDimensionReconciler vecDimensions) : IEntryEmbedder
+    IVecDimensionReconciler vecDimensions,
+    EmbedDrainReporter reporter,
+    IOperationTelemetry telemetry,
+    ILogger<EntryEmbedder> logger) : IEntryEmbedder
 {
     /// <summary>Rows per generator call. Internal so PendingEmbedJob can derive its own per-run bound from it instead of duplicating the number.</summary>
     internal const int BatchSize = 32;
@@ -99,19 +105,31 @@ public sealed class EntryEmbedder(
                 "ai-raccoon: EntryEmbedder was built without an IModelMigrationLease; DrainMigrationAsync needs one");
         }
 
+        const EmbedCorpus corpus = EmbedCorpus.Memory;
+
         if (!await migrationLease.TryAcquireAsync(connection, cancellationToken).ConfigureAwait(false))
         {
             return false;
         }
 
+        using var pass = telemetry.Begin(EmbedDrainService.OperationName);
+        var startedAt = timeProvider.GetTimestamp();
+        var drained = 0;
         try
         {
+            // The open-migration re-check stays UNDER the lease (S7): acquiring first is what
+            // makes it race-free. False here means the migration finished between the relay's
+            // due-check and this pass.
             var open = await connection.QuerySingleOrDefaultAsync<long?>(
                 Def(MemorySql.HasOpenModelMigration, cancellationToken)).ConfigureAwait(false) > 0;
             if (!open)
             {
                 return false;
             }
+
+            var owed = await connection.ExecuteScalarAsync<long>(Def(MemorySql.CountPendingEmbed, cancellationToken))
+                .ConfigureAwait(false);
+            reporter.MigrationStarted(logger, corpus, owed);
 
             await ReconcileVecDimensionsAsync(connection, cancellationToken).ConfigureAwait(false);
 
@@ -125,14 +143,30 @@ public sealed class EntryEmbedder(
                     break;
                 }
 
-                await EmbedAsync(connection, batch, cancellationToken).ConfigureAwait(false);
+                drained += await EmbedAsync(connection, batch, cancellationToken).ConfigureAwait(false);
                 await migrationLease.TryRenewAsync(connection, cancellationToken).ConfigureAwait(false);
             }
 
             await connection.ExecuteAsync(Def(MemorySql.FinishModelMigration,
                     new { finishedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() }, cancellationToken))
                 .ConfigureAwait(false);
+            if (drained > 0)
+            {
+                pass.NoteWork();
+            }
+
+            // RecordRows MUST run before Succeeded() (#548 review, B1) — the same rule as
+            // EmbedDrainService.DrainOnceAsync: Succeeded() claims the scope's one measurement.
+            pass.RecordRows(drained);
+            pass.Succeeded();
+            reporter.PassFinished(logger, corpus, drained, timeProvider.GetElapsedTime(startedAt));
             return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            pass.Failed(ex);
+            reporter.PassFailed(logger, corpus, ex);
+            throw;
         }
         finally
         {

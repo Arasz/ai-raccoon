@@ -12,6 +12,10 @@ public sealed partial class EmbedDrainReporter(IMeasurementRecorder measurements
 {
     public void PassStarted(ILogger logger, EmbedCorpus corpus) => Log.DrainStarted(logger, corpus);
 
+    /// <summary>The migration relay's start line — Information, with the rows owed (LANE P4).</summary>
+    public void MigrationStarted(ILogger logger, EmbedCorpus corpus, long owed) =>
+        Log.MigrationDrainStarted(logger, corpus, owed);
+
     public void PassFailed(ILogger logger, EmbedCorpus corpus, Exception exception) =>
         Log.DrainFailed(logger, corpus, exception);
 
@@ -67,5 +71,8 @@ public sealed partial class EmbedDrainReporter(IMeasurementRecorder measurements
             Message = "Embed drain's self re-signal for {Corpus} did not enqueue (already queued, or the pump is full); the next poll recovers it")]
         public static partial void SelfReSignalNotQueued(ILogger logger, EmbedCorpus corpus);
 
+        [LoggerMessage(EventId = 1008, Level = LogLevel.Information,
+            Message = "Embed drain for {Corpus} started under the model migration: {Owed} row(s) owed")]
+        public static partial void MigrationDrainStarted(ILogger logger, EmbedCorpus corpus, long owed);
     }
 }
