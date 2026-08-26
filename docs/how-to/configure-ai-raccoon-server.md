@@ -187,6 +187,7 @@ delivered never reports success:
 | `17` | the server refused the loopback token — it may serve another data root |
 | `18` | the server could not be reached or auto-started within the acquire budget |
 | `23` | the server answered but failed with a 5xx — a server-side fault, distinct from `15` (`InvalidArgument`, "you mistyped") |
+| `25` | the settings server refused `settings model reset` / `settings model embedding reset` because a model migration outbox row is open (ADR-0076) — every MCP tool call is refused until it finishes; nothing was deleted |
 
 **Why it works this way.** Two processes writing one SQLite file is a lock-contention problem nobody
 chose; it accumulated one command family at a time. Routing every settings write through the server
@@ -364,8 +365,8 @@ represent, so recreating it is a data-loss decision, not a schema decision — o
 with the bank in front of you.
 
 It opens the bank **read-only** and does not modify it, so it is safe to run against a live bank or
-a backup. Exit code is `0` when healthy, `24` while a model migration is open (schema shape is
-still healthy), and non-zero on a mismatch, so it composes into a script:
+a backup. Exit code is `0` when healthy, non-zero on a mismatch (`19`/`20`/`22`), and `24` while a
+model migration is open (schema shape is still healthy), so it composes into a script:
 
 | Exit code | Meaning |
 |---|---|

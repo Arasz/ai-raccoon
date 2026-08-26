@@ -260,14 +260,24 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
     public async Task<int> ModelResetAsync(IMemoryStore store, StandardStreams streams,
         CancellationToken cancellationToken)
     {
-        foreach (var key in new[]
-                 {
-                     EmbeddingSettingsKeys.Provider, EmbeddingSettingsKeys.Model, EmbeddingSettingsKeys.BaseUrl,
-                     EmbeddingSettingsKeys.Engine, EmbeddingSettingsKeys.ApiKey,
-                     EmbeddingSettingsKeys.Dimensions
-                 })
+        try
         {
-            await store.DeleteSettingAsync(key, cancellationToken);
+            foreach (var key in new[]
+                     {
+                         EmbeddingSettingsKeys.Provider, EmbeddingSettingsKeys.Model, EmbeddingSettingsKeys.BaseUrl,
+                         EmbeddingSettingsKeys.Engine, EmbeddingSettingsKeys.ApiKey,
+                         EmbeddingSettingsKeys.Dimensions
+                     })
+            {
+                await store.DeleteSettingAsync(key, cancellationToken);
+            }
+        }
+        catch (ModelMigrationInProgressException ex)
+        {
+            // The endpoint's 409 body already carries the "ai-raccoon: " prefix, so the message
+            // goes to stderr unreformatted — CliFailureFormatting would double it (#592).
+            await streams.WriteErrorLineAsync(ex.Message);
+            return ExitCode.ModelResetRefused;
         }
 
         await streams.WriteOutputLineAsync("embedding engine reset to default: no engine (FTS5-only search)");
