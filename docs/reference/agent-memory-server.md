@@ -18,8 +18,14 @@ deferred to a deployment that needs it (D11).
 
 ## Tools (29)
 
-Every tool requires `projectId` (camelCase — all parameters are camelCase), except
-`memory_promotion_list` where it is optional, and `project_id_token_get`, which mints
+Every tool takes `projectId` (camelCase — all parameters are camelCase), and it is
+**optional on every tool**: an omitted or blank id defaults to the registered project
+whose ingest-scope or watch surface contains the server process's working directory —
+one distinct project resolves (guid spellings canonicalize at the gate), several refuse
+as ambiguous with the sorted candidate list, none refuses with `projectId is required`
+naming the probed directory. An explicit id always wins and never consults the resolver.
+The exceptions: `memory_promotion_list`, whose omitted id means all-projects (its
+cross-project feature) and never cwd-defaults, and `project_id_token_get`, which mints
 one and so takes none. Writes land in `project:<id>` by default; naming a `workspaceId`
 routes them into that workspace's isolated context.
 

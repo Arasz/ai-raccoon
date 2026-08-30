@@ -1,6 +1,9 @@
 # Default projectId resolution from the calling directory (cwd default)
 
-**Status:** plan (not started) · **Author:** Rafał Araszkiewicz (Arasz) with ox-alpha ·
+**Status:** implemented (1.37.0) — deviations recorded in PR #594: the Out-of-scope premise
+was false (tool schemas marked projectId REQUIRED; every tool now carries an optional
+projectId), union-then-Ambiguous with canonical-form candidate dedup, `ingest.scope.global`
+skip, and `projectId` casing in both refusal messages. · **Author:** Rafał Araszkiewicz (Arasz) with ox-alpha ·
 **Date:** 2026-08-29 · **Origin:** ai-badger/pi integration follow-up (state.json.next item 1)
 
 ## Problem
