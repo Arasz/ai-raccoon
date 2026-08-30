@@ -19,15 +19,15 @@ namespace AiRaccoon.Projects;
 public sealed class CwdProjectIdResolver(
     ISettingsStore settings,
     IWatchRegisteredStore watches,
-    Func<string>? cwdProbe = null) : IProjectIdResolver
+    ICwdProbe? cwdProbe = null) : IProjectIdResolver
 {
     private static readonly string ScopePrefix = IngestScopeKeys.ScopeProject(string.Empty);
 
-    private readonly Func<string> _cwdProbe = cwdProbe ?? (() => Environment.CurrentDirectory);
+    private readonly ICwdProbe _cwdProbe = cwdProbe ?? CurrentDirectoryCwdProbe.Instance;
 
     public async Task<ProjectIdResolution> ResolveAsync(CancellationToken cancellationToken = default)
     {
-        var cwd = _cwdProbe();
+        var cwd = _cwdProbe.CurrentDirectory;
         HashSet<string> candidates = new(StringComparer.Ordinal);
 
         var scopes = await settings.GetSettingsByPrefixAsync(ScopePrefix, cancellationToken).ConfigureAwait(false);

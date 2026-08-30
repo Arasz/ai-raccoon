@@ -30,7 +30,12 @@ public sealed class CwdProjectIdResolverTests : IDisposable
         return path;
     }
 
-    private CwdProjectIdResolver NewResolver(string cwd) => new(_settings, _settings, () => cwd);
+    private CwdProjectIdResolver NewResolver(string cwd) => new(_settings, _settings, new PinnedCwdProbe(cwd));
+
+    private sealed class PinnedCwdProbe(string cwd) : ICwdProbe
+    {
+        public string CurrentDirectory => cwd;
+    }
 
     [Fact]
     public async Task ExactMatch_ResolvesProject()
