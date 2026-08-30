@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Projects;
 using AiRaccoon.Tests.TestHelpers;
@@ -162,5 +163,25 @@ public sealed class CwdProjectIdResolverTests : IDisposable
         var resolution = await NewResolver(cwd).ResolveAsync(TestContext.Current.CancellationToken);
 
         resolution.ShouldBe(new ProjectIdResolution.Resolved("p1"));
+    }
+
+    [Fact]
+    public async Task MixedSpellings_SameGuid_DedupToResolved()
+    {
+        // The same guid under two spellings — braced-upper in a scope row, lowercase-D in a watch
+        // row — is ONE project: dedup runs on the canonical form, not the stored spelling. The
+        // first-seen spelling (the scope row's) is what the resolution carries; the gate
+        // canonicalizes it to the D-form exactly once.
+        var guid = Guid.NewGuid();
+        var bracedUpper = $"{{{guid.ToString("D").ToUpperInvariant()}}}";
+        var cwd = Dir("mixed-spellings");
+        _settings.Values[IngestScopeKeys.ScopeProject(bracedUpper)] = IngestScopeKeys.Serialize([cwd]);
+        _settings.Watches = [new WatchRegistration(guid.ToString("D"), cwd, 0, 0)];
+
+        var resolution = await NewResolver(cwd).ResolveAsync(TestContext.Current.CancellationToken);
+
+        var resolved = resolution.ShouldBeOfType<ProjectIdResolution.Resolved>();
+        resolved.ProjectId.ShouldBe(bracedUpper);
+        ProjectId.Canonicalize(resolved.ProjectId).ShouldBe(guid.ToString("D"));
     }
 }

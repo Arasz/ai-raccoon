@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Watch;
 
 namespace AiRaccoon.Projects;
@@ -9,8 +10,11 @@ namespace AiRaccoon.Projects;
 ///     resolves to the single project whose ingest scope (settings rows under "ingest.scope.")
 ///     or live watch registration contains the server's cwd. Both surfaces are enumerated and
 ///     merged on EVERY call — never cached at singleton construction, because scopes are edited
-///     and watches are (un)registered while the server runs. The union is deduped by project id;
-///     one distinct id resolves, several are refused as ambiguous (never guess), none is None.
+///     and watches are (un)registered while the server runs. The union is deduped by CANONICAL
+///     project id, so the same guid stored under two spellings (a braced scope row and a D-form
+///     watch row) is one project, not a false ambiguity; the first-seen stored spelling is what
+///     the resolution carries, and the gate canonicalizes it exactly once anyway. One distinct
+///     id resolves, several are refused as ambiguous (never guess), none is None.
 ///     The legacy "watch.scope." prefix is excluded naturally by the settings enumeration, and
 ///     "ingest.scope.global" is skipped explicitly (a machine-wide allowlist elects no project).
 ///     Stored ids travel verbatim — <see cref="Core.Projects.ProjectId.Canonicalize" /> runs once
@@ -19,16 +23,14 @@ namespace AiRaccoon.Projects;
 public sealed class CwdProjectIdResolver(
     ISettingsStore settings,
     IWatchRegisteredStore watches,
-    ICwdProbe? cwdProbe = null) : IProjectIdResolver
+    ICwdProbe cwdProbe) : IProjectIdResolver
 {
     private static readonly string ScopePrefix = IngestScopeKeys.ScopeProject(string.Empty);
 
-    private readonly ICwdProbe _cwdProbe = cwdProbe ?? CurrentDirectoryCwdProbe.Instance;
-
     public async Task<ProjectIdResolution> ResolveAsync(CancellationToken cancellationToken = default)
     {
-        var cwd = _cwdProbe.CurrentDirectory;
-        HashSet<string> candidates = new(StringComparer.Ordinal);
+        var cwd = cwdProbe.CurrentDirectory;
+        Dictionary<string, string> candidates = new(StringComparer.Ordinal);
 
         var scopes = await settings.GetSettingsByPrefixAsync(ScopePrefix, cancellationToken).ConfigureAwait(false);
         foreach (var (key, value) in scopes)
@@ -48,7 +50,7 @@ public sealed class CwdProjectIdResolver(
 
             if (paths.Any(path => IngestPath.IsWithinScope(cwd, path)))
             {
-                candidates.Add(key[ScopePrefix.Length..]);
+                AddCandidate(candidates, key[ScopePrefix.Length..]);
             }
         }
 
@@ -56,15 +58,26 @@ public sealed class CwdProjectIdResolver(
         {
             if (IngestPath.IsWithinScope(cwd, watch.Path))
             {
-                candidates.Add(watch.ProjectId);
+                AddCandidate(candidates, watch.ProjectId);
             }
         }
 
         return candidates.Count switch
         {
             0 => new ProjectIdResolution.None(),
-            1 => new ProjectIdResolution.Resolved(candidates.Single()),
-            _ => new ProjectIdResolution.Ambiguous([.. candidates.Order(StringComparer.Ordinal)]),
+            1 => new ProjectIdResolution.Resolved(candidates.Single().Value),
+            _ => new ProjectIdResolution.Ambiguous([.. candidates.Values.Order(StringComparer.Ordinal)]),
         };
+    }
+
+    /// <summary>
+    ///     Dedups on the canonical form of the stored id (guid spellings collapse to the D-form;
+    ///     non-guids key on themselves) while keeping the first-seen stored spelling for the
+    ///     resolution. The gate canonicalizes the carried spelling exactly once downstream.
+    /// </summary>
+    private static void AddCandidate(Dictionary<string, string> candidates, string stored)
+    {
+        var key = ProjectId.TryCanonicalize(stored, out var canonical) ? canonical : stored;
+        candidates.TryAdd(key, stored);
     }
 }
