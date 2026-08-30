@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -49,7 +50,7 @@ public sealed partial class MemoryTools(
         "Writes content into memory. Writes land in the project's committed context by default; naming a workspace_id routes them into that isolated workspace. A write may be refused (e.g. it matched a noise policy) — check stored: a refused write has stored=false and a reason naming what rejected it, and hash is empty.")]
     public async Task<ApiEnvelope<WriteResult>> Write(
         [Description("The project id; every memory operation is scoped to a project.")]
-        string projectId,
+        [Optional][DefaultParameterValue("")] string projectId,
         [Description("The content to remember.")]
         string content,
         [Description("When set, the write lands in this workspace's isolated context instead of the project context.")]
@@ -81,7 +82,7 @@ public sealed partial class MemoryTools(
         "Reads one entry's full content by its content hash, as returned by memory_write or memory_search. An unknown hash is refused as unknown-hash.")]
     public async Task<ApiEnvelope<GetResult>> Get(
         [Description("The project id; every memory operation is scoped to a project.")]
-        string projectId,
+        [Optional][DefaultParameterValue("")] string projectId,
         [Description("The content hash to read.")]
         string hash,
         CancellationToken cancellationToken = default)
@@ -105,7 +106,7 @@ public sealed partial class MemoryTools(
         + "embedding engine is not installed: relay '" + CodeEngineSetup.DefaultModelCommand + "' to the user once and "
         + "treat the code hits as incomplete; re-running the search changes nothing until that command runs.")]
     public async Task<ApiEnvelope<SearchResultList>> Search(
-        [Description("The project id.")] string projectId,
+        [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
         [Description(
             "The search query. Semantic matching only sees roughly the first 254 tokens (~1,000 " +
             "characters of English prose, approximate) — for a long paste (a log, stack trace, test " +
@@ -294,7 +295,7 @@ public sealed partial class MemoryTools(
     [McpServerTool(Name = TnMemoryList)]
     [Description("Lists the bank's indexed files as a JSON tree (memory_list_files).")]
     public async Task<ApiEnvelope<ListResult>> List(
-        [Description("The project id.")] string projectId,
+        [Description("The project id.")] string? projectId = null,
         CancellationToken cancellationToken = default)
     {
         var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryList, cancellationToken);
@@ -307,7 +308,7 @@ public sealed partial class MemoryTools(
     [McpServerTool(Name = TnMemoryStats)]
     [Description("Reports entry count, pending (deferred-embedding) count, and the bank's committed contexts.")]
     public async Task<ApiEnvelope<StatsResult>> Stats(
-        [Description("The project id.")] string projectId,
+        [Description("The project id.")] string? projectId = null,
         CancellationToken cancellationToken = default)
     {
         var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryStats, cancellationToken);
@@ -321,7 +322,7 @@ public sealed partial class MemoryTools(
     [Description(
         "Deletes a specific memory entry by its content hash. Idempotent: an unknown hash is not an error — it reports deleted=0.")]
     public async Task<ApiEnvelope<DeletedResult>> Delete(
-        [Description("The project id.")] string projectId,
+        [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
         [Description("The content hash to delete.")]
         string hash,
         CancellationToken cancellationToken = default)
@@ -339,7 +340,7 @@ public sealed partial class MemoryTools(
     [Description(
         "Deletes every entry stored under a context label (e.g. a project or workspace context). Idempotent: an unknown context is not an error — it reports deleted=0.")]
     public async Task<ApiEnvelope<DeletedContextResult>> DeleteContext(
-        [Description("The project id.")] string projectId,
+        [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
         [Description("The context label to delete.")]
         string context,
         CancellationToken cancellationToken = default)
@@ -356,7 +357,7 @@ public sealed partial class MemoryTools(
     [McpServerTool(Name = TnMemoryIngestFile)]
     [Description("Indexes one file from disk into memory. The path must lie inside the project's configured scope (ai-raccoon settings ingest scope add); an unscoped project refuses every ingest.")]
     public async Task<ApiEnvelope<IngestResult>> IngestFile(
-        [Description("The project id.")] string projectId,
+        [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
         [Description("Path of the file to index.")]
         string path,
         [Description("Optional context label.")]
@@ -376,7 +377,7 @@ public sealed partial class MemoryTools(
     [Description(
         "Recursively indexes a directory tree into memory, skipping unchanged files. The path must lie inside the project's configured scope (ai-raccoon settings ingest scope add); an unscoped project refuses every ingest.")]
     public async Task<ApiEnvelope<ScannedResult>> IngestDirectory(
-        [Description("The project id.")] string projectId,
+        [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
         [Description("Path of the directory to index.")]
         string path,
         [Description("Optional context label applied to all files.")]
@@ -395,7 +396,7 @@ public sealed partial class MemoryTools(
     [McpServerTool(Name = TnMemoryEmbedPending)]
     [Description("Embeds deferred entries in batches (used when no model was configured at write time).")]
     public async Task<ApiEnvelope<EmbedResult>> EmbedPending(
-        [Description("The project id.")] string projectId,
+        [Description("The project id.")] string? projectId = null,
         [Description("Maximum rows to process in this call; omit for all.")]
         int? limit = null,
         CancellationToken cancellationToken = default)

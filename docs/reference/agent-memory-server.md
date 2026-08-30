@@ -18,8 +18,14 @@ deferred to a deployment that needs it (D11).
 
 ## Tools (29)
 
-Every tool requires `projectId` (camelCase — all parameters are camelCase), except
-`memory_promotion_list` where it is optional, and `project_id_token_get`, which mints
+Every tool takes `projectId` (camelCase — all parameters are camelCase), and it is
+**optional on every tool**: an omitted or blank id defaults to the registered project
+whose ingest-scope or watch surface contains the server process's working directory —
+one distinct project resolves (guid spellings canonicalize at the gate), several refuse
+as ambiguous with the sorted candidate list, none refuses with `projectId is required`
+naming the probed directory. An explicit id always wins and never consults the resolver.
+The exceptions: `memory_promotion_list`, whose omitted id means all-projects (its
+cross-project feature) and never cwd-defaults, and `project_id_token_get`, which mints
 one and so takes none. Writes land in `project:<id>` by default; naming a `workspaceId`
 routes them into that workspace's isolated context.
 
@@ -968,7 +974,7 @@ source of truth; a test cross-checks this table against it.
 | `access-denied` | The resolved access mode (`ro`/`rw`/`full`) does not permit the attempted operation | `access-denied: <detail>` |
 | `project-not-registered` | A write/destructive call named a `projectId` with no registry row and no existing rows either (ADR-0089) — reads are never refused. A legacy raw-text id the bank already holds rows for keeps working, with a one-time warning, instead of this refusal | `project-not-registered: Project '<id>' is not registered. Call project_id_token_get to mint and register a project id before writing.` |
 | `context-outside-project` | A write's `context` names a project other than the request's `project_id` | `context-outside-project: Context '<context>' writes into a project other than '<project_id>'. A write may only target its own project.` |
-| `invalid-params` | FluentValidation rejected the request (missing/blank `projectId`, invalid `scope`, out-of-range `limit`, etc.) | `invalid-params: project_id is required` |
+| `invalid-params` | FluentValidation rejected the request (invalid `scope`, out-of-range `limit`, etc.), or the call named no `projectId` and cwd-default resolution found no candidate — the refusal names the probed working directory. When resolution finds two or more candidates the message is `invalid-params: projectId is ambiguous from cwd <cwd>: candidates <ids>`. The one exception is `memory_promotion_list`, whose omitted projectId means all-projects (that tool's cross-project feature) and never cwd-defaults. | `invalid-params: projectId is required (no registered project's scope contains cwd <cwd>; pass projectId explicitly, or register this directory with memory_watch_add / settings ingest scope add)` |
 | `invalid-argument` | A call's JSON argument shape doesn't match the tool's declared parameter type (e.g. a scalar where an array is declared), a required parameter is missing, or a present-but-blank value fails a guard clause — caught at argument-binding time or by a guard clause at the top of the tool method, before its logic runs. Mapped from `JsonException`, `ArgumentException` and `ArgumentNullException`. `ArgumentOutOfRangeException` is deliberately **not** mapped: it is how .NET reports the server's own index arithmetic going wrong, so refusing it would mute Error-level alerting and tell the caller to retry an argument that was never at fault | `invalid-argument: The JSON value could not be converted to System.String[]. Path: $ \| LineNumber: 0 \| BytePositionInLine: 5.` |
 | `confirm-required` | `memory_share_extract` called with `autoPromote=true` but `confirm` not set to `true` — an explicit enable gate for a promotion that shares data across all listed projects | `confirm-required: autoPromote shares candidates with ALL projects — pass confirm=true to enable` |
 | `model-migration-in-progress` | Every bank operation is refused for the duration of an embedding-model migration (`model embedding set`, ADR-0076) — a bank whose rows are half old-model and half new-model vectors is not detectably broken, it just retrieves worse, so the migration locks the bank rather than serving through it | `model-migration-in-progress: ai-raccoon: a model migration is in progress; try again once it finishes (memory_write)` |

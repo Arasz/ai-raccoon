@@ -487,15 +487,20 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
                     new Dictionary<string, object?> { ["projectId"] = "", ["query"] = "x" },
                     cancellationToken: TestContext.Current.CancellationToken);
 
-                // (a) caller-facing text unchanged — exact message, prefix included.
+                // (a) caller-facing text unchanged in shape — the enriched cwd-aware refusal;
+                // cwd-tolerant matching because the process cwd is shared and mutable.
                 result.IsError.ShouldBe(true);
                 var text = string.Concat(result.Content.OfType<TextContentBlock>().Select(b => b.Text));
-                text.ShouldBe("invalid-params: project_id is required");
+                text.ShouldStartWith(
+                    "invalid-params: projectId is required (no registered project's scope contains cwd ");
+                text.ShouldContain(
+                    "; pass projectId explicitly, or register this directory with memory_watch_add / settings ingest scope add)");
 
                 // (b) the log carries the real reason after "refused: ".
                 var record = fakeLogs.Collector.GetSnapshot()
                     .Single(r => r.Message.Contains(
-                        "refused: invalid-params: project_id is required", StringComparison.Ordinal));
+                        "refused: invalid-params: projectId is required (no registered project's scope contains cwd",
+                        StringComparison.Ordinal));
                 // (c) level is Information for a non-WarningPrefix refusal.
                 record.Level.ShouldBe(LogLevel.Information);
                 // (d) no exception attached — 5d511748's anti-flood property.

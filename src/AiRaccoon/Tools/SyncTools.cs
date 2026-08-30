@@ -23,7 +23,7 @@ public sealed class SyncTools(
         "<container>` (settings table); add `--cli` to use the machine's az/aws CLI login instead of " +
         "stored secrets.")]
     public async Task<ApiEnvelope<SyncToolResult>> Sync(
-        [Description("The project id.")] string projectId,
+        [Description("The project id.")] string? projectId = null,
         CancellationToken cancellationToken = default)
     {
         var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemorySync, cancellationToken);

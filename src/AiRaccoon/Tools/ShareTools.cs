@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using JetBrains.Annotations;
@@ -21,7 +22,7 @@ public sealed class ShareTools(
     [Description(
         "Promotes an existing project entry into the flat shared context — the curated, cross-project, sweep-exempt tier. Nothing is shared without this explicit promotion.")]
     public async Task<ApiEnvelope<ShareResult>> Share(
-        [Description("The project id.")] string projectId,
+        [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
         [Description("The content hash to promote.")]
         string hash,
         CancellationToken cancellationToken = default)

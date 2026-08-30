@@ -153,6 +153,8 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<IMemoryAccessGuard, MemoryAccessGuard>();
             services.AddRequiredSingleton<IForgettingPolicyService, ForgettingPolicyService>();
             services.AddRequiredSingleton<IProjectRegistrationGuard, ProjectRegistrationGuard>();
+            services.AddRequiredSingleton<ICwdProbe, CurrentDirectoryCwdProbe>();
+            services.AddRequiredSingleton<IProjectIdResolver, CwdProjectIdResolver>();
             services.AddRequiredSingleton<IToolGate, ToolGate>();
         }
 

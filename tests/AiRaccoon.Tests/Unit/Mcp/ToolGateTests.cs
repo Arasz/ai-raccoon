@@ -63,7 +63,10 @@ public sealed class ToolGateTests
             gate.RequireAsync(projectId, AccessRequirement.Write, "memory_write",
                 TestContext.Current.CancellationToken));
 
-        ex.Message.ShouldBe("invalid-params: project_id is required");
+        // Cwd-tolerant: the enriched refusal names the probed working directory (Unit runs beside
+        // Integration suites that mutate the process cwd), so pin the stable prefix only.
+        ex.Message.ShouldStartWith(
+            "invalid-params: projectId is required (no registered project's scope contains cwd ");
         guard.Calls.ShouldBeEmpty();
     }
 

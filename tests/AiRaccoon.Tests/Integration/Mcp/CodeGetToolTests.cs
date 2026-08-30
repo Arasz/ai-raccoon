@@ -100,7 +100,7 @@ public sealed class CodeGetToolTests : IAsyncLifetime
         var ex = await Should.ThrowAsync<McpException>(() =>
             _tools.CodeGet("", "hash-1", TestContext.Current.CancellationToken));
 
-        ex.Message.ShouldContain("project_id is required");
+        ex.Message.ShouldContain("projectId is required (no registered project's scope contains cwd");
     }
 
     private async Task SeedAsync(long id, string projectId, string path, string value, int lineStart, int lineEnd)
