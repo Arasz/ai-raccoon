@@ -61,7 +61,7 @@ exception is `McpException`** (namespace `ModelContextProtocol`, ctor `(string m
 (spec-style `invalid-params: …`, `sync-not-configured`, …).
 
 Two reliable options:
-1. `throw new McpException("invalid-params: project_id is required");` — message preserved.
+1. `throw new McpException("invalid-params: projectId is required (no registered project's scope contains cwd <cwd>; pass projectId explicitly, or register this directory with memory_watch_add / settings ingest scope add)");` — blank projectId is resolved from the working directory first; this is the no-candidate refusal.
 2. Return a structured error directly (the SDK has an explicit pass-through branch for it):
 
 ```csharp

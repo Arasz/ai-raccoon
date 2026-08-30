@@ -962,7 +962,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     public void ThenToolErrorsMissingProject()
     {
         _lastError.ShouldNotBeNull().ShouldBeOfType<McpException>();
-        _lastError!.Message.ShouldContain("project_id");
+        _lastError!.Message.ShouldContain("projectId is required");
     }
 
     [Then("^the tool returns success$")]

@@ -94,7 +94,7 @@ tested at the SQL-string + fake level only).
   stubs unless a sweep service is added. Task brief claims NSubstitute is already a testing dep —
   **it is not** (`Directory.Packages.props` has no NSubstitute); existing tests use hand-written
   fakes (see `tests/AgentMemoryServer.Tests/Domain/MemoryStorePortTests.cs` `RecordingStore`).
-- **Tool error codes** (spec §7): `invalid-params: project_id is required`, `workspace-not-found`,
+- **Tool error codes** (spec §7): `invalid-params: projectId is required (no registered project's scope contains cwd <cwd>; …)` — optional projectId, resolved from cwd when omitted — `workspace-not-found`,
   `embedding-api-key-missing`, `sync-not-configured` — surface via `McpException` throws or
   `CallToolResult { IsError = true }` returns (message-drop trap above).
 - **Dual-transport Program.cs**: `McpTransportSelector.UseHttp(MCP_TRANSPORT)` unchanged; both
