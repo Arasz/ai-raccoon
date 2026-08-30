@@ -24,10 +24,11 @@ public sealed class McpToolContractTests : IAsyncLifetime
     ///     declaration order. A renamed parameter, a changed type, or a tightened/loosened
     ///     required list all show up as a one-line diff.
     /// </summary>
-    // projectId is optional on every tool (cwd-default resolution): `string?` = nullable with a
-    // null default; `string?`-with-`""` default reads as a plain optional string because C#
-    // forbids an optional parameter before a required one (CS1737) — those tools carry a required
-    // parameter after projectId and use an empty-string default instead.
+    // projectId is optional on every tool (cwd-default resolution). Snapshot token mapping:
+    // `string?` = the CS1737 form — a NON-nullable `string projectId` carrying
+    // [Optional][DefaultParameterValue("")] because a required parameter follows it; `string|null?`
+    // = the nullable form (`string? projectId = null`), used where every following parameter is
+    // already optional.
     private const string ExpectedContract = """
                                             code_get(projectId:string?, hash:string!)
                                             memory_delete(projectId:string?, hash:string!)

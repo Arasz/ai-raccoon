@@ -71,7 +71,7 @@ public sealed class ToolGate(
         {
             switch (await resolver.ResolveAsync(cancellationToken).ConfigureAwait(false))
             {
-                case ProjectIdResolution.Resolved resolved:
+                case ProjectIdResolution.Resolved resolved when !string.IsNullOrWhiteSpace(resolved.ProjectId):
                     return resolved.ProjectId;
                 case ProjectIdResolution.Ambiguous ambiguous:
                     throw new McpException(

@@ -82,8 +82,9 @@ public sealed class ToolGateCwdDefaultTests
     [Fact]
     public async Task ExplicitId_ResolverNeverConsulted()
     {
-        // Load-bearing wiring test: the throwing stub proves the resolver is consulted ONLY on a blank id.
-        var gate = NewGate();
+        // Load-bearing wiring test: the throwing stub fails the run outright if the resolver is
+        // consulted on an explicit id — consulted-and-ignored cannot hide from it.
+        var gate = new ToolGate(_guard, _queue, _migrations, _registration, new ThrowingResolver());
 
         var canonical = await gate.RequireAsync("{ACME}", AccessRequirement.Write, "memory_write",
             TestContext.Current.CancellationToken);
@@ -115,6 +116,12 @@ public sealed class ToolGateCwdDefaultTests
 
         public Task<ProjectIdResolution> ResolveAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(Result);
+    }
+
+    private sealed class ThrowingResolver : IProjectIdResolver
+    {
+        public Task<ProjectIdResolution> ResolveAsync(CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("resolver consulted on an explicit id");
     }
 
     private sealed class RecordingAccessGuard : IMemoryAccessGuard
