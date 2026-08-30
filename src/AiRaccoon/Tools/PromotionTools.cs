@@ -66,7 +66,7 @@ public sealed class PromotionTools(
     [Description(
         "Removes a candidate from the propose tier without promoting it (the agent's 'no'). Omit the hash to clear the whole project's queue. Idempotent: an unknown hash is not an error — it reports discarded=0.")]
     public async Task<ApiEnvelope<PromotionDiscardResult>> Discard(
-        [Description("The project id.")] string projectId,
+        [Description("The project id.")] string? projectId = null,
         [Description("The queued hash to drop; omit to clear the project's whole queue.")]
         string? hash = null,
         CancellationToken cancellationToken = default)

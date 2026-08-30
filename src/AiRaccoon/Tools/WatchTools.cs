@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Watch;
 using ModelContextProtocol.Server;
@@ -19,7 +20,7 @@ public sealed class WatchTools(
         "Registers a file or directory to be mirrored into the project's memory. Watching must be enabled and the path inside the scope allowlist — both configured via the CLI ('ai-raccoon settings watch enable' / 'settings ingest scope add'). No overlapping watches: a path already covered by an existing watch is refused (watch-overlap, naming the covering watch); registering a broader watch prunes every watch it contains (reported in `pruned`; already-ingested entries are kept and the broader watch re-scans them). An exact re-add of an already-watched path is a no-op (`absorbedBy` reports it). Returns immediately — the initial scan runs in the background (status reports scanning).")]
     public async Task<ApiEnvelope<WatchAddResult>> Add(
         [Description("The project id; watches are scoped to a project.")]
-        string projectId,
+        [Optional][DefaultParameterValue("")] string projectId,
         [Description("Absolute path of the file or directory to watch.")]
         string path,
         CancellationToken cancellationToken = default)
@@ -37,7 +38,7 @@ public sealed class WatchTools(
     [Description(
         "Lists the project's registered watches with their live state (scanning/healthy/retrying/stopped), last error and last sync; empty list when none. Available in every access tier.")]
     public async Task<ApiEnvelope<WatchStatusResult>> Status(
-        [Description("The project id.")] string projectId,
+        [Description("The project id.")] string? projectId = null,
         CancellationToken cancellationToken = default)
     {
         var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnWatchStatus, cancellationToken);
@@ -50,7 +51,7 @@ public sealed class WatchTools(
     [McpServerTool(Name = TnWatchRemove)]
     [Description("Stops watching a path for the project and removes its registration; a non-existent watch is a no-op.")]
     public async Task<ApiEnvelope<WatchRemoveResult>> Remove(
-        [Description("The project id.")] string projectId,
+        [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
         [Description("Absolute path of the watched file or directory.")]
         string path,
         CancellationToken cancellationToken = default)

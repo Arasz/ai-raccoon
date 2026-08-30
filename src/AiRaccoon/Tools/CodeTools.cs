@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Code;
@@ -19,7 +20,7 @@ public sealed class CodeTools(ICodeSearchService codeSearch, IToolGate gate)
         "Reads one code chunk's full source by its content hash, as returned by memory_search kind=code/both. Mirrors memory_get. An unknown hash is refused as unknown-hash.")]
     public async Task<ApiEnvelope<CodeGetResult>> CodeGet(
         [Description("The project id; code is always project-scoped.")]
-        string projectId,
+        [Optional][DefaultParameterValue("")] string projectId,
         [Description("The content hash to read.")]
         string hash,
         CancellationToken cancellationToken = default)

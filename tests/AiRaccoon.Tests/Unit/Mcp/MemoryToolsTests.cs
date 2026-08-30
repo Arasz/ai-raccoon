@@ -98,7 +98,7 @@ public class MemoryToolsTests
     {
         var ex = await Should.ThrowAsync<McpException>(() =>
             _tools.Write("", "content", cancellationToken: TestContext.Current.CancellationToken));
-        ex.Message.ShouldContain("project_id");
+        ex.Message.ShouldContain("projectId is required (no registered project's scope contains cwd");
     }
 
     // The CallToolFilter maps this to "unknown-workspace:" (see ToolRefusalsTests) — a direct
