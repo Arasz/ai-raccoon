@@ -53,6 +53,32 @@ public sealed class SweepHostedServiceConsentAndTelemetryTests
             "a project outside full mode has not consented to destructive background sweeps");
     }
 
+    /// <summary>
+    ///     Regression for the sweep's fail-open hazard: <see cref="AccessModePolicy.ProjectSettingKey" />
+    ///     folds the id unconditionally, so an unmigrated bank whose per-project exemption is still
+    ///     stored under the unfolded legacy spelling (<see cref="AccessModePolicy.LegacyProjectSettingKey" />
+    ///     — "AI-RACCOON" is a literal ProjectIdAliasMap alias) must
+    ///     still gate the reaper, mirroring MemoryAccessGuard.ResolveAsync's fallback (MemoryAccessGuard.cs:23-26).
+    ///     Before the fix the folded-only lookup misses, resolution falls through to global "full", and
+    ///     the reaper deletes from a project the operator marked read-only (H6).
+    /// </summary>
+    [Fact]
+    public async Task RunOnce_LegacyUnfoldedPerProjectKey_StillHonoured_EntrySurvives()
+    {
+        var (store, service) = NewStack();
+        store.Projects.Clear();
+        store.Projects.Add("AI-RACCOON");
+        store.SeedSweepable("AI-RACCOON", "hash-legacy", FixedNow);
+        store.Settings[AccessModePolicy.GlobalSettingKey] = "full";
+        store.Settings[AccessModePolicy.LegacyProjectSettingKey("AI-RACCOON")] = "ro";
+
+        await service.RunOnceAsync(TestContext.Current.CancellationToken);
+
+        store.Deleted.ShouldNotContain(("AI-RACCOON", "hash-legacy"),
+            "an unmigrated bank's legacy-spelled per-project exemption must still gate the sweep — " +
+            "the folded lookup misses and must not fail open to the global full mode.");
+    }
+
     [Fact]
     public async Task RunOnce_ModeCannotBeResolved_DoesNotThrow_OtherProjectsStillSwept()
     {

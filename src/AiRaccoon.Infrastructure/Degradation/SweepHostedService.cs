@@ -166,6 +166,10 @@ public sealed partial class SweepHostedService(
     ///     Resolves one project's effective access mode: per-project setting, else global
     ///     default, else rw (mirrors AiRaccoon.Access.MemoryAccessGuard.ResolveAsync's rule via the
     ///     same Core policy, without a project reference back to the host layer — clean layering).
+    ///     The per-project lookup also mirrors MemoryAccessGuard.ResolveAsync's legacy-key fallback
+    ///     (MemoryAccessGuard.cs:23-26): the canonical key folds the id unconditionally, so an
+    ///     unmigrated bank's exemption stored under the unfolded spelling would otherwise miss and
+    ///     fail open to the global mode.
     ///     Never throws for an unparsable value; propagates a genuine store failure to the caller's
     ///     per-project catch, which counts it as this project's failure rather than aborting the pass.
     /// </summary>
@@ -174,6 +178,13 @@ public sealed partial class SweepHostedService(
         var perProjectRaw = await store
             .GetSettingAsync(AccessModePolicy.ProjectSettingKey(projectId), cancellationToken)
             .ConfigureAwait(false);
+        if (perProjectRaw is null)
+        {
+            perProjectRaw = await store
+                .GetSettingAsync(AccessModePolicy.LegacyProjectSettingKey(projectId), cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         if (AccessModePolicy.Parse(perProjectRaw) is { } perProject)
         {
             return perProject;
