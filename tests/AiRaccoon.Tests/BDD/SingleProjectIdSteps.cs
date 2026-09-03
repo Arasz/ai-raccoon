@@ -7,6 +7,7 @@ using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Reqnroll;
 using Shouldly;
+using Xunit;
 
 namespace AiRaccoon.Tests.BDD;
 
@@ -28,7 +29,7 @@ public sealed class SingleProjectIdSteps(ScenarioContext scenarioContext)
     [Given("^a bank with the jsaa split cluster and the AI-RACCOON casing split$")]
     public async Task GivenSplitClusterBank()
     {
-        var ct = CancellationToken.None;
+        var ct = TestContext.Current.CancellationToken; // QA F3: fail the step, not the run timeout.
         await using var connection = await _ctx.OpenBankAsync(ct);
         var now = MemoryFeatureContext.FixedNow.ToUnixTimeSeconds();
 
@@ -65,7 +66,7 @@ public sealed class SingleProjectIdSteps(ScenarioContext scenarioContext)
     [When("^the project-ids repair runs$")]
     public async Task WhenRepairRuns()
     {
-        var ct = CancellationToken.None;
+        var ct = TestContext.Current.CancellationToken; // QA F3: fail the step, not the run timeout.
         await using var connection = await _ctx.OpenBankAsync(ct);
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.RequestRepair,
             new { kind = RepairKinds.ProjectIds, requestedAt = MemoryFeatureContext.FixedNow.ToUnixTimeSeconds() },
