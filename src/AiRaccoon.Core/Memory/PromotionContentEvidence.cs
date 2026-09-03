@@ -14,10 +14,10 @@ internal static class PromotionContentEvidence
 {
     private const double Lo = -1.60;
     private const double Hi = 1.60;
-    private const double PlanRuleCap = 0.45;
-    private const double DefaultRuleCap = 1.00;
-    private const double RuleGain = 0.38;
-    private const double RuleCentre = 0.20;
+    private const double PlanRuleCap = 0.35;
+    private const double DefaultRuleCap = 0.70;
+    private const double RuleGain = 0.30;
+    private const double RuleCentre = 0.25;
 
     private const double AutoMemoryNoteLo = -1.8;
     private const double AutoMemoryNoteHi = 1.4;
@@ -58,7 +58,7 @@ internal static class PromotionContentEvidence
         var ruleCap = archetype == ProvenanceArchetype.Plan ? PlanRuleCap : DefaultRuleCap;
         var ruleBonus = Clamp(RuleGain * f.RuleDensity - RuleCentre, -RuleCentre, ruleCap);
         adj += ruleBonus;
-        if (f.RuleDensity > 0)
+        if (f.RuleDensity >= 0.5)
         {
             reasons.Add("rule-language");
         }
@@ -145,16 +145,16 @@ internal static class PromotionContentEvidence
             reasons.Add("metadata-header");
         }
 
-        if (f.Imperatives >= 3)
+        if (f.Imperatives >= 2)
         {
-            adj -= 0.30;
+            adj -= 0.45;
             reasons.Add("imperative-checklist");
         }
 
         // A durable rule with a verified measurement behind it is the strongest combination.
-        if (f.MeasureWords >= 1 && f.RuleDensity >= 0.8)
+        if (f.MeasureWords >= 1 && f.RuleDensity >= 0.6)
         {
-            adj += 0.35;
+            adj += 0.50;
             reasons.Add("verified-contract");
         }
 
