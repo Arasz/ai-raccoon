@@ -121,6 +121,28 @@ public sealed class SearchDispatcherTests
         quality.LastSessionId.ShouldBe("sess-abc-123");
     }
 
+    /// <summary>
+    ///     P3 (ADR-0097): the dispatcher forwards the requested kind to the quality service as
+    ///     the lowercase wire string — the memory leg keeps the <c>memory</c> label and both
+    ///     keeps <c>both</c> (the row still describes the memory leg per ADR-0094; kind names
+    ///     the request, not the leg). Mutation: forward the leg instead → the Both case fails.
+    /// </summary>
+    [Theory]
+    [InlineData(SearchKind.Memory, "memory")]
+    [InlineData(SearchKind.Code, "code")]
+    [InlineData(SearchKind.Both, "both")]
+    public async Task DispatchAsync_ForwardsKind_ToQualityServiceLowercased(SearchKind kind, string expected)
+    {
+        var quality = new SpyQualityService();
+        var dispatcher = new SearchDispatcher(new EmptyMemoryStore(), new SpyCodeSearchService(), quality);
+
+        await dispatcher.DispatchAsync(searchQuery: new SearchQuery("acme", "widget"), kind: kind,
+            rawScope: "all", correlationId: "corr-1", sessionId: "sess-test",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        quality.LastKind.ShouldBe(expected);
+    }
+
     private sealed class SpyCodeSearchService : ICodeSearchService
     {
         public CodeSearchQuery? LastQuery { get; private set; }
@@ -153,21 +175,25 @@ public sealed class SearchDispatcherTests
             Task.FromResult(new SearchResults([], SearchTimings.Empty));
     }
 
-    /// <summary>Dumb record-and-return quality spy: captures the session id, nothing more.</summary>
+    /// <summary>Dumb record-and-return quality spy: captures the session id and kind, nothing more.</summary>
     private sealed class SpyQualityService : AiRaccoon.Core.SearchQuality.ISearchQualityService
     {
         public string? LastSessionId { get; private set; }
 
+        public string? LastKind { get; private set; }
+
         public Task RecordSearchAsync(string correlationId, string query, string? scope, string? projectId,
-            string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default)
+            string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default)
         {
+            LastKind = kind;
             LastSessionId = sessionId;
             return Task.CompletedTask;
         }
 
         public Task RecordSearchSafeAsync(string correlationId, string query, string? scope, string? projectId,
-            string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default)
+            string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default)
         {
+            LastKind = kind;
             LastSessionId = sessionId;
             return Task.CompletedTask;
         }

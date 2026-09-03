@@ -526,15 +526,18 @@ public sealed class MemorySearchKindToolTests
 
         public string? LastSessionId { get; private set; }
 
+        public string? LastKind { get; private set; }
+
         public Task<int> PurgeOlderThanAsync(long nowUnixSeconds, int retentionDays,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(0);
 
         public Task RecordSearchAsync(string correlationId, string query, string? scope, string? projectId,
-            string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default)
+            string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default)
         {
             RecordedCorrelationIds.Add(correlationId);
             LastQuery = query;
+            LastKind = kind;
             LastSessionId = sessionId;
             LastResultCount = resultCount;
             LastTopSourceFiles = topSourceFiles;
@@ -542,10 +545,11 @@ public sealed class MemorySearchKindToolTests
         }
 
         public Task RecordSearchSafeAsync(string correlationId, string query, string? scope, string? projectId,
-            string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default)
+            string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default)
         {
             RecordedCorrelationIds.Add(correlationId);
             LastQuery = query;
+            LastKind = kind;
             LastSessionId = sessionId;
             LastResultCount = resultCount;
             LastTopSourceFiles = topSourceFiles;

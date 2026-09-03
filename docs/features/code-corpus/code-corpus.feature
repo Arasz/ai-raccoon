@@ -258,3 +258,13 @@ Feature: Code corpus
         Scenario: A session-attributed search stores its session id verbatim
             When I call memory_search for the project with kind "memory" with session "sess-bdd-1"
             Then the search_quality row for that call carries session "sess-bdd-1"
+
+        # P3 (ADR-0097): kind is required on the write path — the row for THIS call
+        # (correlation-filtered) carries the requested kind verbatim.
+        Scenario: A kind=code search stores its kind verbatim
+            When I call memory_search for the project with kind "code"
+            Then the search_quality row for that call carries kind "code"
+
+        Scenario: A kind=both search stores its kind verbatim
+            When I call memory_search for the project with kind "both"
+            Then the search_quality row for that call carries kind "both"

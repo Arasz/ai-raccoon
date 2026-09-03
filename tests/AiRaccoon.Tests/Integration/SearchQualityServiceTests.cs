@@ -40,7 +40,7 @@ public sealed class SearchQualityServiceTests : IDisposable
         await EnsureSchemaAsync();
 
         await _sut.RecordSearchAsync(
-            "corr-001", "test query", "all", "proj-a", "session-1",
+            "corr-001", "test query", "all", "proj-a", "memory", "session-1",
             5, ["/path/a.md", "/path/b.md"], TestContext.Current.CancellationToken);
 
         var metrics = await _sut.GetMetricsAsync("proj-a", DateTimeOffset.MinValue, TestContext.Current.CancellationToken);
@@ -55,7 +55,7 @@ public sealed class SearchQualityServiceTests : IDisposable
         await EnsureSchemaAsync();
 
         await _sut.RecordSearchAsync(
-            "corr-002", "query", "all", "proj-a", sessionId: "sess-test",
+            "corr-002", "query", "all", "proj-a", kind: "memory", sessionId: "sess-test",
             resultCount: 3, topSourceFiles: ["/file.md"], ct: TestContext.Current.CancellationToken);
 
         await _sut.RecordFollowThroughAsync("corr-002", "/file.md", TestContext.Current.CancellationToken);
@@ -71,7 +71,7 @@ public sealed class SearchQualityServiceTests : IDisposable
         await EnsureSchemaAsync();
 
         await _sut.RecordSearchAsync(
-            "corr-003", "query", "all", "proj-a", sessionId: "sess-test",
+            "corr-003", "query", "all", "proj-a", kind: "memory", sessionId: "sess-test",
             resultCount: 1, topSourceFiles: ["/file.md"], ct: TestContext.Current.CancellationToken);
 
         await _sut.RecordFollowThroughAsync("corr-003", "/file.md", TestContext.Current.CancellationToken);
@@ -87,7 +87,7 @@ public sealed class SearchQualityServiceTests : IDisposable
         await EnsureSchemaAsync();
 
         await _sut.RecordSearchAsync(
-            "corr-004", "query", "all", "proj-a", sessionId: "sess-test",
+            "corr-004", "query", "all", "proj-a", kind: "memory", sessionId: "sess-test",
             resultCount: 5, topSourceFiles: ["/file.md"], ct: TestContext.Current.CancellationToken);
 
         await _sut.RecordGradeAsync("proj-a", "corr-004", 5, "great result", TestContext.Current.CancellationToken);
@@ -103,8 +103,8 @@ public sealed class SearchQualityServiceTests : IDisposable
     {
         await EnsureSchemaAsync();
 
-        await _sut.RecordSearchAsync(correlationId: "c1", query: "q1", scope: "all", projectId: "proj-a", sessionId: "sess-test", resultCount: 1, topSourceFiles: [], ct: TestContext.Current.CancellationToken);
-        await _sut.RecordSearchAsync(correlationId: "c2", query: "q2", scope: "all", projectId: "proj-b", sessionId: "sess-test", resultCount: 1, topSourceFiles: [], ct: TestContext.Current.CancellationToken);
+        await _sut.RecordSearchAsync(correlationId: "c1", query: "q1", scope: "all", projectId: "proj-a", kind: "memory", sessionId: "sess-test", resultCount: 1, topSourceFiles: [], ct: TestContext.Current.CancellationToken);
+        await _sut.RecordSearchAsync(correlationId: "c2", query: "q2", scope: "all", projectId: "proj-b", kind: "memory", sessionId: "sess-test", resultCount: 1, topSourceFiles: [], ct: TestContext.Current.CancellationToken);
 
         var metricsA = await _sut.GetMetricsAsync("proj-a", DateTimeOffset.MinValue, TestContext.Current.CancellationToken);
         metricsA.TotalSearches.ShouldBe(1);
@@ -118,8 +118,8 @@ public sealed class SearchQualityServiceTests : IDisposable
     {
         await EnsureSchemaAsync();
 
-        await _sut.RecordSearchAsync(correlationId: "c1", query: "q1", scope: "all", projectId: "proj-a", sessionId: "sess-test", resultCount: 1, topSourceFiles: [], ct: TestContext.Current.CancellationToken);
-        await _sut.RecordSearchAsync(correlationId: "c2", query: "q2", scope: "all", projectId: "proj-a", sessionId: "sess-test", resultCount: 1, topSourceFiles: [], ct: TestContext.Current.CancellationToken);
+        await _sut.RecordSearchAsync(correlationId: "c1", query: "q1", scope: "all", projectId: "proj-a", kind: "memory", sessionId: "sess-test", resultCount: 1, topSourceFiles: [], ct: TestContext.Current.CancellationToken);
+        await _sut.RecordSearchAsync(correlationId: "c2", query: "q2", scope: "all", projectId: "proj-a", kind: "memory", sessionId: "sess-test", resultCount: 1, topSourceFiles: [], ct: TestContext.Current.CancellationToken);
         await _sut.RecordFollowThroughAsync("c1", "/file.md", TestContext.Current.CancellationToken);
 
         var metrics = await _sut.GetMetricsAsync("proj-a", DateTimeOffset.MinValue, TestContext.Current.CancellationToken);
@@ -132,7 +132,7 @@ public sealed class SearchQualityServiceTests : IDisposable
         await EnsureSchemaAsync();
 
         await _sut.RecordSearchAsync(
-            correlationId: "corr-null", query: "query", scope: null, projectId: null, sessionId: "sess-test",
+            correlationId: "corr-null", query: "query", scope: null, projectId: null, kind: "memory", sessionId: "sess-test",
             resultCount: 0, topSourceFiles: [], ct: TestContext.Current.CancellationToken);
 
         var metrics = await _sut.GetMetricsAsync(null, DateTimeOffset.MinValue, TestContext.Current.CancellationToken);
@@ -150,7 +150,7 @@ public sealed class SearchQualityServiceTests : IDisposable
 
         await _sut.RecordSearchSafeAsync(
             correlationId: "corr-sess-1", query: "session verbatim query", scope: "all", projectId: "proj-a",
-            sessionId: "sess-abc-123", resultCount: 1, topSourceFiles: [],
+            kind: "memory", sessionId: "sess-abc-123", resultCount: 1, topSourceFiles: [],
             ct: TestContext.Current.CancellationToken);
 
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -158,5 +158,70 @@ public sealed class SearchQualityServiceTests : IDisposable
             "SELECT session_id FROM search_quality WHERE correlation_id = @Id",
             new { Id = "corr-sess-1" });
         stored.ShouldBe("sess-abc-123");
+    }
+
+    /// <summary>
+    ///     P3 (ADR-0097): kind is required on the write path — every recorded row names the leg
+    ///     it describes. Both verbs take it as a required string after projectId / before
+    ///     sessionId; the dispatcher passes <c>SearchKind.ToString().ToLowerInvariant()</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("memory")]
+    [InlineData("code")]
+    [InlineData("both")]
+    public async Task RecordSearch_KindStoredVerbatim(string kind)
+    {
+        await EnsureSchemaAsync();
+
+        await _sut.RecordSearchAsync(
+            correlationId: $"corr-kind-{kind}", query: "kind query", scope: "all", projectId: "proj-a",
+            kind: kind, sessionId: "sess-test", resultCount: 1, topSourceFiles: [],
+            ct: TestContext.Current.CancellationToken);
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var stored = await connection.QuerySingleOrDefaultAsync<string?>(
+            "SELECT kind FROM search_quality WHERE correlation_id = @Id",
+            new { Id = $"corr-kind-{kind}" });
+        stored.ShouldBe(kind);
+    }
+
+    [Theory]
+    [InlineData("memory")]
+    [InlineData("code")]
+    [InlineData("both")]
+    public async Task RecordSearchSafe_KindStoredVerbatim(string kind)
+    {
+        await EnsureSchemaAsync();
+
+        await _sut.RecordSearchSafeAsync(
+            correlationId: $"corr-kind-safe-{kind}", query: "kind query", scope: "all", projectId: "proj-a",
+            kind: kind, sessionId: "sess-test", resultCount: 1, topSourceFiles: [],
+            ct: TestContext.Current.CancellationToken);
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var stored = await connection.QuerySingleOrDefaultAsync<string?>(
+            "SELECT kind FROM search_quality WHERE correlation_id = @Id",
+            new { Id = $"corr-kind-safe-{kind}" });
+        stored.ShouldBe(kind);
+    }
+
+    /// <summary>
+    ///     P3: the service guards kind fail-fast on the throwing verb — anything outside
+    ///     memory/code/both is a caller bug, and the CHECK constraint is the backstop, never the
+    ///     validator. (The Safe verb keeps its never-throws contract and swallows into a log.)
+    ///     Mutation: drop the guard → this fails.
+    /// </summary>
+    [Theory]
+    [InlineData("banana")]
+    [InlineData("")]
+    [InlineData("MEMORY")]
+    public async Task RecordSearch_InvalidKind_RejectedFailFast(string kind)
+    {
+        await EnsureSchemaAsync();
+
+        await Should.ThrowAsync<ArgumentException>(() => _sut.RecordSearchAsync(
+            correlationId: "corr-kind-bad", query: "kind query", scope: "all", projectId: "proj-a",
+            kind: kind, sessionId: "sess-test", resultCount: 1, topSourceFiles: [],
+            ct: TestContext.Current.CancellationToken));
     }
 }

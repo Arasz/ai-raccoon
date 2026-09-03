@@ -13,12 +13,15 @@ public interface ISearchQualityService
     ///     search — fire-and-forget from the tool layer. <paramref name="sessionId" /> is the
     ///     calling agent's session id, stored verbatim; every agent has a session, so it is
     ///     required — never null, never blank (the tool boundary rejects blank fail-fast).
+    ///     <paramref name="kind" /> names the requested kind (memory/code/both, lowercased by the
+    ///     dispatcher) and is required — the row always says which leg it describes.
     /// </summary>
     Task RecordSearchAsync(
         string correlationId,
         string query,
         string? scope,
         string? projectId,
+        string kind,
         string sessionId,
         int resultCount,
         IReadOnlyList<string> topSourceFiles,
@@ -28,13 +31,15 @@ public interface ISearchQualityService
     ///     <see cref="RecordSearchAsync" />, best-effort: swallows and logs any failure instead of
     ///     throwing. The tool layer calls this, not the throwing form, so a quality-recording
     ///     failure never fails the search it describes. Carries the same required
-    ///     <paramref name="sessionId" /> — it is the only live record path.
+    ///     <paramref name="sessionId" /> — it is the only live record path — and the same
+    ///     required <paramref name="kind" />.
     /// </summary>
     Task RecordSearchSafeAsync(
         string correlationId,
         string query,
         string? scope,
         string? projectId,
+        string kind,
         string sessionId,
         int resultCount,
         IReadOnlyList<string> topSourceFiles,

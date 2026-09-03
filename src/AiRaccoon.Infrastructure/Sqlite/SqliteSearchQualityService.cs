@@ -18,6 +18,7 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
         string query,
         string? scope,
         string? projectId,
+        string kind,
         string sessionId,
         int resultCount,
         IReadOnlyList<string> topSourceFiles,
@@ -25,7 +26,7 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
     {
         try
         {
-            await RecordSearchAsync(correlationId, query, scope, projectId, sessionId, resultCount, topSourceFiles, ct)
+            await RecordSearchAsync(correlationId, query, scope, projectId, kind, sessionId, resultCount, topSourceFiles, ct)
                 .ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -39,20 +40,26 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
         string query,
         string? scope,
         string? projectId,
+        string kind,
         string sessionId,
         int resultCount,
         IReadOnlyList<string> topSourceFiles,
         CancellationToken ct = default)
     {
+        if (kind is not ("memory" or "code" or "both"))
+        {
+            throw new ArgumentException($"Invalid kind '{kind}': expected memory, code, or both.", nameof(kind));
+        }
+
         await using var connection = await factory.OpenBankAsync(ct).ConfigureAwait(false);
         var topFilesJson = topSourceFiles.Count > 0 ? JsonSerializer.Serialize(topSourceFiles) : null;
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
         await connection.ExecuteAsync(
             """
-            INSERT INTO search_quality (correlation_id, query, scope, project_id, session_id,
+            INSERT INTO search_quality (correlation_id, query, scope, project_id, session_id, kind,
                 result_count, top_source_files, created_at)
-            VALUES (@CorrelationId, @Query, @Scope, @ProjectId, @SessionId,
+            VALUES (@CorrelationId, @Query, @Scope, @ProjectId, @SessionId, @Kind,
                 @ResultCount, @TopSourceFiles, @CreatedAt)
             """,
             new
@@ -62,6 +69,7 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
                 Scope = scope,
                 ProjectId = projectId,
                 SessionId = sessionId,
+                Kind = kind,
                 ResultCount = resultCount,
                 TopSourceFiles = topFilesJson,
                 CreatedAt = now

@@ -55,8 +55,8 @@ public sealed class SearchDispatcher(IMemoryStore store, ICodeSearchService code
             ? (codeResults?.Count ?? 0, (IReadOnlyList<string>)[])
             : (results.Count, [.. results.Where(r => r.SourceFile is not null).Select(r => r.SourceFile!).Take(5)]);
         await qualityService.RecordSearchSafeAsync(correlationId: correlationId, query: searchQuery.Query,
-            scope: rawScope, projectId: searchQuery.ProjectId, sessionId: sessionId,
-            resultCount: qualityCount, topSourceFiles: qualityFiles,
+            scope: rawScope, projectId: searchQuery.ProjectId, kind: kind.ToString().ToLowerInvariant(),
+            sessionId: sessionId, resultCount: qualityCount, topSourceFiles: qualityFiles,
             ct: cancellationToken);
 
         return new SearchDispatchResult(results, memorySearchResults, codeResults, codeWarning);

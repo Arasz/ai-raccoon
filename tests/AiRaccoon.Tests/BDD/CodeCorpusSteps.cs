@@ -855,4 +855,21 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
             new { Id = correlationId });
         stored.ShouldBe(session);
     }
+
+    /// <summary>
+    ///     P3 (ADR-0097): the row for THIS call — correlation-filtered, not a bare COUNT(*) —
+    ///     carries the requested kind verbatim. Pre-P3 the column did not exist (NULL backfill
+    ///     excepted: only pre-cutoff rows read 'memory' without a kind on the write path).
+    /// </summary>
+    [Then("^the search_quality row for that call carries kind \"([^\"]*)\"$")]
+    public async Task ThenSearchQualityRowCarriesKind(string kind)
+    {
+        _lastSearchEnvelope.ShouldNotBeNull("the scenario's search must have succeeded");
+        var correlationId = _lastSearchEnvelope!.Meta.CorrelationId.ShouldNotBeNull();
+        await using var connection = await Ctx.OpenBankAsync();
+        var stored = await connection.QuerySingleOrDefaultAsync<string?>(
+            "SELECT kind FROM search_quality WHERE correlation_id = @Id",
+            new { Id = correlationId });
+        stored.ShouldBe(kind);
+    }
 }
