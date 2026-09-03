@@ -21,6 +21,14 @@ public partial class SyncService(
     private readonly ISyncBlobAuthenticator _authenticator = blobAuthenticator ?? new SyncBlobAuthenticator();
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    /// <summary>Tables that never leave the machine via sync — DROPped from every pushed snapshot
+    /// by <see cref="StripNonSyncableAsync" />. The single list both that method and its tests read,
+    /// so a table added here only needs adding once.</summary>
+    internal static readonly string[] MachineLocalTables =
+    [
+        "workspaces", "promotion_queue", "promotion_queue_prune_requests", "repair_requests"
+    ];
+
     /// <summary>
     ///     Air-merge P2 convergence: folds a remote id an unrepaired replica still pushes into its
     ///     canonical winner. The id is resolved first through the REMOTE projects-row name — the
@@ -528,7 +536,7 @@ public partial class SyncService(
         delSettings.CommandText = "DELETE FROM settings";
         await delSettings.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
 
-        foreach (var table in new[] { "workspaces", "promotion_queue", "promotion_queue_prune_requests" })
+        foreach (var table in MachineLocalTables)
         {
             await using var dropTable = snap.CreateCommand();
             dropTable.CommandText = $"DROP TABLE IF EXISTS {table}";

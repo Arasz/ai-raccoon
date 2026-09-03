@@ -132,11 +132,15 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
             "fts5 shadow tables for code_fts must not survive the strip either.");
     }
 
+    /// <summary>Derives the expected-absent set from <see cref="SyncService.MachineLocalTables" />
+    /// — the single list the strip itself reads — rather than a second hand-copy here that could
+    /// silently drift from it (a table added to one and not the other would fail loudly instead).</summary>
     private static void AssertNoMachineLocalTables(List<string> tables)
     {
-        tables.ShouldNotContain("workspaces");
-        tables.ShouldNotContain("promotion_queue");
-        tables.ShouldNotContain("promotion_queue_prune_requests");
+        foreach (var table in SyncService.MachineLocalTables)
+        {
+            tables.ShouldNotContain(table, $"{table} must never leave the machine via sync.");
+        }
     }
 
     // --- Push path 1: local snapshot (SyncService.cs ~:74) -------------------------------------
@@ -181,6 +185,17 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
                                 VALUES ('acme', 'queue-hash', 'doc.md', 'queued value', 'doc.md', 1.0, '[]', 0, 1, 1)
                                 """;
             await queue.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+
+            // #603: a FINISHED repair_requests row for kind=project-ids is the permanent signal
+            // SqliteProjectIdsMigrationGate reads to gate ProjectIdAliasMap folding — it must not
+            // survive into a pushed snapshot (repair_requests' own outbox doc comment,
+            // MemorySchema.cs ~:443).
+            await using var repair = conn.CreateCommand();
+            repair.CommandText = """
+                                 INSERT INTO repair_requests (kind, requested_at, finished_at)
+                                 VALUES ('project-ids', 1, 1)
+                                 """;
+            await repair.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
         var service = new SyncService(cloud, ct => CreateAndOpenAsync(BankPath, ct), OpenSnapshot(), OpenReadOnly(),
@@ -195,6 +210,14 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
         var tables = await TableNamesAsync(pulledPath, TestContext.Current.CancellationToken);
         AssertNoCodeTables(tables);
         AssertNoMachineLocalTables(tables);
+
+        // Independent of SyncService.MachineLocalTables (which drives the strip itself, so
+        // asserting membership in that same array could never fail for an entry missing from
+        // it) — a direct regression pin for #603: repair_requests is the same class of
+        // per-machine outbox as promotion_queue_prune_requests and must not survive a push.
+        tables.ShouldNotContain("repair_requests",
+            "repair_requests must never leave the machine via sync — a hand-restored snapshot " +
+            "must not inherit a FINISHED repair_requests row (#603, SqliteProjectIdsMigrationGate).");
     }
 
     /// <summary>
