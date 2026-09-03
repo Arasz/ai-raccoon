@@ -9,4 +9,17 @@ public sealed record FusionStats(
     double? TopMargin,
     double? TopVsMedian,
     double MaxPossible,
-    IReadOnlyList<string> ParticipatingLegs);
+    IReadOnlyList<string> ParticipatingLegs)
+{
+    /// <summary>
+    ///     The metric names the fusion-signal series record — declared once so emission
+    ///     (MemoryTools) and tests never keep second hand-written copies
+    ///     (derive-or-delete-the-list, FusionDiff.MetricNames precedent). Renaming an
+    ///     exported series would orphan its stored metric rows: add, never rename.
+    /// </summary>
+    public const string TopStrengthMetric = "search.fusion.top_strength";
+    public const string TopMarginMetric = "search.fusion.top_margin";
+    public const string LegsFiredMetric = "search.fusion.legs_fired";
+
+    public static IReadOnlyList<string> MetricNames { get; } = [TopStrengthMetric, TopMarginMetric, LegsFiredMetric];
+}

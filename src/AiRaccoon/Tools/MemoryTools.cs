@@ -571,17 +571,17 @@ public sealed partial class MemoryTools(
 
         if (topStrength is { } strength)
         {
-            yield return ("search.fusion.top_strength", strength, "ratio");
+            yield return (FusionStats.TopStrengthMetric, strength, "ratio");
         }
 
         if (results.Stats is { } stats)
         {
             if (stats.TopMargin is { } margin)
             {
-                yield return ("search.fusion.top_margin", margin, "ratio");
+                yield return (FusionStats.TopMarginMetric, margin, "ratio");
             }
 
-            yield return ("search.fusion.legs_fired", stats.ParticipatingLegs.Count, "legs");
+            yield return (FusionStats.LegsFiredMetric, stats.ParticipatingLegs.Count, "legs");
         }
     }
 
