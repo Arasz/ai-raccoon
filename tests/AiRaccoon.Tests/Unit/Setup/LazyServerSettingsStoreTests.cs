@@ -171,6 +171,7 @@ public sealed class LazyServerSettingsStoreTests
         report.ShouldBe(new ChunkIndexRepairReport(2, 4, 6));
     }
 
+    // Ledger — project-ids-report-not-delegated : --filter ReportProjectIdsAsync_DelegatesToTheAcquiredStore : InMemorySettings report.
     [Fact]
     public async Task ReportProjectIdsAsync_DelegatesToTheAcquiredStore()
     {

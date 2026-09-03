@@ -15,6 +15,8 @@ namespace AiRaccoon.Tests.Unit.Projects;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ProjectIdsFoldPlanTests
 {
+    // Key-mapping row, not a fold row: pins the outbox kind string the CLI and the job agree on.
+    // Ledger — kind-key-drifts : --filter ProjectIds_RepairKind_MapsToTheProjectIdsOutboxKey : enum, no fixture.
     [Fact]
     public void ProjectIds_RepairKind_MapsToTheProjectIdsOutboxKey()
     {
@@ -22,6 +24,7 @@ public sealed class ProjectIdsFoldPlanTests
         RepairKinds.ProjectIds.ShouldBe("project-ids");
     }
 
+    // Ledger — unknown-loser-not-folded : --filter FromCensus_MapsKnownLosersToTheirWinners : jsaa 2+queued, loser 1+queued.
     [Fact]
     public void FromCensus_MapsKnownLosersToTheirWinners()
     {
@@ -37,6 +40,7 @@ public sealed class ProjectIdsFoldPlanTests
         plan.Unresolved.ShouldBeEmpty();
     }
 
+    // Ledger — guid-falls-to-unresolved : --filter FromCensus_FoldsAGuidLoser_ByItsProjectsRowName : guid + registered pre-guid name.
     [Fact]
     public void FromCensus_FoldsAGuidLoser_ByItsProjectsRowName()
     {
@@ -50,6 +54,7 @@ public sealed class ProjectIdsFoldPlanTests
         plan.Folds.ShouldBe([new ProjectIdFold(guid, "jsaa")]);
     }
 
+    // Ledger — case-folds-to-itself : --filter FromCensus_FoldsCaseSplitLosers_IntoTheLowercaseWinner : UPPER + lowercase pair.
     [Fact]
     public void FromCensus_FoldsCaseSplitLosers_IntoTheLowercaseWinner()
     {
@@ -62,6 +67,7 @@ public sealed class ProjectIdsFoldPlanTests
         plan.Folds.ShouldBe([new ProjectIdFold("AI-RACCOON", "ai-raccoon")]);
     }
 
+    // Ledger — dropped-ids-folded : --filter FromCensus_DeletesDroppedIds_InsteadOfFoldingThem : qa-noise + manual-sweep rows.
     [Fact]
     public void FromCensus_DeletesDroppedIds_InsteadOfFoldingThem()
     {
@@ -75,6 +81,7 @@ public sealed class ProjectIdsFoldPlanTests
         plan.Dropped.ShouldBe(["qa-noise-project", "manual-sweep"], "the plan preserves census order");
     }
 
+    // Ledger — zero-row-guid-kept : --filter FromCensus_RetiresZeroEntryProjectsRows_WithNoAttachments : registered zero-row guid.
     [Fact]
     public void FromCensus_RetiresZeroEntryProjectsRows_WithNoAttachments()
     {
@@ -89,6 +96,7 @@ public sealed class ProjectIdsFoldPlanTests
         plan.Unresolved.ShouldBeEmpty();
     }
 
+    // Ledger — typo-folded-or-dropped : --filter FromCensus_LeavesTrueTyposUnresolved_NeverFolded : unattributable jsaaa row.
     [Fact]
     public void FromCensus_LeavesTrueTyposUnresolved_NeverFolded()
     {
@@ -104,6 +112,7 @@ public sealed class ProjectIdsFoldPlanTests
         plan.Unresolved.ShouldBe(["jsaaa"]);
     }
 
+    // Ledger — canonical-self-folds : --filter FromCensus_CanonicalSelf_WithEntries_IsANoOp : winner-only bank.
     [Fact]
     public void FromCensus_CanonicalSelf_WithEntries_IsANoOp()
     {
@@ -114,6 +123,7 @@ public sealed class ProjectIdsFoldPlanTests
         plan.IsEmpty.ShouldBeTrue();
     }
 
+    // Ledger — empty-bank-plans-work : --filter FromCensus_OnACleanBank_IsEmpty : zero rows.
     [Fact]
     public void FromCensus_OnACleanBank_IsEmpty()
     {
@@ -122,6 +132,52 @@ public sealed class ProjectIdsFoldPlanTests
 
         plan.IsEmpty.ShouldBeTrue();
         plan.Unresolved.ShouldBeEmpty();
+    }
+
+    // Ledger — metrics-only-dropped-replanned : --filter FromCensus_DroppedIdWithOnlyMetrics_IsNotScheduled : Row(metricsRows: 1).
+    [Fact]
+    public void FromCensus_DroppedIdWithOnlyMetrics_IsNotScheduled()
+    {
+        var report = Report(Row("qa-noise-project", metricsRows: 1));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Default);
+
+        plan.Dropped.ShouldBeEmpty("metrics are never touched — scheduling this re-plans forever as a no-op");
+        plan.Unresolved.ShouldBeEmpty();
+    }
+
+    // Ledger — quality-rows-dropped-skipped : --filter FromCensus_DroppedIdWithQualityRows_IsScheduled : Row(qualityRows: 1).
+    [Fact]
+    public void FromCensus_DroppedIdWithQualityRows_IsScheduled()
+    {
+        var report = Report(Row("manual-sweep", qualityRows: 1));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Default);
+
+        plan.Dropped.ShouldBe(["manual-sweep"]);
+    }
+
+    // Ledger — noise-only-dropped-replanned : --filter FromCensus_DroppedIdWithOnlyNoise_IsNotScheduled : Row(noiseRows: 1).
+    [Fact]
+    public void FromCensus_DroppedIdWithOnlyNoise_IsNotScheduled()
+    {
+        var report = Report(Row("qa-noise-project", noiseRows: 1));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Default);
+
+        plan.Dropped.ShouldBeEmpty("noise rows are never touched — same no-op re-plan as metrics");
+        plan.Unresolved.ShouldBeEmpty();
+    }
+
+    // Ledger — discards-only-dropped-skipped : --filter FromCensus_DroppedIdWithDiscards_IsScheduled : Row(discards: 1).
+    [Fact]
+    public void FromCensus_DroppedIdWithDiscards_IsScheduled()
+    {
+        var report = Report(Row("manual-sweep", discards: 1));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Default);
+
+        plan.Dropped.ShouldBe(["manual-sweep"], "discards follow the fold — the gate must not over-exclude");
     }
 
     private static ProjectIdCensusReport Report(params ProjectIdCensusRow[] rows) =>
@@ -134,7 +190,11 @@ public sealed class ProjectIdsFoldPlanTests
         long watches = 0,
         bool registered = false,
         string? registeredName = null,
+        long discards = 0,
+        long qualityRows = 0,
+        long metricsRows = 0,
+        long noiseRows = 0,
         params string[] settingsKeys) =>
         new(projectId, registered, registeredName, projectEntries, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            queued, 0, 0, watches, 0, 0, 0, 0, 0, 0, settingsKeys);
+            queued, discards, qualityRows, watches, 0, 0, 0, 0, metricsRows, noiseRows, settingsKeys);
 }

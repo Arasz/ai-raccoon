@@ -22,18 +22,24 @@ public partial class SyncService(
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     /// <summary>
-    ///     Air-merge P2 convergence: folds a loser id an unrepaired replica still pushes into its
-    ///     canonical winner. Built from the durable <see cref="ProjectIdAliasMap" /> (same table the
-    ///     repair and the ToolGate fold consume), inlined as a CASE because the merge is SQL — the
-    ///     aliases are compile-time constants, never bank content. Static aliases only: a guid loser
-    ///     (resolvable in C# through its projects-row name) has no SQL spelling — P-INT covers that
-    ///     gap, and the repair itself already folded those rows locally on every repaired replica.
+    ///     Air-merge P2 convergence: folds a remote id an unrepaired replica still pushes into its
+    ///     canonical winner. The id is resolved first through the REMOTE projects-row name — the
+    ///     live guid losers are registered under their pre-guid names and the alias map deliberately
+    ///     never hardcodes a guid (P1 decision), so the name is the only attribution channel — then
+    ///     through the static verbatim alias CASE, falling back to the raw id when neither resolves
+    ///     (an unknown guid, or a verbatim id whose projects row is missing, passes through exactly
+    ///     as the old static fold left it). Built from the durable <see cref="ProjectIdAliasMap" />
+    ///     (same table the repair and the ToolGate fold consume), inlined as a CASE because the merge
+    ///     is SQL — the aliases are compile-time constants, never bank content. The remote.projects
+    ///     table is always ATTACHed (the merge attaches the whole snapshot, and projects never strips).
     /// </summary>
-    internal static string FoldLoserProjectId(string column)
+    internal static string FoldRemoteProjectId(string column)
     {
+        var named =
+            $"COALESCE((SELECT p.name FROM remote.projects p WHERE p.id = {column}), {column})";
         var arms = ProjectIdAliasMap.Default.Aliases
             .Select(entry => $"WHEN '{entry.Alias}' THEN '{entry.Canonical}'");
-        return $"CASE {column} {string.Join(" ", arms)} ELSE {column} END";
+        return $"CASE {named} {string.Join(" ", arms)} ELSE {column} END";
     }
 
     /// <summary>Convenience ctor for a fixed store (tests); the DI path resolves per call.</summary>
@@ -312,11 +318,11 @@ public partial class SyncService(
                 // already has is silently skipped and converges on the next write
                 // (docs/work/archive/2026-08-06-extraction-followups-plan.md).
                 // Air-merge P2: the stored project_id and the tombstone check both fold through
-                // FoldLoserProjectId, so an unrepaired replica's loser rows land canonical and its
+                // FoldRemoteProjectId, so an unrepaired replica's loser rows land canonical and its
                 // loser pushes stay suppressed by the repair's rewritten (winner-keyed) tombstones.
                 await using (var mergeEntries = conn.CreateCommand())
                 {
-                    var foldedRemoteProject = FoldLoserProjectId("r.project_id");
+                    var foldedRemoteProject = FoldRemoteProjectId("r.project_id");
                     mergeEntries.CommandText = $"""
                                                INSERT OR IGNORE INTO entries (hash, path, value, source_file, section, scope, project_id, context_label,
                                                                                workspace_id, agent_id, created_at, updated_at,
@@ -383,7 +389,7 @@ public partial class SyncService(
                 // loser tombstone meets the repair's rewritten winner-keyed one (OR IGNORE dedups).
                 await using (var mergeTombstones = conn.CreateCommand())
                 {
-                    var foldedTombstoneProject = FoldLoserProjectId("project_id");
+                    var foldedTombstoneProject = FoldRemoteProjectId("project_id");
                     mergeTombstones.CommandText = $"""
                                                   INSERT OR IGNORE INTO sync_tombstones (project_id, hash, scope, deleted_at)
                                                   SELECT {foldedTombstoneProject}, hash, scope, deleted_at FROM remote.sync_tombstones
@@ -396,7 +402,7 @@ public partial class SyncService(
                 // folded winner row.
                 await using (var applyTombstones = conn.CreateCommand())
                 {
-                    var foldedApplyProject = FoldLoserProjectId("project_id");
+                    var foldedApplyProject = FoldRemoteProjectId("project_id");
                     applyTombstones.CommandText = $"""
                                                   DELETE FROM entries
                                                   WHERE (hash, COALESCE(scope, 'workspace'), project_id)

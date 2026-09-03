@@ -37,10 +37,10 @@ public sealed class CliWriteOptOutsTests
     // The reported defect this ADR-0075 amendment fixes: `repair <verb> --apply` was never on this
     // list, yet still wrote the bank directly via an unconditionally-bound IMemoryStore
     // (AppRegistrations.cs) — repair is now a thin IRepairStore client like every other command, so
-    // these two rows belong here like everything else.
+    // these repair rows belong here like everything else.
     [InlineData("repair", "reingest")]
     [InlineData("repair", "chunk-index")]
-    [InlineData("repair", "project-ids")]
+    [InlineData("repair", "project-ids")] // Ledger — project-ids-writes-directly : --filter CliWriteOptOutsTests : command tree, no fixture.
     public void WritesDirectly_IsFalse_ForEverythingElse(params string[] commandPath) =>
         CliWriteOptOuts.WritesDirectly(commandPath).ShouldBeFalse();
 }

@@ -100,8 +100,13 @@ public sealed class RepairCommandsTests
         inner.LastRepairRequest.ShouldBe(RepairKind.ChunkIndex);
     }
 
+    /// <summary>
+    ///     Formatter row (review MUST-4: dispatcher/formatter only, never the diagnose gate — that is
+    ///     Diagnose_ListsJsaaCluster alone): dry-run output names the loser, the winner, and the fold.
+    ///     Ledger — drop-folds-to-line : --filter ProjectIds_DryRun_FormatsTheFoldPlan : jsaa-cluster report.
+    /// </summary>
     [Fact]
-    public async Task ProjectIds_DryRun_ListsTheJsaaCluster_WithItsFold()
+    public async Task ProjectIds_DryRun_FormatsTheFoldPlan()
     {
         var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, ClusterReport());
 
@@ -110,6 +115,10 @@ public sealed class RepairCommandsTests
         stdout.ShouldContain("folds to");
     }
 
+    /// <summary>
+    ///     Dispatcher row (review MUST-4, never the diagnose gate): --diagnose reports without committing a request.
+    ///     Ledger — diagnose-requests-anyway : --filter ProjectIds_DiagnoseFlag_ReportsWithoutRequesting : cluster report.
+    /// </summary>
     [Fact]
     public async Task ProjectIds_DiagnoseFlag_ReportsWithoutRequesting()
     {
@@ -121,6 +130,10 @@ public sealed class RepairCommandsTests
         inner.LastRepairRequest.ShouldBeNull();
     }
 
+    /// <summary>
+    ///     Dispatcher row (review MUST-4, never the diagnose gate): dry run never commits.
+    ///     Ledger — dry-run-requests : --filter ProjectIds_DryRun_NeverRequestsARepair : cluster report.
+    /// </summary>
     [Fact]
     public async Task ProjectIds_DryRun_NeverRequestsARepair()
     {
@@ -131,6 +144,10 @@ public sealed class RepairCommandsTests
         inner.LastRepairRequest.ShouldBeNull();
     }
 
+    /// <summary>
+    ///     Dispatcher row (review MUST-4, never the diagnose gate): --apply commits the project-ids kind.
+    ///     Ledger — apply-requests-wrong-kind : --filter ProjectIds_Apply_RequestsTheProjectIdsKind : cluster report.
+    /// </summary>
     [Fact]
     public async Task ProjectIds_Apply_RequestsTheProjectIdsKind()
     {

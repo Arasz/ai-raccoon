@@ -61,7 +61,7 @@ public sealed class CliBankWriteTests : IAsyncLifetime
         ModelMigrationJob.JobName,
         ChunkIndexRepairJob.JobName,
         ReingestRepairJob.JobName,
-        ProjectIdsRepairJob.JobName,
+        ProjectIdsRepairJob.JobName, // Ledger — ledger-drifts : --filter CliBankWriteLedgerDriftTests/CliBankWriteTests : DI job list.
         PromotionQueuePruneJob.JobName,
         PendingEmbedJob.JobName,
         CodeReindexJob.JobName
@@ -114,6 +114,7 @@ public sealed class CliBankWriteTests : IAsyncLifetime
         { "extract prune --apply", ["extract", "prune", "--apply"], "promotion_queue_prune_requests" },
         { "repair chunk-index --apply", ["repair", "chunk-index", "--apply"], "repair_requests" },
         { "repair reingest --apply", ["repair", "reingest", "--apply"], "repair_requests" },
+        // Ledger — project-ids-apply-unlisted : --filter ApplyCommand_OnlyCommitsAnOutboxRequest : jsaa-cluster seed below.
         { "repair project-ids --apply", ["repair", "project-ids", "--apply"], "repair_requests" }
     };
 
@@ -299,6 +300,7 @@ public sealed class CliBankWriteTests : IAsyncLifetime
         "repair reingest --apply" => new HashSet<string> { "entries" },
         // Every id-keyed surface the fold rewrites (ProjectIdsRepair step order): an in-window
         // relay drain may legitimately touch any of them plus its maintenance_jobs stamp.
+        // Ledger — dropped-surface-omitted : --filter ApplyCommand_OnlyCommitsAnOutboxRequest : recipe lists every surface the fold writes.
         "repair project-ids --apply" => new HashSet<string>
         {
             "entries", "code_entries", "promotion_queue", "promotion_discards", "search_quality",
@@ -384,18 +386,21 @@ public sealed class CliBankWriteTests : IAsyncLifetime
     }
 
     /// <summary>A labeled loser-id row plus its queue leg — the jsaa-cluster shape the project-ids diagnose reports on.</summary>
+    // Ledger — empty-bank-short-circuits-outbox-write : --filter ApplyCommand_OnlyCommitsAnOutboxRequest : loser + winner rows (an empty bank would let --apply short-circuit before the outbox write).
     private async Task SeedProjectIdsLoserRowAsync(CancellationToken cancellationToken)
     {
         await using var connection = await _factory.OpenBankAsync(cancellationToken);
         await connection.ExecuteAsync(
             """
             INSERT INTO entries (hash, path, value, source_file, scope, project_id, context_label, created_at, updated_at, embed_state)
-            VALUES ('loser-1', 'loser-1', 'loser content', 'seed.md', 'project', 'job-search-ai-assistant', 'ctx-a', 0, 0, 'pending')
+            VALUES ('loser-1', 'loser-1', 'loser content', 'seed.md', 'project', 'job-search-ai-assistant', 'ctx-a', 0, 0, 'pending'),
+                   ('winner-1', 'winner-1', 'winner content', 'seed.md', 'project', 'jsaa', 'ctx-a', 0, 0, 'pending')
             """);
         await connection.ExecuteAsync(
             """
             INSERT INTO promotion_queue (project_id, hash, value, score, created_at, updated_at)
-            VALUES ('job-search-ai-assistant', 'loser-q1', 'loser-q1', 0.7, 0, 0)
+            VALUES ('job-search-ai-assistant', 'loser-q1', 'loser-q1', 0.7, 0, 0),
+                   ('jsaa', 'winner-q1', 'winner-q1', 0.9, 0, 0)
             """);
     }
 }

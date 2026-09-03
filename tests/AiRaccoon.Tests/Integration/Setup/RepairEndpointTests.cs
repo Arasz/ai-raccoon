@@ -112,8 +112,15 @@ public sealed class RepairEndpointTests : IAsyncLifetime
             .StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
     }
 
+    /// <summary>
+    ///     P2 diagnose gate (review MUST-2/MUST-4): the ONLY test that carries the gate — the CLI
+    ///     ProjectIds_* rows assert dispatcher/formatter output, never this. Renamed to the gate name
+    ///     so the narrowest --filter hits it (a --filter miss exits 0).
+    ///     Ledger — comment-out-the-jsaa-cluster-branch : --filter Diagnose_ListsJsaaCluster : ≥2 loser
+    ///     entries + both queue legs (one-sided queue passes while dropping a side, review MUST-3).
+    /// </summary>
     [RetryFact]
-    public async Task GetProjectIdsReport_ListsTheJsaaCluster()
+    public async Task Diagnose_ListsJsaaCluster()
     {
         await SeedProjectIdsAsync();
 
@@ -123,10 +130,15 @@ public sealed class RepairEndpointTests : IAsyncLifetime
         var report = await response.Content.ReadFromJsonAsync<ProjectIdCensusReport>(TestContext.Current.CancellationToken);
         report.ShouldNotBeNull();
         report.Row("jsaa").ProjectEntries.ShouldBe(2);
-        report.Row("job-search-ai-assistant").ProjectEntries.ShouldBe(1);
+        report.Row("jsaa").Queued.ShouldBe(1, "the winner queue leg must be asserted too — one-sided passes while dropping a side");
+        report.Row("job-search-ai-assistant").ProjectEntries.ShouldBe(2);
         report.Row("job-search-ai-assistant").Queued.ShouldBe(1);
     }
 
+    /// <summary>
+    ///     --apply commits the outbox row (the server drains it). Ledger — drop-TryParseKind-ProjectIds-arm :
+    ///     --filter PostProjectIds_CommitsARequestRow : live server bank, no seed rows needed.
+    /// </summary>
     [RetryFact]
     public async Task PostProjectIds_CommitsARequestRow()
     {
@@ -146,10 +158,12 @@ public sealed class RepairEndpointTests : IAsyncLifetime
             "INSERT INTO entries (hash, path, value, source_file, scope, project_id, context_label, created_at, updated_at, embed_state) VALUES " +
             "('jsaa-1', 'jsaa-1', 'jsaa-1', 'seed.md', 'project', 'jsaa', 'ctx-a', 1, 1, 'pending')," +
             "('jsaa-2', 'jsaa-2', 'jsaa-2', 'seed.md', 'project', 'jsaa', 'ctx-a', 2, 2, 'pending')," +
-            "('loser-1', 'loser-1', 'loser-1', 'seed.md', 'project', 'job-search-ai-assistant', 'ctx-a', 3, 3, 'pending')");
+            "('loser-1', 'loser-1', 'loser-1', 'seed.md', 'project', 'job-search-ai-assistant', 'ctx-a', 3, 3, 'pending')," +
+            "('loser-2', 'loser-2', 'loser-2', 'seed.md', 'project', 'job-search-ai-assistant', 'ctx-a', 4, 4, 'pending')");
         await connection.ExecuteAsync(
-            "INSERT INTO promotion_queue (project_id, hash, value, score, created_at, updated_at) " +
-            "VALUES ('job-search-ai-assistant', 'loser-q1', 'loser-q1', 0.7, 3, 3)");
+            "INSERT INTO promotion_queue (project_id, hash, value, score, created_at, updated_at) VALUES " +
+            "('job-search-ai-assistant', 'loser-q1', 'loser-q1', 0.7, 3, 3)," +
+            "('jsaa', 'winner-q1', 'winner-q1', 0.9, 1, 1)");
     }
 
     private async Task<long> RequestCountAsync(string kind)
