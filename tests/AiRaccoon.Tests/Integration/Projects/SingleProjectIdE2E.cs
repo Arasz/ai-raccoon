@@ -119,10 +119,10 @@ public sealed class SingleProjectIdE2E : IAsyncLifetime
         }
 
         await _store.EmbedPendingAsync(Winner, null, ct);
-        var foldedHits = await tools.Search(Winner, "wombat platonov", cancellationToken: ct);
-        var winnerHits = await tools.Search(Winner, "capybara arbiter", cancellationToken: ct);
-        var bulkUnderWinner = await tools.Search(Winner, "quokka zelinsky", cancellationToken: ct);
-        var bulkUnderLoser = await tools.Search(Loser, "quokka zelinsky", cancellationToken: ct);
+        var foldedHits = await tools.Search(Winner, "wombat platonov", sessionId: "sess-pint", cancellationToken: ct);
+        var winnerHits = await tools.Search(Winner, "capybara arbiter", sessionId: "sess-pint", cancellationToken: ct);
+        var bulkUnderWinner = await tools.Search(Winner, "quokka zelinsky", sessionId: "sess-pint", cancellationToken: ct);
+        var bulkUnderLoser = await tools.Search(Loser, "quokka zelinsky", sessionId: "sess-pint", cancellationToken: ct);
 
         foldedHits.Data!.Results.ShouldContain(r => r.Hash == "labeled-1",
             "the labeled loser content folded under the winner");
