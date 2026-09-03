@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.SearchQuality;
 using Dapper;
 using Microsoft.Extensions.Logging;
@@ -22,11 +23,12 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
         string sessionId,
         int resultCount,
         IReadOnlyList<string> topSourceFiles,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        IReadOnlyList<RetrievalEvidence>? evidence = null)
     {
         try
         {
-            await RecordSearchAsync(correlationId, query, scope, projectId, kind, sessionId, resultCount, topSourceFiles, ct)
+            await RecordSearchAsync(correlationId, query, scope, projectId, kind, sessionId, resultCount, topSourceFiles, ct, evidence)
                 .ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -44,7 +46,10 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
         string sessionId,
         int resultCount,
         IReadOnlyList<string> topSourceFiles,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        // P6a threading only: accepted so the dispatcher can pass the sidecar through.
+        // P6b persists it; until then it is ignored and the row writes exactly as before.
+        IReadOnlyList<RetrievalEvidence>? evidence = null)
     {
         if (kind is not ("memory" or "code" or "both"))
         {

@@ -1,6 +1,7 @@
 using AiRaccoon.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Code;
+using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Metrics;
 using AiRaccoon.Core.SearchQuality;
@@ -528,12 +529,15 @@ public sealed class MemorySearchKindToolTests
 
         public string? LastKind { get; private set; }
 
+        public IReadOnlyList<RetrievalEvidence>? LastEvidence { get; private set; }
+
         public Task<int> PurgeOlderThanAsync(long nowUnixSeconds, int retentionDays,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(0);
 
         public Task RecordSearchAsync(string correlationId, string query, string? scope, string? projectId,
-            string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default)
+            string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default,
+            IReadOnlyList<RetrievalEvidence>? evidence = null)
         {
             RecordedCorrelationIds.Add(correlationId);
             LastQuery = query;
@@ -541,11 +545,13 @@ public sealed class MemorySearchKindToolTests
             LastSessionId = sessionId;
             LastResultCount = resultCount;
             LastTopSourceFiles = topSourceFiles;
+            LastEvidence = evidence;
             return Task.CompletedTask;
         }
 
         public Task RecordSearchSafeAsync(string correlationId, string query, string? scope, string? projectId,
-            string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default)
+            string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default,
+            IReadOnlyList<RetrievalEvidence>? evidence = null)
         {
             RecordedCorrelationIds.Add(correlationId);
             LastQuery = query;
@@ -553,6 +559,7 @@ public sealed class MemorySearchKindToolTests
             LastSessionId = sessionId;
             LastResultCount = resultCount;
             LastTopSourceFiles = topSourceFiles;
+            LastEvidence = evidence;
             return Task.CompletedTask;
         }
 

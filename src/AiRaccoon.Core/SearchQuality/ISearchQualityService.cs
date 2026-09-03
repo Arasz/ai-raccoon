@@ -1,3 +1,5 @@
+using AiRaccoon.Core.Memory.Fusion;
+
 namespace AiRaccoon.Core.SearchQuality;
 
 /// <summary>
@@ -15,6 +17,9 @@ public interface ISearchQualityService
     ///     required — never null, never blank (the tool boundary rejects blank fail-fast).
     ///     <paramref name="kind" /> names the requested kind (memory/code/both, lowercased by the
     ///     dispatcher) and is required — the row always says which leg it describes.
+    ///     <paramref name="evidence" /> is the P4 sidecar joined to the served rows in served
+    ///     order (P6a threading; P6b persists it). Null means absent-evidence: the row writes
+    ///     exactly as before. Core stays JSON-free; serialization is P6b's.
     /// </summary>
     Task RecordSearchAsync(
         string correlationId,
@@ -25,7 +30,8 @@ public interface ISearchQualityService
         string sessionId,
         int resultCount,
         IReadOnlyList<string> topSourceFiles,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        IReadOnlyList<RetrievalEvidence>? evidence = null);
 
     /// <summary>
     ///     <see cref="RecordSearchAsync" />, best-effort: swallows and logs any failure instead of
@@ -43,7 +49,8 @@ public interface ISearchQualityService
         string sessionId,
         int resultCount,
         IReadOnlyList<string> topSourceFiles,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        IReadOnlyList<RetrievalEvidence>? evidence = null);
 
     /// <summary>
     ///     Records that the agent read a file that appeared in the search results.
