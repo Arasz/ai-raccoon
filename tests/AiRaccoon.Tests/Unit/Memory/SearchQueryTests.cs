@@ -26,8 +26,8 @@ public class SearchQueryTests
         var query = new SearchQuery("acme", "search");
 
         query.WorkspaceId.ShouldBeNull();
-        query.Limit.ShouldBe(20);
-        query.MinRelativeScore.ShouldBe(0.0);
+        query.Limit.ShouldBe(8);
+        query.MinRelativeScore.ShouldBe(0.6);
         query.Scope.ShouldBe(SearchScope.All);
         // Tuning values are "no opinion" at the query layer; SearchParameters.FromSources
         // resolves them against the store's defaults (canonical constants otherwise).
