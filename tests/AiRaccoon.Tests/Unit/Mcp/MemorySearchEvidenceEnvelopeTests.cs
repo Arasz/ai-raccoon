@@ -51,7 +51,7 @@ public sealed class MemorySearchEvidenceEnvelopeTests
         _store.StubEvidence = null;
         _store.StubStats = null;
 
-        var envelope = await _tools.Search("acme", "widgets", kind: "memory",
+        var envelope = await _tools.Search("acme", "widgets", kind: "memory", sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.EvidenceByHash.ShouldBeNull();
@@ -83,7 +83,7 @@ public sealed class MemorySearchEvidenceEnvelopeTests
         };
         _store.StubStats = new FusionStats(0.2, 0.35, 0.0328, ["fts", "vector"]);
 
-        var envelope = await _tools.Search("acme", "widgets", kind: "memory",
+        var envelope = await _tools.Search("acme", "widgets", kind: "memory", sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Results.Count.ShouldBe(2);
@@ -122,7 +122,7 @@ public sealed class MemorySearchEvidenceEnvelopeTests
         };
         _store.StubStats = new FusionStats(0.5, null, 0.0328, ["fts", "vector"]);
 
-        var envelope = await _tools.Search("acme", "widgets", kind: "memory",
+        var envelope = await _tools.Search("acme", "widgets", kind: "memory", sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         var evidence = envelope.Data!.EvidenceByHash.ShouldNotBeNull();
@@ -148,7 +148,7 @@ public sealed class MemorySearchEvidenceEnvelopeTests
         _store.StubStats = new FusionStats(0.1, null, 0.0328, ["fts", "vector"]);
         _codeSearch.StubResults = [new CodeSearchResult("code1", 1.0, "Foo.cs", "class Foo", 1, 10)];
 
-        var envelope = await _tools.Search("acme", "widgets", kind: "both",
+        var envelope = await _tools.Search("acme", "widgets", kind: "both", sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Results.ShouldHaveSingleItem().Hash.ShouldBe("mem1");
@@ -173,7 +173,7 @@ public sealed class MemorySearchEvidenceEnvelopeTests
         };
         _store.StubStats = new FusionStats(0.1, null, 0.0328, ["fts", "vector"]);
 
-        var envelope = await _tools.Search("acme", "widgets", kind: "memory",
+        var envelope = await _tools.Search("acme", "widgets", kind: "memory", sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Results.ShouldBeEmpty();

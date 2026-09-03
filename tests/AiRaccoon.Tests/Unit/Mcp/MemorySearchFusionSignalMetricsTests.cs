@@ -64,7 +64,7 @@ public sealed class MemorySearchFusionSignalMetricsTests
         StubTwoLegSearch();
         var tools = CreateTools();
 
-        var envelope = await tools.Search("acme", "widgets", kind: "memory",
+        var envelope = await tools.Search("acme", "widgets", kind: "memory", sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         var series = FusionSignalSeries();
@@ -94,7 +94,7 @@ public sealed class MemorySearchFusionSignalMetricsTests
         _store.StubStats = new FusionStats(null, null, 0.0164, ["fts"]);
         var tools = CreateTools();
 
-        await tools.Search("acme", "widgets", kind: "memory",
+        await tools.Search("acme", "widgets", kind: "memory", sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         var series = FusionSignalSeries();
@@ -110,7 +110,7 @@ public sealed class MemorySearchFusionSignalMetricsTests
         _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
         var tools = CreateTools();
 
-        await tools.Search("acme", "widgets", kind: "both",
+        await tools.Search("acme", "widgets", kind: "both", sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         var series = FusionSignalSeries();
@@ -125,7 +125,7 @@ public sealed class MemorySearchFusionSignalMetricsTests
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
         var tools = CreateTools();
 
-        await tools.Search("acme", "widgets", kind: "memory",
+        await tools.Search("acme", "widgets", kind: "memory", sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         FusionSignalSeries().ShouldBeEmpty("absent evidence writes exactly as before — no new series appear");
@@ -138,7 +138,7 @@ public sealed class MemorySearchFusionSignalMetricsTests
         StubTwoLegSearch();
         var tools = CreateTools(new ThrowingMeasurementRecorder());
 
-        var envelope = await tools.Search("acme", "widgets", kind: "memory",
+        var envelope = await tools.Search("acme", "widgets", kind: "memory", sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Results.Count.ShouldBe(2, "G6: telemetry write failure never fails a search");

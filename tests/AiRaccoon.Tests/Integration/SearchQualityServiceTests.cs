@@ -487,10 +487,12 @@ public sealed class SearchQualityServiceTests : IDisposable
         columns.ShouldBe(
             [
                 "id", "correlation_id", "query", "scope", "project_id", "session_id", "kind",
-                "result_count", "top_source_files", "follow_through_count", "follow_through_files",
+                "result_count", "top_source_files", "result_features", "follow_through_count", "follow_through_files",
                 "usefulness_grade", "grade_note", "created_at"
             ],
-            "P4 is codec-only — follow_through_files carries ranks as JSON, no column may be added");
+            "P4 is codec-only — follow_through_files carries ranks as JSON, no column may be added " +
+            "by rank work. result_features is the separate Stage-1 evidence column (M1 tolerant-ensure); " +
+            "this test still pins that rank work adds nothing further.");
         (await connection.ExecuteScalarAsync<long>("PRAGMA user_version")).ShouldBe(12,
             "P4 owns no ladder rung — P3's v12 is current");
     }

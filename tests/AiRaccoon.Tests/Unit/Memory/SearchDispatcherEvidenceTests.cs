@@ -41,6 +41,7 @@ public sealed class SearchDispatcherEvidenceTests
             SearchKind.Memory,
             "all",
             "corr-evidence",
+            sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         quality.LastEvidence.ShouldNotBeNull("dispatcher must pass the joined sidecar through");
@@ -62,6 +63,7 @@ public sealed class SearchDispatcherEvidenceTests
             SearchKind.Memory,
             "all",
             "corr-null",
+            sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         quality.LastEvidence.ShouldBeNull("absent sidecar must stay absent, not become an empty list");
@@ -83,6 +85,7 @@ public sealed class SearchDispatcherEvidenceTests
             SearchKind.Code,
             "code",
             "corr-code",
+            sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         quality.LastEvidence.ShouldBeNull("the code leg has no memory sidecar, so nothing flows to quality");
@@ -145,7 +148,8 @@ public sealed class SearchDispatcherEvidenceTests
             string query,
             string? scope,
             string? projectId,
-            string? sessionId,
+            string kind,
+            string sessionId,
             int resultCount,
             IReadOnlyList<string> topSourceFiles,
             CancellationToken ct = default,
@@ -162,6 +166,8 @@ public sealed class SearchDispatcherEvidenceTests
             string query,
             string? scope,
             string? projectId,
+            string kind,
+            string sessionId,
             int resultCount,
             IReadOnlyList<string> topSourceFiles,
             CancellationToken ct = default,
@@ -173,7 +179,7 @@ public sealed class SearchDispatcherEvidenceTests
             return Task.CompletedTask;
         }
 
-        public Task RecordFollowThroughAsync(string correlationId, string filePath, CancellationToken ct = default)
+        public Task RecordFollowThroughAsync(string correlationId, string filePath, int? servedRank = null, CancellationToken ct = default)
         {
             return Task.CompletedTask;
         }

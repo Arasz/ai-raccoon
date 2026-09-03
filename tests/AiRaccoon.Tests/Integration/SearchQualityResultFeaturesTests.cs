@@ -112,7 +112,7 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
     {
         await EnsureSchemaAsync();
 
-        await _sut.RecordSearchAsync("corr-feat-1", "query", "all", "proj-a", null,
+        await _sut.RecordSearchAsync("corr-feat-1", "query", "all", "proj-a", "memory", "sess-test",
             2, ["/a.md"], TestContext.Current.CancellationToken, TwoRowEvidence());
 
         var json = await ReadResultFeaturesAsync("corr-feat-1");
@@ -139,7 +139,7 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
         await EnsureSchemaAsync();
 
         // Empty-results search with a present sidecar: the dispatcher joins zero rows.
-        await _sut.RecordSearchAsync("corr-feat-empty", "query", "all", "proj-a", null,
+        await _sut.RecordSearchAsync("corr-feat-empty", "query", "all", "proj-a", "memory", "sess-test",
             0, [], TestContext.Current.CancellationToken, []);
 
         var json = await ReadResultFeaturesAsync("corr-feat-empty");
@@ -153,7 +153,7 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
     {
         await EnsureSchemaAsync();
 
-        await _sut.RecordSearchAsync("corr-feat-null", "query", "all", "proj-a", null,
+        await _sut.RecordSearchAsync("corr-feat-null", "query", "all", "proj-a", "memory", "sess-test",
             0, [], TestContext.Current.CancellationToken, null);
 
         (await ReadResultFeaturesAsync("corr-feat-null")).ShouldBeNull("absent evidence writes exactly as before");
@@ -166,7 +166,7 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
         var hostile = new RetrievalEvidence("hash-nan", double.NaN,
             [new LegRank("fts", 1)], double.PositiveInfinity);
 
-        await _sut.RecordSearchAsync("corr-feat-nan", "query", "all", "proj-a", null,
+        await _sut.RecordSearchAsync("corr-feat-nan", "query", "all", "proj-a", "memory", "sess-test",
             1, [], TestContext.Current.CancellationToken, [hostile]);
 
         var json = await ReadResultFeaturesAsync("corr-feat-nan");
@@ -194,7 +194,7 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
         var service = new SqliteSearchQualityService(
             new SharedConnectionFactory(_factory, shared), NullLogger<SqliteSearchQualityService>.Instance);
 
-        await service.RecordSearchAsync("corr-feat-count", "query", "all", "proj-a", null,
+        await service.RecordSearchAsync("corr-feat-count", "query", "all", "proj-a", "memory", "sess-test",
             5, [], TestContext.Current.CancellationToken, evidence);
 
         var qualityWrites = statements
@@ -209,10 +209,10 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
     {
         await EnsureSchemaAsync();
 
-        await _sut.RecordSearchAsync("corr-join-1", "query", "all", "proj-a", null,
+        await _sut.RecordSearchAsync("corr-join-1", "query", "all", "proj-a", "memory", "sess-test",
             2, ["/a.md"], TestContext.Current.CancellationToken, TwoRowEvidence());
         await _sut.RecordGradeAsync("proj-a", "corr-join-1", 4, "useful", TestContext.Current.CancellationToken);
-        await _sut.RecordFollowThroughAsync("corr-join-1", "/a.md", TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("corr-join-1", "/a.md", ct: TestContext.Current.CancellationToken);
 
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var row = await connection.QuerySingleAsync(new CommandDefinition(
@@ -244,7 +244,7 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
         var dispatcher = new SearchDispatcher(store, new StubCodeSearch(), _sut);
 
         var result = await dispatcher.DispatchAsync(new SearchQuery("proj-a", "query"),
-            SearchKind.Memory, "all", "corr-failopen", cancellationToken: TestContext.Current.CancellationToken);
+            SearchKind.Memory, "all", "corr-failopen", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         result.Results.Count.ShouldBe(2, "G6 fail-open: a telemetry write failure still returns full results");
         result.Results.Select(r => r.Hash).ShouldBe(["hash-a", "hash-b"], "ordering untouched by the failed write");
@@ -258,7 +258,7 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
             new StubCodeSearch([new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)]), _sut);
 
         await dispatcher.DispatchAsync(new SearchQuery("proj-a", "query"),
-            SearchKind.Code, "all", "corr-code-1", cancellationToken: TestContext.Current.CancellationToken);
+            SearchKind.Code, "all", "corr-code-1", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         (await ReadResultFeaturesAsync("corr-code-1")).ShouldBeNull(
             "S8: kind=code has no memory sidecar — features null, row still written");
@@ -281,7 +281,7 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
             new StubCodeSearch(), _sut);
 
         await dispatcher.DispatchAsync(new SearchQuery("proj-a", "query"),
-            SearchKind.Memory, "all", "corr-bounded-1", cancellationToken: TestContext.Current.CancellationToken);
+            SearchKind.Memory, "all", "corr-bounded-1", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         var json = await ReadResultFeaturesAsync("corr-bounded-1");
         json.ShouldNotBeNull();
@@ -295,7 +295,7 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
     public async Task PurgeOlderThan_RemovesRowsCarryingResultFeatures()
     {
         await EnsureSchemaAsync();
-        await _sut.RecordSearchAsync("corr-purge-1", "query", "all", "proj-a", null,
+        await _sut.RecordSearchAsync("corr-purge-1", "query", "all", "proj-a", "memory", "sess-test",
             2, [], TestContext.Current.CancellationToken, TwoRowEvidence());
 
         var deleted = await _sut.PurgeOlderThanAsync(
@@ -310,11 +310,11 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
     public async Task GetMetrics_LiveSearchesAreNotValidationN()
     {
         await EnsureSchemaAsync();
-        await _sut.RecordSearchAsync("corr-hon-1", "q1", "all", "proj-a", null,
+        await _sut.RecordSearchAsync("corr-hon-1", "q1", "all", "proj-a", "memory", "sess-test",
             1, [], TestContext.Current.CancellationToken, TwoRowEvidence());
-        await _sut.RecordSearchAsync("corr-hon-2", "q2", "all", "proj-a", null,
+        await _sut.RecordSearchAsync("corr-hon-2", "q2", "all", "proj-a", "memory", "sess-test",
             1, [], TestContext.Current.CancellationToken);
-        await _sut.RecordSearchAsync("corr-hon-3", "q3", "all", "proj-a", null,
+        await _sut.RecordSearchAsync("corr-hon-3", "q3", "all", "proj-a", "memory", "sess-test",
             1, [], TestContext.Current.CancellationToken);
         await _sut.RecordGradeAsync("proj-a", "corr-hon-1", 5, "great", TestContext.Current.CancellationToken);
 
