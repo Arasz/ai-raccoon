@@ -11,7 +11,9 @@ namespace AiRaccoon.Core.Memory;
 public sealed record SearchResults(
     IReadOnlyList<MemorySearchResult> Results,
     SearchTimings Timings,
-    FusionDiff? Fusion = null);
+    FusionDiff? Fusion = null,
+    IReadOnlyDictionary<string, RetrievalEvidence>? EvidenceByHash = null,
+    FusionStats? Stats = null);
 
 /// <summary>Per-phase durations for one <see cref="IMemoryStore.SearchAsync" /> call, plus the measured total (docs/adr/0079).</summary>
 public sealed record SearchTimings(
