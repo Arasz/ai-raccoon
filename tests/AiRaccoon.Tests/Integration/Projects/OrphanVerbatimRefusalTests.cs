@@ -169,7 +169,7 @@ public sealed class OrphanVerbatimRefusalTests : IAsyncLifetime
         await _store.EmbedPendingAsync(Loser, null, ct);
 
         // Ledger — refuse-reads : --filter OrphanRead_Passthrough : unmigrated bank with loser rows, loser-id search.
-        var search = await tools.Search(Loser, "narwhal tusk", cancellationToken: ct);
+        var search = await tools.Search(Loser, "narwhal tusk", sessionId: "sess-pint", cancellationToken: ct);
 
         search.Data!.Results.ShouldContain(r => r.Hash == written.Data!.Hash);
     }

@@ -102,12 +102,12 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
         {
             total += await InWriteTransactionAsync(connection, () => connection.ExecuteAsync(
                     new CommandDefinition(
-                        """
+                        $"""
                         UPDATE entries
                         SET embed_state = 'pending', embedding = NULL,
                             structure_embedding = NULL, heading_path = NULL
                         WHERE embed_state = 'embedded'
-                          AND scope = 'project' AND context_label IS NOT NULL AND project_id = @loser
+                          AND {ProjectRows.LabeledProjectScope("", "loser")}
                         """,
                         new { loser = fold.Loser }, cancellationToken: cancellationToken)),
                 cancellationToken).ConfigureAwait(false);
@@ -156,19 +156,19 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
                 // the queue legs are winner-keyed and promotion_queue_entries_ad (which matches
                 // OLD.project_id = loser) never touches the merged candidates.
                 var stepMoved = await connection.ExecuteAsync(new CommandDefinition(
-                        """
+                        $"""
                         UPDATE entries SET project_id = @winner
-                        WHERE scope = 'project' AND context_label IS NOT NULL AND project_id = @loser
+                        WHERE {ProjectRows.LabeledProjectScope("", "loser")}
                           AND NOT EXISTS (
                               SELECT 1 FROM entries w
-                              WHERE w.scope = 'project' AND w.project_id = @winner
+                              WHERE {ProjectRows.ProjectScope("w.", "winner")}
                                 AND w.path = entries.path AND w.hash = entries.hash
                                 AND COALESCE(w.context_label, '') = COALESCE(entries.context_label, ''))
                         """,
                         new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken))
                     .ConfigureAwait(false);
                 var stepDeleted = await connection.ExecuteAsync(new CommandDefinition(
-                        "DELETE FROM entries WHERE scope = 'project' AND context_label IS NOT NULL AND project_id = @loser",
+                        "DELETE FROM entries WHERE " + ProjectRows.LabeledProjectScope("", "loser"),
                         new { loser = fold.Loser }, cancellationToken: cancellationToken))
                     .ConfigureAwait(false);
                 return (Moved: stepMoved, Deleted: stepDeleted);
