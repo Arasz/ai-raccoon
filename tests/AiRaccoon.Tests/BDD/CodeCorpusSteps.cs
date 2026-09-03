@@ -88,14 +88,15 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
             new { path = IngestPath.Normalize(path) }));
     }
 
-    private async Task RunSearchAsync(string projectId, string query, string? kind = null, string? scope = null)
+    private async Task RunSearchAsync(string projectId, string query, string? kind = null, string? scope = null,
+        string sessionId = "bdd-session")
     {
         _lastError = null;
         try
         {
             _lastSearchEnvelope = kind is null
-                ? await Ctx.MemoryTools.Search(projectId, query)
-                : await Ctx.MemoryTools.Search(projectId, query, scope: scope ?? "all", kind: kind);
+                ? await Ctx.MemoryTools.Search(projectId, query, sessionId: sessionId)
+                : await Ctx.MemoryTools.Search(projectId, query, sessionId: sessionId, scope: scope ?? "all", kind: kind);
             _lastSearchJson = JsonSerializer.SerializeToNode(_lastSearchEnvelope, McpJsonUtilities.DefaultOptions)!
                 .AsObject()["data"]!.AsObject();
         }
@@ -621,7 +622,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
     [Then("^memory_search with kind \"([^\"]*)\" for the same project still succeeds$")]
     public async Task ThenSearchWithKindStillSucceeds(string kind)
     {
-        var envelope = await Ctx.MemoryTools.Search(DefaultProject, _searchQuery, kind: kind);
+        var envelope = await Ctx.MemoryTools.Search(DefaultProject, _searchQuery, sessionId: "sess-test", kind: kind);
         envelope.Data.ShouldNotBeNull();
     }
 
@@ -750,6 +751,10 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
     [When("^memory_search is called for the project with kind \"([^\"]*)\"$")]
     public Task WhenMemorySearchIsCalledForProjectWithKind(string kind) => RunSearchAsync(DefaultProject, _searchQuery, kind: kind);
 
+    [When("^I call memory_search for the project with kind \"([^\"]*)\" with session \"([^\"]*)\"$")]
+    public Task WhenSearchWithKindAndSession(string kind, string session) =>
+        RunSearchAsync(DefaultProject, _searchQuery, kind: kind, sessionId: session);
+
     [Then("^the call succeeds without a migration-in-progress refusal$")]
     public void ThenCallSucceedsWithoutMigrationRefusal()
     {
@@ -833,5 +838,21 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
             files.ShouldAllBe(f => !CodeExtensions.All.Contains(Path.GetExtension(f)),
                 "code paths must never enter the syncing search_quality table (ADR-0085 never-syncs rule)");
         }
+    }
+
+    /// <summary>
+    ///     P1: the row for THIS call — correlation-filtered, not a bare COUNT(*) — carries the
+    ///     passed session verbatim. Pre-P1 this read back NULL (the Safe path hardcoded null).
+    /// </summary>
+    [Then("^the search_quality row for that call carries session \"([^\"]*)\"$")]
+    public async Task ThenSearchQualityRowCarriesSession(string session)
+    {
+        _lastSearchEnvelope.ShouldNotBeNull("the scenario's search must have succeeded");
+        var correlationId = _lastSearchEnvelope!.Meta.CorrelationId.ShouldNotBeNull();
+        await using var connection = await Ctx.OpenBankAsync();
+        var stored = await connection.QuerySingleOrDefaultAsync<string?>(
+            "SELECT session_id FROM search_quality WHERE correlation_id = @Id",
+            new { Id = correlationId });
+        stored.ShouldBe(session);
     }
 }

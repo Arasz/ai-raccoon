@@ -11,9 +11,11 @@ public interface ISearchDispatcher
     /// <summary>
     ///     <paramref name="codeLimit" />/<paramref name="codeMinRelativeScore" /> override the
     ///     shared <paramref name="searchQuery" /> values for the code section only (§3.6 per-section
-    ///     tuning) — null means "same as the memory section".
+    ///     tuning) — null means "same as the memory section". <paramref name="sessionId" /> is the
+    ///     calling agent's session id, forwarded verbatim to the quality service alongside (the
+    ///     query itself stays attribution-free: it feeds backends that must ignore attribution).
     /// </summary>
     Task<SearchDispatchResult> DispatchAsync(SearchQuery searchQuery, SearchKind kind, string rawScope,
-        string correlationId, int? codeLimit = null, double? codeMinRelativeScore = null,
+        string correlationId, string sessionId, int? codeLimit = null, double? codeMinRelativeScore = null,
         CancellationToken cancellationToken = default);
 }

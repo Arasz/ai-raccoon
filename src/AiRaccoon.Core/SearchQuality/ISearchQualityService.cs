@@ -10,14 +10,16 @@ public interface ISearchQualityService
 {
     /// <summary>
     ///     Creates a quality record for a memory_search call. Called alongside (not inside) the
-    ///     search — fire-and-forget from the tool layer.
+    ///     search — fire-and-forget from the tool layer. <paramref name="sessionId" /> is the
+    ///     calling agent's session id, stored verbatim; every agent has a session, so it is
+    ///     required — never null, never blank (the tool boundary rejects blank fail-fast).
     /// </summary>
     Task RecordSearchAsync(
         string correlationId,
         string query,
         string? scope,
         string? projectId,
-        string? sessionId,
+        string sessionId,
         int resultCount,
         IReadOnlyList<string> topSourceFiles,
         CancellationToken ct = default);
@@ -25,13 +27,15 @@ public interface ISearchQualityService
     /// <summary>
     ///     <see cref="RecordSearchAsync" />, best-effort: swallows and logs any failure instead of
     ///     throwing. The tool layer calls this, not the throwing form, so a quality-recording
-    ///     failure never fails the search it describes.
+    ///     failure never fails the search it describes. Carries the same required
+    ///     <paramref name="sessionId" /> — it is the only live record path.
     /// </summary>
     Task RecordSearchSafeAsync(
         string correlationId,
         string query,
         string? scope,
         string? projectId,
+        string sessionId,
         int resultCount,
         IReadOnlyList<string> topSourceFiles,
         CancellationToken ct = default);

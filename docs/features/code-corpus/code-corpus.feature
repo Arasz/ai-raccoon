@@ -251,3 +251,10 @@ Feature: Code corpus
         Scenario: A kind=memory search still records exactly as today
             When I call memory_search for the project with kind "memory"
             Then a search_quality row is written for that call
+
+        # P1 (owner gate 2026-09-03, D1 CHANGE): sessionId is required at every layer —
+        # every agent has a session. The row for THIS call (correlation-filtered) carries the
+        # passed session verbatim; pre-P1 the Safe path hardcoded null, so this read back NULL.
+        Scenario: A session-attributed search stores its session id verbatim
+            When I call memory_search for the project with kind "memory" with session "sess-bdd-1"
+            Then the search_quality row for that call carries session "sess-bdd-1"

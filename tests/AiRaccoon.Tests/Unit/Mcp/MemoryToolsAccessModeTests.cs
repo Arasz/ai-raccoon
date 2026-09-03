@@ -87,7 +87,7 @@ public sealed class MemoryToolsAccessModeTests
             _tools.Write("acme-web", "content", cancellationToken: TestContext.Current.CancellationToken));
         writeEx.Message.ShouldContain("memory_write requires mode rw (current ro)");
 
-        var results = await _tools.Search("acme-web", "query", cancellationToken: TestContext.Current.CancellationToken);
+        var results = await _tools.Search("acme-web", "query", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
         results.Data!.Results.Count.ShouldBe(1);
         results.Data!.Results[0].Snippet.ShouldBe("content");
     }

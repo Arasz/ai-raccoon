@@ -1,5 +1,6 @@
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using Dapper;
 using Shouldly;
 using Xunit;
 using xRetry.v3;
@@ -54,8 +55,8 @@ public sealed class SearchQualityServiceTests : IDisposable
         await EnsureSchemaAsync();
 
         await _sut.RecordSearchAsync(
-            "corr-002", "query", "all", "proj-a", null,
-            3, ["/file.md"], TestContext.Current.CancellationToken);
+            "corr-002", "query", "all", "proj-a", sessionId: "sess-test",
+            resultCount: 3, topSourceFiles: ["/file.md"], ct: TestContext.Current.CancellationToken);
 
         await _sut.RecordFollowThroughAsync("corr-002", "/file.md", TestContext.Current.CancellationToken);
         await _sut.RecordFollowThroughAsync("corr-002", "/other.md", TestContext.Current.CancellationToken);
@@ -70,8 +71,8 @@ public sealed class SearchQualityServiceTests : IDisposable
         await EnsureSchemaAsync();
 
         await _sut.RecordSearchAsync(
-            "corr-003", "query", "all", "proj-a", null,
-            1, ["/file.md"], TestContext.Current.CancellationToken);
+            "corr-003", "query", "all", "proj-a", sessionId: "sess-test",
+            resultCount: 1, topSourceFiles: ["/file.md"], ct: TestContext.Current.CancellationToken);
 
         await _sut.RecordFollowThroughAsync("corr-003", "/file.md", TestContext.Current.CancellationToken);
         await _sut.RecordFollowThroughAsync("corr-003", "/file.md", TestContext.Current.CancellationToken);
@@ -86,8 +87,8 @@ public sealed class SearchQualityServiceTests : IDisposable
         await EnsureSchemaAsync();
 
         await _sut.RecordSearchAsync(
-            "corr-004", "query", "all", "proj-a", null,
-            5, ["/file.md"], TestContext.Current.CancellationToken);
+            "corr-004", "query", "all", "proj-a", sessionId: "sess-test",
+            resultCount: 5, topSourceFiles: ["/file.md"], ct: TestContext.Current.CancellationToken);
 
         await _sut.RecordGradeAsync("proj-a", "corr-004", 5, "great result", TestContext.Current.CancellationToken);
 
@@ -102,8 +103,8 @@ public sealed class SearchQualityServiceTests : IDisposable
     {
         await EnsureSchemaAsync();
 
-        await _sut.RecordSearchAsync("c1", "q1", "all", "proj-a", null, 1, [], TestContext.Current.CancellationToken);
-        await _sut.RecordSearchAsync("c2", "q2", "all", "proj-b", null, 1, [], TestContext.Current.CancellationToken);
+        await _sut.RecordSearchAsync(correlationId: "c1", query: "q1", scope: "all", projectId: "proj-a", sessionId: "sess-test", resultCount: 1, topSourceFiles: [], ct: TestContext.Current.CancellationToken);
+        await _sut.RecordSearchAsync(correlationId: "c2", query: "q2", scope: "all", projectId: "proj-b", sessionId: "sess-test", resultCount: 1, topSourceFiles: [], ct: TestContext.Current.CancellationToken);
 
         var metricsA = await _sut.GetMetricsAsync("proj-a", DateTimeOffset.MinValue, TestContext.Current.CancellationToken);
         metricsA.TotalSearches.ShouldBe(1);
@@ -117,8 +118,8 @@ public sealed class SearchQualityServiceTests : IDisposable
     {
         await EnsureSchemaAsync();
 
-        await _sut.RecordSearchAsync("c1", "q1", "all", "proj-a", null, 1, [], TestContext.Current.CancellationToken);
-        await _sut.RecordSearchAsync("c2", "q2", "all", "proj-a", null, 1, [], TestContext.Current.CancellationToken);
+        await _sut.RecordSearchAsync(correlationId: "c1", query: "q1", scope: "all", projectId: "proj-a", sessionId: "sess-test", resultCount: 1, topSourceFiles: [], ct: TestContext.Current.CancellationToken);
+        await _sut.RecordSearchAsync(correlationId: "c2", query: "q2", scope: "all", projectId: "proj-a", sessionId: "sess-test", resultCount: 1, topSourceFiles: [], ct: TestContext.Current.CancellationToken);
         await _sut.RecordFollowThroughAsync("c1", "/file.md", TestContext.Current.CancellationToken);
 
         var metrics = await _sut.GetMetricsAsync("proj-a", DateTimeOffset.MinValue, TestContext.Current.CancellationToken);
@@ -131,10 +132,31 @@ public sealed class SearchQualityServiceTests : IDisposable
         await EnsureSchemaAsync();
 
         await _sut.RecordSearchAsync(
-            "corr-null", "query", null, null, null,
-            0, [], TestContext.Current.CancellationToken);
+            correlationId: "corr-null", query: "query", scope: null, projectId: null, sessionId: "sess-test",
+            resultCount: 0, topSourceFiles: [], ct: TestContext.Current.CancellationToken);
 
         var metrics = await _sut.GetMetricsAsync(null, DateTimeOffset.MinValue, TestContext.Current.CancellationToken);
         metrics.TotalSearches.ShouldBe(1);
+    }
+
+    /// <summary>
+    ///     P1: the present session id is stored verbatim — row-read through the real service,
+    ///     not spy-only. Pre-P1 the Safe path hardcoded null, so this read back NULL.
+    /// </summary>
+    [RetryFact]
+    public async Task RecordSearchSafe_PresentSessionId_StoredVerbatim()
+    {
+        await EnsureSchemaAsync();
+
+        await _sut.RecordSearchSafeAsync(
+            correlationId: "corr-sess-1", query: "session verbatim query", scope: "all", projectId: "proj-a",
+            sessionId: "sess-abc-123", resultCount: 1, topSourceFiles: [],
+            ct: TestContext.Current.CancellationToken);
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var stored = await connection.QuerySingleOrDefaultAsync<string?>(
+            "SELECT session_id FROM search_quality WHERE correlation_id = @Id",
+            new { Id = "corr-sess-1" });
+        stored.ShouldBe("sess-abc-123");
     }
 }

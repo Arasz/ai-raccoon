@@ -18,13 +18,14 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
         string query,
         string? scope,
         string? projectId,
+        string sessionId,
         int resultCount,
         IReadOnlyList<string> topSourceFiles,
         CancellationToken ct = default)
     {
         try
         {
-            await RecordSearchAsync(correlationId, query, scope, projectId, null, resultCount, topSourceFiles, ct)
+            await RecordSearchAsync(correlationId, query, scope, projectId, sessionId, resultCount, topSourceFiles, ct)
                 .ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -38,7 +39,7 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
         string query,
         string? scope,
         string? projectId,
-        string? sessionId,
+        string sessionId,
         int resultCount,
         IReadOnlyList<string> topSourceFiles,
         CancellationToken ct = default)
