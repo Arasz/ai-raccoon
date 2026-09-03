@@ -193,7 +193,15 @@ def _record_follow_through_sql(correlation_id: str, file_path: str) -> None:
                 files = []
             if not isinstance(files, list):
                 files = []
-            if file_path not in files:
+            # P4 object rows ({path, rank}) interop: bare-string membership misses
+            # dict elements, so compare by path across both shapes. New files still
+            # append as bare strings, which the C# per-element fallback reads.
+            known = {
+                e.get("path") if isinstance(e, dict) else e
+                for e in files
+                if isinstance(e, (dict, str))
+            }
+            if file_path not in known:
                 files.append(file_path)
             conn.execute(
                 "UPDATE search_quality SET follow_through_count = ?, "

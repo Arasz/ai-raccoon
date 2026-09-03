@@ -583,14 +583,15 @@ public sealed class NoOpSearchQualityService : ISearchQualityService
         Task.FromResult(0);
 
     public Task RecordSearchAsync(string correlationId, string query, string? scope, string? projectId,
-        string? sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default) =>
+        string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default) =>
         Task.CompletedTask;
 
     public Task RecordSearchSafeAsync(string correlationId, string query, string? scope, string? projectId,
-        int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default) =>
+        string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default) =>
         Task.CompletedTask;
 
-    public Task RecordFollowThroughAsync(string correlationId, string filePath, CancellationToken ct = default) => Task.CompletedTask;
+    public Task RecordFollowThroughAsync(string correlationId, string filePath, int? servedRank = null,
+        CancellationToken ct = default) => Task.CompletedTask;
 
     public Task RecordGradeAsync(string projectId, string correlationId, int grade, string? note,
         CancellationToken ct = default) =>

@@ -108,8 +108,10 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
             {
                 // Bare McpException path: ToolGate.RequireAsync rejects a blank project id
                 // before any access check (invalid-params is in DirectThrowPrefixes).
+                // sessionId is required since P1 — a valid one is passed so the call reaches
+                // the tool-level refusal instead of the SDK's missing-param marshaller error.
                 "memory_search",
-                new Dictionary<string, object?> { ["projectId"] = "", ["query"] = "x" },
+                new Dictionary<string, object?> { ["projectId"] = "", ["query"] = "x", ["sessionId"] = "sess-test" },
                 "invalid-params",
                 null,
                 null
@@ -484,7 +486,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
                     cancellationToken: TestContext.Current.CancellationToken);
 
                 var result = await client.CallToolAsync("memory_search",
-                    new Dictionary<string, object?> { ["projectId"] = "", ["query"] = "x" },
+                    new Dictionary<string, object?> { ["projectId"] = "", ["query"] = "x", ["sessionId"] = "sess-test" },
                     cancellationToken: TestContext.Current.CancellationToken);
 
                 // (a) caller-facing text unchanged in shape — the enriched cwd-aware refusal;

@@ -44,14 +44,24 @@ internal static class MemorySchema
     ///     <see cref="MigrateToV7Async" />/<see cref="MigrateToV8Async" />/
     ///     <see cref="MigrateToV9Async" />/
     ///     <see cref="MigrateToV10Async" /> (ADR-0011),
-    ///     <see cref="MigrateToV11Async" />. Not every schema change needs a ladder
+    ///     <see cref="MigrateToV11Async" />,
+    ///     <see cref="MigrateToV12Async" /> (ADR-0097). Not every schema change needs a ladder
     ///     step: a trigger body replacement that is safely re-runnable on every open belongs in the
     ///     unconditional <see cref="Ddl" /> instead (ADR-0023 amendment) — the ladder is for changes
     ///     that need guarded, one-time work.
     /// </summary>
-    internal const int CurrentVersion = 11;
+    internal const int CurrentVersion = 12;
 
     private const int DefaultEmbeddingDimension = 384;
+
+    /// <summary>
+    ///     Backfill cutoff for the v12 <c>search_quality.kind</c> column (ADR-0097):
+    ///     <c>git show -s --format=%ct 356afe95</c> — the commit whose rows predate kind
+    ///     entirely, so every row older than this ran the memory leg and backfills to
+    ///     <c>'memory'</c>. Rows at or after the cutoff keep NULL until the write path
+    ///     records their kind.
+    /// </summary>
+    internal const long SearchQualityKindBackfillCutoff = 1788447366;
 
     /// <summary>
     ///     The promotion_queue_entries_ad body (ADR-0023, amended by H4 and again by ADR-0046):
@@ -67,6 +77,34 @@ internal static class MemorySchema
                                                                                        AND {ProjectRows.Scope("e.")});
                                                                END;
                                                                """;
+
+    /// <summary>
+    ///     The <c>search_quality</c> table shape, declared once: the digest-gated <see cref="Ddl" />
+    ///     block interpolates it for fresh banks, and the v12 ladder step executes it for the
+    ///     staged-absence branch (a runtime DROP the digest gate cannot see) — one definition,
+    ///     two call sites, never a copy. ADR-0097 adds the nullable <c>kind</c> column with
+    ///     <c>CHECK(kind IN ('memory','code','both'))</c>; legacy NULLs backfill in the ladder.
+    /// </summary>
+    private const string SearchQualityTableDdl = """
+        CREATE TABLE IF NOT EXISTS search_quality (
+            id                INTEGER PRIMARY KEY,
+            correlation_id    TEXT NOT NULL UNIQUE,
+            query             TEXT NOT NULL,
+            scope             TEXT,
+            project_id        TEXT,
+            session_id        TEXT,
+            kind              TEXT CHECK(kind IN ('memory','code','both')),
+            result_count      INTEGER,
+            top_source_files  TEXT,       -- JSON array of SourceFile paths
+            follow_through_count INTEGER  DEFAULT 0,
+            follow_through_files TEXT,    -- JSON array of files read after search
+            usefulness_grade  INTEGER     CHECK(usefulness_grade BETWEEN 1 AND 5),
+            grade_note        TEXT,
+            created_at        INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_sq_project_time ON search_quality(project_id, created_at);
+        """;
 
     // workspace_id carries its own FK to workspaces and a CHECK enforcing "workspace XOR
     // committed scope": an entry is either workspace-scratch or one of shared/project/custom, never both.
@@ -330,23 +368,7 @@ internal static class MemorySchema
                                           -- Search-quality metric: tracks every memory_search call with correlation-id,
                                           -- follow-through (did the agent use the result?), and usefulness grade.
                                           -- See docs/plans/2026-08-11-search-quality-metric-plan.md.
-                                          CREATE TABLE IF NOT EXISTS search_quality (
-                                              id                INTEGER PRIMARY KEY,
-                                              correlation_id    TEXT NOT NULL UNIQUE,
-                                              query             TEXT NOT NULL,
-                                              scope             TEXT,
-                                              project_id        TEXT,
-                                              session_id        TEXT,
-                                              result_count      INTEGER,
-                                              top_source_files  TEXT,       -- JSON array of SourceFile paths
-                                              follow_through_count INTEGER  DEFAULT 0,
-                                              follow_through_files TEXT,    -- JSON array of files read after search
-                                              usefulness_grade  INTEGER     CHECK(usefulness_grade BETWEEN 1 AND 5),
-                                              grade_note        TEXT,
-                                              created_at        INTEGER NOT NULL
-                                          );
-
-                                          CREATE INDEX IF NOT EXISTS idx_sq_project_time ON search_quality(project_id, created_at);
+                                          {SearchQualityTableDdl}
 
                                           -- Universal self-instrumentation row (docs/plans/2026-08-15-performance-metrics-implementation.md,
                                           -- WP0). project_id/query_hash/correlation_id are real, indexed columns rather than
@@ -734,6 +756,11 @@ internal static class MemorySchema
             await MigrateToV11Async(connection, cancellationToken).ConfigureAwait(false);
         }
 
+        if (healthy && storedVersion < 12)
+        {
+            await MigrateToV12Async(connection, cancellationToken).ConfigureAwait(false);
+        }
+
         // Both stamps land together, only once the ladder actually finished (healthy): stamping the
         // digest on a degraded (unhealthy) run would let EnsureCheapAsync trust a bank whose ladder
         // never completed, the same bug this reordering exists to close (Data F1 / D5).
@@ -1040,6 +1067,78 @@ internal static class MemorySchema
             await connection.ExecuteAsync(
                     new CommandDefinition(
                         "DROP INDEX IF EXISTS uq_sync_tombstones_project_identity",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    /// <summary>Ladder step 12 (ADR-0097): the <c>search_quality.kind</c> column — nullable
+    ///     <c>TEXT CHECK(kind IN ('memory','code','both'))</c> — with a cutoff backfill to
+    ///     <c>'memory'</c> for rows older than <see cref="SearchQualityKindBackfillCutoff" />
+    ///     (the <c>356afe95</c> landing: every pre-kind row ran the memory leg). The whole step
+    ///     runs inside one <c>BEGIN IMMEDIATE</c> transaction, single-writer by construction: a
+    ///     concurrent opener blocks on the lock instead of racing the ALTER, and a crash
+    ///     mid-step rolls back to the intact v11 shape, retried on the next open. The only
+    ///     early return is the table-absence one — a runtime DROP the digest gate cannot see
+    ///     (it hashes the Ddl string, not the live objects), recreated here from
+    ///     <see cref="SearchQualityTableDdl" />. Otherwise the column is ensured probe-first
+    ///     and the backfill is a set UPDATE over <c>kind IS NULL</c> — rerunnable, idempotent,
+    ///     explicit kinds never clobbered, and a no-op on an empty table (no row reads at all,
+    ///     so emptiness cannot trip a materializer).
+    /// </summary>
+    private static async Task MigrateToV12Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        try
+        {
+            // Re-probed under the write lock — another opener may have migrated between the
+            // ladder's version read and this BEGIN.
+            var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                    "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'search_quality'",
+                    cancellationToken: cancellationToken))
+                .ConfigureAwait(false) > 0;
+            if (!hasTable)
+            {
+                await connection.ExecuteAsync(
+                        new CommandDefinition(SearchQualityTableDdl, cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                await connection.ExecuteAsync(
+                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            var columns = (await connection.QueryAsync<string>(
+                    new CommandDefinition(
+                        "SELECT name FROM pragma_table_info('search_quality')",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false)).ToList();
+            if (!columns.Contains("kind", StringComparer.Ordinal))
+            {
+                await connection.ExecuteAsync(
+                        new CommandDefinition(
+                            "ALTER TABLE search_quality ADD COLUMN kind TEXT CHECK(kind IN ('memory','code','both'))",
+                            cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+            }
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "UPDATE search_quality SET kind = 'memory' WHERE kind IS NULL AND created_at < @Cutoff",
+                        new { Cutoff = SearchQualityKindBackfillCutoff },
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
 

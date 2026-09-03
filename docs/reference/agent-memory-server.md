@@ -42,8 +42,8 @@ config channel (see [Command-line options](#command-line-options)).
 |--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
 | `memory_write`                 | `projectId`, `content`, `workspaceId?`, `agentId?`, `context?`, `sourceFile?`, `section?`                                                                   | `{hash, path, context, createdAt}`                                                                 |
 | `memory_get`                   | `projectId`, `hash`                                                                                                                                         | `{hash, value, path, context, createdAt}`                                                          |
-| `memory_search`                | `projectId`, `query`, `scope=all\|project\|shared`, `workspaceId?`, `limit=8`, `minRelativeScore=0.6`, `rrfK=60`, `ftsWeight=1`, `vectorWeight=1`, `contextLabel?`, `kind=memory\|code\|both` (default `both`) | `{results:[{hash, ranking, path, snippet, sourceFile?, chunkIndex, totalChunks}], code?:[{hash, ranking, path, snippet, lineStart, lineEnd}], warning?}` |
-| `memory_record_followthrough`  | `projectId`, `correlationId`, `filePath`                                                                                                                    | `{recorded: true}`                                                                                 |
+| `memory_search`                | `projectId`, `query`, `sessionId!`, `scope=all\|project\|shared`, `workspaceId?`, `limit=8`, `minRelativeScore=0.6`, `rrfK=60`, `ftsWeight=1`, `vectorWeight=1`, `contextLabel?`, `kind=memory\|code\|both` (default `both`) | `{results:[{hash, ranking, path, snippet, sourceFile?, chunkIndex, totalChunks}], code?:[{hash, ranking, path, snippet, lineStart, lineEnd}], warning?}` |
+| `memory_record_followthrough`  | `projectId`, `correlationId`, `filePath`, `servedRank?`                                                                                                                    | `{recorded: true}`                                                                                 |
 | `memory_record_grade`          | `projectId`, `correlationId`, `grade`, `note?`                                                                                                              | `{recorded: true}`                                                                                 |
 | `memory_list`                  | `projectId`                                                                                                                                                 | `{files: <json tree>}`                                                                             |
 | `memory_stats`                 | `projectId`                                                                                                                                                 | `{entries, pending, contexts}`                                                                     |
@@ -103,10 +103,11 @@ config channel (see [Command-line options](#command-line-options)).
   read the full chunk with `code_get`. Every `memory_search` writes a `search_quality` row
   (ADR-0094): `kind=memory` records the memory hit count and files as always, `kind=both`
   records the memory leg the same way, and `kind=code` records the code hit count with an empty
-  file list. Code paths never enter the table, since its rows travel in the sync snapshot and
-  the code corpus never leaves the machine. `meta.correlationId` is present on all three kinds
+  file list. Code paths never enter the table — neither the code corpus nor the telemetry
+  tables ever leave the machine (code per ADR-0085, telemetry stripped from every pushed
+  snapshot per ADR-0098). `meta.correlationId` is present on all three kinds
   (the id `memory_record_grade`/`memory_record_followthrough` key off), since every search now
-  has a row behind it.
+  has a row behind it. `sessionId` is required on every search. Pass your session id. Blank fails fast. The server stores the value verbatim on the row. When you open a file the search returned, call `memory_record_followthrough` with that id, the file path, and `servedRank` when you saw one. Rank is 1-based. Under `kind=both` a bare rank cannot name its section, and that ambiguity is intentional. Grade with `memory_record_grade` (1-5, 5 is best, plus an optional note) on the same id when you have a judgment.
 - **`memory_ingest_file`/`memory_ingest_directory` feed the code corpus too:** a file is routed
   by extension — the memory-owned extensions (`.md`/`.markdown`/`.txt`/`.json`) always win on
   overlap; a recognized code extension (`.cs`, `.py`, `.ts`, `.go`, `.rs`, … — the v1 list is

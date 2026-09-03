@@ -81,7 +81,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
 
         var before = await CountMetricsRowsAsync();
 
-        await _tools.Search("acme", "chassis", cancellationToken: TestContext.Current.CancellationToken);
+        await _tools.Search("acme", "chassis", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         var after = await CountMetricsRowsAsync();
         after.ShouldBe(before, "no measurement may be written on the caller's thread during memory_search");
@@ -98,7 +98,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
     {
         await _tools.Write("acme", "the chassis pattern decision", cancellationToken: TestContext.Current.CancellationToken);
 
-        var envelope = await _tools.Search("acme", "chassis", cancellationToken: TestContext.Current.CancellationToken);
+        var envelope = await _tools.Search("acme", "chassis", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data.ShouldNotBeNull();
         envelope.Data.Results.ShouldNotBeEmpty("the search must return its own results even though nothing has been flushed yet");
@@ -123,7 +123,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
     {
         await _tools.Write("acme", "the chassis pattern decision", cancellationToken: TestContext.Current.CancellationToken);
 
-        var envelope = await _tools.Search("acme", "chassis", kind: "memory",
+        var envelope = await _tools.Search("acme", "chassis", sessionId: "sess-test", kind: "memory",
             cancellationToken: TestContext.Current.CancellationToken);
         var correlationId = envelope.Meta.CorrelationId.ShouldNotBeNull();
 
@@ -152,8 +152,8 @@ public sealed class SearchMetricsIsolationTests : IDisposable
     {
         await _tools.Write("acme", "the chassis pattern decision", cancellationToken: TestContext.Current.CancellationToken);
 
-        var first = await _tools.Search("acme", "chassis", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
-        var second = await _tools.Search("acme", "chassis", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
+        var first = await _tools.Search("acme", "chassis", sessionId: "sess-test", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
+        var second = await _tools.Search("acme", "chassis", sessionId: "sess-test", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
         var firstCorrelationId = first.Meta.CorrelationId.ShouldNotBeNull();
         var secondCorrelationId = second.Meta.CorrelationId.ShouldNotBeNull();
         firstCorrelationId.ShouldNotBe(secondCorrelationId, "two genuinely separate runs, not one call counted twice");
@@ -206,7 +206,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
         await toolsUnderRestrictiveSettings.Write("acme", "the chassis pattern decision",
             cancellationToken: TestContext.Current.CancellationToken);
 
-        await toolsUnderRestrictiveSettings.Search("acme", "chassis", cancellationToken: TestContext.Current.CancellationToken);
+        await toolsUnderRestrictiveSettings.Search("acme", "chassis", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         restrictiveBuffer.EnqueuedCount.ShouldBeGreaterThan(0, "no combination of restrictive settings may disable measurement");
         restrictiveBuffer.DroppedCount.ShouldBeGreaterThan(0,
@@ -267,7 +267,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
 
         var before = await CountMetricsRowsAsync();
 
-        await toolsWithSynchronousRecorder.Search("acme", "chassis", cancellationToken: TestContext.Current.CancellationToken);
+        await toolsWithSynchronousRecorder.Search("acme", "chassis", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         var after = await CountMetricsRowsAsync();
         after.ShouldBeGreaterThan(before,

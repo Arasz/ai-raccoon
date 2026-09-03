@@ -287,7 +287,7 @@ public class MemoryToolsTests
     public async Task Search_WithInvalidScope_ThrowsMcpException()
     {
         var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.Search("acme", "q", "bogus", cancellationToken: TestContext.Current.CancellationToken));
+            _tools.Search("acme", "q", sessionId: "sess-test", scope: "bogus", cancellationToken: TestContext.Current.CancellationToken));
         ex.Message.ShouldStartWith("invalid-params: ");
         ex.Message.ShouldContain("scope");
     }
@@ -295,7 +295,7 @@ public class MemoryToolsTests
     [Fact]
     public async Task Search_WithAllScope_DelegatesWithSearchScopeAll()
     {
-        await _tools.Search("acme", "query", cancellationToken: TestContext.Current.CancellationToken);
+        await _tools.Search("acme", "query", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         _store.LastQuery!.Scope.ShouldBe(SearchScope.All);
         _store.LastQuery.ProjectId.ShouldBe("acme");
@@ -310,7 +310,7 @@ public class MemoryToolsTests
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
 
-        var envelope = await tools.Search("acme", "widgets", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
+        var envelope = await tools.Search("acme", "widgets", sessionId: "sess-test", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
         var correlationId = envelope.Meta.CorrelationId.ShouldNotBeNull();
 
         recorder.Recorded.Select(m => m.Name).ShouldBe(SearchTimings.SeriesNames, ignoreOrder: true);
@@ -333,7 +333,7 @@ public class MemoryToolsTests
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
 
-        var envelope = await tools.Search("acme", "widgets", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
+        var envelope = await tools.Search("acme", "widgets", sessionId: "sess-test", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
         var correlationId = envelope.Meta.CorrelationId.ShouldNotBeNull();
 
         var fusion = recorder.Recorded.Where(m => FusionDiff.MetricNames.Contains(m.Name)).ToList();
@@ -353,7 +353,7 @@ public class MemoryToolsTests
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
 
-        await tools.Search("acme", "widgets", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
+        await tools.Search("acme", "widgets", sessionId: "sess-test", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
 
         _store.Fusion.ShouldBeNull();
         recorder.Recorded.ShouldNotContain(m => FusionDiff.MetricNames.Contains(m.Name));
@@ -373,7 +373,7 @@ public class MemoryToolsTests
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance, time);
 
-        await tools.Search("acme", "widgets", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
+        await tools.Search("acme", "widgets", sessionId: "sess-test", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
 
         recorder.Recorded.ShouldAllBe(m => m.RecordedAt == FixedNow);
     }
@@ -387,7 +387,7 @@ public class MemoryToolsTests
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
 
-        var envelope = await tools.Search("acme", "widgets", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
+        var envelope = await tools.Search("acme", "widgets", sessionId: "sess-test", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data.ShouldNotBeNull();
         recorder.Recorded.ShouldBeEmpty("the throwing recorder never got to append anything");
@@ -407,7 +407,7 @@ public class MemoryToolsTests
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
 
-        await tools.Search("acme", "widgets", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
+        await tools.Search("acme", "widgets", sessionId: "sess-test", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
 
         recorder.CallCount.ShouldBe(1,
             "the first phase measurement's write fails and RecordPhaseMeasurements' loop stops there — nothing retries it");
@@ -416,7 +416,7 @@ public class MemoryToolsTests
     [Fact]
     public async Task Search_WithFusionParameters_DelegatesThemOnTheQuery()
     {
-        await _tools.Search("acme", "query", rrfK: 30, ftsWeight: 2, vectorWeight: 1,
+        await _tools.Search("acme", "query", sessionId: "sess-test", rrfK: 30, ftsWeight: 2, vectorWeight: 1,
             cancellationToken: TestContext.Current.CancellationToken);
 
         _store.LastQuery!.RrfK.ShouldBe(30);
@@ -427,7 +427,7 @@ public class MemoryToolsTests
     [Fact]
     public async Task Search_WithoutTuningParameters_PassesNullsThrough()
     {
-        await _tools.Search("acme", "query", cancellationToken: TestContext.Current.CancellationToken);
+        await _tools.Search("acme", "query", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         // Tuning values are "no opinion" at the query layer; the store resolves them
         // against its settings/defaults (SearchParameters.FromSources).
@@ -443,7 +443,7 @@ public class MemoryToolsTests
     [Fact]
     public async Task Search_WithTuningParameters_DelegatesThemOnTheQuery()
     {
-        await _tools.Search("acme", "query", rrfK: 30, ftsWeight: 2, vectorWeight: 1, sourceLambda: 0.3,
+        await _tools.Search("acme", "query", sessionId: "sess-test", rrfK: 30, ftsWeight: 2, vectorWeight: 1, sourceLambda: 0.3,
             consolidationThreshold: 0.05, docScoreFormula: "sum", candidateWindow: "max5x50",
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -462,7 +462,7 @@ public class MemoryToolsTests
     public async Task Search_WithInvalidRrfK_FailsFastBeforeAnyBankWork(int rrfK)
     {
         var ex = await Should.ThrowAsync<ValidationException>(() =>
-            _tools.Search("acme", "query", rrfK: rrfK, cancellationToken: TestContext.Current.CancellationToken));
+            _tools.Search("acme", "query", sessionId: "sess-test", rrfK: rrfK, cancellationToken: TestContext.Current.CancellationToken));
 
         ToolRefusals.PrefixFor(ex).ShouldBe("invalid-params", "the wire prefix is the contract, not the exception type");
         _store.LastQuery.ShouldBeNull("the store must not be reached when the provided values are invalid");
@@ -472,7 +472,7 @@ public class MemoryToolsTests
     public async Task Search_WithOutOfRangeSourceLambda_FailsFastBeforeAnyBankWork()
     {
         var ex = await Should.ThrowAsync<ValidationException>(() =>
-            _tools.Search("acme", "query", sourceLambda: 2.0, cancellationToken: TestContext.Current.CancellationToken));
+            _tools.Search("acme", "query", sessionId: "sess-test", sourceLambda: 2.0, cancellationToken: TestContext.Current.CancellationToken));
 
         ToolRefusals.PrefixFor(ex).ShouldBe("invalid-params");
         _store.LastQuery.ShouldBeNull("the store must not be reached when the provided values are invalid");
@@ -484,7 +484,7 @@ public class MemoryToolsTests
     public async Task Search_WithInvalidDocScoreFormula_ThrowsInvalidParams(string formula)
     {
         var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.Search("acme", "query", docScoreFormula: formula,
+            _tools.Search("acme", "query", sessionId: "sess-test", docScoreFormula: formula,
                 cancellationToken: TestContext.Current.CancellationToken));
 
         ex.Message.ShouldStartWith("invalid-params: Invalid docScoreFormula");
@@ -494,7 +494,7 @@ public class MemoryToolsTests
     public async Task Search_WithInvalidCandidateWindow_ThrowsInvalidParams()
     {
         var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.Search("acme", "query", candidateWindow: "max",
+            _tools.Search("acme", "query", sessionId: "sess-test", candidateWindow: "max",
                 cancellationToken: TestContext.Current.CancellationToken));
 
         ex.Message.ShouldStartWith("invalid-params: Invalid candidateWindow");
@@ -513,7 +513,7 @@ public class MemoryToolsTests
     [Fact]
     public async Task Search_ForwardsContextLabel_ToStore()
     {
-        await _tools.Search("acme", "query", contextLabel: "docs:adr",
+        await _tools.Search("acme", "query", sessionId: "sess-test", contextLabel: "docs:adr",
             cancellationToken: TestContext.Current.CancellationToken);
 
         _store.LastQuery!.ContextLabel.ShouldBe("docs:adr");
@@ -533,7 +533,7 @@ public class MemoryToolsTests
     public async Task Search_WithAMachineOutputQuery_RefusesWithoutCallingTheStore()
     {
         var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.Search("acme", RealHermesProcessNotification, cancellationToken: TestContext.Current.CancellationToken));
+            _tools.Search("acme", RealHermesProcessNotification, sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken));
 
         ex.Message.ShouldStartWith("invalid-params: ");
         ex.Message.ShouldContain("tool output");
@@ -546,7 +546,7 @@ public class MemoryToolsTests
         var query = RealHermesProcessNotification + new string('x', 300);
 
         var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.Search("acme", query, cancellationToken: TestContext.Current.CancellationToken));
+            _tools.Search("acme", query, sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken));
 
         ex.Message.ShouldContain("Refused query:");
         ex.Message.ShouldContain("Background process");
@@ -557,7 +557,7 @@ public class MemoryToolsTests
     [Fact]
     public async Task Search_WithALogLikeQuery_ReturnsResultsWithAWarning()
     {
-        var result = await _tools.Search("acme", "info: something happened\n at System.Foo.Bar(baz)",
+        var result = await _tools.Search("acme", "info: something happened\n at System.Foo.Bar(baz)", sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         _store.LastQuery.ShouldNotBeNull();
@@ -567,7 +567,7 @@ public class MemoryToolsTests
     [Fact]
     public async Task Search_WithAnOrdinaryQuery_HasNoWarning()
     {
-        var result = await _tools.Search("acme", "why did the auth build start failing",
+        var result = await _tools.Search("acme", "why did the auth build start failing", sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         result.Data!.Warning.ShouldBeNull();
@@ -578,7 +578,7 @@ public class MemoryToolsTests
     {
         _store.Settings[QueryGuardConfigKeys.EnabledGlobal] = "false";
 
-        var result = await _tools.Search("acme", RealHermesProcessNotification,
+        var result = await _tools.Search("acme", RealHermesProcessNotification, sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         _store.LastQuery.ShouldNotBeNull();
@@ -593,7 +593,7 @@ public class MemoryToolsTests
     {
         var query = new string('a', QueryLengthGuard.WarnThresholdChars + 1);
 
-        var result = await _tools.Search("acme", query, cancellationToken: TestContext.Current.CancellationToken);
+        var result = await _tools.Search("acme", query, sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         result.Data!.Warning.ShouldNotBeNullOrWhiteSpace();
     }
@@ -604,7 +604,7 @@ public class MemoryToolsTests
         var query = new string('a', QueryLengthGuard.WarnThresholdChars);
         query.Length.ShouldBe(QueryLengthGuard.WarnThresholdChars); // pin the fixture to the boundary first
 
-        var result = await _tools.Search("acme", query, cancellationToken: TestContext.Current.CancellationToken);
+        var result = await _tools.Search("acme", query, sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         result.Data!.Warning.ShouldBeNull();
     }
@@ -617,7 +617,7 @@ public class MemoryToolsTests
         _store.Settings[QueryGuardConfigKeys.EnabledGlobal] = "false";
         var query = new string('a', QueryLengthGuard.WarnThresholdChars + 1);
 
-        var result = await _tools.Search("acme", query, cancellationToken: TestContext.Current.CancellationToken);
+        var result = await _tools.Search("acme", query, sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         result.Data!.Warning.ShouldNotBeNullOrWhiteSpace();
     }
@@ -630,7 +630,7 @@ public class MemoryToolsTests
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), logger);
         _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
 
-        var result = await tools.Search("acme", RealHermesProcessNotification,
+        var result = await tools.Search("acme", RealHermesProcessNotification, sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         _store.LastQuery.ShouldNotBeNull();
@@ -647,7 +647,7 @@ public class MemoryToolsTests
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), logger);
         _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
 
-        await tools.Search("acme", "why did the auth build start failing",
+        await tools.Search("acme", "why did the auth build start failing", sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         logger.Collector.Count.ShouldBe(0);
@@ -662,7 +662,7 @@ public class MemoryToolsTests
         _store.Settings[QueryGuardConfigKeys.EnabledGlobal] = "false";
         _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
 
-        await tools.Search("acme", RealHermesProcessNotification, cancellationToken: TestContext.Current.CancellationToken);
+        await tools.Search("acme", RealHermesProcessNotification, sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         logger.Collector.Count.ShouldBe(0);
     }
@@ -680,7 +680,7 @@ public class MemoryToolsTests
         // to today when off).
         _store.Settings[QueryGuardConfigKeys.StructuralThresholdGlobal] = "0.0";
 
-        var result = await _tools.Search("acme", "why did the auth build start failing",
+        var result = await _tools.Search("acme", "why did the auth build start failing", sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         result.Data!.Warning.ShouldBeNull();
@@ -692,7 +692,7 @@ public class MemoryToolsTests
         _store.Settings[QueryGuardConfigKeys.StructuralEnabledGlobal] = "true";
         _store.Settings[QueryGuardConfigKeys.StructuralThresholdGlobal] = "0.0"; // every score satisfies this
 
-        var result = await _tools.Search("acme", "why did the auth build start failing",
+        var result = await _tools.Search("acme", "why did the auth build start failing", sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         _store.LastQuery.ShouldNotBeNull(); // never refuses
@@ -705,7 +705,7 @@ public class MemoryToolsTests
         _store.Settings[QueryGuardConfigKeys.StructuralEnabledGlobal] = "true";
         _store.Settings[QueryGuardConfigKeys.StructuralThresholdGlobal] = "1.1"; // no score can satisfy this
 
-        var result = await _tools.Search("acme", "why did the auth build start failing",
+        var result = await _tools.Search("acme", "why did the auth build start failing", sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         result.Data!.Warning.ShouldBeNull();
@@ -718,7 +718,7 @@ public class MemoryToolsTests
         _store.Settings[QueryGuardConfigKeys.StructuralThresholdGlobal] = "0.0";
 
         var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.Search("acme", RealHermesProcessNotification, cancellationToken: TestContext.Current.CancellationToken));
+            _tools.Search("acme", RealHermesProcessNotification, sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken));
 
         ex.Message.ShouldStartWith("invalid-params: ");
         _store.LastQuery.ShouldBeNull();
@@ -734,7 +734,7 @@ public class MemoryToolsTests
         _store.Settings[QueryGuardConfigKeys.StructuralThresholdGlobal] = "0.0";
         _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
 
-        var result = await tools.Search("acme", "why did the auth build start failing",
+        var result = await tools.Search("acme", "why did the auth build start failing", sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         result.Data!.Warning.ShouldBeNull();

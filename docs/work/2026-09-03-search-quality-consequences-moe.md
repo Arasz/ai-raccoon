@@ -179,3 +179,94 @@ B's privacy-first instinct is honored by placing the strip second rather than la
 
 Items 2–6 are each small enough to ship alone. None of them belongs smuggled into PR #596,
 which stays a telemetry-restore change with privacy pins, nothing more.
+
+---
+
+## Item 6 closure — consumer review (P5 audit, 2026-09-03, lane `air-followup-p5-audit`)
+
+Read-only audit plus two deliberately-scoped pins; no production behavior change
+(`git diff --stat src/` empty at close). Every inventory below re-grepped at build time;
+no line number inherited. Planned shapes judged against: required sessionId (P1),
+stripped sync (P2), kind column (P3), ranked follow-through files (P4) — none landed in
+this worktree (base `9aebeaa8`), so verdicts record current state + planned impact.
+
+1. **GetMetricsAsync kind-blindness — confirmed, pooled semantics pinned.** SQL filters
+   `created_at` + `project_id` only (`SqliteSearchQualityService.cs:120-150`); no `kind`
+   column exists (`MemorySchema.cs:333-349`); result has no per-kind breakdown
+   (`SearchQualityMetrics.cs`). Zero production callers (only def/interface/doc-ref under
+   `src/`). Rationale recorded: pooled semantics deliberate; split only on a named new
+   consumer (none). Pin: `GetMetrics_PooledSemantics_CountsAllRowsRegardlessOfScope`
+   (`SearchQualityServiceTests.cs`) — red-proofed (`AND scope = 'all'` mutation:
+   `TotalSearches should be 4 but was 1`).
+2. **follow_through/RecordGrade projectId-forwarding gap — confirmed, accepted-out-of-scope
+   + pinned (absence pin), stated never silent.** `QualityTools.cs:30-32` resolves canonical
+   project for the gate but forwards no project to `RecordFollowThroughAsync` (signature has
+   none, `ISearchQualityService.cs:43-45`); `RecordGradeAsync` takes projectId but binds only
+   `Id/Grade/Note`, `WHERE correlation_id` only (`SqliteSearchQualityService.cs:102-116`).
+   No live cross-project grade demonstrated (ids UNIQUE per `MemorySchema.cs:335`,
+   unguessable envelope values; gate still enforces write access) — out of scope per the
+   correlationId-only-keying ruling. Pin:
+   `RecordGrade_CorrelationIdOnlyKeying_ProjectIdNotAPredicate` — red-proofed
+   (`AND project_id = @ProjectId` mutation: `GradedSearches should be 1 but was 0`). Any
+   future re-scoping trips it for deliberate revisit.
+3. **Zero session_id readers — confirmed, acceptance recorded.** `session_id` occurs only in
+   DDL (`MemorySchema.cs:339`) and the INSERT (`SqliteSearchQualityService.cs:52-63`); zero
+   `SELECT … session` hits repo-wide; sole writer passes null (`Safe`,
+   `SqliteSearchQualityService.cs:27`; dispatcher has no session source). P1 changes no
+   consumer. No pin.
+4. **Probe line struck — confirmed, no P4-compat work.** `QueryGuardRecallProbe.cs:53`
+   selects only `query`; zero `servedRank` in `*.cs`; sole `follow_through_files` reader is
+   the writer itself. No fixture busywork done. No pin.
+5. **Grade fail-fast — NO behavior change (default stands).** No range guard in
+   `QualityTools.cs:42-56` or the service; only the DB CHECK (`MemorySchema.cs:344`). The
+   decider bar (tool-error-log CHECK-violation search) is unobservable from the bank — no
+   such log infra in-repo — so bar-as-absent → no guard added. Owner note: the bar stays
+   open; a future CHECK-violation sighting reopens the guard question as its own package.
+6. **review-tests lens on both pins.** Pin 1 failure mode: silent dashboard narrowing;
+   mutation above proves it trips. Pin 2 failure mode: silent re-scoping of grade keying;
+   mutation above proves it trips. Fixtures non-degenerate (multi-row, mixed scopes,
+   cross-project seeds); secondaries asserted (rates, average, coverage, totals).
+
+Follow-up sketched, NOT implemented (needs its own package if ever wanted): post-P3,
+extend the pooled pin with multi-kind seeds so a kind-filtered GetMetrics trips on kind
+itself rather than via the scope proxy. AC: seed memory/code/both rows, assert pooled
+totals; mutation kind-filtered GetMetrics fails; file: the same quality test file.
+
+---
+
+## Item 7 closure — P7 integration join (2026-09-03, lane `air-followup-p7-integration`, PR #602 DRAFT)
+
+Join: four `--no-ff` merges onto `a26f7772` (task docs → P2 strip → P5 audit → P6-chain
+`e9fb2946`), each SHA-verified before merging, no surprises. SHAs and per-file conflict
+resolutions live in the PR description; the short version: the only real collision was the
+known one — main owns `docs/adr/0095-promotion-scorer-rebalance-ablation-pair.md`, so our
+strip record moved `0095-telemetry-never-syncs.md` → `0098-telemetry-never-syncs.md`
+(header + README row + four `ADR-0095` code/test refs → `ADR-0098` in the same sweep;
+main's 0095 byte-identical, verified by empty diff). Our `0097` kind record stood — main
+had taken only 0095/0096 (`ls docs/adr` at build; `AdrIndexTests` green is the proof).
+`agent-memory-server.md` took both sides (main's limit-8/floor-0.6 row + lane's
+`sessionId!`/`servedRank?`); `SearchQualityServiceTests.cs` took the P6-chain body with
+the P5 pins re-applied on the new kind+sessionId signatures.
+
+Sketched follow-up CLOSED here, not deferred: the pooled pin now seeds memory/code/both
+kinds (`GetMetrics_PooledSemantics_CountsAllRowsRegardlessOfScopeAndKind`) — red-proofed
+at the join (`AND kind = 'memory'` mutation: `TotalSearches should be 4 but was 2`).
+The correlation-keying pin re-verified on new signatures (`AND project_id` mutation:
+`GradedSearches should be 1 but was 0`). Failure-isolation matrix spot-checked both
+ways (disable session-forward → exactly the session spy assertion fails, kind green;
+disable kind-forward → exactly the kind spy assertions fail, session green).
+
+Integration findings (fixed in-join, no new packages): P1 missed three wire consumers —
+`ToolRefusalsTests` memory_search rows (SDK missing-`sessionId` error masked the
+tool-level refusal) and one E2E caller — each given an explicit sessionId; P3/P4's bare
+`[Theory]` tripped main's newer retry-surface gate (→ `[RetryTheory]` ×4). Leak-comment
+sweep: the second `MemoryTools` witness + the reference-doc "rows travel" line now state
+the ADR-0098 stripped truth (first witnesses already did). Re-greps: zero production
+`GetMetricsAsync` callers, no promotion reads of `search_quality`, sole
+`follow_through_files` reader still the writer, `search_quality_eval.json` kind-free and
+unconsumed — no scope creep. No ADR-consequence changes: behavior matches the records
+as written (0094/0097/0098); the renumber is recorded here and in plan v5, not in 0098
+itself. Open hypothesis: `BothTransports_CreateWebHostWithStdio` fails on this box
+(Kestrel bind canceled; live `ai-raccoon serve` processes compete for loopback) on a code
+path the join never touches — CI on a clean runner judges.
+

@@ -263,7 +263,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
             new QueryGuardService(settings), new MemoryWriteService(memoryStore, new FakePromotionQueue()),
             new NoOpMeasurementRecorder(), NullLogger<MemoryTools>.Instance);
 
-        var envelope = await tools.Search("acme", "anything", cancellationToken: TestContext.Current.CancellationToken);
+        var envelope = await tools.Search("acme", "anything", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data.ShouldNotBeNull("memory tools must never be blocked by a pending code drain -- no ToolGate interaction at all");
     }

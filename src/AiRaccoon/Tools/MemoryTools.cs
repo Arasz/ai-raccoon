@@ -101,7 +101,11 @@ public sealed partial class MemoryTools(
     [Description(
         "Hybrid semantic search over the bank. scope=all (default) searches shared + project (+ workspace when named); "
         + "scope=project searches the project only; scope=shared searches the shared promotion tier only. A project scope "
-        + "covers every context in the project unless contextLabel narrows it to one. A result warning of '"
+        + "covers every context in the project unless contextLabel narrows it to one. sessionId is required: every agent "
+        + "has a session, and the id is stored verbatim on the search_quality row. Kind defaults to both, with each "
+        + "section ranked by its own hybrid. Every search records a search_quality row and returns meta.correlationId "
+        + "for grade and follow-through. Memory and both store the memory leg count and files. Code stores the code "
+        + "count with an empty file list. Code paths never enter the table. A result warning of '"
         + CodeSearchWarnings.EngineNotConfiguredPrefix + "' means the code section is keyword-only because the code "
         + "embedding engine is not installed: relay '" + CodeEngineSetup.DefaultModelCommand + "' to the user once and "
         + "treat the code hits as incomplete; re-running the search changes nothing until that command runs.")]
@@ -115,6 +119,10 @@ public sealed partial class MemoryTools(
             "is code or both, the code leg's own engine window is wider (510 tokens for " +
             "code-daemon-embed-v1) — a query trimmed for code may still fit the memory leg in full.")]
         string query,
+        [Description(
+            "The calling agent's session id. Required attribution, stored verbatim on the search_quality row; " +
+            "blank is rejected fail-fast.")]
+        string sessionId,
         [Description("Search scope: all (default), project, or shared.")]
         string scope = "all",
         [Description("When set, also searches this workspace's isolated context.")]
@@ -161,6 +169,7 @@ public sealed partial class MemoryTools(
         CancellationToken cancellationToken = default)
     {
         var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemorySearch, cancellationToken);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
 
         var parsedScope = scope.ToLowerInvariant() switch
         {
@@ -192,12 +201,14 @@ public sealed partial class MemoryTools(
 
         var correlationId = Guid.CreateVersion7().ToString("N");
         var dispatch = await searchDispatcher.DispatchAsync(searchQuery, parsedKind, scope, correlationId,
-            codeLimit, codeMinRelativeScore, cancellationToken);
+            sessionId: sessionId, codeLimit: codeLimit, codeMinRelativeScore: codeMinRelativeScore,
+            cancellationToken: cancellationToken);
 
         if (dispatch.MemorySearchResults is not null)
         {
-            // The metrics table syncs off-machine like search_quality, so the query-content hash
-            // stays excluded for a code-adjacent kind -- only the hash, not the whole recording
+            // The metrics table never leaves the machine (stripped from every pushed snapshot per ADR-0098,
+            // like search_quality), so the query-content hash stays excluded for a code-adjacent kind
+            // as defense-in-depth -- only the hash, not the whole recording
             // (integration review S6, unchanged by ADR-0094). search_quality itself now records
             // every kind (ADR-0094), with code paths never stored.
             var queryHash = parsedKind == SearchKind.Memory ? ContentHash.OfValue(query) : null;
@@ -451,8 +462,9 @@ public sealed partial class MemoryTools(
     ///     present only when the no-fusion-regression flag is on (docs/adr/0078) — with the query
     ///     hash and correlation id and hands them to the recorder; never the query text itself
     ///     (SqliteMetricsStore's save-time allowlist rejects it). queryHash is null for a
-    ///     code-adjacent kind (kind=both): the metrics table syncs off-machine like search_quality,
-    ///     so a code-adjacent query's content hash is excluded the same way. Best-effort: a
+    ///     code-adjacent kind (kind=both): the metrics table never leaves the machine (stripped
+    ///     from every pushed snapshot per ADR-0098, like search_quality), so a code-adjacent
+    ///     query's content hash is excluded the same way as defense-in-depth. Best-effort: a
     ///     throwing recorder must never fail or slow the search (WP3).
     /// </summary>
     private void RecordSearchMeasurements(SearchResults results, string? queryHash, string correlationId, string projectId)

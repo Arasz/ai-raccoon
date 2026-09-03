@@ -515,7 +515,7 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
             true);
         await using var client = await McpClient.CreateAsync(transport, cancellationToken: TestContext.Current.CancellationToken);
         var result = await client.CallToolAsync("memory_search",
-            new Dictionary<string, object?> { ["projectId"] = "acme", ["query"] = query },
+            new Dictionary<string, object?> { ["projectId"] = "acme", ["query"] = query, ["sessionId"] = "sess-e2e-test" },
             cancellationToken: TestContext.Current.CancellationToken);
         result.IsError.ShouldNotBe(true);
         return string.Concat(result.Content.OfType<TextContentBlock>().Select(b => b.Text));
