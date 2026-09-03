@@ -29,6 +29,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import tracker_lib as lib
 
+# pylint: disable=no-member  # debug_log is an exec-populated shim; pylint cannot see its members
 try:
     import debug_log  # pylint: disable=wrong-import-position
 except ImportError:  # pragma: no cover - a missing logger must never break a hook
@@ -63,8 +64,8 @@ def task_id_from_prompt(prompt: str) -> str | None:
 
 def _register_task(task_id: str, session_id: str, transcript: str) -> None:
     checkpoint = lib.make_checkpoint(transcript)
-    with lib.locked_store():
-        tasks = lib.load_tasks()
+    with lib.tracking_transaction() as store:
+        tasks = lib.load_tasks(store)
         entry = lib.find_entry(tasks, task_id)
         if entry is not None and entry.get("state") == lib.STATE_FINISHED:
             return  # user referenced a finished task; nothing to register
@@ -89,9 +90,9 @@ def _register_task(task_id: str, session_id: str, transcript: str) -> None:
                 "resumeCommand": f"claude --resume {session_id}",
             }
         )
-        lib.save_json(lib.EXECUTED_TASKS, tasks)
+        lib.save_tasks(store, tasks)
 
-        usage = lib.load_usage()
+        usage = lib.load_usage(store)
         usage_entry = lib.find_entry(usage, task_id)
         if usage_entry is None:
             usage_entry = {"taskId": task_id, "subagents": [], "grade": None}
@@ -100,7 +101,7 @@ def _register_task(task_id: str, session_id: str, transcript: str) -> None:
         checkpoints = usage_entry.setdefault("checkpoints", {})
         checkpoints.setdefault("start", checkpoint)
         checkpoints["latest"] = checkpoint
-        lib.save_json(lib.TOKEN_USAGE, usage)
+        lib.save_usage(store, usage)
 
 
 def main() -> int:

@@ -130,6 +130,14 @@ If `index.json` is missing or stale, run `python3 "$AI_BADGER/tooling/index_buil
   and emit a note rather than mangling it.
 - **A drift notice fires once per tree.** Competing ai-badger copies each claim the repo, so a
   relayed tree list explains contradictory notices — it is not a bug to fix.
+- **Never remediate a scaffold-freshness-guard failure with `--skills ''`.** The empty value
+  recovers the skill list *from the manifest being audited* (#129), so on a narrowed manifest
+  it regenerates the same narrowed set and the guard goes green over the very defect it
+  reported. The guard's printed remediation carries the full config-derived skill list — run
+  that verbatim. And every regenerated mirror (`.ai-badger/skills/**`, agent files,
+  `.ai-badger/manifest.json`) rides **in the same commit as the source edit that made it
+  stale** — a mirror committed alone is the guard catching up to something that already
+  shipped.
 
 ## Updating an already-scaffolded project
 

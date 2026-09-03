@@ -43,7 +43,6 @@ PROJECT_ROOT = lib.PROJECT_ROOT
 # ".claude/task-tracking/" here would silently point at a directory nothing else ever writes to.
 LOG_FILE = lib.DATA_DIR / "poll_limit.log"
 PID_FILE = lib.DATA_DIR / "poll_limit.pid"
-STATUSLINE_STATE = lib.DATA_DIR / "statusline-state.json"
 DEFAULT_AVAILABLE_INTERVAL_SECONDS = 300
 STATUSLINE_FRESH_SECONDS = 180
 LIMIT_WAIT_SCHEDULE_SECONDS = [7200, 1800, 900, 300]
@@ -134,9 +133,9 @@ def statusline_state_age_seconds(state: dict) -> float | None:
     return time.time() - captured_epoch
 
 
-def check_limit_from_statusline(state_path: Path = STATUSLINE_STATE) -> tuple[bool, str] | None:
+def check_limit_from_statusline() -> tuple[bool, str] | None:
     """Use captured statusLine rate-limit metadata only when the capture is fresh."""
-    state = _read_json(state_path, {})
+    state = lib.load_statusline_state()
     age_seconds = statusline_state_age_seconds(state)
     if age_seconds is None or age_seconds > STATUSLINE_FRESH_SECONDS:
         return None

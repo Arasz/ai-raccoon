@@ -8,6 +8,10 @@ recorded renderer rather than leaving the status bar routed through ai-badger.
 """
 from __future__ import annotations
 
+import importlib.util
+import os
+import sqlite3
+from contextlib import closing
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -20,6 +24,52 @@ CAPTURE_SCRIPT = "task/scripts/statusline_capture.py"
 # Machine-local, and deliberately not the committed settings.json: the delegate is a path
 # personal to one machine, while the wired command must stay portable across checkouts.
 DELEGATE_RECORD = Path(".ai-badger") / "task-tracking" / "statusline-delegate.json"
+
+
+def _badger_store():
+    """The store module (ADR-0024) vendored beside the task skill's tracker_lib, or None.
+
+    The task skill's vendored copy ships wherever the capture script is scaffolded, so the
+    relative hop from this module's directory finds it in the framework checkout and in a
+    scaffolded project alike. None means the task skill never shipped and the legacy
+    delegate file stays the surface (the capture's dual-read still merges it, D5a).
+    """
+    try:
+        import badger_store  # pylint: disable=import-outside-toplevel
+        return badger_store
+    except ImportError:
+        pass
+    path = Path(__file__).resolve().parents[1] / "task" / "scripts" / "badger_store.py"
+    if not path.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location("statusline_wiring_badger_store", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _statusline_families(store_mod, tracking: Path) -> dict:
+    """The statusline store families (ADR-0024): one table, two KV rows — 'state', 'delegate'.
+
+    Mirrors tracker_lib._task_families()'s statusline entries; the row keys are the schema
+    ruling, not local convention.
+    """
+    return {
+        "statusline": store_mod.Family(
+            table="statusline", db="tracking",
+            legacy_path=lambda: tracking / "statusline-state.json",
+            legacy_kind="kvdoc", row_key="state"),
+        "statusline_delegate": store_mod.Family(
+            table="statusline", db="tracking",
+            legacy_path=lambda: tracking / "statusline-delegate.json",
+            legacy_kind="kvdoc", row_key="delegate"),
+    }
+
+
+def _open_delegate_store(store_mod, tracking: Path):
+    """The tracking store over *tracking* with the statusline families registered."""
+    os.environ[store_mod.TRACKING_ROOT_ENV] = str(tracking)
+    return store_mod.open_tracking(families=_statusline_families(store_mod, tracking))
 
 
 def capture_command(aib_rel: str) -> str:
@@ -121,11 +171,10 @@ class StatusLineWiring:
         if not existing or not is_capture_command(existing.get("command", "")):
             return
 
-        record_path = self.ctx.target / DELEGATE_RECORD
-        record, record_note = cg.read_json_mapping(record_path)
+        record = self._read_delegate()
         if record is None:
-            self.ctx.notes.append(f"{record_note} (statusline capture left wired — the renderer "
-                              "it displaced cannot be read back)")
+            self.ctx.notes.append("statusline capture left wired — the renderer "
+                              "it displaced cannot be read back")
             return
 
         delegate = record.get("command")
@@ -139,6 +188,34 @@ class StatusLineWiring:
         cg.write_json_with_backup(settings_path, settings)
         self.ctx.notes.append("unwired statusline capture from .claude/settings.json")
 
+    def _read_delegate(self) -> Optional[Dict[str, Any]]:
+        """The delegate record: the store row, else the legacy file, else None.
+
+        The first delegate write migrates the file into the store and renames it, so the
+        store row is the surface from then on; a project the store never reached still has
+        the file. Broken reads return None — unwire then leaves the capture wired rather
+        than dropping a renderer it cannot read back.
+        """
+        store_mod = _badger_store()
+        tracking = self.ctx.target / DELEGATE_RECORD.parent
+        if store_mod is not None:
+            try:
+                with closing(_open_delegate_store(store_mod, tracking)) as store:
+                    record = store.kv_get("statusline", "delegate", {})
+                if isinstance(record, dict):
+                    return record
+            except (OSError, sqlite3.Error):
+                pass
+        record, _note = cg.read_json_mapping(self.ctx.target / DELEGATE_RECORD)
+        return record
+
     def _record_delegate(self, command: Optional[str]) -> None:
         """Record the renderer the wrapper delegates to; ``None`` means capture only."""
-        cg.write_json_with_backup(self.ctx.target / DELEGATE_RECORD, {"command": command})
+        record = {"command": command}
+        store_mod = _badger_store()
+        tracking = self.ctx.target / DELEGATE_RECORD.parent
+        if store_mod is None:
+            cg.write_json_with_backup(self.ctx.target / DELEGATE_RECORD, record)
+            return
+        with closing(_open_delegate_store(store_mod, tracking)) as store:
+            store.kv_set("statusline", "delegate", record)

@@ -66,8 +66,8 @@ scaffolded project (ai-raccoon: `agents: [claude, copilot, hermes]`,
 - All tracked-task token checkpoints are all-zero under Hermes; only manual
   `task_tracker.py subagent` writes numbers. `resumeCommand` strings record
   `claude --resume <hermes-session-id>` — a Claude command for a Hermes id.
-- `tracker_lib.py` resolves sessions from `CLAUDE_CODE_SESSION_ID` + `current-session.json`
-  (written only by Claude hooks); never reads `HERMES_SESSION_ID`.
+- `tracker_lib.py` resolves sessions from `CLAUDE_CODE_SESSION_ID` + the `sessions` table
+  of the tracking DB (written only by Claude hooks); never reads `HERMES_SESSION_ID`.
 - Hermes `~/.hermes/state.db`: `sessions` (input/output/cache/reasoning tokens,
   api_call_count, model, cwd, git_repo_root), `session_model_usage` (per-model
   breakdown = the tracker's `byModel` shape), `async_delegations.result_json`

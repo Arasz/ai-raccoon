@@ -23,7 +23,7 @@
       "description": "Where the framework was when this scaffold was written — the pointer a copied file otherwise lacks (ADR-0007). Relative to the project when the framework is inside it (a self-hosted repo records '.'), absolute otherwise. A machine-local hint, always re-validated against the root predicate before use, so a value from another machine is ignored rather than trusted."
     },
     "generatedAt": { "type": ["string", "null"], "description": "ISO timestamp stamped by the orchestrator after scaffold (scripts avoid nondeterministic clocks)." },
-    "agents": { "type": "array", "items": { "enum": ["claude", "copilot", "hermes"] } },
+    "agents": { "type": "array", "items": { "enum": ["claude", "copilot", "hermes", "pi"] } },
     "pluginScope": { "enum": ["default", "local"] },
     "skillScope": { "enum": ["default", "local"], "description": "Renamed from pluginScope in v0.7.0. scaffold.py still writes both keys so pre-0.7.0 manifests stay readable; pluginScope is deprecated and read by nothing." },
     "configHash": {

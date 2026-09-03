@@ -296,6 +296,9 @@ def detect_agents(target: Path) -> List[str]:
             or (target / "HERMES.md").exists()
             or (home / ".hermes").is_dir()):
         agents.append("hermes")
+    # pi detection: .pi/ directory in repo or ~/.pi/ in user scope
+    if (target / ".pi").is_dir() or (home / ".pi").is_dir():
+        agents.append("pi")
     return agents or ["claude"]
 
 

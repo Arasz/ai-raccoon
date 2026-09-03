@@ -294,15 +294,15 @@ class SkillDelivery:
                             projectOwned=project_owned_names(skill_name))
             # emit per-file entries for extension content so feed-badger can
             # detect user edits to extension files (#65)
-            ext_dir = dest / "extensions"
-            if ext_dir.is_dir():
-                for f in sorted(ext_dir.rglob("*")):
+            for ext_base in self.extensions._extension_bases(dest):
+                if not ext_base.is_dir():
+                    continue
+                for f in sorted(ext_base.rglob("*")):
                     if f.is_file():
-                        ext_src = src / "extensions" / f.relative_to(ext_dir)
-                        self.ctx.record(
-                            "skills", item_stack,
-                            f"{skill_name}/extensions/{f.relative_to(ext_dir).as_posix()}",
-                            ext_src if ext_src.exists() else f, f)
+                        rel = f.relative_to(dest).as_posix()
+                        ext_src = src / rel
+                        self.ctx.record("skills", item_stack, f"{skill_name}/{rel}",
+                                        ext_src if ext_src.exists() else f, f)
 
     # -- seed-once (framework writes once, project owns thereafter; see #15) ----------
     def project_owned_files(self, dest: Path, skill_name: str) -> List[str]:

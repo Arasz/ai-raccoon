@@ -2,11 +2,18 @@
 
 Off unless switched on by the `call-behaviorist` skill. Self-contained on purpose: hooks run
 from four deployment shapes and import nothing from the framework.
+
+P2.2 storage: audit records live in the store's ``hook_audit`` family and the enable state in
+``hook_state`` (KV row ``debug``); the legacy ``audit.jsonl``/``state.json`` files beside this
+module's debug directory remain the import seam and the fallback sink when the store is
+unavailable. Fail-open throughout: a store error never breaks the hook being observed (D31).
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -23,6 +30,39 @@ SCOPE_PROJECT = "project"
 # Not a version: analysis must never read it as one copy disagreeing with another.
 VERSION_UNKNOWN = "unknown"
 
+# The store module: vendored beside this file in every deployment shape, engine/ canonical in
+# tests. The scaffolder ships the pair together (adjust_hooks' PROJECT_HOOKS/USER_PLUGINS put
+# badger_store.py beside every debug_log copy it delivers); when the sibling is nonetheless
+# absent or unreadable — an older or partial shape — the loader degrades to legacy file mode
+# (the old jsonl/state.json sink, still fully functional) instead of breaking this module's
+# import: a missing store must never take a hook down with it (D31).
+def _load_store_module():
+    try:
+        import badger_store
+        return badger_store
+    except ImportError:
+        pass
+    sibling = Path(__file__).resolve().parent / "badger_store.py"
+    spec = importlib.util.spec_from_file_location("badger_store", sibling)
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules.setdefault("badger_store", module)
+    try:
+        spec.loader.exec_module(module)
+    except OSError:
+        sys.modules.pop("badger_store", None)
+        return None
+    return module
+
+
+_store_module = _load_store_module()
+
+# The whole sink moves with $AI_BADGER_DEBUG_DIR (D21); the module global is the same contract
+# at call time, so tests can redirect the sink by patching DEBUG_DIR instead of the env.
+AUDIT_DB_NAME = "audit.db"
+
+
 
 def debug_dir() -> Path:
     """Where state and records live: `$AI_BADGER_DEBUG_DIR`, else `~/.ai-badger/debug`.
@@ -36,6 +76,17 @@ def debug_dir() -> Path:
 DEBUG_DIR = debug_dir()
 STATE_FILE = DEBUG_DIR / "state.json"
 AUDIT_FILE = DEBUG_DIR / "audit.jsonl"
+
+
+def audit_db() -> Path:
+    """The audit sink's own DB file, under DEBUG_DIR.
+
+    `$AI_BADGER_DEBUG_DIR` moves the whole sink (D21) by shaping `debug_dir()` at import;
+    deriving from the DEBUG_DIR global (not re-reading the env) keeps a redirected sink —
+    tests patching the global, a suite-wide conftest override — redirecting the DB too.
+    """
+    return DEBUG_DIR / AUDIT_DB_NAME
+
 
 # An unbounded audit log on someone's disk is its own defect.
 MAX_AUDIT_LINES = 5000
@@ -84,6 +135,8 @@ KEY_NAMES = {
     KEY_THRESHOLD: "threshold",
     KEY_TOOL: "tool",
 }
+
+STATE_ROW_KEY = "debug"  # hook_state holds the whole enable document under this key (D26)
 
 # project dir -> name, resolved once per process: a config read on every hook event is a real
 # cost for a facility that is meant to be nearly free.
@@ -191,22 +244,73 @@ def project_name(project):
     return name
 
 
-def _state():
-    """The recorded debug state, or None when absent/unreadable/expired."""
+def _families():
+    """The two families this module owns, pointed at the legacy seams beside DEBUG_DIR."""
+    return {
+        "hook_audit": _store_module.Family(
+            table="hook_audit", db="user",
+            legacy_path=lambda: AUDIT_FILE, legacy_kind="jsonl", ts_field=KEY_TS,
+        ),
+        "hook_state": _store_module.Family(
+            table="hook_state", db="user",
+            legacy_path=lambda: STATE_FILE, legacy_kind="kvdoc", row_key=STATE_ROW_KEY,
+        ),
+    }
+
+
+def _store():
+    """The audit store over its own DB, or None when unavailable (legacy file mode, D31)."""
+    if _store_module is None:
+        return None
     try:
-        state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        # _open is the module's single store constructor; the audit sink gets its own DB
+        # file and only the two families this module writes (a narrower view than open_user).
+        store = _store_module._open(audit_db(), "user", _families())  # pylint: disable=protected-access
+        _own_only(audit_db().parent)  # a pre-existing parent may be group-readable
+        return store
+    except Exception:  # pylint: disable=broad-except
         return None
-    if not state.get("enabled"):
-        return None
+
+
+def _valid_state(state) -> bool:
+    """A stored state document enables logging only while unexpired."""
+    if not isinstance(state, dict) or not state.get("enabled"):
+        return False
     expires_at = state.get("expires_at")
     if expires_at:
         try:
             if now() >= datetime.fromisoformat(expires_at):
-                return None
+                return False
         except ValueError:
-            return None
-    return state
+            return False
+    return True
+
+
+def _state():
+    """The recorded debug state, or None when absent/unreadable/expired.
+
+    Store row when the audit DB already exists; the legacy state.json beside DEBUG_DIR is the
+    import seam (read back until a state write migrates it) and the fallback otherwise. A
+    disabled logger creates nothing: no DB, no directory.
+    """
+    if not audit_db().exists() and not STATE_FILE.exists():
+        return None
+    if audit_db().exists():
+        store = _store()
+        if store is not None:
+            try:
+                stored = store.kv_get("hook_state", STATE_ROW_KEY)
+                if stored is not None:
+                    return stored if _valid_state(stored) else None
+            except Exception:  # pylint: disable=broad-except
+                pass
+            finally:
+                store.close()
+    try:
+        state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return state if _valid_state(state) else None
 
 
 def enabled_for(project=None) -> bool:
@@ -220,6 +324,27 @@ def enabled_for(project=None) -> bool:
         return True
     scoped = state.get("project")
     return bool(scoped) and project == scoped
+
+
+def set_state(state: dict) -> None:
+    """Record the enable document (behaviorist's on/off). Never raises (D31).
+
+    Store row when the store is available; the legacy state.json file otherwise.
+    """
+    try:
+        store = _store()
+        if store is not None:
+            try:
+                store.kv_set("hook_state", STATE_ROW_KEY, state)
+            finally:
+                store.close()
+            return
+        DEBUG_DIR.mkdir(parents=True, exist_ok=True)
+        _own_only(DEBUG_DIR)
+        STATE_FILE.write_text(json.dumps(state), encoding="utf-8")
+        _own_only(STATE_FILE)
+    except Exception:  # pylint: disable=broad-except
+        return
 
 
 def _own_only(path: Path) -> None:
@@ -254,8 +379,18 @@ def _fit(record):
     return record
 
 
+def _legacy_append(record) -> None:
+    """One jsonl line at AUDIT_FILE with the PIPE_BUF interleaving bound and the cap."""
+    DEBUG_DIR.mkdir(parents=True, exist_ok=True)
+    _own_only(DEBUG_DIR)
+    with AUDIT_FILE.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+    _own_only(AUDIT_FILE)
+    _trim()
+
+
 def _trim() -> None:
-    """Keep the newest MAX_AUDIT_LINES records."""
+    """Keep the newest MAX_AUDIT_LINES records (legacy sink only; the DB needs no trim)."""
     try:
         lines = AUDIT_FILE.read_text(encoding="utf-8").splitlines(keepends=True)
     except OSError:
@@ -267,6 +402,65 @@ def _trim() -> None:
         _own_only(AUDIT_FILE)
     except OSError:
         pass
+
+
+def read_records(limit=None):
+    """Audit records, oldest first; the newest `limit` when given. Never raises (D31).
+
+    Store rows when the store is available (the legacy jsonl imports on first write), the
+    legacy file otherwise — the same view the behaviorist's verbs read.
+    """
+    try:
+        store = _store()
+        if store is not None:
+            try:
+                rows = store.conn.execute(
+                    "SELECT payload FROM hook_audit ORDER BY id" + (
+                        f" DESC LIMIT {int(limit)}" if limit else "")
+                ).fetchall()
+                records = [json.loads(row[0]) for row in rows]
+                return records if not limit else records[::-1]
+            finally:
+                store.close()
+        if not AUDIT_FILE.exists():
+            return []
+        lines = AUDIT_FILE.read_text(encoding="utf-8").splitlines()
+        records = [json.loads(line) for line in lines if line.strip()]
+        return records if limit is None else records[-int(limit):]
+    except Exception:  # pylint: disable=broad-except
+        return []
+
+
+def count_records() -> int:
+    """How many audit records exist. Never raises (D31)."""
+    try:
+        store = _store()
+        if store is not None:
+            try:
+                return int(store.conn.execute("SELECT COUNT(*) FROM hook_audit").fetchone()[0])
+            finally:
+                store.close()
+        return len(read_records())
+    except Exception:  # pylint: disable=broad-except
+        return 0
+
+
+def clear_records() -> None:
+    """Drop every audit record. Never raises (D31)."""
+    try:
+        store = _store()
+        if store is not None:
+            try:
+                store.conn.execute("DELETE FROM hook_audit")
+                store.conn.commit()
+            finally:
+                store.close()
+            return
+        if AUDIT_FILE.exists():
+            AUDIT_FILE.write_text("", encoding="utf-8")
+            _own_only(AUDIT_FILE)
+    except Exception:  # pylint: disable=broad-except
+        return
 
 
 def log_event(component: str, event: str, project=None, session=None, **fields) -> None:
@@ -295,11 +489,17 @@ def log_event(component: str, event: str, project=None, session=None, **fields) 
                 record[key] = _clip(value, MAX_QUERY_CHARS if key == KEY_QUERY else None)
         _fit(record)
 
-        DEBUG_DIR.mkdir(parents=True, exist_ok=True)
-        _own_only(DEBUG_DIR)
-        with AUDIT_FILE.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
-        _own_only(AUDIT_FILE)
-        _trim()
+        store = _store()
+        if store is not None:
+            try:
+                store.log_append("hook_audit", record[KEY_TS], record)
+                # Retention (P2.3/D30): the write is the prune opportunity — throttled by the
+                # store's pruned_at stamp, one transaction with the DELETE, fail-open (a
+                # sqlite error returns 0; anything worse lands in the handler below).
+                store.prune_expired("hook_audit", max_age_days=60)
+            finally:
+                store.close()
+            return
+        _legacy_append(record)
     except Exception:  # pylint: disable=broad-except
         return

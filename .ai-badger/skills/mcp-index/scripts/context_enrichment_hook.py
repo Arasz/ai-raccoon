@@ -25,6 +25,7 @@ from typing import Any, Dict, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+# pylint: disable=no-member  # debug_log is an exec-populated shim; pylint cannot see its members
 try:
     import debug_log  # pylint: disable=wrong-import-position
 except ImportError:  # pragma: no cover - a missing logger must never break a hook

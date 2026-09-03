@@ -9,6 +9,7 @@ import importlib.util
 import os
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 import tempfile
 import time
 from pathlib import Path
@@ -169,19 +170,34 @@ def check_valve(marker_dir: Path) -> None:
           _denied(INCIDENT, "s-mixed"))
 
 
-def check_pruning(marker_dir: Path) -> None:
-    guard.MARKER_DIR = marker_dir
+def check_pruning() -> None:
+    """Row-level successor of the file-mtime prune: a stale row is dropped on write, the
+    current (session, command) row survives it."""
     guard._live_lane_pids = lambda: [111, 222]  # noqa: SLF001
-    marker_dir.mkdir(parents=True, exist_ok=True)
-    stale = marker_dir / "ancient-session.deadbeef.denials"
-    stale.write_text("1", encoding="utf-8")
-    old = time.time() - 2 * guard.MARKER_TTL_SECONDS
-    os.utime(stale, (old, old))
+    store = guard.badger_store.open_user()
+    stale_key = "ancient-session.deadbeef"
+    old = datetime.now(timezone.utc) - timedelta(seconds=2 * guard.MARKER_TTL_SECONDS)
+    store.conn.execute(
+        "INSERT OR REPLACE INTO blast_radius_denials(key, denials, updated_at) "
+        "VALUES (?, ?, ?)", (stale_key, 1, old.isoformat()))
+    store.conn.commit()
+    store.close()
     _denied(INCIDENT, "s-prune")
-    probe("markers: a counter older than a day is pruned on write", not stale.exists())
-    fresh = guard._denials_path("s-prune", INCIDENT)  # noqa: SLF001
-    probe("markers: this call's counter survives the prune",
-          fresh is not None and fresh.exists())
+    store = guard.badger_store.open_user()
+    try:
+        pruned = store.conn.execute(
+            "SELECT count(*) FROM blast_radius_denials WHERE key = ?",
+            (stale_key,)).fetchone()[0]
+        fresh_key = guard._denials_key("s-prune", INCIDENT)  # noqa: SLF001
+        fresh = store.conn.execute(
+            "SELECT count(*) FROM blast_radius_denials WHERE key = ?",
+            (fresh_key,)).fetchone()[0]
+    finally:
+        store.close()
+    probe("markers: a counter older than a day is pruned on write", pruned == 0,
+          f"stale rows left: {pruned}")
+    probe("markers: this call's counter survives the prune", fresh == 1,
+          f"fresh rows: {fresh}")
 
 
 # ------------------------------------------------------------------- dirty: fake worktrees
@@ -232,9 +248,8 @@ def _edit(worktree: Path) -> Dict[str, Any]:
             "cwd": str(worktree)}
 
 
-def check_dirty_cache(cache_dir: Path, root: Path) -> None:
+def check_dirty_cache(root: Path) -> None:
     repo = FakeRepo(root)
-    dirty.CACHE_DIR = cache_dir
     dirty._run_git = repo.run_git  # noqa: SLF001
 
     writer = dirty.check(_edit(repo.lane))
@@ -253,9 +268,8 @@ def check_dirty_cache(cache_dir: Path, root: Path) -> None:
           repo.sweeps() == sweeps_after_writer == 1, f"sweeps={repo.calls}")
 
 
-def check_dirty_budget(cache_dir: Path, root: Path) -> None:
+def check_dirty_budget(root: Path) -> None:
     repo = FakeRepo(root)
-    dirty.CACHE_DIR = cache_dir
     dirty._run_git = repo.run_git  # noqa: SLF001
     original = dirty._SWEEP_BUDGET_SECONDS  # noqa: SLF001
     dirty._SWEEP_BUDGET_SECONDS = 0  # noqa: SLF001
@@ -269,18 +283,32 @@ def check_dirty_budget(cache_dir: Path, root: Path) -> None:
         dirty._SWEEP_BUDGET_SECONDS = original  # noqa: SLF001
 
 
-def check_dirty_cache_shape(cache_dir: Path) -> None:
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    bad = cache_dir / "shape.json"
-    for label, content in (
-            ("a bare string", '"injected text"'),
-            ("a non-string branch", '{"src/shared.txt": [{"worktree": "x", "branch": 1}]}'),
-            ("a non-list value", '{"src/shared.txt": "injected text"}'),
-            ("broken json", "{not json"),
-    ):
-        bad.write_text(content, encoding="utf-8")
-        probe(f"dirty: cache holding {label} is rejected",
-              dirty._read_cache(bad) is None)  # noqa: SLF001
+def check_dirty_cache_shape(root: Path) -> None:
+    """Row-level successor of the old file-shape probes: a corrupt or wrong-shaped
+    sweep row must be rejected (fresh sweep wins), a well-shaped fresh row served."""
+    dirty._run_git = lambda args, cwd, timeout: None  # noqa: SLF001 - a fresh sweep is {}
+    store = dirty.badger_store.open_user()
+    repo_root = root / "irrelevant-repo-root"
+    key = dirty._sweep_key(repo_root)  # noqa: SLF001
+    try:
+        for label, content in (
+                ("a bare string", '"injected text"'),
+                ("a non-string branch", '{"src/shared.txt": [{"worktree": "x", "branch": 1}]}'),
+                ("a non-list value", '{"src/shared.txt": "injected text"}'),
+                ("broken json", "{not json"),
+        ):
+            store.conn.execute(
+                "INSERT OR REPLACE INTO dirty_sweeps(key, value, updated_at) VALUES (?, ?, ?)",
+                (key, content, datetime.now(timezone.utc).isoformat()))
+            store.conn.commit()
+            probe(f"dirty: cache row holding {label} is rejected",
+                  dirty._sweep_cached(repo_root) == {}, "the row leaked into the result")
+        shaped = {"src/shared.txt": [{"worktree": "x", "branch": "y"}]}
+        store.kv_set("dirty_sweeps", key, shaped)
+        probe("dirty: a fresh, well-shaped cache row is served",
+              dirty._sweep_cached(repo_root) == shaped, "the row was ignored")
+    finally:
+        store.close()
 
 
 # ------------------------------------------------------------------------------ fail-open
@@ -337,14 +365,17 @@ def check_fail_open() -> None:
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="verify-hooks-") as tmp:
         root = Path(tmp)
+        # Every store-backed surface (dispatch denials, sweep cache) lands in the temp
+        # user root: the probes must stay hermetic, not write the developer's own DB.
+        os.environ[dirty.badger_store.USER_ROOT_ENV] = str(root / "user-root")
         check_classification()
         check_every_stack_has_a_probe()
         check_lanes(root / "markers")
         check_valve(root / "markers")
-        check_pruning(root / "markers")
-        check_dirty_cache(root / "cache", root / "case-a")
-        check_dirty_budget(root / "cache-b", root / "case-b")
-        check_dirty_cache_shape(root / "cache-c")
+        check_pruning()
+        check_dirty_cache(root / "case-a")
+        check_dirty_budget(root / "case-b")
+        check_dirty_cache_shape(root / "user-root")
         check_lexer_fail_open()
         check_fail_open()
 

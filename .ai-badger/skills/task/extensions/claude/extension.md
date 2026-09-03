@@ -69,12 +69,12 @@ the `model` override, not by doing the work in-session because the session "is" 
 ## Reading a finished task's numbers
 
 Measurements behind the delegation policy, and the two artefacts that carry them. Read this when
-interpreting `token-usage.json`, not on every dispatch — the base skill's policy is the part you
+interpreting the `token_usage` store, not on every dispatch — the base skill's policy is the part you
 act on.
 
 ### Judge a task by its model mix, not its cache efficiency
 
-`token-usage.json` records both. `cacheEfficiency` (cache_read ÷ (cache_read + cache_creation))
+The `token_usage` store records both. `cacheEfficiency` (cache_read ÷ (cache_read + cache_creation))
 turns out not to discriminate: **measured over 1250 real sessions it sits at 0.975–0.986 on every
 one**, including the most expensive. It is worth watching only for a *collapse*, which means the
 prefix is churning.

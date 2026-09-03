@@ -19,7 +19,10 @@ Known limitation, accepted rather than solved: an upstream rename reads as "remo
 because a manifest entry's source is a path with no forwarding record.
 
 Exit code 0 == no drift, 1 == drift found, 2 == usage error. Skipped and locally-modified
-entries alone do not count as drift.
+entries alone do not count as drift. Neither do the config's prose slots (`proseReview`):
+`project.summary` and `project.domain` are human-written, re-rendered verbatim on every
+scaffold, and nothing can compare them to anything — they are listed for staleness review,
+never counted, never rewritten.
 """
 from __future__ import annotations
 
@@ -385,6 +388,50 @@ def _config_drift(target: Optional[Path],
     return {"recorded": recorded, "current": current}
 
 
+# The config keys the scaffolder renders verbatim as free-form prose, with the template slot
+# each fills. Duplicated from template_rendering.PROSE_SLOTS because drift.py runs standalone
+# (the same reason _bootstrap_lib is duplicated across every entry point);
+# test_prose_staleness_review.py pins the two lists to each other, so they cannot drift
+# apart silently.
+PROSE_SLOTS = {"summary": "PROJECT_SUMMARY", "domain": "PROJECT_DOMAIN"}
+
+
+def prose_review(target: Optional[Path]) -> List[Dict[str, str]]:
+    """The config's prose slots, listed for staleness review — never drift, never rewritten.
+
+    `project.summary` and `project.domain` are the only free-form prose the scaffolder
+    renders into managed agent files, and compute_doc_slots re-renders them verbatim on
+    every scaffold: fingerprints, version and config-hash comparisons all pass while the
+    sentences go stale as the project evolves. A re-scaffold cannot freshen them — it would
+    faithfully re-render the same stale words — and config.json is project-owned (#172), so
+    the only fix is a human re-reading them. Each entry carries the config key, the template
+    slot it fills, the value as written, and the note a reviewer needs.
+    """
+    if target is None:
+        return []
+    config_path = target / ".ai-badger" / "config.json"
+    if not config_path.is_file():
+        return []
+    try:
+        project = bl.load_json(config_path).get("project", {})
+    except (ValueError, OSError):
+        # An unreadable config is _config_drift's business, not this listing's.
+        return []
+    if not isinstance(project, dict):
+        return []
+    review: List[Dict[str, str]] = []
+    for key, slot in PROSE_SLOTS.items():
+        value = project.get(key)
+        if isinstance(value, str) and value.strip():
+            review.append({
+                "configKey": f"project.{key}",
+                "slot": slot,
+                "value": value,
+                "note": "human-written — review for staleness",
+            })
+    return review
+
+
 def _mcp_index_migration_note(target: Optional[Path]) -> Optional[str]:
     """Note a not-yet-migrated legacy mcp-tools.yaml — never converted here (issue #145).
 
@@ -483,6 +530,9 @@ def compare(root: Path, manifest: Dict[str, Any],
         "configChanged": _config_drift(target, manifest),
         "invalid": invalid,
         "notes": notes,
+        # Review-only by construction: prose_review's docstring says why this is never a
+        # drift signal and must never reach any re-scaffold gate.
+        "proseReview": prose_review(target),
     }
     if stacks is not None:
         result["newItems"] = detect_new_items(root, manifest, stacks,
@@ -558,6 +608,16 @@ def main(argv: Optional[List[str]] = None) -> int:
             print("  config   .ai-badger/config.json declares something this scaffold does "
                   "not have — re-scaffold to apply it")
 
+    if result.get("proseReview"):
+        print("prose slots are human-written and re-rendered verbatim into every managed "
+              "file on each scaffold — nothing checks them for staleness, so review them "
+              "against the project as it is now (a re-scaffold cannot freshen them)")
+        for item in result["proseReview"]:
+            print(f"  prose    {item['configKey']} ({item['slot']}): "
+                  f"{' '.join(item['value'].split())}")
+
+    # proseReview is deliberately absent from this gate: stale prose is review-only, and a
+    # re-scaffold cannot fix it — gating on it would re-scaffold on every run, forever.
     has_drift = bool(result["changed"] or result["removed"] or result.get("newItems")
                      or result["versionChanged"] or result["configChanged"])
     if not has_drift:

@@ -227,8 +227,11 @@ from mcp_tools import McpTools  # noqa: E402
 from statusline_wiring import StatusLineWiring  # noqa: E402
 # relink_hermes_skills is re-exported: den-refresh's refresh.py calls it on this module.
 from skill_delivery import SkillDelivery, prune_namespaces, relink_hermes_skills  # noqa: E402
+from skills_argv import resolve_requested_skills  # noqa: E402
 from superseded_prune import SupersededPrune  # noqa: E402
+from project_id import mint_project_id  # noqa: E402
 from local_invariants import append_rendered  # noqa: E402
+from gitignore_block import gitignore_managed_block, merge_gitignore, write_gitignore_block  # noqa
 
 
 def _ctx_property(name: str) -> property:
@@ -257,17 +260,19 @@ class Scaffolder:
     def __init__(self, root: Path, target: Path, config: Dict[str, Any],
                  skills: List[str], install: bool, overwrite: bool = False,
                  reset_seed_files: bool = False, execute: bool = False):
-        # The one enforcement point for config.exclude and config.include: every consumer
-        # reads self.skills or self.items(), so welcome-ai-badger and den-refresh cannot
-        # disagree about what a project declined — or asked for.
-        excluded = bl.exclusions(config)
+        # The enforcement point for config.exclude/include: consumers read self.skills or
+        # self.items(), so welcome-ai-badger and den-refresh cannot disagree about either.
+        aliases = bl.gateway_aliases(root)
+        excluded = bl.exclusions(config, aliases)
         self.included = bl.inclusions(config)
         self.addable_skills = set(bl.opt_in_skills_in(root / "features" / "common" / "skills"))
-        # Grouped skills cannot do their job alone, so naming one installs all of them (#266).
-        # Expanded before the addable filter: an included skill whose citations dangle is worse
-        # than one that was never offered.
-        wanted = bl.expand_skill_groups(self.included["skills"])
-        asked_for = [n for n in sorted(wanted) if n in self.addable_skills]
+        # Grouped skills install whole (#266), expanded before the addable filter; a stale
+        # member name resolves to the gateway that absorbed it (ADR-0021). The composition is
+        # the shared include-derived oracle (bl.include_derived_skill_names) so the guard's
+        # expected set cannot drift from what the Scaffolder actually asks for (D1) — only the
+        # include-derived block feeds delivery here: an explicit argv REPLACES the defaults
+        # and must never gain them back (API-F2).
+        asked_for = bl.include_derived_skill_names(config, aliases, self.addable_skills)
         offered = list(dict.fromkeys(list(skills) + asked_for))
         # Whether the delivered list is evidence of what the project wants: empty means
         # "unchanged" (#129), which discover_stack_local hides. See adjust_skills.may_prune.
@@ -337,7 +342,8 @@ class Scaffolder:
         """Report each inclusion: what it added, and what it could not add — never fatal."""
         self.notes.extend(bl.inclusion_notes(
             self.included["skills"], self.excluded["skills"], self.addable_skills,
-            bl.default_skills_in(self.root / "features" / "common" / "skills")))
+            bl.default_skills_in(self.root / "features" / "common" / "skills"),
+            aliases=bl.gateway_aliases(self.root)))
 
     # -- provenance -----------------------------------------------------------------
     def record(self, feature: str, stack: str, name: str, source: Path, target: Path,
@@ -457,6 +463,10 @@ class Scaffolder:
         append_rendered(rendered, self.aib / "invariants" / "local",
                         delivered, invariant_summary, self.notes)
         return rendered
+
+    def scaffold_gitignore(self) -> None:
+        """Merge the managed SQLite-artifact block into the target's .gitignore."""
+        write_gitignore_block(self.ctx)
 
     def scaffold_agent_instructions(self) -> None:
         """Copy the agent-instructions schema/model template into .ai-badger/agent-instructions/."""
@@ -701,6 +711,7 @@ class Scaffolder:
     def run(self, generated_at: Optional[str] = None) -> Dict[str, Any]:
         """Run every scaffold step in order and return the manifest, plugin commands, and notes."""
         self.aib.mkdir(parents=True, exist_ok=True)
+        mint_project_id(self.aib)
         self._completed_steps = []
         self._record_progress("start")
         self.superseded.prune(self._prior_manifest().get("entries", []))
@@ -715,6 +726,7 @@ class Scaffolder:
             self._outside_project("hermes skill symlinks", self.symlink_hermes_skills)
         self.scaffold_agent_instructions()
         self.scaffold_templates()
+        self.scaffold_gitignore()
         self.mcp.fill_mcp_described()
         self.rendering.write_delegation_map(invariants, instr_paths,
                                             self.mcp.project_server_names())
@@ -803,22 +815,10 @@ def main(argv=None) -> int:
         return 1
 
     config = bl.load_json(config_path)
-    skills = [s for s in args.skills.split(",") if s]
-    cli_notes: List[str] = []
-    if not skills:
-        # An explicitly empty --skills means "unchanged", not "none" (#129). A fresh target
-        # has no manifest to recover from and scaffolds no skills — nothing to destroy.
-        manifest_path = target / ".ai-badger" / "manifest.json"
-        if manifest_path.is_file():
-            try:
-                skills = bl.scaffolded_skill_names(bl.load_json(manifest_path))
-                cli_notes.append(
-                    f"--skills was empty — reused {len(skills)} skill(s) already scaffolded, "
-                    f"from the manifest at {manifest_path}"
-                )
-            except (ValueError, OSError) as exc:
-                skills = []
-                cli_notes.append(f"--skills empty, manifest at {manifest_path} could not be read ({exc})")
+    skills, cli_notes, rejection = resolve_requested_skills(root, target, args.skills)
+    if rejection:
+        print(rejection, end="")
+        return 2
     scaf = Scaffolder(root, target, config, skills, install=not args.no_install,
                       overwrite=args.overwrite_agent_files,
                       reset_seed_files=args.reset_seed_files,

@@ -17,12 +17,16 @@ any internal error occurs — a broken hook must never block a prompt from going
 """
 from __future__ import annotations
 
+import importlib.util
 import json
+import os
+import sqlite3
 import sys
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
+# pylint: disable=no-member  # debug_log is an exec-populated shim; pylint cannot see its members
 try:
     import debug_log  # pylint: disable=wrong-import-position
 except ImportError:  # pragma: no cover - a missing logger must never break a hook
@@ -46,12 +50,69 @@ def _debug(event: str, **fields) -> None:
 SKILL_DIR = Path(__file__).resolve().parent.parent
 MARKERS_CONTEXT_FILE = SKILL_DIR / "markers-context.json"
 
+# Appended to a marker's inject text when the prompt used the importance token (`!` between
+# alias and colon) and the marker defines no dedicated interrupt text. The pi-side
+# session-signals extension aborts the running turn for `!`-markers; hosts without a
+# mid-turn hook get this instruction instead — the model preempts what is in flight.
+IMPORTANCE_SUFFIX = (
+    "\n\nIMPORTANCE: interrupt-grade — the user marked this with ! to preempt current "
+    "work. Break off what is running and handle this before anything else."
+)
+
+def _load_badger_store():
+    """The store module: already-imported, importable, or the vendored copy beside this script.
+
+    None when neither exists — persistence then degrades to silence, like a missing logger.
+    """
+    if "badger_store" in sys.modules:
+        return sys.modules["badger_store"]
+    try:
+        import badger_store  # pylint: disable=import-outside-toplevel,redefined-outer-name
+        return badger_store
+    except ImportError:
+        pass
+    path = SKILL_DIR / "badger_store.py"
+    if not path.exists():
+        return None
+    spec = importlib.util.spec_from_file_location("badger_store", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["badger_store"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+badger_store = _load_badger_store()
+
+
+def _open_marker_store(tracking_dir: Path):
+    """Open the tracking store aimed at *tracking_dir*; None when unavailable or broken.
+
+    The caller has already proven `.ai-badger` exists (the hook never creates tracking
+    structure on its own): only then may the store create task-tracking/tracking.db beneath
+    it. A broken store never blocks a prompt (D31) — hooks fail open.
+    """
+    if badger_store is None:
+        return None
+    # Aim the store at the directory the prompt named, at call time (D9) — the same
+    # set-not-setdefault discipline as the task tracker's _sync_tracking_root.
+    os.environ[badger_store.TRACKING_ROOT_ENV] = str(tracking_dir / "task-tracking")
+    try:
+        return badger_store.open_tracking()
+    except (OSError, sqlite3.Error):
+        return None
+
+
 # Convention shared with the rest of an ai-badger-scaffolded project: a project-tracking
 # directory at the repo root named ".ai-badger". Transformations are recorded there only if the
 # project has actually adopted that convention (directory already exists) — this hook never
 # creates project-tracking structure on its own.
 TRACKING_DIR_NAME = ".ai-badger"
-STATE_SUBPATH = ("prompt-markers", "marker-state.json")
+
+# Marker state lives in the store's marker_state KV table (tracking.db): the "history" row
+# carries the audit trail and the "feedbackStreak" row the consolidated-restart counter —
+# the row-count equivalent of the legacy prompt-markers/marker-state.json document, whose
+# "history" list this row still is, still capped at MAX_HISTORY entries. The first store
+# write lazy-migrates a legacy file to rows + marker-state.migrated.json (D6).
 MAX_HISTORY = 100
 
 
@@ -66,21 +127,35 @@ def load_markers_context() -> dict:
         return json.load(fh)
 
 
-def match_marker(prompt: str, markers: list[dict]) -> tuple[dict, str] | None:
-    """Return the (marker, matched prefix) whose prefix leads `prompt`, or None.
+def _prefix_candidates(prefix: str) -> list[str]:
+    """The spellings one catalog prefix matches: itself, and its interrupt variant with a
+    `!` inserted before the trailing colon (`f:` also matches `f!:`). The importance token
+    is grammar, not catalog: every marker can carry it without enumerating variants in
+    markers-context.json."""
+    if prefix.endswith(":"):
+        return [prefix, prefix[:-1] + "!:"]
+    return [prefix]
 
-    A single-letter prefix must be followed by whitespace or end of prompt, so a
-    Windows path (`H:\\Projects\\foo.py …`) is not read as `h:` (F-21).
+
+def match_marker(prompt: str, markers: list[dict]) -> tuple[dict, str, bool] | None:
+    """Return the (marker, matched prefix, bang) whose prefix leads `prompt`, or None.
+
+    `bang` is True when the prompt used the importance token (`f!:`). A single-letter
+    prefix must be followed by whitespace or end of prompt, so a Windows path
+    (`H:\\Projects\\foo.py …`) is not read as `h:` (F-21); the guard counts only the
+    alias letters, so its `!`-variant (`h!:`) is guarded identically.
     """
     prompt_trimmed = prompt.strip().lower()
     for marker in markers:
         for prefix in marker.get("prefixes", []):
-            if not prompt_trimmed.startswith(prefix.lower()):
-                continue
-            rest = prompt_trimmed[len(prefix):]
-            if len(prefix.rstrip(":")) == 1 and rest and not rest[0].isspace():
-                continue
-            return marker, prefix
+            for candidate in _prefix_candidates(prefix.lower()):
+                if not prompt_trimmed.startswith(candidate):
+                    continue
+                rest = prompt_trimmed[len(candidate):]
+                alias_len = len(candidate.rstrip(":").rstrip("!"))
+                if alias_len == 1 and rest and not rest[0].isspace():
+                    continue
+                return marker, candidate, candidate.endswith("!:")
     return None
 
 
@@ -94,36 +169,36 @@ def find_tracking_dir(start: Path) -> Path | None:
 
 
 def record_transformation(
-    cwd: str, prompt: str, marker_id: str, prefix: str, injected: str
+    cwd: str, prompt: str, marker_id: str, prefix: str, injected: str, bang: bool = False
 ) -> None:
-    """Best-effort audit trail. Skips silently if the project has no tracking dir."""
+    """Best-effort audit trail. Skips silently if the project has no tracking dir.
+
+    Appends to the ``history`` row of the marker_state table, capped at MAX_HISTORY
+    entries; the first write lazy-migrates the legacy marker-state.json (D6). Whole
+    prompts land in the store verbatim — the DB is owner-only (security I5), enforced
+    by the store on every write.
+    """
     tracking_dir = find_tracking_dir(Path(cwd) if cwd else Path.cwd())
     if tracking_dir is None:
         return
-
-    state_dir = tracking_dir.joinpath(*STATE_SUBPATH[:-1])
-    state_file = state_dir / STATE_SUBPATH[-1]
-    state_dir.mkdir(parents=True, exist_ok=True)
-
+    store = _open_marker_store(tracking_dir)
+    if store is None:
+        return
     try:
-        state = json.loads(state_file.read_text()) if state_file.exists() else {"history": []}
-    except (OSError, ValueError):
-        state = {"history": []}
-
-    state.setdefault("history", []).append({
-        "timestamp": now_iso(),
-        "originalPrompt": prompt,
-        "matchedPrefix": prefix,
-        "markerId": marker_id,
-        "injectedContext": injected,
-    })
-    state["history"] = state["history"][-MAX_HISTORY:]
-    state_file.write_text(json.dumps(state, indent=2) + "\n")
-    try:
-        # Whole prompts land here verbatim; keep them owner-only (security I5).
-        state_file.chmod(0o600)
-    except OSError:
-        pass
+        history = store.kv_get("marker_state", "history", [])
+        history.append({
+            "timestamp": now_iso(),
+            "originalPrompt": prompt,
+            "matchedPrefix": prefix,
+            "markerId": marker_id,
+            "bang": bang,
+            "injectedContext": injected,
+        })
+        store.kv_set("marker_state", "history", history[-MAX_HISTORY:])
+    except (OSError, sqlite3.Error):
+        pass  # best-effort: the audit trail never blocks the marker's injection
+    finally:
+        store.close()
 
 
 def count_trailing_feedback(state: dict) -> int:
@@ -147,39 +222,31 @@ RESTART_ADVISORY = (
 )
 
 
-def advance_feedback_streak(cwd: str, is_feedback: bool, session_id: str = "") -> int:
-    """Advance the per-project, per-session feedback streak by one user turn.
+def advance_feedback_streak(cwd: str, is_feedback: bool) -> int:
+    """Advance the per-project feedback streak by one user turn.
 
     A feedback turn increments the streak; any other marker resets it to 0.
-    Returns the new streak.  Keyed by the hook payload's session identifier so
-    two concurrent sessions in the same checkout cannot increment or reset each
-    other's streak; an empty session id falls back to the shared "default" key.
-    Best-effort: silently returns 0 when no tracking dir exists or the state
-    file is unreadable.
+    Returns the new streak.  Best-effort: silently returns 0 when no tracking
+    dir exists or the store is unavailable; the streak is the ``feedbackStreak``
+    row of the marker_state table.
     """
     tracking_dir = find_tracking_dir(Path(cwd) if cwd else Path.cwd())
     if tracking_dir is None:
         return 0
-    state_file = tracking_dir.joinpath(*STATE_SUBPATH)
-    session_key = session_id or "default"
+    store = _open_marker_store(tracking_dir)
+    if store is None:
+        return 0
     try:
-        state = json.loads(state_file.read_text()) if state_file.exists() else {}
-    except (OSError, ValueError):
-        state = {}
-    streaks = state.get("feedbackStreaks", {})
-    if not isinstance(streaks, dict):
-        streaks = {}
-    streak = streaks.get(session_key, 0) + 1 if is_feedback else 0
+        prior = store.kv_get("marker_state", "feedbackStreak", 0)
+    except (OSError, sqlite3.Error):
+        prior = 0
+    streak = prior + 1 if is_feedback else 0
     try:
-        streaks[session_key] = streak
-        # Keep only live sessions: a stale key with no streak left is dropped so
-        # the state file cannot grow without bound across sessions.
-        state["feedbackStreaks"] = {k: v for k, v in streaks.items() if v > 0}
-        state_file.parent.mkdir(parents=True, exist_ok=True)
-        state_file.write_text(json.dumps(state, indent=2) + "\n")
-        state_file.chmod(0o600)
-    except OSError:
+        store.kv_set("marker_state", "feedbackStreak", streak)
+    except (OSError, sqlite3.Error):
         pass
+    finally:
+        store.close()
     return streak
 
 
@@ -199,27 +266,31 @@ def main() -> int:
         # interleaved normal prompt breaks a would-be restart advisory.
         cwd = payload.get("cwd", "")
         if find_tracking_dir(Path(cwd) if cwd else Path.cwd()) is not None:
-            advance_feedback_streak(cwd, is_feedback=False, session_id=payload.get("session_id", ""))
+            advance_feedback_streak(cwd, is_feedback=False)
         _debug("skip", reason="no_match")
         return 0
 
-    marker, prefix = matched
+    marker, prefix, bang = matched
     injected = marker["inject"]
+    if bang:
+        # A dedicated interrupt text (the important marker's emergency instruction) wins;
+        # otherwise the marker's meaning carries the generic preemption suffix.
+        injected = marker.get("injectInterrupt") or injected + IMPORTANCE_SUFFIX
 
     cwd = payload.get("cwd", "")
-    record_transformation(cwd, prompt, marker["id"], prefix, injected)
+    record_transformation(cwd, prompt, marker["id"], prefix, injected, bang)
 
     # Consolidated restart: track consecutive *user turns* that were feedback.
     # Every recorded turn advances the streak; non-feedback markers reset it.
     if marker["id"] == "feedback":
-        streak = advance_feedback_streak(cwd, is_feedback=True, session_id=payload.get("session_id", ""))
+        streak = advance_feedback_streak(cwd, is_feedback=True)
         if streak >= RESTART_THRESHOLD:
             injected += "\n\n" + RESTART_ADVISORY.format(count=streak)
             _debug("restart_advisory", count=streak)
     else:
-        advance_feedback_streak(cwd, is_feedback=False, session_id=payload.get("session_id", ""))
+        advance_feedback_streak(cwd, is_feedback=False)
 
-    _debug("fire", marker=marker["id"], prefix=prefix)
+    _debug("fire", marker=marker["id"], prefix=prefix, bang=bang)
 
     print(json.dumps({
         "hookSpecificOutput": {

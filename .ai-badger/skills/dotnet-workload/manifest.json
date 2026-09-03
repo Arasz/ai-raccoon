@@ -1,0 +1,174 @@
+{
+  "kind": "gateway",
+  "members": [
+    {
+      "name": "dotnet-bdd-testing",
+      "purpose": "Use when adding Gherkin .feature files / a BDD runner to a .NET project: Reqnroll is the only live option (SpecFlow is EOL — never recommend it), xunit.v3 + CPM integration, tags/@ignore/Skip and Rule: blocks, or un-ignoring dormant scenarios. Includes the build-time code-behind recipe, feature-file overlap policy, and verified package facts.",
+      "triggers": [
+        "bdd",
+        "gherkin",
+        "reqnroll",
+        "feature file",
+        "specflow",
+        "xunit.v3",
+        "scenario"
+      ],
+      "paths": {
+        "skill": "references/dotnet-bdd-testing"
+      }
+    },
+    {
+      "name": "dotnet-domain-modeling",
+      "purpose": "Use when modeling immutable C#/.NET domain layers: sealed records with required/init props, CommunityToolkit.Diagnostics guards (and when to hand-roll them), state-transition methods, policy objects, extension-point interfaces (DIM), FluentValidation nested validators, ArchUnitNET purity enforcement — with TDD for pure domain layers. Triggers: DDD aggregates/value objects, domain-purity rules, validator design.",
+      "triggers": [
+        "domain model",
+        "sealed record",
+        "ddd",
+        "aggregate",
+        "value object",
+        "guard clause",
+        "fluentvalidation",
+        "archunitnet",
+        "domain purity"
+      ],
+      "paths": {
+        "skill": "references/dotnet-domain-modeling"
+      }
+    },
+    {
+      "name": "dotnet-flaky-test-diagnosis",
+      "purpose": "Use when a .NET test fails in the full suite but passes alone (or flakes intermittently): classify via the ladder — intra-test race (lock-guard fake collections), inter-test contention (xunit v3 DisableParallelization collections), or environmental flakes (child PATH/env, cold-worktree asset provisioning) — before blaming the branch. Includes the clean-main baseline check and gate discipline.",
+      "triggers": [
+        "flaky test",
+        "passes alone",
+        "intermittent test",
+        "disableparallelization",
+        "test race",
+        "cold worktree"
+      ],
+      "paths": {
+        "skill": "references/dotnet-flaky-test-diagnosis"
+      }
+    },
+    {
+      "name": "dotnet-hosted-service-review",
+      "purpose": "Use when reviewing a PR that adds or modifies a .NET BackgroundService/IHostedService — background extraction loops, watchers, sync, sweep, or any poll loop. Checklist: ExecuteAsync try/catch coverage (StopHost kills the process), cancellation filtering, PeriodicTimer semantics, store-level idempotency vs TOCTOU, settings-channel parsing, LoggerMessage invariants. Produces numbered findings + severity + file:line.",
+      "triggers": [
+        "backgroundservice",
+        "ihostedservice",
+        "hosted service review",
+        "executeasync",
+        "periodictimer",
+        "poll loop",
+        "watcher"
+      ],
+      "paths": {
+        "skill": "references/dotnet-hosted-service-review"
+      }
+    },
+    {
+      "name": "dotnet-hosted-service-testing",
+      "purpose": "Use when writing or reviewing .NET BackgroundService tests with FakeTimeProvider/TimeProvider: lost-first-Advance semantics, inline-vs-threadpool timer callbacks, poll-loop test honesty (invocation counters, not side-effect counts), tick derivation from timeouts, DI registration smoke tests, vacuous-gate detection. Verified on .NET 10; includes an empirical probe script.",
+      "triggers": [
+        "faketimeprovider",
+        "timeprovider",
+        "hosted service test",
+        "timer callback",
+        "advance",
+        "tick"
+      ],
+      "paths": {
+        "skill": "references/dotnet-hosted-service-testing"
+      }
+    },
+    {
+      "name": "dotnet-logger-message-design",
+      "purpose": "Use when designing or testing [LoggerMessage] log lines in .NET: nested static partial Log classes, explicit EventIds with per-category ranges, no call-site interpolation, collection parameters (pre-join at the call site), per-item detail logs vs counts, and FakeLogger-based log assertions (generic vs non-generic compile contract, LatestRecord/AllRecords, RED-first EventId tests).",
+      "triggers": [
+        "loggermessage",
+        "eventid",
+        "fakelogger",
+        "log assertion",
+        "structured log design"
+      ],
+      "paths": {
+        "skill": "references/dotnet-logger-message-design"
+      }
+    },
+    {
+      "name": "dotnet-mcp-server",
+      "purpose": "Use when adding MCP (Model Context Protocol) tools or servers to a .NET project: tool/prompt registration with [McpServerTool]/[McpServerPrompt], stdio or Streamable-HTTP host wiring (dual-mode, port traps), DI + typed HttpClient for REST-backed tools, unit tests with mock HTTP handlers, tool-inventory tests that assert the REGISTERED surface, and SDK 2.x specifics (McpException error signaling, request filters, tool-name derivation).",
+      "triggers": [
+        "mcp",
+        "model context protocol",
+        "mcservertool",
+        "stdio",
+        "streamable http",
+        "mcp tool"
+      ],
+      "paths": {
+        "skill": "references/dotnet-mcp-server"
+      }
+    },
+    {
+      "name": "dotnet-sqlcipher-encryption",
+      "purpose": "Use when working with SQLCipher-encrypted SQLite in .NET (e_sqlite3mc / SQLitePCLRaw bundle): raw 256-bit keys via Password='x'<hex>'', deriving keys from ed25519 SSH keys, PRAGMA rekey constraints (WAL unsupported), pluggable key-source providers (env/keychain/vault) with the pre-open sidecar pattern, and Dapper-over-SQLite3MC mapping traps.",
+      "triggers": [
+        "sqlcipher",
+        "sqlite encryption",
+        "e_sqlite3mc",
+        "rekey",
+        "database key",
+        "sqlitepclraw"
+      ],
+      "paths": {
+        "skill": "references/dotnet-sqlcipher-encryption"
+      }
+    },
+    {
+      "name": "dotnet-system-commandline",
+      "purpose": "Use when adding CLI argument parsing to a .NET app or dotnet tool: System.CommandLine 2.0.x GA idioms (parse-first, HelpAction/VersionOptionAction detection, Option.Validators, FromAmong), parser-landscape verdicts (Cocona archived — don't adopt), and the stdio-MCP trap where help/version must render to stderr. Includes Cocona-maintenance guidance for existing tools.",
+      "triggers": [
+        "system.commandline",
+        "cli parsing",
+        "command line arguments",
+        "option validator",
+        "fromamong"
+      ],
+      "paths": {
+        "skill": "references/dotnet-system-commandline"
+      }
+    },
+    {
+      "name": "dotnet-tool-publishing",
+      "purpose": "Use when packaging or publishing a .NET CLI tool (PackAsTool) or library to NuGet: the MSB3030 build-before-pack trap (and its Web-SDK inversion), multi-RID matrix shells + the shell-race fix, gitignored bundled assets, Trusted Publishing/OIDC with human approval gates, the 409-published-nothing diagnosis, ToolCommandName/PATH shim rules, and full fresh-install verification for MCP tools with bundled models.",
+      "triggers": [
+        "packastool",
+        "nuget publish",
+        "dotnet tool",
+        "trusted publishing",
+        "multi-rid",
+        "msb3030",
+        "toolcommandname"
+      ],
+      "paths": {
+        "skill": "references/dotnet-tool-publishing"
+      }
+    },
+    {
+      "name": "observability-contract-review",
+      "purpose": "Use when reviewing claims that 'all calls are instrumented': span+metrics helper diffs, tool-layer try/catch instrumentation, N/N tool-surface parity tests. Checks path coverage, not call-site presence — filtered-catch escape holes, exactly-once recording, Activity status/tag ordering, instrumentation-test honesty, CI Speed-trait blind spots, metrics-unchanged verification.",
+      "triggers": [
+        "observability",
+        "instrumentation review",
+        "span",
+        "metrics",
+        "activity status",
+        "opentelemetry"
+      ],
+      "paths": {
+        "skill": "references/observability-contract-review"
+      }
+    }
+  ]
+}

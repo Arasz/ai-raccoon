@@ -84,14 +84,32 @@ def extract_keep_regions(text: str) -> List[str]:
 
 
 def carry_keep_regions(existing: str, body: str) -> str:
-    """Return `body` with every keep region of `existing` appended verbatim, in order.
+    """Return `body` carrying every keep region of `existing`, in order.
 
-    Regions land at the end because the templates carry no anchors to re-seat them at.
+    A region fills the matching keep slot the template ships, so re-scaffolding a template
+    that carries its own keep region does not append a second copy of it every run. Regions
+    the body has no slot for land at the end, because those templates carry no anchors to
+    re-seat them at.
     """
     regions = extract_keep_regions(existing)
     if not regions:
         return body
-    return body.rstrip("\n") + "\n\n" + "\n\n".join(regions) + "\n"
+    slots = extract_keep_regions(body)
+    if not slots:
+        return body.rstrip("\n") + "\n\n" + "\n\n".join(regions) + "\n"
+
+    out, rest = [], body
+    for slot, region in zip(slots, regions):
+        head, _, rest = rest.partition(slot)
+        out.append(head)
+        out.append(region)
+    out.append(rest)
+    carried = "".join(out)
+
+    spare = regions[len(slots):]
+    if spare:
+        carried = carried.rstrip("\n") + "\n\n" + "\n\n".join(spare) + "\n"
+    return carried
 
 
 def cfg_get(config: Dict[str, Any], dotted: str) -> Any:

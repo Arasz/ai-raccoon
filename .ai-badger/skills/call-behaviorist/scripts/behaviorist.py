@@ -11,6 +11,7 @@ Debug is user-scoped by default: every project logs. `--project` narrows it to t
 working directory.
 """
 from __future__ import annotations
+# pylint: disable=no-member  # debug_log is an exec-populated shim; pylint cannot see its members
 
 import argparse
 import json
@@ -69,34 +70,29 @@ def cmd_on(duration: str, project_scoped: bool) -> int:
         "enabled_at": dl.iso(dl.now()),
         "expires_at": None if expires is None else dl.iso(expires),
     }
-    dl.DEBUG_DIR.mkdir(parents=True, exist_ok=True)
-    dl.STATE_FILE.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
-    # pylint: disable=protected-access
-    dl._own_only(dl.DEBUG_DIR)
-    dl._own_only(dl.STATE_FILE)
+    dl.set_state(state)
     where = state["project"] if project_scoped else "every project"
     expiry = state["expires_at"] or "never — switch it off with `behaviorist.py off`"
     print(f"debug logging ON for {where}, expires {expiry}")
-    print(f"records: {dl.AUDIT_FILE}")
+    print(f"records: {_records_sink()}")
     dl.log_event(TOOL_COMPONENT, "enabled", project=state["project"], scope=state["scope"])
     return 0
 
 
 def cmd_off() -> int:
-    if not dl.STATE_FILE.exists():
+    if dl._state() is None:  # pylint: disable=protected-access
         print("debug logging is already off.")
         return 0
     dl.log_event(TOOL_COMPONENT, "disabled")
-    dl.STATE_FILE.write_text(json.dumps({"enabled": False}, indent=2) + "\n", encoding="utf-8")
+    dl.set_state({"enabled": False})
     print("debug logging OFF.")
     return 0
 
 
-def _line_count() -> int:
-    try:
-        return sum(1 for _ in dl.AUDIT_FILE.open("r", encoding="utf-8"))
-    except OSError:
-        return 0
+def _records_sink():
+    """Where records live now: the store's audit DB, or the legacy jsonl beside DEBUG_DIR."""
+    # pylint: disable=protected-access
+    return dl.audit_db() if dl._store() is not None else dl.AUDIT_FILE
 
 
 def cmd_status() -> int:
@@ -108,20 +104,16 @@ def cmd_status() -> int:
         target = state.get("project") or "every project"
         print(f"debug logging: ON ({scope} — {target})")
         print(f"expires: {state.get('expires_at') or 'never'}")
-    print(f"records: {_line_count()} in {dl.AUDIT_FILE}")
+    print(f"records: {dl.count_records()} in {_records_sink()}")
     return 0
 
 
 def cmd_tail(count: int) -> int:
-    if not dl.AUDIT_FILE.exists():
+    records = dl.read_records(limit=count)
+    if not records:
         print("no records yet.")
         return 0
-    lines = dl.AUDIT_FILE.read_text(encoding="utf-8").splitlines()[-count:]
-    for line in lines:
-        try:
-            rec = json.loads(line)
-        except ValueError:
-            continue
+    for rec in records:
         fixed = (dl.KEY_TS, dl.KEY_COMPONENT, dl.KEY_EVENT, dl.KEY_VERSION)
         extra = " ".join(f"{dl.KEY_NAMES.get(k, k)}={v}" for k, v in rec.items()
                          if k not in fixed)
@@ -136,17 +128,7 @@ ENABLE_HINT = ("nothing observed yet — run `behaviorist.py on 4h`, work normal
 
 def _read_records():
     """Every parseable record in the log, from every project."""
-    try:
-        lines = dl.AUDIT_FILE.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return []
-    records = []
-    for line in lines:
-        try:
-            records.append(json.loads(line))
-        except ValueError:
-            continue
-    return records
+    return dl.read_records()
 
 
 def _resolved(path):
@@ -548,9 +530,7 @@ def cmd_analyze(project, as_json: bool) -> int:
 
 
 def cmd_clear() -> int:
-    if dl.AUDIT_FILE.exists():
-        dl.AUDIT_FILE.write_text("", encoding="utf-8")
-        dl._own_only(dl.AUDIT_FILE)  # pylint: disable=protected-access
+    dl.clear_records()
     dl.log_event(TOOL_COMPONENT, "cleared")
     print("audit log cleared.")
     return 0

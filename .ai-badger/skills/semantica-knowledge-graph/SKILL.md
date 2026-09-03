@@ -46,7 +46,7 @@ Semantica is a session-scoped knowledge graph MCP server (MIT, v0.6.5+). In-memo
 
 ### 4. Graph export & AiRaccoon persistence pattern
 To prevent data loss from Semantica's ephemeral process:
-1. **Export auto-saves per session**: Call `export_graph(format="json")`. The export hook auto-saves each result to `.semantica/<session>.json` — per-session and timestamped, so parallel sessions and subagents never collide.
+1. **Export auto-saves per session**: the hook saves each `export_graph` result to `.semantica/<session>.json`, per-session and timestamped, so parallel sessions never collide. Wired but inert on 0.6.6 — see Gotchas.
 2. **Watch the directory once**: The `ai-raccoon-memory` skill registers a one-time directory watch on `.semantica/` via `memory_watch_add(projectId, <absolute path to .semantica>)`; re-adding is a no-op.
 3. **Structural JSON Integration**: AiRaccoon ingests every `.semantica/` file, parses graphs and decisions, and embeds them into its persistent SQLite memory bank (`memory.db`).
 4. **Cross-Session Retrieval**: `memory_search` in AiRaccoon returns both textual decision rationale and structural JSON graph relations.
@@ -70,9 +70,10 @@ To prevent data loss from Semantica's ephemeral process:
 - **Extraction ML deps**: `extract_entities` needs `torch` + `transformers`, not LLM API keys.
 - **Parameter names**: `add_relationship` uses `source`/`target`, not `source_id`/`target_id`.
 - **Known issue**: `get_graph_analytics` unavailable in 0.6.5 — use `get_graph_summary`.
-- **Upstream export bug (0.6.5/0.6.6)**: `export_graph(format="json")` errors
-  (`JSONExporter.export() missing ... 'file_path'`) — fixed after 0.6.6; until then the
-  hook skips the dump; graph tools work; `check.py` probes and warns.
+- **Upstream export bug (0.6.5/0.6.6)**: *every* `export_graph` format errors, no fix
+  released — an empty `.semantica/` is this bug, not a broken bridge. Graph tools work.
+  RDF writes progress to **stdout**, corrupting MCP; the entry sets
+  `SEMANTICA_DISABLE_PROGRESS=1`.
 - **All agents auto-save and nudge**: export autosave is wired for Hermes (plugin),
   Claude Code (PostToolUse), Copilot (postToolUse) — every `export_graph` result lands in
   `.semantica/`. The once-per-session export guidance nudge is active across all three hosts.

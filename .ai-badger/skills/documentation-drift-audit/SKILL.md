@@ -9,7 +9,7 @@ scope: optIn
 metadata:
   hermes:
     tags: [documentation, drift, audit, verification]
-    related_skills: [update-documentation, maintain-agent-instructions]
+    related_skills: [documentation, maintain-agent-instructions]
 ---
 
 # Documentation drift audit

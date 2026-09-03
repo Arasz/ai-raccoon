@@ -2,9 +2,11 @@
 name: prompt-markers
 description: >-
   Use when a prompt starts with a marker prefix — `h:`/`hint:` (a lead to validate before
-  acting), `f:`/`feedback:` (a correction to apply immediately), `e:`/`extension:` (a request to
-  widen scope), `q:`/`queue:` (queued task for after current work), or `i!:`/`important!:` (immediate
-  emergency interrupt) — or when the user asks to add, change, or inspect those markers. The
+  acting), `f:`/`feedback:` (a correction to apply immediately), `e:`/`extension:` (a request
+  to widen scope), `q:`/`queue:` (a queued task for after current work), `i:`/`important:`
+  (important, high priority) or `i!:`/`important!:` (immediate emergency interrupt) — every
+  marker also accepts a `!` importance token between alias and colon, making it
+  interrupt-grade — or when the user asks to add, change, or inspect those markers. The
   UserPromptSubmit hook detects them and injects the matching behaviour.
 version: 1.0.0
 author: ai-badger
@@ -32,7 +34,16 @@ context.
 | `f:` / `feedback:` | Direct critique or correction on previous work | High priority — address it before other work, referring back to the specific point in session history, and cite the failing output, validator result, or source evidence behind the correction |
 | `e:` / `extension:` | A request to expand the current task's scope | Analyze the new requirement; fold it into the current unit of work if it fits, or flag it for a follow-up task if it's too large |
 | `q:` / `queue:` | A queued instruction to run after active work finishes | Finish active work first. Once complete, analyze and execute this queued instruction, incorporating context from all prior work |
+| `i:` / `important:` | Important — high priority, no preemption | Treat as high priority: do not drop it, handle at the next natural boundary; do not cancel work in flight |
 | `i!:` / `important!:` | Immediate emergency interrupt | STOP IMMEDIATELY — pause or cancel running commands/subtasks, read the message, and react instantly before doing anything else |
+
+**Importance token:** every marker accepts a `!` between the alias and the colon
+(`f!:`, `queue!:`) — interrupt-grade: the handler must preempt current work instead
+of queueing. Meaning and importance are orthogonal; the legacy `i!:` is exactly
+`i` + `!`. On pi the session-signals extension aborts the running turn for a
+`!`-marker; this hook (turn-start only) conveys it by injecting the marker's
+interrupt text when one is defined (`injectInterrupt`), or its meaning plus a
+preemption suffix.
 
 Marker definitions (prefixes + the exact instruction text injected for each) live in
 `markers-context.json`, next to this file — edit that file to add a marker or change its wording;
@@ -69,7 +80,8 @@ Every detected marker is recorded to a small history file so the record of what 
 survives later compaction or summarization, even though the injected context itself doesn't
 persist verbatim in a compacted transcript. This is best-effort and opt-in by convention: the
 hook looks for an already-existing `.ai-badger` directory (walking up from the prompt's `cwd`) and,
-only if one is found, writes/updates `.ai-badger/prompt-markers/marker-state.json` (capped at the
+only if one is found, writes/updates the `marker_state` table in the project tracking DB
+(`.ai-badger/task-tracking/tracking.db`; capped at the
 most recent 100 entries). If no such directory exists, the hook still injects context but skips
 the audit write silently — it never creates project-tracking structure on its own.
 
@@ -82,7 +94,7 @@ the audit write silently — it never creates project-tracking structure on its 
   `UserPromptSubmit` hook (e.g. task's session tracker), add an entry, never replace it — the
   host runs all registered hooks.
 - **The audit write is best-effort by design.** It only fires when an `.ai-badger` directory
-  already exists; a missing `marker-state.json` is not a hook failure.
+  already exists; a skipped audit write is not a hook failure.
 - **Marker definitions live in `markers-context.json`.** Edit that file to add or change a
   marker, not the hook.
 

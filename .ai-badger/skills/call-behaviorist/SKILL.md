@@ -78,25 +78,27 @@ record never contains the text, so there is nothing to scrub after the fact.
 
 ## Where things live
 
-| Path | Purpose |
+| Store | Purpose |
 |---|---|
-| `~/.ai-badger/debug/state.json` | Whether logging is on, its scope and expiry |
-| `~/.ai-badger/debug/audit.jsonl` | The records, one JSON object per line |
+| `hook_state` KV in `~/.ai-badger/debug/audit.db` | Whether logging is on, its scope and expiry |
+| `hook_audit` table in the same DB | The records, one JSON payload per row |
 
-Both are user-level and `0600` — the log says where you work and what ran, so it never lands in
-a project directory or in git. It is capped at 5000 records, oldest trimmed first.
+The audit DB is user-level and `0600` — the log says where you work and what ran, so it never
+lands in a project directory or in git. `AI_BADGER_DEBUG_DIR` moves the whole sink. Records
+older than 60 days are pruned, so disk stays bounded whatever the duration.
 
 ## Reading the log
 
-`tail` is for a quick look. For anything more, the file is one JSON object per line:
+`tail [N]` is for a quick look. For anything more, each `hook_audit` payload is one JSON
+object:
 
 ```bash
-jq -r 'select(.event=="drift")' ~/.ai-badger/debug/audit.jsonl
-jq -r '[.component, .version] | @tsv' ~/.ai-badger/debug/audit.jsonl | sort | uniq -c
+python3 .ai-badger/skills/call-behaviorist/scripts/behaviorist.py tail 20
+sqlite3 ~/.ai-badger/debug/audit.db "SELECT payload FROM hook_audit ORDER BY id DESC LIMIT 20"
 ```
 
-The second is the useful one when several copies of ai-badger are installed: it shows which
-version each component actually ran at.
+The `sqlite3` query is the useful one when several copies of ai-badger are installed: it shows
+which version each component actually ran at.
 
 ## Producing a health report
 
@@ -184,10 +186,10 @@ so two things are worth knowing before choosing it:
 - **It is a standing privacy exposure.** The log records where you work, which hooks ran and
   the MCP retrieval `q` field. Set `AI_BADGER_DEBUG_REDACT` to drop `q`, and remember the log
   spans every project on the machine, not just this one.
-- **Disk is bounded, not unbounded.** `MAX_AUDIT_LINES` (5000, oldest trimmed first) caps the
-  file whatever the duration — so `forever` costs a fixed slice of disk rather than a growing
-  one. The real cost is that a busy component evicts a quiet one's evidence, which is why a
-  hook that logs on every tool call is a bug rather than a preference.
+- **Disk is bounded, not unbounded.** Records older than 60 days are pruned from `hook_audit`
+  whatever the duration — so `forever` costs a bounded slice of disk rather than a growing
+  one. The real cost is that a busy component's recent records crowd a quiet one's evidence,
+  which is why a hook that logs on every tool call is a bug rather than a preference.
 
 Switch it off with `off` when the question is answered.
 

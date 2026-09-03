@@ -1,14 +1,18 @@
 """Extension management, one of the scaffold's collaborators.
 
 Parses, merges, and prunes skill extensions shipped at <skill>/extensions/<name>/ as they
-land in .ai-badger/skills/. See ADR-0006 for why this is the only mechanism.
+land in .ai-badger/skills/. Gateway skills carry their members' extension dirs one level
+deeper (<gateway>/references/<member>/extensions/), discovered from the gateway manifest's
+own member paths — no parallel list. See ADR-0006 for why this is the only mechanism.
 """
 from __future__ import annotations
 
+import json
 import re
 import shutil
 from collections import defaultdict
 from pathlib import Path
+from typing import List
 
 from scaffold_context import ScaffoldContext
 
@@ -16,6 +20,34 @@ from scaffold_context import ScaffoldContext
 _SECTION_RE = re.compile(r'^##\s+(.+)$')
 _AT_MARKER_RE = re.compile(r'^@([a-z][a-z0-9-]*):\s*(.*)$')
 _EXT_MARKER_RE = re.compile(r'<!--\s*EXT:([a-z][a-z0-9-]*)\s*-->')
+
+
+def _member_extension_bases(skill_dest: Path) -> List[Path]:
+    """Extension dirs a gateway's members ship, derived from manifest.json's member paths."""
+    try:
+        manifest = json.loads((skill_dest / "manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(manifest, dict) or manifest.get("kind") != "gateway":
+        return []
+    members = manifest.get("members")
+    if not isinstance(members, list):
+        return []
+    bases: List[Path] = []
+    for member in members:
+        if not isinstance(member, dict):
+            continue
+        paths = member.get("paths")
+        skill_rel = paths.get("skill") if isinstance(paths, dict) else None
+        if not isinstance(skill_rel, str):
+            name = member.get("name")
+            skill_rel = f"references/{name}" if isinstance(name, str) else None
+        if not isinstance(skill_rel, str):
+            continue
+        base = skill_dest / skill_rel / "extensions"
+        if base.is_dir():
+            bases.append(base)
+    return bases
 
 
 class Extensions:
@@ -86,58 +118,61 @@ class Extensions:
                     append_sections.append(rendered)
         return dict(by_marker), append_sections
 
+    def _extension_bases(self, dest: Path) -> List[Path]:
+        """Every extensions/ dir this delivered skill carries: its own plus each member's."""
+        return [dest / "extensions"] + _member_extension_bases(dest)
+
     def merge_extensions(self, skill_name: str, dest: Path) -> None:
         """Route extension sections into SKILL.md at <!-- EXT:name --> markers.
 
-        Only activates when SKILL.md contains the MERGE_EXTENSIONS sentinel.
-        Extension sections with @marker-name headers are inserted at the matching
-        <!-- EXT:name --> position. Sections without @marker are appended at the end.
-        Extensions/ directory is removed after merge.
+        Only activates when the SKILL.md beside an extensions/ dir contains the
+        MERGE_EXTENSIONS sentinel — so a member without one keeps its extension dirs exactly
+        as the prune left them.
         """
-        ext_base = dest / "extensions"
-        if not ext_base.is_dir():
-            return
-        skill_md = dest / "SKILL.md"
-        if not skill_md.exists():
-            return
-        content = skill_md.read_text(encoding="utf-8")
-        if "<!-- MERGE_EXTENSIONS -->" not in content:
-            return
-        content = content.replace("<!-- MERGE_EXTENSIONS -->\n", "")
-        content = content.replace("<!-- MERGE_EXTENSIONS -->", "")
-
-        by_marker, append_sections = self._collect_marker_sections(dest)
-
-        # Insert at each marker position
-        ext_count = 0
-        for marker_name, sections in by_marker.items():
-            marker_tag = f"<!-- EXT:{marker_name} -->"
-            if marker_tag not in content:
-                self.ctx.notes.append(
-                    f"extension targets marker '{marker_name}' but SKILL.md has no "
-                    f"<!-- EXT:{marker_name} --> — sections skipped"
-                )
+        for ext_base in self._extension_bases(dest):
+            if not ext_base.is_dir():
                 continue
-            insertion = "\n\n" + "\n\n".join(sections)
-            content = content.replace(marker_tag, marker_tag + insertion)
-            ext_count += len(sections)
+            skill_md = ext_base.parent / "SKILL.md"
+            if not skill_md.exists():
+                continue
+            content = skill_md.read_text(encoding="utf-8")
+            if "<!-- MERGE_EXTENSIONS -->" not in content:
+                continue
+            content = content.replace("<!-- MERGE_EXTENSIONS -->\n", "")
+            content = content.replace("<!-- MERGE_EXTENSIONS -->", "")
 
-        # Append untargeted sections at the end
-        if append_sections:
-            content = content.rstrip() + "\n\n" + "\n\n".join(append_sections) + "\n"
-            ext_count += len(append_sections)
+            by_marker, append_sections = self._collect_marker_sections(ext_base.parent)
 
-        # Remove EXT markers from output
-        content = re.sub(r'\n?<!-- EXT:[a-z][a-z0-9-]* -->\n?', '', content)
+            # Insert at each marker position
+            ext_count = 0
+            for marker_name, sections in by_marker.items():
+                marker_tag = f"<!-- EXT:{marker_name} -->"
+                if marker_tag not in content:
+                    self.ctx.notes.append(
+                        f"extension targets marker '{marker_name}' but SKILL.md has no "
+                        f"<!-- EXT:{marker_name} --> — sections skipped"
+                    )
+                    continue
+                insertion = "\n\n" + "\n\n".join(sections)
+                content = content.replace(marker_tag, marker_tag + insertion)
+                ext_count += len(sections)
 
-        if ext_count:
-            skill_md.write_text(content, encoding="utf-8")
-            self.ctx.notes.append(
-                f"merged {ext_count} extension section(s) into "
-                f".ai-badger/skills/{skill_name}/SKILL.md"
-            )
-        # Remove extensions/ dir — content is now in SKILL.md
-        shutil.rmtree(ext_base)
+            # Append untargeted sections at the end
+            if append_sections:
+                content = content.rstrip() + "\n\n" + "\n\n".join(append_sections) + "\n"
+                ext_count += len(append_sections)
+
+            # Remove EXT markers from output
+            content = re.sub(r'\n?<!-- EXT:[a-z][a-z0-9-]* -->\n?', '', content)
+
+            if ext_count:
+                skill_md.write_text(content, encoding="utf-8")
+                self.ctx.notes.append(
+                    f"merged {ext_count} extension section(s) into "
+                    f".ai-badger/skills/{skill_name}/{skill_md.relative_to(dest).as_posix()}"
+                )
+            # Remove extensions/ dir — content is now in SKILL.md
+            shutil.rmtree(ext_base)
 
     def append_project_local(self, skill_name: str, dest: Path) -> None:
         """If project-local.md exists in the scaffolded skill dir, append its content to SKILL.md.
@@ -163,31 +198,32 @@ class Extensions:
     def prune_inline_extensions(self, skill_name: str, dest: Path) -> None:
         """Remove extensions shipped inside the skill directory whose requires aren't met.
 
-        Extensions stored at <skill>/extensions/<ext>/ are copied by copytree before their
-        activation conditions are checked.  This prunes any whose extension.json declares
+        Extensions stored at <skill>/extensions/<ext>/ (or a gateway member's equivalent,
+        <gateway>/references/<member>/extensions/<ext>/) are copied by copytree before their
+        activation conditions are checked. This prunes any whose extension.json declares
         unmet requires, keeping the scaffolded output config-gated.
         """
         import badger_lib as bl
         from _shared import requirement_met  # pylint: disable=import-outside-toplevel
 
-        ext_base = dest / "extensions"
-        if not ext_base.is_dir():
-            return
-        for ext_dir in sorted(ext_base.iterdir()):
-            if not ext_dir.is_dir():
+        for ext_base in self._extension_bases(dest):
+            if not ext_base.is_dir():
                 continue
-            descriptor = ext_dir / "extension.json"
-            if not descriptor.exists():
-                continue
-            reqs = bl.load_json(descriptor).get("requires", [])
-            if all(requirement_met(self.ctx.config, r) for r in reqs):
-                self.ctx.notes.append(
-                    f"embedded extension '{ext_dir.name}' into skill "
-                    f"'{skill_name}' (requirements met)"
-                )
-            else:
-                shutil.rmtree(ext_dir)
-                self.ctx.notes.append(
-                    f"extension '{ext_dir.name}' for '{skill_name}' "
-                    "skipped (config requirements not met)"
-                )
+            for ext_dir in sorted(ext_base.iterdir()):
+                if not ext_dir.is_dir():
+                    continue
+                descriptor = ext_dir / "extension.json"
+                if not descriptor.exists():
+                    continue
+                reqs = bl.load_json(descriptor).get("requires", [])
+                if all(requirement_met(self.ctx.config, r) for r in reqs):
+                    self.ctx.notes.append(
+                        f"embedded extension '{ext_dir.name}' into skill "
+                        f"'{skill_name}' (requirements met)"
+                    )
+                else:
+                    shutil.rmtree(ext_dir)
+                    self.ctx.notes.append(
+                        f"extension '{ext_dir.name}' for '{skill_name}' "
+                        "skipped (config requirements not met)"
+                    )

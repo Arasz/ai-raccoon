@@ -4,7 +4,7 @@ C# .NET 10 MCP server exposing agent memory management over sqlite-memory: proje
 
 > Domain: Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory.
 > Stacks: dotnet, mcp, python, github, ai-raccoon
-> Scaffolded by ai-badger 0.136.0. Source of truth for this file: `.ai-badger/copilot-instructions.md`.
+> Scaffolded by ai-badger 0.161.0. Source of truth for this file: `.ai-badger/copilot-instructions.md`.
 
 ## Commands
 
@@ -30,6 +30,7 @@ Additional invariants load contextually via these paths — see `.ai-badger/inva
 - code review, quality gates, PR review → `code-reviewer`
 - C#/.NET implementation, MCP tools, backend work → `dotnet-engineer`
 - Every dispatch names its `model` — the delegation map is `.ai-badger/delegation.md`.
+- Parallel dispatches each name their own `isolation` — lanes sharing a tree share its build output.
 
 ## Prompt markers
 
@@ -39,7 +40,10 @@ This project understands prompt markers (see `.ai-badger/skills/prompt-markers`)
 - `f:` / `feedback:` — a high-priority correction; adjust immediately.
 - `e:` / `extension:` — a request to expand the current task's scope.
 - `q:` / `queue:` — a queued instruction to analyze and run after active work completes.
+- `i:` / `important:` — important: high priority, do not drop it; handle at the next natural boundary.
 - `i!:` / `important!:` — immediate emergency interrupt: STOP, pause/cancel active tasks, and react instantly.
+
+Every marker accepts an **importance token**: insert `!` before the colon (`f!:`, `queue!:`) to make that marker interrupt-grade — preempt current work and handle it first. On pi the session-signals extension aborts the running turn for you; here, treat a `!`-marker as preempting whatever is in flight — never queue it silently behind work already running.
 
 A marker is expanded by a `UserPromptSubmit` hook, which fires only when a message **starts a turn**. A message sent **mid-turn** — queued while work is already running — reaches the model as an attachment and never passes through that hook, so its marker is never expanded. Apply the behaviour above yourself whenever you see a marker arrive that way.
 
@@ -131,8 +135,11 @@ Each tool's own description covers the rest.
 - **Measure only when the measurement pays** — Run your own benchmark or experiment when the time it costs is repaid by the decision it settles, and not otherwise.
   → `.ai-badger/invariants/measure-when-it-pays.md`
 
-- **Minimal comments** — Keep doc comments to 1-3 lines stating the contract, not the provenance or rationale — point at an ADR or spec doc for the "why" instead of writing an essay inline.
+- **Minimal comments** — Write a doc comment as the 1-3 line contract an editor shows on hover — what the thing is and how to use it — and never let a PR, issue or ticket reference appear anywhere in it.
   → `.ai-badger/invariants/minimal-comments.md`
+
+- **Let git write git's own storage** — Write a git dir through `git config`, `git remote` and `git branch --set-upstream-to`, each of which takes the config lock and rewrites only the key it was given.
+  → `.ai-badger/invariants/never-hand-edit-the-git-dir.md`
 
 - **Use platform security APIs** — Always use the platform's built-in security and crypto APIs.
   → `.ai-badger/invariants/no-hand-rolled-crypto.md`
@@ -175,6 +182,9 @@ Each tool's own description covers the rest.
 
 - **TDD is mandatory** — Write a failing, behavior-focused test before any production code change.
   → `.ai-badger/invariants/tdd-mandatory.md`
+
+- **Run each suite once; CI runs the rest** — Normal flow runs the modified surface's suite once — plus the suites of anything that consumes the changed behavior, so an API change pulls the frontend end-to-end that exercises it — and leaves the full suite to CI on push.
+  → `.ai-badger/invariants/test-run-economy.md`
 
 - **Tests are designed before they are written, and judged after** — Green is the floor, not the evidence: a test list comes out of the acceptance criteria before the first test is written (`design-tests`, each row naming the failure mode it targets and the mutation that proves it real), and a change that adds or alters tests is not done until something other than its author has run `review-tests` and asked whether that suite could have gone red.
   → `.ai-badger/invariants/tests-are-designed-and-reviewed.md`

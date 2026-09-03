@@ -244,8 +244,8 @@ def cmd_start(args) -> int:
         )
         return 2
     checkpoint = source["checkpoint"](session)
-    with lib.locked_store():
-        tasks = lib.load_tasks()
+    with lib.tracking_transaction() as store:
+        tasks = lib.load_tasks(store)
         conflict = lib.find_other_entry_with_session(tasks, session["sessionId"], args.task_id)
         if conflict is not None and conflict.get("state") != lib.STATE_FINISHED:
             print(
@@ -285,9 +285,9 @@ def cmd_start(args) -> int:
                 "resumeAttempts": entry.get("resumeAttempts", []),
             }
         )
-        lib.save_json(lib.EXECUTED_TASKS, tasks)
+        lib.save_tasks(store, tasks)
 
-        usage = lib.load_usage()
+        usage = lib.load_usage(store)
         usage_entry = lib.find_entry(usage, args.task_id)
         if usage_entry is None:
             usage_entry = {"taskId": args.task_id, "subagents": [], "grade": None}
@@ -297,7 +297,7 @@ def cmd_start(args) -> int:
         checkpoints = usage_entry.setdefault("checkpoints", {})
         checkpoints.setdefault("start", checkpoint)  # keep the original start on re-runs
         checkpoints["latest"] = checkpoint
-        lib.save_json(lib.TOKEN_USAGE, usage)
+        lib.save_usage(store, usage)
 
     # Outside the lock: this shells out to git, and holding the store lock across it would let a
     # slow checkout block every other tracker call.
@@ -340,8 +340,8 @@ def cmd_start(args) -> int:
 
 
 def cmd_finish(args) -> int:
-    with lib.locked_store():
-        tasks = lib.load_tasks()
+    with lib.tracking_transaction() as store:
+        tasks = lib.load_tasks(store)
         entry = lib.find_entry(tasks, args.task_id)
         if entry is None:
             print(f"Unknown task {args.task_id}. Run start first.", file=sys.stderr)
@@ -372,9 +372,9 @@ def cmd_finish(args) -> int:
         entry["state"] = lib.STATE_FINISHED
         entry["finishedAt"] = lib.now_iso()
         entry["stateJsonUpdated"] = lib.state_json_updated_since(entry["startedAt"])
-        lib.save_json(lib.EXECUTED_TASKS, tasks)
+        lib.save_tasks(store, tasks)
 
-        usage = lib.load_usage()
+        usage = lib.load_usage(store)
         usage_entry = lib.find_entry(usage, args.task_id)
         if usage_entry is None:
             usage_entry = {
@@ -388,7 +388,7 @@ def cmd_finish(args) -> int:
         usage_entry["usage"] = lib.compute_usage(
             start_cp, checkpoint, usage_entry.get("subagents", [])
         )
-        lib.save_json(lib.TOKEN_USAGE, usage)
+        lib.save_usage(store, usage)
 
     worktree = {"removed": False, "keptBecause": ""}
     if not args.keep_worktree:
@@ -432,15 +432,15 @@ def cmd_grade(args) -> int:
     if not 0 <= args.grade <= 5:
         print("Grade must be 0-5.", file=sys.stderr)
         return 2
-    with lib.locked_store():
-        usage = lib.load_usage()
+    with lib.tracking_transaction() as store:
+        usage = lib.load_usage(store)
         entry = lib.find_entry(usage, args.task_id)
         if entry is None:
             print(f"Unknown task {args.task_id}.", file=sys.stderr)
             return 2
         entry["grade"] = args.grade
         entry["gradedAt"] = lib.now_iso()
-        lib.save_json(lib.TOKEN_USAGE, usage)
+        lib.save_usage(store, usage)
     print(f"Grade {args.grade}/5 saved for {args.task_id}.")
     return 0
 
@@ -452,8 +452,8 @@ def cmd_subagent(args) -> int:
             file=sys.stderr,
         )
         return 2
-    with lib.locked_store():
-        usage = lib.load_usage()
+    with lib.tracking_transaction() as store:
+        usage = lib.load_usage(store)
         entry = lib.find_entry(usage, args.task_id)
         if entry is None:
             print(f"Unknown task {args.task_id}. Run start first.", file=sys.stderr)
@@ -498,15 +498,15 @@ def cmd_subagent(args) -> int:
         end_cp = checkpoints.get("finish") or checkpoints.get("latest")
         if start_cp and end_cp:
             entry["usage"] = lib.compute_usage(start_cp, end_cp, entry["subagents"])
-        lib.save_json(lib.TOKEN_USAGE, usage)
+        lib.save_usage(store, usage)
     print(f"Recorded {record['totalTokens']} subagent tokens for {args.task_id}.")
     return 0
 
 
 def cmd_reattach(args) -> int:
     session = _session_or_die(args)
-    with lib.locked_store():
-        tasks = lib.load_tasks()
+    with lib.tracking_transaction() as store:
+        tasks = lib.load_tasks(store)
         conflict = lib.find_other_entry_with_session(tasks, session["sessionId"], args.task_id)
         if conflict is not None and conflict.get("state") != lib.STATE_FINISHED:
             print(
@@ -536,7 +536,7 @@ def cmd_reattach(args) -> int:
         entry["resumeCommand"] = source["resume"](session["sessionId"])
         if entry.get("state") != lib.STATE_FINISHED:
             entry["state"] = lib.STATE_IN_PROGRESS
-        lib.save_json(lib.EXECUTED_TASKS, tasks)
+        lib.save_tasks(store, tasks)
     print(f"Task {args.task_id} reattached to session {session['sessionId']}.")
     return 0
 

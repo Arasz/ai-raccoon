@@ -1,6 +1,6 @@
 # Delegation map — AiRaccoon
 
-> Scaffolded by ai-badger 0.136.0. Regenerated on every scaffold; do not edit.
+> Scaffolded by ai-badger 0.161.0. Regenerated on every scaffold; do not edit.
 
 ## Stacks
 
@@ -22,6 +22,15 @@ dotnet, mcp, python, github, ai-raccoon
 - tests, test strategy, test coverage → `test-engineer`
 - code review, quality gates, PR review → `code-reviewer`
 - C#/.NET implementation, MCP tools, backend work → `dotnet-engineer`
+
+## Parallel dispatch
+
+Lanes running at the same time need their own tree, not just their own files:
+agents sharing a checkout share its build output, so a green run proves nothing
+about the change that produced it. Dispatch with your agent tool's native
+`isolation` rather than a hand-made worktree. The `dispatch-gate` hook denies a
+write-capable dispatch that names none while a sibling lane is live; read-only
+lanes are exempt. Worked cases live in `.ai-badger/skills/worktree-agent-isolation`.
 
 ## Reasoning-model dispatch
 

@@ -18,6 +18,12 @@ SESSION_DEFAULT_LANE = "session default"
 
 DELEGATION_TEMPLATE = "delegation.md.tmpl"
 
+# The config keys the scaffolder renders verbatim as free-form prose, with the template slot
+# each fills. compute_doc_slots is the only writer. Every other slot is structured and
+# fingerprinted; this prose is the one thing a scaffold re-renders faithfully while it goes
+# stale, which is why drift.py surfaces exactly this list for staleness review.
+PROSE_SLOTS: Dict[str, str] = {"summary": "PROJECT_SUMMARY", "domain": "PROJECT_DOMAIN"}
+
 
 def frontmatter_fields(text: str) -> Dict[str, str]:
     """Each top-level frontmatter key mapped to its value, a folded block joined into one line."""
@@ -156,10 +162,8 @@ class TemplateRendering:
             "`personaRouting` in `.ai-badger/config.json` to route it._"
         )
         instr_md = "\n".join(instruction_row(p) for p in instr_paths) or "_None._"
-        return {
+        slots = {
             "PROJECT_NAME": project.get("name", ""),
-            "PROJECT_SUMMARY": project.get("summary", ""),
-            "PROJECT_DOMAIN": project.get("domain", ""),
             "STACKS": ", ".join(self.ctx.config.get("stacks", [])),
             "INVARIANTS": inv_md,
             "COMMANDS": cmd_md,
@@ -169,6 +173,9 @@ class TemplateRendering:
             "FRAMEWORK_VERSION": self.ctx.index["frameworkVersion"],
             "SOURCE_OF_TRUTH": source_of_truth,
         }
+        # The prose slots, from the list drift.py reviews against — one writer, one list.
+        slots.update({slot: project.get(key, "") for key, slot in PROSE_SLOTS.items()})
+        return slots
 
     def _render_template(self, tmpl_name: str, slots: Dict[str, str]) -> str:
         """Render a template file from features/common/templates/ with the given slots."""

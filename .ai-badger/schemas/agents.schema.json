@@ -18,13 +18,15 @@
         "enum": [
           "claude",
           "copilot",
-          "hermes"
+          "hermes",
+          "pi"
         ]
       },
       "default": [
         "claude",
         "copilot",
-        "hermes"
+        "hermes",
+        "pi"
       ]
     }
   }

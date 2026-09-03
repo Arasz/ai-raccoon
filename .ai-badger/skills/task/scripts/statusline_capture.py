@@ -24,8 +24,6 @@ import tracker_lib as lib
 # otherwise the record the scaffolder wrote when it displaced the project's own renderer.
 # Whether settings `env` reaches a statusLine command is undocumented, so the record must stand alone.
 _USER_STATUSLINE_ENV = "CLAUDE_USER_STATUSLINE"
-STATUSLINE_STATE = lib.DATA_DIR / "statusline-state.json"
-DELEGATE_RECORD = lib.DATA_DIR / "statusline-delegate.json"
 
 
 def capture_statusline(input_text: str) -> None:
@@ -43,7 +41,7 @@ def capture_statusline(input_text: str) -> None:
         "contextWindow": payload.get("context_window", {}),
         "model": payload.get("model", {}),
     }
-    lib.save_json(STATUSLINE_STATE, state)
+    lib.save_statusline_state(state)
 
 
 def resolve_delegate():
@@ -51,11 +49,7 @@ def resolve_delegate():
     configured = os.environ.get(_USER_STATUSLINE_ENV)
     if configured:
         return configured
-    try:
-        record = json.loads(DELEGATE_RECORD.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    command = record.get("command") if isinstance(record, dict) else None
+    command = lib.load_statusline_delegate().get("command")
     return command or None
 
 

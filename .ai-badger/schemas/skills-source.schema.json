@@ -54,7 +54,8 @@
                   "enum": [
                     "claude",
                     "copilot",
-                    "hermes"
+                    "hermes",
+                    "pi"
                   ]
                 },
                 "minItems": 1

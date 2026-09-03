@@ -1,11 +1,11 @@
-"""Shared helpers for the /task skill: JSON stores, transcript token parsing, session refs.
+"""Shared helpers for the /task skill: the tracking store, transcript token parsing, session refs.
 
-Data lives in <project-root>/.ai-badger/task-tracking/ (gitignored):
-  executed-tasks.json  — task execution records (session refs, timestamps, state)
-  token-usage.json     — per-task token checkpoints, usage deltas, quality grade
-  current-session.json — every currently-active session (keyed by sessionId), so multiple
-                          concurrent Claude Code sessions can share the file safely — see
-                          resolve_own_session().
+Task family state lives in <project-root>/.ai-badger/task-tracking/tracking.db (ADR-0024),
+accessed through the vendored badger_store module: tasks, token_usage, sessions and the
+statusline KV rows. The legacy JSON files (executed-tasks.json, token-usage.json,
+current-session.json, statusline-*.json) are migration sources: the first write through these
+accessors imports and renames them (*.migrated.json, D6), and until then reads merge them with
+per-key last-write-wins (D5a) so old surfaces and new code share one store.
 
 Project-agnostic: the project root is resolved via `resolve_project_root()` (env var, then a
 cwd walk for the `.ai-badger/config.json` contract marker, then a fallback relative to this
@@ -24,12 +24,14 @@ persona routing) lives in the project's `.ai-badger/config.json`, not here.
 
 from __future__ import annotations
 
+import contextlib
 import fcntl
 import json
 import os
 import subprocess
 import sys
 import tempfile
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -42,6 +44,35 @@ from pathlib import Path
 SESSION_SOURCES: dict = {}
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+
+
+def _load_badger_store():
+    """The store module (ADR-0024), vendored beside this script; None only if it never shipped.
+
+    Import order: already-loaded singleton, plain import (the framework checkout has engine/ on
+    sys.path; hook scripts put their own directory there first), then the sibling file — the
+    copy the vendored manifest delivers beside tracker_lib (D16).
+    """
+    if "badger_store" in sys.modules:
+        return sys.modules["badger_store"]
+    try:
+        import badger_store  # pylint: disable=import-outside-toplevel,redefined-outer-name
+        return badger_store
+    except ImportError:
+        pass
+    path = SCRIPT_DIR / "badger_store.py"
+    if not path.exists():
+        return None
+    import importlib.util  # pylint: disable=import-outside-toplevel,redefined-outer-name
+
+    spec = importlib.util.spec_from_file_location("badger_store", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["badger_store"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+badger_store = _load_badger_store()
 
 
 # badger_lib.GIT_LOCATION_ENV, repeated because this ships into projects that have no framework
@@ -361,12 +392,195 @@ def save_json(path: Path, data) -> None:
         raise
 
 
-def load_tasks() -> dict:
-    return load_json(EXECUTED_TASKS, {"tasks": []})
+# ---------------------------------------------------------------- store accessors (ADR-0024)
+
+# The doc-level key stop_hook.py carries in executed-tasks.json for its per-session block
+# budget. No ruled tasks column holds it, so it lives in the store's meta table; the legacy
+# file's own doc-level key merges beneath the DB value during the dual-read window.
+STOP_BLOCKS_KEY = "stopBlocks"
+
+# Every table the task family owns in tracking.db, migrated lazily on the first write (D6).
+_TASK_FAMILY_TABLES = ("tasks", "token_usage", "sessions", "statusline")
 
 
-def load_usage() -> dict:
-    return load_json(TOKEN_USAGE, {"tasks": []})
+def _task_families() -> dict:
+    """The store's task-family registry, rebuilt per call over THIS module's path constants.
+
+    Lambdas over module globals resolve at call time, so a test that reassigns EXECUTED_TASKS
+    or DATA_DIR redirects the legacy sources without touching the store module (D9).
+    """
+    if badger_store is None:
+        return {}
+
+    def legacy(name):
+        return lambda: DATA_DIR / name
+
+    def families():
+        return {
+            "tasks": badger_store.Family(
+                table="tasks", db="tracking", legacy_path=legacy("executed-tasks.json"),
+                legacy_kind="tasks"),
+            "token_usage": badger_store.Family(
+                table="token_usage", db="tracking", legacy_path=legacy("token-usage.json"),
+                legacy_kind="usage"),
+            "sessions": badger_store.Family(
+                table="sessions", db="tracking", legacy_path=legacy("current-session.json"),
+                legacy_kind="sessions"),
+            "statusline": badger_store.Family(
+                table="statusline", db="tracking", legacy_path=legacy("statusline-state.json"),
+                legacy_kind="kvdoc", row_key="state"),
+            "statusline_delegate": badger_store.Family(
+                table="statusline", db="tracking",
+                legacy_path=legacy("statusline-delegate.json"),
+                legacy_kind="kvdoc", row_key="delegate"),
+        }
+
+    return families()
+
+
+def _sync_tracking_root() -> None:
+    """Aim the store at this module's tracking dir, at call time (D9).
+
+    DATA_DIR is the one task-tracking resolution every consumer already shares — collapse,
+    CLAUDE_PROJECT_DIR, plugin-cache fallbacks included — so the store must follow it wherever
+    it lands, per-test redirects included. Set, not setdefault: a stale value from an earlier
+    resolve must not outlive this module's own answer.
+    """
+    if badger_store is not None:
+        os.environ[badger_store.TRACKING_ROOT_ENV] = str(DATA_DIR)
+
+
+def _open_store():
+    """The tracking store with the task families registered; raises on a resurrected legacy
+    file (D5c) — callers decide fail-open (hooks) or fail-loud (CLI)."""
+    _sync_tracking_root()
+    return badger_store.open_tracking(families=_task_families())
+
+
+@contextlib.contextmanager
+def tracking_transaction():
+    """One BEGIN IMMEDIATE store transaction spanning the block — the flock replacement.
+
+    Migrates every task-family legacy file first (its own transaction, D6), then holds one
+    write transaction so a verb's read-modify-write across tasks and token_usage stays atomic.
+    Store failures propagate: hooks wrap and fail open (D31), CLI verbs report.
+    """
+    store = _open_store()
+    try:
+        for table in _TASK_FAMILY_TABLES:
+            store.migrate(table)
+        store.conn.execute("BEGIN IMMEDIATE")
+        try:
+            yield store
+            store.conn.commit()
+        except BaseException:
+            store.conn.rollback()
+            raise
+        badger_store.notify_write(store.db_path)  # D24: suite attribution on committed writes
+    finally:
+        store.close()
+
+
+if badger_store is not None:
+    # D24: the store write path reports to the suite's leak-guards the way save_json does.
+    badger_store.WRITE_OBSERVERS.append(_record_real_write)
+
+
+def _legacy_stop_blocks() -> dict:
+    """The un-migrated executed-tasks.json doc-level block budget, for the dual-read window.
+
+    Resurrection is not a concern here: the store open already failed closed on it (D5c), so
+    a file that exists is pre-migration and safe to serve as the weaker source.
+    """
+    doc = load_json(EXECUTED_TASKS, {})
+    blocks = doc.get(STOP_BLOCKS_KEY) if isinstance(doc, dict) else None
+    return blocks if isinstance(blocks, dict) else {}
+
+
+def load_tasks(store=None) -> dict:
+    """Executed tasks as the doc every consumer knows: {"tasks": [...]}, dual-read (D5a).
+
+    DB rows win per task id; legacy-only entries still merge until their file migrates. The
+    doc carries the stop-block budget only when one is recorded, matching the legacy shape.
+    Read-only by itself: it never migrates, never renames — migration is a write's job (D6).
+    """
+    def _read(open_store):
+        doc = {"tasks": open_store.tasks_all()}
+        blocks = {**_legacy_stop_blocks(), **open_store.stop_blocks()}
+        if blocks:
+            doc[STOP_BLOCKS_KEY] = blocks
+        return doc
+
+    if store is not None:
+        return _read(store)
+    with closing(_open_store()) as open_store:
+        return _read(open_store)
+
+
+def save_tasks(store, doc: dict) -> None:
+    """Persist the executed-tasks doc inside a held transaction: upsert per entry.
+
+    Rows are written by explicit UPDATE or plain INSERT keyed on task_id — never INSERT OR
+    REPLACE, which deletes the session's other ACTIVE row (P0.6a MUST-2). Task entries are
+    never deleted, so a partial doc cannot prune the store; the doc-level block budget is
+    written when present.
+    """
+    for entry in doc.get("tasks", []):
+        store.task_upsert(entry)
+    blocks = doc.get(STOP_BLOCKS_KEY)
+    if isinstance(blocks, dict):
+        store.meta_set(STOP_BLOCKS_KEY, blocks)
+
+
+def save_tasks_doc(doc: dict) -> None:
+    """save_tasks for callers without a held transaction (one-shot whole-doc writes)."""
+    with tracking_transaction() as store:
+        save_tasks(store, doc)
+
+
+def load_usage(store=None) -> dict:
+    """Token-usage doc, dual-read: DB rows win per task id, legacy-only entries merge (D5a)."""
+    if store is not None:
+        return {"tasks": store.usage_all()}
+    with closing(_open_store()) as open_store:
+        return {"tasks": open_store.usage_all()}
+
+
+def save_usage(store, doc: dict) -> None:
+    """Persist the token-usage doc inside a held transaction (upsert per entry)."""
+    for entry in doc.get("tasks", []):
+        store.usage_upsert(entry)
+
+
+def save_usage_doc(doc: dict) -> None:
+    """save_usage for callers without a held transaction."""
+    with tracking_transaction() as store:
+        save_usage(store, doc)
+
+
+def load_statusline_state(store=None) -> dict:
+    """The captured statusLine payload (statusline KV row 'state'), dual-read (D5a)."""
+    def _read(open_store):
+        doc = open_store.kv_get("statusline", "state", {})
+        return doc if isinstance(doc, dict) else {}
+
+    if store is not None:
+        return _read(store)
+    with closing(_open_store()) as open_store:
+        return _read(open_store)
+
+
+def save_statusline_state(state: dict) -> None:
+    """Persist the captured statusLine payload (one atomic KV row upsert)."""
+    with closing(_open_store()) as open_store:
+        open_store.kv_set("statusline", "state", state)
+
+
+def load_statusline_delegate() -> dict:
+    """The statusline delegate record (statusline KV row 'delegate'), dual-read (D5a)."""
+    with closing(_open_store()) as open_store:
+        record = open_store.kv_get("statusline", "delegate", {})
+        return record if isinstance(record, dict) else {}
 
 
 def load_config() -> dict:
@@ -407,31 +621,29 @@ def _pid_alive(pid) -> bool:
 
 
 def load_current_sessions() -> dict:
-    """Every currently-known active session, keyed by sessionId."""
-    return load_json(CURRENT_SESSION, {"sessions": {}}).get("sessions", {})
+    """Every currently-known active session, keyed by sessionId (store dual-read, D5a)."""
+    with closing(_open_store()) as store:
+        return store.sessions_map()
 
 
 def save_current_session(session_id: str, transcript_path: str, cwd: str = "") -> None:
-    """Record this session into the shared multi-session index.
+    """Record this session into the shared multi-session index (one store transaction).
 
-    Lock-protected read-modify-write: multiple Claude Code sessions call this concurrently
-    (once per SessionStart/UserPromptSubmit), so it must not race a plain save_json overwrite
-    that would drop another session's entry. Also opportunistically prunes entries whose
-    process no longer exists, so the file self-cleans without a separate GC job.
+    The BEGIN IMMEDIATE transaction is the old flock's replacement: concurrent SessionStart /
+    UserPromptSubmit hooks serialize, so no session's entry can be lost. Also opportunistically
+    prunes entries whose process no longer exists, so the index self-cleans without a GC job.
     """
-    with locked_store():
-        doc = load_json(CURRENT_SESSION, {"sessions": {}})
-        sessions = doc.setdefault("sessions", {})
+    with tracking_transaction() as store:
+        sessions = store.sessions_map()
         for sid in list(sessions):
             if sid != session_id and not _pid_alive(sessions[sid].get("pid")):
-                del sessions[sid]
-        sessions[session_id] = {
+                store.session_delete(sid)
+        store.session_upsert(session_id, {
             "transcriptPath": transcript_path,
             "cwd": cwd or str(PROJECT_ROOT),
             "pid": os.getppid(),  # the long-lived Claude Code process that spawned this hook
             "recordedAt": now_iso(),
-        }
-        save_json(CURRENT_SESSION, doc)
+        })
 
 
 def _own_pid_ancestry(max_depth: int = 12) -> list[int]:

@@ -7,12 +7,14 @@ Verified by verify_hooks.py in this directory.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
+import sqlite3
 import subprocess
 import sys
-import tempfile
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -29,16 +31,33 @@ _CACHE_TTL_SECONDS = 10
 _EDIT_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
 
 
-def _cache_root() -> Optional[Path]:
-    """The cache directory, or None when this process has no home directory. Deliberately
-    not the world-writable temp dir: the cached text is interpolated into a model's context."""
+def _load_badger_store():
+    """The store module: already-imported, importable, or the vendored copy beside this script."""
+    if "badger_store" in sys.modules:
+        return sys.modules["badger_store"]
     try:
-        return Path.home() / ".ai-badger" / "dirty-sweep"
-    except (RuntimeError, OSError):
+        import badger_store  # pylint: disable=import-outside-toplevel,redefined-outer-name
+        return badger_store
+    except ImportError:
+        pass
+    try:
+        path = Path(__file__).resolve().parent / "badger_store.py"
+        spec = importlib.util.spec_from_file_location("badger_store", path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules["badger_store"] = module
+        spec.loader.exec_module(module)
+        return module
+    except (OSError, ValueError):
         return None
 
 
-CACHE_DIR: Optional[Path] = _cache_root()
+badger_store = _load_badger_store()
+
+
+def _sweep_key(repo_root: Path) -> str:
+    """The sweep's store key: sha1 of the MAIN checkout root, 16 hex chars — the legacy
+    cache filename's hash verbatim (D4), so every worktree of a repo shares one row."""
+    return hashlib.sha1(str(repo_root).encode("utf-8")).hexdigest()[:16]
 
 
 def git_env(env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
@@ -89,13 +108,6 @@ def _main_repo_root(cwd: str) -> Optional[Path]:
 def _toplevel(cwd: str) -> Optional[Path]:
     top = _run_git(["rev-parse", "--show-toplevel"], cwd, _GIT_TIMEOUT_SECONDS)
     return Path(top.strip()) if top else None
-
-
-def _cache_path(repo_root: Path) -> Optional[Path]:
-    if CACHE_DIR is None:
-        return None
-    key = hashlib.sha1(str(repo_root).encode("utf-8")).hexdigest()[:16]
-    return CACHE_DIR / f"dirty-sweep-{key}.json"
 
 
 def _parse_worktree_porcelain(output: str) -> List[Dict[str, str]]:
@@ -183,40 +195,40 @@ def _valid_sweep(data: Any) -> bool:
     return True
 
 
-def _read_cache(cache_file: Path) -> Optional[Dict[str, List[Dict[str, str]]]]:
-    try:
-        if time.time() - cache_file.stat().st_mtime > _CACHE_TTL_SECONDS:
-            return None
-        data = json.loads(cache_file.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    return data if _valid_sweep(data) else None
-
-
-def _write_cache(cache_file: Path, data: Dict[str, List[Dict[str, str]]]) -> None:
-    """Atomic replace so a concurrent reader never sees a half-written sweep."""
-    try:
-        cache_file.parent.mkdir(parents=True, exist_ok=True)
-        handle, temp_name = tempfile.mkstemp(dir=str(cache_file.parent), suffix=".tmp")
-        try:
-            with os.fdopen(handle, "w", encoding="utf-8") as stream:
-                json.dump(data, stream)
-            os.replace(temp_name, cache_file)
-        except OSError:
-            os.unlink(temp_name)
-    except OSError:
-        pass  # a cache write failure only costs the next call a fresh sweep
-
-
 def _sweep_cached(repo_root: Path) -> Dict[str, List[Dict[str, str]]]:
-    cache_file = _cache_path(repo_root)
-    if cache_file is None:
+    """The shared sweep: the store row when fresh, else a fresh sweep written back. The
+    row is keyed on the main repo root (D4); a miss or an unreadable row only costs a
+    re-sweep, never a wrong answer."""
+    key = _sweep_key(repo_root)
+    if badger_store is None:
         return _sweep(repo_root)
-    cached = _read_cache(cache_file)
-    if cached is not None:
-        return cached
+    try:
+        store = badger_store.open_user()
+        if store is None:
+            return _sweep(repo_root)
+        try:
+            row = store.conn.execute(
+                "SELECT value, updated_at FROM dirty_sweeps WHERE key = ?", (key,)).fetchone()
+            if row is not None:
+                age = datetime.now(timezone.utc).timestamp() - \
+                    datetime.fromisoformat(str(row[1])).timestamp()
+                data = json.loads(row[0])
+                if 0 <= age <= _CACHE_TTL_SECONDS and _valid_sweep(data):
+                    return data
+        finally:
+            store.close()
+    except (OSError, sqlite3.Error, ValueError, TypeError):
+        pass  # a cache read failure only costs a fresh sweep
     data = _sweep(repo_root)
-    _write_cache(cache_file, data)
+    try:
+        store = badger_store.open_user()
+        if store is not None:
+            try:
+                store.kv_set("dirty_sweeps", key, data)
+            finally:
+                store.close()
+    except (OSError, sqlite3.Error, ValueError):
+        pass
     return data
 
 

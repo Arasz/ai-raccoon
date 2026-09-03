@@ -39,8 +39,9 @@ at-a-glance).
   A common-stack skill declaring neither value fails `gates/skills_lint.py` rule 12,
   so the catalog is complete by construction.
 - 0.78.0 snapshot: **14 default** (13 + `the project-memory`), **8 optIn**
-  (debug-issue, evidence-first-research, explore-codebase, migrate-documentation,
-  refactor-safely, review-changes, scaffold-documentation, update-documentation),
+  (debug-issue, evidence-first-research, explore-codebase, refactor-safely,
+  review-changes; plus the documentation trio, which since 0.137.0 are members of
+  the `documentation` gateway rather than registered skills),
   `auto-wm` claude-only. Sibling docs that say otherwise (e.g. docs/skills.md "seven
   are optIn") are drift; fix against the dict.
 - MCP servers: `features/common/stack-mcp.json` — `code-review-graph` unconditional

@@ -82,6 +82,12 @@ For initial setup use `welcome-ai-badger`; to contribute back use `feed-badger`.
      last scaffold was built from (an `exclude`, `commands`, `stacks`, `agents` or
      `personaRouting` edit). Present as `{"recorded": ..., "current": ...}`; `recorded: null`
      means this manifest predates the field and self-heals on this one re-scaffold
+   - `drift.proseReview` — the config's free-form prose (`project.summary`, `project.domain`),
+     re-rendered verbatim into the managed agent files on every scaffold and checked by no
+     fingerprint, so it goes stale silently. Each entry names the `configKey`, the template
+     `slot` it fills, the `value` as written, and carries the note "human-written — review
+     for staleness". Present them to the operator for review; never treat them as drift —
+     a re-scaffold cannot freshen prose, only re-render it, and config.json is project-owned
    - `newStacks` — stacks detectable in the target but missing from config. Advisory only:
      it never triggers a re-scaffold, so non-empty `newStacks` alongside `reScaffolded: false`
      is the expected shape, not a contradiction

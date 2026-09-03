@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import commit_reminder  # pylint: disable=wrong-import-position
 import impact_estimator  # pylint: disable=wrong-import-position
 
+# pylint: disable=no-member  # debug_log is an exec-populated shim; pylint cannot see its members
 try:
     import debug_log  # pylint: disable=wrong-import-position
 except ImportError:  # pragma: no cover - a missing logger must never break a hook

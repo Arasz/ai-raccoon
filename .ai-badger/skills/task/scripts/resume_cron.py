@@ -164,8 +164,8 @@ def run(dry_run: bool) -> int:
         return 0
 
     for entry in stalled:
-        with lib.locked_store():
-            fresh = lib.load_tasks()
+        with lib.tracking_transaction() as store:
+            fresh = lib.load_tasks(store)
             fresh_entry = lib.find_entry(fresh, entry["taskId"])
             if fresh_entry is None or fresh_entry.get("state") == lib.STATE_FINISHED:
                 continue
@@ -173,7 +173,7 @@ def run(dry_run: bool) -> int:
                 {"at": lib.now_iso(), "dryRun": dry_run}
             )
             fresh_entry["state"] = lib.STATE_IN_PROGRESS
-            lib.save_json(lib.EXECUTED_TASKS, fresh)
+            lib.save_tasks(store, fresh)
         resume_task(entry, dry_run)
     return 0
 

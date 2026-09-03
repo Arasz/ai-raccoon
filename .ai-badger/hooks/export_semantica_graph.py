@@ -27,9 +27,8 @@ DEFAULT_SEED = {
 }
 
 NUDGE_LINE = (
-    "[ai-badger] Semantica is configured: record key decisions via record_decision and "
-    "call export_graph(format=json) before finishing — dumps auto-save to .semantica/ "
-    "and are indexed."
+    "[ai-badger] Semantica is configured: record key decisions via record_decision — "
+    "they stay queryable this session via query_decisions and find_precedents."
 )
 
 
@@ -122,7 +121,12 @@ def extract_graph_json(result) -> dict | None:
                 return None
             return inner
         return None
-    return result
+    # Anything that matched no envelope used to fall through and be written as a
+    # graph. Require the shape a graph actually has rather than enumerating the
+    # envelopes that are not one.
+    if "nodes" in result:
+        return result
+    return None
 
 
 def export_graph(
@@ -199,6 +203,17 @@ def _error_payload_error(result) -> str | None:
                 continue
         if isinstance(inner, dict) and (inner.get("error") is not None or inner.get("isError")):
             return str(inner.get("error") or "isError")
+    content = result.get("content")
+    if isinstance(content, list):
+        for part in content:
+            if not isinstance(part, dict) or part.get("type") != "text":
+                continue
+            try:
+                inner = json.loads(part.get("text", ""))
+            except json.JSONDecodeError:
+                continue
+            if isinstance(inner, dict) and (inner.get("error") is not None or inner.get("isError")):
+                return str(inner.get("error") or "isError")
     return None
 
 
@@ -215,6 +230,12 @@ def autosave_export(tool_name, result, session_id, project_dir) -> Path | None:
         if error is not None:
             print(
                 f"[ai-badger] semantica export_graph failed; .semantica/ dump skipped: {error}",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                "[ai-badger] semantica export_graph returned an unrecognized payload "
+                "shape; .semantica/ dump skipped.",
                 file=sys.stderr,
             )
         return None

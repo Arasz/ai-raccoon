@@ -27,6 +27,11 @@ from mcp_matcher import (  # noqa: E402  pylint: disable=wrong-import-position
 )
 from mcp_matcher import find_relevant_tools as _mm_find_relevant_tools  # noqa: E402  pylint: disable=wrong-import-position,line-too-long
 
+try:
+    import badger_store  # engine/ canonical; this module is never vendored (P2.1a)
+except ImportError:  # a checkout without engine/ keeps the legacy marker-file surface
+    badger_store = None  # pylint: disable=invalid-name
+
 TOP_N = 3
 MAX_HINT_CHARS = 300
 # debug_log's own PIPE_BUF-driven field clip (MAX_FIELD_CHARS); duplicated as a plain int here
@@ -34,9 +39,8 @@ MAX_HINT_CHARS = 300
 MAX_TOP_CANDIDATES_CHARS = 200
 
 NUDGE_LINE = (
-    "[ai-badger] Semantica is configured: record key decisions via record_decision and "
-    "call export_graph(format=json) before finishing — dumps auto-save to .semantica/ "
-    "and are indexed."
+    "[ai-badger] Semantica is configured: record key decisions via record_decision — "
+    "they stay queryable this session via query_decisions and find_precedents."
 )
 
 SEMANTICA_NUDGE_DIR = Path.home() / ".ai-badger" / "semantica-nudge"
@@ -211,11 +215,38 @@ def semantica_nudge_marker_path(
     return target_dir / safe
 
 
+def _open_nudge_store():
+    """The user store narrowed to the semantica_nudge family; SEMANTICA_NUDGE_DIR is the seam."""
+    return badger_store.open_user(families={
+        "semantica_nudge": badger_store.Family(
+            table="semantica_nudge", db="user",
+            legacy_path=lambda: SEMANTICA_NUDGE_DIR, legacy_kind="nudges",
+        ),
+    })
+
+
 def semantica_nudge_already_shown(
     session_id: Optional[str],
     base_dir: Optional[Path] = None,
 ) -> bool:
-    """True when the session was already nudged for Semantica (marker exists)."""
+    """True when the session was already nudged (store row, else the legacy marker file)."""
+    safe = _safe_session(session_id)
+    if not safe:
+        return False
+    if badger_store is not None:
+        try:
+            store = _open_nudge_store()
+            try:
+                row = store.conn.execute(
+                    "SELECT 1 FROM semantica_nudge WHERE session_id = ?", (safe,)
+                ).fetchone()
+            finally:
+                store.close()
+            if row is not None:
+                return True
+        # a hook never raises
+        except Exception:  # pylint: disable=broad-exception-caught
+            pass
     path = semantica_nudge_marker_path(session_id, base_dir=base_dir)
     return path.is_file() if path.name else False
 
@@ -224,7 +255,32 @@ def record_semantica_nudge_shown(
     session_id: Optional[str],
     base_dir: Optional[Path] = None,
 ) -> bool:
-    """Touch the semantica nudge marker; False on a missing session id or IO failure."""
+    """Record the nudge as a session-keyed presence row; False on failure.
+
+    The first write lazy-migrates the legacy flat marker set (D6). An unavailable store
+    falls back to touching the legacy marker file, so the nudge keeps working either way.
+    """
+    safe = _safe_session(session_id)
+    if not safe:
+        return False
+    if badger_store is not None:
+        try:
+            store = _open_nudge_store()
+            try:
+                store.migrate("semantica_nudge")
+                store.conn.execute(
+                    "INSERT INTO semantica_nudge(session_id, payload, updated_at) "
+                    "VALUES (?, ?, ?) ON CONFLICT(session_id) DO NOTHING",
+                    # the shared row-stamp format comes from the store's own helper
+                    # pylint: disable-next=protected-access
+                    (safe, json.dumps({"shown": True}), badger_store._now()),
+                )
+                store.conn.commit()
+                return True
+            finally:
+                store.close()
+        except Exception:  # pylint: disable=broad-exception-caught
+            pass
     path = semantica_nudge_marker_path(session_id, base_dir=base_dir)
     if not path.name:
         return False

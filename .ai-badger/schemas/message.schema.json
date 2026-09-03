@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Arasz/ai-badger/schemas/message.schema.json",
+  "title": "Message Bus Document",
+  "description": "One user-DB message-bus document: who sent it, the raw content, and when it was sent. The store's delivery API returns this shape and the per-harness delivery hooks inject it into session context.",
+  "type": "object",
+  "required": ["sender", "content", "timestamp"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "sender": {
+      "type": "object",
+      "description": "The sending session's full identity — identity is REQUIRED at send, so both halves are always present on a delivered message.",
+      "required": ["sessionId", "projectId"],
+      "additionalProperties": false,
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The sending session's harness session id."
+        },
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The sending session's resolved project id (the cwd resolver's space)."
+        }
+      }
+    },
+    "content": {
+      "type": "string",
+      "description": "The message body as a raw string, stored and injected verbatim."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC send time; feeds the 4-day retention window."
+    }
+  }
+}

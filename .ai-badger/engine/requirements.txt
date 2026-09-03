@@ -3,3 +3,8 @@
 #   python3 -m pip install -r engine/requirements.txt
 jsonschema>=4.26.0
 pyyaml>=6.0.3
+# Optional: semantica MCP wrapper (semantica_mcp_wrapper.py). Only needed when
+# the wrapper script is used to patch the upstream export_graph bug (0.6.5-0.6.6).
+# The wrapper runs inside semantica's own uv-tool env; this declaration satisfies
+# the dependency guard.
+semantica>=0.6.6

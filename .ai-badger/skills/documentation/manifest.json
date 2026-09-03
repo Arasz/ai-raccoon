@@ -1,0 +1,45 @@
+{
+  "kind": "gateway",
+  "members": [
+    {
+      "name": "migrate-documentation",
+      "purpose": "Use when an existing documentation tree must be reorganised wholesale — \"migrate the docs\", \"reorganise docs/\", hundreds of files with no structure, overlapping documents that contradict each other, a docs directory nobody can navigate, or documentation whose accuracy is unknown and must be established before anyone relies on it. Also use to resume a migration already in progress. Not for creating a tree that does not exist (use scaffold-documentation) and not for a single documentation change (use update-documentation).",
+      "triggers": [
+        "migrate docs",
+        "move documentation",
+        "reorganise docs",
+        "legacy docs"
+      ],
+      "paths": {
+        "skill": "references/migrate-documentation"
+      }
+    },
+    {
+      "name": "scaffold-documentation",
+      "purpose": "Use when a repository has no documentation tree yet, or the canonical docs layout is missing, incomplete or was hand-created — \"set up docs\", \"scaffold documentation\", \"create the docs structure\", a fresh repo with only a README, a docs directory missing its directory READMEs, or a structure check that reports absent directories. Not for adding or editing a document (use update-documentation), and not for reorganising docs that already exist (use migrate-documentation).",
+      "triggers": [
+        "scaffold documentation",
+        "docs structure",
+        "create docs",
+        "documentation tree",
+        "directory readme"
+      ],
+      "paths": {
+        "skill": "references/scaffold-documentation"
+      }
+    },
+    {
+      "name": "update-documentation",
+      "purpose": "Use whenever documentation must change to match something that already changed — after a code change, ADR, schema change or PR lands, and when the user says \"update the docs\", \"document this\", \"add a how-to for X\", \"the README is wrong\", \"this doc is stale\", or a reviewer reports docs drift. Also use before creating any new document, to decide where it belongs. Triggers include a doc that contradicts the code, a fact nobody can source, and a new page with no obvious home. Not for creating the docs tree (use scaffold-documentation) and not for reorganising it wholesale (use migrate-documentation).",
+      "triggers": [
+        "update docs",
+        "edit documentation",
+        "amend doc",
+        "stale doc"
+      ],
+      "paths": {
+        "skill": "references/update-documentation"
+      }
+    }
+  ]
+}

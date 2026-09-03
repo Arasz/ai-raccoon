@@ -89,6 +89,9 @@ expiring state, or a retry budget? Command: `scripts/scan_uncontrolled_resources
 **when** the project's stack ships it, else grep the same categories by hand; read the teardown
 for every shared resource. Stop condition: none — record every hit and continue; a
 non-deterministic suite can still hide real coverage gaps worth finding in a later pass.
+Repetition has a place here and only here: confirming a flake means running the suite
+deliberately, in isolation, to measure a distribution — that is diagnosis, the one run the
+test-run-economy invariant's once-per-change rule exempts.
 
 ## Pass 3 — Does the name match the body?
 

@@ -1,10 +1,17 @@
+# pylint: disable=too-many-lines
+# A hook dispatcher: its length is the number of hooks it fans out to, not one long
+# routine. Each subsystem already lives in a lazily-loaded sibling (see
+# _load_sibling_module); what remains here is the wiring. Same precedent as
+# engine/badger_lib.py.
 """Hermes plugin hooks for ai-badger framework integration.
 
 Provides feature-parity with Claude Code hooks:
-- on_session_start: drift notice (Tier 1, ADR-0001 decision 5)
+- on_session_start: drift notice (Tier 1, ADR-0001 decision 5) + Hermes subagent-isolation notice
 - pre_llm_call: inject framework version context, usage hints, and MCP tool index recommendations
+  + message-bus per-turn delivery
 - pre_tool_call: memory-first gate — block text search until the session consulted memory_search
 - post_tool_call: log tool usage, index hit/miss metrics, and learned-skill sync
+- on_session_end: message-bus cursor cleanup
 
 Installation (0.80.0+): `welcome-ai-badger` ships these hooks as a Hermes
 DIRECTORY plugin at ~/.hermes/plugins/ai-badger/ (plugin.yaml declaring the hooks,
@@ -17,6 +24,7 @@ The plugin self-locates the framework root with the shared `_bootstrap_lib()` sh
 in the plugin dir's own .ai-badger/manifest.json is what answers (ADR-0007 shape D).
 """
 
+# pylint: disable=too-many-lines  # registration surface: one thin callback per hook arm
 from __future__ import annotations
 
 import importlib.util
@@ -31,6 +39,7 @@ from typing import Any, Dict, Optional, Tuple
 # debug_log sits beside this file in every deployment shape; it is a no-op unless the
 # call-behaviorist skill has switched debug on.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+# pylint: disable=no-member  # debug_log is an exec-populated shim; pylint cannot see its members
 try:
     import debug_log  # pylint: disable=import-error
 except ImportError:  # pragma: no cover - a missing logger must never break a hook
@@ -47,14 +56,18 @@ def _debug(component: str, event: str, **fields) -> None:
 
 # Sibling module names already reported broken this process — logged once, not once per call.
 _broken_siblings: set = set()
+# Sibling module names already reported missing this process — logged once, not once per call.
+_missing_siblings: set = set()
 
 
 def _load_sibling_module(module_name: str, filename: str, label: str) -> Optional[Any]:
     """Import a sibling module beside this file, lazily and cached; None when absent or broken.
 
-    Absent (no file) fails open in silence — an older scaffold legitimately lacks it. Broken
-    (raises on import) logs "<label> disabled" once per process via logger.warning and _debug,
-    then keeps returning None without re-attempting the import.
+    Absent (no file) fails open too — an older scaffold legitimately lacks it — but logs
+    "<label> missing" ONCE per process (a silently inert registered hook is this repo's
+    recurring defect; observable beats silent). Broken (raises on import) logs
+    "<label> disabled" once per process via logger.warning and _debug; both then keep
+    returning None without re-attempting the import.
     """
     cached = sys.modules.get(module_name)
     if cached is not None:
@@ -63,6 +76,11 @@ def _load_sibling_module(module_name: str, filename: str, label: str) -> Optiona
         return None
     path = Path(__file__).resolve().parent / filename
     if not path.is_file():
+        if module_name not in _missing_siblings:
+            _missing_siblings.add(module_name)
+            logger.warning("%s missing: %s was not found beside %s — the hook is inert",
+                           label, filename, Path(__file__).name)
+            _debug("ai_badger_hooks/sibling_load", "missing", module=module_name, label=label)
         return None
     spec = importlib.util.spec_from_file_location(module_name, path)
     if spec is None or spec.loader is None:
@@ -379,6 +397,29 @@ def pre_tool_call_memory_gate(tool_name: str = "", args: Optional[Dict[str, Any]
     return gate.build_decision("hermes", tool_name, args or {}, None, cwd=project)
 
 
+HERMES_ISOLATION_MODULE_NAME = "ai_badger_hermes_isolation"
+
+
+def _load_hermes_isolation():
+    """The sibling module that reads delegation.worktree_isolation; None when absent."""
+    return _load_sibling_module(HERMES_ISOLATION_MODULE_NAME, "hermes_isolation.py",
+                                "Hermes subagent-isolation notice")
+
+# ---------------------------------------------------------------------------
+# Git-internals guard — the rule and its Hermes name/arg map live in the sibling
+# module, the way the memory gate's build_decision("hermes", ...) does.
+# ---------------------------------------------------------------------------
+
+GIT_INTERNALS_GUARD_MODULE_NAME = "git_internals_guard"
+
+
+def pre_tool_call_git_internals_guard(**kwargs: Any) -> Optional[Dict[str, str]]:
+    """Block a Hermes call that would hand-write a git dir; None allows. Never raises."""
+    guard = _load_sibling_module(GIT_INTERNALS_GUARD_MODULE_NAME, "git_internals_guard.py",
+                                 "git internals guard")
+    return guard.hermes_decision(**kwargs) if guard is not None else None
+
+
 def on_session_start_drift_notice(cwd: str = "", **_kwargs: Any) -> None:
     """Check for framework version drift (see `versions_diverge`) on every session start.
 
@@ -389,6 +430,10 @@ def on_session_start_drift_notice(cwd: str = "", **_kwargs: Any) -> None:
     reset_gate_state()
     project = _project_cwd(cwd)
     _debug("ai_badger_hooks/session_start", "start", project=project)
+    isolation = _load_hermes_isolation()
+    if isolation is not None and isolation.subagents_share_one_tree():
+        _debug("ai_badger_hooks/session_start", "shared_tree", project=project)
+        logger.info(isolation.ISOLATION_NOTICE, isolation.hermes_config_path())
     scaffold_ver = _read_scaffold_version(project)
     fw_version = _read_framework_version()
     if not scaffold_ver or not fw_version or not versions_diverge(scaffold_ver, fw_version):
@@ -587,7 +632,7 @@ def _record_tool_index_check(project, tool_name: str, index: dict[str, Any]) -> 
 # ---------------------------------------------------------------------------
 
 def pre_llm_inject_context(
-    cwd: str = "", message: str = "", user_message: str = "", **_kwargs: Any
+    cwd: str = "", message: str = "", user_message: str = "", **kwargs: Any
 ) -> Optional[Dict[str, str]]:
     """Inject ai-badger framework context into every LLM turn.
 
@@ -615,6 +660,14 @@ def pre_llm_inject_context(
     pending_feedback = None if gf is None else gf.pop_pending_feedback(project)
     if pending_feedback:
         parts.append(pending_feedback)
+
+    try:
+        bus_text = _bus_turn_context(kwargs.get("session_id") or "", project)
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.warning("message-bus delivery failed", exc_info=True)
+        bus_text = None
+    if bus_text:
+        parts.append(bus_text)
 
     # Framework version — see `versions_diverge`; a patch-only bump is silent (B10).
     fw_version = _read_framework_version()
@@ -774,6 +827,58 @@ def _pop_pending_reminder(project: str) -> Optional[str]:
     return None if gf is None else gf.pop_pending_reminder(project, PENDING_REMINDER_FILE)
 
 
+# ---------------------------------------------------------------------------
+# Test-run economy — count full-suite runs per session and nudge when they repeat.
+# Logic lives in the skill's sibling test_economy.py module (lazy-loaded); the nudge
+# rides the same pending-reminder channel the commit reminder uses.
+# ---------------------------------------------------------------------------
+
+TEST_ECONOMY_MODULE_NAME = "ai_badger_test_economy"
+
+
+def _load_test_economy() -> Optional[Any]:
+    """Import the sibling suite_economy module lazily; None when absent, or it's broken."""
+    return _load_sibling_module(TEST_ECONOMY_MODULE_NAME, "suite_economy.py",
+                                "test-run economy")
+
+
+def _maybe_count_test_run(tool_name: str, args: Any, cwd: str, session_id: Any) -> None:
+    """After a shell-shaped tool call, count full-suite test runs and stash a nudge.
+
+    Guard: an unavailable module, a non-shell tool, or a non-test command skips before any
+    store call. The command comes from the tool args (``command``/``cmd``); a transport that
+    passes neither is simply not a test run.
+    """
+    test_economy = _load_test_economy()
+    if test_economy is None or not test_economy.is_shell_tool(tool_name):
+        return
+    if not isinstance(args, dict):
+        return
+    command = args.get("command") or args.get("cmd") or ""
+    run = test_economy.is_test_run(command if isinstance(command, str) else "")
+    if run is None:
+        return
+
+    project = _project_cwd(cwd)
+    entry = test_economy.get_entry(project)
+    fires, escalated, entry = test_economy.advance_session(
+        entry, str(session_id or "default"), run["kind"] == "full",
+        now=_now_iso(),
+    )
+    test_economy.set_entry(project, entry)
+    if not fires:
+        return
+
+    gates = test_economy.detect_local_gates(project)
+    session_key = str(session_id or "default")
+    message = test_economy.build_message(
+        entry.get("sessions", {}).get(session_key, {}).get("full", 0),
+        run["runner"], gates, escalated=escalated)
+    _set_pending_reminder(project, message)
+    _debug("ai_badger_hooks/test_economy", "fire", project=project,
+           runner=run["runner"], escalated=escalated)
+
+
 def _load_commit_reminder() -> Optional[Any]:
     """Import the sibling commit_reminder module lazily; None when absent, or it's broken."""
     return _load_sibling_module(COMMIT_REMINDER_MODULE_NAME, "commit_reminder.py",
@@ -890,6 +995,85 @@ def _load_semantica_export() -> Optional[Any]:
 
 
 # ---------------------------------------------------------------------------
+# Message-bus delivery — the user-DB message bus (aib-user-db-message-bus).
+# Hermes payloads carry no cwd and no project identity: cwd is the process cwd at
+# callback time (see _project_cwd), projectId comes only from the store resolver
+# (AI_BADGER_PROJECT_ID explicit-wins, else the raccoon registry bank).
+# ---------------------------------------------------------------------------
+
+MESSAGE_BUS_STORE_MODULE_NAME = "ai_badger_message_bus_store"
+
+def _load_message_bus_store() -> Optional[Any]:
+    """Import the vendored badger_store beside this file; None when absent or broken."""
+    return _load_sibling_module(MESSAGE_BUS_STORE_MODULE_NAME, "badger_store.py",
+                                "message-bus store")
+
+
+def _deliver_bus_messages(session_id: str, cwd: str) -> list:
+    """One delivery firing: resolve identity, read the store, advance the cursor.
+
+    The store's start semantics self-apply: a session with no cursor row is gated to
+    the last 30 minutes and capped at 16, later reads are pure id > cursor. Project
+    identity comes only from the store resolver; an unresolved or ambiguous project
+    fails open to the 1:1 leg (D7). Returns [] when anything is missing or broken.
+    """
+    store_lib = _load_message_bus_store()
+    if store_lib is None or not session_id:
+        return []
+    try:
+        project_id = store_lib.resolve_project_id(cwd or None)
+    except Exception as refusal:  # pylint: disable=broad-exception-caught
+        logger.debug("message bus: project refused (%s) — delivering 1:1 only", refusal)
+        project_id = None
+    store = store_lib.open_user()
+    try:
+        # C2: the txn also returns the wake summary; hermes injects every delivery
+        # unconditionally (pre_llm_call has no wake decision), so the summary is
+        # deliberately unused here.
+        messages, _summary = store.deliver_for_session(session_id, project_id)
+    finally:
+        store.close()
+    return messages
+
+
+def _render_bus_messages(docs: list) -> str:
+    """The injected text for delivered documents — content verbatim, sender for context."""
+    lines = [f"[ai-badger] {len(docs)} message(s) from other sessions:"]
+    for doc in docs:
+        sender = doc.get("sender") or {}
+        lines.append(f"- {doc.get('content', '')} (from {sender.get('sessionId', '?')} "
+                     f"in {sender.get('projectId', '?')}, {doc.get('timestamp', '')})")
+    return "\n".join(lines)
+
+
+def _bus_turn_context(session_id: str, cwd: str) -> Optional[str]:
+    """One turn's bus context: the live read. The first call is the whole delivery —
+    read, cursor advance and injection in one store transaction, surfaced through the
+    pre_llm_call return channel; a session that never turns consumes nothing."""
+    docs = _deliver_bus_messages(session_id, cwd)
+    return _render_bus_messages(docs) if docs else None
+
+
+def on_session_end_message_delivery(session_id: str = "", **kwargs: Any) -> None:
+    """Remove the session's cursor — the close-event cleanup; the 4-day TTL is the backstop."""
+    try:
+        session_id = session_id or kwargs.get("session_id") or ""
+        if not session_id:
+            return
+        store_lib = _load_message_bus_store()
+        if store_lib is None:
+            return
+        store = store_lib.open_user()
+        try:
+            store.delete_cursor(session_id)
+        finally:
+            store.close()
+        _debug("ai_badger_hooks/message_bus", "closed", session=session_id)
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.warning("message-bus cursor cleanup failed", exc_info=True)
+
+
+# ---------------------------------------------------------------------------
 # Tool call observer — equivalent to Claude's PostToolUse hook
 # ---------------------------------------------------------------------------
 
@@ -905,7 +1089,7 @@ def post_tool_observer(tool_name: str = "", result: str = "",
     _emit_post_tool_call_hook), not the shell-hook ``tool_name``/``args``/``cwd``
     spelling — normalize both so the observer works under either transport. No
     payload carries ``cwd``; fall back to the session process cwd, which is what
-    pre_llm_inject_context resolves on the pop side.
+    pre_llm_inject_context resolves on the delivery side.
     """
     tool_name = tool_name or kwargs.get("function_name") or ""
     args = kwargs.get("args") or kwargs.get("function_args") or {}
@@ -932,6 +1116,11 @@ def post_tool_observer(tool_name: str = "", result: str = "",
         _maybe_remind_commit(tool_name, cwd)
     except Exception:  # pylint: disable=broad-exception-caught
         logger.warning("commit reminder check failed", exc_info=True)
+
+    try:
+        _maybe_count_test_run(tool_name, args, cwd, session_id)
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.warning("test-economy check failed", exc_info=True)
 
     try:
         gf = _load_grounded_feedback()
@@ -995,6 +1184,8 @@ def register(ctx: Any) -> None:
     ctx.register_hook("on_session_start", on_session_start_drift_notice)
     ctx.register_hook("pre_llm_call", pre_llm_inject_context)
     ctx.register_hook("pre_tool_call", pre_tool_call_memory_gate)
+    ctx.register_hook("pre_tool_call", pre_tool_call_git_internals_guard)
     ctx.register_hook("post_tool_call", post_tool_observer)
+    ctx.register_hook("on_session_end", on_session_end_message_delivery)
     logger.info("ai-badger hooks registered: on_session_start, pre_llm_call, "
-                "pre_tool_call, post_tool_call")
+                "pre_tool_call, post_tool_call, on_session_end")

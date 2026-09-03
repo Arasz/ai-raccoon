@@ -39,12 +39,19 @@ that file, then replay the operation once.
 **Auth** failures (403/404 on a repo you can see) mean expired credentials; refresh via the
 platform CLI (`gh auth status`, `gh auth login`) before retrying.
 
+**Frozen remote-tracking refs** (`git fetch` reports success but `origin/<branch>` never moves)
+means `.git/config` lost `remote.origin.fetch` or a `[branch]` section. Read
+`references/git-config-repair.md` when that happens, before editing the file by hand.
+
 ## CI failure triage
 
 - Read only what failed: `gh run view <id> --log-failed`.
 - **Reproduce vs rerun**: a failure naming your diff (assertion, lint finding) reproduces
   locally first; infra-shaped output (timeout, connection reset, runner lost) earns one rerun
-  of the single failing job before investigation starts.
+  of the single failing job before investigation starts — one, then stop. Re-running a job or
+  suite to see whether it stays green is not triage: flake attribution works from the runs
+  that already happened (which failed, which passed, what differed) and files the evidence;
+  manufacturing extra runs is the repetition the test-run-economy invariant bans.
 - **Env-only failures** (green locally, red in CI): compare runtime versions across the matrix,
   working directory, and secret/env presence before suspecting the code.
 - **Flake attribution**: record which run failed, which passed, and what differed; a test that

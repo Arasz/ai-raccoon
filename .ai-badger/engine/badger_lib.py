@@ -1,3 +1,5 @@
+# gateway_aliases() pushed past 1000 lines; trim before removing this disable
+# pylint: disable=too-many-lines
 """Shared helpers for ai-badger scripts.
 
 Deterministic and offline (Python 3.10+, the floor CI tests): scripts must be runnable wherever
@@ -86,19 +88,25 @@ def feature_type(name: str) -> FeatureType:
     return _BY_NAME[name]
 
 
-def exclusions(config: Dict[str, Any]) -> Dict[str, Set[str]]:
+def exclusions(config: Dict[str, Any], aliases: Optional[Dict[str, str]] = None) -> Dict[str, Set[str]]:
     """Names `config.exclude` declines, keyed by feature type — every key always present.
 
     Tolerant of a malformed block on purpose: drift reads configs this library did not
     validate, and a refusal there would convert a bad edit into a broken refresh.
+    `aliases` (from `gateway_aliases`) keeps exclude the mirror of include: a stale member
+    name declines the gateway that absorbed it.
     """
     declared = config.get("exclude")
     if not isinstance(declared, dict):
         declared = {}
-    return {
+    declined = {
         feature: {n for n in declared.get(feature) or [] if isinstance(n, str)}
         for feature in EXCLUDABLE_FEATURES
     }
+    if aliases:
+        skills = declined["skills"]
+        skills.update(aliases[name] for name in list(skills) if name in aliases)
+    return declined
 
 
 # A skill citing `../<sibling>/references/<file>.md` depends on that sibling being installed.
@@ -106,12 +114,9 @@ def exclusions(config: Dict[str, Any]) -> Dict[str, Set[str]]:
 SIBLING_REFERENCE_RE = re.compile(r"(?<![./])\.\./([a-z][a-z0-9-]*)/references/[a-z-]+\.md")
 
 # Skills that cannot do their job alone. Naming any member — or the group — installs all of them.
-#
-# Grouping protects cross-references between skills that cite each other's references/ in place.
+# One ruleset, two default skills: design-tests writes, review-tests judges; both read
+# review-tests/references/ (SYNTHESIS.md ruling A). Grouping protects cross-citations.
 SKILL_GROUPS: Dict[str, Tuple[str, ...]] = {
-    "documentation": ("scaffold-documentation", "update-documentation", "migrate-documentation"),
-    # One ruleset, two default skills: design-tests writes, review-tests judges; both read
-    # review-tests/references/ (SYNTHESIS.md ruling A). Grouping protects cross-citations.
     "testing": ("design-tests", "review-tests"),
 }
 
@@ -119,9 +124,9 @@ SKILL_GROUPS: Dict[str, Tuple[str, ...]] = {
 def expand_skill_groups(names: Iterable[str]) -> Set[str]:
     """`names` with every group they touch expanded to all its members.
 
-    A member's name pulls in its siblings; the group's own name works too, so a project can ask
-    for `documentation` and get the three. A name in no group passes through untouched — an
-    unknown name is `inclusion_notes`' to report, and two places reporting it disagree eventually.
+    A member's name pulls in its siblings; the group's own name works too. A name in no group
+    passes through untouched — an unknown name is `inclusion_notes`' to report, and two places
+    reporting it disagree eventually.
     """
     wanted: Set[str] = set()
     for name in names:
@@ -133,6 +138,38 @@ def expand_skill_groups(names: Iterable[str]) -> Set[str]:
             if name in members:
                 wanted.update(members)
     return wanted
+
+
+def gateway_aliases(root: Path) -> Dict[str, str]:
+    """Member skill name -> gateway name, derived from every features/*/skills/*/manifest.json.
+
+    Never a literal: a config naming a skill a gateway absorbed resolves to the gateway that
+    now carries it. One member name claimed by two gateways is ambiguous routing, so it raises
+    rather than letting one of them win silently.
+    """
+    aliases: Dict[str, str] = {}
+    for manifest_path in sorted(Path(root).glob("features/*/skills/*/manifest.json")):
+        try:
+            manifest = load_json(manifest_path)
+        except (OSError, ValueError):
+            continue
+        if not isinstance(manifest, dict) or manifest.get("kind") != "gateway":
+            continue
+        members = manifest.get("members")
+        if not isinstance(members, list):
+            continue
+        gateway = manifest_path.parent.name
+        for member in members:
+            name = member.get("name") if isinstance(member, dict) else None
+            if not isinstance(name, str):
+                continue
+            previous = aliases.get(name)
+            if previous is not None and previous != gateway:
+                raise ValueError(
+                    f"member name {name!r} is claimed by two gateway skills "
+                    f"({previous!r} and {gateway!r}) — rename one member")
+            aliases[name] = gateway
+    return aliases
 
 
 def inclusions(config: Dict[str, Any]) -> Dict[str, Set[str]]:
@@ -152,7 +189,7 @@ def inclusions(config: Dict[str, Any]) -> Dict[str, Set[str]]:
 
 # Canonical agent list — keep in sync with schemas/agents.schema.json and
 # schemas/config.schema.json agents enum.
-AGENT_NAMES = ["claude", "copilot", "hermes"]
+AGENT_NAMES = ["claude", "copilot", "hermes", "pi"]
 
 
 # ---------------------------------------------------------------------- breaking versions
@@ -752,6 +789,51 @@ def opt_in_skills_in(skills_dir: Path) -> List[str]:
     return _skills_scoped(skills_dir, SKILL_SCOPE_OPT_IN)
 
 
+def include_derived_skill_names(config: Dict[str, Any], aliases: Dict[str, str],
+                                addable: Set[str]) -> List[str]:
+    """Config-include skills a scaffold appends after the argv block: groups expanded first
+    (#266), then gateway-alias mapped (a stale member name resolves to the gateway that
+    absorbed it, ADR-0021), sorted, intersected with the addable opt-in catalog.
+
+    NOT exclusion-filtered here: the Scaffolder filters at ctx construction, and
+    `expected_skill_names` filters per stage. Shared by both so scaffolder and guard cannot
+    disagree about what config.include asks for (D1).
+    """
+    wanted = {aliases.get(n, n) for n in expand_skill_groups(inclusions(config)["skills"])}
+    return [n for n in sorted(wanted) if n in addable]
+
+
+def expected_skill_names(root: Path, config: Dict[str, Any]) -> List[str]:
+    """Skills an unattended scaffold of *config* delivers, in delivery BLOCK order.
+
+    The one oracle shared by the Scaffolder and the scaffold freshness guard (D1, task
+    aib-scaffold-freshness-guard-blindspot-proof): the scope-default catalog (minus the
+    alias-mapped exclusions), then the include-derived block (`include_derived_skill_names`,
+    minus exclusions, deduplicated against the defaults the way `dict.fromkeys` deduplicates
+    the argv), then stack-local discovery per `resolve_stacks(config)` order — config-
+    overridable `commonStacks`, constant `DEFAULT_COMMON_STACKS` skip-set — minus exclusions.
+
+    The return order is the Scaffolder's delivery order, NOT flat-sorted (API-F1): the guard's
+    re-scaffold argv becomes the delivery order, manifest rows are recorded in delivery order,
+    and the guard's `normalized()` preserves list order — a flat-sorted list fails healthy
+    trees. A skill name appears once, at its first block position.
+    """
+    aliases = gateway_aliases(root)
+    excluded = exclusions(config, aliases)["skills"]
+    common_skills = root / "features" / "common" / "skills"
+    addable = set(opt_in_skills_in(common_skills))
+    block = [s for s in default_skills_in(common_skills) if s not in excluded]
+    block += [n for n in include_derived_skill_names(config, aliases, addable)
+              if n not in excluded and n not in block]
+    for stack in resolve_stacks(config):
+        if stack in DEFAULT_COMMON_STACKS:
+            continue
+        for name in stack_local_skills(root / "features" / stack / "skills"):
+            if name not in excluded and name not in block:
+                block.append(name)
+    return block
+
+
 # What a skill with no readable description is reported as. Reporting only — never a value
 # any behaviour keys off.
 NO_DESCRIPTION = "(no description)"
@@ -777,19 +859,25 @@ def skill_description(skill_md: Path) -> Optional[str]:
 
 
 def inclusion_notes(included: Iterable[str], excluded: Iterable[str],
-                    addable: Iterable[str], defaults: Iterable[str]) -> List[str]:
+                    addable: Iterable[str], defaults: Iterable[str],
+                    aliases: Optional[Dict[str, str]] = None) -> List[str]:
     """One note per name in `config.include.skills`, saying what it added or why it could not.
 
     Never fatal, for the reason exclusions are not: refresh refuses on an invalid config, so a
     fatal note would turn an upstream deletion or a scope change into a broken upgrade.
+    `aliases` (from `gateway_aliases`) reports a stale member name as resolved instead of
+    telling the reader to delete config that still works (#275).
     """
     declined, offerable, ships = set(excluded), set(addable), set(defaults)
+    aliases = aliases or {}
     notes = []
     for name in sorted(set(included)):
         if name in SKILL_GROUPS:
             members = ", ".join(SKILL_GROUPS[name])
             notes.append(f"included skill group '{name}' — delivered {members} "
                          f"(they read each other's references/ and cannot work alone)")
+        elif name in aliases:
+            notes.append(f"included '{name}' — resolved to gateway '{aliases[name]}'")
         elif name in declined:
             notes.append(f"inclusion '{name}' is also in config.exclude.skills — "
                          f"exclude wins; not delivered")

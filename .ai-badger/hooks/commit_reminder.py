@@ -1,6 +1,10 @@
 """Pure logic for the commit-reminder skill: parse `git status --porcelain`, recognize an
 edit-shaped tool call, and debounce the nudge with a per-project marker persisted outside
-any scaffolded repo (a state file inside the measured repo would inflate its own count).
+any scaffolded repo (state inside the measured repo would inflate its own count).
+
+State lives as ``commit_reminder`` rows in the user store (~/.ai-badger/ai-badger.db), one
+row per project (P1.3). STATE_FILE is the legacy source the store lazy-migrates on first
+write: imported to rows, renamed *.migrated.json.
 """
 from __future__ import annotations
 
@@ -8,8 +12,12 @@ import json
 import os
 import subprocess
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
+import badger_store  # vendored beside this script in production; engine/ canonical in tests
+
+#: Legacy source only: the store imports it on first write and renames it. Tests and surfaces
+#: redirect the legacy file by rebinding this constant; AI_BADGER_USER_ROOT moves the rows' DB.
 STATE_FILE = Path.home() / ".ai-badger" / "commit-reminder" / "state.json"
 
 # Unanswered commands before the work is reported as at risk of being lost.
@@ -139,8 +147,19 @@ def uncommitted_files(root: str, timeout: float = 5.0) -> List[str]:
     return parse_porcelain(result.stdout)
 
 
-def load_state() -> Dict[str, int]:
-    """Load the marker state file; `{}` on missing file, read error, or malformed JSON."""
+def open_store():
+    """The user store narrowed to the commit-reminder family; STATE_FILE is its legacy seam."""
+    families = {
+        "commit_reminder": badger_store.Family(
+            table="commit_reminder", db="user",
+            legacy_path=lambda: STATE_FILE, legacy_kind="map",
+        ),
+    }
+    return badger_store.open_user(families=families)
+
+
+def _legacy_state() -> Dict[str, Any]:
+    """The legacy state.json document, ``{}`` on missing file, read error, or bad JSON."""
     try:
         raw = STATE_FILE.read_text(encoding="utf-8")
     except (OSError, ValueError):  # ValueError: a non-UTF-8 file raises UnicodeDecodeError
@@ -152,23 +171,41 @@ def load_state() -> Dict[str, int]:
     return data if isinstance(data, dict) else {}
 
 
-def save_state(state: Dict[str, int]) -> None:
-    """Persist the state file atomically, creating parent directories as needed.
+def load_state() -> Dict[str, Any]:
+    """Per-project entries: store rows merged with the legacy file (D5a); ``{}`` fail-open.
 
-    Parallel agents in separate worktrees share one file. The write is a rename so a reader
-    never sees a torn file: `load_state` degrades an unparseable read to `{}`, and the next
-    writer would then persist that — silently cancelling every other project's escalation.
+    A store that cannot be opened fails open to the legacy file — the same contract as the
+    missing-file case; the legacy file is only renamed by a write, never a read.
     """
-    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    tmp = STATE_FILE.with_name(f"{STATE_FILE.name}.{os.getpid()}.tmp")
-    tmp.write_text(json.dumps(state), encoding="utf-8")
-    os.replace(tmp, STATE_FILE)
+    try:
+        store = open_store()
+        try:
+            return store.kv_all("commit_reminder")
+        finally:
+            store.close()
+    except Exception:  # pylint: disable=broad-exception-caught
+        return _legacy_state()
+
+
+def save_state(state: Dict[str, Any]) -> None:
+    """Upsert every project's entry as its own row; the first write migrates legacy (D6).
+
+    Keys absent from ``state`` keep their rows — callers evolve one project's entry through
+    set_entry; nothing deletes another project's row by saving a narrower document.
+    """
+    store = open_store()
+    try:
+        for key, value in state.items():
+            store.kv_set("commit_reminder", key, value)
+    finally:
+        store.close()
 
 
 def get_entry(root: str) -> Dict:
     """Return the persisted entry for ``root``, normalising the old marker-only form.
 
-    Every machine that ran the previous hook has `{root: <int>}` on disk, so a bare integer
+    Every machine that ran the pre-store hook has ``{root: <int>}`` on disk (now in its
+    migrated row), so a bare integer
     reads as a marker with no unanswered commands rather than as corrupt state.
     """
     value = load_state().get(str(Path(root).resolve()), 0)
@@ -183,10 +220,12 @@ def get_entry(root: str) -> Dict:
 
 
 def set_entry(root: str, entry: Dict) -> None:
-    """Persist ``entry`` for ``root``, keyed by its resolved absolute path."""
-    state = load_state()
-    state[str(Path(root).resolve())] = entry
-    save_state(state)
+    """Persist ``entry`` as ``root``'s own row, keyed by its resolved absolute path."""
+    store = open_store()
+    try:
+        store.kv_set("commit_reminder", str(Path(root).resolve()), entry)
+    finally:
+        store.close()
 
 
 def at_risk_entries() -> Dict[str, Dict]:
@@ -208,8 +247,9 @@ def get_marker(root: str) -> int:
 
 
 def set_marker(root: str, marker: int) -> None:
-    """Persist ``marker`` for ``root``, keyed by its resolved absolute path."""
-    key = str(Path(root).resolve())
-    state = load_state()
-    state[key] = marker
-    save_state(state)
+    """Persist ``marker`` as ``root``'s own row, keyed by its resolved absolute path."""
+    store = open_store()
+    try:
+        store.kv_set("commit_reminder", str(Path(root).resolve()), int(marker))
+    finally:
+        store.close()

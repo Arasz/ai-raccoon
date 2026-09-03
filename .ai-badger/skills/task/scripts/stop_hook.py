@@ -26,6 +26,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import tracker_lib as lib
 
+# pylint: disable=no-member  # debug_log is an exec-populated shim; pylint cannot see its members
 try:
     import debug_log  # pylint: disable=wrong-import-position
 except ImportError:  # pragma: no cover - a missing logger must never break a hook
@@ -219,14 +220,14 @@ def main() -> int:
     resumed = field(payload, "stop_hook_active", "stopHookActive", default=False)
 
     block_reasons = []
-    with lib.locked_store():
-        tasks = lib.load_tasks()
+    with lib.tracking_transaction() as store:
+        tasks = lib.load_tasks(store)
         mine = [e for e in tasks["tasks"] if e.get("sessionId") == session_id]
         if not mine:
             _debug("skip", reason="no_tracked_task")
             return 0
 
-        usage = lib.load_usage()
+        usage = lib.load_usage(store)
         usage_dirty = checkpoint_tasks(mine, usage, transcript)
         tasks_dirty = promote_started(mine)
 
@@ -235,9 +236,9 @@ def main() -> int:
             tasks_dirty = tasks_dirty or enforcement_dirty
 
         if tasks_dirty:
-            lib.save_json(lib.EXECUTED_TASKS, tasks)
+            lib.save_tasks(store, tasks)
         if usage_dirty:
-            lib.save_json(lib.TOKEN_USAGE, usage)
+            lib.save_usage(store, usage)
 
     if block_reasons:
         _debug("block", reasons=len(block_reasons))

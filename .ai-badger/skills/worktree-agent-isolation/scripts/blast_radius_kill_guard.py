@@ -6,12 +6,15 @@ Verified by verify_hooks.py in this directory.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import re
 import shlex
+import sqlite3
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
@@ -56,15 +59,27 @@ _CACHE_PATTERNS: Dict[str, "re.Pattern[str]"] = {
 }
 
 
-def _marker_dir() -> Optional[Path]:
-    """The denial-counter directory, or None when this process has no home directory."""
+def _load_badger_store():
+    """The store module: already-imported, importable, or the vendored copy beside this script."""
+    if "badger_store" in sys.modules:
+        return sys.modules["badger_store"]
     try:
-        return Path.home() / ".ai-badger" / "blast-radius-guard"
-    except (RuntimeError, OSError):
+        import badger_store  # pylint: disable=import-outside-toplevel,redefined-outer-name
+        return badger_store
+    except ImportError:
+        pass
+    try:
+        path = Path(__file__).resolve().parent / "badger_store.py"
+        spec = importlib.util.spec_from_file_location("badger_store", path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules["badger_store"] = module
+        spec.loader.exec_module(module)
+        return module
+    except (OSError, ValueError):
         return None
 
 
-MARKER_DIR: Optional[Path] = _marker_dir()
+badger_store = _load_badger_store()
 
 _SHELLS = frozenset(("sh", "bash", "zsh", "dash", "ksh"))
 _SKIPPABLE = frozenset(("sudo", "command", "env", "nohup", "exec", "time"))
@@ -236,53 +251,101 @@ def _safe_session(session_id: Optional[str]) -> str:
     return sanitized
 
 
-def _denials_path(session_id: Optional[str], command: str) -> Optional[Path]:
-    """Counter file for this (session, exact command) pair, or None when unaddressable."""
-    if MARKER_DIR is None or not session_id:
+def _denials_key(session_id: Optional[str], command: str) -> Optional[str]:
+    """Store key for this (session, exact command) pair — the legacy counter file's
+    stem (`<session>.<32-hex>`), or None when unaddressable."""
+    if badger_store is None or not session_id:
         return None
     safe = _safe_session(session_id)
     if not safe:
         return None
     digest = hashlib.sha256(command.encode("utf-8")).hexdigest()[:32]
-    return MARKER_DIR / f"{safe}.{digest}.denials"
+    return f"{safe}.{digest}"
+
+
+def _open_store():
+    """The user store, or None when the store machinery is unavailable (fail open)."""
+    if badger_store is None:
+        return None
+    try:
+        return badger_store.open_user()
+    except (OSError, sqlite3.Error, ValueError):
+        return None
+
+
+def _now() -> str:
+    """UTC ISO-8601 timestamp for the row's updated_at column."""
+    return datetime.now(timezone.utc).isoformat()
 
 
 def deny_count(session_id: Optional[str], command: str) -> int:
-    path = _denials_path(session_id, command)
-    if path is None:
+    key = _denials_key(session_id, command)
+    if key is None:
+        return 0
+    store = _open_store()
+    if store is None:
         return 0
     try:
-        return int(path.read_text(encoding="utf-8").strip() or "0")
-    except (OSError, ValueError):
+        store.migrate("blast_radius_denials")
+        row = store.conn.execute(
+            "SELECT denials FROM blast_radius_denials WHERE key = ?", (key,)).fetchone()
+    except (OSError, sqlite3.Error, ValueError):
+        return 0  # D31: a broken store never blocks a caller
+    finally:
+        store.close()
+    try:
+        return int(row[0]) if row is not None else 0
+    except (TypeError, ValueError, IndexError):
         return 0
 
 
-def _prune(directory: Path) -> None:
-    """Drop counter files older than MARKER_TTL_SECONDS; best effort."""
-    cutoff = time.time() - MARKER_TTL_SECONDS
+def _prune(store) -> None:
+    """Drop counter rows older than MARKER_TTL_SECONDS; best effort, caller's transaction."""
+    cutoff = datetime.now(timezone.utc).timestamp() - MARKER_TTL_SECONDS
     try:
-        stale = list(directory.glob("*.denials"))
-    except OSError:
+        stale = store.conn.execute(
+            "SELECT key, updated_at FROM blast_radius_denials").fetchall()
+    except sqlite3.Error:
         return
-    for marker in stale:
+    for key, updated_at in stale:
         try:
-            if marker.stat().st_mtime < cutoff:
-                marker.unlink()
-        except OSError:
+            if datetime.fromisoformat(str(updated_at)).timestamp() < cutoff:
+                store.conn.execute(
+                    "DELETE FROM blast_radius_denials WHERE key = ?", (key,))
+        except (TypeError, ValueError):
             continue
 
 
 def increment_denials(session_id: Optional[str], command: str) -> bool:
-    path = _denials_path(session_id, command)
-    if path is None:
+    key = _denials_key(session_id, command)
+    if key is None:
+        return False
+    store = _open_store()
+    if store is None:
         return False
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        _prune(path.parent)
-        path.write_text(str(deny_count(session_id, command) + 1), encoding="utf-8")
-        return True
-    except OSError:
+        store.migrate("blast_radius_denials")
+        store.conn.execute("BEGIN IMMEDIATE")
+        try:
+            _prune(store)
+            row = store.conn.execute(
+                "SELECT denials FROM blast_radius_denials WHERE key = ?",
+                (key,)).fetchone()
+            current = int(row[0]) if row is not None else 0
+            store.conn.execute(
+                "INSERT OR REPLACE INTO blast_radius_denials(key, denials, updated_at) "
+                "VALUES (?, ?, ?)", (key, current + 1, _now()))
+            store.conn.commit()
+        except BaseException:
+            store.conn.rollback()
+            raise
+        badger_store._assert_file_perms(store.db_path)  # pylint: disable=protected-access
+        badger_store.notify_write(store.db_path)
+    except (OSError, sqlite3.Error, ValueError):
         return False
+    finally:
+        store.close()
+    return True
 
 
 def _reason(hazard: str, live_pids: List[int]) -> str:
