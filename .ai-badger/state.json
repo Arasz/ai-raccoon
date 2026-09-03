@@ -1,8 +1,16 @@
 {
-  "lastUpdated": "2026-08-26T16:50:00+02:00",
+  "lastUpdated": "2026-09-04T00:00:00+02:00",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "air-promotion-scorer-rebalance-tdd-adr",
+      "title": "Promotion scorer rebalance (ablation pair) with ADR-0095, TDD",
+      "pr": 598,
+      "merged": true,
+      "date": "2026-09-04",
+      "summary": "Architect plan -> code-reviewer plan review (7 MUSTs, cut to ablation pair) -> dotnet-engineer impl TDD (9 tests, red witnessed per batch) -> code-reviewer APPROVE + test-engineer APPROVE-WITH-CHANGES (gate pinned at 0.6 edge). Merged as 3cc35769. P3 post-merge: partial ablation on v1-subset n=53 (directionless, parity green), recorded in ADR-0095 + report; follow-up docs PR #599. Round-3 splits still absent."
+    },
     {
       "id": "doctor-feature-match-cont",
       "title": "follow-ups: refuse model reset during open migration (exit 25); complete the 1.36.0 checklist; derive the doctor exit table",

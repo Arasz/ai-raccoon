@@ -1,18 +1,19 @@
 {
   "$schema": "../schemas/manifest.schema.json",
   "frameworkVersion": "0.161.0",
-  "frameworkCommit": "2bbc0aef8093fd05be391ed64a61baa41bd8c129",
+  "frameworkCommit": "e2aeb53f86056cfd06592ef6c4cf0a9cc186b1e4",
   "frameworkDirty": false,
   "frameworkRoot": "/Users/arasz/RiderProjects/ai-badger",
   "generatedAt": null,
   "agents": [
     "claude",
     "copilot",
-    "hermes"
+    "hermes",
+    "pi"
   ],
   "skillScope": "default",
   "pluginScope": "default",
-  "configHash": "8e4042ee88bd220e0f93eb89f703640fb9f075993d3270d7a3d3ff66584e968a",
+  "configHash": "ce937bfaf8c67bcecedc3d94ebd2705626344b04e4af61ade8cd7b5136f9f886",
   "generatedConfig": [
     {
       "path": ".claude/settings.json",
@@ -643,6 +644,24 @@
     {
       "feature": "skills",
       "stack": "common",
+      "name": "task/extensions/pi/extension.json",
+      "source": "features/common/skills/task/extensions/pi/extension.json",
+      "target": ".ai-badger/skills/task/extensions/pi/extension.json",
+      "frameworkVersion": "0.161.0",
+      "hash": "0bd36fcf44068d1d714106350bbacda0bf4e8532fe44bc1c26a2ac459a46de6e"
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "task/extensions/pi/extension.md",
+      "source": "features/common/skills/task/extensions/pi/extension.md",
+      "target": ".ai-badger/skills/task/extensions/pi/extension.md",
+      "frameworkVersion": "0.161.0",
+      "hash": "0321b816e63916621bd506305bd189d75cd9bfb35405e01814917c1f0fe271ef"
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
       "name": "welcome-ai-badger",
       "source": "features/common/skills/welcome-ai-badger",
       "target": ".ai-badger/skills/welcome-ai-badger",
@@ -1046,12 +1065,12 @@
       "source": "features/common/skills/worktree-agent-isolation",
       "target": ".ai-badger/skills/worktree-agent-isolation",
       "frameworkVersion": "0.161.0",
-      "hash": "fc0153d2ac915ae45073a4c2bb1406e3ca1ffb0a4e652d6cd789378f0c84cdf3",
+      "hash": "7d7260b401efff1ce12e9fa549ad7d36703d5ca8202f3a15865be331ac90a366",
       "dirMeta": {
         "file_count": 14,
         "dir_count": 2
       },
-      "sourceHash": "fc0153d2ac915ae45073a4c2bb1406e3ca1ffb0a4e652d6cd789378f0c84cdf3",
+      "sourceHash": "7d7260b401efff1ce12e9fa549ad7d36703d5ca8202f3a15865be331ac90a366",
       "sourceMeta": {
         "file_count": 14,
         "dir_count": 2
@@ -1277,12 +1296,12 @@
       "source": "features/dotnet/skills/dotnet-workload",
       "target": ".ai-badger/skills/dotnet-workload",
       "frameworkVersion": "0.161.0",
-      "hash": "f98d509ac1969c80cc5a2878b34e6caf83741840cb58a36631c7d2742262da5c",
+      "hash": "a76311443e79d93fae0f91564eb588769dfa0c970fe7d8ad1218572db00cd989",
       "dirMeta": {
         "file_count": 98,
         "dir_count": 28
       },
-      "sourceHash": "f98d509ac1969c80cc5a2878b34e6caf83741840cb58a36631c7d2742262da5c",
+      "sourceHash": "a76311443e79d93fae0f91564eb588769dfa0c970fe7d8ad1218572db00cd989",
       "sourceMeta": {
         "file_count": 98,
         "dir_count": 28
@@ -1380,6 +1399,16 @@
       "target": "HERMES.md",
       "frameworkVersion": "0.161.0",
       "hash": "92f2f08f916c832b8e96401b2c1bda4eb0a2920fabb36a1390432a68f8d8e294",
+      "seedOnce": false
+    },
+    {
+      "feature": "templates",
+      "stack": "pi",
+      "name": "AGENTS.override.md.tmpl",
+      "source": "features/pi/templates/AGENTS.override.md.tmpl",
+      "target": "AGENTS.override.md",
+      "frameworkVersion": "0.161.0",
+      "hash": "a41eabaafcadafdb2f0bd2ac32a89faf44e00d545553e00bcdb9ed53cf4e7b32",
       "seedOnce": false
     },
     {
@@ -2425,6 +2454,78 @@
       "target": ".ai-badger/skills/task/scripts/hermes_session_source.py",
       "frameworkVersion": "0.161.0",
       "hash": "23bc44fab388744722fa09af3272ac4e8379784a9354346eafb0b752f1b325a8"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "pi",
+      "name": "adjustments/.ai-badger/hooks/ai_badger_hooks.py",
+      "source": "features/pi/adjustments/adjust_hooks.py",
+      "target": ".ai-badger/hooks/ai_badger_hooks.py",
+      "frameworkVersion": "0.161.0",
+      "hash": "3de1aac8beb42831bd286e63ea6e736ded80cb0927674fcd668d18b54fe4877a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "pi",
+      "name": "adjustments/.ai-badger/hooks/badger_store.py",
+      "source": "features/pi/adjustments/adjust_hooks.py",
+      "target": ".ai-badger/hooks/badger_store.py",
+      "frameworkVersion": "0.161.0",
+      "hash": "3de1aac8beb42831bd286e63ea6e736ded80cb0927674fcd668d18b54fe4877a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "pi",
+      "name": "adjustments/.ai-badger/hooks/mcp_index_hook.py",
+      "source": "features/pi/adjustments/adjust_hooks.py",
+      "target": ".ai-badger/hooks/mcp_index_hook.py",
+      "frameworkVersion": "0.161.0",
+      "hash": "3de1aac8beb42831bd286e63ea6e736ded80cb0927674fcd668d18b54fe4877a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "pi",
+      "name": "adjustments/.ai-badger/hooks/debug_log.py",
+      "source": "features/pi/adjustments/adjust_hooks.py",
+      "target": ".ai-badger/hooks/debug_log.py",
+      "frameworkVersion": "0.161.0",
+      "hash": "3de1aac8beb42831bd286e63ea6e736ded80cb0927674fcd668d18b54fe4877a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "pi",
+      "name": "adjustments/.ai-badger/hooks/grounded_feedback.py",
+      "source": "features/pi/adjustments/adjust_hooks.py",
+      "target": ".ai-badger/hooks/grounded_feedback.py",
+      "frameworkVersion": "0.161.0",
+      "hash": "3de1aac8beb42831bd286e63ea6e736ded80cb0927674fcd668d18b54fe4877a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "pi",
+      "name": "adjustments/.ai-badger/hooks/hermes_isolation.py",
+      "source": "features/pi/adjustments/adjust_hooks.py",
+      "target": ".ai-badger/hooks/hermes_isolation.py",
+      "frameworkVersion": "0.161.0",
+      "hash": "3de1aac8beb42831bd286e63ea6e736ded80cb0927674fcd668d18b54fe4877a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "pi",
+      "name": "adjustments/.ai-badger/hooks/message_delivery_hook.py",
+      "source": "features/pi/adjustments/adjust_hooks.py",
+      "target": ".ai-badger/hooks/message_delivery_hook.py",
+      "frameworkVersion": "0.161.0",
+      "hash": "3de1aac8beb42831bd286e63ea6e736ded80cb0927674fcd668d18b54fe4877a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "pi",
+      "name": "adjustments/.ai-badger/skills/task/scripts/pi_session_source.py",
+      "source": "features/pi/adjustments/adjust_task.py",
+      "target": ".ai-badger/skills/task/scripts/pi_session_source.py",
+      "frameworkVersion": "0.161.0",
+      "hash": "3f2edfc2086bc2cc944790211911f5d15623786d28511160e405c5d39511a4ec"
     },
     {
       "feature": "skills",
