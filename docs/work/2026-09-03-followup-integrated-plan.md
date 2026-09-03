@@ -264,7 +264,9 @@ description for contract tests to pass); this package owns cross-surface consist
   `SearchQuery.cs`/`MemoryTools.cs` defaults, floor contract tests; #599 docs;
   framework refresh): contract + floor + BDD corpus re-run after the final rebase.
 - **Docs:** MoE note closed with PR links; ADR consequences updated if found
-  anything.
+  anything. **On merge to main:** send a 1:1 bus message to session
+  `bee69600-35f0-4af1-9509-962d8b8052e0` (owner order 2026-09-03) stating merged
+  commit + what shipped — do not close the task without it.
 
 ## Parallelism map (amended)
 
