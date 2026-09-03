@@ -468,6 +468,7 @@ public sealed class FakePromotionQueue : IPromotionQueue
     public IReadOnlyList<string>? LastPromoteProjects { get; private set; }
     public List<IReadOnlyList<string>> PromoteCalls { get; } = [];
     public int? LastLimit { get; private set; }
+    public double? LastMinScore { get; private set; }
     public PromoteOutcome PromoteOutcome { get; set; } = new([], 0, new Dictionary<string, int>());
     public Exception? PromoteError { get; set; }
     public Exception? GetMetaError { get; set; }
@@ -496,12 +497,13 @@ public sealed class FakePromotionQueue : IPromotionQueue
         return Task.FromResult(new ProposeOutcome(candidates.Count, []));
     }
 
-    public Task<PromoteOutcome> PromoteAsync(IReadOnlyList<string> projectIds, int limit,
+    public Task<PromoteOutcome> PromoteAsync(IReadOnlyList<string> projectIds, int limit, double? minScore = null,
         CancellationToken cancellationToken = default)
     {
         LastPromoteProjects = projectIds;
         PromoteCalls.Add(projectIds);
         LastLimit = limit;
+        LastMinScore = minScore;
         if (PromoteError is not null)
         {
             throw PromoteError;

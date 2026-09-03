@@ -117,6 +117,7 @@ internal sealed class ConfigCommands(
                 ["settings", "extract", "mode"] => await extract.SetModeAsync(parsedCliArgs, store, streams, ctx),
                 ["settings", "extract", "interval"] => await extract.SetIntervalAsync(parsedCliArgs, store, streams, ctx),
                 ["settings", "extract", "capacity"] => await extract.SetCapacityAsync(parsedCliArgs, store, streams, ctx),
+                ["settings", "extract", "auto-promote-threshold"] => await extract.SetAutoPromoteThresholdAsync(parsedCliArgs, store, streams, ctx),
                 ["settings", "extract", "list"] => await extract.ListAsync(store, streams, ctx),
                 ["settings", "extract", "exclude", "add"] => await extract.ExcludeAddAsync(parsedCliArgs, store, streams, ctx),
                 ["settings", "extract", "exclude", "remove"] => await extract.ExcludeRemoveAsync(parsedCliArgs, store, streams, ctx),

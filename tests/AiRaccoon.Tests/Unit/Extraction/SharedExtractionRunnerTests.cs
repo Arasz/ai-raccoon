@@ -32,7 +32,7 @@ public sealed class SharedExtractionRunnerTests
         store.Candidates["acme"] = [Row("h1")];
 
         var candidates = await runner.ProposeAsync("acme", EmptyIndex,
-            includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
+            includeTtlRows: false, limit: 20, cancellationToken: TestContext.Current.CancellationToken);
 
         candidates.Select(c => c.Hash).ShouldBe(["h1"]);
         queue.LastProject.ShouldBe("acme");
@@ -49,7 +49,7 @@ public sealed class SharedExtractionRunnerTests
         store.Candidates["acme"] = [Row("h1", value, sourceFile: "docs/beta.md")];
 
         var candidates = await runner.ProposeAsync("acme", EmptyIndex,
-            includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
+            includeTtlRows: false, limit: 20, cancellationToken: TestContext.Current.CancellationToken);
 
         candidates[0].ValuePreview.Length.ShouldBeLessThan(value.Length);
         var queued = queue.LastCandidates!.Single();
@@ -65,7 +65,7 @@ public sealed class SharedExtractionRunnerTests
         store.Candidates["acme"] = [];
 
         var candidates = await runner.ProposeAsync("acme", EmptyIndex,
-            includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
+            includeTtlRows: false, limit: 20, cancellationToken: TestContext.Current.CancellationToken);
 
         candidates.ShouldBeEmpty();
         queue.LastProject.ShouldBeNull();
@@ -80,12 +80,12 @@ public sealed class SharedExtractionRunnerTests
         store.Candidates["acme"] = [Row("h1", ageDays: 20)];
 
         var fresh = await runner.ProposeAsync("acme", EmptyIndex,
-            includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
+            includeTtlRows: false, limit: 20, cancellationToken: TestContext.Current.CancellationToken);
 
         time.Advance(TimeSpan.FromDays(30));
 
         var stale = await runner.ProposeAsync("acme", EmptyIndex,
-            includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
+            includeTtlRows: false, limit: 20, cancellationToken: TestContext.Current.CancellationToken);
 
         stale[0].Score.ShouldBe(fresh[0].Score);
     }
@@ -101,9 +101,69 @@ public sealed class SharedExtractionRunnerTests
         ];
 
         var candidates = await runner.ProposeAsync("acme", EmptyIndex,
-            includeTtlRows: false, limit: 3, TestContext.Current.CancellationToken);
+            includeTtlRows: false, limit: 3, cancellationToken: TestContext.Current.CancellationToken);
 
         candidates.Count.ShouldBe(3);
+    }
+
+    /// <summary>A minimum score above every ranked score queues nothing and never touches
+    /// the queue — the gated auto-promote pass relies on this so sub-threshold rows leave no
+    /// review backlog behind.</summary>
+    [Fact]
+    public async Task ProposeAsync_MinScoreAboveEveryScore_QueuesNothing()
+    {
+        var (store, queue, _, runner) = NewStack();
+        store.Candidates["acme"] = [Row("h1")];
+
+        var candidates = await runner.ProposeAsync("acme", EmptyIndex,
+            includeTtlRows: false, limit: 20, minScore: 5.0,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        candidates.ShouldBeEmpty();
+        queue.LastProject.ShouldBeNull("nothing qualified, so the queue was never touched");
+    }
+
+    [Fact]
+    public async Task ProposeAsync_MinScoreAtZero_QueuesNormally()
+    {
+        var (store, queue, _, runner) = NewStack();
+        store.Candidates["acme"] = [Row("h1")];
+
+        var candidates = await runner.ProposeAsync("acme", EmptyIndex,
+            includeTtlRows: false, limit: 20, minScore: 0.0,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        candidates.Select(c => c.Hash).ShouldBe(["h1"]);
+        queue.LastCandidates!.Select(c => c.Hash).ShouldBe(["h1"]);
+    }
+
+    /// <summary>The boundary is inclusive: a candidate scoring exactly the minimum still
+    /// qualifies, without depending on any hard-coded scorer value.</summary>
+    [Fact]
+    public async Task ProposeAsync_MinScore_SplitsOnTheScoreBoundary()
+    {
+        var probe = NewStack();
+        probe.Store.Candidates["acme"] = [Row("h1")];
+        var unfiltered = await probe.Runner.ProposeAsync("acme", EmptyIndex,
+            includeTtlRows: false, limit: 20,
+            cancellationToken: TestContext.Current.CancellationToken);
+        var score = unfiltered.Single().Score;
+
+        var (store, queue, _, runner) = NewStack();
+        store.Candidates["acme"] = [Row("h1")];
+        var kept = await runner.ProposeAsync("acme", EmptyIndex,
+            includeTtlRows: false, limit: 20, minScore: score,
+            cancellationToken: TestContext.Current.CancellationToken);
+        kept.Select(c => c.Hash).ShouldBe(["h1"]);
+        queue.LastCandidates!.Select(c => c.Hash).ShouldBe(["h1"]);
+
+        var (store2, queue2, _, runner2) = NewStack();
+        store2.Candidates["acme"] = [Row("h1")];
+        var dropped = await runner2.ProposeAsync("acme", EmptyIndex,
+            includeTtlRows: false, limit: 20, minScore: score + 1.0,
+            cancellationToken: TestContext.Current.CancellationToken);
+        dropped.ShouldBeEmpty();
+        queue2.LastProject.ShouldBeNull();
     }
 
     /// <summary>A brand-new candidate that is not already queued is subject to the display limit —
@@ -120,7 +180,7 @@ public sealed class SharedExtractionRunnerTests
         ];
 
         await runner.ProposeAsync("acme", EmptyIndex,
-            includeTtlRows: false, limit: 3, TestContext.Current.CancellationToken);
+            includeTtlRows: false, limit: 3, cancellationToken: TestContext.Current.CancellationToken);
 
         queue.LastCandidates!.Count.ShouldBe(3,
             "candidates not already queued must not exceed the display limit in a single pass");
@@ -145,7 +205,7 @@ public sealed class SharedExtractionRunnerTests
             [new PromotionQueueRow("acme", "h09", "h09.md", "queued value", null, 0.1, [], 0, 0, PromotionScorer.Version)];
 
         await runner.ProposeAsync("acme", EmptyIndex,
-            includeTtlRows: false, limit: 3, TestContext.Current.CancellationToken);
+            includeTtlRows: false, limit: 3, cancellationToken: TestContext.Current.CancellationToken);
 
         queue.LastCandidates!.Select(c => c.Hash).ShouldContain("h09",
             "a row already queued must be refreshed even though it now ranks outside the display limit");
@@ -166,7 +226,7 @@ public sealed class SharedExtractionRunnerTests
         ];
 
         await runner.ProposeAsync("acme", EmptyIndex,
-            includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
+            includeTtlRows: false, limit: 20, cancellationToken: TestContext.Current.CancellationToken);
 
         queue.LastCandidates!.Count.ShouldBe(SharedExtractionService.MaxQueuedPerSourceDocument,
             "one document may not occupy more than the per-document cap of the queue in a single pass");
@@ -187,7 +247,7 @@ public sealed class SharedExtractionRunnerTests
         store.Candidates["acme"] = [Row("new1", sourceFile: "doc.md")];
 
         await runner.ProposeAsync("acme", EmptyIndex,
-            includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
+            includeTtlRows: false, limit: 20, cancellationToken: TestContext.Current.CancellationToken);
 
         queue.LastProject.ShouldBeNull("the only new candidate belongs to an already-capped document, "
                                        + "and none of the already-queued rows are in this pass's eligible pool to refresh");
@@ -214,7 +274,7 @@ public sealed class SharedExtractionRunnerTests
         ];
 
         await runner.ProposeAsync("acme", EmptyIndex,
-            includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
+            includeTtlRows: false, limit: 20, cancellationToken: TestContext.Current.CancellationToken);
 
         queue.LastCandidates!.Select(c => c.Hash).ShouldBe(["q1", "q2", "q3"], ignoreOrder: true,
             "already-queued rows must still be refreshed even though their document is at the cap");
@@ -227,7 +287,7 @@ public sealed class SharedExtractionRunnerTests
         store.Candidates["acme"] = [Row("h1")];
 
         var candidates = await runner.ProposeAsync("acme", new SharedIndex([], ["shared/h1.md"]),
-            includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
+            includeTtlRows: false, limit: 20, cancellationToken: TestContext.Current.CancellationToken);
 
         candidates.ShouldBeEmpty();
         queue.LastProject.ShouldBeNull();
@@ -251,7 +311,7 @@ public sealed class SharedExtractionRunnerTests
         ];
 
         await runner.ProposeAsync("acme", EmptyIndex,
-            includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
+            includeTtlRows: false, limit: 20, cancellationToken: TestContext.Current.CancellationToken);
 
         queue.Rows.Select(r => r.Hash).ShouldBe(["current"],
             "the row on a retired scorer version is cleared; the row already on the current version stays");
@@ -272,7 +332,7 @@ public sealed class SharedExtractionRunnerTests
         ];
 
         await runner.ProposeAsync("acme", EmptyIndex,
-            includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
+            includeTtlRows: false, limit: 20, cancellationToken: TestContext.Current.CancellationToken);
 
         queue.LastCandidates!.Select(c => c.Hash).ShouldContain("h1",
             "h1 is still eligible on merit, so the propose path re-admits it in the same pass after the stale clear");
@@ -292,7 +352,7 @@ public sealed class SharedExtractionRunnerTests
         ];
 
         await runner.ProposeAsync("acme", EmptyIndex,
-            includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
+            includeTtlRows: false, limit: 20, cancellationToken: TestContext.Current.CancellationToken);
 
         queue.Rows.ShouldBeEmpty("the stale row was cleared, and nothing in this pass re-admits it");
         queue.LastProject.ShouldBeNull("no candidate was eligible to (re-)queue");
@@ -305,7 +365,7 @@ public sealed class SharedExtractionRunnerTests
         store.Candidates["acme"] = [Row("h1")];
 
         await runner.ProposeAsync("acme", EmptyIndex,
-            includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
+            includeTtlRows: false, limit: 20, cancellationToken: TestContext.Current.CancellationToken);
 
         queue.LastCandidates!.Single().ScorerVersion.ShouldBe(PromotionScorer.Version);
     }
@@ -322,7 +382,7 @@ public sealed class SharedExtractionRunnerTests
         ];
 
         await runner.ProposeAsync("acme", EmptyIndex,
-            includeTtlRows: false, limit: 20, TestContext.Current.CancellationToken);
+            includeTtlRows: false, limit: 20, cancellationToken: TestContext.Current.CancellationToken);
 
         queue.LastCandidates!.Single(c => c.Hash == "h1").ScorerVersion.ShouldBe(PromotionScorer.Version);
     }
@@ -336,7 +396,7 @@ public sealed class SharedExtractionRunnerTests
 
         await Should.ThrowAsync<ArgumentOutOfRangeException>(() =>
             runner.ProposeAsync("acme", EmptyIndex, includeTtlRows: false, limit,
-                TestContext.Current.CancellationToken));
+                cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -346,6 +406,6 @@ public sealed class SharedExtractionRunnerTests
 
         await Should.ThrowAsync<ArgumentException>(() =>
             runner.ProposeAsync("  ", EmptyIndex, includeTtlRows: false, limit: 20,
-                TestContext.Current.CancellationToken));
+                cancellationToken: TestContext.Current.CancellationToken));
     }
 }

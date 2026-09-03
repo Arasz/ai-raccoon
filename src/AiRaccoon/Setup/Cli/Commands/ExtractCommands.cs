@@ -80,6 +80,32 @@ public sealed class ExtractCommands(IPromotionQueuePruneStore promotionQueuePrun
         return 0;
     }
 
+    public async Task<int> SetAutoPromoteThresholdAsync(ParseResult parseResult, IMemoryStore store,
+        StandardStreams streams, CancellationToken cancellationToken)
+    {
+        var raw = parseResult.GetValue<string>("threshold");
+        if (raw is not null && raw.Trim().Equals("off", StringComparison.OrdinalIgnoreCase))
+        {
+            await store.DeleteSettingAsync(ExtractionConfigKeys.AutoPromoteThresholdGlobal, cancellationToken);
+            await streams.WriteOutputLineAsync("auto-promote-threshold: off (auto-promotion disabled)");
+            return 0;
+        }
+
+        var parsed = ExtractionConfigKeys.ParseAutoPromoteThreshold(raw);
+        if (!parsed.HasValue)
+        {
+            await streams.WriteErrorLineAsync("ai-raccoon: threshold must be a score 0..4 or 'off'");
+            return ExitCode.InvalidArgument;
+        }
+
+        var formatted = ExtractionConfigKeys.FormatAutoPromoteThreshold(parsed);
+        await store.SetSettingAsync(ExtractionConfigKeys.AutoPromoteThresholdGlobal, formatted, cancellationToken);
+        await streams.WriteOutputLineAsync(
+            $"auto-promote-threshold: {formatted} " +
+            "(in promote mode, candidates scoring at or above share automatically; nothing below is queued)");
+        return 0;
+    }
+
     public async Task<int> ListAsync(IMemoryStore store, StandardStreams streams, CancellationToken cancellationToken)
     {
         var enabled = ExtractionConfigKeys.ParseEnabled(
@@ -90,9 +116,12 @@ public sealed class ExtractCommands(IPromotionQueuePruneStore promotionQueuePrun
             await store.GetSettingAsync(ExtractionConfigKeys.IntervalMinutesGlobal, cancellationToken));
         var capacity = ExtractionConfigKeys.ParseQueueCapacity(
             await store.GetSettingAsync(ExtractionConfigKeys.QueueCapacityGlobal, cancellationToken));
+        var threshold = ExtractionConfigKeys.FormatAutoPromoteThreshold(
+            ExtractionConfigKeys.ParseAutoPromoteThreshold(
+                await store.GetSettingAsync(ExtractionConfigKeys.AutoPromoteThresholdGlobal, cancellationToken)));
         await streams.WriteOutputLineAsync(
             $"enabled: {enabled}  mode: {mode.ToString().ToLowerInvariant()}  interval: {interval} min  " +
-            $"queue-capacity: {capacity}");
+            $"queue-capacity: {capacity}  auto-promote-threshold: {threshold}");
         return 0;
     }
 

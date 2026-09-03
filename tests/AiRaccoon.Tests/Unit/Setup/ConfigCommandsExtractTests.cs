@@ -135,6 +135,68 @@ public class ConfigCommandsExtractTests
     }
 
     [Fact]
+    public async Task ExtractAutoPromoteThresholdSet_WritesGlobalRow()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, outp, _) = await Run(["settings", "extract", "auto-promote-threshold", "3.5"], store);
+
+        exit.ShouldBe(0);
+        store.Settings[ExtractionConfigKeys.AutoPromoteThresholdGlobal].ShouldBe("3.5");
+        outp.ShouldContain("auto-promote-threshold: 3.5");
+    }
+
+    [Fact]
+    public async Task ExtractAutoPromoteThresholdOff_DeletesTheSettingRow()
+    {
+        var store = new FakeConfigStore();
+        store.Settings[ExtractionConfigKeys.AutoPromoteThresholdGlobal] = "3.5";
+
+        var (exit, outp, _) = await Run(["settings", "extract", "auto-promote-threshold", "off"], store);
+
+        exit.ShouldBe(0);
+        store.Settings.ShouldNotContainKey(ExtractionConfigKeys.AutoPromoteThresholdGlobal);
+        outp.ShouldContain("off");
+    }
+
+    [Theory]
+    [InlineData("much")]
+    [InlineData("-1")]
+    [InlineData("4.1")]
+    public async Task ExtractAutoPromoteThresholdInvalid_Returns1_AndWritesError(string raw)
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, _, err) = await Run(["settings", "extract", "auto-promote-threshold", raw], store);
+
+        exit.ShouldBe(ExitCode.InvalidArgument);
+        err.ShouldContain("threshold must be a score 0..4 or 'off'");
+        store.Settings.ShouldNotContainKey(ExtractionConfigKeys.AutoPromoteThresholdGlobal);
+    }
+
+    [Fact]
+    public async Task ExtractList_ShowsAutoPromoteThresholdOff_WhenUnset()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, outp, _) = await Run(["settings", "extract", "list"], store);
+
+        exit.ShouldBe(0);
+        outp.ShouldContain("auto-promote-threshold: off");
+    }
+
+    [Fact]
+    public async Task ExtractList_ShowsConfiguredAutoPromoteThreshold()
+    {
+        var store = new FakeConfigStore();
+        store.Settings[ExtractionConfigKeys.AutoPromoteThresholdGlobal] = "3.5";
+
+        var (_, outp, _) = await Run(["settings", "extract", "list"], store);
+
+        outp.ShouldContain("auto-promote-threshold: 3.5");
+    }
+
+    [Fact]
     public async Task ExtractList_ShowsTheQueueCapacity()
     {
         var store = new FakeConfigStore();

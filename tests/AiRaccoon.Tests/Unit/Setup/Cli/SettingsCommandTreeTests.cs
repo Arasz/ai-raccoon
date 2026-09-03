@@ -94,6 +94,7 @@ public class SettingsCommandTreeTests
         ("settings extract mode", ["settings", "extract", "mode", "propose"]),
         ("settings extract interval", ["settings", "extract", "interval", "30"]),
         ("settings extract capacity", ["settings", "extract", "capacity", "100"]),
+        ("settings extract auto-promote-threshold", ["settings", "extract", "auto-promote-threshold", "3.5"]),
         ("settings extract exclude add", ["settings", "extract", "exclude", "add", "scratch/"]),
         ("settings extract exclude remove", ["settings", "extract", "exclude", "remove", "scratch/"]),
         ("settings extract exclude list", ["settings", "extract", "exclude", "list"]),

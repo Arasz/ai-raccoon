@@ -11,8 +11,12 @@ public interface IPromotionQueue
     Task<ProposeOutcome> ProposeAsync(string projectId, IReadOnlyList<QueueCandidate> candidates,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Shares the top-ranked queued rows of the given projects and drains them; already-shared rows are skipped and drained too.</summary>
-    Task<PromoteOutcome> PromoteAsync(IReadOnlyList<string> projectIds, int limit,
+    /// <summary>
+    ///     Shares the top-ranked queued rows of the given projects and drains them; already-shared
+    ///     rows are skipped and drained too. A minimum score narrows the drain to rows scoring at
+    ///     or above it — the rest stay queued untouched, never discarded.
+    /// </summary>
+    Task<PromoteOutcome> PromoteAsync(IReadOnlyList<string> projectIds, int limit, double? minScore = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>Removes one queued row (hash given) or a whole project's queue (hash null); returns the removed count.</summary>

@@ -91,7 +91,7 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
             [Candidate("h1", "docs/a.md", "chunk one", 5.0), Candidate("h2", "docs/a.md", "chunk two", 4.0)],
             TestContext.Current.CancellationToken);
 
-        var outcome = await _service.PromoteAsync(["acme"], 2, TestContext.Current.CancellationToken);
+        var outcome = await _service.PromoteAsync(["acme"], 2, cancellationToken: TestContext.Current.CancellationToken);
 
         outcome.PromotedHashes.ShouldBe(["h1", "h2"],
             "every promoted chunk is shared — one file may hold many shared rows");
@@ -116,7 +116,7 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
             [Candidate("h1", "one.md", "identical fact", 5.0), Candidate("h2", "two.md", "identical fact", 4.0)],
             TestContext.Current.CancellationToken);
 
-        var outcome = await _service.PromoteAsync(["acme"], 2, TestContext.Current.CancellationToken);
+        var outcome = await _service.PromoteAsync(["acme"], 2, cancellationToken: TestContext.Current.CancellationToken);
 
         outcome.PromotedHashes.ShouldBe(["h1"]);
         outcome.SkippedDuplicates.ShouldBe(1,
@@ -141,8 +141,8 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
         var service = new PromotionQueueService(queue, store, new UniformCountEvictionPolicy(),
             new SpyMetrics(), NullLogger<PromotionQueueService>.Instance, new FakeTimeProvider(FixedNow));
 
-        var first = await service.PromoteAsync(["acme"], 10, TestContext.Current.CancellationToken);
-        var second = await service.PromoteAsync(["beta"], 10, TestContext.Current.CancellationToken);
+        var first = await service.PromoteAsync(["acme"], 10, cancellationToken: TestContext.Current.CancellationToken);
+        var second = await service.PromoteAsync(["beta"], 10, cancellationToken: TestContext.Current.CancellationToken);
 
         first.PromotedHashes.ShouldBe(["h1"], "the winner created the shared row");
         first.Absorbed.ShouldBe(0);
@@ -169,7 +169,7 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
             [Candidate("h1", "docs/a.md", "chunk one", 5.0), Candidate("h2", "docs/a.md", "chunk two", 4.0)],
             TestContext.Current.CancellationToken);
 
-        await service.PromoteAsync(["acme"], 2, TestContext.Current.CancellationToken);
+        await service.PromoteAsync(["acme"], 2, cancellationToken: TestContext.Current.CancellationToken);
 
         logger.Messages.ShouldContain(m => m.Contains(
                 "Promoted from the queue for acme: 2 shared, 0 absorbed (already shared), 0 duplicate-skipped"),

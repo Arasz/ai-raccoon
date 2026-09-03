@@ -512,6 +512,8 @@ internal static class CliCommandTree
                 { new Argument<string>("minutes") { HelpName = "minutes" } },
             new Command("capacity", "Sets the propose-tier queue capacity (positive integer; default 1000) — the total queued candidates across projects, split into per-project reservations")
                 { new Argument<string>("capacity") { HelpName = "capacity" } },
+            new Command("auto-promote-threshold", "Sets the score-gated auto-promote threshold (0..4, e.g. 3.5) or 'off' (default): in promote mode, queued candidates scoring at or above share automatically and nothing below is queued")
+                { new Argument<string>("threshold") { HelpName = "score|off" } },
             new Command("exclude", "Excludes source_file prefixes from shared-extraction candidacy (extract.exclude.prefixes; e.g. 'scratch/' keeps agent scratch files out of the shared tier)")
             {
                 new Command("add", "Adds a source_file prefix to the exclusion list (deduped)")

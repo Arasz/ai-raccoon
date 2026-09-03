@@ -119,6 +119,17 @@ public sealed partial class ExtractionHostedService(
             return 0;
         }
 
+        double? threshold = null;
+        if (mode == ExtractMode.Promote)
+        {
+            // Propose mode ignores the threshold (it stays a full-fidelity review tool). A store
+            // failure here fails the whole pass closed via RunOnceAsync: nothing is shared on a
+            // pass that could not read its own guard rail.
+            threshold = ExtractionConfigKeys.ParseAutoPromoteThreshold(
+                await store.GetSettingAsync(ExtractionConfigKeys.AutoPromoteThresholdGlobal, cancellationToken)
+                    .ConfigureAwait(false));
+        }
+
         var sharedIndex = await store.GetSharedIndexAsync(cancellationToken).ConfigureAwait(false);
         var promotedTotal = 0;
         var failures = 0;
@@ -128,9 +139,21 @@ public sealed partial class ExtractionHostedService(
             {
                 if (mode == ExtractMode.Promote)
                 {
+                    if (threshold.HasValue)
+                    {
+                        // Score-gated auto-promote: rank fresh, queue only qualifiers, share them
+                        // in the same pass. Sub-threshold rows never enter the queue, so no review
+                        // backlog accumulates; the manual MCP promote path stays unfiltered.
+                        await extraction.ProposeAsync(projectId, sharedIndex,
+                                false, SharedExtractionService.DefaultCandidateLimit, threshold,
+                                cancellationToken: cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+
                     // Promote-from-queue: the propose tier is the source of truth.
                     var outcome = await queue
-                        .PromoteAsync([projectId], SharedExtractionService.DefaultCandidateLimit, cancellationToken)
+                        .PromoteAsync([projectId], SharedExtractionService.DefaultCandidateLimit, threshold,
+                            cancellationToken: cancellationToken)
                         .ConfigureAwait(false);
                     promotedTotal += outcome.PromotedHashes.Count;
                     var candidateCount = outcome.PromotedHashes.Count + outcome.Absorbed
@@ -148,7 +171,8 @@ public sealed partial class ExtractionHostedService(
                 }
 
                 var candidates = await extraction.ProposeAsync(projectId, sharedIndex,
-                        false, SharedExtractionService.DefaultCandidateLimit, cancellationToken)
+                        false, SharedExtractionService.DefaultCandidateLimit,
+                        cancellationToken: cancellationToken)
                     .ConfigureAwait(false);
 
                 // Per-pass summary only; candidate counts are metered, not logged per row.
