@@ -126,15 +126,16 @@ jobs:
       - name: Fast tests
         if: needs.changes.outputs.code == 'true'
         # Speed=Fast only; Speed=Slow is gated by build-slow below and BDD by
-        # build-bdd. The three filters together cover the suite — see
-        # tests/AiRaccoon.Tests/TestCategories.cs for the trait split.
+        # build-bdd. Those three cover every Fast, Slow and BDD test — but NOT
+        # Speed=Nightly, whose only runner is the opt-in build-nightly-gates job
+        # below. See tests/AiRaccoon.Tests/TestCategories.cs for the trait split.
         #
         # Performance!=Benchmark drops wall-clock budget gates from every PR lane
         # (owner ruling 2026-08-22: a budget belongs in a benchmark, not in a test
         # that gates a merge — it can go red with no defect present). A test with no
         # Performance trait still matches, which is what keeps this an exclusion and
-        # not a second opt-in. Those tests still run in nightly.yml's unfiltered
-        # backstop, and on demand with --filter "Performance=Benchmark".
+        # not a second opt-in. Those tests run on demand with
+        # --filter "Performance=Benchmark"; no scheduled backstop runs them.
         run: dotnet test --project tests/AiRaccoon.Tests --filter "Speed=Fast&Performance!=Benchmark" --no-build -v m
 
   build-bdd:
@@ -244,9 +245,7 @@ jobs:
 
   build-nightly-gates:
     # Q2 (delta review fix plan, owner flag O1): nothing ran Speed=Nightly against a PR head.
-    # nightly.yml already has workflow_dispatch, but dispatching it runs the full unfiltered
-    # ~45-minute suite and files a red-nightly issue on failure (scripts/nightly-triage.py) — wrong
-    # for a PR's own red. This job runs only the Nightly-tagged tests, with no triage script, and
+    # This job runs only the Nightly-tagged tests, with no triage script, and
     # is not a required status check (unlike build-fast/build-bdd/build-slow above) — it only runs
     # when explicitly asked for, via the `run-nightly-gates` label or a manual dispatch, so it
     # never adds cost to a PR that doesn't want it.

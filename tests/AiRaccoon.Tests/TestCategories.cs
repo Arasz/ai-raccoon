@@ -7,8 +7,10 @@ namespace AiRaccoon.Tests;
 ///     Trait values for filtering: `dotnet test --filter "Category=Unit&Speed=Fast"`.
 ///     Category: Unit (pure logic / fakes), Integration (real SQLite or native extensions),
 ///     E2E (full server over HTTP via WebApplicationFactory). Speed: Fast, Slow or Nightly —
-///     Nightly is excluded from every push-gate filter and runs only via nightly.yml's
-///     unfiltered `dotnet test`.
+///     Nightly is excluded from all three required gates (build-fast, build-bdd, build-slow).
+///     Its only runner is build-nightly-gates, which is opt-in — the run-nightly-gates label or
+///     a manual dispatch — and is not a required check, so a Nightly test can go red on main
+///     without any gate seeing it. Run it locally with --filter "Speed=Nightly".
 /// </summary>
 public static class TestCategories
 {
@@ -25,8 +27,9 @@ public static class TestCategories
 
     /// <summary>
     ///     Marks a test whose verdict depends on host speed (a wall-clock budget or percentile). Excluded
-    ///     from every PR lane via <c>Performance!=Benchmark</c> (see .github/workflows/build.yml); still runs
-    ///     in nightly and on demand. A correctness test holding a Stopwatch belongs on a fake clock instead.
+    ///     from every PR lane via <c>Performance!=Benchmark</c> (see .github/workflows/build.yml); runs on
+    ///     demand with --filter "Performance=Benchmark". A correctness test holding a Stopwatch belongs on
+    ///     a fake clock instead.
     /// </summary>
     public const string Performance = "Performance";
 
