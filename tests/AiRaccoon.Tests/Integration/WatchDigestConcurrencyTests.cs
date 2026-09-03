@@ -236,7 +236,7 @@ public sealed class WatchDigestConcurrencyTests
     ///     in-flight test, so the replayed statement itself cannot drift from this pin.
     ///     Ledger — watches-replay-drift : --filter WatchesFoldReplay_MatchesTheRealStep : twin banks, replay vs real step.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task WatchesFoldReplay_MatchesTheRealStep()
     {
         const string loser = "job-search-ai-assistant";

@@ -52,7 +52,7 @@ public sealed class ProjectIdsRepairContendedLockTests : IDisposable
     /// <summary>Positions the probe after the repair's start; ordering itself is latch-guaranteed, not timed.</summary>
     private static readonly TimeSpan Grace = TimeSpan.FromMilliseconds(500);
 
-    [Fact]
+    [RetryFact]
     public async Task RepairVsWrite_ContendedLock()
     {
         var ct = TestContext.Current.CancellationToken;

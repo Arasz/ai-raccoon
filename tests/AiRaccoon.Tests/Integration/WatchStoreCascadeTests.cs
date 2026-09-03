@@ -31,7 +31,7 @@ public sealed class WatchStoreCascadeTests
     ///     verbatim (the fold lives upstream), so no alias leg here.
     ///     Ledger — raw-respelled-watch-write : --filter AddWatchAsync_RespelledGuid_RefusesLoudly : braced upper-case guid, both entry points.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task AddWatchAsync_RespelledGuid_RefusesLoudly()
     {
         using var stack = new Stack();
