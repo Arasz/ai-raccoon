@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using CommunityToolkit.Diagnostics;
 
@@ -39,7 +40,7 @@ public sealed class ProjectIdAliasMap
     public IReadOnlyList<string> Dropped => [.. _dropped];
 
     /// <summary>True and the winner when the id is a known loser or a canonical itself (self-mapped); false for dropped ids and true typos.</summary>
-    public bool TryResolve(string projectId, out string? canonical)
+    public bool TryResolve(string projectId, [NotNullWhen(true)] out string? canonical)
     {
         if (_aliases.TryGetValue(projectId, out canonical))
         {
@@ -54,6 +55,23 @@ public sealed class ProjectIdAliasMap
 
         canonical = null;
         return false;
+    }
+
+    /// <summary>
+    ///     The choke's single fold (air-merge P3/P4, review M4c): guid D-form first, then the alias
+    ///     winner. Canonicals, true typos and drop-candidates come back untouched — refusing a typo
+    ///     is the registration guard's job, and a dropped id is deleted, never folded. Blank input
+    ///     passes through: the key factories derive their prefixes from an empty id.
+    /// </summary>
+    public string Fold(string projectId)
+    {
+        if (string.IsNullOrEmpty(projectId))
+        {
+            return projectId;
+        }
+
+        var canonical = ProjectId.Canonicalize(projectId);
+        return TryResolve(canonical, out var winner) ? winner : canonical;
     }
 
     /// <summary>True when the id is deleted with a tombstone at merge time, never folded.</summary>

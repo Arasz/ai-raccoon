@@ -1,7 +1,9 @@
 using System.Globalization;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Watch;
+using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
@@ -1500,5 +1502,245 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
             status.Watches[0].State.ShouldBe(WatchState.Retrying,
                 "the counter reset on success — one new failure must not stop the watch");
         }
+    }
+
+    // ── Rule: A project-ids repair folds watch registrations without resurrecting the loser ──
+    // WatchRenameBDD (air-merge P3+P4): guid/multi-id fixture, digest_claims seeding,
+    // multi-event post-repair digest, no-resurrect-loser asserts, UPDATE-preserved leases.
+    // Ledger — skip-watch-rewrite : WatchRenameBDD scenario : loser+UPPER+guid watches with
+    // claims, leases, scope rows and ingested files; skip-settings-rename : same : loser scope
+    // rows; delete-insert-instead-of-update : same : rowid-stability asserts; unchanged-file-stays-put :
+    // same : g.md is asserted searchable only after a post-repair change (untouched mirrors stay
+    // byte-identical under the loser per review S2 — asserting it before the change fails).
+
+    private const string RenameLoser = "job-search-ai-assistant";
+    private const string RenameWinner = "jsaa";
+    private const string RenameLoserUpper = "AI-RACCOON";
+    private const string RenameWinnerLower = "ai-raccoon";
+    private const string RenameGuidLoser = "01a062f4-0000-7000-8000-000000000001";
+
+    private readonly Dictionary<(string Project, string Path), long> _watchRowIds = new();
+    private readonly Dictionary<string, long> _nullContextBefore = new();
+    private long _expectedLease;
+
+    [Given("^a digest claim for \"([^\"]*)\" at \"([^\"]*)\" with scan owner \"([^\"]*)\"$")]
+    public async Task GivenDigestClaimWithScanOwner(string projectId, string virtualPath, string owner)
+    {
+        var path = Map(virtualPath);
+        // A STALE claim (expired an hour ago): the row still carries owner+lease for the UPDATE-
+        // preservation asserts, but the lease no longer blocks post-repair scans — an active lease
+        // would make WatchCatchUp.ScanCoreAsync silently skip the watch (only the holder may scan),
+        // so no post-repair change could ever become searchable. Precedent: WatchDigestConcurrencyTests
+        // pins its parked lease at a long-expired 1700003600 for the same reason.
+        _expectedLease = MemoryFeatureContext.FixedNow.AddHours(-1).ToUnixTimeSeconds();
+        await using var connection = await Ctx.OpenBankAsync();
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO watch_digest_claims (project_id, path, claimed_at) VALUES (@projectId, @path, @now)",
+            new { projectId, path, now = MemoryFeatureContext.FixedNow.ToUnixTimeSeconds() }));
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE watches SET scan_owner = @owner, scan_lease_expires_at = @lease WHERE project_id = @projectId AND path = @path",
+            new { owner, lease = _expectedLease, projectId, path }));
+        _watchRowIds[(projectId, path)] = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT rowid FROM watches WHERE project_id = @projectId AND path = @path",
+            new { projectId, path }));
+    }
+
+    [Given("^a guid watch for \"([^\"]*)\" named \"([^\"]*)\" on path \"([^\"]*)\" with \"([^\"]*)\" ingested$")]
+    public async Task GivenGuidWatchNamed(string guid, string name, string virtualPath, string file)
+    {
+        await SetupWatchWithIngestedAsync(guid, virtualPath, [file]);
+        // The live 01a062f4 shape: the guid is registered under its pre-guid name, which is the
+        // only channel the fold can attribute it through (the map never hardcodes the guid).
+        await using var connection = await Ctx.OpenBankAsync();
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO projects (id, name, created_at) VALUES (@id, @name, @now)",
+            new { id = guid, name, now = MemoryFeatureContext.FixedNow.ToUnixTimeSeconds() }));
+    }
+
+    [Given("^loser scope and config rows for \"([^\"]*)\" and \"([^\"]*)\"$")]
+    public async Task GivenLoserScopeAndConfigRows(string loser1, string loser2)
+    {
+        // Raw loser keys on purpose: the factories fold at construction now, so only a pre-repair
+        // bank still holds these spellings.
+        var scope = IngestScopeKeys.Serialize([Map("/repo")]);
+        await using var connection = await Ctx.OpenBankAsync();
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO settings (key, value) VALUES (@k1, @scope), (@k2, @scope), (@k3, 'true')",
+            new
+            {
+                k1 = $"ingest.scope.{loser1}", scope,
+                k2 = $"ingest.scope.{loser2}",
+                k3 = $"watch.enabled.{loser2}"
+            }));
+    }
+
+    [When("^the project-ids repair folds loser ids into their winners$")]
+    public async Task WhenProjectIdsRepairFolds()
+    {
+        await using var connection = await Ctx.OpenBankAsync();
+        _nullContextBefore.Clear();
+        foreach (var loser in new[] { RenameLoser, RenameLoserUpper, RenameGuidLoser })
+        {
+            _nullContextBefore[loser] = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM entries WHERE project_id = @loser AND scope = 'project' AND context_label IS NULL",
+                new { loser }));
+        }
+
+        var plan = ProjectIdsFoldPlan.FromCensus(
+            await ProjectIdCensus.CollectAsync(connection, CancellationToken.None), ProjectIdAliasMap.Default);
+        plan.IsEmpty.ShouldBeFalse("the seeded losers must schedule folds");
+        await new ProjectIdsRepair(Ctx.TimeProvider).ApplyAsync(connection, plan, CancellationToken.None);
+        // Model elapsed time between the repair and later edits: catch-up changed-since scans
+        // gate on mtime > last_change_ts (1s granularity), and the repair preserves the
+        // pre-repair watermark — without this advance a same-fake-second edit ties the watermark
+        // and its (renamed, still fingerprinted) file is skipped as not-due. Production never ties;
+        // fake time must not either.
+        Ctx.TimeProvider.Advance(TimeSpan.FromSeconds(30));
+    }
+
+    [Given("^labeled project rows for the loser ids$")]
+    public async Task GivenLabeledProjectRowsForLosers()
+    {
+        // The P2 move-shape (scope project + non-null label): the only entries the repair moves.
+        // File-mirrored rows are NULL-context by digest construction and stay byte-identical.
+        await using var connection = await Ctx.OpenBankAsync();
+        var now = MemoryFeatureContext.FixedNow.ToUnixTimeSeconds();
+        foreach (var (hash, loser) in new[]
+                 {
+                     ("lab-1", RenameLoser), ("lab-2", RenameLoser),
+                     ("lab-3", RenameLoserUpper), ("lab-4", RenameGuidLoser)
+                 })
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                "INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, context_label, created_at, updated_at, embed_state) " +
+                "VALUES (@hash, @hash, @hash, 'seed.md', 's', 'project', @loser, 'ctx-a', @now, @now, 'pending')",
+                new { hash, loser, now }));
+        }
+    }
+
+    [Then("^no loser rows remain except byte-identical file mirrors$")]
+    [Then("^still no loser rows remain and mirrors are unchanged$")]
+    public async Task ThenNoLoserRowsRemain()
+    {
+        await using var connection = await Ctx.OpenBankAsync();
+        foreach (var loser in new[] { RenameLoser, RenameLoserUpper, RenameGuidLoser })
+        {
+            foreach (var table in new[] { "watches", "watch_files", "watch_digest_claims" })
+            {
+                // Table names are this step's own constants, never bank content.
+                (await connection.ExecuteScalarAsync<long>(
+                        new CommandDefinition($"SELECT count(*) FROM {table} WHERE project_id = @loser",
+                            new { loser })))
+                    .ShouldBe(0, $"loser {loser} resurrected in {table}");
+            }
+
+            (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                    "SELECT count(*) FROM entries WHERE project_id = @loser AND scope = 'project' AND context_label IS NOT NULL",
+                    new { loser })))
+                .ShouldBe(0, $"labeled loser rows survived under {loser}");
+            (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                    "SELECT count(*) FROM entries WHERE project_id = @loser AND scope = 'project' AND context_label IS NULL",
+                    new { loser })))
+                .ShouldBe(_nullContextBefore[loser],
+                    $"file mirrors under {loser} changed — they stay byte-identical (review S2)");
+        }
+
+        (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM entries WHERE project_id = 'jsaa' AND scope = 'project' AND context_label IS NOT NULL")))
+            .ShouldBe(3, "loser + guid labeled rows meet under jsaa");
+    }
+
+    [Then("^the scope and config rows moved to the winner keys$")]
+    public async Task ThenScopeAndConfigRowsMoved()
+    {
+        var scope = IngestScopeKeys.Serialize([Map("/repo")]);
+        await using var connection = await Ctx.OpenBankAsync();
+        (await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+                "SELECT value FROM settings WHERE key = 'ingest.scope.jsaa'")))
+            .ShouldBe(scope);
+        (await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+                "SELECT value FROM settings WHERE key = 'ingest.scope.ai-raccoon'")))
+            .ShouldBe(scope);
+        (await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+                "SELECT value FROM settings WHERE key = 'watch.enabled.ai-raccoon'")))
+            .ShouldBe("true");
+        foreach (var loserKey in new[]
+                 {
+                     "ingest.scope.job-search-ai-assistant", "ingest.scope.AI-RACCOON",
+                     "watch.enabled.AI-RACCOON"
+                 })
+        {
+            (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                    "SELECT count(*) FROM settings WHERE key = @key", new { key = loserKey })))
+                .ShouldBe(0, $"loser key {loserKey} survived the rename");
+        }
+    }
+
+    [Then("^the \"([^\"]*)\" watch keeps scan owner \"([^\"]*)\" with its lease$")]
+    public async Task ThenWatchKeepsScanOwnerAndLease(string winner, string owner)
+    {
+        var loser = winner == RenameWinner ? RenameLoser : RenameLoserUpper;
+        var path = Map("/repo");
+        await using var connection = await Ctx.OpenBankAsync();
+        var row = await connection.QueryFirstOrDefaultAsync<(string? Owner, long Lease, long RowId)>(
+            new CommandDefinition(
+                "SELECT scan_owner AS Owner, scan_lease_expires_at AS Lease, rowid AS RowId " +
+                "FROM watches WHERE project_id = @winner AND path = @path",
+                new { winner, path }));
+        row.Owner.ShouldBe(owner);
+        row.Lease.ShouldBe(_expectedLease);
+        row.RowId.ShouldBe(_watchRowIds[(loser, path)],
+            "the rename is an UPDATE preserving the row — never DELETE+INSERT");
+    }
+
+    [Then("^the \"([^\"]*)\" watch still owns \"([^\"]*)\"$")]
+    public async Task ThenWatchStillOwnsFile(string winner, string file)
+    {
+        var path = Normalized(Path.Combine(Map("/repo"), file));
+        await using var connection = await Ctx.OpenBankAsync();
+        (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM watch_files WHERE project_id = @winner AND path = @path",
+                new { winner, path })))
+            .ShouldBe(1, $"{file} lost its fingerprint in the rename");
+    }
+
+    [Then("^\"([^\"]*)\" is searchable for \"([^\"]*)\"$")]
+    public async Task ThenFileIsSearchableFor(string file, string projectId)
+    {
+        var real = FileByName(file);
+        (await EnsureSearchableAsync(projectId, _contentByPath[real], real)).ShouldBeTrue(
+            $"'{file}' did not become searchable for {projectId}");
+    }
+
+    [When("^\"([^\"]*)\" and \"([^\"]*)\" change$")]
+    public void WhenTwoFilesChange(string file1, string file2)
+    {
+        WriteFileAt("/repo", file1);
+        WriteFileAt("/repo", file2);
+    }
+
+    [Then("^memory_search for \"([^\"]*)\" returns both new contents$")]
+    public async Task ThenSearchReturnsBothNewContents(string projectId)
+    {
+        foreach (var file in new[] { "a.md", "b.md" })
+        {
+            var real = Path.Combine(Map("/repo"), file);
+            (await EnsureSearchableAsync(projectId, _contentByPath[real], real)).ShouldBeTrue(
+                $"'{file}' change did not become searchable for {projectId}");
+        }
+    }
+
+    private string FileByName(string file)
+    {
+        foreach (var dir in new[] { "/repo", "/repo/g" })
+        {
+            var real = Path.Combine(Map(dir), file);
+            if (_contentByPath.ContainsKey(real))
+            {
+                return real;
+            }
+        }
+
+        throw new InvalidOperationException($"no ingested file named '{file}' in this scenario");
     }
 }

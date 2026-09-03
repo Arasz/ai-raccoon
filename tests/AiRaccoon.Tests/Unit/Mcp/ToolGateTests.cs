@@ -167,6 +167,54 @@ public sealed class ToolGateTests
             "access passed first; only then did the registration refusal fire");
     }
 
+    /// <summary>
+    ///     P3 activation (review M1): once the P2 finished marker exists, a known loser folds to
+    ///     its winner at the choke — every downstream guard and store sees jsaa, never the loser.
+    ///     Ledger — skip-alias-fold : --filter RequireAsync_WhenMigrated_FoldsAKnownAliasToTheWinner :
+    ///     job-search-ai-assistant write.
+    /// </summary>
+    [Fact]
+    public async Task RequireAsync_WhenMigrated_FoldsAKnownAliasToTheWinner()
+    {
+        var (guard, _, _, registration, _) = NewStack();
+        var gate = new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration,
+            migrationGate: new StubMigrationGate(true));
+
+        var canonical = await gate.RequireAsync("job-search-ai-assistant", AccessRequirement.Write,
+            "memory_write", TestContext.Current.CancellationToken);
+
+        canonical.ShouldBe("jsaa");
+        guard.Calls.ShouldBe([("jsaa", AccessRequirement.Write, "memory_write")]);
+        registration.Calls.ShouldBe([("jsaa", AccessRequirement.Write)]);
+    }
+
+    /// <summary>
+    ///     The mechanical half of M1: without the marker the bank behaves exactly as before — the
+    ///     loser passes through unfolded (the winners' own writes must never refuse on an
+    ///     unmigrated bank). Ledger — fold-unconditionally :
+    ///     --filter RequireAsync_WhenUnmigrated_PassesTheLoserThroughUnfolded : same write, gate false.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RequireAsync_WhenUnmigrated_PassesTheLoserThroughUnfolded(bool migrated)
+    {
+        // True here means the gate was constructed WITHOUT a migration gate at all (the pre-P3
+        // call shape every existing construction uses); false means an explicit unmigrated bank.
+        // Both must behave identically: no fold until the marker exists.
+        var (guard, _, _, registration, _) = NewStack();
+        var gate = migrated
+            ? new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration)
+            : new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration,
+                migrationGate: new StubMigrationGate(false));
+
+        var canonical = await gate.RequireAsync("job-search-ai-assistant", AccessRequirement.Write,
+            "memory_write", TestContext.Current.CancellationToken);
+
+        canonical.ShouldBe("job-search-ai-assistant");
+        guard.Calls.ShouldBe([("job-search-ai-assistant", AccessRequirement.Write, "memory_write")]);
+    }
+
     private sealed class RecordingGuard : IMemoryAccessGuard
     {
         public List<(string ProjectId, AccessRequirement Requirement, string ToolName)> Calls { get; } = [];
@@ -215,5 +263,11 @@ public sealed class ToolGateTests
 
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class StubMigrationGate(bool migrated) : IProjectIdsMigrationGate
+    {
+        public Task<bool> IsMigratedAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(migrated);
     }
 }

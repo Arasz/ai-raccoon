@@ -6,6 +6,7 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.Metrics;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Rating;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
@@ -59,6 +60,18 @@ public sealed partial class SqliteMemoryStore(
     public async Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        // Canonical-only (air-merge P3, review S1): the ToolGate choke canonicalizes every id
+        // before it reaches storage, so a re-spelled id here means a caller bypassed the gate —
+        // fail loudly instead of landing a raw second partition. Spelling-canonical only (guid
+        // D-form): alias losers still arrive verbatim on unmigrated banks and the digest path
+        // carries stored spellings by design, so an alias assert here would break them.
+        if (request.ProjectId != ProjectId.Canonicalize(request.ProjectId))
+        {
+            throw new InvalidOperationException(
+                $"ai-raccoon: refusing to write under non-canonical project id '{request.ProjectId}' " +
+                "(canonicalize at the ToolGate first)");
+        }
 
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
 

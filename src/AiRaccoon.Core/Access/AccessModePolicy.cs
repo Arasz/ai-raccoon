@@ -10,7 +10,9 @@ public static class AccessModePolicy
 
     public const string GlobalSettingKey = "access.mode.global";
 
-    public static string ProjectSettingKey(string projectId) => $"access.mode.project:{projectId}";
+    /// <summary>The per-project mode key; the id segment folds at construction (air-merge P4 — see <see cref="Ingestion.IngestScopeKeys" />).</summary>
+    public static string ProjectSettingKey(string projectId) =>
+        $"access.mode.project:{Projects.ProjectIdAliasMap.Default.Fold(projectId)}";
 
     public static AccessMode Resolve(AccessMode? global, AccessMode? perProject) => perProject ?? global ?? AccessMode.Rw;
 

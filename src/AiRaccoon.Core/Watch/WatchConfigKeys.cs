@@ -10,7 +10,11 @@ public static class WatchConfigKeys
     public const string EnabledGlobal = "watch.enabled.global";
     public const string ConcurrencyGlobal = "watch.concurrency.global";
 
-    public static string EnabledProject(string projectId) => $"watch.enabled.{projectId}";
+    /// <summary>The per-project key; the id segment folds at construction (air-merge P4 — see <see cref="AiRaccoon.Core.Ingestion.IngestScopeKeys" />).</summary>
+    public static string EnabledProject(string projectId) =>
+        $"watch.enabled.{Projects.ProjectIdAliasMap.Default.Fold(projectId)}";
 
-    public static string ConcurrencyProject(string projectId) => $"watch.concurrency.{projectId}";
+    /// <summary>The per-project key; the id segment folds at construction (air-merge P4 — see <see cref="AiRaccoon.Core.Ingestion.IngestScopeKeys" />).</summary>
+    public static string ConcurrencyProject(string projectId) =>
+        $"watch.concurrency.{Projects.ProjectIdAliasMap.Default.Fold(projectId)}";
 }

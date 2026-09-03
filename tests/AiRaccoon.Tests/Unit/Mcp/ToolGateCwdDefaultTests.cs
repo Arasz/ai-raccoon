@@ -79,6 +79,27 @@ public sealed class ToolGateCwdDefaultTests
         _registration.Calls.ShouldBeEmpty();
     }
 
+    /// <summary>
+    ///     P4 resolver coherence: a blank id over an alias pair (loser + winner fragments) stays
+    ///     Ambiguous — the gate never folds or guesses across fragments on the blank path.
+    ///     Ledger — fold-across-fragments : --filter BlankId_AliasPair_StaysAmbiguous :
+    ///     loser+winner fragments.
+    /// </summary>
+    [Fact]
+    public async Task BlankId_AliasPair_StaysAmbiguous()
+    {
+        _resolver.Result = new ProjectIdResolution.Ambiguous(["job-search-ai-assistant", "jsaa"]);
+        var gate = NewGate();
+
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            gate.RequireAsync("", AccessRequirement.Write, "memory_write", TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldStartWith("invalid-params: projectId is ambiguous from cwd ");
+        ex.Message.ShouldContain(": candidates job-search-ai-assistant, jsaa");
+        _guard.Calls.ShouldBeEmpty();
+        _registration.Calls.ShouldBeEmpty();
+    }
+
     [Fact]
     public async Task ExplicitId_ResolverNeverConsulted()
     {

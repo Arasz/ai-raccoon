@@ -144,9 +144,12 @@ public sealed class WatchCommands
         CancellationToken cancellationToken)
     {
         var filter = parseResult.GetValue<string?>("project-id");
+        // P4 boundary fold: a loser spelling lists its winner's registrations (the stored rows are
+        // canonical post-repair; the fold is idempotent on canonical spellings).
+        var wanted = filter is null ? null : Core.Projects.ProjectIdAliasMap.Default.Fold(filter);
         var watches = await _watchStore.ListWatchesAsync(cancellationToken);
         var rows = watches
-            .Where(w => filter is null || w.ProjectId == filter)
+            .Where(w => wanted is null || w.ProjectId == wanted)
             .OrderBy(w => w.ProjectId, StringComparer.Ordinal)
             .ThenBy(w => w.Path, IngestPath.PathComparer)
             .ToArray();
