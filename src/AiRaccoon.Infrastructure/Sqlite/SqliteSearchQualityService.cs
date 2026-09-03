@@ -79,19 +79,33 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
     public async Task RecordFollowThroughAsync(
         string correlationId,
         string filePath,
+        int? servedRank = null,
         CancellationToken ct = default)
     {
+        if (servedRank.HasValue)
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(servedRank.Value, 1);
+        }
+
         await using var connection = await factory.OpenBankAsync(ct).ConfigureAwait(false);
 
-        // Read current follow_through_files, append, update count
+        // The codec is the migration (no DDL): legacy plain-string cells upgrade in memory to
+        // uniform object rows on append, and the cell always round-trips the object shape.
+        // Dedupe is ordinal by path: an existing non-null rank is never clobbered, and a null
+        // rank is filled once by a later non-null.
         var existing = await connection.QuerySingleOrDefaultAsync<string?>(
             "SELECT follow_through_files FROM search_quality WHERE correlation_id = @Id",
             new { Id = correlationId }).ConfigureAwait(false);
 
-        var files = existing is not null ? JsonSerializer.Deserialize<List<string>>(existing) ?? [] : [];
-        if (!files.Contains(filePath, StringComparer.Ordinal))
+        var entries = DecodeFollowThrough(existing);
+        var index = entries.FindIndex(e => string.Equals(e.Path, filePath, StringComparison.Ordinal));
+        if (index < 0)
         {
-            files.Add(filePath);
+            entries.Add(new FollowThroughEntry(filePath, servedRank));
+        }
+        else if (entries[index].Rank is null && servedRank.HasValue)
+        {
+            entries[index] = entries[index] with { Rank = servedRank };
         }
 
         await connection.ExecuteAsync(
@@ -103,9 +117,48 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
             new
             {
                 Id = correlationId,
-                files.Count,
-                Files = JsonSerializer.Serialize(files)
+                entries.Count,
+                Files = JsonSerializer.Serialize(entries)
             }).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Decodes a <c>follow_through_files</c> cell: uniform object rows, with a per-element
+    ///     fallback for legacy plain-string rows (pre-P4 writers, including the file-watcher
+    ///     hook, which still appends bare strings). Unknown element shapes are skipped.
+    /// </summary>
+    private static List<FollowThroughEntry> DecodeFollowThrough(string? cell)
+    {
+        if (string.IsNullOrEmpty(cell))
+        {
+            return [];
+        }
+
+        using var document = JsonDocument.Parse(cell);
+        var entries = new List<FollowThroughEntry>();
+        foreach (var element in document.RootElement.EnumerateArray())
+        {
+            if (element.ValueKind == JsonValueKind.String)
+            {
+                entries.Add(new FollowThroughEntry(element.GetString() ?? string.Empty, null));
+            }
+            else if (element.ValueKind == JsonValueKind.Object
+                && element.TryGetProperty("path", out var pathProperty)
+                && pathProperty.GetString() is { } path)
+            {
+                int? rank = null;
+                if (element.TryGetProperty("rank", out var rankProperty)
+                    && rankProperty.ValueKind == JsonValueKind.Number
+                    && rankProperty.TryGetInt32(out var parsed))
+                {
+                    rank = parsed;
+                }
+
+                entries.Add(new FollowThroughEntry(path, rank));
+            }
+        }
+
+        return entries;
     }
 
     public async Task RecordGradeAsync(

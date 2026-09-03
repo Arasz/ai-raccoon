@@ -48,10 +48,15 @@ public interface ISearchQualityService
     /// <summary>
     ///     Records that the agent read a file that appeared in the search results.
     ///     Updates the existing row by <paramref name="correlationId" />.
+    ///     <paramref name="servedRank" /> is the 1-based rank the file was served at, when known
+    ///     (null when the caller never saw a rank). Ranks below 1 are rejected fail-fast; there
+    ///     is no upper bound — result-set size is unknowable at write time. Rank-only telemetry
+    ///     is section-ambiguous under <c>kind=both</c> by design, so there is no section qualifier.
     /// </summary>
     Task RecordFollowThroughAsync(
         string correlationId,
         string filePath,
+        int? servedRank = null,
         CancellationToken ct = default);
 
     /// <summary>

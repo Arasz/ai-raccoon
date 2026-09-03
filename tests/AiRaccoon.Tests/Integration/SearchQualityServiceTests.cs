@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
@@ -58,8 +59,8 @@ public sealed class SearchQualityServiceTests : IDisposable
             "corr-002", "query", "all", "proj-a", kind: "memory", sessionId: "sess-test",
             resultCount: 3, topSourceFiles: ["/file.md"], ct: TestContext.Current.CancellationToken);
 
-        await _sut.RecordFollowThroughAsync("corr-002", "/file.md", TestContext.Current.CancellationToken);
-        await _sut.RecordFollowThroughAsync("corr-002", "/other.md", TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("corr-002", "/file.md", ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("corr-002", "/other.md", ct: TestContext.Current.CancellationToken);
 
         var metrics = await _sut.GetMetricsAsync("proj-a", DateTimeOffset.MinValue, TestContext.Current.CancellationToken);
         metrics.FollowThroughSearches.ShouldBe(1);
@@ -74,8 +75,8 @@ public sealed class SearchQualityServiceTests : IDisposable
             "corr-003", "query", "all", "proj-a", kind: "memory", sessionId: "sess-test",
             resultCount: 1, topSourceFiles: ["/file.md"], ct: TestContext.Current.CancellationToken);
 
-        await _sut.RecordFollowThroughAsync("corr-003", "/file.md", TestContext.Current.CancellationToken);
-        await _sut.RecordFollowThroughAsync("corr-003", "/file.md", TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("corr-003", "/file.md", ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("corr-003", "/file.md", ct: TestContext.Current.CancellationToken);
 
         var metrics = await _sut.GetMetricsAsync("proj-a", DateTimeOffset.MinValue, TestContext.Current.CancellationToken);
         metrics.FollowThroughSearches.ShouldBe(1);
@@ -120,7 +121,7 @@ public sealed class SearchQualityServiceTests : IDisposable
 
         await _sut.RecordSearchAsync(correlationId: "c1", query: "q1", scope: "all", projectId: "proj-a", kind: "memory", sessionId: "sess-test", resultCount: 1, topSourceFiles: [], ct: TestContext.Current.CancellationToken);
         await _sut.RecordSearchAsync(correlationId: "c2", query: "q2", scope: "all", projectId: "proj-a", kind: "memory", sessionId: "sess-test", resultCount: 1, topSourceFiles: [], ct: TestContext.Current.CancellationToken);
-        await _sut.RecordFollowThroughAsync("c1", "/file.md", TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("c1", "/file.md", ct: TestContext.Current.CancellationToken);
 
         var metrics = await _sut.GetMetricsAsync("proj-a", DateTimeOffset.MinValue, TestContext.Current.CancellationToken);
         metrics.FollowThroughRate.ShouldBe(0.5);
@@ -223,5 +224,222 @@ public sealed class SearchQualityServiceTests : IDisposable
             correlationId: "corr-kind-bad", query: "kind query", scope: "all", projectId: "proj-a",
             kind: kind, sessionId: "sess-test", resultCount: 1, topSourceFiles: [],
             ct: TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    ///     P4: a legacy plain-string cell upgrades losslessly to object rows on append — the codec
+    ///     is the migration (no DDL). Pre-P4 this stored '["/a.md","/b.md"]' (bare strings).
+    /// </summary>
+    [RetryFact]
+    public async Task RecordFollowThrough_LegacyStringRow_UpgradesLosslesslyToObjectRows()
+    {
+        await EnsureSchemaAsync();
+        await _sut.RecordSearchAsync(
+            correlationId: "corr-p4-legacy", query: "query", scope: "all", projectId: "proj-a",
+            kind: "memory", sessionId: "sess-test", resultCount: 1, topSourceFiles: ["/a.md"],
+            ct: TestContext.Current.CancellationToken);
+        await using (var seed = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await seed.ExecuteAsync(
+                "UPDATE search_quality SET follow_through_count = 1, "
+                + "follow_through_files = '[\"/a.md\"]' WHERE correlation_id = 'corr-p4-legacy'");
+        }
+
+        await _sut.RecordFollowThroughAsync("corr-p4-legacy", "/b.md", ct: TestContext.Current.CancellationToken);
+
+        var raw = await ReadFollowThroughFilesAsync("corr-p4-legacy");
+        raw.ShouldNotBeNull();
+        var rows = JsonDocument.Parse(raw).RootElement.EnumerateArray().ToList();
+        rows.Count.ShouldBe(2);
+        rows[0].GetProperty("path").GetString().ShouldBe("/a.md");
+        rows[0].GetProperty("rank").ValueKind.ShouldBe(JsonValueKind.Null);
+        rows[1].GetProperty("path").GetString().ShouldBe("/b.md");
+    }
+
+    /// <summary>
+    ///     P4: legacy and new rows coexist in one cell byte-identically — order preserved,
+    ///     lowercase keys, null rank rendered. A writer that rewrites every row (drops legacy,
+    ///     reorders, PascalCase keys) fails this oracle.
+    /// </summary>
+    [RetryFact]
+    public async Task RecordFollowThrough_MixedCoexistence_StoredByteIdentical()
+    {
+        await EnsureSchemaAsync();
+        await _sut.RecordSearchAsync(
+            correlationId: "corr-p4-mixed", query: "query", scope: "all", projectId: "proj-a",
+            kind: "memory", sessionId: "sess-test", resultCount: 1, topSourceFiles: ["/a.md"],
+            ct: TestContext.Current.CancellationToken);
+        await using (var seed = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await seed.ExecuteAsync(
+                "UPDATE search_quality SET follow_through_count = 1, "
+                + "follow_through_files = '[\"/a.md\"]' WHERE correlation_id = 'corr-p4-mixed'");
+        }
+
+        await _sut.RecordFollowThroughAsync("corr-p4-mixed", "/b.md", ct: TestContext.Current.CancellationToken);
+
+        (await ReadFollowThroughFilesAsync("corr-p4-mixed")).ShouldBe(
+            "[{\"path\":\"/a.md\",\"rank\":null},{\"path\":\"/b.md\",\"rank\":null}]",
+            "legacy + new rows coexist byte-identically — a rewriting writer fails here");
+    }
+
+    /// <summary>
+    ///     P4 owns the unknown-id pin for BOTH paths (plan ruling 4; P5 must not re-pin): an
+    ///     unknown correlation id is a silent no-op — no throw, no row created.
+    ///     Mutation: throw on 0-row UPDATE → this fails.
+    /// </summary>
+    [RetryFact]
+    public async Task RecordFollowThrough_UnknownCorrelationId_SilentNoOp()
+    {
+        await EnsureSchemaAsync();
+
+        await _sut.RecordFollowThroughAsync("no-such-corr", "/file.md", ct: TestContext.Current.CancellationToken);
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        (await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM search_quality")).ShouldBe(0);
+    }
+
+    /// <summary>
+    ///     P4 owns the unknown-id pin for BOTH paths (plan ruling 4; P5 must not re-pin): grade
+    ///     on an unknown correlation id is a silent no-op — no throw, no row created.
+    ///     Mutation: throw on 0-row UPDATE → this fails.
+    /// </summary>
+    [RetryFact]
+    public async Task RecordGrade_UnknownCorrelationId_SilentNoOp()
+    {
+        await EnsureSchemaAsync();
+
+        await _sut.RecordGradeAsync("proj-a", "no-such-corr", 4, null, TestContext.Current.CancellationToken);
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        (await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM search_quality")).ShouldBe(0);
+    }
+
+    /// <summary>
+    ///     P4: served ranks round-trip over two files with distinct ranks. Each rank assertion
+    ///     names the path it pins (d-393 SHOULD-10); ranks are section-agnostic by design —
+    ///     rank-only telemetry under kind=both cannot say which leg served the file.
+    /// </summary>
+    [RetryFact]
+    public async Task RecordFollowThrough_RankRoundTrip_PersistsDistinctRanks()
+    {
+        await EnsureSchemaAsync();
+        await _sut.RecordSearchAsync(
+            correlationId: "corr-p4-rank", query: "query", scope: "all", projectId: "proj-a",
+            kind: "both", sessionId: "sess-test", resultCount: 5, topSourceFiles: ["/a.md", "/b.md"],
+            ct: TestContext.Current.CancellationToken);
+
+        await _sut.RecordFollowThroughAsync("corr-p4-rank", "/a.md", servedRank: 1, ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("corr-p4-rank", "/b.md", servedRank: 3, ct: TestContext.Current.CancellationToken);
+
+        var raw = await ReadFollowThroughFilesAsync("corr-p4-rank");
+        raw.ShouldNotBeNull();
+        var rows = JsonDocument.Parse(raw).RootElement.EnumerateArray().ToList();
+        rows.Count.ShouldBe(2);
+        rows[0].GetProperty("path").GetString().ShouldBe("/a.md");
+        rows[0].GetProperty("rank").GetInt32().ShouldBe(1, "row for /a.md keeps servedRank 1 (rank-only, section-agnostic by design)");
+        rows[1].GetProperty("path").GetString().ShouldBe("/b.md");
+        rows[1].GetProperty("rank").GetInt32().ShouldBe(3, "row for /b.md keeps servedRank 3 (rank-only, section-agnostic by design)");
+    }
+
+    /// <summary>
+    ///     P4 dedupe rule: ordinal by path — an existing non-null rank is never clobbered, a
+    ///     null rank is filled once by a later non-null, then pinned. Count stays distinct paths.
+    ///     (This overrides any "first-supplied wins" phrasing elsewhere.)
+    /// </summary>
+    [RetryFact]
+    public async Task RecordFollowThrough_Dedupe_KeepsFirstNonNullRank_FillsNullOnce()
+    {
+        await EnsureSchemaAsync();
+        await _sut.RecordSearchAsync(
+            correlationId: "corr-p4-dedupe", query: "query", scope: "all", projectId: "proj-a",
+            kind: "memory", sessionId: "sess-test", resultCount: 2, topSourceFiles: ["/a.md", "/b.md"],
+            ct: TestContext.Current.CancellationToken);
+
+        await _sut.RecordFollowThroughAsync("corr-p4-dedupe", "/a.md", servedRank: 3, ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("corr-p4-dedupe", "/a.md", servedRank: 5, ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("corr-p4-dedupe", "/a.md", ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("corr-p4-dedupe", "/b.md", ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("corr-p4-dedupe", "/b.md", servedRank: 7, ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("corr-p4-dedupe", "/b.md", servedRank: 9, ct: TestContext.Current.CancellationToken);
+
+        var raw = await ReadFollowThroughFilesAsync("corr-p4-dedupe");
+        raw.ShouldNotBeNull();
+        var rows = JsonDocument.Parse(raw).RootElement.EnumerateArray().ToList();
+        rows.Count.ShouldBe(2, "count == distinct paths");
+        var ranks = rows.ToDictionary(
+            e => e.GetProperty("path").GetString()!,
+            e => e.GetProperty("rank").ValueKind == JsonValueKind.Null ? (int?)null : e.GetProperty("rank").GetInt32());
+        ranks["/a.md"].ShouldBe(3, "existing non-null rank is never clobbered — not by a later rank, not by null");
+        ranks["/b.md"].ShouldBe(7, "null rank is filled once by a later non-null, then pinned against rank 9");
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        (await connection.QuerySingleOrDefaultAsync<int>(
+            "SELECT follow_through_count FROM search_quality WHERE correlation_id = @Id",
+            new { Id = "corr-p4-dedupe" })).ShouldBe(2, "follow_through_count == distinct paths");
+    }
+
+    /// <summary>
+    ///     P4: ranks below 1 are a caller bug — rejected fail-fast before any DB touch. No upper
+    ///     bound: result-set size is unknowable at write time.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(int.MinValue)]
+    public async Task RecordFollowThrough_RankBelowOne_RejectedFailFast(int rank)
+    {
+        await EnsureSchemaAsync();
+
+        await Should.ThrowAsync<ArgumentOutOfRangeException>(() => _sut.RecordFollowThroughAsync(
+            "corr-p4-guard", "/file.md", servedRank: rank, ct: TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>P4: no upper bound on rank — the writer cannot know the result-set size.</summary>
+    [RetryFact]
+    public async Task RecordFollowThrough_HugeRankAccepted_NoUpperBound()
+    {
+        await EnsureSchemaAsync();
+        await _sut.RecordSearchAsync(
+            correlationId: "corr-p4-big", query: "query", scope: "all", projectId: "proj-a",
+            kind: "memory", sessionId: "sess-test", resultCount: 1, topSourceFiles: ["/file.md"],
+            ct: TestContext.Current.CancellationToken);
+
+        await _sut.RecordFollowThroughAsync("corr-p4-big", "/file.md", servedRank: int.MaxValue, ct: TestContext.Current.CancellationToken);
+
+        var raw = await ReadFollowThroughFilesAsync("corr-p4-big");
+        raw.ShouldNotBeNull();
+        JsonDocument.Parse(raw).RootElement.EnumerateArray().Single()
+            .GetProperty("rank").GetInt32().ShouldBe(int.MaxValue);
+    }
+
+    /// <summary>
+    ///     P4 is codec-only: no column, no ladder rung (P3 owned v11→v12). Pins the exact
+    ///     search_quality column set and the v12 stamp, so any DDL or version bump fails here.
+    /// </summary>
+    [RetryFact]
+    public async Task SchemaSearchQualityShape_UnchangedByRankWork_NoColumnOrVersionBump()
+    {
+        await EnsureSchemaAsync();
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var columns = (await connection.QueryAsync<string>("SELECT name FROM pragma_table_info('search_quality')")).ToList();
+        columns.ShouldBe(
+            [
+                "id", "correlation_id", "query", "scope", "project_id", "session_id", "kind",
+                "result_count", "top_source_files", "follow_through_count", "follow_through_files",
+                "usefulness_grade", "grade_note", "created_at"
+            ],
+            "P4 is codec-only — follow_through_files carries ranks as JSON, no column may be added");
+        (await connection.ExecuteScalarAsync<long>("PRAGMA user_version")).ShouldBe(12,
+            "P4 owns no ladder rung — P3's v12 is current");
+    }
+
+    private async Task<string?> ReadFollowThroughFilesAsync(string correlationId)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.QuerySingleOrDefaultAsync<string?>(
+            "SELECT follow_through_files FROM search_quality WHERE correlation_id = @Id",
+            new { Id = correlationId });
     }
 }

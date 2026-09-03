@@ -556,7 +556,8 @@ public sealed class MemorySearchKindToolTests
             return Task.CompletedTask;
         }
 
-        public Task RecordFollowThroughAsync(string correlationId, string filePath, CancellationToken ct = default) =>
+        public Task RecordFollowThroughAsync(string correlationId, string filePath, int? servedRank = null,
+            CancellationToken ct = default) =>
             Task.CompletedTask;
 
         public Task RecordGradeAsync(string projectId, string correlationId, int grade, string? note,
