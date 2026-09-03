@@ -168,9 +168,7 @@ B's privacy-first instinct is honored by placing the strip second rather than la
 1. **Correct the ADR hint sentence** (done on the branch with this note): rows are
    indistinguishable by shape today, not weakly hinted.
 2. **Caller-side `session_id`** (pass it from the search call sites; no migration).
-3. **Strip telemetry from the sync snapshot** (extend the existing strip to the two
-   telemetry tables, following the code-corpus DROP precedent; verify restore-open and
-   merge-untouched.
+3. **Strip telemetry from the sync snapshot**, extending the existing strip to the two telemetry tables following the code-corpus DROP precedent, with restore-open and merge-untouched verified.
 4. **Literal empty-array marker + pinning test** (make code rows shape-distinguishable
    without DDL).
 5. **`kind` column migration** (the honest schema, with backfill rules stated up front).
