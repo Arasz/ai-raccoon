@@ -2,6 +2,7 @@
 
 Task: `air-search-quality-followup-kind-strip` (high effort). Date: 2026-09-03.
 Status: plan-review complete — 3 × APPROVE-WITH-CHANGES, all MUSTs folded below.
+v3 2026-09-03 (owner feedback): Package 6 agent-facing surface added; integration renumbered P6→P7.
 No implementation dispatches until owner sign-off on this version.
 
 Planners: d-389 (architect), d-390 (dotnet-engineer), d-391 (test-engineer).
@@ -50,12 +51,13 @@ Sources (paths relative to the task worktree unless absolute):
 5. **No product-VERSION bump in any package** (unanimous). Only the schema ladder
    moves (11→12, P3).
 6. **Lane structure:** Lane-W serial spine P1→P3→P4; Lane-S parallel P2 + P5-audit;
-   P5-write (if any) sequenced; P6 strictly last.
+   P5-write (if any) sequenced; P6-surface after P1+P4 merge (parallel-safe vs
+   P2/P3/P5-audit otherwise); P7 strictly last.
 7. **MCP contract ownership per break** (d-393 MUST-12, d-392 S10, d-394 S1): the
    package that changes the wire updates `ExpectedContract` red-first in the same
-   commit — P1 (`sessionId:string|null?`), P4 (`servedRank:integer|null?`, which
+   commit — P1 (`sessionId:string!`, required per owner gate D1), P4 (`servedRank:integer|null?`, which
    also finally names servedRank's type/optionality). P5 verifies the freeze (no
-   edits). P6 asserts final-contract green (added to AC3).
+   edits). P7 asserts final-contract green (added to AC3).
 8. **BDD restored for P1/P3** (d-393 MUST-3, d-394 S10 overruled toward the
    plan's own invariant): one correlation-filtered scenario each (session-attributed
    search; kind-value pin), red-proofed (pre-P1 `session_id IS NULL` fails; pre-P3
@@ -64,11 +66,15 @@ Sources (paths relative to the task worktree unless absolute):
    `CodeCorpusSteps.cs:808-836` (d-392 S2: d-388's "no *.feature" claim searched
    `tests/` only).
 9. **Release rule** (d-392 S6, owner-APPROVED 2026-09-03, no waiver): one release ships
-P1–P6 together; any split release
+P1–P7 together; any split release
    rides P2 first-or-together with P1/P3 (strip-before-richness; otherwise new
    session/kind values sync in the interim); all syncing hosts upgrade together
    (mixed-version fleets fail closed both ways — verified). Owner may waive
-   explicitly.
+   explicitly (asked 2026-09-03, APPROVED as written — ruling stands).
+14. **Agent surface is its own package (P6).** Behavior packages write first-draft
+descriptions for their own new params; P6 owns cross-surface consistency (skill +
+reference + all descriptions) after P1+P4 merge, parallel-safe vs P2/P3/P5-audit
+otherwise. Framework catalog sync is report-only.
 10. **P4 shape is d-390 verbatim** (d-392 M2, d-393 MUST-10): uniform object rows
     `{ "path": "…", "rank": 3|null }`, `FollowThroughEntry(Path, Rank)` Core
     record, legacy-`List<string>` fallback with in-memory upgrade, dedupe rule =
@@ -167,7 +173,7 @@ P1–P6 together; any split release
 - **Docs:** `docs/adr/0096-*.md` (backfill rule, nullable choice, no-index
   rationale) + README row same commit; rung doc comment. Merge-order rule with
   P2 (ruling 9 mechanics: P2's 0095 commit merges first or both land atomically
-  at P6 — d-394 M4).
+  at P7 — d-394 M4).
 - **Gate:** migration/version/DDL-count/stamp-order + kind-tool tests +
   `SearchDispatcherTests` + `AdrIndexTests` + `SyncServiceCodeExclusionTests`
   (+`SyncServiceTests` — P3's digest change can break P2's restore assertions;
@@ -184,7 +190,7 @@ P1–P6 together; any split release
   dedupe per exact rule + `count == distinct paths` secondary; rank guard;
   unknown-id pins **both** paths (ruling 4); no-DDL-change pin. Contract:
   `ExpectedContract` updated red-first (`servedRank:integer|null?` — ruling 7).
-  BDD decider + criterion named before P4 merges (not at P6 — d-394 S8).
+  BDD decider + criterion named before P4 merges (not at P7 — d-394 S8).
   Gate: `SearchQualityServiceTests` (Slow) + contract tests (d-394 S4); no
   probe work; rest to CI.
 - **Docs:** service contract + codec comments; MoE point-1 closure. No ADR.
@@ -202,7 +208,40 @@ P1–P6 together; any split release
   spine. Grade fail-fast per ruling 3.
 - **Docs:** MoE item 6 closure (+ ADR consequences if behavior changed).
 
-## Package 6 (LAST) — integration
+## Package 6 — agent-facing surface: skill + docs + tool descriptions (after P1+P4 merge)
+
+Owner-ordered 2026-09-03 (feedback): behavior changes mean nothing if every agent keeps
+following stale guidance. First drafts ride the behavior commits (a new param needs some
+description for contract tests to pass); this package owns cross-surface consistency.
+
+- **Sweep (verify-then-update, file:line-grounded):**
+  a. `.ai-badger/skills/ai-raccoon-memory/SKILL.md` — `memory_search` usage: kind
+  default both + what each kind records; correlationId always present
+  (grade/follow-through key); sessionId REQUIRED (every agent passes its session id,
+  blank rejected); servedRank on follow-through (1-based rank in the serving
+  response's section). Drop/replace anything describing the pre-#596 exclusion.
+  b. Ripgrep the rest of `.ai-badger/skills/` + `docs/` for
+  `memory_search|correlationId|search_quality|memory_record` guidance contradicting
+  the new surface; update each hit or record it explicitly accepted.
+  c. `docs/reference/agent-memory-server.md` — params, recording rules,
+  correlationId, grade/follow-through semantics verified against the shipped tools.
+  d. MCP tool descriptions (`MemoryTools.cs` incl. the new sessionId text,
+  `QualityTools.cs` incl. servedRank, kind/correlationId behavior text): accuracy
+  pass — every new/changed param described truthfully; pre-existing text corrected
+  where the behavior moved. Descriptions only: no logic, no signatures.
+  e. Framework catalog check: does the `~/RiderProjects/ai-badger` checkout ship a
+  copy of this guidance needing the same update? REPORT only — framework PRs go
+  through `feed-badger` with explicit owner approval, never smuggled into this task.
+- **Tests/gates:** no behavior reds (docs package). Gates: `McpToolContractTests` +
+  `ToolInventoryTests` green (descriptions pinned) + `dotnet build`; rest to CI.
+  Lane report carries a checklist: every new/changed param described; skill updated;
+  ripgrep deltas listed as updated-or-accepted; framework-copy verdict.
+- **Docs:** the package IS docs; MoE note gets an agent-surface closure paragraph.
+- **Files owned:** `.ai-badger/skills/**` (this repo), `docs/reference/*.md`,
+  `Description` attributes in `src/AiRaccoon/Tools/*.cs`. Must NOT touch: behavior,
+  tests, ADR files, the framework checkout.
+
+## Package 7 (LAST) — integration
 
 - **AC1 (restricted — d-394 S6):** shape-presence + writability + re-strip across
   the legacy→push→restore→repush journey with step oracles named (d-393
@@ -216,7 +255,7 @@ P1–P6 together; any split release
   per-file failure-mode × mutation table (d-393 MUST-16: adopt d-390§2 + d-391
   lists with the MUST-6/9/12/13 deltas; no-double-pin scope incl.); BDD green;
   `AdrIndexTests` + DDL-count + version + **`McpToolContractTests`
-  final-contract** green (d-392 S10); P6 entry re-greps the three inventories
+  final-contract** green (d-392 S10); P7 entry re-greps the three inventories
   (d-392 S7); rest to CI, no local re-runs.
 - **Docs:** MoE note closed with PR links; ADR consequences updated if found
   anything.
@@ -225,10 +264,10 @@ P1–P6 together; any split release
 
 - **Lane-W serial: P1 → P3 → P4** (collision set += `SearchDispatcherTests.cs`,
   d-394 M6). Signatures per ruling 2; named-args rule for all test callers.
-- **Lane-S parallel: P2 + P5-audit** (disjoint; contracts checked at P6).
-- **P5-write (if any) sequenced; P6 strictly last.**
+- **Lane-S parallel: P2 + P5-audit** (disjoint; contracts checked at P7).
+- **P5-write (if any) sequenced; P6-surface after P1+P4 merge; P7 strictly last.**
 - **ADR merge order** (d-394 M4): P2's 0095 commit before P3's 0096 commit, or
-  both atomically at P6.
+  both atomically at P7.
 - Flake traits per precedent (d-393 SHOULD-6); exact lane filters named per
   package (Fast exclusion vs Slow sync — d-394 S2).
 
