@@ -183,7 +183,7 @@ public class McpServerE2ETests : IAsyncLifetime
         Text(stats).ShouldContain("\"pending\":1");
 
         var search = await CallAsync("memory_search",
-            ("projectId", "acme"), ("query", "semantic e2e"), ("scope", "project"));
+            ("projectId", "acme"), ("query", "semantic e2e"), ("scope", "project"), ("sessionId", "sess-e2e"));
         Text(search).ShouldContain("semantic e2e fact");
     }
 
