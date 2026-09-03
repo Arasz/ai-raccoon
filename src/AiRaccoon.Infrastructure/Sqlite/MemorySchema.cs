@@ -96,6 +96,10 @@ internal static class MemorySchema
             kind              TEXT CHECK(kind IN ('memory','code','both')),
             result_count      INTEGER,
             top_source_files  TEXT,       -- JSON array of SourceFile paths
+            -- Stage-1 per-result features (P6b): compact JSON array, one
+            -- hash/strength/legs/cosine object per served row -- features
+            -- only, never values/snippets. NULL when evidence was absent.
+            result_features   TEXT,
             follow_through_count INTEGER  DEFAULT 0,
             follow_through_files TEXT,    -- JSON array of files read after search
             usefulness_grade  INTEGER     CHECK(usefulness_grade BETWEEN 1 AND 5),
@@ -630,6 +634,7 @@ internal static class MemorySchema
             // digest mismatch — its own step, with its own column-existence check (see
             // EnsureCodeEmbedAttemptsColumnAsync).
             await EnsureCodeEmbedAttemptsColumnAsync(connection, cancellationToken).ConfigureAwait(false);
+            await EnsureSearchQualityResultFeaturesColumnAsync(connection, cancellationToken).ConfigureAwait(false);
 
             var testHook = TestOnlyAfterDdlHookAsync.Value;
             if (testHook is not null)
@@ -1295,6 +1300,45 @@ internal static class MemorySchema
         {
             await connection.ExecuteAsync(new CommandDefinition(
                     "ALTER TABLE code_entries ADD COLUMN embed_attempts INTEGER NOT NULL DEFAULT 0",
+                    cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
+        {
+        }
+    }
+
+    /// <summary>
+    ///     P6b: adds search_quality.result_features if it is missing — same tolerant shape as
+    ///     <see cref="EnsureCodeEmbedAttemptsColumnAsync" /> (pragma probe + duplicate-column catch
+    ///     for two connections racing the same digest mismatch). Called only from inside the Ddl
+    ///     block's own digest-mismatch branch: no <see cref="CurrentVersion" /> bump (M1) — legacy
+    ///     banks gain the column on their next open's digest rerun. Old rows stay valid with no
+    ///     backfill: absent evidence has always written NULL, which the new column defaults to.
+    /// </summary>
+    private static async Task EnsureSearchQualityResultFeaturesColumnAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'search_quality'",
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false) > 0;
+        if (!hasTable)
+        {
+            return; // the Ddl block just above creates search_quality; nothing to alter yet
+        }
+
+        var hasColumn = (await connection.QueryAsync<string>(new CommandDefinition(
+                "SELECT name FROM pragma_table_info('search_quality')", cancellationToken: cancellationToken))
+            .ConfigureAwait(false)).Contains("result_features", StringComparer.Ordinal);
+        if (hasColumn)
+        {
+            return;
+        }
+
+        try
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                    "ALTER TABLE search_quality ADD COLUMN result_features TEXT",
                     cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
         }

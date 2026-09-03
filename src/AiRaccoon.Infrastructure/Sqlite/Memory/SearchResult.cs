@@ -28,11 +28,15 @@ public sealed record FusedSearchResult(IReadOnlyList<MemorySearchResult> Results
 {
     public required IReadOnlyList<MemorySearchResult> VectorCandidates { get; init; }
     public required IReadOnlyList<MemorySearchResult> FtsCandidates { get; init; }
+    public IReadOnlyDictionary<string, RetrievalEvidence>? EvidenceByHash { get; init; }
+    public FusionStats? Stats { get; init; }
 }
 
 public sealed record AdjustedSearchResult(IReadOnlyList<MemorySearchResult> Results, TimeSpan SearchTiming) : SearchResult(Results, SearchTiming)
 {
     public FusionDiff? FusionDiff { get; init; }
+    public IReadOnlyDictionary<string, RetrievalEvidence>? EvidenceByHash { get; init; }
+    public FusionStats? Stats { get; init; }
 }
 
 public sealed record DeferredSearchResult(IReadOnlyList<MemorySearchResult> Results, TimeSpan SearchTiming) : SearchResult(Results, SearchTiming)
@@ -43,6 +47,8 @@ public sealed record DeferredSearchResult(IReadOnlyList<MemorySearchResult> Resu
     };
 
     public required FusionDiff? FusionDiff { get; init; }
+    public IReadOnlyDictionary<string, RetrievalEvidence>? EvidenceByHash { get; init; }
+    public FusionStats? Stats { get; init; }
 }
 
 public sealed record MergedSearchResult(IReadOnlyList<MemorySearchResult> Results, TimeSpan SearchTiming) : SearchResult(Results, SearchTiming);

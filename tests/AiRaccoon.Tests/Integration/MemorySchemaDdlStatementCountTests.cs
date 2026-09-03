@@ -42,7 +42,7 @@ public sealed class MemorySchemaDdlStatementCountTests
     ///     and no longer runs in the digest-gated Ddl block.
     /// </summary>
     [RetryFact]
-    public async Task EnsureAsync_WhenTheDigestIsStale_RunsTheFiftyEightStatementDdlBlock()
+    public async Task EnsureAsync_WhenTheDigestIsStale_RunsTheFiftyNineStatementDdlBlock()
     {
         await using var connection = await OpenAsync();
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
@@ -57,9 +57,11 @@ public sealed class MemorySchemaDdlStatementCountTests
         // 39 measured at ADR-0075, +1 model_migration (ADR-0076), +1 repair_requests, +1
         // promotion_queue_prune_requests, +14 the code corpus (ADR-0085: code_entries + code_fts +
         // vec_code, their trigger families, indexes, and the idx_code_entries_path DROP), +1 the
-        // ADR-0089 projects table, +1 the WP12 watch_digest_claims table. The project-scoped
+        // ADR-0089 projects table, +1 the WP12 watch_digest_claims table, +1 the Stage-1
+        // search_quality.result_features ensure (P6b — fires only when the column is absent;
+        // its probes are excluded from the count above). The project-scoped
         // tombstone repair (5 statements) moved to MigrateToV11Async in the version ladder.
-        CountDdl(statements).ShouldBe(58, Report(statements));
+        CountDdl(statements).ShouldBe(59, Report(statements));
     }
 
     private static async Task<List<string>> TraceAsync(SqliteConnection connection)
@@ -86,6 +88,9 @@ public sealed class MemorySchemaDdlStatementCountTests
         - statements.Count(s => s.Contains("name = 'code_entries'", StringComparison.Ordinal))
         - statements.Count(s => s.Contains("table_info('code_entries')", StringComparison.Ordinal))
         - statements.Count(s => s.Contains("table_info='code_entries'", StringComparison.Ordinal))
+        // P6b column ensure (digest-mismatch branch only), same treatment as S2 above:
+        - statements.Count(s => s.Contains("name = 'search_quality'", StringComparison.Ordinal))
+        - statements.Count(s => s.Contains("table_info('search_quality')", StringComparison.Ordinal))
         - statements.Count(s => s.Contains("FROM watches", StringComparison.Ordinal));
 
     private static string Report(List<string> statements) =>
