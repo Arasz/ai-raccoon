@@ -125,7 +125,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
         vecRows.ShouldAllBe(r =>
             r.Ctx == MemorySql.ContextKeyFor(ContextNaming.ProjectContext(_canonical), _canonical));
 
-        var search = await tools.Search(_respelled, "narwhal tusk", cancellationToken: TestContext.Current.CancellationToken);
+        var search = await tools.Search(_respelled, "narwhal tusk", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         search.Data!.Results.ShouldContain(r => r.Hash == written.Data!.Hash);
     }

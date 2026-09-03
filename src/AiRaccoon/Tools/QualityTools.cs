@@ -18,18 +18,22 @@ public sealed class QualityTools(
     [Description(
         "Records that the agent read a file that appeared in a prior memory_search result. " +
         "Updates the existing quality record keyed by correlationId. " +
-        "Call this when the agent opens a file that was returned by memory_search.")]
+        "Call this when the agent opens a file that was returned by memory_search. " +
+        "servedRank is the 1-based rank the file was served at, when known; rank-only telemetry " +
+        "is section-ambiguous under kind=both by design.")]
     public async Task<ApiEnvelope<FollowThroughResult>> RecordFollowThrough(
         [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
         [Description("The correlationId returned by the preceding memory_search call.")]
         string correlationId,
         [Description("Absolute path of the file the agent read.")]
         string filePath,
+        [Description("1-based rank the file was served at, when known.")]
+        int? servedRank = null,
         CancellationToken cancellationToken = default)
     {
         var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnRecordFollowThrough, cancellationToken);
 
-        await qualityService.RecordFollowThroughAsync(correlationId, filePath, cancellationToken);
+        await qualityService.RecordFollowThroughAsync(correlationId, filePath, servedRank, cancellationToken);
         var envelope = await gate.WrapAsync(canonical, new FollowThroughResult(true), cancellationToken);
 
         return envelope;

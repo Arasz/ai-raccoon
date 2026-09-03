@@ -10,14 +10,19 @@ public interface ISearchQualityService
 {
     /// <summary>
     ///     Creates a quality record for a memory_search call. Called alongside (not inside) the
-    ///     search — fire-and-forget from the tool layer.
+    ///     search — fire-and-forget from the tool layer. <paramref name="sessionId" /> is the
+    ///     calling agent's session id, stored verbatim; every agent has a session, so it is
+    ///     required — never null, never blank (the tool boundary rejects blank fail-fast).
+    ///     <paramref name="kind" /> names the requested kind (memory/code/both, lowercased by the
+    ///     dispatcher) and is required — the row always says which leg it describes.
     /// </summary>
     Task RecordSearchAsync(
         string correlationId,
         string query,
         string? scope,
         string? projectId,
-        string? sessionId,
+        string kind,
+        string sessionId,
         int resultCount,
         IReadOnlyList<string> topSourceFiles,
         CancellationToken ct = default);
@@ -25,13 +30,17 @@ public interface ISearchQualityService
     /// <summary>
     ///     <see cref="RecordSearchAsync" />, best-effort: swallows and logs any failure instead of
     ///     throwing. The tool layer calls this, not the throwing form, so a quality-recording
-    ///     failure never fails the search it describes.
+    ///     failure never fails the search it describes. Carries the same required
+    ///     <paramref name="sessionId" /> — it is the only live record path — and the same
+    ///     required <paramref name="kind" />.
     /// </summary>
     Task RecordSearchSafeAsync(
         string correlationId,
         string query,
         string? scope,
         string? projectId,
+        string kind,
+        string sessionId,
         int resultCount,
         IReadOnlyList<string> topSourceFiles,
         CancellationToken ct = default);
@@ -39,10 +48,15 @@ public interface ISearchQualityService
     /// <summary>
     ///     Records that the agent read a file that appeared in the search results.
     ///     Updates the existing row by <paramref name="correlationId" />.
+    ///     <paramref name="servedRank" /> is the 1-based rank the file was served at, when known
+    ///     (null when the caller never saw a rank). Ranks below 1 are rejected fail-fast; there
+    ///     is no upper bound — result-set size is unknowable at write time. Rank-only telemetry
+    ///     is section-ambiguous under <c>kind=both</c> by design, so there is no section qualifier.
     /// </summary>
     Task RecordFollowThroughAsync(
         string correlationId,
         string filePath,
+        int? servedRank = null,
         CancellationToken ct = default);
 
     /// <summary>

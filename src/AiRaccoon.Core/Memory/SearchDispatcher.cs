@@ -8,7 +8,7 @@ public sealed class SearchDispatcher(IMemoryStore store, ICodeSearchService code
     : ISearchDispatcher
 {
     public async Task<SearchDispatchResult> DispatchAsync(SearchQuery searchQuery, SearchKind kind, string rawScope,
-        string correlationId, int? codeLimit = null, double? codeMinRelativeScore = null,
+        string correlationId, string sessionId, int? codeLimit = null, double? codeMinRelativeScore = null,
         CancellationToken cancellationToken = default)
     {
         SearchResults? memorySearchResults = null;
@@ -54,9 +54,10 @@ public sealed class SearchDispatcher(IMemoryStore store, ICodeSearchService code
         var (qualityCount, qualityFiles) = kind == SearchKind.Code
             ? (codeResults?.Count ?? 0, (IReadOnlyList<string>)[])
             : (results.Count, [.. results.Where(r => r.SourceFile is not null).Select(r => r.SourceFile!).Take(5)]);
-        await qualityService.RecordSearchSafeAsync(correlationId, searchQuery.Query, rawScope, searchQuery.ProjectId,
-            qualityCount, qualityFiles,
-            cancellationToken);
+        await qualityService.RecordSearchSafeAsync(correlationId: correlationId, query: searchQuery.Query,
+            scope: rawScope, projectId: searchQuery.ProjectId, kind: kind.ToString().ToLowerInvariant(),
+            sessionId: sessionId, resultCount: qualityCount, topSourceFiles: qualityFiles,
+            ct: cancellationToken);
 
         return new SearchDispatchResult(results, memorySearchResults, codeResults, codeWarning);
     }

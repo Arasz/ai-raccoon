@@ -166,7 +166,7 @@ public class MemoryToolsInstrumentationTests
         var tools = CreateTools(store);
 
         await ThroughFilterAsync(metrics, "memory_search",
-            token => tools.Search("acme", "query", cancellationToken: token));
+            token => tools.Search("acme", "query", sessionId: "sess-test", cancellationToken: token));
 
         var invocations = invocationCollector.GetMeasurementSnapshot();
         invocations.Count.ShouldBe(1);
