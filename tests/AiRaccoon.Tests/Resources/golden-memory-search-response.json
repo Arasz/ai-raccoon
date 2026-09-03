@@ -17,7 +17,43 @@
         "chunkIndex": -1,
         "totalChunks": 0
       }
-    ]
+    ],
+    "evidenceByHash": {
+      "803791bc77d74fa809f2a53560a915890b859aeae2470fb71ab622cd36637a2f": {
+        "hash": "803791bc77d74fa809f2a53560a915890b859aeae2470fb71ab622cd36637a2f",
+        "fusionStrength": 0.9919354838709679,
+        "legs": [
+          {
+            "legName": "fts",
+            "rank": 1
+          },
+          {
+            "legName": "vector",
+            "rank": 2
+          }
+        ],
+        "cosine": 0.33568622171878815
+      },
+      "04c82790357d40d5d84d6ffa5f37ab0b015f73e03cd84eb92c4e427b0c172b4a": {
+        "hash": "04c82790357d40d5d84d6ffa5f37ab0b015f73e03cd84eb92c4e427b0c172b4a",
+        "fusionStrength": 0.5,
+        "legs": [
+          {
+            "legName": "vector",
+            "rank": 1
+          }
+        ],
+        "cosine": 0.3558863401412964
+      }
+    },
+    "fusionStats": {
+      "topMargin": 0.49593495934959353,
+      "maxPossible": 0.03278688524590164,
+      "participatingLegs": [
+        "fts",
+        "vector"
+      ]
+    }
   },
   "meta": {
     "waitingPromotionsCount": 0,
