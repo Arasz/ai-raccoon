@@ -87,14 +87,17 @@ follow-up note should assume zero distinguishability, not weak distinguishabilit
   is uglier than a column, and it must be fenced with a test that breaks loudly if anyone
   "cleans it up."
 
-**Final: C now, A scheduled, B rejected.** Persist the literal empty marker with a pinning
-test and a documented convention, and keep the `kind` column as the deferred honest repair
-the ADR already names. **Why:** C removes the ambiguity for future rows at negligible cost;
-A remains the right long-term shape but nothing about comparability waits on it. B is
-rejected because a unified count destroys exactly the per-leg meaning that grades need (a
-grade-5 on 2 memory hits is not a grade-5 on 9 code hits, and the consumer cannot recover
-the difference). Also action: correct the ADR's hint sentence to state zero
-distinguishability (done on the branch alongside this note).
+**Final: A, the owner's pick over the panel's C.** Schedule the `kind` column migration
+through the normal ladder, with backfill rules stated up front. **Why:** the panel's C-final
+optimized for cheapness, but a marker convention permanent enough to rely on is a second
+implicit schema maintained alongside the real one: every future reader pays the decoding tax,
+and the column stays necessary anyway. If the honest repair is accepted regardless, the marker
+buys a stopgap at the price of lasting ugliness. Do the column once, properly. B is rejected
+as before (a unified count destroys exactly the per-leg meaning grades need: a grade-5 on 2
+memory hits is not a grade-5 on 9 code hits, and no consumer recovers the difference). C falls
+away with it: no marker, no convention, no pinning test for something the schema will state
+outright. The ADR's hint correction stands regardless (rows are indistinguishable today),
+which is now simply the state the migration fixes.
 
 ---
 
@@ -169,11 +172,10 @@ B's privacy-first instinct is honored by placing the strip second rather than la
    indistinguishable by shape today, not weakly hinted.
 2. **Caller-side `session_id`** (pass it from the search call sites; no migration).
 3. **Strip telemetry from the sync snapshot**, extending the existing strip to the two telemetry tables following the code-corpus DROP precedent, with restore-open and merge-untouched verified.
-4. **Literal empty-array marker + pinning test** (make code rows shape-distinguishable
-   without DDL).
-5. **`kind` column migration** (the honest schema, with backfill rules stated up front).
-6. **Rank-aware follow-through JSON** (file plus served rank, no DDL).
-7. **Consumer review last** (grading and promotion reads, only after 2–5 land).
+4. **`kind` column migration** (the point-2 decision, owner's pick over the marker
+   convention; backfill rules stated up front).
+5. **Rank-aware follow-through JSON** (file plus served rank, no DDL).
+6. **Consumer review last** (grading and promotion reads, only after 2–4 land).
 
 Items 2–6 are each small enough to ship alone. None of them belongs smuggled into PR #596,
 which stays a telemetry-restore change with privacy pins, nothing more.

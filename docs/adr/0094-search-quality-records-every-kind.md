@@ -70,7 +70,8 @@ this decision.
    needs a schema migration, so it is deferred, not denied. No shape hint exists today: a code
    row with hits and a memory row whose hits lack source files both persist files as NULL
    (the service nulls empty lists), so the two are indistinguishable in storage. The
-   follow-up note proposes making the marker real without DDL first.
+   follow-up note adopts the column (see docs/work/2026-09-03-search-quality-consequences-moe.md,
+   point 2: the owner's pick over the marker convention).
 - **Negative**: code query text syncs, as memory query text already does. The principled
    privacy fix is stripping `search_quality` and `metrics` from the sync snapshot (telemetry
    has no merge consumer; the merge only reads `entries` and tombstones). That change is
