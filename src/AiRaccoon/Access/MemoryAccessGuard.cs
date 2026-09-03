@@ -14,7 +14,17 @@ public sealed class MemoryAccessGuard(IMemoryStore store) : IMemoryAccessGuard
             .ConfigureAwait(false);
 
         settings.TryGetValue(AccessModePolicy.GlobalSettingKey, out var globalRaw);
-        settings.TryGetValue(AccessModePolicy.ProjectSettingKey(projectId), out var perProjectRaw);
+        // d-426 SHOULD-1 / d-425 SHOULD-3: CLI key writes fold the id at construction while the
+        // MCP choke folds only once migrated — so a pre-P4 (raw-spelling) per-project key would
+        // miss the folded lookup and silently fall back to global (fail-open). Try the stored
+        // spelling too: the canonical key wins when both exist (it is the repair-blessed form),
+        // the raw key is a legacy fallback. One store read either way — the whole prefix arrives
+        // in a single GetSettingsByPrefixAsync call.
+        if (!settings.TryGetValue(AccessModePolicy.ProjectSettingKey(projectId), out var perProjectRaw))
+        {
+            settings.TryGetValue(AccessModePolicy.LegacyProjectSettingKey(projectId), out perProjectRaw);
+        }
+
         return AccessModePolicy.Resolve(AccessModePolicy.Parse(globalRaw), AccessModePolicy.Parse(perProjectRaw));
     }
 

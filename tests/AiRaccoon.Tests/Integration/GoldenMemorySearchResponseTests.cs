@@ -6,6 +6,7 @@ using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -88,7 +89,7 @@ public sealed class GoldenMemorySearchResponseTests : IAsyncLifetime
             TestContext.Current.CancellationToken);
 
         var access = new MemoryAccessGuard(_store);
-        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard());
+        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate());
         var tools = new MemoryTools(_store, gate,
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
             new QueryGuardService(_settings), new MemoryWriteService(_store, new FakePromotionQueue()),

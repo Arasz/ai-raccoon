@@ -434,3 +434,30 @@ Feature: File watcher
             Given a project "proj-a" with no watches
             When memory_watch_status for "proj-a" is called
             Then an empty list is returned without error
+
+    Rule: A project-ids repair folds watch registrations without resurrecting the loser
+        # air-merge P3+P4: the repair renames watches/watch_files/watch_digest_claims as UPDATEs
+        # preserving scan_owner/lease (never DELETE+INSERT); a digest completing under a winner
+        # afterwards leaves zero loser rows. The transient blank-id Ambiguous window — watches
+        # already moved while a scope row still names the loser — is fail-closed by design
+        # (CwdProjectIdResolverTests.AliasPair_StaysAmbiguous_NeverFolds).
+        Scenario: Renaming watched projects keeps scan leases and drops the loser keys
+            Given a watch for "job-search-ai-assistant" on path "/repo" with "a.md" and "b.md" ingested
+            And a digest claim for "job-search-ai-assistant" at "/repo" with scan owner "scanner-1"
+            And a watch for "AI-RACCOON" on path "/repo" with "c.md" ingested
+            And a guid watch for "01a062f4-0000-7000-8000-000000000001" named "job-search-ai-assistant" on path "/repo/g" with "g.md" ingested
+            And loser scope and config rows for "job-search-ai-assistant" and "AI-RACCOON"
+            And labeled project rows for the loser ids
+            When the project-ids repair folds loser ids into their winners
+            Then no loser rows remain except byte-identical file mirrors
+            And the scope and config rows moved to the winner keys
+            And the "jsaa" watch keeps scan owner "scanner-1" with its lease
+            And the "ai-raccoon" watch still owns "c.md"
+            When "a.md" and "b.md" change
+            Then memory_search for "jsaa" returns both new contents
+            # g.md is asserted searchable only AFTER a post-repair change: its untouched rows
+            # stay byte-identical under the guid partition (review S2), so an unchanged g.md
+            # can never be searchable for the winner — same treatment a.md/b.md get above.
+            When "/repo/g/g.md" content changes
+            Then "g.md" is searchable for "jsaa"
+            And still no loser rows remain and mirrors are unchanged

@@ -15,6 +15,7 @@ using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Code;
 using AiRaccoon.Infrastructure.Watch;
+using AiRaccoon.Tests;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;
@@ -67,7 +68,7 @@ public sealed class CodeCorpusFeatureContext : IDisposable
         SearchQuality = new SqliteSearchQualityService(Factory, NullLogger<SqliteSearchQualityService>.Instance);
         ReindexJob = new CodeReindexJob(CodeEmbedder, EmbedDrainPump);
 
-        var gate = new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard());
+        var gate = new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate());
         MemoryTools = new MemoryTools(Store, gate,
             new SearchDispatcher(Store, CodeSearch, SearchQuality),
             new QueryGuardService(Settings), new MemoryWriteService(Store, new FakePromotionQueue()),
@@ -244,7 +245,8 @@ public sealed class CodeCorpusFeatureContext : IDisposable
         WatchCatchUp? catchUp = null;
         Pipeline = new WatchPipeline(new WatchScheduler(),
             new WatchDigestExecutor(Store, WatchStore, TimeProvider,
-                new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => catchUp!), EmbedDrainPump),
+                new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => catchUp!), EmbedDrainPump,
+                new SqliteProjectIdsMigrationGate(Factory)),
             new WatchRetryPolicy(), scanGuard, Store, TimeProvider,
             NullLogger<WatchPipeline>.Instance);
         EventSource = new WatchEventSource(Pipeline.Enqueue, _ => { }, NullLogger<WatchEventSource>.Instance);
@@ -253,7 +255,8 @@ public sealed class CodeCorpusFeatureContext : IDisposable
             new IgnoreRulesProvider());
         Hosted = new WatchHostedService(Store, WatchStore, Pipeline, EventSource, CatchUp, TimeProvider,
             TestTelemetry.None, NullLogger<WatchHostedService>.Instance);
-        WatchServiceInstance = new WatchService(WatchStore, Store, Pipeline, TimeProvider, new WatchOverlapResolver());
-        WatchToolsInstance = new WatchTools(WatchServiceInstance, new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()));
+        WatchServiceInstance = new WatchService(WatchStore, Store, Pipeline, TimeProvider, new WatchOverlapResolver(),
+            new SqliteProjectIdsMigrationGate(Factory));
+        WatchToolsInstance = new WatchTools(WatchServiceInstance, new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()));
     }
 }

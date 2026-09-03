@@ -1,6 +1,7 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Settings;
 using AiRaccoon.Tests.TestHelpers;
@@ -168,6 +169,19 @@ public sealed class LazyServerSettingsStoreTests
         var report = await store.ReportChunkIndexAsync(TestContext.Current.CancellationToken);
 
         report.ShouldBe(new ChunkIndexRepairReport(2, 4, 6));
+    }
+
+    // Ledger — project-ids-report-not-delegated : --filter ReportProjectIdsAsync_DelegatesToTheAcquiredStore : InMemorySettings report.
+    [Fact]
+    public async Task ReportProjectIdsAsync_DelegatesToTheAcquiredStore()
+    {
+        var expected = new ProjectIdCensusReport([], 1, 2, 3, 4, ["ingest.scope.global"]);
+        var inner = new InMemorySettings { ProjectIdsReport = expected };
+        var store = new LazyServerSettingsStore(_ => Task.FromResult<ISettingsStore>(inner));
+
+        var report = await store.ReportProjectIdsAsync(TestContext.Current.CancellationToken);
+
+        report.ShouldBe(expected);
     }
 
     [Fact]

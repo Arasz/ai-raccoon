@@ -1,7 +1,9 @@
 using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Watch;
+using AiRaccoon.Tests;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Watch;
@@ -19,7 +21,7 @@ internal sealed class WatchTestStack
 {
     public static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
-    public WatchTestStack()
+    public WatchTestStack(IProjectIdsMigrationGate? migrationGate = null)
     {
         // The real store keeps the fingerprint inside the replace transaction; the fakes are wired
         // together here so the same re-check/write happens against the fake watch store.
@@ -27,11 +29,13 @@ internal sealed class WatchTestStack
         Memory.WriteFingerprint = (projectId, path, hash) =>
             Store.SetFingerprint(projectId, path, hash, Time.GetUtcNow().ToUnixTimeSeconds());
         var scanInitiatorLazy = new Lazy<IWatchScanInitiator>(() => ScanInitiator);
-        Executor = new WatchDigestExecutor(Memory, Store, Time, IgnoreRules, scanInitiatorLazy, EmbedDrainPump);
+        Executor = new WatchDigestExecutor(Memory, Store, Time, IgnoreRules, scanInitiatorLazy, EmbedDrainPump,
+            migrationGate ?? new NeverMigratedGate());
         Pipeline = new WatchPipeline(
             new WatchScheduler(), Executor, new WatchRetryPolicy(), ScanGuard,
             Memory, Time, NullLogger<WatchPipeline>.Instance);
-        Service = new WatchService(Store, Memory, Pipeline, Time, OverlapResolver);
+        Service = new WatchService(Store, Memory, Pipeline, Time, OverlapResolver,
+            migrationGate ?? new NeverMigratedGate());
     }
 
     public FakeTimeProvider Time { get; } = new(FixedNow);

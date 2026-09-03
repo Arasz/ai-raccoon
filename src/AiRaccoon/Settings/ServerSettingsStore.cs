@@ -2,6 +2,7 @@ using System.Net;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Hosting.Node;
 using CommunityToolkit.Diagnostics;
@@ -146,6 +147,14 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
         var response = await SendAsync(() => _client.GetAsync(RepairProtocol.ForKind(RepairKinds.ChunkIndex), cancellationToken));
         Ensure(response);
         return (await response.Content.ReadFromJsonAsync<ChunkIndexRepairReport>(cancellationToken))!;
+    }
+
+    /// <inheritdoc />
+    public async Task<ProjectIdCensusReport> ReportProjectIdsAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await SendAsync(() => _client.GetAsync(RepairProtocol.ForKind(RepairKinds.ProjectIds), cancellationToken));
+        Ensure(response);
+        return (await response.Content.ReadFromJsonAsync<ProjectIdCensusReport>(cancellationToken))!;
     }
 
     /// <inheritdoc />

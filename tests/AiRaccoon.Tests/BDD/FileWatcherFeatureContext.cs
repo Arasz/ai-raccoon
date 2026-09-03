@@ -7,7 +7,9 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
+using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Watch;
+using AiRaccoon.Tests;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -200,7 +202,8 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
         WatchCatchUp? catchUp = null;
         Pipeline = new WatchPipeline(new WatchScheduler(),
             new WatchDigestExecutor(Store, WatchStore, TimeProvider,
-                new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => catchUp!), EmbedDrainPump),
+                new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => catchUp!), EmbedDrainPump,
+                new SqliteProjectIdsMigrationGate(Factory)),
             new WatchRetryPolicy(), scanGuard, Store, TimeProvider,
             NullLogger<WatchPipeline>.Instance);
         EventSource = new WatchEventSource(Pipeline.Enqueue, Errors.Add, NullLogger<WatchEventSource>.Instance);
@@ -209,7 +212,8 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
             new IgnoreRulesProvider());
         Hosted = new WatchHostedService(Store, WatchStore, Pipeline, EventSource, CatchUp, TimeProvider,
             TestTelemetry.None, NullLogger<WatchHostedService>.Instance);
-        Service = new WatchService(WatchStore, Store, Pipeline, TimeProvider, new WatchOverlapResolver());
-        Tools = new WatchTools(Service, new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()));
+        Service = new WatchService(WatchStore, Store, Pipeline, TimeProvider, new WatchOverlapResolver(),
+            new SqliteProjectIdsMigrationGate(Factory));
+        Tools = new WatchTools(Service, new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()));
     }
 }

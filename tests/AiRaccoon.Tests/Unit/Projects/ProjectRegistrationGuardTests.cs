@@ -17,7 +17,8 @@ namespace AiRaccoon.Tests.Unit.Projects;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ProjectRegistrationGuardTests
 {
-    private static ProjectRegistrationGuard NewGuard(FakeProjectRegistry registry) => new(registry, NullLogger<ProjectRegistrationGuard>.Instance);
+    private static ProjectRegistrationGuard NewGuard(FakeProjectRegistry registry, bool migrated = false) =>
+        new(registry, NullLogger<ProjectRegistrationGuard>.Instance, new StubMigrationGate(migrated));
 
     [Fact]
     public async Task AnUnregisteredGuidV7_IsRefused()
@@ -29,15 +30,78 @@ public sealed class ProjectRegistrationGuardTests
                 TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    ///     Pre-migration compatibility (review M1): without the P2 finished marker an unregistered
+    ///     verbatim id still auto-registers — the winners' own writes must never refuse on an
+    ///     unmigrated bank. Post-migration this flips to refusal (ATrueTypo_AfterMigration...).
+    ///     Ledger — always-enforce : --filter AnUnregisteredRawTextId_BeforeMigration_IsAutoRegistered :
+    ///     jsaa write, empty registry, gate false.
+    /// </summary>
     [Fact]
-    public async Task AnUnregisteredRawTextId_IsAutoRegistered()
+    public async Task AnUnregisteredRawTextId_BeforeMigration_IsAutoRegistered()
     {
         var registry = new FakeProjectRegistry();
-        var guard = NewGuard(registry);
+        var guard = NewGuard(registry, migrated: false);
 
         await guard.EnsureAsync("jsaa", AccessRequirement.Write, TestContext.Current.CancellationToken);
 
         registry.Registered.ShouldContain("jsaa");
+    }
+
+    /// <summary>
+    ///     P3 activation: after the P2 finished marker, a TRUE typo (no registry row, no rows) is
+    ///     refused — and nothing is registered as a side effect (zero new projects rows).
+    ///     Ledger — always-legacy-guard : --filter ATrueTypo_AfterMigration_IsRefusedWithZeroNewRows :
+    ///     jsaaa write against an empty registry.
+    /// </summary>
+    [Fact]
+    public async Task ATrueTypo_AfterMigration_IsRefusedWithZeroNewRows()
+    {
+        var registry = new FakeProjectRegistry();
+        var guard = NewGuard(registry, migrated: true);
+
+        await Should.ThrowAsync<UnregisteredProjectException>(() =>
+            guard.EnsureAsync("jsaaa", AccessRequirement.Write, TestContext.Current.CancellationToken));
+
+        registry.Registered.ShouldBeEmpty("a refused typo must not create a projects row");
+    }
+
+    /// <summary>
+    ///     The marker flips refusal, not the legacy path: an id the bank already holds rows for
+    ///     keeps working after migration (warn-once), so the repair's unresolved leftovers stay writable.
+    ///     Ledger — refuse-has-rows : --filter ALegacyRawTextIdWithRows_AfterMigration_IsStillAllowedAndWarns :
+    ///     jsaa with rows, migrated.
+    /// </summary>
+    [Fact]
+    public async Task ALegacyRawTextIdWithRows_AfterMigration_IsStillAllowedAndWarns()
+    {
+        var registry = new FakeProjectRegistry { RowsFor = { "jsaa" } };
+        var logger = new FakeLogger<ProjectRegistrationGuard>();
+        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(true));
+
+        await guard.EnsureAsync("jsaa", AccessRequirement.Write, TestContext.Current.CancellationToken);
+
+        logger.Collector.GetSnapshot().ShouldContain(r =>
+                r.Id.Name == "LegacyProjectIdAccepted",
+            "post-migration rows-without-registration still warn-and-work");
+    }
+
+    /// <summary>
+    ///     Reads never refuse — the marker changes nothing on the read path (same shape as
+    ///     MemoryAccessGuard.EnsureAsync's early return for Read).
+    ///     Ledger — refuse-reads : --filter AReadRequirement_AfterMigration_IsNeverRefused :
+    ///     migrated read against an empty registry.
+    /// </summary>
+    [Fact]
+    public async Task AReadRequirement_AfterMigration_IsNeverRefused()
+    {
+        var registry = new FakeProjectRegistry();
+        var guard = NewGuard(registry, migrated: true);
+
+        await guard.EnsureAsync("jsaaa", AccessRequirement.Read, TestContext.Current.CancellationToken);
+
+        registry.IsRegisteredCalls.ShouldBeEmpty();
+        registry.HasRowsCalls.ShouldBeEmpty();
     }
 
     [Fact]
@@ -45,7 +109,7 @@ public sealed class ProjectRegistrationGuardTests
     {
         var registry = new FakeProjectRegistry { RowsFor = { "jsaa" } };
         var logger = new FakeLogger<ProjectRegistrationGuard>();
-        var guard = new ProjectRegistrationGuard(registry, logger);
+        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(false));
 
         // Does not throw — a raw-text id the bank already holds rows for keeps working.
         await guard.EnsureAsync("jsaa", AccessRequirement.Write, TestContext.Current.CancellationToken);
@@ -62,7 +126,7 @@ public sealed class ProjectRegistrationGuardTests
     {
         var registry = new FakeProjectRegistry { RowsFor = { "jsaa" } };
         var logger = new FakeLogger<ProjectRegistrationGuard>();
-        var guard = new ProjectRegistrationGuard(registry, logger);
+        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(false));
 
         await guard.EnsureAsync("jsaa", AccessRequirement.Write, TestContext.Current.CancellationToken);
         await guard.EnsureAsync("jsaa", AccessRequirement.Write, TestContext.Current.CancellationToken);
@@ -78,7 +142,7 @@ public sealed class ProjectRegistrationGuardTests
     {
         var registry = new FakeProjectRegistry { RowsFor = { "jsaa", "other-legacy" } };
         var logger = new FakeLogger<ProjectRegistrationGuard>();
-        var guard = new ProjectRegistrationGuard(registry, logger);
+        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(false));
 
         await guard.EnsureAsync("jsaa", AccessRequirement.Write, TestContext.Current.CancellationToken);
         await guard.EnsureAsync("other-legacy", AccessRequirement.Write, TestContext.Current.CancellationToken);
@@ -96,7 +160,7 @@ public sealed class ProjectRegistrationGuardTests
     {
         var registry = new FakeProjectRegistry { RowsFor = { "code-only-legacy" } };
         var logger = new FakeLogger<ProjectRegistrationGuard>();
-        var guard = new ProjectRegistrationGuard(registry, logger);
+        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(false));
 
         await guard.EnsureAsync("code-only-legacy", AccessRequirement.Write, TestContext.Current.CancellationToken);
 
@@ -141,6 +205,12 @@ public sealed class ProjectRegistrationGuardTests
 
         registry.IsRegisteredCalls.ShouldBeEmpty("Read must skip the registry lookups entirely, not just tolerate a false answer");
         registry.HasRowsCalls.ShouldBeEmpty();
+    }
+
+    private sealed class StubMigrationGate(bool migrated) : IProjectIdsMigrationGate
+    {
+        public Task<bool> IsMigratedAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(migrated);
     }
 
     private sealed class FakeProjectRegistry : IProjectRegistry

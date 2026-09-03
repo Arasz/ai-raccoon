@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Watch;
@@ -22,6 +23,31 @@ public sealed class WatchStoreCascadeTests
 
     /// <summary>How long an unblocked remove is given to finish before absence is believed.</summary>
     private static readonly TimeSpan Grace = TimeSpan.FromMilliseconds(300);
+
+    /// <summary>
+    ///     The watch half of the canonical-only tripwire (d-425 SHOULD-4 covered writer): a
+    ///     re-spelled guid fails LOUDLY at both watch-create entry points instead of landing a raw
+    ///     second partition beside the canonical one. Spelling-only — alias losers still store
+    ///     verbatim (the fold lives upstream), so no alias leg here.
+    ///     Ledger — raw-respelled-watch-write : --filter AddWatchAsync_RespelledGuid_RefusesLoudly : braced upper-case guid, both entry points.
+    /// </summary>
+    [RetryFact]
+    public async Task AddWatchAsync_RespelledGuid_RefusesLoudly()
+    {
+        using var stack = new Stack();
+        var canonical = Guid.CreateVersion7().ToString("D");
+        var respelled = $"{{{canonical.ToUpperInvariant()}}}";
+        var ct = TestContext.Current.CancellationToken;
+
+        var first = await Should.ThrowAsync<InvalidOperationException>(() =>
+            stack.Store.AddWatchAsync(respelled, stack.Dir("repo"), 1, 1, ct));
+        first.Message.ShouldContain("non-canonical project id");
+        var second = await Should.ThrowAsync<InvalidOperationException>(() =>
+            stack.Store.ResolveAndAddAsync(respelled,
+                new WatchOverlapCandidate(stack.Dir("repo"), 1), new WatchOverlapResolver(), ct));
+        second.Message.ShouldContain("non-canonical project id");
+        (await stack.Store.ListWatchesAsync(ct)).ShouldBeEmpty("the refused creates stored nothing");
+    }
 
     [RetryFact]
     public async Task RemoveWatchAsync_AlsoDeletesTheFingerprintsUnderTheWatch()

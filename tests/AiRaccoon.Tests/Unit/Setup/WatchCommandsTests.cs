@@ -60,6 +60,25 @@ public class WatchCommandsTests
         stdout.Trim().ShouldBe("no registered watches");
     }
 
+    /// <summary>
+    ///     P4 boundary fold: the --project-id filter folds a loser spelling to its winner, so a
+    ///     cached loser id still lists its registrations after the repair.
+    ///     Ledger — unfold-filter : --filter Registered_FilterFoldsAliasToWinner : loser filter.
+    /// </summary>
+    [Fact]
+    public async Task Registered_FilterFoldsAliasToWinner()
+    {
+        var store = new FakeWatchStore();
+        store.Watches[("jsaa", "/a/b.md")] = (CreatedAt: 1_700_000_000, LastChangeTs: 0);
+
+        var (exit, stdout, _) = await Run(["watch", "registered", "job-search-ai-assistant"],
+            new FakeConfigStore(), store);
+
+        exit.ShouldBe(0);
+        stdout.Trim().ShouldBe(
+            "project: jsaa  path: /a/b.md  registered: 2023-11-14T22:13:20Z  lastChange: never");
+    }
+
     [Fact]
     public async Task List_RendersBlockFormat_WithGlobalFallback()
     {

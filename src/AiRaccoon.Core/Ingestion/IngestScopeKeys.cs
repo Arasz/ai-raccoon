@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AiRaccoon.Core.Projects;
 using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Core.Ingestion;
@@ -14,7 +15,13 @@ public static class IngestScopeKeys
     /// <summary>The pre-1.2 key prefix; banks are migrated on open, and nothing writes it.</summary>
     public const string LegacyScopePrefix = "watch.scope.";
 
-    public static string ScopeProject(string projectId) => $"ingest.scope.{projectId}";
+    /// <summary>
+    ///     The per-project scope key. The id segment folds at construction (air-merge P4, defense in
+    ///     depth — the authoritative fold is the ToolGate choke): a loser id must never again be
+    ///     embedded raw or the resolver would see two projects where the repair left one.
+    /// </summary>
+    public static string ScopeProject(string projectId) =>
+        $"ingest.scope.{ProjectIdAliasMap.Default.Fold(projectId)}";
 
     public static string Serialize(IEnumerable<string> paths)
     {

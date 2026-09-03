@@ -5,6 +5,7 @@ using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Dapper;
@@ -24,6 +25,17 @@ namespace AiRaccoon.Tests.Integration.Projects;
 ///     was assigned. <c>ShareTools.ShareExtract</c> and <c>PromotionTools.List</c> are covered
 ///     directly because §6c of the WP6 plan names them as the two call sites the assignment alone
 ///     cannot fix.
+///     <para>
+///         Covered-writer set (d-425 SHOULD-4): the spelling-canonical tripwire lives on exactly two
+///         writers — <c>SqliteMemoryStore.WriteAsync</c> (entries; pinned by
+///         CanonicalOnlyWrite_ReachesStorage below) and <c>WatchStore.AddWatchAsync</c> /
+///         <c>ResolveAndAddAsync</c> (watches; same spelling-only rule, no alias fold at the store).
+///         Alias losers are folded upstream at the <c>ToolGate</c> choke once migrated, so the
+///         alias legs are pinned there instead: entries by
+///         <c>OrphanVerbatimRefusalTests.AliasFold_ToCanonical</c> (+ the migrated rows below) and
+///         watches by the watch-create loser test (no-resurrection) — a new writer that bypasses
+///         the gate must either fold or trip, and this list names where.
+///     </para>
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -64,7 +76,15 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
     }
 
     private MemoryTools BuildMemoryTools() =>
-        new(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()),
+        new(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()),
+            new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
+            new QueryGuardService(new InMemorySettings()), new MemoryWriteService(_store, new FakePromotionQueue()),
+            NoOpMeasurementRecorder.Instance, NullLogger<MemoryTools>.Instance);
+
+    /// <summary>The P3-activated choke: identical stack except the marker reads migrated, so the alias fold runs.</summary>
+    private MemoryTools BuildMigratedTools() =>
+        new(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(),
+                migrationGate: new StubMigrationGate(Migrated: true)),
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
             new QueryGuardService(new InMemorySettings()), new MemoryWriteService(_store, new FakePromotionQueue()),
             NoOpMeasurementRecorder.Instance, NullLogger<MemoryTools>.Instance);
@@ -134,7 +154,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
     public async Task MemoryShareExtract_UnderARespelledForm_ThreadsTheCanonicalId_ToTheExtractionRunner()
     {
         var extraction = new RecordingExtractionRunner();
-        var gate = new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard());
+        var gate = new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate());
         var tools = new ShareTools(_store, gate, new ShareExtractService(_store, extraction, new FakePromotionQueue()));
 
         await tools.ShareExtract([_respelled], cancellationToken: TestContext.Current.CancellationToken);
@@ -147,13 +167,79 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
     public async Task MemoryPromotionList_UnderARespelledForm_ListsUnderTheCanonicalId()
     {
         var queue = new FakePromotionQueue();
-        var gate = new ToolGate(new MemoryAccessGuard(_store), queue, new NeverMigratingStore(), new AllowingRegistrationGuard());
+        var gate = new ToolGate(new MemoryAccessGuard(_store), queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate());
         var tools = new PromotionTools(queue, gate);
 
         await tools.List(_respelled, cancellationToken: TestContext.Current.CancellationToken);
 
         queue.LastListProject.ShouldBe(_canonical,
             "PromotionTools.List declares its canonical local before the projectId-is-not-null branch (PromotionTools.cs)");
+    }
+
+    /// <summary>
+    ///     P3/P4 alias leg of the canonical-reaches-storage rule: a write under the loser spelling
+    ///     lands in the winner's entries partition AND its vec ctx once migrated — the storage
+    ///     half of OrphanVerbatimRefusalTests.AliasFold_ToCanonical, extended to the vec leg.
+    ///     Ledger — skip-gate-fold : --filter MemoryWrite_UnderAnAliasLoser_WritesTheWinnerPartition_AndVecCtx :
+    ///     migrated loser write + embed drain.
+    /// </summary>
+    [RetryFact]
+    public async Task MemoryWrite_UnderAnAliasLoser_WritesTheWinnerPartition_AndVecCtx()
+    {
+        var tools = BuildMigratedTools();
+
+        var written = await tools.Write("job-search-ai-assistant", "alias fold reaches the narwhal partition",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        (await ReadStoredProjectIdAsync(written.Data!.Hash)).ShouldBe("jsaa");
+        await _store.EmbedPendingAsync("jsaa", null, TestContext.Current.CancellationToken);
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var vecRows = (await connection.QueryAsync<(long RowId, string Ctx)>(
+                new CommandDefinition(
+                    "SELECT v.rowid AS RowId, v.ctx AS Ctx FROM vec_entries v JOIN entries e ON e.id = v.rowid WHERE e.hash = @hash",
+                    new { hash = written.Data!.Hash },
+                    cancellationToken: TestContext.Current.CancellationToken)))
+            .ToList();
+
+        vecRows.ShouldNotBeEmpty("the drain must have embedded the row before this assertion runs");
+        vecRows.ShouldAllBe(r =>
+            r.Ctx == MemorySql.ContextKeyFor(ContextNaming.ProjectContext("jsaa"), "jsaa"));
+    }
+
+    /// <summary>
+    ///     The queue leg of the alias fold: listing under the loser queries the winner's queue.
+    ///     Ledger — skip-gate-fold : --filter MemoryPromotionList_UnderAnAliasLoser_ListsUnderTheWinner :
+    ///     migrated loser list.
+    /// </summary>
+    [RetryFact]
+    public async Task MemoryPromotionList_UnderAnAliasLoser_ListsUnderTheWinner()
+    {
+        var queue = new FakePromotionQueue();
+        var gate = new ToolGate(new MemoryAccessGuard(_store), queue, new NeverMigratingStore(),
+            new AllowingRegistrationGuard(), migrationGate: new StubMigrationGate(Migrated: true));
+        var tools = new PromotionTools(queue, gate);
+
+        await tools.List("job-search-ai-assistant", cancellationToken: TestContext.Current.CancellationToken);
+
+        queue.LastListProject.ShouldBe("jsaa");
+    }
+
+    /// <summary>
+    ///     The share-extract leg of the alias fold: the runner is threaded the winner, never the loser.
+    ///     Ledger — skip-gate-fold : --filter MemoryShareExtract_UnderAnAliasLoser_ThreadsTheWinner :
+    ///     migrated loser extract.
+    /// </summary>
+    [RetryFact]
+    public async Task MemoryShareExtract_UnderAnAliasLoser_ThreadsTheWinner()
+    {
+        var extraction = new RecordingExtractionRunner();
+        var gate = new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(),
+            new AllowingRegistrationGuard(), migrationGate: new StubMigrationGate(Migrated: true));
+        var tools = new ShareTools(_store, gate, new ShareExtractService(_store, extraction, new FakePromotionQueue()));
+
+        await tools.ShareExtract(["job-search-ai-assistant"], cancellationToken: TestContext.Current.CancellationToken);
+
+        extraction.LastProjectId.ShouldBe("jsaa");
     }
 
     private async Task<string?> ReadStoredProjectIdAsync(string hash)
@@ -176,5 +262,11 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
             LastProjectId = projectId;
             return Task.FromResult<IReadOnlyList<ShareCandidate>>([]);
         }
+    }
+
+    private sealed class StubMigrationGate(bool Migrated) : AiRaccoon.Core.Projects.IProjectIdsMigrationGate
+    {
+        public Task<bool> IsMigratedAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(Migrated);
     }
 }

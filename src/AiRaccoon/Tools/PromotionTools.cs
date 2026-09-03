@@ -46,6 +46,12 @@ public sealed class PromotionTools(
             throw new McpException(
                 "invalid-params: projectId is required unless allProjects=true; pass projectId to scope the listing, or allProjects=true to explicitly list every project's queue");
         }
+        else
+        {
+            // The allProjects branch names no project to check, but it still meets the gate: the
+            // migration lock holds for every bank operation (ADR-0076).
+            await gate.RequireBankAvailableAsync(TnMemoryPromotionList, cancellationToken);
+        }
 
         var rows = await queue.ListAsync(canonical, limit, cancellationToken);
         var result = new PromotionListResult([.. rows.Select(r => ToView(r, includeFullValue))]);

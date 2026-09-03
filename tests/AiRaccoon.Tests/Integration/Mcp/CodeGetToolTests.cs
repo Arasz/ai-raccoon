@@ -4,6 +4,7 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Code;
+using AiRaccoon.Tests;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Dapper;
@@ -34,7 +35,7 @@ public sealed class CodeGetToolTests : IAsyncLifetime
         var codeSearch = new SqliteCodeSearchService(_factory, new FakeCodeEmbedder());
         var settings = new SqliteSettingsStore(_factory);
         var access = new MemoryAccessGuard(new SettingsOnlyStore(settings));
-        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard());
+        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate());
         _tools = new CodeTools(codeSearch, gate);
         await using var warm = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
     }

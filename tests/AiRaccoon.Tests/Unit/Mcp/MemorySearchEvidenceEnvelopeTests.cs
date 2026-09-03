@@ -6,6 +6,7 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.Memory.QueryGuard;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -31,7 +32,7 @@ public sealed class MemorySearchEvidenceEnvelopeTests
     public MemorySearchEvidenceEnvelopeTests()
     {
         var access = new MemoryAccessGuard(_store);
-        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard());
+        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), migrationGate: new StubMigrationGate(migrated: false));
         _tools = new MemoryTools(_store, gate, new SearchDispatcher(_store, _codeSearch, new NoOpSearchQualityService()),
             new QueryGuardService(new InMemorySettings()),
             new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(),
@@ -309,5 +310,13 @@ public sealed class MemorySearchEvidenceEnvelopeTests
 
         public Task<CodeEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
             Task.FromResult<CodeEntry?>(null);
+    }
+
+    /// <summary>Unmigrated gate: these search-behavior tests predate the project-ids repair,
+    /// so the fold stays off and pre-migration behavior is preserved.</summary>
+    private sealed class StubMigrationGate(bool migrated) : IProjectIdsMigrationGate
+    {
+        public Task<bool> IsMigratedAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(migrated);
     }
 }

@@ -3,6 +3,7 @@ using System.Text;
 using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 
@@ -24,11 +25,20 @@ public sealed class WatchDigestExecutor(
     TimeProvider timeProvider,
     IIgnoreRulesProvider ignoreRulesProvider,
     Lazy<IWatchScanInitiator> scanInitiator,
-    IEventPump<EmbedDrainRequest> embedDrainPump) : IWatchDigestExecutor
+    IEventPump<EmbedDrainRequest> embedDrainPump,
+    IProjectIdsMigrationGate migrationGate) : IWatchDigestExecutor
 {
     public async Task DigestAsync(string projectId, string watchPath, string filePath, WatchEventKind kind,
         string? oldPath, CancellationToken cancellationToken = default)
     {
+        // Bank-write boundary (air-merge: in-flight scans outlive the repair rename holding the
+        // loser id — without this fold a post-repair scan resurrects the loser key in watch_files).
+        // Marker-gated like the ToolGate choke: unmigrated banks pass through verbatim.
+        if (await migrationGate.IsMigratedAsync(cancellationToken).ConfigureAwait(false))
+        {
+            projectId = ProjectIdAliasMap.Default.Fold(projectId);
+        }
+
         var normalizedWatch = IngestPath.Normalize(watchPath);
         var normalized = IngestPath.Normalize(filePath);
         var isIgnoreFile = IsIgnoreFileItself(normalizedWatch, normalized);

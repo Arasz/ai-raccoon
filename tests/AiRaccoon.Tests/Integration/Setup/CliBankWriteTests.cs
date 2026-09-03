@@ -61,6 +61,7 @@ public sealed class CliBankWriteTests : IAsyncLifetime
         ModelMigrationJob.JobName,
         ChunkIndexRepairJob.JobName,
         ReingestRepairJob.JobName,
+        ProjectIdsRepairJob.JobName, // Ledger — ledger-drifts : --filter CliBankWriteLedgerDriftTests/CliBankWriteTests : DI job list.
         PromotionQueuePruneJob.JobName,
         PendingEmbedJob.JobName,
         CodeReindexJob.JobName
@@ -88,6 +89,7 @@ public sealed class CliBankWriteTests : IAsyncLifetime
         data.Add("extract prune", ["extract", "prune"]);
         data.Add("repair chunk-index", ["repair", "chunk-index"]);
         data.Add("repair reingest", ["repair", "reingest"]);
+        data.Add("repair project-ids", ["repair", "project-ids"]);
         return data;
     }
 
@@ -97,7 +99,7 @@ public sealed class CliBankWriteTests : IAsyncLifetime
     ///     --apply leaf added without a row below fails that test, not this one, so the gate cannot
     ///     silently stay a no-op the way it did for `repair` before this task.
     /// </summary>
-    public static readonly string[] ApplyCommandPaths = ["extract prune", "repair chunk-index", "repair reingest"];
+    public static readonly string[] ApplyCommandPaths = ["extract prune", "repair chunk-index", "repair reingest", "repair project-ids"];
 
     /// <summary>
     ///     The --apply form of each leaf above, paired with the outbox table its request must (and
@@ -111,7 +113,9 @@ public sealed class CliBankWriteTests : IAsyncLifetime
     {
         { "extract prune --apply", ["extract", "prune", "--apply"], "promotion_queue_prune_requests" },
         { "repair chunk-index --apply", ["repair", "chunk-index", "--apply"], "repair_requests" },
-        { "repair reingest --apply", ["repair", "reingest", "--apply"], "repair_requests" }
+        { "repair reingest --apply", ["repair", "reingest", "--apply"], "repair_requests" },
+        // Ledger — project-ids-apply-unlisted : --filter ApplyCommand_OnlyCommitsAnOutboxRequest : jsaa-cluster seed below.
+        { "repair project-ids --apply", ["repair", "project-ids", "--apply"], "repair_requests" }
     };
 
     public async ValueTask InitializeAsync()
@@ -294,6 +298,14 @@ public sealed class CliBankWriteTests : IAsyncLifetime
         "extract prune --apply" => new HashSet<string> { "promotion_queue" },
         "repair chunk-index --apply" => new HashSet<string> { "entries" },
         "repair reingest --apply" => new HashSet<string> { "entries" },
+        // Every id-keyed surface the fold rewrites (ProjectIdsRepair step order): an in-window
+        // relay drain may legitimately touch any of them plus its maintenance_jobs stamp.
+        // Ledger — dropped-surface-omitted : --filter ApplyCommand_OnlyCommitsAnOutboxRequest : recipe lists every surface the fold writes.
+        "repair project-ids --apply" => new HashSet<string>
+        {
+            "entries", "code_entries", "promotion_queue", "promotion_discards", "search_quality",
+            "watches", "watch_files", "watch_digest_claims", "settings", "projects", "sync_tombstones"
+        },
         _ => throw new ArgumentOutOfRangeException(nameof(label), label, "no target-table recipe for this --apply leaf")
     };
 
@@ -317,6 +329,9 @@ public sealed class CliBankWriteTests : IAsyncLifetime
             "repair reingest --apply" => await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                     "SELECT count(*) FROM repair_requests WHERE kind = 'reingest'",
                     cancellationToken: cancellationToken)) > 0,
+            "repair project-ids --apply" => await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                    "SELECT count(*) FROM repair_requests WHERE kind = 'project-ids'",
+                    cancellationToken: cancellationToken)) > 0,
             _ => throw new ArgumentOutOfRangeException(nameof(label), label, "no request-row recipe for this --apply leaf")
         };
     }
@@ -326,6 +341,7 @@ public sealed class CliBankWriteTests : IAsyncLifetime
         "extract prune --apply" => SeedOrphanedPromotionQueueRowAsync(cancellationToken),
         "repair chunk-index --apply" => SeedMisorderedChunkIndexSourceAsync(cancellationToken),
         "repair reingest --apply" => SeedStaleReingestSourceAsync(cancellationToken),
+        "repair project-ids --apply" => SeedProjectIdsLoserRowAsync(cancellationToken),
         _ => throw new ArgumentOutOfRangeException(nameof(label), label, "no seeding recipe for this --apply leaf")
     };
 
@@ -367,5 +383,24 @@ public sealed class CliBankWriteTests : IAsyncLifetime
                 """,
                 new { hash = ContentHash.Of(file, value), path = file, value, sourceFile = file, chunkIndex });
         }
+    }
+
+    /// <summary>A labeled loser-id row plus its queue leg — the jsaa-cluster shape the project-ids diagnose reports on.</summary>
+    // Ledger — empty-bank-short-circuits-outbox-write : --filter ApplyCommand_OnlyCommitsAnOutboxRequest : loser + winner rows (an empty bank would let --apply short-circuit before the outbox write).
+    private async Task SeedProjectIdsLoserRowAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await _factory.OpenBankAsync(cancellationToken);
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO entries (hash, path, value, source_file, scope, project_id, context_label, created_at, updated_at, embed_state)
+            VALUES ('loser-1', 'loser-1', 'loser content', 'seed.md', 'project', 'job-search-ai-assistant', 'ctx-a', 0, 0, 'pending'),
+                   ('winner-1', 'winner-1', 'winner content', 'seed.md', 'project', 'jsaa', 'ctx-a', 0, 0, 'pending')
+            """);
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO promotion_queue (project_id, hash, value, score, created_at, updated_at)
+            VALUES ('job-search-ai-assistant', 'loser-q1', 'loser-q1', 0.7, 0, 0),
+                   ('jsaa', 'winner-q1', 'winner-q1', 0.9, 0, 0)
+            """);
     }
 }

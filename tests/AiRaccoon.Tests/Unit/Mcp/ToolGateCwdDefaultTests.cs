@@ -2,6 +2,7 @@ using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Projects;
+using AiRaccoon.Tests;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using ModelContextProtocol;
@@ -28,7 +29,7 @@ public sealed class ToolGateCwdDefaultTests
     private readonly StubResolver _resolver = new();
 
     private ToolGate NewGate() =>
-        new(_guard, _queue, _migrations, _registration, _resolver);
+        new(_guard, _queue, _migrations, _registration, new NeverMigratedGate(), _resolver);
 
     [Fact]
     public async Task BlankId_Resolved_NonCanonicalGuid_CanonicalizedOnce()
@@ -79,12 +80,33 @@ public sealed class ToolGateCwdDefaultTests
         _registration.Calls.ShouldBeEmpty();
     }
 
+    /// <summary>
+    ///     P4 resolver coherence: a blank id over an alias pair (loser + winner fragments) stays
+    ///     Ambiguous — the gate never folds or guesses across fragments on the blank path.
+    ///     Ledger — fold-across-fragments : --filter BlankId_AliasPair_StaysAmbiguous :
+    ///     loser+winner fragments.
+    /// </summary>
+    [Fact]
+    public async Task BlankId_AliasPair_StaysAmbiguous()
+    {
+        _resolver.Result = new ProjectIdResolution.Ambiguous(["job-search-ai-assistant", "jsaa"]);
+        var gate = NewGate();
+
+        var ex = await Should.ThrowAsync<McpException>(() =>
+            gate.RequireAsync("", AccessRequirement.Write, "memory_write", TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldStartWith("invalid-params: projectId is ambiguous from cwd ");
+        ex.Message.ShouldContain(": candidates job-search-ai-assistant, jsaa");
+        _guard.Calls.ShouldBeEmpty();
+        _registration.Calls.ShouldBeEmpty();
+    }
+
     [Fact]
     public async Task ExplicitId_ResolverNeverConsulted()
     {
         // Load-bearing wiring test: the throwing stub fails the run outright if the resolver is
         // consulted on an explicit id — consulted-and-ignored cannot hide from it.
-        var gate = new ToolGate(_guard, _queue, _migrations, _registration, new ThrowingResolver());
+        var gate = new ToolGate(_guard, _queue, _migrations, _registration, new NeverMigratedGate(), new ThrowingResolver());
 
         var canonical = await gate.RequireAsync("{ACME}", AccessRequirement.Write, "memory_write",
             TestContext.Current.CancellationToken);
@@ -97,7 +119,7 @@ public sealed class ToolGateCwdDefaultTests
     public async Task BlankId_ResolverOmitted_EnrichedNoneRefusal()
     {
         // The optional ctor param's default: no resolver wired — the enriched None refusal still fires.
-        var gate = new ToolGate(_guard, _queue, _migrations, _registration);
+        var gate = new ToolGate(_guard, _queue, _migrations, _registration, new NeverMigratedGate());
 
         var ex = await Should.ThrowAsync<McpException>(() =>
             gate.RequireAsync(null, AccessRequirement.Write, "memory_write", TestContext.Current.CancellationToken));

@@ -2,6 +2,7 @@ using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
+using AiRaccoon.Tests;
 using AiRaccoon.Tools;
 using ModelContextProtocol;
 using Shouldly;
@@ -22,7 +23,7 @@ public sealed class WatchToolsTests
 
     public WatchToolsTests()
     {
-        _tools = new WatchTools(_watch, new ToolGate(new FakeAccessGuard(), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()));
+        _tools = new WatchTools(_watch, new ToolGate(new FakeAccessGuard(), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()));
     }
 
     [Fact]

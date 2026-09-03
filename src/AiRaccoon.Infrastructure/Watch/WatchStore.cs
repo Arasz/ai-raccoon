@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
@@ -50,6 +51,7 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
     public async Task AddWatchAsync(string projectId, string path, long createdAt, long lastChangeTs,
         CancellationToken cancellationToken = default)
     {
+        AssertCanonical(projectId);
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
         await connection.ExecuteAsync(
                 new CommandDefinition(MemorySql.InsertWatchIfAbsent,
@@ -91,6 +93,7 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
     public async Task<WatchOverlapDecision> ResolveAndAddAsync(string projectId, WatchOverlapCandidate candidate,
         IWatchOverlapResolver overlapResolver, CancellationToken cancellationToken = default)
     {
+        AssertCanonical(projectId);
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
 
         await connection.ExecuteAsync(
@@ -200,5 +203,23 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
         return [.. rows];
+    }
+
+    /// <summary>
+    ///     Canonical-only (air-merge P3, review S1 — mirrors
+    ///     <c>SqliteMemoryStore.WriteAsync</c>): the <c>WatchService</c> boundary and the
+    ///     <c>ToolGate</c> choke canonicalize every id before it reaches storage, so a re-spelled
+    ///     id here means a caller bypassed them — fail loudly instead of landing a raw second
+    ///     partition. Spelling-canonical only (guid D-form): alias losers still arrive verbatim on
+    ///     unmigrated banks, so an alias assert here would break them — the fold lives upstream.
+    /// </summary>
+    private static void AssertCanonical(string projectId)
+    {
+        if (projectId != ProjectId.Canonicalize(projectId))
+        {
+            throw new InvalidOperationException(
+                $"ai-raccoon: refusing to register a watch under non-canonical project id '{projectId}' " +
+                "(canonicalize at the ToolGate first)");
+        }
     }
 }

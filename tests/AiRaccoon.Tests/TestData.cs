@@ -184,10 +184,11 @@ public static class TestData
         IModelMigrationStore? modelMigrations = null,
         ChunkIndexRepairCommands? chunkIndexRepair = null,
         ReingestRepairCommands? reingestRepair = null,
+        ProjectIdsRepairCommands? projectIdsRepair = null,
         DoctorCommands? doctor = null,
         ModelDownloadCommands? modelDownload = null,
         ICodeEngineStore? codeEngine = null) =>
-        new(store, modelMigrations!, codeEngine!, settings!, sync!, watch!, encryptionCommands!, extract!, maintenance!, performance!, serve!, noiseEntries!, chunkIndexRepair!, reingestRepair!, doctor!, modelDownload!);
+        new(store, modelMigrations!, codeEngine!, settings!, sync!, watch!, encryptionCommands!, extract!, maintenance!, performance!, serve!, noiseEntries!, chunkIndexRepair!, reingestRepair!, projectIdsRepair!, doctor!, modelDownload!);
 
     /// <summary>A <see cref="ServerProbe"/> backed by a plain loopback HttpClient (the pre-DI-refactor ForLoopback shape).</summary>
     public static ServerProbe CreateServerProbe() => new(new LoopbackHttpClientFactory());
@@ -574,6 +575,18 @@ public sealed class AllowingRegistrationGuard : IProjectRegistrationGuard
 {
     public Task EnsureAsync(string projectId, AccessRequirement requirement, CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
+}
+
+/// <summary>
+///     Stub <see cref="Core.Projects.IProjectIdsMigrationGate"/> for tests that construct a gate
+///     directly and do not exercise the P3 fold: explicitly unmigrated, so ids pass through
+///     unfolded. Named at every construction — the gate ctor takes no default (d-425 SHOULD-1,
+///     d-426 SHOULD-5), so a forgotten gate is a compile error, never a silent pass-through.
+/// </summary>
+public sealed class NeverMigratedGate : Core.Projects.IProjectIdsMigrationGate
+{
+    public Task<bool> IsMigratedAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(false);
 }
 
 /// <summary>No-op implementation of <see cref="ISearchQualityService"/> for unit tests that construct <see cref="MemoryTools"/> directly.</summary>

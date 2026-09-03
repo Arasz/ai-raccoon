@@ -21,6 +21,30 @@ internal static class ProjectRows
     public static string Of(string alias = "") => $"{Scope(alias)} AND {alias}project_id = @projectId";
 
     /// <summary>
+    ///     Committed project-scope rows of one id (<c>{alias}scope = 'project' AND
+    ///     {alias}project_id = @param</c>). The single home of the project-scope literal outside
+    ///     display ordering (ADR-0046; air-merge repair fold) — hand-rolled copies are flagged by
+    ///     <c>ProjectRowsSingleDefinitionTests</c>.
+    /// </summary>
+    public static string ProjectScope(string alias = "", string param = "projectId") =>
+        $"{alias}scope = 'project' AND {alias}project_id = @{param}";
+
+    /// <summary>
+    ///     The project-scope test without the id (<c>{alias}scope = 'project'</c>): the pull fold's
+    ///     domain (d-426 SHOULD-4) — the repair folds project-scope rows, so pulled rows fold on
+    ///     the same scope and merge verbatim otherwise. Kept here so the literal has one home
+    ///     beside <see cref="ProjectScope" /> (the single-definition gate flags copies).
+    /// </summary>
+    public static string ScopeIsProject(string alias = "") => $"{alias}scope = 'project'";
+
+    /// <summary>
+    ///     Foldable project rows: <see cref="ProjectScope" /> plus a context label. Repair folds
+    ///     move only labelled rows — bulk-ingested NULL-context rows stay byte-identical.
+    /// </summary>
+    public static string LabeledProjectScope(string alias = "", string param = "projectId") =>
+        $"{ProjectScope(alias, param)} AND {alias}context_label IS NOT NULL";
+
+    /// <summary>
     ///     Orders the committed row ahead of a context-labelled sibling of the same hash. A hash is
     ///     not a unique row — identical content written twice under different labels shares one — so
     ///     any single-row update or read of "the entry for this hash" needs a deterministic winner.

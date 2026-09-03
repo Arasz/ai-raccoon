@@ -30,9 +30,13 @@ internal static partial class RepairEndpoint
                             var chunkIndex = await store.ReportChunkIndexAsync(ctx);
                             Log.ReportServed(logger, kind);
                             return Results.Ok(chunkIndex);
+                        case RepairKinds.ProjectIds:
+                            var projectIds = await store.ReportProjectIdsAsync(ctx);
+                            Log.ReportServed(logger, kind);
+                            return Results.Ok(projectIds);
                         default:
                             return Results.BadRequest(
-                                $"ai-raccoon: pass ?kind=reingest or ?kind=chunk-index (got '{kind}')");
+                                $"ai-raccoon: pass ?kind=reingest, ?kind=chunk-index or ?kind=project-ids (got '{kind}')");
                     }
                 });
 
@@ -42,7 +46,7 @@ internal static partial class RepairEndpoint
                     if (!TryParseKind(request.Kind, out var parsed))
                     {
                         return Results.BadRequest(
-                            $"ai-raccoon: unknown repair kind '{request.Kind}' (expected reingest or chunk-index)");
+                            $"ai-raccoon: unknown repair kind '{request.Kind}' (expected reingest, chunk-index or project-ids)");
                     }
 
                     await store.RequestRepairAsync(parsed, ctx);
@@ -61,6 +65,9 @@ internal static partial class RepairEndpoint
                 return true;
             case RepairKinds.ChunkIndex:
                 parsed = RepairKind.ChunkIndex;
+                return true;
+            case RepairKinds.ProjectIds:
+                parsed = RepairKind.ProjectIds;
                 return true;
             default:
                 parsed = default;

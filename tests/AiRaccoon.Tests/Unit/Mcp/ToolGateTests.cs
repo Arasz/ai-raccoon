@@ -3,6 +3,7 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Projects;
+using AiRaccoon.Tests;
 using AiRaccoon.Tools;
 using ModelContextProtocol;
 using Shouldly;
@@ -22,7 +23,7 @@ public sealed class ToolGateTests
         var queue = new FakePromotionQueue();
         var migrations = new RecordingMigrations();
         var registration = new RecordingRegistrationGuard();
-        return (guard, queue, migrations, registration, new ToolGate(guard, queue, migrations, registration));
+        return (guard, queue, migrations, registration, new ToolGate(guard, queue, migrations, registration, new NeverMigratedGate()));
     }
 
     [Fact]
@@ -167,6 +168,50 @@ public sealed class ToolGateTests
             "access passed first; only then did the registration refusal fire");
     }
 
+    /// <summary>
+    ///     P3 activation (review M1): once the P2 finished marker exists, a known loser folds to
+    ///     its winner at the choke — every downstream guard and store sees jsaa, never the loser.
+    ///     Ledger — skip-alias-fold : --filter RequireAsync_WhenMigrated_FoldsAKnownAliasToTheWinner :
+    ///     job-search-ai-assistant write.
+    /// </summary>
+    [Fact]
+    public async Task RequireAsync_WhenMigrated_FoldsAKnownAliasToTheWinner()
+    {
+        var (guard, _, _, registration, _) = NewStack();
+        var gate = new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration,
+            migrationGate: new StubMigrationGate(true));
+
+        var canonical = await gate.RequireAsync("job-search-ai-assistant", AccessRequirement.Write,
+            "memory_write", TestContext.Current.CancellationToken);
+
+        canonical.ShouldBe("jsaa");
+        guard.Calls.ShouldBe([("jsaa", AccessRequirement.Write, "memory_write")]);
+        registration.Calls.ShouldBe([("jsaa", AccessRequirement.Write)]);
+    }
+
+    /// <summary>
+    ///     The mechanical half of M1: an EXPLICITLY unmigrated bank behaves exactly as before —
+    ///     the loser passes through unfolded (the winners' own writes must never refuse on an
+    ///     unmigrated bank). d-425 SHOULD-1 inversion: the old theory's `true` leg constructed the
+    ///     gate with NO migration gate at all and asserted the pass-through bypass — that shape no
+    ///     longer compiles (the ctor takes no default), so every construction names its migration
+    ///     state and only an explicit unmigrated gate passes through.
+    ///     Ledger — missing-gate-pass-through : --filter RequireAsync_WhenExplicitlyUnmigrated_PassesTheLoserThroughUnfolded : loser write, explicit unmigrated gate.
+    /// </summary>
+    [Fact]
+    public async Task RequireAsync_WhenExplicitlyUnmigrated_PassesTheLoserThroughUnfolded()
+    {
+        var (guard, _, _, registration, _) = NewStack();
+        var gate = new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration,
+            new StubMigrationGate(false));
+
+        var canonical = await gate.RequireAsync("job-search-ai-assistant", AccessRequirement.Write,
+            "memory_write", TestContext.Current.CancellationToken);
+
+        canonical.ShouldBe("job-search-ai-assistant");
+        guard.Calls.ShouldBe([("job-search-ai-assistant", AccessRequirement.Write, "memory_write")]);
+    }
+
     private sealed class RecordingGuard : IMemoryAccessGuard
     {
         public List<(string ProjectId, AccessRequirement Requirement, string ToolName)> Calls { get; } = [];
@@ -215,5 +260,11 @@ public sealed class ToolGateTests
 
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class StubMigrationGate(bool migrated) : IProjectIdsMigrationGate
+    {
+        public Task<bool> IsMigratedAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(migrated);
     }
 }

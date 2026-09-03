@@ -152,6 +152,9 @@ public static partial class AppRegistrations
         {
             services.AddRequiredSingleton<IMemoryAccessGuard, MemoryAccessGuard>();
             services.AddRequiredSingleton<IForgettingPolicyService, ForgettingPolicyService>();
+            // P3's mechanical gate (review M1): the marker ToolGate and the registration guard
+            // both consult before any fold-or-refuse. Registered beside its consumers, never null.
+            services.AddRequiredSingleton<IProjectIdsMigrationGate, SqliteProjectIdsMigrationGate>();
             services.AddRequiredSingleton<IProjectRegistrationGuard, ProjectRegistrationGuard>();
             services.AddRequiredSingleton<ICwdProbe, CurrentDirectoryCwdProbe>();
             services.AddRequiredSingleton<IProjectIdResolver, CwdProjectIdResolver>();
@@ -194,6 +197,10 @@ public static partial class AppRegistrations
                     sp.GetRequiredService<TimeProvider>()),
                 new ReingestRepairJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IEmbeddingService>(),
                     sp.GetRequiredService<IMemoryStore>(), sp.GetRequiredService<TimeProvider>()),
+                // Air-merge P2: the project-ids fold leaves renamed rows pending too, so it sits
+                // with the other two repair relays, ahead of PendingEmbedJob.
+                new ProjectIdsRepairJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IEmbeddingService>(),
+                    sp.GetRequiredService<TimeProvider>()),
                 // ADR-0075 amendment: on-demand, same shape as the two repair jobs above —
                 // HasWorkAsync reads the promotion_queue_prune_requests row `extract prune --apply`
                 // submitted through the server. Pure DELETE — never leaves anything pending for

@@ -14,11 +14,18 @@ namespace AiRaccoon.Tools;
 ///     enforce the project's access mode, and wrap the result in the envelope carrying the
 ///     propose tier's meta. One copy, so the tool classes cannot drift apart.
 /// </summary>
+/// <remarks>
+///     d-425 SHOULD-1 / d-426 SHOULD-5: <paramref name="migrationGate" /> is REQUIRED (no
+///     nullable default) — a gate-less construction used to default every test-harness build to
+///     pass-through, silently skipping the P3 fold. Fail-closed by construction: forgetting the
+///     gate is a compile error, and an explicitly unmigrated gate still folds nothing.
+/// </remarks>
 public sealed class ToolGate(
     IMemoryAccessGuard access,
     IPromotionQueue queue,
     IModelMigrationStore migrations,
     IProjectRegistrationGuard registration,
+    IProjectIdsMigrationGate migrationGate,
     IProjectIdResolver? resolver = null) : IToolGate
 {
     /// <summary>Refuses while a migration is open. Nothing else — the check a tool with no project yet can still make.</summary>
@@ -35,7 +42,9 @@ public sealed class ToolGate(
     ///     Refuses while a migration is open, then rejects a blank project id — a blank id is
     ///     resolved from the working directory when a resolver is wired (Resolved flows through the
     ///     single canonicalization; Ambiguous/None refuse with the probed cwd in the message) —
-    ///     canonicalizes it (ADR-0089 decision 2), throws access-denied when the mode is too low,
+    ///     canonicalizes it (ADR-0089 decision 2), folds a known loser to its winner once the P2
+    ///     finished marker exists (air-merge P3, review M1 — no fold until migrated, so an
+    ///     unmigrated bank behaves exactly as before), throws access-denied when the mode is too low,
     ///     and only then refuses an unregistered id on a write (decision 3 — reads pass through
     ///     untouched). Registration is checked last so an unauthorized caller cannot learn whether
     ///     an id is registered from the refusal shape. Returns the canonical id for the caller to
@@ -52,6 +61,10 @@ public sealed class ToolGate(
         }
 
         var canonical = ProjectId.Canonicalize(projectId);
+        if (await migrationGate.IsMigratedAsync(cancellationToken).ConfigureAwait(false))
+        {
+            canonical = ProjectIdAliasMap.Default.Fold(canonical);
+        }
 
         await access.EnsureAsync(canonical, requirement, toolName, cancellationToken).ConfigureAwait(false);
         await registration.EnsureAsync(canonical, requirement, cancellationToken).ConfigureAwait(false);

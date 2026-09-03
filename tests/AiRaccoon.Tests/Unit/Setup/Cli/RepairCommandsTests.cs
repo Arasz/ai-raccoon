@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
@@ -97,6 +98,135 @@ public sealed class RepairCommandsTests
         await RunChunkIndexAsync(apply: true, inner);
 
         inner.LastRepairRequest.ShouldBe(RepairKind.ChunkIndex);
+    }
+
+    /// <summary>
+    ///     Formatter row (review MUST-4: dispatcher/formatter only, never the diagnose gate — that is
+    ///     Diagnose_ListsJsaaCluster alone): dry-run output names the loser, the winner, and the fold.
+    ///     Ledger — drop-folds-to-line : --filter ProjectIds_DryRun_FormatsTheFoldPlan : jsaa-cluster report.
+    /// </summary>
+    [Fact]
+    public async Task ProjectIds_DryRun_FormatsTheFoldPlan()
+    {
+        var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, ClusterReport());
+
+        stdout.ShouldContain("job-search-ai-assistant");
+        stdout.ShouldContain("jsaa");
+        stdout.ShouldContain("folds to");
+    }
+
+    /// <summary>
+    ///     Dispatcher row (review MUST-4, never the diagnose gate): --diagnose reports without committing a request.
+    ///     Ledger — diagnose-requests-anyway : --filter ProjectIds_DiagnoseFlag_ReportsWithoutRequesting : cluster report.
+    /// </summary>
+    [Fact]
+    public async Task ProjectIds_DiagnoseFlag_ReportsWithoutRequesting()
+    {
+        var inner = new InMemorySettings { ProjectIdsReport = ClusterReport() };
+
+        var stdout = await RunProjectIdsDiagnoseAsync(inner);
+
+        stdout.ShouldContain("job-search-ai-assistant");
+        inner.LastRepairRequest.ShouldBeNull();
+    }
+
+    /// <summary>
+    ///     Dispatcher row (review MUST-4, never the diagnose gate): dry run never commits.
+    ///     Ledger — dry-run-requests : --filter ProjectIds_DryRun_NeverRequestsARepair : cluster report.
+    /// </summary>
+    [Fact]
+    public async Task ProjectIds_DryRun_NeverRequestsARepair()
+    {
+        var inner = new InMemorySettings { ProjectIdsReport = ClusterReport() };
+
+        await RunProjectIdsAsync(apply: false, inner);
+
+        inner.LastRepairRequest.ShouldBeNull();
+    }
+
+    /// <summary>
+    ///     Dispatcher row (review MUST-4, never the diagnose gate): --apply commits the project-ids kind.
+    ///     Ledger — apply-requests-wrong-kind : --filter ProjectIds_Apply_RequestsTheProjectIdsKind : cluster report.
+    /// </summary>
+    [Fact]
+    public async Task ProjectIds_Apply_RequestsTheProjectIdsKind()
+    {
+        var inner = new InMemorySettings { ProjectIdsReport = ClusterReport() };
+
+        var stdout = await RunProjectIdsAsync(apply: true, inner);
+
+        inner.LastRepairRequest.ShouldBe(RepairKind.ProjectIds);
+        stdout.ShouldContain("maintenance poll");
+    }
+
+    /// <summary>
+    ///     d-426 SHOULD-2: the diagnose names each loser's NULL-context rows — the keep predicate
+    ///     deliberately leaves them behind, so the operator must see (and verify) them before
+    ///     --apply instead of discovering permanent orphans afterwards.
+    ///     Ledger — hide-null-context-counts : --filter ProjectIds_DryRun_PrintsPerLoserNullContextCounts : loser with a NULL-ctx row.
+    /// </summary>
+    [Fact]
+    public async Task ProjectIds_DryRun_PrintsPerLoserNullContextCounts()
+    {
+        var report = new ProjectIdCensusReport(
+        [
+            new ProjectIdCensusRow("jsaa", false, null, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, []),
+            new ProjectIdCensusRow("job-search-ai-assistant", false, null, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, [])
+        ], 0, 0, 0, 0, []);
+
+        var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, report);
+
+        stdout.ShouldContain("1 NULL-context");
+    }
+
+    /// <summary>
+    ///     d-426 SHOULD-5: the fold is single-pass — a write under a folded id during the apply
+    ///     window re-creates the loser key behind the plan's back, so the operator must quiesce
+    ///     writers or loop diagnose→apply until no folds remain. The --apply receipt states that.
+    ///     Ledger — drop-quiesce-line : --filter ProjectIds_Apply_NamesQuiesceOrRerun : cluster report, --apply.
+    /// </summary>
+    [Fact]
+    public async Task ProjectIds_Apply_NamesQuiesceOrRerun()
+    {
+        var inner = new InMemorySettings { ProjectIdsReport = ClusterReport() };
+
+        var stdout = await RunProjectIdsAsync(apply: true, inner);
+
+        stdout.ShouldContain("quiesce");
+        stdout.ShouldContain("re-run");
+    }
+
+    private static ProjectIdCensusReport ClusterReport() => new(
+        [
+            new ProjectIdCensusRow("jsaa", false, null, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, []),
+            new ProjectIdCensusRow("job-search-ai-assistant", false, null, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, [])
+        ], 0, 0, 0, 0, []);
+
+    private static Task<string> RunProjectIdsAsync(bool apply, bool diagnose, ProjectIdCensusReport report) =>
+        RunProjectIdsAsync(apply, diagnose, new InMemorySettings { ProjectIdsReport = report });
+
+    private static Task<string> RunProjectIdsAsync(bool apply, InMemorySettings store) =>
+        RunProjectIdsAsync(apply, false, store);
+
+    private static async Task<string> RunProjectIdsDiagnoseAsync(InMemorySettings store) =>
+        await RunProjectIdsAsync(false, true, store);
+
+    private static async Task<string> RunProjectIdsAsync(bool apply, bool diagnose, InMemorySettings store)
+    {
+        var argv = apply
+            ? new[] { "repair", "project-ids", "--apply" }
+            : diagnose
+                ? ["repair", "project-ids", "--diagnose"]
+                : ["repair", "project-ids"];
+        CliArgs.TryParse(argv, out var parsed).ShouldBeTrue();
+
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+        var exit = await new ProjectIdsRepairCommands(store).RunAsync(parsed!.ParsedCliArgs,
+            new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
+
+        exit.ShouldBe(0, $"stderr: {stderr}");
+        return stdout.ToString();
     }
 
     [Fact]

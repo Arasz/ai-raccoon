@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using JetBrains.Annotations;
+using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
 // ReSharper disable ExplicitCallerInfoArgument
@@ -55,6 +56,18 @@ public sealed class ShareTools(
         CancellationToken cancellationToken = default)
     {
         var request = new ShareExtractRequest(projectIds ?? [], mode, limit, includeTtlRows, autoPromote, confirm);
+        // d-425 MUST-2: a blank element is refused HERE, before the per-element gate —
+        // reaching the gate would cwd-guess a project the caller never named. Null itself
+        // coalesces to [] above and fails the request validator (1..8 rule) instead.
+        for (var i = 0; i < request.ProjectIds.Count; i++)
+        {
+            if (string.IsNullOrWhiteSpace(request.ProjectIds[i]))
+            {
+                throw new McpException(
+                    $"invalid-params: projectIds[{i}] is blank (projectIds must contain 1..8 project ids, none blank)");
+            }
+        }
+
         var canonicalIds = new List<string>(request.ProjectIds.Count);
         foreach (var projectId in request.ProjectIds)
         {
@@ -64,7 +77,10 @@ public sealed class ShareTools(
                 .ConfigureAwait(false));
         }
 
-        request = request with { ProjectIds = [.. canonicalIds] };
+        // Fragments of one project meet here (jsaa + job-search-ai-assistant both fold to jsaa):
+        // without the dedup the runner would propose the same project twice and the meta would
+        // read bank-wide instead of scoped to the single project the call actually named.
+        request = request with { ProjectIds = [.. canonicalIds.Distinct(StringComparer.Ordinal)] };
         var result = await shareExtract.RunAsync(request, cancellationToken).ConfigureAwait(false);
         return await gate.WrapAsync(request.MetaProjectId, result, cancellationToken);
     }

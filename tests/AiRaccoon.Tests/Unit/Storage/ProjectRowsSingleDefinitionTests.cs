@@ -17,19 +17,20 @@ public class ProjectRowsSingleDefinitionTests
 {
     /// <summary>
     ///     The two legitimate holdouts, each with the reason it is not a project-membership test:
-    ///     the context-key CASE maps a row to its display context, and the per-context search filter
-    ///     builds one context's predicate — the custom contexts get their own query, so folding them
-    ///     together would make every context search every context.
+    ///     the context-key CASE maps a row to its display context (d-425 SHOULD-2: the per-context
+    ///     search filter used to be the second holdout, but it now routes through
+    ///     <c>ProjectRows.ProjectScope</c> — a revived inline copy fails this gate).
     /// </summary>
     private static readonly string[] Allowed =
     [
         "WHEN {prefix}scope = 'project' THEN 'project:' || {prefix}project_id",
-        "$\"{alias}scope = 'project' AND {alias}project_id = @projectId\"",
         // Display ordering, not membership: puts shared first, then the project's own rows.
         "ORDER BY CASE WHEN scope = 'shared' THEN 0 WHEN scope = 'project' THEN 1 ELSE 2 END"
     ];
 
     [Fact]
+    // Ledger — restore-inline-literal : --filter FullyQualifiedName~ProjectRowsSingleDefinitionTests :
+    // the repo source tree (reintroducing the ContextFilterProvider.cs:27 copy reddens with it named).
     public void NoSourceFileHandRollsTheProjectScopePredicate()
     {
         var offenders = new List<string>();
