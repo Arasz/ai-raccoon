@@ -30,6 +30,10 @@ flowchart LR
 
 ## What's new
 
+- **BREAKING: `memory_search` requires `sessionId`, and each project resolves to exactly one project id.** Every search
+  attributes itself to a calling session, and fragmented ids collapse onto one canonical id per project. Results also carry
+  `fusionStrength`, `legs` and `cosine` per hit with `topMargin`/`topVsMedian` on the response, and `search_quality` records
+  the search `kind`. (1.38.0) [ADR-0097](docs/adr/0097-search-quality-kind-column.md) · [ADR-0098](docs/adr/0098-telemetry-never-syncs.md)
 - **Memory and code engines are now configured separately.** `model embedding set local|openai` selects the memory bank's engine; `model code set default|local` the code corpus's; `model download` stays fetch-only (it never activates). Configuration reads back under `settings model embedding show|reset` and `settings model code show|reset`. (1.35.0)
 - **The code corpus accepts any embedding dimension.** `model code set local` no longer refuses non-768 manifests — activation reconciles `vec_code` to the manifest's dimension in the same transaction (the memory bank's D3 reconcile, shared), records it as `embedding.codeDimensions`, and the server-open + fingerprint paths reconcile too. Fresh banks still start at 768; existing banks are untouched until a different-dimension engine activates. (1.35.0) [ADR-0093](docs/adr/0093-vec-code-is-dimension-agnostic-through-the-shared-d3-reconciler.md) · [How-to](docs/how-to/configure-embedding-engines.md)
 - **`memory_search` defaults to `kind=both`.** A default search now hits the memory bank and the code corpus, each ranked by its own hybrid (no cross-corpus fusion); pass `kind=memory` explicitly for the pre-1.34 legacy envelope. With no
