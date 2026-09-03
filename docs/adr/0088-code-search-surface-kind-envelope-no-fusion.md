@@ -88,6 +88,17 @@ searchable versus FTS5-only).
 
 ## Amendments
 
+### 2026-09-03 — decision 8 is reversed: every kind records (ADR-0094)
+
+Decision 8's exclusion (`kind=code`/`both` never record, no correlation id) designed the
+quality signal away from the default path the day the default became `both` (PR #580): rows
+stop Aug 24, hermes-default ran 307 searches with 0 behind them. ADR-0094 reverses the
+exclusion. The dispatcher records for every kind: memory as before, both with the memory leg's
+count and files, code with the code count and an empty file list (code paths never enter the
+syncing `search_quality` table, per ADR-0085's never-syncs rule). The envelope always carries
+`Meta.CorrelationId`. Metrics query-hash nulling for `both` is unchanged. Everything else in
+this ADR is unchanged and still in force.
+
 ### 2026-08-24 — the default `kind` is `both`, not `memory`
 
 Decision 1's default changed from `"memory"` to `"both"`: a caller who omits `kind` now gets
