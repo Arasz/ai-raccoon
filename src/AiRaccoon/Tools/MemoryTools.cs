@@ -119,14 +119,14 @@ public sealed partial class MemoryTools(
         string scope = "all",
         [Description("When set, also searches this workspace's isolated context.")]
         string? workspaceId = null,
-        [Description("Maximum results (default 20).")]
-        int limit = 20,
+        [Description("Maximum results (default 8).")]
+        int limit = SearchDefaults.Limit,
         [Description(
-            "Relative floor: keeps results scoring at least this fraction of THIS response's top hit (default 0, off). " +
+            "Relative floor: keeps results scoring at least this fraction of THIS response's top hit (default 0.6). " +
             "Ranking is normalized per response, so rank 1 always scores 1.0 even when nothing in the bank answers the " +
             "query — a high score is not evidence of a good match, and this is not an absolute quality bar. Use it to " +
-            "keep only hits in the same league as the best one; see ADR-0047.")]
-        double minRelativeScore = 0.0,
+            "keep only hits in the same league as the best one; see ADR-0047 and ADR-0096.")]
+        double minRelativeScore = SearchDefaults.MinRelativeScore,
         [Description(
             "RRF cutoff for the hybrid fusion (bank setting retrieval.rrfK, else 60); a result scores weight / (k + rank) per modality list.")]
         int? rrfK = null,
