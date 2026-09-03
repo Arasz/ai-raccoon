@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
 using AiRaccoon.Infrastructure.Options;
@@ -109,6 +110,46 @@ public sealed class RepairEndpointTests : IAsyncLifetime
             .StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
         (await anonymous.PostAsJsonAsync("/repair", new RepairRequest("reingest"), TestContext.Current.CancellationToken))
             .StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [RetryFact]
+    public async Task GetProjectIdsReport_ListsTheJsaaCluster()
+    {
+        await SeedProjectIdsAsync();
+
+        var response = await _client.GetAsync("/repair?kind=project-ids", TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var report = await response.Content.ReadFromJsonAsync<ProjectIdCensusReport>(TestContext.Current.CancellationToken);
+        report.ShouldNotBeNull();
+        report.Row("jsaa").ProjectEntries.ShouldBe(2);
+        report.Row("job-search-ai-assistant").ProjectEntries.ShouldBe(1);
+        report.Row("job-search-ai-assistant").Queued.ShouldBe(1);
+    }
+
+    [RetryFact]
+    public async Task PostProjectIds_CommitsARequestRow()
+    {
+        var response = await _client.PostAsJsonAsync("/repair", new RepairRequest("project-ids"),
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await RequestCountAsync("project-ids")).ShouldBe(1);
+    }
+
+    private async Task SeedProjectIdsAsync()
+    {
+        var options = new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User };
+        var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+        await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(
+            "INSERT INTO entries (hash, path, value, source_file, scope, project_id, context_label, created_at, updated_at, embed_state) VALUES " +
+            "('jsaa-1', 'jsaa-1', 'jsaa-1', 'seed.md', 'project', 'jsaa', 'ctx-a', 1, 1, 'pending')," +
+            "('jsaa-2', 'jsaa-2', 'jsaa-2', 'seed.md', 'project', 'jsaa', 'ctx-a', 2, 2, 'pending')," +
+            "('loser-1', 'loser-1', 'loser-1', 'seed.md', 'project', 'job-search-ai-assistant', 'ctx-a', 3, 3, 'pending')");
+        await connection.ExecuteAsync(
+            "INSERT INTO promotion_queue (project_id, hash, value, score, created_at, updated_at) " +
+            "VALUES ('job-search-ai-assistant', 'loser-q1', 'loser-q1', 0.7, 3, 3)");
     }
 
     private async Task<long> RequestCountAsync(string kind)

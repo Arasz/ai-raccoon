@@ -60,9 +60,12 @@ public class CliCommandTreeTests
             .Children.OfType<Option>().Single(o => o.Name == "--apply");
         var chunkIndexApply = repair.Children.OfType<Command>().Single(c => c.Name == "chunk-index")
             .Children.OfType<Option>().Single(o => o.Name == "--apply");
+        var projectIdsApply = repair.Children.OfType<Command>().Single(c => c.Name == "project-ids")
+            .Children.OfType<Option>().Single(o => o.Name == "--apply");
 
         reingestApply.Description.ShouldNotBeNull().ShouldContain("server");
         chunkIndexApply.Description.ShouldNotBeNull().ShouldContain("server");
+        projectIdsApply.Description.ShouldNotBeNull().ShouldContain("server");
     }
 
     [Fact]
@@ -71,9 +74,10 @@ public class CliCommandTreeTests
         var repair = CommandAt("repair");
         var chunkIndex = repair.Children.OfType<Command>().Single(c => c.Name == "chunk-index");
         var reingest = repair.Children.OfType<Command>().Single(c => c.Name == "reingest");
+        var projectIds = repair.Children.OfType<Command>().Single(c => c.Name == "project-ids");
         var doctor = CommandAt("doctor");
 
-        foreach (var description in new[] { repair.Description, chunkIndex.Description, reingest.Description, doctor.Description })
+        foreach (var description in new[] { repair.Description, chunkIndex.Description, reingest.Description, projectIds.Description, doctor.Description })
         {
             var value = description!;
             value.ShouldNotContain("ADR-");
@@ -84,6 +88,7 @@ public class CliCommandTreeTests
 
         chunkIndex.Description!.ShouldContain("Use this when");
         reingest.Description!.ShouldContain("Use this when");
+        projectIds.Description!.ShouldContain("Use this when");
         doctor.Description!.ShouldContain("without changing the bank");
     }
 

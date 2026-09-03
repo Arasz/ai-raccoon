@@ -423,7 +423,7 @@ internal static class CliCommandTree
     ///     the job; it never writes the bank.
     /// </summary>
     private static Command RepairCommand() =>
-        new("repair", "Fixes bank-state drift by asking the server to repair it. chunk-index fixes wrong chunk positions; reingest re-processes files a chunker change made unreproducible.")
+        new("repair", "Fixes bank-state drift by asking the server to repair it. chunk-index fixes wrong chunk positions; reingest re-processes files a chunker change made unreproducible; project-ids folds fragment ids into one.")
         {
             new Command("chunk-index",
                 "Use this when chunk positions drifted from document order. Reports by default; --apply asks the server to fix them.")
@@ -434,6 +434,12 @@ internal static class CliCommandTree
                 "Use this when a chunker change makes stored chunks unreproducible. Reports by default; --apply asks the server to re-ingest them.")
             {
                 new Option<bool>("--apply") { Description = "Ask the server to re-ingest the files on its next maintenance poll (~15s)" }
+            },
+            new Command("project-ids",
+                "Use this when several project ids name the same project. Diagnoses by default; --apply asks the server to fold them.")
+            {
+                new Option<bool>("--apply") { Description = "Ask the server to fold the ids on its next maintenance poll (~15s)" },
+                new Option<bool>("--diagnose") { Description = "Show the id clusters without queueing anything (the default)" }
             }
         };
 

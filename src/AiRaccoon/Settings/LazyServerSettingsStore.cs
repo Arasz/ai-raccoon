@@ -1,6 +1,7 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Watch;
 using CommunityToolkit.Diagnostics;
 
@@ -60,6 +61,9 @@ internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationS
     /// <inheritdoc />
     public async Task<ChunkIndexRepairReport> ReportChunkIndexAsync(CancellationToken cancellationToken = default) =>
         await AsRepairStore(await InnerAsync(cancellationToken)).ReportChunkIndexAsync(cancellationToken);
+
+    public async Task<ProjectIdCensusReport> ReportProjectIdsAsync(CancellationToken cancellationToken = default) =>
+        await AsRepairStore(await InnerAsync(cancellationToken)).ReportProjectIdsAsync(cancellationToken);
 
     /// <inheritdoc />
     public async Task RequestRepairAsync(RepairKind kind, CancellationToken cancellationToken = default) =>

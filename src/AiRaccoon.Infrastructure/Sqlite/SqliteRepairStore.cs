@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using Dapper;
@@ -30,6 +31,17 @@ public sealed class SqliteRepairStore(
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
         return await new ChunkIndexRepair(fileTypeMatcher, embeddingService)
             .RunAsync(connection, false, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     The project-ids diagnose half: the P1 census, SELECT-only (proven by
+    ///     <c>Collect_RunsUnderQueryOnly_ProvingZeroBankWrites</c>), listing clusters, orphans and
+    ///     zero-entry rows per id. Doctor stays read-only and never serves this.
+    /// </summary>
+    public async Task<ProjectIdCensusReport> ReportProjectIdsAsync(CancellationToken cancellationToken = default)
+    {
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        return await ProjectIdCensus.CollectAsync(connection, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task RequestRepairAsync(RepairKind kind, CancellationToken cancellationToken = default)

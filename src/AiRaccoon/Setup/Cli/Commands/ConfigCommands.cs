@@ -23,6 +23,7 @@ internal sealed class ConfigCommands(
     NoiseEntriesCommands noiseEntries,
     ChunkIndexRepairCommands chunkIndexRepair,
     ReingestRepairCommands reingestRepair,
+    ProjectIdsRepairCommands projectIdsRepair,
     DoctorCommands doctor,
     ModelDownloadCommands modelDownload)
 {
@@ -125,6 +126,7 @@ internal sealed class ConfigCommands(
                 ["extract", "prune"] => await extract.PruneAsync(parsedCliArgs, streams, ctx),
                 ["repair", "chunk-index"] => await chunkIndexRepair.RunAsync(parsedCliArgs, streams, ctx),
                 ["repair", "reingest"] => await reingestRepair.RunAsync(parsedCliArgs, streams, ctx),
+                ["repair", "project-ids"] => await projectIdsRepair.RunAsync(parsedCliArgs, streams, ctx),
                 ["encryption", "show"] => await encryptionCommands.ShowAsync(store, streams, ctx),
                 ["encryption", "unset"] => await encryptionCommands.UnsetAsync(store, streams, ctx),
                 ["encryption", "migrate"] => await encryptionCommands.MigrateAsync(streams, ctx),

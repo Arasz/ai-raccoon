@@ -24,6 +24,7 @@ public static class CommandsRegistration
             serviceCollection.AddSingleton<NoiseEntriesCommands>();
             serviceCollection.AddSingleton<ChunkIndexRepairCommands>();
             serviceCollection.AddSingleton<ReingestRepairCommands>();
+            serviceCollection.AddSingleton<ProjectIdsRepairCommands>();
             serviceCollection.AddSingleton<DoctorCommands>();
             serviceCollection.AddSingleton(sp => new EncryptionCommands(
                 sp.GetRequiredService<ISqliteConnectionFactory>(),
