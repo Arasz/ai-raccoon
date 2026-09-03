@@ -1,6 +1,7 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Watch;
 
 namespace AiRaccoon.Tests.TestHelpers;
@@ -26,6 +27,8 @@ public sealed class InMemorySettings : ISettingsStore, IModelMigrationStore, IRe
 
     public ChunkIndexRepairReport ChunkIndexReport { get; set; } = new(0, 0, 0);
 
+    public ProjectIdCensusReport ProjectIdsReport { get; set; } = new([], 0, 0, 0, 0, []);
+
     /// <summary>Set when RequestPruneOrphansAsync was called, for a test to assert routing without a real bank (ADR-0075 amendment).</summary>
     public bool PruneRequested { get; private set; }
 
@@ -42,6 +45,9 @@ public sealed class InMemorySettings : ISettingsStore, IModelMigrationStore, IRe
 
     public Task<ChunkIndexRepairReport> ReportChunkIndexAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(ChunkIndexReport);
+
+    public Task<ProjectIdCensusReport> ReportProjectIdsAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(ProjectIdsReport);
 
     public Task RequestRepairAsync(RepairKind kind, CancellationToken cancellationToken = default)
     {

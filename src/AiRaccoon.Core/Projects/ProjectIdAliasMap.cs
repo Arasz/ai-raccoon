@@ -31,6 +31,13 @@ public sealed class ProjectIdAliasMap
         _dropped = new HashSet<string>(dropped, StringComparer.Ordinal);
     }
 
+    public IReadOnlyList<ProjectIdAliasEntry> Aliases =>
+        _aliases.Select(kv => new ProjectIdAliasEntry(kv.Key, kv.Value)).ToList();
+
+    public IReadOnlyList<string> Canonicals => [.. _canonicals];
+
+    public IReadOnlyList<string> Dropped => [.. _dropped];
+
     /// <summary>True and the winner when the id is a known loser or a canonical itself (self-mapped); false for dropped ids and true typos.</summary>
     public bool TryResolve(string projectId, out string? canonical)
     {
@@ -58,7 +65,7 @@ public sealed class ProjectIdAliasMap
     /// <summary>Serializes the map for durable hand-off (plan artifact, settings snapshot); no bank schema involved.</summary>
     public string ToJson()
     {
-        var payload = new AliasMapPayload([.. _aliases.Select(kv => new ProjectIdAliasEntry(kv.Key, kv.Value))], [.. _canonicals], [.. _dropped]);
+        var payload = new AliasMapPayload([.. Aliases], [.. Canonicals], [.. Dropped]);
         return JsonSerializer.Serialize(payload, JsonOptions);
     }
 

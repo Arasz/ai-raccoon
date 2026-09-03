@@ -40,6 +40,7 @@ public sealed class CliWriteOptOutsTests
     // these two rows belong here like everything else.
     [InlineData("repair", "reingest")]
     [InlineData("repair", "chunk-index")]
+    [InlineData("repair", "project-ids")]
     public void WritesDirectly_IsFalse_ForEverythingElse(params string[] commandPath) =>
         CliWriteOptOuts.WritesDirectly(commandPath).ShouldBeFalse();
 }

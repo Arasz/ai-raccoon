@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
@@ -97,6 +98,81 @@ public sealed class RepairCommandsTests
         await RunChunkIndexAsync(apply: true, inner);
 
         inner.LastRepairRequest.ShouldBe(RepairKind.ChunkIndex);
+    }
+
+    [Fact]
+    public async Task ProjectIds_DryRun_ListsTheJsaaCluster_WithItsFold()
+    {
+        var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, ClusterReport());
+
+        stdout.ShouldContain("job-search-ai-assistant");
+        stdout.ShouldContain("jsaa");
+        stdout.ShouldContain("folds to");
+    }
+
+    [Fact]
+    public async Task ProjectIds_DiagnoseFlag_ReportsWithoutRequesting()
+    {
+        var inner = new InMemorySettings { ProjectIdsReport = ClusterReport() };
+
+        var stdout = await RunProjectIdsDiagnoseAsync(inner);
+
+        stdout.ShouldContain("job-search-ai-assistant");
+        inner.LastRepairRequest.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task ProjectIds_DryRun_NeverRequestsARepair()
+    {
+        var inner = new InMemorySettings { ProjectIdsReport = ClusterReport() };
+
+        await RunProjectIdsAsync(apply: false, inner);
+
+        inner.LastRepairRequest.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task ProjectIds_Apply_RequestsTheProjectIdsKind()
+    {
+        var inner = new InMemorySettings { ProjectIdsReport = ClusterReport() };
+
+        var stdout = await RunProjectIdsAsync(apply: true, inner);
+
+        inner.LastRepairRequest.ShouldBe(RepairKind.ProjectIds);
+        stdout.ShouldContain("maintenance poll");
+    }
+
+    private static ProjectIdCensusReport ClusterReport() => new(
+        [
+            new ProjectIdCensusRow("jsaa", false, null, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, []),
+            new ProjectIdCensusRow("job-search-ai-assistant", false, null, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, [])
+        ], 0, 0, 0, 0, []);
+
+    private static Task<string> RunProjectIdsAsync(bool apply, bool diagnose, ProjectIdCensusReport report) =>
+        RunProjectIdsAsync(apply, diagnose, new InMemorySettings { ProjectIdsReport = report });
+
+    private static Task<string> RunProjectIdsAsync(bool apply, InMemorySettings store) =>
+        RunProjectIdsAsync(apply, false, store);
+
+    private static async Task<string> RunProjectIdsDiagnoseAsync(InMemorySettings store) =>
+        await RunProjectIdsAsync(false, true, store);
+
+    private static async Task<string> RunProjectIdsAsync(bool apply, bool diagnose, InMemorySettings store)
+    {
+        var argv = apply
+            ? new[] { "repair", "project-ids", "--apply" }
+            : diagnose
+                ? ["repair", "project-ids", "--diagnose"]
+                : ["repair", "project-ids"];
+        CliArgs.TryParse(argv, out var parsed).ShouldBeTrue();
+
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+        var exit = await new ProjectIdsRepairCommands(store).RunAsync(parsed!.ParsedCliArgs,
+            new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
+
+        exit.ShouldBe(0, $"stderr: {stderr}");
+        return stdout.ToString();
     }
 
     [Fact]
