@@ -805,7 +805,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
             .ShouldBeTrue("the code section must no longer degrade to FTS5-only now that the engine is configured and drained");
     }
 
-    // ── Rule: Code and code/both searches are excluded from search-quality recording ──
+    // ── Rule: every kind records a search-quality row; code paths never enter one (ADR-0094) ──
 
     [Then("^no search_quality row is written for that call$")]
     public async Task ThenNoSearchQualityRowWritten()
@@ -819,5 +819,19 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
     {
         await using var connection = await Ctx.OpenBankAsync();
         (await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM search_quality")).ShouldBeGreaterThan(0L);
+    }
+
+    [Then("^no code paths are stored in search_quality$")]
+    public async Task ThenNoCodePathsStoredInSearchQuality()
+    {
+        await using var connection = await Ctx.OpenBankAsync();
+        var cells = (await connection.QueryAsync<string?>("SELECT top_source_files FROM search_quality")).ToList();
+        cells.ShouldNotBeEmpty("the scenario's search just wrote a row");
+        foreach (var cell in cells.Where(c => c is not null))
+        {
+            var files = JsonSerializer.Deserialize<List<string>>(cell!) ?? [];
+            files.ShouldAllBe(f => !CodeExtensions.All.Contains(Path.GetExtension(f)),
+                "code paths must never enter the syncing search_quality table (ADR-0085 never-syncs rule)");
+        }
     }
 }

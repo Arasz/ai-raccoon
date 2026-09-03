@@ -233,17 +233,20 @@ Feature: Code corpus
             Then the pending rows are re-embedded under the new engine
             And kind=code search returns vector-ranked results for them again
 
-    Rule: Code and code/both searches are excluded from search-quality recording
-        # Review F-21 (plan §1, §3.6): search_quality rows sync off-machine; recording
-        # a code query would leak identifiers/paths the same way a raw sync push would.
-        # Memory searches are unaffected.
-        Scenario: A kind=code search writes no search_quality row
+    Rule: Every kind records a search-quality row, but code paths never enter one
+        # ADR-0094 reverses the pre-0094 exclusion (which had designed the signal away from
+        # the default path the day PR #580 flipped the default kind to both): memory records as
+        # before, both records the memory leg, code records its code count with an empty file
+        # list. search_quality rows ride the sync snapshot, so code paths stay out (ADR-0085).
+        Scenario: A kind=code search writes a search_quality row
             When I call memory_search for the project with kind "code"
-            Then no search_quality row is written for that call
+            Then a search_quality row is written for that call
+            And no code paths are stored in search_quality
 
-        Scenario: A kind=both search writes no search_quality row
+        Scenario: A kind=both search writes a search_quality row
             When I call memory_search for the project with kind "both"
-            Then no search_quality row is written for that call
+            Then a search_quality row is written for that call
+            And no code paths are stored in search_quality
 
         Scenario: A kind=memory search still records exactly as today
             When I call memory_search for the project with kind "memory"
