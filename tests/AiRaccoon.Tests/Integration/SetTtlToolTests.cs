@@ -4,6 +4,7 @@ using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests;
 using AiRaccoon.Tools;
 using FluentValidation;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -37,7 +38,7 @@ public sealed class SetTtlToolTests : IDisposable
         _tools = new SweepTools(
             new SweepService(_store, _clock),
             new ForgettingPolicyService(_store, guard),
-            new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()));
+            new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()));
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);

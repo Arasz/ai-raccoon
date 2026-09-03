@@ -7,6 +7,7 @@ using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Code;
+using AiRaccoon.Tests;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Dapper;
@@ -257,7 +258,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
 
         var settings = new SqliteSettingsStore(_factory);
         var memoryStore = new SettingsOnlyStore(settings);
-        var gate = new ToolGate(new MemoryAccessGuard(memoryStore), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard());
+        var gate = new ToolGate(new MemoryAccessGuard(memoryStore), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate());
         var tools = new MemoryTools(memoryStore, gate,
             new SearchDispatcher(memoryStore, new SqliteCodeSearchService(_factory, new FakeCodeEmbedder()), new NoOpSearchQualityService()),
             new QueryGuardService(settings), new MemoryWriteService(memoryStore, new FakePromotionQueue()),

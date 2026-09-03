@@ -159,6 +159,43 @@ public sealed class RepairCommandsTests
         stdout.ShouldContain("maintenance poll");
     }
 
+    /// <summary>
+    ///     d-426 SHOULD-2: the diagnose names each loser's NULL-context rows — the keep predicate
+    ///     deliberately leaves them behind, so the operator must see (and verify) them before
+    ///     --apply instead of discovering permanent orphans afterwards.
+    ///     Ledger — hide-null-context-counts : --filter ProjectIds_DryRun_PrintsPerLoserNullContextCounts : loser with a NULL-ctx row.
+    /// </summary>
+    [Fact]
+    public async Task ProjectIds_DryRun_PrintsPerLoserNullContextCounts()
+    {
+        var report = new ProjectIdCensusReport(
+        [
+            new ProjectIdCensusRow("jsaa", false, null, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, []),
+            new ProjectIdCensusRow("job-search-ai-assistant", false, null, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, [])
+        ], 0, 0, 0, 0, []);
+
+        var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, report);
+
+        stdout.ShouldContain("1 NULL-context");
+    }
+
+    /// <summary>
+    ///     d-426 SHOULD-5: the fold is single-pass — a write under a folded id during the apply
+    ///     window re-creates the loser key behind the plan's back, so the operator must quiesce
+    ///     writers or loop diagnose→apply until no folds remain. The --apply receipt states that.
+    ///     Ledger — drop-quiesce-line : --filter ProjectIds_Apply_NamesQuiesceOrRerun : cluster report, --apply.
+    /// </summary>
+    [Fact]
+    public async Task ProjectIds_Apply_NamesQuiesceOrRerun()
+    {
+        var inner = new InMemorySettings { ProjectIdsReport = ClusterReport() };
+
+        var stdout = await RunProjectIdsAsync(apply: true, inner);
+
+        stdout.ShouldContain("quiesce");
+        stdout.ShouldContain("re-run");
+    }
+
     private static ProjectIdCensusReport ClusterReport() => new(
         [
             new ProjectIdCensusRow("jsaa", false, null, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, []),

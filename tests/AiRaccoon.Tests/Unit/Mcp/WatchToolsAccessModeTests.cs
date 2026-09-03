@@ -1,6 +1,7 @@
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Tests;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Shouldly;
@@ -23,7 +24,7 @@ public sealed class WatchToolsAccessModeTests
     public WatchToolsAccessModeTests()
     {
         _tools = new WatchTools(new NoOpWatchService(),
-            new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()));
+            new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()));
     }
 
     private void SetMode(string? global = null, string? perProject = null)

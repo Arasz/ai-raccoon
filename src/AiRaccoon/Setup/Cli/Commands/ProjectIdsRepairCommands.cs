@@ -27,8 +27,14 @@ public sealed class ProjectIdsRepairCommands(IRepairStore repair)
         foreach (var fold in plan.Folds)
         {
             var loser = report.Rows.SingleOrDefault(row => row.ProjectId == fold.Loser);
+            // d-426 SHOULD-2: expose each loser's NULL-context count at the pre-apply surface.
+            // The repair's keep predicate (project-scope + non-NULL label) deliberately leaves
+            // those rows behind — decided: keep predicate, expose counts, P-INT asserts — so the
+            // count here is the operator's verify-zero-or-broaden instrument before --apply: a
+            // nonzero count stays loser-keyed by design, never a surprise orphan afterwards.
             await streams.WriteOutputLineAsync(
-                $"project-ids repair: '{fold.Loser}' owns {loser?.EntryTotal ?? 0} entries, " +
+                $"project-ids repair: '{fold.Loser}' owns {loser?.EntryTotal ?? 0} entries " +
+                $"({loser?.NullContextEntries ?? 0} NULL-context, stay), " +
                 $"{loser?.Queued ?? 0} queued — folds to '{fold.Winner}'");
         }
 
@@ -50,6 +56,11 @@ public sealed class ProjectIdsRepairCommands(IRepairStore repair)
             await streams.WriteOutputLineAsync(
                 "project-ids repair: request committed; the server applies it and drains the resulting embeddings " +
                 "on its next maintenance poll (~15s) — nothing left to run by hand.");
+            // d-426 SHOULD-5: the fold is single-pass — a concurrent loser write re-creates the
+            // loser key behind the plan's back. The receipt states the quiesce-or-rerun rule.
+            await streams.WriteOutputLineAsync(
+                "project-ids repair: the fold is single-pass — quiesce writers under a folded id, or re-run " +
+                "'repair project-ids' until it reports no folds.");
         }
 
         return 0;

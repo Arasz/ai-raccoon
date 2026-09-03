@@ -6,6 +6,7 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Observability;
+using AiRaccoon.Tests;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;
@@ -99,7 +100,7 @@ public class MemoryToolsInstrumentationTests
 
         var store = new SimpleFakeStore { Entry = new MemoryEntry("h1", "p.md", "project:acme", "content", 5) };
         var queue = new FakePromotionQueue { GetMetaError = new InvalidOperationException("meta boom") };
-        var tools = new MemoryTools(store, new ToolGate(new MemoryAccessGuard(store), queue, new NeverMigratingStore(), new AllowingRegistrationGuard()), new SearchDispatcher(store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(new InMemorySettings()), new MemoryWriteService(store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), NullLogger<MemoryTools>.Instance);
+        var tools = new MemoryTools(store, new ToolGate(new MemoryAccessGuard(store), queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()), new SearchDispatcher(store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(new InMemorySettings()), new MemoryWriteService(store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), NullLogger<MemoryTools>.Instance);
 
         await Should.ThrowAsync<InvalidOperationException>(() => WriteThroughFilterAsync(metrics, tools));
 
@@ -122,7 +123,7 @@ public class MemoryToolsInstrumentationTests
 
         var store = new SimpleFakeStore { Entry = new MemoryEntry("h1", "p.md", "project:acme", "content", 5) };
         var queue = new FakePromotionQueue { GetMetaDelay = TimeSpan.FromMilliseconds(60) };
-        var tools = new MemoryTools(store, new ToolGate(new MemoryAccessGuard(store), queue, new NeverMigratingStore(), new AllowingRegistrationGuard()), new SearchDispatcher(store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(new InMemorySettings()), new MemoryWriteService(store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), NullLogger<MemoryTools>.Instance);
+        var tools = new MemoryTools(store, new ToolGate(new MemoryAccessGuard(store), queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()), new SearchDispatcher(store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(new InMemorySettings()), new MemoryWriteService(store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), NullLogger<MemoryTools>.Instance);
 
         await WriteThroughFilterAsync(metrics, tools);
 
@@ -142,7 +143,7 @@ public class MemoryToolsInstrumentationTests
         var store = new SimpleFakeStore();
         var tools = new SyncTools(new SimpleFakeSyncService { Exception = new SyncNotConfiguredException() },
             new SyncCloudStoreFactory(store, NullLoggerFactory.Instance),
-            new ToolGate(new MemoryAccessGuard(store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()));
+            new ToolGate(new MemoryAccessGuard(store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()));
 
         var ex = await Should.ThrowAsync<SyncNotConfiguredException>(() =>
             ThroughFilterAsync(metrics, "memory_sync", token => tools.Sync("acme", token)));
@@ -192,7 +193,7 @@ public class MemoryToolsInstrumentationTests
     }
 
     private static MemoryTools CreateTools(SimpleFakeStore store) =>
-        new(store, new ToolGate(new MemoryAccessGuard(store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()), new SearchDispatcher(store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(new InMemorySettings()), new MemoryWriteService(store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), NullLogger<MemoryTools>.Instance);
+        new(store, new ToolGate(new MemoryAccessGuard(store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()), new SearchDispatcher(store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(new InMemorySettings()), new MemoryWriteService(store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), NullLogger<MemoryTools>.Instance);
 
     private static Task WriteThroughFilterAsync(ToolCallMetrics metrics, MemoryTools tools) =>
         ThroughFilterAsync(metrics, "memory_write", token => tools.Write("acme", "content", cancellationToken: token));

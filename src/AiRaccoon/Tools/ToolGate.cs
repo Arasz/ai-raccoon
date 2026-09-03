@@ -14,13 +14,19 @@ namespace AiRaccoon.Tools;
 ///     enforce the project's access mode, and wrap the result in the envelope carrying the
 ///     propose tier's meta. One copy, so the tool classes cannot drift apart.
 /// </summary>
+/// <remarks>
+///     d-425 SHOULD-1 / d-426 SHOULD-5: <paramref name="migrationGate" /> is REQUIRED (no
+///     nullable default) — a gate-less construction used to default every test-harness build to
+///     pass-through, silently skipping the P3 fold. Fail-closed by construction: forgetting the
+///     gate is a compile error, and an explicitly unmigrated gate still folds nothing.
+/// </remarks>
 public sealed class ToolGate(
     IMemoryAccessGuard access,
     IPromotionQueue queue,
     IModelMigrationStore migrations,
     IProjectRegistrationGuard registration,
-    IProjectIdResolver? resolver = null,
-    IProjectIdsMigrationGate? migrationGate = null) : IToolGate
+    IProjectIdsMigrationGate migrationGate,
+    IProjectIdResolver? resolver = null) : IToolGate
 {
     /// <summary>Refuses while a migration is open. Nothing else — the check a tool with no project yet can still make.</summary>
     public async Task RequireBankAvailableAsync(string toolName, CancellationToken cancellationToken)
@@ -55,8 +61,7 @@ public sealed class ToolGate(
         }
 
         var canonical = ProjectId.Canonicalize(projectId);
-        if (migrationGate is not null
-            && await migrationGate.IsMigratedAsync(cancellationToken).ConfigureAwait(false))
+        if (await migrationGate.IsMigratedAsync(cancellationToken).ConfigureAwait(false))
         {
             canonical = ProjectIdAliasMap.Default.Fold(canonical);
         }

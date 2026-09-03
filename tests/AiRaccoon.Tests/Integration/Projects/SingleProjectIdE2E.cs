@@ -97,7 +97,8 @@ public sealed class SingleProjectIdE2E : IAsyncLifetime
     ///     against winner-scoped × loser-scoped reads.
     ///     Ledger — revert-jsaa-fold : --filter "FullyQualifiedName~SingleProjectIdE2E.MergedClusterSearch" :
     ///     labeled loser wombat row (SQL) + NULL-ctx loser quokka row (wire) + winner capybara row,
-    ///     real repair, embed drain, winner/loser-scoped searches.
+    ///     real repair, embed drain of BOTH partitions (d-427 SHOULD-4: the neither-served asserts run
+    ///     against embedded state), winner/loser-scoped searches.
     /// </summary>
     [RetryFact]
     public async Task MergedClusterSearch()
@@ -119,6 +120,10 @@ public sealed class SingleProjectIdE2E : IAsyncLifetime
         }
 
         await _store.EmbedPendingAsync(Winner, null, ct);
+        // d-427 SHOULD-4: drain BOTH partitions, not just the winner's — the neither-served
+        // asserts below must hold against fully-embedded state, or the vec leg passes vacuously
+        // (an unembedded row is invisible for the wrong reason).
+        await _store.EmbedPendingAsync(Loser, null, ct);
         var foldedHits = await tools.Search(Winner, "wombat platonov", sessionId: "sess-pint", cancellationToken: ct);
         var winnerHits = await tools.Search(Winner, "capybara arbiter", sessionId: "sess-pint", cancellationToken: ct);
         var bulkUnderWinner = await tools.Search(Winner, "quokka zelinsky", sessionId: "sess-pint", cancellationToken: ct);

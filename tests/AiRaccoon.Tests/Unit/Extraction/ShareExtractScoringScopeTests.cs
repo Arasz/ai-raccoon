@@ -1,6 +1,7 @@
 using AiRaccoon.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Extraction;
+using AiRaccoon.Tests;
 using AiRaccoon.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -32,7 +33,7 @@ public sealed class ShareExtractScoringScopeTests
         store.Candidates["acme"] = [Row("h1", "organic fact about beta")];
         store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
 
-        var gate = new ToolGate(new MemoryAccessGuard(store), queue, new NeverMigratingStore(), new AllowingRegistrationGuard());
+        var gate = new ToolGate(new MemoryAccessGuard(store), queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate());
         var shareTools = new ShareTools(store, gate, new ShareExtractService(store, runner, queue));
         var toolResult = await shareTools.ShareExtract(["acme"],
             cancellationToken: TestContext.Current.CancellationToken);
@@ -60,7 +61,7 @@ public sealed class ShareExtractScoringScopeTests
         store.Candidates["acme"] = [Row("h1", "organic fact about beta")];
         store.Candidates["beta"] = [Row("h2", "organic fact about acme")];
 
-        var gate = new ToolGate(new MemoryAccessGuard(store), queue, new NeverMigratingStore(), new AllowingRegistrationGuard());
+        var gate = new ToolGate(new MemoryAccessGuard(store), queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate());
         var shareTools = new ShareTools(store, gate, new ShareExtractService(store, runner, queue));
         var toolResult = await shareTools.ShareExtract(["acme"],
             cancellationToken: TestContext.Current.CancellationToken);

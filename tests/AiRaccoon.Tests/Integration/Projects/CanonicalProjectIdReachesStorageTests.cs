@@ -5,6 +5,7 @@ using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Dapper;
@@ -24,6 +25,17 @@ namespace AiRaccoon.Tests.Integration.Projects;
 ///     was assigned. <c>ShareTools.ShareExtract</c> and <c>PromotionTools.List</c> are covered
 ///     directly because §6c of the WP6 plan names them as the two call sites the assignment alone
 ///     cannot fix.
+///     <para>
+///         Covered-writer set (d-425 SHOULD-4): the spelling-canonical tripwire lives on exactly two
+///         writers — <c>SqliteMemoryStore.WriteAsync</c> (entries; pinned by
+///         CanonicalOnlyWrite_ReachesStorage below) and <c>WatchStore.AddWatchAsync</c> /
+///         <c>ResolveAndAddAsync</c> (watches; same spelling-only rule, no alias fold at the store).
+///         Alias losers are folded upstream at the <c>ToolGate</c> choke once migrated, so the
+///         alias legs are pinned there instead: entries by
+///         <c>OrphanVerbatimRefusalTests.AliasFold_ToCanonical</c> (+ the migrated rows below) and
+///         watches by the watch-create loser test (no-resurrection) — a new writer that bypasses
+///         the gate must either fold or trip, and this list names where.
+///     </para>
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -64,7 +76,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
     }
 
     private MemoryTools BuildMemoryTools() =>
-        new(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()),
+        new(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()),
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
             new QueryGuardService(new InMemorySettings()), new MemoryWriteService(_store, new FakePromotionQueue()),
             NoOpMeasurementRecorder.Instance, NullLogger<MemoryTools>.Instance);
@@ -142,7 +154,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
     public async Task MemoryShareExtract_UnderARespelledForm_ThreadsTheCanonicalId_ToTheExtractionRunner()
     {
         var extraction = new RecordingExtractionRunner();
-        var gate = new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard());
+        var gate = new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate());
         var tools = new ShareTools(_store, gate, new ShareExtractService(_store, extraction, new FakePromotionQueue()));
 
         await tools.ShareExtract([_respelled], cancellationToken: TestContext.Current.CancellationToken);
@@ -155,7 +167,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
     public async Task MemoryPromotionList_UnderARespelledForm_ListsUnderTheCanonicalId()
     {
         var queue = new FakePromotionQueue();
-        var gate = new ToolGate(new MemoryAccessGuard(_store), queue, new NeverMigratingStore(), new AllowingRegistrationGuard());
+        var gate = new ToolGate(new MemoryAccessGuard(_store), queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate());
         var tools = new PromotionTools(queue, gate);
 
         await tools.List(_respelled, cancellationToken: TestContext.Current.CancellationToken);
