@@ -231,3 +231,42 @@ Follow-up sketched, NOT implemented (needs its own package if ever wanted): post
 extend the pooled pin with multi-kind seeds so a kind-filtered GetMetrics trips on kind
 itself rather than via the scope proxy. AC: seed memory/code/both rows, assert pooled
 totals; mutation kind-filtered GetMetrics fails; file: the same quality test file.
+
+---
+
+## Item 7 closure — P7 integration join (2026-09-03, lane `air-followup-p7-integration`, PR #602 DRAFT)
+
+Join: four `--no-ff` merges onto `a26f7772` (task docs → P2 strip → P5 audit → P6-chain
+`e9fb2946`), each SHA-verified before merging, no surprises. SHAs and per-file conflict
+resolutions live in the PR description; the short version: the only real collision was the
+known one — main owns `docs/adr/0095-promotion-scorer-rebalance-ablation-pair.md`, so our
+strip record moved `0095-telemetry-never-syncs.md` → `0098-telemetry-never-syncs.md`
+(header + README row + four `ADR-0095` code/test refs → `ADR-0098` in the same sweep;
+main's 0095 byte-identical, verified by empty diff). Our `0097` kind record stood — main
+had taken only 0095/0096 (`ls docs/adr` at build; `AdrIndexTests` green is the proof).
+`agent-memory-server.md` took both sides (main's limit-8/floor-0.6 row + lane's
+`sessionId!`/`servedRank?`); `SearchQualityServiceTests.cs` took the P6-chain body with
+the P5 pins re-applied on the new kind+sessionId signatures.
+
+Sketched follow-up CLOSED here, not deferred: the pooled pin now seeds memory/code/both
+kinds (`GetMetrics_PooledSemantics_CountsAllRowsRegardlessOfScopeAndKind`) — red-proofed
+at the join (`AND kind = 'memory'` mutation: `TotalSearches should be 4 but was 2`).
+The correlation-keying pin re-verified on new signatures (`AND project_id` mutation:
+`GradedSearches should be 1 but was 0`). Failure-isolation matrix spot-checked both
+ways (disable session-forward → exactly the session spy assertion fails, kind green;
+disable kind-forward → exactly the kind spy assertions fail, session green).
+
+Integration findings (fixed in-join, no new packages): P1 missed three wire consumers —
+`ToolRefusalsTests` memory_search rows (SDK missing-`sessionId` error masked the
+tool-level refusal) and one E2E caller — each given an explicit sessionId; P3/P4's bare
+`[Theory]` tripped main's newer retry-surface gate (→ `[RetryTheory]` ×4). Leak-comment
+sweep: the second `MemoryTools` witness + the reference-doc "rows travel" line now state
+the ADR-0098 stripped truth (first witnesses already did). Re-greps: zero production
+`GetMetricsAsync` callers, no promotion reads of `search_quality`, sole
+`follow_through_files` reader still the writer, `search_quality_eval.json` kind-free and
+unconsumed — no scope creep. No ADR-consequence changes: behavior matches the records
+as written (0094/0097/0098); the renumber is recorded here and in plan v5, not in 0098
+itself. Open hypothesis: `BothTransports_CreateWebHostWithStdio` fails on this box
+(Kestrel bind canceled; live `ai-raccoon serve` processes compete for loopback) on a code
+path the join never touches — CI on a clean runner judges.
+
