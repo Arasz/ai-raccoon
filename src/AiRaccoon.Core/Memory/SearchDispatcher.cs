@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Memory.Code;
+using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.SearchQuality;
 
 namespace AiRaccoon.Core.Memory;
@@ -54,9 +55,28 @@ public sealed class SearchDispatcher(IMemoryStore store, ICodeSearchService code
         var (qualityCount, qualityFiles) = kind == SearchKind.Code
             ? (codeResults?.Count ?? 0, (IReadOnlyList<string>)[])
             : (results.Count, [.. results.Where(r => r.SourceFile is not null).Select(r => r.SourceFile!).Take(5)]);
+        // P6a threading: join the served rows to the P4 sidecar by hash, in served order.
+        // Null sidecar stays null (absent-evidence writes exactly as before); a present sidecar
+        // yields the served subset only, so the payload is bounded by the served rows.
+        IReadOnlyList<RetrievalEvidence>? evidence = null;
+        if (memorySearchResults?.EvidenceByHash is not null)
+        {
+            var byHash = memorySearchResults.EvidenceByHash;
+            var joined = new List<RetrievalEvidence>(results.Count);
+            foreach (var row in results)
+            {
+                if (byHash.TryGetValue(row.Hash, out var rowEvidence))
+                {
+                    joined.Add(rowEvidence);
+                }
+            }
+
+            evidence = joined;
+        }
+
         await qualityService.RecordSearchSafeAsync(correlationId, searchQuery.Query, rawScope, searchQuery.ProjectId,
             qualityCount, qualityFiles,
-            cancellationToken);
+            cancellationToken, evidence);
 
         return new SearchDispatchResult(results, memorySearchResults, codeResults, codeWarning);
     }
