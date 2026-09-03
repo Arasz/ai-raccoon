@@ -141,6 +141,83 @@ public sealed class ExtractionHostedServiceTests
         queue.LastLimit.ShouldBe(SharedExtractionService.DefaultCandidateLimit);
     }
 
+    private static (FakeExtractionStore Store, FakeTimeProvider Time, ExtractionHostedService Service,
+        FakePromotionQueue Queue, SpyRunner Runner) NewStackWithSpy(ILogger<ExtractionHostedService>? logger = null)
+    {
+        var store = new FakeExtractionStore();
+        var time = new FakeTimeProvider(FixedNow);
+        var queue = new FakePromotionQueue();
+        var runner = new SpyRunner(new SharedExtractionRunner(store, new SharedExtractionService(), queue, time));
+        var service = new ExtractionHostedService(store, runner, queue, time,
+            TestTelemetry.None, logger ?? NullLogger<ExtractionHostedService>.Instance);
+        return (store, time, service, queue, runner);
+    }
+
+    /// <summary>Records the minimum score each propose pass carried — the gated auto-promote
+    /// path must hand the operator's threshold to both the propose admission and the promote drain.</summary>
+    private sealed class SpyRunner(ISharedExtractionRunner inner) : ISharedExtractionRunner
+    {
+        public List<double?> MinScores { get; } = [];
+
+        public Task<IReadOnlyList<ShareCandidate>> ProposeAsync(string projectId, SharedIndex sharedIndex,
+            bool includeTtlRows, int limit, double? minScore = null,
+            CancellationToken cancellationToken = default)
+        {
+            MinScores.Add(minScore);
+            return inner.ProposeAsync(projectId, sharedIndex, includeTtlRows, limit, minScore, cancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task RunOnce_PromoteMode_WithThreshold_ProposesAndPromotesGated()
+    {
+        var (store, _, service, queue, runner) = NewStackWithSpy();
+        store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
+        store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
+        store.Settings[ExtractionConfigKeys.AutoPromoteThresholdGlobal] = "3.5";
+        store.Candidates["acme"] = [Row("h1", null, "organic fact about beta")];
+
+        await service.RunOnceAsync(TestContext.Current.CancellationToken);
+
+        // One propose per project, each carrying the threshold — sub-threshold rows never queue,
+        // so no review backlog accumulates behind the auto-share.
+        runner.MinScores.ShouldBe([3.5, 3.5]);
+        queue.LastMinScore.ShouldBe(3.5);
+    }
+
+    [Fact]
+    public async Task RunOnce_PromoteMode_WithoutThreshold_PassesNoMinScore()
+    {
+        var (store, _, service, queue, runner) = NewStackWithSpy();
+        store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
+        store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
+        store.Candidates["acme"] = [Row("h1", null, "organic fact about beta")];
+
+        await service.RunOnceAsync(TestContext.Current.CancellationToken);
+
+        // Threshold unset: the legacy unfiltered behavior is unchanged — propose is skipped,
+        // promote drains the whole queue head.
+        runner.MinScores.ShouldBeEmpty();
+        queue.LastMinScore.ShouldBeNull();
+        queue.PromoteCalls.ShouldBe([["acme"], ["beta"]]);
+    }
+
+    [Fact]
+    public async Task RunOnce_ProposeMode_WithThresholdSet_IgnoresTheThreshold()
+    {
+        var (store, _, service, queue, runner) = NewStackWithSpy();
+        store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
+        store.Settings[ExtractionConfigKeys.AutoPromoteThresholdGlobal] = "3.5";
+        store.Candidates["acme"] = [Row("h1", null, "organic fact about beta")];
+
+        await service.RunOnceAsync(TestContext.Current.CancellationToken);
+
+        // Propose mode stays a full-fidelity review tool: the threshold only narrows promote.
+        runner.MinScores.ShouldBe([null, null]);
+        queue.PromoteCalls.ShouldBeEmpty();
+        store.Shared.ShouldBeEmpty();
+    }
+
     [Fact]
     public async Task RunOnce_PromoteMode_CallsTheQueuePerProject()
     {

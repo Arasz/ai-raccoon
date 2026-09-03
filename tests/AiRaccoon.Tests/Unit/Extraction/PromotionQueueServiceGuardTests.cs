@@ -45,7 +45,7 @@ public sealed class PromotionQueueServiceGuardTests
     public async Task PromoteAsync_RejectsAnEmptyProjectList()
     {
         await Should.ThrowAsync<ArgumentException>(() =>
-            NewService().PromoteAsync([], 20, TestContext.Current.CancellationToken));
+            NewService().PromoteAsync([], 20, cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Theory]
@@ -54,7 +54,7 @@ public sealed class PromotionQueueServiceGuardTests
     public async Task PromoteAsync_RejectsANonPositiveLimit(int limit)
     {
         await Should.ThrowAsync<ArgumentOutOfRangeException>(() =>
-            NewService().PromoteAsync(["acme"], limit, TestContext.Current.CancellationToken));
+            NewService().PromoteAsync(["acme"], limit, cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Theory]

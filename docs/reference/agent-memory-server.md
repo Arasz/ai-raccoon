@@ -137,7 +137,15 @@ config channel (see [Command-line options](#command-line-options)).
   upsert also refuses rows whose exact value is already in the shared tier, so the
   queue never holds shared content.
   `memory_share_extract` in `mode=promote` drains the top queued candidates into
-  `shared`. Every response carries `waitingPromotionsCount`/`promotionsWaitTimeSeconds`
+  `shared`. Operators who never review the queue can set `settings extract
+  auto-promote-threshold` to a score (0..4, e.g. 3.5; `off` by default). On a background
+  pass in `promote` mode, the loop ranks fresh candidates, queues only rows at or above
+  the threshold, and shares them in the same pass. Rows below it never enter the queue,
+  so no backlog piles up waiting for a review that never happens. Propose mode ignores
+  the threshold and keeps queuing the full ranked set, and the manual MCP promote path
+  stays unfiltered: an explicit promote call shares what it names. Rows queued before
+  the threshold was set stay queued; clear them once with `memory_promotion_discard`
+  after enabling. Every response carries `waitingPromotionsCount`/`promotionsWaitTimeSeconds`
   in `meta`, scoped to the project the call named; once that project holds queued rows,
   `meta.capacity` also carries its `reserved`/`used`/`borrowing` share of the cap
   (ADR-0007's fair-share promise, made observable) — see [`capacity`
@@ -762,6 +770,7 @@ ai-raccoon settings extract enable {true|false}
 ai-raccoon settings extract mode {propose|promote}
 ai-raccoon settings extract interval {minutes}
 ai-raccoon settings extract capacity {capacity}
+ai-raccoon settings extract auto-promote-threshold {score|off}
 ai-raccoon settings extract exclude add {prefix}
 ai-raccoon settings extract exclude remove {prefix}
 ai-raccoon settings extract exclude list

@@ -193,13 +193,57 @@ public sealed class PromotionQueueServiceTests : IDisposable
             ],
             TestContext.Current.CancellationToken);
 
-        var outcome = await _service.PromoteAsync(["acme"], 2, TestContext.Current.CancellationToken);
+        var outcome = await _service.PromoteAsync(["acme"], 2, cancellationToken: TestContext.Current.CancellationToken);
 
         outcome.PromotedHashes.ShouldBe([high.Hash, mid.Hash], "top-2 by score");
         outcome.SkippedDuplicates.ShouldBe(0);
         outcome.RemainingByProject["acme"].ShouldBe(1);
         (await _service.ListAsync("acme", 10, TestContext.Current.CancellationToken))
             .Select(r => r.Hash).ShouldBe([low.Hash]);
+    }
+
+    /// <summary>Score-gated auto-promote: only rows at or above the minimum are shared —
+    /// the rest stay queued untouched (never discarded: the review may still happen, or a
+    /// later pass with a lower threshold picks them up).</summary>
+    [RetryFact]
+    public async Task Promote_MinScore_OnlySharesRowsAtOrAboveThreshold_LeavingTheRestQueued()
+    {
+        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
+        var low = await store.WriteAsync(new MemoryWriteRequest("acme", "low fact"),
+            TestContext.Current.CancellationToken);
+        var high = await store.WriteAsync(new MemoryWriteRequest("acme", "high fact"),
+            TestContext.Current.CancellationToken);
+        await _service.ProposeAsync("acme",
+            [
+                Candidate(low.Hash, "low fact", 1.5), Candidate(high.Hash, "high fact", 3.8)
+            ],
+            TestContext.Current.CancellationToken);
+
+        var outcome = await _service.PromoteAsync(["acme"], 10, minScore: 3.5,
+            TestContext.Current.CancellationToken);
+
+        outcome.PromotedHashes.ShouldBe([high.Hash]);
+        outcome.SkippedDuplicates.ShouldBe(0);
+        outcome.Failures.ShouldBeEmpty();
+        (await _service.ListAsync("acme", 10, TestContext.Current.CancellationToken))
+            .Select(r => r.Hash).ShouldBe([low.Hash]);
+    }
+
+    [RetryFact]
+    public async Task Promote_MinScoreAboveEveryRow_SharesNothing_AndKeepsTheQueue()
+    {
+        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), _clock, TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
+        var entry = await store.WriteAsync(new MemoryWriteRequest("acme", "some fact"),
+            TestContext.Current.CancellationToken);
+        await _service.ProposeAsync("acme", [Candidate(entry.Hash, "some fact", 2.0)],
+            TestContext.Current.CancellationToken);
+
+        var outcome = await _service.PromoteAsync(["acme"], 10, minScore: 3.5,
+            TestContext.Current.CancellationToken);
+
+        outcome.PromotedHashes.ShouldBeEmpty();
+        (await _service.ListAsync("acme", 10, TestContext.Current.CancellationToken))
+            .Select(r => r.Hash).ShouldBe([entry.Hash]);
     }
 
     /// <summary>The layered dedup contract (docs/adr/0026): propose refuses EXACT shared twins at
@@ -228,7 +272,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
             [Candidate(dup.Hash, "shared  fact", 5.0), Candidate(fresh.Hash, "fresh fact", 4.0)],
             TestContext.Current.CancellationToken);
 
-        var outcome = await _service.PromoteAsync(["acme"], 10, TestContext.Current.CancellationToken);
+        var outcome = await _service.PromoteAsync(["acme"], 10, cancellationToken: TestContext.Current.CancellationToken);
 
         outcome.PromotedHashes.ShouldBe([fresh.Hash]);
         outcome.SkippedDuplicates.ShouldBe(1);

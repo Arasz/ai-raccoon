@@ -137,7 +137,7 @@ public sealed class PromotionQueueDiscardTests : IDisposable
         await _queueStore.UpsertAsync("acme", [Candidate(entry.Hash, "promotable fact", 2.0)],
             TestContext.Current.CancellationToken);
 
-        var outcome = await CreateService().PromoteAsync(["acme"], 20, TestContext.Current.CancellationToken);
+        var outcome = await CreateService().PromoteAsync(["acme"], 20, cancellationToken: TestContext.Current.CancellationToken);
 
         outcome.PromotedHashes.ShouldContain(entry.Hash);
         (await DiscardCountAsync("acme", TestContext.Current.CancellationToken)).ShouldBe(0,

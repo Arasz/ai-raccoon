@@ -21,6 +21,7 @@ public sealed class SharedExtractionRunner(
         SharedIndex sharedIndex,
         bool includeTtlRows,
         int limit,
+        double? minScore = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
@@ -36,6 +37,11 @@ public sealed class SharedExtractionRunner(
         var allProjectIds = await store.GetProjectIdsAsync(cancellationToken).ConfigureAwait(false);
         var ranked = extraction.RankAll(projectId, allProjectIds, rows,
             sharedIndex.Values, sharedIndex.Paths, includeTtlRows, timeProvider.GetUtcNow());
+        if (minScore.HasValue)
+        {
+            ranked = [.. ranked.Where(c => c.Score >= minScore.Value)];
+        }
+
         if (ranked.Count > 0)
         {
             // Refreshing an already-queued row and enqueueing a new one are different operations:

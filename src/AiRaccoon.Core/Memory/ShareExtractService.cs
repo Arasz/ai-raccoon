@@ -37,7 +37,8 @@ public sealed class ShareExtractService(
     private async Task<ShareExtractResult> PromoteAsync(ShareExtractRequest request, int limit,
         CancellationToken cancellationToken)
     {
-        var outcome = await queue.PromoteAsync([.. request.ProjectIds], limit, cancellationToken)
+        var outcome = await queue.PromoteAsync([.. request.ProjectIds], limit,
+            cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         return new ShareExtractResult([], outcome.PromotedHashes)
         {
@@ -56,7 +57,8 @@ public sealed class ShareExtractService(
         foreach (var projectId in request.ProjectIds)
         {
             candidates.AddRange(await extraction
-                .ProposeAsync(projectId, sharedIndex, request.IncludeTtlRows, limit, cancellationToken)
+                .ProposeAsync(projectId, sharedIndex, request.IncludeTtlRows, limit,
+                    cancellationToken: cancellationToken)
                 .ConfigureAwait(false));
         }
 

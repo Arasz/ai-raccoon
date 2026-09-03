@@ -67,7 +67,7 @@ public sealed partial class PromotionQueueService(
         return new ProposeOutcome(upserted, evicted);
     }
 
-    public async Task<PromoteOutcome> PromoteAsync(IReadOnlyList<string> projectIds, int limit,
+    public async Task<PromoteOutcome> PromoteAsync(IReadOnlyList<string> projectIds, int limit, double? minScore = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(projectIds);
@@ -106,6 +106,7 @@ public sealed partial class PromotionQueueService(
             }
 
             var rows = (await queue.ListAsync(projectId, cancellationToken).ConfigureAwait(false))
+                .Where(r => !minScore.HasValue || r.Score >= minScore.Value)
                 .Take(limit).ToList();
             foreach (var row in rows)
             {

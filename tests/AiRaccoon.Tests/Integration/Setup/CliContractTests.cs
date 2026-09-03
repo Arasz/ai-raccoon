@@ -54,7 +54,7 @@ public sealed class CliContractTests : IAsyncLifetime
             "ai-raccoon: buffer capacity must be at most 1000000 measurements"),
         new(["settings", "extract", "mode", "bogus"], ExitCode.InvalidArgument, "",
             "ai-raccoon: mode must be 'propose' or 'promote'"),
-        new(["settings", "extract", "list"], 0, "enabled: False  mode: propose  interval: 30 min  queue-capacity: 1000", ""),
+        new(["settings", "extract", "list"], 0, "enabled: False  mode: propose  interval: 30 min  queue-capacity: 1000  auto-promote-threshold: off", ""),
         new(["settings", "ingest", "scope", "list", "*"], 0, "", ""),
         new(["watch", "registered"], 0, "no registered watches", ""),
         new(["extract", "prune"], 0, "promotion queue: no orphaned candidates found", ""),

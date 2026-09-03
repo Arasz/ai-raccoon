@@ -35,7 +35,7 @@ public sealed class PromotionQueueServicePromoteRaceTests
         var service = new PromotionQueueService(queue, store, new UniformCountEvictionPolicy(),
             metrics, NullLogger<PromotionQueueService>.Instance, new FakeTimeProvider(FixedNow));
 
-        var outcome = await service.PromoteAsync(["acme"], 10, TestContext.Current.CancellationToken);
+        var outcome = await service.PromoteAsync(["acme"], 10, cancellationToken: TestContext.Current.CancellationToken);
 
         store.SharedHashes.ShouldNotContain("h1",
             "h1 was already claimed by a concurrent discard — sharing it would resurrect a rejected " +
@@ -63,7 +63,7 @@ public sealed class PromotionQueueServicePromoteRaceTests
         var service = new PromotionQueueService(queue, store, new UniformCountEvictionPolicy(),
             metrics, NullLogger<PromotionQueueService>.Instance, new FakeTimeProvider(FixedNow));
 
-        var outcome = await service.PromoteAsync(["acme"], 10, TestContext.Current.CancellationToken);
+        var outcome = await service.PromoteAsync(["acme"], 10, cancellationToken: TestContext.Current.CancellationToken);
 
         outcome.PromotedHashes.ShouldBe(["h2"],
             "h1's failure must not stop h2, which was already claimed and ready to share");
@@ -88,7 +88,7 @@ public sealed class PromotionQueueServicePromoteRaceTests
         var service = new PromotionQueueService(queue, store, new UniformCountEvictionPolicy(),
             metrics, NullLogger<PromotionQueueService>.Instance, new FakeTimeProvider(FixedNow));
 
-        var outcome = await service.PromoteAsync(["acme", "beta"], 10, TestContext.Current.CancellationToken);
+        var outcome = await service.PromoteAsync(["acme", "beta"], 10, cancellationToken: TestContext.Current.CancellationToken);
 
         outcome.PromotedHashes.ShouldBe(["h2"], "acme's failure must not stop beta from promoting");
         outcome.Failures.ShouldHaveSingleItem();
@@ -115,7 +115,7 @@ public sealed class PromotionQueueServicePromoteRaceTests
         var service = new PromotionQueueService(queue, store, new UniformCountEvictionPolicy(),
             metrics, NullLogger<PromotionQueueService>.Instance, new FakeTimeProvider(FixedNow));
 
-        var outcome = await service.PromoteAsync(["acme"], 10, TestContext.Current.CancellationToken);
+        var outcome = await service.PromoteAsync(["acme"], 10, cancellationToken: TestContext.Current.CancellationToken);
 
         outcome.Failures.ShouldHaveSingleItem().Reason.ShouldBe("share-failed");
         queue.Rows.ShouldContain(r => r.Hash == "h1",
@@ -137,7 +137,7 @@ public sealed class PromotionQueueServicePromoteRaceTests
         var service = new PromotionQueueService(queue, store, new UniformCountEvictionPolicy(),
             metrics, NullLogger<PromotionQueueService>.Instance, new FakeTimeProvider(FixedNow));
 
-        await service.PromoteAsync(["acme"], 10, TestContext.Current.CancellationToken);
+        await service.PromoteAsync(["acme"], 10, cancellationToken: TestContext.Current.CancellationToken);
 
         queue.Rows.ShouldBeEmpty("a genuinely gone backing entry must not be left claimed forever");
     }
@@ -156,7 +156,7 @@ public sealed class PromotionQueueServicePromoteRaceTests
         var service = new PromotionQueueService(queue, store, new UniformCountEvictionPolicy(),
             metrics, NullLogger<PromotionQueueService>.Instance, new FakeTimeProvider(FixedNow));
 
-        var outcome = await service.PromoteAsync(["acme"], 10, TestContext.Current.CancellationToken);
+        var outcome = await service.PromoteAsync(["acme"], 10, cancellationToken: TestContext.Current.CancellationToken);
 
         outcome.PromotedHashes.ShouldBe(["h1"], "the stale claim must be released before this pass drains the queue");
     }
@@ -174,7 +174,7 @@ public sealed class PromotionQueueServicePromoteRaceTests
             metrics, NullLogger<PromotionQueueService>.Instance, new FakeTimeProvider(FixedNow));
 
         await Should.ThrowAsync<OperationCanceledException>(() =>
-            service.PromoteAsync(["acme"], 10, TestContext.Current.CancellationToken));
+            service.PromoteAsync(["acme"], 10, cancellationToken: TestContext.Current.CancellationToken));
     }
 
     private sealed class RaceyQueueStore : IPromotionQueueStore

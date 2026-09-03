@@ -171,7 +171,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
         public string? LastProjectId { get; private set; }
 
         public Task<IReadOnlyList<ShareCandidate>> ProposeAsync(string projectId, SharedIndex sharedIndex,
-            bool includeTtlRows, int limit, CancellationToken cancellationToken = default)
+            bool includeTtlRows, int limit, double? minScore = null, CancellationToken cancellationToken = default)
         {
             LastProjectId = projectId;
             return Task.FromResult<IReadOnlyList<ShareCandidate>>([]);
