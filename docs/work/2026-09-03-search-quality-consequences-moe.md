@@ -179,3 +179,55 @@ B's privacy-first instinct is honored by placing the strip second rather than la
 
 Items 2–6 are each small enough to ship alone. None of them belongs smuggled into PR #596,
 which stays a telemetry-restore change with privacy pins, nothing more.
+
+---
+
+## Item 6 closure — consumer review (P5 audit, 2026-09-03, lane `air-followup-p5-audit`)
+
+Read-only audit plus two deliberately-scoped pins; no production behavior change
+(`git diff --stat src/` empty at close). Every inventory below re-grepped at build time;
+no line number inherited. Planned shapes judged against: required sessionId (P1),
+stripped sync (P2), kind column (P3), ranked follow-through files (P4) — none landed in
+this worktree (base `9aebeaa8`), so verdicts record current state + planned impact.
+
+1. **GetMetricsAsync kind-blindness — confirmed, pooled semantics pinned.** SQL filters
+   `created_at` + `project_id` only (`SqliteSearchQualityService.cs:120-150`); no `kind`
+   column exists (`MemorySchema.cs:333-349`); result has no per-kind breakdown
+   (`SearchQualityMetrics.cs`). Zero production callers (only def/interface/doc-ref under
+   `src/`). Rationale recorded: pooled semantics deliberate; split only on a named new
+   consumer (none). Pin: `GetMetrics_PooledSemantics_CountsAllRowsRegardlessOfScope`
+   (`SearchQualityServiceTests.cs`) — red-proofed (`AND scope = 'all'` mutation:
+   `TotalSearches should be 4 but was 1`).
+2. **follow_through/RecordGrade projectId-forwarding gap — confirmed, accepted-out-of-scope
+   + pinned (absence pin), stated never silent.** `QualityTools.cs:30-32` resolves canonical
+   project for the gate but forwards no project to `RecordFollowThroughAsync` (signature has
+   none, `ISearchQualityService.cs:43-45`); `RecordGradeAsync` takes projectId but binds only
+   `Id/Grade/Note`, `WHERE correlation_id` only (`SqliteSearchQualityService.cs:102-116`).
+   No live cross-project grade demonstrated (ids UNIQUE per `MemorySchema.cs:335`,
+   unguessable envelope values; gate still enforces write access) — out of scope per the
+   correlationId-only-keying ruling. Pin:
+   `RecordGrade_CorrelationIdOnlyKeying_ProjectIdNotAPredicate` — red-proofed
+   (`AND project_id = @ProjectId` mutation: `GradedSearches should be 1 but was 0`). Any
+   future re-scoping trips it for deliberate revisit.
+3. **Zero session_id readers — confirmed, acceptance recorded.** `session_id` occurs only in
+   DDL (`MemorySchema.cs:339`) and the INSERT (`SqliteSearchQualityService.cs:52-63`); zero
+   `SELECT … session` hits repo-wide; sole writer passes null (`Safe`,
+   `SqliteSearchQualityService.cs:27`; dispatcher has no session source). P1 changes no
+   consumer. No pin.
+4. **Probe line struck — confirmed, no P4-compat work.** `QueryGuardRecallProbe.cs:53`
+   selects only `query`; zero `servedRank` in `*.cs`; sole `follow_through_files` reader is
+   the writer itself. No fixture busywork done. No pin.
+5. **Grade fail-fast — NO behavior change (default stands).** No range guard in
+   `QualityTools.cs:42-56` or the service; only the DB CHECK (`MemorySchema.cs:344`). The
+   decider bar (tool-error-log CHECK-violation search) is unobservable from the bank — no
+   such log infra in-repo — so bar-as-absent → no guard added. Owner note: the bar stays
+   open; a future CHECK-violation sighting reopens the guard question as its own package.
+6. **review-tests lens on both pins.** Pin 1 failure mode: silent dashboard narrowing;
+   mutation above proves it trips. Pin 2 failure mode: silent re-scoping of grade keying;
+   mutation above proves it trips. Fixtures non-degenerate (multi-row, mixed scopes,
+   cross-project seeds); secondaries asserted (rates, average, coverage, totals).
+
+Follow-up sketched, NOT implemented (needs its own package if ever wanted): post-P3,
+extend the pooled pin with multi-kind seeds so a kind-filtered GetMetrics trips on kind
+itself rather than via the scope proxy. AC: seed memory/code/both rows, assert pooled
+totals; mutation kind-filtered GetMetrics fails; file: the same quality test file.
