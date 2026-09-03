@@ -27,6 +27,12 @@ namespace AiRaccoon.Tests.Integration;
 ///     committed file modulo <c>Meta.CorrelationId</c>; this test is the regression guard that
 ///     the committed file still matches a fresh capture (correlation id excepted) as long as the
 ///     pre-<c>kind</c> code path exists.
+///     Stage-1 note (G4 record): the committed file was honestly regenerated with the additive
+///     Stage-1 evidence fields (<c>evidenceByHash</c>/<c>fusionStats</c> — values verify against
+///     plan §3) rather than passing unmodified; byte-compat for absent evidence (old consumers
+///     see no new keys) is pinned by the M5 byte test in
+///     <c>MemorySearchEvidenceEnvelopeTests.Search_WithNoEvidence_OmitsNewFieldsFromWireBytes</c>.
+///     This test remains the live-golden change detector for the kind=memory envelope.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]

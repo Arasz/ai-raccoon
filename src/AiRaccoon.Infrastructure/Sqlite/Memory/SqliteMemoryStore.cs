@@ -615,7 +615,8 @@ public sealed partial class SqliteMemoryStore(
         await BumpAccessAsync(connection, deferredResults, query.ProjectId, cancellationToken).ConfigureAwait(false);
         searchTimingsCollector.Bump = timeProvider.GetElapsedTime(bumpStart);
 
-        return new Core.Memory.SearchResults(deferredResults.Results, searchTimingsCollector.ToCollected(timeProvider), deferredResults.FusionDiff);
+        return new Core.Memory.SearchResults(deferredResults.Results, searchTimingsCollector.ToCollected(timeProvider), deferredResults.FusionDiff,
+            deferredResults.EvidenceByHash, deferredResults.Stats);
     }
 
     private async Task<AdjustedSearchResult> AdjustMergedResults(SqliteConnection connection, SearchQuery query, SearchParameters parameters, FtsQueryPlan queryPlan, QueryVector queryVector,
@@ -632,13 +633,19 @@ public sealed partial class SqliteMemoryStore(
         // reorder work, and the ADR's cost note was amended by the SearchParameters plan).
         if (legs.Count(leg => leg.Contributes) < 2 || !parameters.FusionNoRegressionEnabled)
         {
-            return new AdjustedSearchResult(merged, timeProvider.GetElapsedTime(adjustmentStart));
+            return new AdjustedSearchResult(merged, timeProvider.GetElapsedTime(adjustmentStart))
+            {
+                EvidenceByHash = fusedSearchResult.EvidenceByHash,
+                Stats = fusedSearchResult.Stats
+            };
         }
 
         var adjusted = SearchResultMerger.Merge(NoFusionRegression.Reorder(merged, legs), query, parameters, queryPlan);
         return new AdjustedSearchResult(adjusted, timeProvider.GetElapsedTime(adjustmentStart))
         {
-            FusionDiff = FusionDiff.Between(merged, adjusted)
+            FusionDiff = FusionDiff.Between(merged, adjusted),
+            EvidenceByHash = fusedSearchResult.EvidenceByHash,
+            Stats = fusedSearchResult.Stats
         };
     }
 
@@ -654,12 +661,21 @@ public sealed partial class SqliteMemoryStore(
         var fusionStart = timeProvider.GetTimestamp();
         var ftsCandidates = ModalityCandidates.ByBm25(searchResults);
         var vectorCandidates = ModalityCandidates.ByCosine(searchResults);
-        List<WeightedResults> weightedResults = [new(ftsCandidates, parameters.FtsWeight), new(vectorCandidates, parameters.VectorWeight)];
-        var fused = ReciprocalRankFusion.Fuse(weightedResults, parameters.RrfK, 0, int.MaxValue);
-        return new FusedSearchResult(fused, timeProvider.GetElapsedTime(fusionStart))
+        // S1 capture (Stage 1): FuseWithEvidence fuses exactly like Fuse while attaching each
+        // served hash's pre-normalization evidence. Leg names reuse the ModalityLeg vocabulary
+        // from LegsFor ("fts"/"vector") — "vector" is the name the seam reads the fused cosine by.
+        // The carry below is an O(1) reference handoff, keyed by hash: the Merger's
+        // reorder/consolidation/drop needs no remapping, and no SQL is issued anywhere on it.
+        var fused = ReciprocalRankFusion.FuseWithEvidence(
+            [new NamedWeightedCandidates(ftsCandidates, parameters.FtsWeight, "fts"),
+             new NamedWeightedCandidates(vectorCandidates, parameters.VectorWeight, "vector")],
+            parameters.RrfK, 0, int.MaxValue);
+        return new FusedSearchResult(fused.Results, timeProvider.GetElapsedTime(fusionStart))
         {
             VectorCandidates = vectorCandidates,
-            FtsCandidates = ftsCandidates
+            FtsCandidates = ftsCandidates,
+            EvidenceByHash = fused.EvidenceByHash,
+            Stats = fused.Stats
         };
     }
 
@@ -885,7 +901,9 @@ public sealed partial class SqliteMemoryStore(
             })
         ], timeProvider.GetElapsedTime(deferredSnippetsStart))
         {
-            FusionDiff = adjustedSearch.FusionDiff
+            FusionDiff = adjustedSearch.FusionDiff,
+            EvidenceByHash = adjustedSearch.EvidenceByHash,
+            Stats = adjustedSearch.Stats
         };
     }
 

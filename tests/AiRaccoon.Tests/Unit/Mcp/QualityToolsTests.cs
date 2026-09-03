@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Tools;
 using Shouldly;
@@ -94,11 +95,13 @@ public sealed class QualityToolsTests
             Task.FromResult(0);
 
         public Task RecordSearchAsync(string correlationId, string query, string? scope, string? projectId,
-            string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default) =>
+            string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default,
+            IReadOnlyList<RetrievalEvidence>? evidence = null) =>
             Task.CompletedTask;
 
         public Task RecordSearchSafeAsync(string correlationId, string query, string? scope, string? projectId,
-            string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default) =>
+            string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default,
+            IReadOnlyList<RetrievalEvidence>? evidence = null) =>
             Task.CompletedTask;
 
         public Task RecordFollowThroughAsync(string correlationId, string filePath, int? servedRank = null,

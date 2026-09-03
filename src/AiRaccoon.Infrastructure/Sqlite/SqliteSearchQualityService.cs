@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.SearchQuality;
 using Dapper;
 using Microsoft.Extensions.Logging;
@@ -12,6 +13,8 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory factory, ILogger<SqliteSearchQualityService> logger)
     : ISearchQualityService
 {
+    /// <summary>Compact Stage-1 feature JSON: camel-case keys, no indentation.</summary>
+    private static readonly JsonSerializerOptions ResultFeaturesJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     /// <summary>Best-effort: never throws (docs/plans/2026-08-15-performance-metrics-implementation.md, WP1 tool-size step).</summary>
     public async Task RecordSearchSafeAsync(
         string correlationId,
@@ -22,11 +25,12 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
         string sessionId,
         int resultCount,
         IReadOnlyList<string> topSourceFiles,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        IReadOnlyList<RetrievalEvidence>? evidence = null)
     {
         try
         {
-            await RecordSearchAsync(correlationId, query, scope, projectId, kind, sessionId, resultCount, topSourceFiles, ct)
+            await RecordSearchAsync(correlationId, query, scope, projectId, kind, sessionId, resultCount, topSourceFiles, ct, evidence)
                 .ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -44,7 +48,10 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
         string sessionId,
         int resultCount,
         IReadOnlyList<string> topSourceFiles,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        // P6b: the P4 sidecar joined to the served rows in served order. Persisted as compact
+        // JSON on the same single INSERT — never a per-result statement (M6/G5).
+        IReadOnlyList<RetrievalEvidence>? evidence = null)
     {
         if (kind is not ("memory" or "code" or "both"))
         {
@@ -53,14 +60,15 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
 
         await using var connection = await factory.OpenBankAsync(ct).ConfigureAwait(false);
         var topFilesJson = topSourceFiles.Count > 0 ? JsonSerializer.Serialize(topSourceFiles) : null;
+        var resultFeaturesJson = SerializeResultFeatures(evidence);
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
         await connection.ExecuteAsync(
             """
             INSERT INTO search_quality (correlation_id, query, scope, project_id, session_id, kind,
-                result_count, top_source_files, created_at)
+                result_count, top_source_files, result_features, created_at)
             VALUES (@CorrelationId, @Query, @Scope, @ProjectId, @SessionId, @Kind,
-                @ResultCount, @TopSourceFiles, @CreatedAt)
+                @ResultCount, @TopSourceFiles, @ResultFeatures, @CreatedAt)
             """,
             new
             {
@@ -72,9 +80,52 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
                 Kind = kind,
                 ResultCount = resultCount,
                 TopSourceFiles = topFilesJson,
+                ResultFeatures = resultFeaturesJson,
                 CreatedAt = now
             }).ConfigureAwait(false);
     }
+
+    /// <summary>
+    ///     Stage-1 per-result features (plan §5, P6b): hashes, strengths, leg names/ranks,
+    ///     cosines — never values or snippets. Null or empty evidence writes NULL (the
+    ///     top_source_files precedent in the caller). Non-finite doubles become null: Core stays
+    ///     JSON-free while System.Text.Json refuses to emit them, so the sanitize lives here (M2).
+    /// </summary>
+    private static string? SerializeResultFeatures(IReadOnlyList<RetrievalEvidence>? evidence)
+    {
+        if (evidence is null || evidence.Count == 0)
+        {
+            return null;
+        }
+
+        var rows = new List<ResultFeatureRow>(evidence.Count);
+        foreach (var item in evidence)
+        {
+            var legs = new List<LegFeatureRow>(item.Legs.Count);
+            foreach (var leg in item.Legs)
+            {
+                legs.Add(new LegFeatureRow(leg.LegName, leg.Rank));
+            }
+
+            rows.Add(new ResultFeatureRow(
+                item.Hash,
+                double.IsFinite(item.FusionStrength) ? item.FusionStrength : null,
+                legs,
+                item.Cosine is { } cosine && double.IsFinite(cosine) ? cosine : null));
+        }
+
+        return JsonSerializer.Serialize(rows, ResultFeaturesJson);
+    }
+
+    /// <summary>One served row's features: the <c>result_features</c> JSON element shape.</summary>
+    private sealed record ResultFeatureRow(
+        string Hash,
+        double? Strength,
+        IReadOnlyList<LegFeatureRow> Legs,
+        double? Cosine);
+
+    /// <summary>One leg's ordinal vote, mirroring <see cref="LegRank" />.</summary>
+    private sealed record LegFeatureRow(string Name, int Rank);
 
     public async Task RecordFollowThroughAsync(
         string correlationId,

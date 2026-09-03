@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Code;
+using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Metrics;
 using FluentValidation;
@@ -108,7 +109,15 @@ public sealed partial class MemoryTools(
         + "count with an empty file list. Code paths never enter the table. A result warning of '"
         + CodeSearchWarnings.EngineNotConfiguredPrefix + "' means the code section is keyword-only because the code "
         + "embedding engine is not installed: relay '" + CodeEngineSetup.DefaultModelCommand + "' to the user once and "
-        + "treat the code hits as incomplete; re-running the search changes nothing until that command runs.")]
+        + "treat the code hits as incomplete; re-running the search changes nothing until that command runs. "
+        + "Each memory hit may carry retrieval evidence: fusionStrength (0-1, the fraction of the strongest leg "
+        + "agreement this query could have produced — ~0.95 means every firing leg ranked it first, ~0.2 is thin), "
+        + "legs (which legs agreed and at which ranks; a single-leg entry is itself a thin-response tell), and cosine "
+        + "(the fused vector similarity when a vector leg participated). The response may carry fusionStats "
+        + "(topMargin/topVsMedian over pre-normalization raws, plus maxPossible and participatingLegs). A flat margin "
+        + "plus a single-leg top is the measurable 'best of a bad lot' signature — a thin response, not a verdict. "
+        + "These signals claim no relevance (no relevance value is computed); margins are computed over the PRE-floor "
+        + "candidate population, not the served set.")]
     public async Task<ApiEnvelope<SearchResultList>> Search(
         [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
         [Description(
@@ -220,7 +229,7 @@ public sealed partial class MemoryTools(
         // IQueryGuardService (a disabled guard must not silence it). It applies identically
         // whichever kind was requested, since both corpora search the same query text.
         var warning = ComposeWarning(SearchWarnings.Compose(guard.Verdict, QueryLengthGuard.Evaluate(query)), dispatch.CodeWarning);
-        var result = new SearchResultList(dispatch.Results, warning, dispatch.CodeResults);
+        var result = BuildSearchResultList(dispatch, warning);
         var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
 
         // ADR-0094: SearchDispatcher records a search_quality row for every kind, so every
@@ -266,6 +275,42 @@ public sealed partial class MemoryTools(
             (null, not null) => extra,
             _ => $"{primary} {extra}"
         };
+
+    /// <summary>
+    ///     S3 join: the P4 sidecar onto the MCP envelope by hash. Dict-by-hash (not a parallel
+    ///     list): the affinity reorder (SearchResultMerger.Merge) and the floor/limit permute
+    ///     Results order, so a positional coupling would misalign; a hash key survives reorder,
+    ///     gives consumers O(1) lookup, and lets an absent hash mean "no evidence" with no
+    ///     placeholder. Iterates memory Results only: code hashes live in a separate namespace
+    ///     (§8) and floored-out sidecar entries stay out (S10 bounded payload: returned rows
+    ///     only). An empty served set carries no evidence and no stats (G3). Ranking is never
+    ///     touched in name, position, or semantics.
+    /// </summary>
+    private static SearchResultList BuildSearchResultList(SearchDispatchResult dispatch, string? warning)
+    {
+        if (dispatch.Results.Count == 0)
+        {
+            return new SearchResultList(dispatch.Results, warning, dispatch.CodeResults);
+        }
+
+        var sidecar = dispatch.MemorySearchResults;
+        if (sidecar?.EvidenceByHash is not { } evidence)
+        {
+            return new SearchResultList(dispatch.Results, warning, dispatch.CodeResults, null, sidecar?.Stats);
+        }
+
+        var joined = new Dictionary<string, RetrievalEvidence>(dispatch.Results.Count, StringComparer.Ordinal);
+        foreach (var result in dispatch.Results)
+        {
+            if (evidence.TryGetValue(result.Hash, out var item))
+            {
+                joined[result.Hash] = item;
+            }
+        }
+
+        return new SearchResultList(dispatch.Results, warning, dispatch.CodeResults,
+            joined.Count > 0 ? joined : null, sidecar.Stats);
+    }
 
     /// <summary>
     ///     Builds the query from the wire values: enum strings are parsed and rejected on typo,
@@ -434,7 +479,11 @@ public sealed partial class MemoryTools(
         IReadOnlyList<MemorySearchResult> Results,
         string? Warning = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        IReadOnlyList<CodeSearchResult>? Code = null);
+        IReadOnlyList<CodeSearchResult>? Code = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IReadOnlyDictionary<string, RetrievalEvidence>? EvidenceByHash = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        FusionStats? FusionStats = null);
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record ListResult(JsonNode Files);
@@ -483,10 +532,56 @@ public sealed partial class MemoryTools(
                 measurements.Record(new Measurement(name, MeasurementKind.Gauge, value,
                     unit, recordedAt, projectId, queryHash, correlationId));
             }
+
+            foreach (var (name, value, unit) in FusionSignalMeasurements(results))
+            {
+                measurements.Record(new Measurement(name, MeasurementKind.Gauge, value,
+                    unit, recordedAt, projectId, queryHash, correlationId));
+            }
         }
         catch (Exception ex)
         {
             Log.PhaseMeasurementRecordingFailed(logger, ex, correlationId);
+        }
+    }
+
+    /// <summary>
+    ///     Stage-1 response-shape series (plan §5, P6b): top_strength is the max fusion strength
+    ///     over the served rows that carry evidence — reorder-invariant, equal to rank-1 strength
+    ///     when nothing reordered — while top_margin and legs_fired come from Stats. Skip-null:
+    ///     a missing margin or leg set emits no series at all (M8 — a 0.0 sentinel would poison
+    ///     Stage-2 distributions). Carries the caller's queryHash unchanged, so the
+    ///     code-adjacent null rule applies to these series exactly as to the phase series.
+    /// </summary>
+    private static IEnumerable<(string Name, double Value, string Unit)> FusionSignalMeasurements(SearchResults results)
+    {
+        double? topStrength = null;
+        if (results.EvidenceByHash is { } byHash)
+        {
+            foreach (var row in results.Results)
+            {
+                if (byHash.TryGetValue(row.Hash, out var evidence))
+                {
+                    topStrength = topStrength is null
+                        ? evidence.FusionStrength
+                        : Math.Max(topStrength.Value, evidence.FusionStrength);
+                }
+            }
+        }
+
+        if (topStrength is { } strength)
+        {
+            yield return (FusionStats.TopStrengthMetric, strength, "ratio");
+        }
+
+        if (results.Stats is { } stats)
+        {
+            if (stats.TopMargin is { } margin)
+            {
+                yield return (FusionStats.TopMarginMetric, margin, "ratio");
+            }
+
+            yield return (FusionStats.LegsFiredMetric, stats.ParticipatingLegs.Count, "legs");
         }
     }
 

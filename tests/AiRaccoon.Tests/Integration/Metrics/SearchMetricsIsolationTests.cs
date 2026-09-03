@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Metrics;
 using AiRaccoon.Infrastructure.Metrics;
@@ -120,7 +121,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
     ///     allowlist).
     /// </summary>
     [RetryFact]
-    public async Task Search_RecordsNineSeriesMeasurements_ReachingTheMetricsTable_TaggedWithHashAndCorrelationId_NeverQueryText()
+    public async Task Search_RecordsTwelveSeriesMeasurements_ReachingTheMetricsTable_TaggedWithHashAndCorrelationId_NeverQueryText()
     {
         await _tools.Write("acme", "the chassis pattern decision", cancellationToken: TestContext.Current.CancellationToken);
 
@@ -137,7 +138,11 @@ public sealed class SearchMetricsIsolationTests : IDisposable
             "SELECT name AS Name, query_hash AS QueryHash, correlation_id AS CorrelationId, tags AS Tags " +
             "FROM metrics WHERE name LIKE 'search.%'")).ToList();
 
-        rows.Select(r => r.Name).ShouldBe(SearchTimings.SeriesNames, ignoreOrder: true);
+        // 10 SearchTimings series + the 2 fusion series this single-row bank emits.
+        // top_margin is correctly ABSENT: one served row → skip-null per M8 (the
+        // margin-present case is pinned in MemorySearchFusionSignalMetricsTests).
+        rows.Select(r => r.Name).ShouldBe([.. SearchTimings.SeriesNames,
+            FusionStats.TopStrengthMetric, FusionStats.LegsFiredMetric], ignoreOrder: true);
         rows.ShouldAllBe(r => r.QueryHash == ContentHash.OfValue("chassis"));
         rows.ShouldAllBe(r => r.CorrelationId == correlationId);
         rows.ShouldAllBe(r => r.Tags == null, "no row may carry the query text anywhere, including Tags");
