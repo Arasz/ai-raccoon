@@ -116,7 +116,9 @@ cd <worktree> || exit 1
 BUILD=$(dotnet build src/App/App.csproj --nologo 2>&1)
 echo "$BUILD" | grep -q "0 Warning(s)" || { echo "FAIL build"; exit 1; }
 echo "$BUILD" | grep -q "0 Error(s)"   || { echo "FAIL build"; exit 1; }
-TEST=$(dotnet test tests/App.Tests/App.Tests.csproj --filter 'YourSlice' --nologo 2>&1)
+# VSTest projects may add --nologo; MTP projects must not (forwarded to the testhost
+# → 'Unknown option', zero tests, exit 5; dotnet/sdk#55309).
+TEST=$(dotnet test tests/App.Tests/App.Tests.csproj --filter 'YourSlice' 2>&1)
 echo "$TEST" | grep -q "Passed!"       || { echo "FAIL test"; exit 1; }
 echo "$TEST" | grep -q "Failed:     0" || { echo "FAIL test"; exit 1; }
 echo "VERIFY OK"

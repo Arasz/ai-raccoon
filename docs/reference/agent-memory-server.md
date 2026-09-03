@@ -42,7 +42,7 @@ config channel (see [Command-line options](#command-line-options)).
 |--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
 | `memory_write`                 | `projectId`, `content`, `workspaceId?`, `agentId?`, `context?`, `sourceFile?`, `section?`                                                                   | `{hash, path, context, createdAt}`                                                                 |
 | `memory_get`                   | `projectId`, `hash`                                                                                                                                         | `{hash, value, path, context, createdAt}`                                                          |
-| `memory_search`                | `projectId`, `query`, `scope=all\|project\|shared`, `workspaceId?`, `limit=20`, `minRelativeScore=0`, `rrfK=60`, `ftsWeight=1`, `vectorWeight=1`, `contextLabel?`, `kind=memory\|code\|both` (default `both`) | `{results:[{hash, ranking, path, snippet, sourceFile?, chunkIndex, totalChunks}], code?:[{hash, ranking, path, snippet, lineStart, lineEnd}], warning?}` |
+| `memory_search`                | `projectId`, `query`, `scope=all\|project\|shared`, `workspaceId?`, `limit=8`, `minRelativeScore=0.6`, `rrfK=60`, `ftsWeight=1`, `vectorWeight=1`, `contextLabel?`, `kind=memory\|code\|both` (default `both`) | `{results:[{hash, ranking, path, snippet, sourceFile?, chunkIndex, totalChunks}], code?:[{hash, ranking, path, snippet, lineStart, lineEnd}], warning?}` |
 | `memory_record_followthrough`  | `projectId`, `correlationId`, `filePath`                                                                                                                    | `{recorded: true}`                                                                                 |
 | `memory_record_grade`          | `projectId`, `correlationId`, `grade`, `note?`                                                                                                              | `{recorded: true}`                                                                                 |
 | `memory_list`                  | `projectId`                                                                                                                                                 | `{files: <json tree>}`                                                                             |
@@ -315,7 +315,11 @@ config channel (see [Command-line options](#command-line-options)).
   fingerprinted or chunked; a file that was already indexed before a matching rule appeared has
   its stale chunks removed (and its fingerprint cleared) the next time its watch digests it or
   its watch rescans. Editing the ignore file itself triggers a full re-scan of that watch. The
-  ignore file is never matched against its own rules.
+  ignore file is never matched against its own rules. A commented starter covering the
+  five universal noise families (eval corpora, snapshot harnesses, coverage/perf reports,
+  checklist transcripts, vendored mirrors) lives at `docs/reference/ai-raccoon-ignore-template.ignore` —
+  copy it to a new watched root and delete what does not apply, rather than extending
+  the built-in deny set, which would silently change ingest for every project.
 - **Deferred writes:** until an engine is configured, writes are stored deferred
   (`memory_stats.pending > 0`) and only become searchable after `memory_embed_pending`.
 - **`memory_performance`:** project-scoped, except the reserved `__self_metrics__` project id,

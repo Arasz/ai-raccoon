@@ -58,7 +58,10 @@ set -euo pipefail
 cd /path/to/repo/root
 build_out=$(dotnet build --nologo 2>&1); echo "$build_out" | tail -5
 grep -q "0 Warning(s)" <<<"$build_out" || { echo "FAIL: build warnings"; exit 1; }
-test_out=$(dotnet test --nologo 2>&1); echo "$test_out" | tail -3
+# Runner rule: --nologo is VSTest-only. Under Microsoft Testing Platform (MTP)
+# dotnet test forwards it to the testhost, which aborts with 'Unknown option'
+# (zero tests, exit 5; dotnet/sdk#55309) — so MTP projects must not pass it.
+test_out=$(dotnet test 2>&1); echo "$test_out" | tail -3
 grep -qE "Passed!.*Failed:[[:space:]]*0," <<<"$test_out" || { echo "FAIL: tests not green"; exit 1; }
 echo "ALL CHECKS PASSED"
 EOF

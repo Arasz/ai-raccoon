@@ -1,0 +1,55 @@
+# Suggested ai-raccoon.ignore starter — the UNIVERSAL noise families (ADR-0086 §5: the
+# ignore file is the extension surface for anything beyond the built-in deny set).
+#
+# Copy to <watched-root>/ai-raccoon.ignore and delete what does not apply. Every family
+# below was measured as live-bank noise in at least one project on 2026-09-03; the counts
+# are the evidence, not a quota — keep a line only when the path holds no real docs.
+#
+# Why a template and NOT a WatchDenySet extension: the deny set matches exact directory
+# names at any depth for every project with no review surface. Names like `assets`,
+# `snapshots` or `meta` also hold legitimate content in some repos, so promoting them
+# there would silently change ingest behavior bank-wide. A copied-and-reviewed file keeps
+# each project's exclusions a flagged, reviewable diff.
+#
+# Syntax reminder (gitignore subset, no `!` negation in v1): trailing `/` = the directory
+# and everything beneath it; a pattern with no `/` at all matches at any depth; `*` stays
+# within one path segment; `#` comments and blank lines are inert.
+
+# 1. Eval corpora and golden-file fixtures — ai-raccoon leaked 788 rows across
+#    tests/AiRaccoon.Tests/search_quality_eval.json (335), QueryGuard structural assets
+#    (325) and scripts/retrieval_tuning/corpora/ (128). Scope per project: prefer the
+#    fixture-only directory; fall back to the file when siblings must stay indexed.
+# tests/<...>/search_quality_eval.json
+# tests/<...>/QueryGuard/Structural/assets/
+# scripts/retrieval_tuning/corpora/
+**/corpora/
+**/fixtures/
+
+# 2. Snapshot / expected-output harnesses — deepseek-harness leaked 1606 rows across
+#    scripts/snapshots/*/ (*.expected.json, result.json) plus a type-equiv manifest.
+#    `snapshots/` and `__snapshots__/` are fixture-only by convention; keep them active.
+snapshots/
+__snapshots__/
+*.expected.json
+
+# 3. Generated coverage and perf reports — vue-kanban leaked 1127 rows across
+#    lighthouse-report/*.report.json and coverage/coverage-final.json (+ built HTML).
+#    Report directories are never project knowledge; keep these active.
+coverage/
+lighthouse-report/
+*.report.json
+coverage-final.json
+TestResults/
+
+# 4. Checklist transcripts and generated meta indexes — ai-raccoon already ignores
+#    docs/work/checklist/ (large JSON command-output transcripts). The same class:
+#    machine-written index/manifest JSON (jsaa docs/meta/*.json ≈ 340 rows) and
+#    per-run work transcripts. Scope per project — never ignore docs/work/ wholesale;
+#    jsaa holds ~10k legitimate rows under docs/work/plans+designs.
+# docs/work/checklist/
+# docs/meta/*.json
+
+# 5. Vendored / mirrored duplicate trees — ai-badger indexed the same 108 KB rules.json
+#    twice (skills/ and features/common/skills/, 448 rows) plus mirrored references.
+#    Ignore the mirror side, never both; verify byte-identity before excluding.
+# features/common/skills/
