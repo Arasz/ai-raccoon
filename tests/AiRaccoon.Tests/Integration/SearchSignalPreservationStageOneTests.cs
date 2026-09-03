@@ -6,6 +6,7 @@ using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Metrics;
 using AiRaccoon.Core.SearchQuality;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Metrics;
 using AiRaccoon.Infrastructure.Options;
@@ -560,7 +561,7 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
         ICodeSearchService? codeSearch = null)
     {
         var gate = new ToolGate(new MemoryAccessGuard(store), new FakePromotionQueue(),
-            new NeverMigratingStore(), new AllowingRegistrationGuard());
+            new NeverMigratingStore(), new AllowingRegistrationGuard(), migrationGate: new StubMigrationGate(migrated: false));
         return new MemoryTools(store, gate,
             new SearchDispatcher(store, codeSearch ?? new NoOpCodeSearchService(),
                 quality ?? new NoOpSearchQualityService()),
@@ -691,5 +692,13 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
                 SQLitePCL.raw.sqlite3_trace(connection.Handle, hook, null);
             }
         }
+    }
+
+    /// <summary>Unmigrated gate: these search-behavior tests predate the project-ids repair,
+    /// so the fold stays off and pre-migration behavior is preserved.</summary>
+    private sealed class StubMigrationGate(bool migrated) : IProjectIdsMigrationGate
+    {
+        public Task<bool> IsMigratedAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(migrated);
     }
 }
