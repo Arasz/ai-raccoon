@@ -67,8 +67,10 @@ this decision.
 - **Negative**: `result_count` now means different things by kind (memory hits, except pure
    code where it counts code hits), and the row has no `kind` column to say which. Consumers
    must not compare counts across kinds blindly. A `kind` column is the honest repair and it
-   needs a schema migration, so it is deferred, not denied. Until then an empty file list on a
-   nonzero count hints at a code row, but a hint is not a schema.
+   needs a schema migration, so it is deferred, not denied. No shape hint exists today: a code
+   row with hits and a memory row whose hits lack source files both persist files as NULL
+   (the service nulls empty lists), so the two are indistinguishable in storage. The
+   follow-up note proposes making the marker real without DDL first.
 - **Negative**: code query text syncs, as memory query text already does. The principled
    privacy fix is stripping `search_quality` and `metrics` from the sync snapshot (telemetry
    has no merge consumer; the merge only reads `entries` and tombstones). That change is
