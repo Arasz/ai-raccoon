@@ -16,6 +16,22 @@ src/AiRaccoon/Models/
 *.g.cs
 known-flakes.json
 
+# Eval corpora and golden-file fixtures: machine-generated JSON the retriever must
+# never quote back as project knowledge (leaked 788 rows before 2026-09-03:
+# search_quality_eval.json + the QueryGuard structural assets + the retrieval-tuning
+# corpora; eval corpora postdate the ignore mechanism, #400 vs #469/#495).
+# Directory-scoped where the directory holds nothing but fixtures (both dirs contain
+# only their JSON sets); file-scoped for search_quality_eval.json because its
+# directory holds test sources that must stay indexed.
+tests/AiRaccoon.Tests/search_quality_eval.json
+tests/AiRaccoon.Tests/Unit/Memory/QueryGuard/Structural/assets/
+scripts/retrieval_tuning/corpora/
+
+# Generated test-runner output (empty today; guard so a future `dotnet test` run
+# never indexes .trx artifacts). See also the starter template's universal set:
+# docs/reference/ai-raccoon-ignore-template.ignore.
+TestResults/
+
 # Mitigation for #494 until the watch filters events itself: hidden directories and the
 # enumeration deny set, so a file written under them after registration is never digested
 # and the re-scan this edit triggers prunes what already leaked (agent worktrees under
