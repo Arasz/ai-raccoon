@@ -196,12 +196,10 @@ public sealed partial class MemoryTools(
 
         if (dispatch.MemorySearchResults is not null)
         {
-            // SearchDispatcher's search_quality exclusion (kind=code/both never records: rows
-            // sync off-machine, and a code-adjacent query's content hash would leak the same
-            // way) applies here too — the metrics table syncs as well, and RecordSearchMeasurements
-            // still runs for kind=both (the memory leg's SearchResults are non-null). Performance
-            // metrics stay useful telemetry either way, so only the content-identifying query hash
-            // is excluded, not the whole recording (integration review S6).
+            // The metrics table syncs off-machine like search_quality, so the query-content hash
+            // stays excluded for a code-adjacent kind -- only the hash, not the whole recording
+            // (integration review S6, unchanged by ADR-0094). search_quality itself now records
+            // every kind (ADR-0094), with code paths never stored.
             var queryHash = parsedKind == SearchKind.Memory ? ContentHash.OfValue(query) : null;
             RecordSearchMeasurements(dispatch.MemorySearchResults, queryHash, correlationId, canonical);
         }
@@ -214,13 +212,11 @@ public sealed partial class MemoryTools(
         var result = new SearchResultList(dispatch.Results, warning, dispatch.CodeResults);
         var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
 
-        // SearchDispatcher records a search_quality row only for kind=memory, so a kind=code/both
-        // correlation id would be a promise the envelope cannot keep: a later
-        // memory_record_grade/memory_record_followthrough call keyed on it would silently no-op
-        // against a row that was never written (integration review S6).
-        return parsedKind == SearchKind.Memory
-            ? envelope with { Meta = envelope.Meta with { CorrelationId = correlationId } }
-            : envelope;
+        // ADR-0094: SearchDispatcher records a search_quality row for every kind, so every
+        // envelope carries a backed correlation id -- a later memory_record_grade /
+        // memory_record_followthrough call always has a row to key on. This supersedes the
+        // integration-review S6 withholding rule (which held only while code/both wrote no row).
+        return envelope with { Meta = envelope.Meta with { CorrelationId = correlationId } };
     }
 
     /// <summary>Mirrors the scope validation pattern: normalized case-insensitively, rejected fail-fast on a typo.</summary>

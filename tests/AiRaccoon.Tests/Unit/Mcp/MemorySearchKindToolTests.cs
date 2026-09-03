@@ -15,8 +15,9 @@ namespace AiRaccoon.Tests.Unit.Mcp;
 
 /// <summary>
 ///     WP6 — memory_search kind (docs/work/2026-08-21-code-search-implementation-plan.md §3.6):
-///     kind=memory|code|both, the pinned results/code envelope, the search_quality exclusion for
-///     code/both, and the FTS5-only-mode code section warning. WP6-T02…T06/T12.
+///     kind=memory|code|both, the pinned results/code envelope, the search_quality recording rule
+///     for every kind (ADR-0094: both records the memory leg, code its count with no files), and
+///     the FTS5-only-mode code section warning. WP6-T02…T06/T12.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -181,25 +182,59 @@ public sealed class MemorySearchKindToolTests
     }
 
     [Fact]
-    public async Task Search_KindCode_NeverRecordsSearchQuality()
+    public async Task Search_KindCode_RecordsSearchQuality()
     {
         _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
 
         await _tools.Search("acme", "widgets", kind: "code", cancellationToken: TestContext.Current.CancellationToken);
 
-        _quality.RecordedCorrelationIds.ShouldBeEmpty(
-            "kind=code must never record -- the recorder's rows sync, and a code query would leak paths off-machine");
+        _quality.RecordedCorrelationIds.ShouldHaveSingleItem(
+            "ADR-0094: every kind records -- a default (both) search with no row behind it is a dead quality signal");
     }
 
     [Fact]
-    public async Task Search_KindBoth_NeverRecordsSearchQuality()
+    public async Task Search_KindBoth_RecordsSearchQuality()
     {
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
         _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
 
         await _tools.Search("acme", "widgets", kind: "both", cancellationToken: TestContext.Current.CancellationToken);
 
-        _quality.RecordedCorrelationIds.ShouldBeEmpty("kind=both is excluded exactly like kind=code");
+        _quality.RecordedCorrelationIds.ShouldHaveSingleItem("ADR-0094: kind=both records exactly like kind=memory");
+    }
+
+    [Fact]
+    public async Task Search_KindBoth_RecordsTheMemoryLeg_NeverCodePaths()
+    {
+        _store.StubResults =
+        [
+            new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit", SourceFile: "p.md"),
+            new MemorySearchResult("mem-hash-2", 0.8, "q.md", "second hit", SourceFile: "q.md"),
+        ];
+        _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
+
+        await _tools.Search("acme", "widgets", kind: "both", cancellationToken: TestContext.Current.CancellationToken);
+
+        _quality.LastResultCount.ShouldBe(2, "the row describes the memory leg");
+        _quality.LastTopSourceFiles.ShouldBe(["p.md", "q.md"]);
+        _quality.LastTopSourceFiles.ShouldNotContain("Foo.cs",
+            "code paths must never enter the syncing search_quality table (ADR-0085 never-syncs rule)");
+    }
+
+    [Fact]
+    public async Task Search_KindCode_RecordsTheCodeCount_WithNoSourceFiles()
+    {
+        _codeSearch.StubResults =
+        [
+            new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10),
+            new CodeSearchResult("code-hash-2", 0.9, "Bar.cs", "class Bar", 20, 30),
+        ];
+
+        await _tools.Search("acme", "widgets", kind: "code", cancellationToken: TestContext.Current.CancellationToken);
+
+        _quality.LastResultCount.ShouldBe(2, "a code row with a memory-leg 0 would make grades uninterpretable");
+        _quality.LastTopSourceFiles.ShouldBeEmpty(
+            "code paths must never enter the syncing search_quality table (ADR-0085 never-syncs rule)");
     }
 
     [Fact]
@@ -240,25 +275,24 @@ public sealed class MemorySearchKindToolTests
     }
 
     /// <summary>
-    ///     Integration review S6: SearchDispatcher only records a search_quality row for
-    ///     kind=memory, so a kind=code/both correlation id in the envelope has no row behind it —
-    ///     a later memory_record_grade/memory_record_followthrough call keyed on it silently
-    ///     no-ops. The envelope must not hand out a correlation id it cannot back.
+    ///     ADR-0094 supersedes the integration-review S6 withholding rule: every kind now records
+    ///     a search_quality row, so every envelope carries a backed correlation id and a later
+    ///     memory_record_grade/memory_record_followthrough call always has a row to key on.
     /// </summary>
     [Fact]
-    public async Task Search_KindCode_HasNoCorrelationIdInMeta()
+    public async Task Search_KindCode_HasCorrelationIdInMeta()
     {
         _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
 
         var envelope = await _tools.Search("acme", "widgets", kind: "code",
             cancellationToken: TestContext.Current.CancellationToken);
 
-        envelope.Meta.CorrelationId.ShouldBeNull(
-            "no search_quality row backs a kind=code correlation id -- grade/follow-through would silently no-op");
+        envelope.Meta.CorrelationId.ShouldNotBeNullOrEmpty(
+            "ADR-0094: a kind=code row is recorded, so the correlation id is backed");
     }
 
     [Fact]
-    public async Task Search_KindBoth_HasNoCorrelationIdInMeta()
+    public async Task Search_KindBoth_HasCorrelationIdInMeta()
     {
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
         _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
@@ -266,7 +300,7 @@ public sealed class MemorySearchKindToolTests
         var envelope = await _tools.Search("acme", "widgets", kind: "both",
             cancellationToken: TestContext.Current.CancellationToken);
 
-        envelope.Meta.CorrelationId.ShouldBeNull("kind=both is excluded from search_quality exactly like kind=code");
+        envelope.Meta.CorrelationId.ShouldNotBeNullOrEmpty("ADR-0094: kind=both records exactly like kind=memory");
     }
 
     [Fact]
@@ -421,6 +455,12 @@ public sealed class MemorySearchKindToolTests
     {
         public List<string> RecordedCorrelationIds { get; } = [];
 
+        public string? LastQuery { get; private set; }
+
+        public int LastResultCount { get; private set; } = -1;
+
+        public IReadOnlyList<string> LastTopSourceFiles { get; private set; } = [];
+
         public Task<int> PurgeOlderThanAsync(long nowUnixSeconds, int retentionDays,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(0);
@@ -429,6 +469,9 @@ public sealed class MemorySearchKindToolTests
             string? sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default)
         {
             RecordedCorrelationIds.Add(correlationId);
+            LastQuery = query;
+            LastResultCount = resultCount;
+            LastTopSourceFiles = topSourceFiles;
             return Task.CompletedTask;
         }
 
@@ -436,6 +479,9 @@ public sealed class MemorySearchKindToolTests
             int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default)
         {
             RecordedCorrelationIds.Add(correlationId);
+            LastQuery = query;
+            LastResultCount = resultCount;
+            LastTopSourceFiles = topSourceFiles;
             return Task.CompletedTask;
         }
 
