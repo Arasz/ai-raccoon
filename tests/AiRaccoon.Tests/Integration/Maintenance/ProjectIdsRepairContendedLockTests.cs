@@ -8,6 +8,7 @@ using Dapper;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Maintenance;
 
@@ -19,7 +20,8 @@ namespace AiRaccoon.Tests.Integration.Maintenance;
 ///         d-427 MUST-1: no sleep-and-hope timing — the repair starts strictly AFTER the writer
 ///         signals its held lock (TCS latch), and a probe BEGIN observed mid-wait proves a live
 ///         waiter sat on that lock — the repair actually contended instead of running unopposed.
-///         Deterministic by construction, hence a plain Fact (the RetryFact is dropped, not retained).
+///         Deterministic by construction (TCS latch, no timing), wrapped in RetryFact per
+///         the RetrySurfaceGate requirement that integration rows carry a retry attribute.
 ///     </para>
 ///     <para>
 ///         Honesty ledger (mutation : filter : fixture): BEGIN IMMEDIATE back to deferred BEGIN :
