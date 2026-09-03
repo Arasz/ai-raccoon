@@ -108,6 +108,84 @@ public sealed class MemorySearchEvidenceEnvelopeTests
     }
 
     /// <summary>
+    ///     F2: the S3 join is by hash, never by position — served [mem2, mem1] against a sidecar
+    ///     inserted [mem1, mem2]. A positional coupling (the exact alternative M5 rejected) would
+    ///     pin mem1's strength-0.95 two-leg evidence onto mem2 and fail the per-row assertions.
+    ///     Pattern copied from the exemplary <c>EvidenceCarryChainTests</c> reorder guard: served
+    ///     order must genuinely differ from insertion order, or the test proves nothing.
+    /// </summary>
+    [Fact]
+    public async Task Search_WithReorderedResults_JoinsEvidenceByHashNotPosition()
+    {
+        _store.StubResults =
+        [
+            new MemorySearchResult("mem2", 0.8, "b.md", "second"),
+            new MemorySearchResult("mem1", 1.0, "a.md", "first"),
+        ];
+        _store.StubEvidence = new Dictionary<string, RetrievalEvidence>(StringComparer.Ordinal)
+        {
+            ["mem1"] = new RetrievalEvidence("mem1", 0.95,
+                [new LegRank("fts", 1), new LegRank("vector", 1)], 0.87),
+            ["mem2"] = new RetrievalEvidence("mem2", 0.42, [new LegRank("fts", 3)], null),
+        };
+        _store.StubStats = new FusionStats(0.2, 0.35, 0.0328, ["fts", "vector"]);
+        _store.StubResults.Select(r => r.Hash).ShouldNotBe(_store.StubEvidence.Keys,
+            "served order must genuinely differ from sidecar insertion order, or this test proves nothing");
+
+        var envelope = await _tools.Search("acme", "widgets", kind: "memory", sessionId: "sess-test",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        envelope.Data!.Results.Count.ShouldBe(2);
+        envelope.Data!.Results[0].Hash.ShouldBe("mem2");
+        envelope.Data!.Results[0].Ranking.ShouldBe(0.8, "the join never touches Ranking");
+        envelope.Data!.Results[1].Hash.ShouldBe("mem1");
+        envelope.Data!.Results[1].Ranking.ShouldBe(1.0, "the join never touches Ranking");
+        var evidence = envelope.Data!.EvidenceByHash.ShouldNotBeNull();
+        evidence.Count.ShouldBe(2);
+        evidence["mem2"].FusionStrength.ShouldBe(0.42);
+        evidence["mem2"].Legs.ShouldBe([new LegRank("fts", 3)]);
+        evidence["mem2"].Cosine.ShouldBeNull();
+        evidence["mem1"].FusionStrength.ShouldBe(0.95);
+        evidence["mem1"].Legs.ShouldBe([new LegRank("fts", 1), new LegRank("vector", 1)]);
+        evidence["mem1"].Cosine.ShouldBe(0.87);
+    }
+
+    /// <summary>
+    ///     F2 orphan-first variant: a floored-out sidecar entry inserted BEFORE the served hashes,
+    ///     so a positional coupling attaches the dropped hash's evidence to mem2 — the sharpest
+    ///     misalignment. The hash join still resolves each served row and still excludes the orphan.
+    /// </summary>
+    [Fact]
+    public async Task Search_WithOrphanInsertedFirst_StillJoinsEvidenceByHash()
+    {
+        _store.StubResults =
+        [
+            new MemorySearchResult("mem2", 0.8, "b.md", "second"),
+            new MemorySearchResult("mem1", 1.0, "a.md", "first"),
+        ];
+        _store.StubEvidence = new Dictionary<string, RetrievalEvidence>(StringComparer.Ordinal)
+        {
+            ["floored"] = new RetrievalEvidence("floored", 0.99, [new LegRank("vector", 1)], 0.9),
+            ["mem1"] = new RetrievalEvidence("mem1", 0.95,
+                [new LegRank("fts", 1), new LegRank("vector", 1)], 0.87),
+            ["mem2"] = new RetrievalEvidence("mem2", 0.42, [new LegRank("fts", 3)], null),
+        };
+        _store.StubStats = new FusionStats(0.2, 0.35, 0.0328, ["fts", "vector"]);
+
+        var envelope = await _tools.Search("acme", "widgets", kind: "memory", sessionId: "sess-test",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        var evidence = envelope.Data!.EvidenceByHash.ShouldNotBeNull();
+        evidence.Count.ShouldBe(2, "the floored-out orphan stays out (S10) even when inserted first");
+        evidence.ShouldNotContainKey("floored");
+        evidence["mem2"].FusionStrength.ShouldBe(0.42);
+        evidence["mem2"].Legs.ShouldBe([new LegRank("fts", 3)]);
+        evidence["mem1"].FusionStrength.ShouldBe(0.95);
+        evidence["mem1"].Legs.ShouldBe([new LegRank("fts", 1), new LegRank("vector", 1)]);
+        evidence["mem1"].Cosine.ShouldBe(0.87);
+    }
+
+    /// <summary>
     ///     S10 bounded payload: the envelope carries returned rows only. A sidecar entry for a
     ///     hash the floor/limit removed (not in served Results) must not leak onto the wire.
     /// </summary>

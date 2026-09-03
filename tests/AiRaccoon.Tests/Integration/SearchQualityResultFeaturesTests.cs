@@ -291,6 +291,14 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
         rows.ShouldHaveSingleItem().GetProperty("hash").GetString().ShouldBe("hash-a");
     }
 
+    /// <summary>
+    ///     G6 retention wiring: the purge *runs* on the scheduled maintenance pass —
+    ///     <c>BankMaintenanceHostedService.RunPassAsync</c> calls
+    ///     <c>PurgeExpiredRetentionAsync</c>, which calls
+    ///     <c>ISearchQualityService.PurgeOlderThanAsync</c> (EventId 523 on success) — so this
+    ///     mechanics test plus that caller is the whole retention proof. The existing whole-row
+    ///     purge carries the new column with it, no new code.
+    /// </summary>
     [RetryFact]
     public async Task PurgeOlderThan_RemovesRowsCarryingResultFeatures()
     {
@@ -301,7 +309,8 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
         var deleted = await _sut.PurgeOlderThanAsync(
             DateTimeOffset.UtcNow.AddDays(8).ToUnixTimeSeconds(), 7, TestContext.Current.CancellationToken);
 
-        deleted.ShouldBe(1, "retention is the existing whole-row purge — the new column rides along, no new code");
+        deleted.ShouldBe(1, "retention is the scheduled whole-row purge (BankMaintenanceHostedService " +
+            "RunPassAsync -> PurgeExpiredRetentionAsync -> PurgeOlderThanAsync) — the new column rides along, no new code");
         var metrics = await _sut.GetMetricsAsync("proj-a", DateTimeOffset.MinValue, TestContext.Current.CancellationToken);
         metrics.TotalSearches.ShouldBe(0);
     }

@@ -132,6 +132,27 @@ public sealed class MemorySearchFusionSignalMetricsTests
         _recorder.Recorded.ShouldNotBeEmpty("the existing phase series still record");
     }
 
+    /// <summary>
+    ///     M1: kind=code emits no fusion series. Verified current behavior (pinned here, not
+    ///     assumed): the code leg has no memory sidecar, so MemoryTools skips measurement
+    ///     recording entirely when MemorySearchResults is null — the guards stay null-safe and
+    ///     nothing throws on the null sidecar. The quality row still records the code count
+    ///     (ADR-0094); only the metrics path stays silent.
+    /// </summary>
+    [Fact]
+    public async Task Search_KindCode_EmitsNoFusionSignalSeries()
+    {
+        _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
+        var tools = CreateTools();
+
+        var envelope = await tools.Search("acme", "widgets", kind: "code", sessionId: "sess-test",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        envelope.Data!.Code.ShouldHaveSingleItem("the search itself still serves the code hit");
+        FusionSignalSeries().ShouldBeEmpty("kind=code has no memory sidecar, so no fusion series emit");
+        _recorder.Recorded.ShouldBeEmpty("kind=code records no measurement series at all today");
+    }
+
     [Fact]
     public async Task Search_WhenRecorderThrows_StillReturnsFullResults()
     {

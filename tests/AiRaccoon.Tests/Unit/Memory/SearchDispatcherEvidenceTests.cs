@@ -50,6 +50,92 @@ public sealed class SearchDispatcherEvidenceTests
         quality.LastEvidence[1].ShouldBe(evidenceH2);
     }
 
+    /// <summary>
+    ///     F1: the dispatcher join is by hash, never by position — served [h2, h1] against a
+    ///     sidecar inserted [h1, h2] (unserved orphan last). A positional zip would pin h1's
+    ///     strength-1.0 two-leg evidence onto h2 and fail every per-row assertion below.
+    ///     Pattern copied from the exemplary <c>EvidenceCarryChainTests</c> reorder guard: the
+    ///     order-differs assertion proves the fixture genuinely reorders, or the test proves
+    ///     nothing. This dispatcher-level reorder identity is also the accepted cheap closure
+    ///     for F4 (P7 reorder identity): served order differs from insertion order and each row
+    ///     still resolves its own hand-written strength/legs/cosine.
+    /// </summary>
+    [Fact]
+    public async Task DispatchAsync_WithReorderedResults_JoinsEvidenceByHashNotPosition()
+    {
+        var first = new MemorySearchResult("h1", 1.0, "a.md", "snippet a", SourceFile: "a.md");
+        var second = new MemorySearchResult("h2", 0.5, "b.md", "snippet b", SourceFile: "b.md");
+        var sidecar = new Dictionary<string, RetrievalEvidence>(StringComparer.Ordinal)
+        {
+            ["h1"] = new RetrievalEvidence("h1", 1.0, [new LegRank("fts", 1), new LegRank("vector", 1)], 0.9),
+            ["h2"] = new RetrievalEvidence("h2", 0.4, [new LegRank("fts", 2)], null),
+            ["unserved"] = new RetrievalEvidence("unserved", 0.1, [new LegRank("fts", 9)], null),
+        };
+        // Served reversed against insertion order: affinity reordered between fuse and join.
+        var store = new EvidenceStore([second, first], evidenceByHash: sidecar);
+        sidecar.Keys.Take(2).ShouldNotBe(["h2", "h1"],
+            "served order must genuinely differ from sidecar insertion order, or this test proves nothing");
+        var quality = new CapturingQualityService();
+        var dispatcher = new SearchDispatcher(store, new EmptyCodeSearchService(), quality);
+
+        await dispatcher.DispatchAsync(
+            new SearchQuery("acme", "widgets"),
+            SearchKind.Memory,
+            "all",
+            "corr-reorder",
+            sessionId: "sess-test",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        ReorderedEvidenceShouldMatchRows(quality.LastEvidence);
+    }
+
+    /// <summary>
+    ///     F1 orphan-first variant: the unserved sidecar entry is inserted BEFORE the served
+    ///     hashes, so a positional zip attaches the orphan's evidence to h2 — the sharpest
+    ///     misalignment. The hash join is unaffected by insertion order.
+    /// </summary>
+    [Fact]
+    public async Task DispatchAsync_WithOrphanInsertedFirst_StillJoinsEvidenceByHash()
+    {
+        var first = new MemorySearchResult("h1", 1.0, "a.md", "snippet a", SourceFile: "a.md");
+        var second = new MemorySearchResult("h2", 0.5, "b.md", "snippet b", SourceFile: "b.md");
+        var sidecar = new Dictionary<string, RetrievalEvidence>(StringComparer.Ordinal)
+        {
+            ["unserved"] = new RetrievalEvidence("unserved", 0.1, [new LegRank("fts", 9)], null),
+            ["h1"] = new RetrievalEvidence("h1", 1.0, [new LegRank("fts", 1), new LegRank("vector", 1)], 0.9),
+            ["h2"] = new RetrievalEvidence("h2", 0.4, [new LegRank("fts", 2)], null),
+        };
+        var store = new EvidenceStore([second, first], evidenceByHash: sidecar);
+        var quality = new CapturingQualityService();
+        var dispatcher = new SearchDispatcher(store, new EmptyCodeSearchService(), quality);
+
+        await dispatcher.DispatchAsync(
+            new SearchQuery("acme", "widgets"),
+            SearchKind.Memory,
+            "all",
+            "corr-orphan-first",
+            sessionId: "sess-test",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        ReorderedEvidenceShouldMatchRows(quality.LastEvidence);
+    }
+
+    private static void ReorderedEvidenceShouldMatchRows(IReadOnlyList<RetrievalEvidence>? joined)
+    {
+        // Member-wise, not record ShouldBe: record equality compares the Legs lists by
+        // reference, so independently built (but identical) evidence would never be "equal".
+        joined.ShouldNotBeNull("the dispatcher must pass the joined sidecar through");
+        joined.Count.ShouldBe(2, "served-subset only — the unserved orphan never joins");
+        joined[0].Hash.ShouldBe("h2");
+        joined[0].FusionStrength.ShouldBe(0.4);
+        joined[0].Legs.ShouldBe([new LegRank("fts", 2)]);
+        joined[0].Cosine.ShouldBeNull();
+        joined[1].Hash.ShouldBe("h1");
+        joined[1].FusionStrength.ShouldBe(1.0);
+        joined[1].Legs.ShouldBe([new LegRank("fts", 1), new LegRank("vector", 1)]);
+        joined[1].Cosine.ShouldBe(0.9);
+    }
+
     [Fact]
     public async Task DispatchAsync_WithNullEvidence_PassesNullAndBehavesAsBefore()
     {

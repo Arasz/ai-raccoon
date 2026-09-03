@@ -46,6 +46,15 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
     private const int RrfK = 60;
     private const int UnitWeight = 1;
 
+    // Pinned by running LiveSearch_WithVectorLegFiring_IssuesPinnedStatementCount: the count the
+    // both-legs search path issues today, with evidence flowing on both legs (5 open PRAGMAs,
+    // 3 schema/watch checks, the 2-statement settings snapshot, 5 embedding-setting reads, 1 context
+    // resolve, 2 shared + 2 project vector-candidate queries, 2 FTS candidate queries, 1 grouped
+    // snippet lookup, and 1 access bump per served row (5)). Deliberate, not incidental —
+    // pair-update with the two FTS-only pins (SearchEvidencePipelineTests and the
+    // P7 G5 conjunction below): any search-path query change must reconcile all three.
+    private const int ExpectedVectorStatementCount = 28;
+
     private readonly List<string> _roots = [];
     private FakeEmbeddingEndpoint _openAi = null!;
 
@@ -340,8 +349,10 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
         plain.Data!.EvidenceByHash.ShouldNotBeNull("the pin is meaningless unless evidence flowed on the plain path too");
         wired.Data!.EvidenceByHash.ShouldNotBeNull("the pin is meaningless unless evidence flowed on the wired path");
         plainStatements.Count.ShouldBe(16,
-            "the P4 pin re-proven through the full tools path: gate, guard, and buffered " +
-            "recording add zero SQL to the search itself");
+            "the P4 FTS-only pin re-proven through the full tools path (vectorWeight: 0 — the " +
+            "both-legs path has its own pin, LiveSearch_WithVectorLegFiring_IssuesPinnedStatementCount): " +
+            "gate, guard, and buffered recording add zero SQL to the search itself. " +
+            "Pair-update with SearchEvidencePipelineTests.ExpectedStatementCount.");
         ServedKeys(wired).ShouldBe(ServedKeys(plain), "telemetry changes no served row");
         ServedRankings(wired).ShouldBe(ServedRankings(plain), "telemetry changes no ranking");
 
@@ -382,6 +393,38 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
                 new { Id = wiredCorrelationId }, cancellationToken: ct));
         FeatureHashes(features.ShouldNotBeNull()).ShouldBe(ServedKeys(wired),
             "the single INSERT carried the served-subset features with it");
+    }
+
+    /// <summary>
+    ///     F3 (G5 vector path): the statement-count tripwire with the vector leg genuinely firing —
+    ///     seeded harbor bank plus FakeEmbeddingEndpoint vectors, so ParticipatingLegs must name
+    ///     both legs and vector rows must carry cosines, or the pin is meaningless. The FTS-only
+    ///     pins (P4 SearchEvidencePipelineTests + the G5 conjunction below, both vectorWeight: 0)
+    ///     cannot see a query smuggled onto the embedding/vector path; this pin breaks on exactly
+    ///     that. Pair-update with those two FTS-only pins: any search-path query change must
+    ///     reconcile all three.
+    /// </summary>
+    [RetryFact]
+    public async Task LiveSearch_WithVectorLegFiring_IssuesPinnedStatementCount()
+    {
+        var traced = new List<string>();
+        var bank = await CreateHarborBankAsync(TestContext.Current.CancellationToken, sql => traced.Add(sql));
+        var tools = BuildTools(bank.Store);
+        var ct = TestContext.Current.CancellationToken;
+
+        traced.Clear();
+        var both = await tools.Search("acme", "harbor", scope: "all", limit: 50, minRelativeScore: 0.0,
+            rrfK: RrfK, ftsWeight: UnitWeight, vectorWeight: UnitWeight, sourceLambda: 0.0,
+            kind: "memory", cancellationToken: ct, sessionId: "sess-test");
+
+        var stats = both.Data!.FusionStats.ShouldNotBeNull();
+        stats.ParticipatingLegs.ShouldBe(["fts", "vector"],
+            "the pin is meaningless unless the vector leg genuinely fired");
+        var evidence = both.Data!.EvidenceByHash.ShouldNotBeNull();
+        evidence.Values.Where(row => row.Cosine is not null).ShouldNotBeEmpty(
+            "vector-participating rows carry their fused cosine");
+        traced.Count.ShouldBe(ExpectedVectorStatementCount,
+            "G5 on the both-legs path: capture adds zero SQL beyond the pinned search shape");
     }
 
     /// <summary>
@@ -461,12 +504,24 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
         }
     }
 
-    private async Task<HarborBank> CreateHarborBankAsync(CancellationToken cancellationToken)
+    private async Task<HarborBank> CreateHarborBankAsync(CancellationToken cancellationToken, Action<string>? onStatement = null)
     {
         var dataRoot = TestData.CreateTempRoot("airaccoon-p7-s1");
         _roots.Add(dataRoot);
         var options = TestData.CreateInfrastructureOptions(dataRoot);
-        var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+        ISqliteConnectionFactory factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+        if (onStatement is not null)
+        {
+            // F3 vector-path pin: the same observed-not-assumed trace mechanism as the P4 pin
+            // (copied), so the both-legs search shape is pinned statement-for-statement.
+            factory = new CountingFactory(factory, sql =>
+            {
+                if (!sql.StartsWith("--", StringComparison.Ordinal))
+                {
+                    onStatement(sql);
+                }
+            });
+        }
         var clock = new FakeTimeProvider(FixedNow);
         var settings = new SqliteSettingsStore(factory);
         var store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance,
@@ -573,7 +628,7 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
             new { Id = correlationId }, cancellationToken: cancellationToken));
     }
 
-    private sealed record HarborBank(SqliteConnectionFactory Factory, SqliteMemoryStore Store,
+    private sealed record HarborBank(ISqliteConnectionFactory Factory, SqliteMemoryStore Store,
         FakeTimeProvider Clock, IReadOnlyList<MemoryEntry> Entries);
 
     private sealed record Seed(string Value, string SourceFile);

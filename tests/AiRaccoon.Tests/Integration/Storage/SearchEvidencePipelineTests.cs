@@ -2,13 +2,14 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Memory;
+using AiRaccoon.Tests.Unit.Storage;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
 using xRetry.v3;
 
-namespace AiRaccoon.Tests.Unit.Storage;
+namespace AiRaccoon.Tests.Integration.Storage;
 
 /// <summary>
 ///     P4 pipeline wiring through the real <see cref="SqliteMemoryStore" />: S1 evidence
@@ -137,7 +138,9 @@ public sealed class SearchEvidencePipelineTests(ITestOutputHelper output) : IDis
 
     /// <summary>
     ///     G5: capturing and carrying evidence adds zero SQL queries to the search path.
-    ///     The pinned count is the whole search on one project-scoped single-token query:
+    ///     FTS-only path (vectorWeight: 0): the both-legs path has its own pin —
+    ///     <c>SearchSignalPreservationStageOneTests.LiveSearch_WithVectorLegFiring_IssuesPinnedStatementCount</c>.
+    ///     The pinned count is the whole FTS-only search on one project-scoped single-token query:
     ///     5 open PRAGMAs, 3 schema/watch checks, the 2-statement settings snapshot, 1 context
     ///     resolve, 1 FTS candidate query, 1 grouped snippet lookup, and 1 access bump per
     ///     served row (3). Any new query on this path — including one smuggled in by the
@@ -178,8 +181,12 @@ public sealed class SearchEvidencePipelineTests(ITestOutputHelper output) : IDis
     }
 
     // Pinned by running SearchAsync_EvidenceCapture_IssuesZeroNewQueries: the count the
-    // search path issues today, with evidence flowing. Deliberate, not incidental — adding
-    // a query to the search path means updating this literal (SearchResultsTests.PhaseNames
-    // precedent: the pin is the review gate).
+    // FTS-only search path issues today, with evidence flowing. Deliberate, not incidental —
+    // adding a query to the search path means updating this literal (SearchResultsTests.PhaseNames
+    // precedent: the pin is the review gate). Pair-update with the P7 G5 conjunction pin
+    // (SearchSignalPreservationStageOneTests.EquippedSearch_AddsExactlyOneStatementBeyondTheUnequippedPath,
+    // same 16 re-proven through the full tools path) and the P7 vector-path pin
+    // (LiveSearch_WithVectorLegFiring_IssuesPinnedStatementCount): any search-path query change
+    // must reconcile all three.
     private const int ExpectedStatementCount = 16;
 }
