@@ -244,6 +244,88 @@ public sealed class ProjectIdsPullFoldTests : IDisposable
             .ShouldBe(Winner);
     }
 
+    /// <summary>
+    ///     d-426 SHOULD-3 self-arm (the MUST-9 static-alias gap made explicit): a remote guid row
+    ///     whose projects-row name resolves to the WINNER — not an alias — lands on the winner.
+    ///     Without the self-arm the CASE falls to ELSE and the raw guid leaks back as canonical.
+    ///     Ledger — winner-named-guid-leak : --filter PullFoldsWinnerNamedGuidRow_IntoTheWinner :
+    ///     guid + winner-name row, no alias hop (raw guid reappears → red).
+    /// </summary>
+    [RetryFact]
+    public async Task PullFoldsWinnerNamedGuidRow_IntoTheWinner()
+    {
+        const string guidWinnerNamed = "01a062f4-0000-7000-8000-000000000099";
+        var ct = TestContext.Current.CancellationToken;
+        var localFactory = Factory(_localRoot);
+        await using (var local = await localFactory.OpenBankAsync(ct))
+        {
+            await local.ExecuteAsync(MemorySql.RequestRepair,
+                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds() });
+            await RepairJob().RunAsync(local, ct);
+        }
+
+        var remoteFactory = Factory(_remoteRoot);
+        await using (var remote = await remoteFactory.OpenBankAsync(ct))
+        {
+            await remote.ExecuteAsync(
+                "INSERT INTO entries (hash, path, value, source_file, scope, project_id, context_label, created_at, updated_at, embed_state) VALUES " +
+                "('h-guid-winner', 'h-guid-winner', 'winner-named guid content', 'seed.md', 'project', @guid, 'ctx-a', 1, 1, 'pending')",
+                new { guid = guidWinnerNamed });
+            await remote.ExecuteAsync(
+                "INSERT INTO projects (id, name, created_at) VALUES (@guid, @winner, 1)",
+                new { guid = guidWinnerNamed, winner = Winner });
+        }
+
+        var cloud = new FakeCloudStore();
+        cloud.Set("test-object", await SnapshotBytesAsync(_remoteRoot, ct));
+        await NewSyncService(cloud, localFactory).MemorySyncAsync(Winner, "test-object", ct);
+
+        await using var verify = await localFactory.OpenBankAsync(ct);
+        (await verify.ExecuteScalarAsync<string>("SELECT project_id FROM entries WHERE hash = 'h-guid-winner'"))
+            .ShouldBe(Winner, "the winner-named guid row lands on the winner, not the raw guid");
+        (await verify.ExecuteScalarAsync<long>("SELECT count(*) FROM entries WHERE project_id = @guid", new { guid = guidWinnerNamed }))
+            .ShouldBe(0, "the guid never reappears as canonical after a pull");
+    }
+
+    /// <summary>
+    ///     d-426 SHOULD-4: the pull fold matches the repair's domain (project-scope rows only) —
+    ///     custom/shared loser rows merge verbatim, exactly as the repair leaves them.
+    ///     Ledger — custom-shared-pull-fold : --filter PullLeavesCustomAndSharedLoserRows_Verbatim :
+    ///     custom + shared loser rows (folded to the winner → red).
+    /// </summary>
+    [RetryFact]
+    public async Task PullLeavesCustomAndSharedLoserRows_Verbatim()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var localFactory = Factory(_localRoot);
+        await using (var local = await localFactory.OpenBankAsync(ct))
+        {
+            await local.ExecuteAsync(MemorySql.RequestRepair,
+                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds() });
+            await RepairJob().RunAsync(local, ct);
+        }
+
+        var remoteFactory = Factory(_remoteRoot);
+        await using (var remote = await remoteFactory.OpenBankAsync(ct))
+        {
+            await remote.ExecuteAsync(
+                "INSERT INTO entries (hash, path, value, source_file, scope, project_id, context_label, created_at, updated_at, embed_state) VALUES " +
+                "('h-custom', 'h-custom', 'custom loser content', 'seed.md', 'custom', @loser, 'ctx-a', 1, 1, 'pending')," +
+                "('h-shared', 'h-shared', 'shared loser content', 'seed.md', 'shared', @loser, 'ctx-a', 2, 2, 'pending')",
+                new { loser = Loser });
+        }
+
+        var cloud = new FakeCloudStore();
+        cloud.Set("test-object", await SnapshotBytesAsync(_remoteRoot, ct));
+        await NewSyncService(cloud, localFactory).MemorySyncAsync(Winner, "test-object", ct);
+
+        await using var verify = await localFactory.OpenBankAsync(ct);
+        (await verify.ExecuteScalarAsync<string>("SELECT project_id FROM entries WHERE hash = 'h-custom'"))
+            .ShouldBe(Loser, "custom-scope rows merge verbatim — the repair never folds them");
+        (await verify.ExecuteScalarAsync<string>("SELECT project_id FROM entries WHERE hash = 'h-shared'"))
+            .ShouldBe(Loser, "shared-scope rows merge verbatim — the repair never folds them");
+    }
+
     private static SqliteConnectionFactory Factory(string dataRoot)
     {
         var options = TestData.CreateInfrastructureOptions(dataRoot);

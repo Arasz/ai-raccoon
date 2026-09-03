@@ -8,6 +8,13 @@ namespace AiRaccoon.Core.Projects;
 public sealed record ProjectIdAliasEntry(string Alias, string Canonical);
 
 /// <summary>Durable loser-to-winner map for the single-project-id merge (air-merge plan P1): compiled into the binary and JSON-round-trippable, so pull-time fold and the ToolGate fold consume the same table with no bank FK.</summary>
+/// <remarks>
+///     d-425 SHOULD-5: every lookup is <see cref="StringComparison.Ordinal" /> — case-SENSITIVE
+///     by decision, recorded here as a non-goal rather than normalized. A mixed-case id that is
+///     not an explicit entry (e.g. <c>JSAA</c>) is a distinct id and passes through untouched;
+///     only an explicit alias entry folds (e.g. <c>AI-RACCOON</c> → <c>ai-raccoon</c>). The sync
+///     CASE inherits the same semantics (built from <see cref="Aliases" /> verbatim).
+/// </remarks>
 public sealed class ProjectIdAliasMap
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = false };

@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Watch;
 
 namespace AiRaccoon.Infrastructure.Watch;
@@ -17,10 +18,12 @@ public sealed class WatchService(
     IMemoryStore memory,
     WatchPipeline pipeline,
     TimeProvider timeProvider,
-    IWatchOverlapResolver overlapResolver) : IWatchService
+    IWatchOverlapResolver overlapResolver,
+    IProjectIdsMigrationGate migrationGate) : IWatchService
 {
     public async Task<WatchAddOutcome> AddAsync(string projectId, string path, CancellationToken cancellationToken = default)
     {
+        projectId = await FoldAsync(projectId, cancellationToken).ConfigureAwait(false);
         var config = await ResolveConfigAsync(projectId, cancellationToken).ConfigureAwait(false);
         if (!config.Enabled)
         {
@@ -76,6 +79,7 @@ public sealed class WatchService(
 
     public async Task RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default)
     {
+        projectId = await FoldAsync(projectId, cancellationToken).ConfigureAwait(false);
         var normalized = IngestPath.Normalize(path);
         await store.RemoveWatchAsync(projectId, normalized, cancellationToken).ConfigureAwait(false);
         pipeline.UnregisterWatch(projectId, normalized);
@@ -84,6 +88,7 @@ public sealed class WatchService(
     public async Task<IReadOnlyList<WatchStatus>> StatusAsync(string projectId,
         CancellationToken cancellationToken = default)
     {
+        projectId = await FoldAsync(projectId, cancellationToken).ConfigureAwait(false);
         var registrations = (await store.ListWatchesAsync(cancellationToken).ConfigureAwait(false))
             .Where(r => r.ProjectId == projectId)
             .OrderBy(r => r.Path, IngestPath.PathComparer)
@@ -102,6 +107,20 @@ public sealed class WatchService(
     }
 
     public async Task<bool> IsEnabledAsync(string projectId, CancellationToken cancellationToken = default) => (await ResolveConfigAsync(projectId, cancellationToken).ConfigureAwait(false)).Enabled;
+
+    /// <summary>
+    ///     d-425 MUST-1: the watch-create boundary folds through the same alias table as the
+    ///     <c>ToolGate</c> choke, gated on the same migration marker. Post-migration a loser create
+    ///     lands winner-keyed, so later scans ingest under the winner instead of resurrecting the
+    ///     loser; pre-migration ids pass through verbatim (the rename arrange + unmigrated-bank
+    ///     contract). Status/Remove fold for the same reason — row identity must agree on both
+    ///     sides of the marker. Config-only reads need no fold: the key helpers fold at
+    ///     construction already.
+    /// </summary>
+    private async Task<string> FoldAsync(string projectId, CancellationToken cancellationToken) =>
+        await migrationGate.IsMigratedAsync(cancellationToken).ConfigureAwait(false)
+            ? ProjectIdAliasMap.Default.Fold(projectId)
+            : projectId;
 
     public async Task<bool> IsPathAllowedAsync(string projectId, string path,
         CancellationToken cancellationToken = default)

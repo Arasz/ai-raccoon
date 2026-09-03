@@ -2,6 +2,7 @@ using AiRaccoon.Core.Projects;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.TestHelpers;
 using Dapper;
+using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
 using xRetry.v3;
@@ -26,6 +27,8 @@ public sealed class QueueRenameTests : IDisposable
 {
     private const string Winner = "jsaa";
     private const string Loser = "job-search-ai-assistant";
+
+    private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
     private readonly string _dataRoot = TestData.CreateTempRoot("queue-rename");
     private readonly SqliteConnectionFactory _factory;
@@ -59,7 +62,7 @@ public sealed class QueueRenameTests : IDisposable
         var plan = ProjectIdsFoldPlan.FromCensus(
             await ProjectIdCensus.CollectAsync(connection, ct).ConfigureAwait(false),
             ProjectIdAliasMap.Default);
-        await new ProjectIdsRepair(TimeProvider.System).ApplyAsync(connection, plan, ct);
+        await new ProjectIdsRepair(new FakeTimeProvider(FixedNow)).ApplyAsync(connection, plan, ct);
 
         (await CountAsync(connection, Winner, ct)).ShouldBe(157 + 89 + 1,
             "every queued row meets under the winner: 157 winner + 89 loser + the merged collision");

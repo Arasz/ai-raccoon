@@ -149,6 +149,13 @@ public sealed class SingleProjectIdCensusTests : IDisposable
     ///     repair under their original keys with identical counts. Ledger — widen-the-rewrite-predicate :
     ///     --filter "FullyQualifiedName~SingleProjectIdCensusTests.NullContextAndNullScope_Preserved" :
     ///     1 NULL-ctx + 1 NULL-scope row (a widened predicate would fold or drop them).
+    ///     <para>
+    ///         d-427 SHOULD-6: no LOSER NULL-context row is seeded here on purpose — a loser NULL-ctx
+    ///         row stays loser-keyed by design (keep predicate) and would surface as an orphan,
+    ///         breaking OrphanCensus_ZeroAcrossEverySurface above. The loser keep-leg is covered by
+    ///         P2's l-bulk fixture (ProjectIdsRepairJobTests) and the E2E bulk row
+    ///         (SingleProjectIdE2E.MergedClusterSearch) — cited, not duplicated.
+    ///     </para>
     /// </summary>
     [RetryFact]
     public async Task NullContextAndNullScope_Preserved()

@@ -14,6 +14,15 @@ public static class AccessModePolicy
     public static string ProjectSettingKey(string projectId) =>
         $"access.mode.project:{Projects.ProjectIdAliasMap.Default.Fold(projectId)}";
 
+    /// <summary>
+    ///     The pre-P4 spelling of the per-project key: the id embedded verbatim, unfolded.
+    ///     Read-only legacy fallback for lookups (d-426 SHOULD-1 — the MCP choke folds only once
+    ///     migrated, so a raw-spelling row would otherwise miss and fail open): nothing writes
+    ///     this form anymore, <see cref="ProjectSettingKey" /> folds at construction.
+    /// </summary>
+    public static string LegacyProjectSettingKey(string projectId) =>
+        $"{SettingKeyPrefix}project:{projectId}";
+
     public static AccessMode Resolve(AccessMode? global, AccessMode? perProject) => perProject ?? global ?? AccessMode.Rw;
 
     public static bool Allows(AccessMode mode, AccessRequirement requirement) =>

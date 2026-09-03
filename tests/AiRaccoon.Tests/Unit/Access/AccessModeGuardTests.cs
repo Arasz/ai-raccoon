@@ -66,6 +66,37 @@ public sealed class AccessModeGuardTests
         (await _guard.ResolveAsync("acme", TestContext.Current.CancellationToken)).ShouldBe(AccessMode.Rw);
     }
 
+    /// <summary>
+    ///     d-426 SHOULD-1 + d-425 SHOULD-3: CLI key writes fold at construction while the MCP choke
+    ///     folds only once migrated — a pre-P4 (raw-spelling) per-project key must still be honored
+    ///     pre-migration, or the mode silently falls back to global (fail-OPEN). The guard tries the
+    ///     stored spelling too, so the legacy key fails CLOSED.
+    ///     Ledger — legacy-raw-key-miss : --filter Resolve_LegacyRawSpellingKey_IsEnforced_FailsClosed : raw loser key + default global.
+    /// </summary>
+    [Fact]
+    public async Task Resolve_LegacyRawSpellingKey_IsEnforced_FailsClosed()
+    {
+        _store.Settings["access.mode.project:job-search-ai-assistant"] = "ro";
+
+        (await _guard.ResolveAsync("job-search-ai-assistant", TestContext.Current.CancellationToken))
+            .ShouldBe(AccessMode.Ro);
+    }
+
+    /// <summary>
+    ///     When both spellings exist the canonical (folded) key wins — it is the repair-blessed
+    ///     form; the raw key is a legacy fallback, never an override.
+    ///     Ledger — raw-overrides-canonical : --filter Resolve_BothSpellingsPresent_CanonicalWins : folded rw + raw ro.
+    /// </summary>
+    [Fact]
+    public async Task Resolve_BothSpellingsPresent_CanonicalWins()
+    {
+        _store.Settings[AccessModePolicy.ProjectSettingKey("job-search-ai-assistant")] = "rw";
+        _store.Settings["access.mode.project:job-search-ai-assistant"] = "ro";
+
+        (await _guard.ResolveAsync("job-search-ai-assistant", TestContext.Current.CancellationToken))
+            .ShouldBe(AccessMode.Rw);
+    }
+
     [Fact]
     public async Task EnsureAsync_ForWrite_ReadsSettingsStoreOnce()
     {

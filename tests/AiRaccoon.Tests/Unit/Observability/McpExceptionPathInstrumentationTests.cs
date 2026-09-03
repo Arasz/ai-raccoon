@@ -3,6 +3,7 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Observability;
+using AiRaccoon.Tests;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;
@@ -29,7 +30,7 @@ public class McpExceptionPathInstrumentationTests
     {
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
-        var tools = new WatchTools(new NoOpWatchService(), new ToolGate(new AllowAllGuard(), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()));
+        var tools = new WatchTools(new NoOpWatchService(), new ToolGate(new AllowAllGuard(), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()));
 
         await Should.ThrowAsync<McpException>(() =>
             ThroughFilterAsync(metrics, "memory_watch_add", "", token => tools.Add("", "/repo", token)));
@@ -45,7 +46,7 @@ public class McpExceptionPathInstrumentationTests
     {
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
-        var tools = new WatchTools(new NoOpWatchService(), new ToolGate(new AllowAllGuard(), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()));
+        var tools = new WatchTools(new NoOpWatchService(), new ToolGate(new AllowAllGuard(), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()));
 
         await Should.ThrowAsync<McpException>(() =>
             ThroughFilterAsync(metrics, "memory_watch_status", "", token => tools.Status("", token)));
@@ -61,7 +62,7 @@ public class McpExceptionPathInstrumentationTests
     {
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
-        var tools = new WatchTools(new NoOpWatchService(), new ToolGate(new AllowAllGuard(), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()));
+        var tools = new WatchTools(new NoOpWatchService(), new ToolGate(new AllowAllGuard(), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()));
 
         await Should.ThrowAsync<McpException>(() =>
             ThroughFilterAsync(metrics, "memory_watch_remove", "", token => tools.Remove("", "/repo", token)));
@@ -77,7 +78,7 @@ public class McpExceptionPathInstrumentationTests
     {
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
-        var tools = new WatchTools(new NoOpWatchService(), new ToolGate(new DenyWriteGuard(), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()));
+        var tools = new WatchTools(new NoOpWatchService(), new ToolGate(new DenyWriteGuard(), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()));
 
         await Should.ThrowAsync<McpException>(() =>
             ThroughFilterAsync(metrics, "memory_watch_add", "proj-a", token => tools.Add("proj-a", "/repo", token)));
@@ -96,7 +97,7 @@ public class McpExceptionPathInstrumentationTests
         var store = new SimpleFakeStore();
         var tools = new SyncTools(new SimpleFakeSyncService(),
             new SyncCloudStoreFactory(store, NullLoggerFactory.Instance),
-            new ToolGate(new DenyWriteGuard(), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()));
+            new ToolGate(new DenyWriteGuard(), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()));
 
         await Should.ThrowAsync<McpException>(() =>
             ThroughFilterAsync(metrics, "memory_sync", "proj-a", token => tools.Sync("proj-a", token)));

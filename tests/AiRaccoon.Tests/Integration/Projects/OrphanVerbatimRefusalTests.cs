@@ -157,6 +157,12 @@ public sealed class OrphanVerbatimRefusalTests : IAsyncLifetime
             .ShouldBe(0, "the refused write stored nothing");
     }
 
+    /// <summary>
+    ///     No marker: an unmigrated bank holding loser rows. Loser-id reads must succeed and find
+    ///     their rows — enforcement must not break reads, before migration or after. Two rows, not
+    ///     one (d-427 SHOULD-5): a single-row passthrough cannot tell "reads pass through" from
+    ///     "the one row happened to match".
+    /// </summary>
     [RetryFact]
     public async Task OrphanRead_Passthrough()
     {
@@ -164,13 +170,16 @@ public sealed class OrphanVerbatimRefusalTests : IAsyncLifetime
         // its rows — enforcement must not break reads, before migration or after.
         var ct = TestContext.Current.CancellationToken;
         var tools = BuildEnforcingTools();
-        var written = await tools.Write(Loser, "loser row narwhal tusk",
+        var first = await tools.Write(Loser, "loser row narwhal tusk",
+            cancellationToken: ct);
+        var second = await tools.Write(Loser, "loser row narwhal horn",
             cancellationToken: ct);
         await _store.EmbedPendingAsync(Loser, null, ct);
 
         // Ledger — refuse-reads : --filter OrphanRead_Passthrough : unmigrated bank with loser rows, loser-id search.
-        var search = await tools.Search(Loser, "narwhal tusk", sessionId: "sess-pint", cancellationToken: ct);
+        var search = await tools.Search(Loser, "narwhal", sessionId: "sess-pint", cancellationToken: ct);
 
-        search.Data!.Results.ShouldContain(r => r.Hash == written.Data!.Hash);
+        search.Data!.Results.ShouldContain(r => r.Hash == first.Data!.Hash);
+        search.Data!.Results.ShouldContain(r => r.Hash == second.Data!.Hash);
     }
 }

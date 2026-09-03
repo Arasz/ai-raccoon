@@ -30,6 +30,14 @@ internal static class ProjectRows
         $"{alias}scope = 'project' AND {alias}project_id = @{param}";
 
     /// <summary>
+    ///     The project-scope test without the id (<c>{alias}scope = 'project'</c>): the pull fold's
+    ///     domain (d-426 SHOULD-4) — the repair folds project-scope rows, so pulled rows fold on
+    ///     the same scope and merge verbatim otherwise. Kept here so the literal has one home
+    ///     beside <see cref="ProjectScope" /> (the single-definition gate flags copies).
+    /// </summary>
+    public static string ScopeIsProject(string alias = "") => $"{alias}scope = 'project'";
+
+    /// <summary>
     ///     Foldable project rows: <see cref="ProjectScope" /> plus a context label. Repair folds
     ///     move only labelled rows — bulk-ingested NULL-context rows stay byte-identical.
     /// </summary>

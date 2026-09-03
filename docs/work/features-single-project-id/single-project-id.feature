@@ -20,6 +20,9 @@ Feature: Single project id (air-merge repair + enforcement)
             And no queue row is loser-keyed
 
     @air-merge-pint
+    # d-427 SHOULD-7 (recorded split, not a Background): the watch setup stays scenario-local —
+    # the repair scenarios above assert pre-scan state and must not drag FileWatcher machinery
+    # (watches, ingested files, ticks) into every run. Only this scenario needs a live watch.
     Rule: A watch scan never resurrects the loser id
         Scenario: Scan after repair keeps the winner key
             Given a watch for "job-search-ai-assistant" on path "/repo" with "notes-a.md" and "notes-b.md" ingested

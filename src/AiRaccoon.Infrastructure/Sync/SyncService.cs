@@ -32,15 +32,28 @@ public partial class SyncService(
     ///     (same table the repair and the ToolGate fold consume), inlined as a CASE because the merge
     ///     is SQL — the aliases are compile-time constants, never bank content. The remote.projects
     ///     table is always ATTACHed (the merge attaches the whole snapshot, and projects never strips).
+    ///     <para>
+    ///         d-426 SHOULD-3: canonical self-arms (<c>WHEN 'jsaa' THEN 'jsaa'</c>) catch a remote
+    ///         guid row whose projects-row name resolves to a canonical winner rather than an alias
+    ///         — without one the CASE falls to ELSE and the raw guid leaks back as canonical.
+    ///         Alias arms stay ahead of the self-arms: the sets are disjoint today, but an overlap
+    ///         must resolve to the alias winner. Every interpolated literal passes through
+    ///         <see cref="EscapeSqlString" /> so a future quote in the table cannot break the merge.
+    ///     </para>
     /// </summary>
     internal static string FoldRemoteProjectId(string column)
     {
         var named =
             $"COALESCE((SELECT p.name FROM remote.projects p WHERE p.id = {column}), {column})";
         var arms = ProjectIdAliasMap.Default.Aliases
-            .Select(entry => $"WHEN '{entry.Alias}' THEN '{entry.Canonical}'");
-        return $"CASE {named} {string.Join(" ", arms)} ELSE {column} END";
+            .Select(entry => $"WHEN '{EscapeSqlString(entry.Alias)}' THEN '{EscapeSqlString(entry.Canonical)}'");
+        var selfArms = ProjectIdAliasMap.Default.Canonicals
+            .Select(canonical => $"WHEN '{EscapeSqlString(canonical)}' THEN '{EscapeSqlString(canonical)}'");
+        return $"CASE {named} {string.Join(" ", arms)} {string.Join(" ", selfArms)} ELSE {column} END";
     }
+
+    /// <summary>SQL string-literal escape for fold arms: the table is compile-time constants today, but an unescaped quote would break the merge or worse.</summary>
+    internal static string EscapeSqlString(string value) => value.Replace("'", "''");
 
     /// <summary>Convenience ctor for a fixed store (tests); the DI path resolves per call.</summary>
     public SyncService(ICloudStore cloud, Func<CancellationToken, Task<SqliteConnection>> openBank,
@@ -323,12 +336,19 @@ public partial class SyncService(
                 await using (var mergeEntries = conn.CreateCommand())
                 {
                     var foldedRemoteProject = FoldRemoteProjectId("r.project_id");
+                    // d-426 SHOULD-4: the pull fold matches the repair's domain (project-scope rows
+                    // only) — custom/shared rows merge verbatim, exactly as the repair leaves them.
+                    // The tombstone-suppression check below stays folded: identity compares in
+                    // fold-space while storage stays verbatim, so a winner-keyed tombstone still
+                    // suppresses the content it describes.
+                    var scopedFold =
+                        $"CASE WHEN {ProjectRows.ScopeIsProject("r.")} THEN {foldedRemoteProject} ELSE r.project_id END";
                     mergeEntries.CommandText = $"""
                                                INSERT OR IGNORE INTO entries (hash, path, value, source_file, section, scope, project_id, context_label,
                                                                                workspace_id, agent_id, created_at, updated_at,
                                                                                access_count, last_accessed_at, rating, ttl_days,
                                                                                embed_state, embedding)
-                                               SELECT r.hash, r.path, r.value, r.source_file, r.section, r.scope, {foldedRemoteProject}, r.context_label,
+                                               SELECT r.hash, r.path, r.value, r.source_file, r.section, r.scope, {scopedFold}, r.context_label,
                                                       r.workspace_id, r.agent_id, r.created_at, r.updated_at,
                                                       r.access_count, r.last_accessed_at, r.rating, r.ttl_days,
                                                       'pending', NULL

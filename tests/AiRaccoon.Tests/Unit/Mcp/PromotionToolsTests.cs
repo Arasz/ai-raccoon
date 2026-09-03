@@ -1,6 +1,7 @@
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Tests;
 using AiRaccoon.Tools;
 using ModelContextProtocol;
 using Shouldly;
@@ -17,7 +18,7 @@ public sealed class PromotionToolsTests
     private static (FakePromotionQueue Queue, PromotionTools Tools) NewStack()
     {
         var queue = new FakePromotionQueue();
-        var gate = new ToolGate(new AllowingGuard(), queue, new NeverMigratingStore(), new AllowingRegistrationGuard());
+        var gate = new ToolGate(new AllowingGuard(), queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate());
         return (queue, new PromotionTools(queue, gate));
     }
 
@@ -127,7 +128,7 @@ public sealed class PromotionToolsTests
     public async Task List_AllProjects_WhileAModelMigrationIsOpen_Refuses()
     {
         var queue = new FakePromotionQueue();
-        var gate = new ToolGate(new AllowingGuard(), queue, new MigratingStore(), new AllowingRegistrationGuard());
+        var gate = new ToolGate(new AllowingGuard(), queue, new MigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate());
         var tools = new PromotionTools(queue, gate);
 
         await Should.ThrowAsync<ModelMigrationInProgressException>(() =>

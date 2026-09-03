@@ -41,6 +41,11 @@ public sealed record ProjectIdsRepairResult(
 ///     lock to hold, review MUST-1), so a failed step rolls back to the pre-step bank and the open
 ///     repair_requests row retries it on the next maintenance pass.
 ///     <para>
+///         Single-pass (d-426 SHOULD-5): the plan derives from the diagnose-time census, so a
+///         write under a folded id landing mid-apply re-creates the loser key — operators quiesce
+///         writers or loop derive→apply until a run reports no folds (the --apply receipt states this).
+///     </para>
+///     <para>
 ///         Entries scope rule (review S2): only <c>scope = 'project'</c> rows with a non-NULL
 ///         context_label move — NULL-context bulk rows and custom/shared partitions stay
 ///         byte-identical. Dropped ids delete all committed-scope rows instead (there is no winner
@@ -374,9 +379,11 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
     ///     Watch renames run as UPDATEs preserving scan_owner/lease (review SHOULD-2, P4's
     ///     in-flight-scan case relies on it); on a same-path collision the winner's registration
     ///     survives. A cross-store transient is impossible here — every table folds in place, no
-    ///     DELETE+INSERT round trip.
+    ///     DELETE+INSERT round trip. Internal (not private) so the in-flight-scan test can drive the
+    ///     real step in isolation (d-427 SHOULD-3) — a hand-SQL replay of this statement would drift
+    ///     from it silently.
     /// </summary>
-    private static async Task<int> FoldWatchesAsync(SqliteConnection connection, ProjectIdsFoldPlan plan,
+    internal static async Task<int> FoldWatchesAsync(SqliteConnection connection, ProjectIdsFoldPlan plan,
         CancellationToken cancellationToken)
     {
         var total = 0;

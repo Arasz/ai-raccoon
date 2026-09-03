@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Watch;
 using Shouldly;
@@ -12,6 +13,8 @@ namespace AiRaccoon.Tests.Unit.Watch;
 public sealed class WatchServiceTests
 {
     private const string Project = "acme";
+    private const string Winner = "jsaa";
+    private const string Loser = "job-search-ai-assistant";
 
     [Fact]
     public async Task AddAsync_WhenWatchingDisabled_ThrowsWatchDisabled()
@@ -64,6 +67,45 @@ public sealed class WatchServiceTests
         var status = (await stack.Service.StatusAsync(Project, TestContext.Current.CancellationToken)).Single();
         status.Path.ShouldBe(dir.Path);
         status.State.ShouldBe(WatchState.Scanning);
+    }
+
+    [Fact]
+    public async Task AddAsync_WhenMigrated_FoldsAKnownLoserToTheWinner()
+    {
+        // Ledger — raw-loser-watch-create : --filter AddAsync_WhenMigrated_FoldsAKnownLoserToTheWinner : loser create on a migrated bank.
+        // d-425 MUST-1: the watch-create boundary folds through the same alias table as the
+        // gate — a loser create lands winner-keyed, so post-repair scans ingest under the winner
+        // instead of resurrecting the loser. Config already lives under the winner (the P4 key
+        // helpers fold at construction).
+        using var dir = TempDir.New("service-fold");
+        var stack = new WatchTestStack(migrationGate: new MigratedGate());
+        stack.Enable(Winner);
+        stack.AllowScope(dir.Path, Winner);
+
+        await stack.Service.AddAsync(Loser, dir.Path, TestContext.Current.CancellationToken);
+
+        stack.Store.Watches.ShouldContainKey((Winner, dir.Path));
+        stack.Store.Watches.Keys.ShouldAllBe(k => k.ProjectId != Loser,
+            "no loser-keyed row survives a migrated create");
+        (await stack.Service.StatusAsync(Loser, TestContext.Current.CancellationToken)).ShouldHaveSingleItem();
+        await stack.Service.RemoveAsync(Loser, dir.Path, TestContext.Current.CancellationToken);
+        stack.Store.Watches.ShouldBeEmpty("identity agrees on both sides of the marker");
+    }
+
+    [Fact]
+    public async Task AddAsync_WhenUnmigrated_PassesTheLoserThrough()
+    {
+        // Ledger — fold-unmigrated-watch-create : --filter AddAsync_WhenUnmigrated_PassesTheLoserThrough : loser create on an unmigrated bank.
+        // Pins the rename arrange contract: pre-migration the service stores verbatim (the BDD
+        // rename scenarios seed loser watches through this method, then the repair renames them).
+        using var dir = TempDir.New("service-unmigrated");
+        var stack = new WatchTestStack();
+        stack.Enable(Winner);
+        stack.AllowScope(dir.Path, Winner);
+
+        await stack.Service.AddAsync(Loser, dir.Path, TestContext.Current.CancellationToken);
+
+        stack.Store.Watches.ShouldContainKey((Loser, dir.Path));
     }
 
     [Fact]
@@ -273,5 +315,11 @@ public sealed class WatchServiceTests
             .ShouldBeTrue();
         (await stack.Service.IsPathAllowedAsync(Project, outside.Path, TestContext.Current.CancellationToken))
             .ShouldBeFalse();
+    }
+
+    private sealed class MigratedGate : IProjectIdsMigrationGate
+    {
+        public Task<bool> IsMigratedAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
     }
 }

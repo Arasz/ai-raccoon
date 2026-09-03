@@ -6,6 +6,7 @@ using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Metrics;
 using AiRaccoon.Infrastructure.Metrics;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Dapper;
@@ -62,7 +63,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private MemoryTools BuildTools(IMeasurementRecorder recorder) =>
-        new(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()),
+        new(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()),
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
             new QueryGuardService(new InMemorySettings()),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder,

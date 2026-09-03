@@ -82,9 +82,10 @@ public sealed class ProjectIdAliasMapTests
     /// <summary>
     ///     P3/P4 choke helper: guid D-form first, then the alias winner — everything else
     ///     (canonicals, true typos, drop-candidates) comes back untouched. The guard refuses typos
-    ///     and Fold never invents a mapping, so a typo must survive Fold verbatim.
+    ///     and Fold never invents a mapping, so a typo must survive Fold verbatim. Mixed-case legs
+    ///     pin the Ordinal non-goal (d-425 SHOULD-5): JSAA is NOT jsaa — only an explicit entry folds.
     ///     Ledger — skip-alias-leg : --filter Fold_MapsKnownLosers_AndLeavesEverythingElseAlone :
-    ///     jsaa/AI-RACCOON/typo/drop InlineData legs.
+    ///     jsaa/AI-RACCOON/typo/drop/mixed-case InlineData legs.
     /// </summary>
     [Theory]
     [InlineData("job-search-ai-assistant", "jsaa")]
@@ -92,6 +93,8 @@ public sealed class ProjectIdAliasMapTests
     [InlineData("jsaa", "jsaa")]
     [InlineData("jsaaa", "jsaaa")]
     [InlineData("qa-noise-project", "qa-noise-project")]
+    [InlineData("JSAA", "JSAA")]
+    [InlineData("Job-Search-Ai-Assistant", "Job-Search-Ai-Assistant")]
     public void Fold_MapsKnownLosers_AndLeavesEverythingElseAlone(string input, string expected)
     {
         ProjectIdAliasMap.Default.Fold(input).ShouldBe(expected);

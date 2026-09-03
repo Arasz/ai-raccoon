@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Sqlite.Memory;
 
@@ -24,7 +25,9 @@ internal static class ContextFilterProvider
 
         if (context.StartsWith("project:", StringComparison.Ordinal))
         {
-            return new ContextFilter($"{alias}scope = 'project' AND {alias}project_id = @projectId",
+            // d-425 SHOULD-2: the project-membership predicate lives in ProjectRows — this
+            // builds one context's predicate through it, never a copied literal.
+            return new ContextFilter(ProjectRows.ProjectScope(alias),
                 new Dictionary<string, object?> { ["projectId"] = projectId });
         }
 

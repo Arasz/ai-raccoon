@@ -6,6 +6,7 @@ using AiRaccoon.Core.Metrics;
 using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
+using AiRaccoon.Tests;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;
@@ -44,7 +45,7 @@ public sealed class MemorySearchKindToolTests
     public MemorySearchKindToolTests()
     {
         var access = new MemoryAccessGuard(_store);
-        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard());
+        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate());
         _tools = new MemoryTools(_store, gate, new SearchDispatcher(_store, _codeSearch, _quality),
             new QueryGuardService(new InMemorySettings()),
             new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(),
@@ -332,7 +333,7 @@ public sealed class MemorySearchKindToolTests
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
         _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
         var recorder = new SpyMeasurementRecorder();
-        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()),
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()),
             new SearchDispatcher(_store, _codeSearch, _quality), new QueryGuardService(new InMemorySettings()),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
 
@@ -348,7 +349,7 @@ public sealed class MemorySearchKindToolTests
     {
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
         var recorder = new SpyMeasurementRecorder();
-        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()),
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()),
             new SearchDispatcher(_store, _codeSearch, _quality), new QueryGuardService(new InMemorySettings()),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
 
@@ -446,7 +447,7 @@ public sealed class MemorySearchKindToolTests
         var quality = new SqliteSearchQualityService(new ThrowingConnectionFactory(),
             NullLogger<SqliteSearchQualityService>.Instance);
         var tools = new MemoryTools(_store,
-            new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()),
+            new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()),
             new SearchDispatcher(_store, _codeSearch, quality), new QueryGuardService(new InMemorySettings()),
             new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(),
             NullLogger<MemoryTools>.Instance);

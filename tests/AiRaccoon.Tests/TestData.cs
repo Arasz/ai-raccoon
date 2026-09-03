@@ -576,6 +576,18 @@ public sealed class AllowingRegistrationGuard : IProjectRegistrationGuard
         Task.CompletedTask;
 }
 
+/// <summary>
+///     Stub <see cref="Core.Projects.IProjectIdsMigrationGate"/> for tests that construct a gate
+///     directly and do not exercise the P3 fold: explicitly unmigrated, so ids pass through
+///     unfolded. Named at every construction — the gate ctor takes no default (d-425 SHOULD-1,
+///     d-426 SHOULD-5), so a forgotten gate is a compile error, never a silent pass-through.
+/// </summary>
+public sealed class NeverMigratedGate : Core.Projects.IProjectIdsMigrationGate
+{
+    public Task<bool> IsMigratedAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(false);
+}
+
 /// <summary>No-op implementation of <see cref="ISearchQualityService"/> for unit tests that construct <see cref="MemoryTools"/> directly.</summary>
 public sealed class NoOpSearchQualityService : ISearchQualityService
 {

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
@@ -17,6 +18,13 @@ public sealed class ProjectIdCensusTests
     private const string GuidBadgerA = "01a03024-0000-7000-8000-000000000001";
     private const string GuidBadgerB = "01a0302f-0000-7000-8000-000000000002";
 
+    private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
+
+    /// <summary>
+    ///     Per populated surface: every id-keyed counter lands on its id's row.
+    ///     Ledger — drop-a-surface-count : --filter Collect_OnASeededMultiClusterBank_ReportsEveryIdKeyedSurfacePerId :
+    ///     multi-cluster bank (queue+code+quality+watches+tombstones+metrics+settings seeded).
+    /// </summary>
     [RetryFact]
     public async Task Collect_OnASeededMultiClusterBank_ReportsEveryIdKeyedSurfacePerId()
     {
@@ -60,6 +68,11 @@ public sealed class ProjectIdCensusTests
         guid.Orphan.ShouldBeFalse();
     }
 
+    /// <summary>
+    ///     Retire/delete candidates surface with their attachments before any decision.
+    ///     Ledger — skip-zero-entry-rows : --filter Collect_SurfacesZeroEntryGuids_WithTheirAttachments :
+    ///     two zero-entry guids + drop candidates with watch/quality/noise attachments.
+    /// </summary>
     [RetryFact]
     public async Task Collect_SurfacesZeroEntryGuids_WithTheirAttachments()
     {
@@ -90,6 +103,11 @@ public sealed class ProjectIdCensusTests
         noise.AttachmentCount.ShouldBe(0);
     }
 
+    /// <summary>
+    ///     Id-embedding keys attribute to their owner; global keys stay unattributed.
+    ///     Ledger — skip-key-attribution : --filter Collect_AttributesSettingsKeys_ById_LeavingGlobalsUnattributed :
+    ///     colliding ingest.scope casing pair + watch.enabled loser key + two globals.
+    /// </summary>
     [RetryFact]
     public async Task Collect_AttributesSettingsKeys_ById_LeavingGlobalsUnattributed()
     {
@@ -105,6 +123,11 @@ public sealed class ProjectIdCensusTests
         report.UnattributedSettingsKeys.ShouldContain("sync.provider");
     }
 
+    /// <summary>
+    ///     NULL-scope/NULL-context rows are counted bank-wide, not attributed.
+    ///     Ledger — miscount-nulls : --filter Collect_CountsNullScopeAndNullContextRows_BankWide :
+    ///     1 NULL-scope + 2 NULL-context rows (a miscount hides bulk residue).
+    /// </summary>
     [RetryFact]
     public async Task Collect_CountsNullScopeAndNullContextRows_BankWide()
     {
@@ -117,18 +140,34 @@ public sealed class ProjectIdCensusTests
         report.NullContextEntries.ShouldBe(2, "one jsaa bulk row plus the workspace row carry NULL context_label");
     }
 
+    /// <summary>
+    ///     The read-only proof: under PRAGMA query_only the census returns EXACTLY the full report
+    ///     a normal run returns — compared as JSON over twin seeded banks (FixedNow makes the seeds
+    ///     byte-identical), not just a non-empty smoke. Record Equals cannot serve here: the row
+    ///     and key properties are lists, which compare by reference. Any write attempt throws
+    ///     under query_only.
+    ///     Ledger — write-under-census : --filter Collect_RunsUnderQueryOnly_ProvingZeroBankWrites :
+    ///     twin seeded banks compared by full-report JSON equality.
+    /// </summary>
     [RetryFact]
     public async Task Collect_RunsUnderQueryOnly_ProvingZeroBankWrites()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var connection = await OpenSeededAsync(ct);
+        await using var baseline = await OpenSeededAsync(ct);
         await connection.ExecuteAsync(new CommandDefinition("PRAGMA query_only = ON", cancellationToken: ct));
 
         var report = await ProjectIdCensus.CollectAsync(connection, ct);
+        var expected = await ProjectIdCensus.CollectAsync(baseline, ct);
 
-        report.Rows.ShouldNotBeEmpty();
+        JsonSerializer.Serialize(report).ShouldBe(JsonSerializer.Serialize(expected));
     }
 
+    /// <summary>
+    ///     Empty bank, empty report — no phantom rows, no unattributed keys.
+    ///     Ledger — phantom-rows : --filter Collect_OnAnEmptyBank_ReturnsNoRowsAndZeroCounters :
+    ///     schema-only bank (any row at all reddens).
+    /// </summary>
     [RetryFact]
     public async Task Collect_OnAnEmptyBank_ReturnsNoRowsAndZeroCounters()
     {
@@ -163,7 +202,7 @@ public sealed class ProjectIdCensusTests
 
     private static async Task SeedAsync(SqliteConnection connection, CancellationToken ct)
     {
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var now = FixedNow.ToUnixTimeSeconds();
         var contentVector = EmbeddingBlob.ToBytes(new float[384]);
         var codeVector = EmbeddingBlob.ToBytes(new float[768]);
 

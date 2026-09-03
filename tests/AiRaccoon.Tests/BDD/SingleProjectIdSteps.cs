@@ -74,8 +74,15 @@ public sealed class SingleProjectIdSteps(ScenarioContext scenarioContext)
             new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]),
             TestData.CreateEmbeddingService(), _ctx.TimeProvider);
         (await job.RunAsync(connection, ct)).ShouldBeTrue("the split-cluster bank must fold");
+        // FileWatcherSteps precedent: model elapsed time after the repair — a same-fake-second
+        // post-repair edit could tie the pre-repair watermark and be skipped as not-due.
+        // Production never ties; fake time must not either.
+        _ctx.TimeProvider.Advance(TimeSpan.FromSeconds(30));
     }
 
+    // Ledger — skip-entries-rewrite : "Loser rows meet under the winner" scenario : jsaa 2+2 +
+    // AI-RACCOON 2+2 labeled rows (an entries-only rewrite still leaves loser rows behind);
+    // skip-projects-ensure : same : winners-registered assert (loser registry row must delete).
     [Then("^no labeled entries row is loser-keyed$")]
     public async Task ThenNoLabeledEntriesLoserKeyed()
     {
@@ -96,6 +103,8 @@ public sealed class SingleProjectIdSteps(ScenarioContext scenarioContext)
         ids.ShouldNotContain(Loser, "the loser registry row never survives the fold");
     }
 
+    // Ledger — skip-queue-rewrite : "The split queue meets under the winner" scenario : jsaa 2 +
+    // loser 2 queued rows (the winner holds every row only when the queue fold ran).
     [Then("^the winner's queue holds every row$")]
     public async Task ThenWinnerQueueHoldsEveryRow()
     {
@@ -119,6 +128,9 @@ public sealed class SingleProjectIdSteps(ScenarioContext scenarioContext)
         _watch.WriteFile(path, $"{file} post-repair scan content");
     }
 
+    // Ledger — scan-resurrects-loser : "Scan after repair keeps the winner key" scenario : loser
+    // watch + ingested notes-a/b, post-repair notes-c + tick (a scan storing under the watch's
+    // pre-repair id reintroduces the loser key on every surface asserted below).
     [Then("^no watch, file, digest or queue row is loser-keyed$")]
     public async Task ThenNoWatchSurfaceLoserKeyed()
     {

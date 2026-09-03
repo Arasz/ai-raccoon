@@ -3,6 +3,7 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Projects;
+using AiRaccoon.Tests;
 using AiRaccoon.Tools;
 using ModelContextProtocol;
 using Shouldly;
@@ -22,7 +23,7 @@ public sealed class ToolGateTests
         var queue = new FakePromotionQueue();
         var migrations = new RecordingMigrations();
         var registration = new RecordingRegistrationGuard();
-        return (guard, queue, migrations, registration, new ToolGate(guard, queue, migrations, registration));
+        return (guard, queue, migrations, registration, new ToolGate(guard, queue, migrations, registration, new NeverMigratedGate()));
     }
 
     [Fact]
@@ -189,24 +190,20 @@ public sealed class ToolGateTests
     }
 
     /// <summary>
-    ///     The mechanical half of M1: without the marker the bank behaves exactly as before — the
-    ///     loser passes through unfolded (the winners' own writes must never refuse on an
-    ///     unmigrated bank). Ledger — fold-unconditionally :
-    ///     --filter RequireAsync_WhenUnmigrated_PassesTheLoserThroughUnfolded : same write, gate false.
+    ///     The mechanical half of M1: an EXPLICITLY unmigrated bank behaves exactly as before —
+    ///     the loser passes through unfolded (the winners' own writes must never refuse on an
+    ///     unmigrated bank). d-425 SHOULD-1 inversion: the old theory's `true` leg constructed the
+    ///     gate with NO migration gate at all and asserted the pass-through bypass — that shape no
+    ///     longer compiles (the ctor takes no default), so every construction names its migration
+    ///     state and only an explicit unmigrated gate passes through.
+    ///     Ledger — missing-gate-pass-through : --filter RequireAsync_WhenExplicitlyUnmigrated_PassesTheLoserThroughUnfolded : loser write, explicit unmigrated gate.
     /// </summary>
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task RequireAsync_WhenUnmigrated_PassesTheLoserThroughUnfolded(bool migrated)
+    [Fact]
+    public async Task RequireAsync_WhenExplicitlyUnmigrated_PassesTheLoserThroughUnfolded()
     {
-        // True here means the gate was constructed WITHOUT a migration gate at all (the pre-P3
-        // call shape every existing construction uses); false means an explicit unmigrated bank.
-        // Both must behave identically: no fold until the marker exists.
         var (guard, _, _, registration, _) = NewStack();
-        var gate = migrated
-            ? new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration)
-            : new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration,
-                migrationGate: new StubMigrationGate(false));
+        var gate = new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration,
+            new StubMigrationGate(false));
 
         var canonical = await gate.RequireAsync("job-search-ai-assistant", AccessRequirement.Write,
             "memory_write", TestContext.Current.CancellationToken);

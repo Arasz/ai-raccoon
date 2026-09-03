@@ -16,6 +16,7 @@ using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
 using AiRaccoon.Observability;
 using AiRaccoon.Prompts;
+using AiRaccoon.Tests;
 using AiRaccoon.Tools;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -79,7 +80,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
                 NullLogger<PromotionQueueService>.Instance,
                 _ctx.TimeProvider),
             new NeverMigratingStore(),
-            new AllowingRegistrationGuard());
+            new AllowingRegistrationGuard(), new NeverMigratedGate());
 
     private FakeCloudStore CloudStore => (FakeCloudStore)scenarioContext[CloudStoreKey];
 

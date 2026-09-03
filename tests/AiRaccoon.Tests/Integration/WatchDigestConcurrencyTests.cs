@@ -9,6 +9,7 @@ using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Projects;
 using AiRaccoon.Tests.TestHelpers;
 using Dapper;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -36,6 +37,14 @@ public sealed class WatchDigestConcurrencyTests
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    ///     The watches-leg replay text the in-flight test executes mid-scan (d-427 SHOULD-3): one
+    ///     shared const, so the replay cannot drift from the drift assert below without touching both.
+    /// </summary>
+    private const string WatchesFoldReplaySql =
+        "UPDATE watches SET project_id = @w WHERE project_id = @l " +
+        "AND NOT EXISTS (SELECT 1 FROM watches w WHERE w.project_id = @w AND w.path = watches.path)";
 
     [RetryFact]
     public async Task TwoProcessesDigestingOnePath_KeepItSearchable_AndChunkItOnce()
@@ -138,10 +147,12 @@ public sealed class WatchDigestConcurrencyTests
         await one.Gate.Entered.WaitAsync(Patience, token);
         await using (var connection = await one.Factory.OpenBankAsync(token))
         {
-            // The repair's watches UPDATE in isolation (FoldWatchesAsync's statement shape).
-            await connection.ExecuteAsync(new CommandDefinition(
-                "UPDATE watches SET project_id = @w WHERE project_id = @l " +
-                "AND NOT EXISTS (SELECT 1 FROM watches w WHERE w.project_id = @w AND w.path = watches.path)",
+            // The repair's watches UPDATE in isolation — a hand-SQL replay of FoldWatchesAsync's
+            // watches leg ONLY (d-427 SHOULD-3): files/claims must stay loser-keyed while the stale
+            // digest is parked (moving them early orphans its held claim under the winner and the
+            // later v3 digest declines). The replay text is shared with WatchesFoldReplay_MatchesTheRealStep
+            // below, which fails if the replay and the real step ever diverge.
+            await connection.ExecuteAsync(new CommandDefinition(WatchesFoldReplaySql,
                 new { w = winner, l = loser }, cancellationToken: token));
         }
 
@@ -166,7 +177,7 @@ public sealed class WatchDigestConcurrencyTests
         {
             var plan = ProjectIdsFoldPlan.FromCensus(
                 await ProjectIdCensus.CollectAsync(connection, token), ProjectIdAliasMap.Default);
-            await new ProjectIdsRepair(TimeProvider.System).ApplyAsync(connection, plan, token);
+            await new ProjectIdsRepair(new FakeTimeProvider(FixedNow)).ApplyAsync(connection, plan, token);
         }
 
         await using (var after = await one.Factory.OpenBankAsync(token))
@@ -204,7 +215,7 @@ public sealed class WatchDigestConcurrencyTests
             var plan = ProjectIdsFoldPlan.FromCensus(
                 await ProjectIdCensus.CollectAsync(connection: redrive, cancellationToken: token),
                 ProjectIdAliasMap.Default);
-            await new ProjectIdsRepair(TimeProvider.System).ApplyAsync(redrive, plan, token);
+            await new ProjectIdsRepair(new FakeTimeProvider(FixedNow)).ApplyAsync(redrive, plan, token);
             (await redrive.ExecuteScalarAsync<long>(new CommandDefinition(
                     "SELECT count(*) FROM watch_files WHERE project_id = @l",
                     new { l = loser }, cancellationToken: token)))
@@ -212,6 +223,102 @@ public sealed class WatchDigestConcurrencyTests
             (await NullContextCountAsync(one, loser, token)).ShouldBe(nullBefore,
                 "NULL-context mirrors stay byte-identical across the redrive (review S2)");
         }
+    }
+
+    /// <summary>
+    ///     d-427 SHOULD-3 shape-drift assert: twin loser-keyed banks (watch + file + claim, plus a
+    ///     same-path winner watch for the collision leg) — one runs the full hand-replay below,
+    ///     the other the real <c>ProjectIdsRepair.FoldWatchesAsync</c>. All three tables must come
+    ///     out identical (leases ride the UPDATE, collisions keep the winner): the replay pins
+    ///     prod's CURRENT shape, so any drift in the real step's watches/files/claims legs
+    ///     reddens here instead of silently invalidating the in-flight test's transient window.
+    ///     The watches UPDATE leg additionally shares <c>WatchesFoldReplaySql</c> with the
+    ///     in-flight test, so the replayed statement itself cannot drift from this pin.
+    ///     Ledger — watches-replay-drift : --filter WatchesFoldReplay_MatchesTheRealStep : twin banks, replay vs real step.
+    /// </summary>
+    [Fact]
+    public async Task WatchesFoldReplay_MatchesTheRealStep()
+    {
+        const string loser = "job-search-ai-assistant";
+        const string winner = "jsaa";
+        var token = TestContext.Current.CancellationToken;
+        var replayRoot = TestData.CreateTempRoot("watch-fold-twin-replay");
+        var realRoot = TestData.CreateTempRoot("watch-fold-twin-real");
+        try
+        {
+            await using var replayBank = await OpenFoldTwinAsync(replayRoot, loser, winner, token);
+            await using var realBank = await OpenFoldTwinAsync(realRoot, loser, winner, token);
+
+            // Table names are this test's own constants, never bank content.
+            foreach (var table in new[] { "watches", "watch_files", "watch_digest_claims" })
+            {
+                var update = table == "watches"
+                    ? WatchesFoldReplaySql
+                    : $"UPDATE {table} SET project_id = @w WHERE project_id = @l " +
+                      $"AND NOT EXISTS (SELECT 1 FROM {table} t WHERE t.project_id = @w AND t.path = {table}.path)";
+                await replayBank.ExecuteAsync(new CommandDefinition(update,
+                    new { w = winner, l = loser }, cancellationToken: token));
+                await replayBank.ExecuteAsync(new CommandDefinition(
+                    $"DELETE FROM {table} WHERE project_id = @l",
+                    new { l = loser }, cancellationToken: token));
+            }
+
+            var window = new ProjectIdsFoldPlan([new ProjectIdFold(loser, winner)], [], [], []);
+            await ProjectIdsRepair.FoldWatchesAsync(realBank, window, token);
+
+            (await DumpFoldTablesAsync(replayBank, token)).ShouldBe(await DumpFoldTablesAsync(realBank, token));
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(replayRoot);
+            TestData.DeleteTempRoot(realRoot);
+        }
+    }
+
+    private static async Task<SqliteConnection> OpenFoldTwinAsync(string dataRoot, string loser, string winner,
+        CancellationToken cancellationToken)
+    {
+        var options = new InfrastructureOptions
+        {
+            DataRoot = dataRoot, Rid = "osx-arm64", Scope = InstallScope.User
+        };
+        var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+        var connection = await factory.OpenBankAsync(cancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO watches (project_id, path, created_at, last_change_ts, scan_owner, scan_lease_expires_at) VALUES " +
+            "(@l, '/repo/a', 1, 1, 'scanner-1', 1700003600), (@w, '/repo/a', 2, 2, 'owner-w', 999)",
+            new { l = loser, w = winner }, cancellationToken: cancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO watch_files (project_id, path, file_hash, updated_at) VALUES (@l, '/repo/a', 'h', 3)",
+            new { l = loser }, cancellationToken: cancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO watch_digest_claims (project_id, path, claimed_at) VALUES (@l, '/repo/a', 4)",
+            new { l = loser }, cancellationToken: cancellationToken));
+        return connection;
+    }
+
+    private static async Task<string> DumpFoldTablesAsync(SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        // Table/column names are this method's own constants, never bank content.
+        var dump = new System.Text.StringBuilder();
+        foreach (var (table, columns) in new[]
+                 {
+                     ("watches", "project_id || '|' || path || '|' || scan_owner || '|' || scan_lease_expires_at"),
+                     ("watch_files", "project_id || '|' || path || '|' || file_hash"),
+                     ("watch_digest_claims", "project_id || '|' || path || '|' || claimed_at")
+                 })
+        {
+            var rows = await connection.QueryAsync<string>(new CommandDefinition(
+                $"SELECT {columns} FROM {table} ORDER BY project_id, path", cancellationToken: cancellationToken));
+            dump.AppendLine(table);
+            foreach (var row in rows)
+            {
+                dump.AppendLine(row);
+            }
+        }
+
+        return dump.ToString();
     }
 
     private static async Task<long> NullContextCountAsync(Process process, string projectId,

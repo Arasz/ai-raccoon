@@ -6,6 +6,7 @@ using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Code;
+using AiRaccoon.Tests;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Dapper;
@@ -38,7 +39,7 @@ public sealed class MemorySearchCodeIntegrationTests : IAsyncLifetime
         var settings = new SqliteSettingsStore(_factory);
         var store = new SettingsOnlyStore(settings);
         var access = new MemoryAccessGuard(store);
-        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard());
+        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate());
         _tools = new MemoryTools(store, gate,
             new SearchDispatcher(store, new SqliteCodeSearchService(_factory, new FakeCodeEmbedder()), new NoOpSearchQualityService()),
             new QueryGuardService(settings), new MemoryWriteService(store, new FakePromotionQueue()),

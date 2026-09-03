@@ -42,6 +42,12 @@ public sealed class ShareExtractRequestValidator : AbstractValidator<ShareExtrac
             .Must(ids => ids.Count <= MaxProjects)
             .WithMessage($"projectIds must contain 1..{MaxProjects} project ids");
 
+        // d-425 MUST-2, service leg: the tool pre-checks blanks before its per-element gate,
+        // but this pipeline is reachable without MCP (see IShareExtractService) — a blank element
+        // here fails validation instead of cwd-guessing at the service's own gate loop.
+        RuleForEach(request => request.ProjectIds)
+            .NotEmpty().WithMessage("projectIds must not contain blank ids");
+
         RuleFor(request => request.Mode)
             .Must(mode => mode is ShareExtractRequest.ProposeMode or ShareExtractRequest.PromoteMode)
             .WithMessage($"mode must be '{ShareExtractRequest.ProposeMode}' or '{ShareExtractRequest.PromoteMode}'");
