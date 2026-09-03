@@ -103,8 +103,9 @@ config channel (see [Command-line options](#command-line-options)).
   read the full chunk with `code_get`. Every `memory_search` writes a `search_quality` row
   (ADR-0094): `kind=memory` records the memory hit count and files as always, `kind=both`
   records the memory leg the same way, and `kind=code` records the code hit count with an empty
-  file list. Code paths never enter the table, since its rows travel in the sync snapshot and
-  the code corpus never leaves the machine. `meta.correlationId` is present on all three kinds
+  file list. Code paths never enter the table — neither the code corpus nor the telemetry
+  tables ever leave the machine (code per ADR-0085, telemetry stripped from every pushed
+  snapshot per ADR-0098). `meta.correlationId` is present on all three kinds
   (the id `memory_record_grade`/`memory_record_followthrough` key off), since every search now
   has a row behind it. `sessionId` is required on every search. Pass your session id. Blank fails fast. The server stores the value verbatim on the row. When you open a file the search returned, call `memory_record_followthrough` with that id, the file path, and `servedRank` when you saw one. Rank is 1-based. Under `kind=both` a bare rank cannot name its section, and that ambiguity is intentional. Grade with `memory_record_grade` (1-5, 5 is best, plus an optional note) on the same id when you have a judgment.
 - **`memory_ingest_file`/`memory_ingest_directory` feed the code corpus too:** a file is routed

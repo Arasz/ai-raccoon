@@ -462,8 +462,9 @@ public sealed partial class MemoryTools(
     ///     present only when the no-fusion-regression flag is on (docs/adr/0078) — with the query
     ///     hash and correlation id and hands them to the recorder; never the query text itself
     ///     (SqliteMetricsStore's save-time allowlist rejects it). queryHash is null for a
-    ///     code-adjacent kind (kind=both): the metrics table syncs off-machine like search_quality,
-    ///     so a code-adjacent query's content hash is excluded the same way. Best-effort: a
+    ///     code-adjacent kind (kind=both): the metrics table never leaves the machine (stripped
+    ///     from every pushed snapshot per ADR-0098, like search_quality), so a code-adjacent
+    ///     query's content hash is excluded the same way as defense-in-depth. Best-effort: a
     ///     throwing recorder must never fail or slow the search (WP3).
     /// </summary>
     private void RecordSearchMeasurements(SearchResults results, string? queryHash, string correlationId, string projectId)
