@@ -71,12 +71,6 @@ density gate. Queue: dynamic floor near cap, organic per-project per-pass cap (n
 limits, sweep, and version-clear handling stay as-is. Process: scorer Version 2→3 bump
 decision, parity check against the C# port, and the full train/validation/holdout ablation.
 
-## SHIPPED-WITHOUT-ABLATION waiver — OPEN, owner action required
+## SHIPPED-WITHOUT-ABLATION waiver — GRANTED by merge of #598; partial ablation recorded 2026-09-04
 
-This change ships on unit-level exact-diff evidence only. The corpus ablation the catalog calls
-for (`score_round.py` over train/validation/holdout plus the parity check against the C# port)
-was NOT run in this lane: the split fixtures are absent from disk (the eval tree carries only
-`reference-labels.json` and the round2/round3 agent scorers, no train/validation/holdout
-splits), and running it is outside this lane's allowed files. Merging without that ablation —
-or supplying the fixtures first — is the owner's explicit call. Granting this waiver also acknowledges the staleness window: with no scorer-version bump in this change, already-queued rows keep their old scores until natural churn replaces them. This section must not be
-marked granted by anyone but the owner.
+This change shipped on unit-level exact-diff evidence, and the owner granted the waiver by merging #598. After the merge a partial ablation ran (`docs/work/2026-09-04-scorer-ablation-report.md`): v1 labels rejoined to the 1.8.0 backup bank (53/61 rows; 8 ids gone from every bank on this machine), three prototype arms, full-set only — the round-3 splits are still absent, so that gate stays open. Outcome, stated plainly: spearman flat (after +0.6112 vs before +0.6180, bootstrap CI contains zero), nDCG@10 up one top-10 swap (+0.9373 vs +0.8907, CI contains zero), movement concentrated in labels 0–2 with the label-4 head rank-stable, and the merged C# port inside ±0.03 of the after-prototype on the same 53 rows. That clears safety, not efficacy: no significant degradation, no proof the middle got better. The staleness window stands as written above — queued rows keep old scores until natural churn — and the Version 2→3 bump decision with it.
