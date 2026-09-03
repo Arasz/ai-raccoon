@@ -68,7 +68,11 @@ jobs:
           # matched here (docs/**, *.md, etc.) is treated as safe to skip.
           # docs/ subdirs are included because 8 test files read docs at runtime
           # via TestData.RepoFile — a docs-only PR that breaks one must go red (#541).
-          CODE_REGEX='^src/.*\.cs$|^tests/.*\.cs$|\.csproj$|\.sln$|(^|/)Directory\.Build\.props$|(^|/)Directory\.Packages\.props$|\.feature$|\.onnx$|^nuget\.config$|^scripts/verify-tool-package\.py$|^\.github/workflows/build\.yml$|^docs/adr/|^docs/reference/|^docs/how-to/|^docs/plans/'
+          # VERSION is included because it is the file release.yml triggers on: a
+          # release PR that changes only VERSION would otherwise take all three
+          # required checks green having built nothing, and the commit that cuts a
+          # public release is the last one that should reach main unbuilt.
+          CODE_REGEX='^src/.*\.cs$|^tests/.*\.cs$|\.csproj$|\.sln$|(^|/)Directory\.Build\.props$|(^|/)Directory\.Packages\.props$|\.feature$|\.onnx$|^nuget\.config$|^scripts/verify-tool-package\.py$|^\.github/workflows/build\.yml$|^VERSION$|^docs/adr/|^docs/reference/|^docs/how-to/|^docs/plans/'
 
           if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BASE" 2>/dev/null; then
             echo "No usable base commit (new branch or force-push); treating as a code change."
