@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Watch;
@@ -60,6 +61,57 @@ public sealed class WatchDigestExecutorTests
 
         var queued = stack.EmbedDrainPump.DrainUpTo(10).ShouldHaveSingleItem();
         queued.Corpus.ShouldBe(EmbedCorpus.Code);
+    }
+
+    /// <summary>In-flight scans outlive the repair rename holding the loser id: with the marker
+    /// set, the digest boundary folds to the winner so a post-repair scan cannot resurrect the
+    /// loser key in watch_files (CI BDD failure 2026-09-03: 1 loser row post-tick).</summary>
+    [Fact]
+    public async Task Digest_FoldsLoserToWinnerWhenMigrated()
+    {
+        // Ledger — remove-the-fold : --filter Digest_FoldsLoserToWinnerWhenMigrated : migrated
+        // stack, loser-id digest; fingerprint must land winner-keyed.
+        using var dir = TempDir.New("digest-fold");
+        var file = dir.File("a.md");
+        await File.WriteAllTextAsync(file, "fold me", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack(new MigratedGate());
+        await stack.Store.AddWatchAsync("job-search-ai-assistant", dir.Path, 0, 0,
+            TestContext.Current.CancellationToken);
+
+        await Executor(stack).DigestAsync("job-search-ai-assistant", dir.Path, file,
+            WatchEventKind.Created, null, TestContext.Current.CancellationToken);
+
+        (await stack.Store.GetFileHashAsync("jsaa", file, TestContext.Current.CancellationToken))
+            .ShouldBe(WatchDigestExecutor.ComputeHash(file, "fold me"));
+        (await stack.Store.GetFileHashAsync("job-search-ai-assistant", file,
+            TestContext.Current.CancellationToken)).ShouldBeNull();
+    }
+
+    /// <summary>Pre-migration the boundary passes ids through verbatim (marker-gated fold).</summary>
+    [Fact]
+    public async Task Digest_PassesIdThroughWhenUnmigrated()
+    {
+        // Ledger — force-fold-always : --filter Digest_PassesIdThroughWhenUnmigrated : unmigrated
+        // stack, loser-id digest; fingerprint must stay loser-keyed.
+        using var dir = TempDir.New("digest-passthrough");
+        var file = dir.File("a.md");
+        await File.WriteAllTextAsync(file, "pass me", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        await stack.Store.AddWatchAsync("job-search-ai-assistant", dir.Path, 0, 0,
+            TestContext.Current.CancellationToken);
+
+        await Executor(stack).DigestAsync("job-search-ai-assistant", dir.Path, file,
+            WatchEventKind.Created, null, TestContext.Current.CancellationToken);
+
+        (await stack.Store.GetFileHashAsync("job-search-ai-assistant", file,
+            TestContext.Current.CancellationToken))
+            .ShouldBe(WatchDigestExecutor.ComputeHash(file, "pass me"));
+    }
+
+    private sealed class MigratedGate : IProjectIdsMigrationGate
+    {
+        public Task<bool> IsMigratedAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
     }
 
     [Fact]

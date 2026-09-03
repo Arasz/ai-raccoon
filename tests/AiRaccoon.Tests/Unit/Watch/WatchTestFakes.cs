@@ -29,7 +29,8 @@ internal sealed class WatchTestStack
         Memory.WriteFingerprint = (projectId, path, hash) =>
             Store.SetFingerprint(projectId, path, hash, Time.GetUtcNow().ToUnixTimeSeconds());
         var scanInitiatorLazy = new Lazy<IWatchScanInitiator>(() => ScanInitiator);
-        Executor = new WatchDigestExecutor(Memory, Store, Time, IgnoreRules, scanInitiatorLazy, EmbedDrainPump);
+        Executor = new WatchDigestExecutor(Memory, Store, Time, IgnoreRules, scanInitiatorLazy, EmbedDrainPump,
+            migrationGate ?? new NeverMigratedGate());
         Pipeline = new WatchPipeline(
             new WatchScheduler(), Executor, new WatchRetryPolicy(), ScanGuard,
             Memory, Time, NullLogger<WatchPipeline>.Instance);

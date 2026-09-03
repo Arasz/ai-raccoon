@@ -707,7 +707,8 @@ public sealed class WatchIntegrationTests
             WatchCatchUp? catchUp = null;
             Pipeline = new WatchPipeline(new WatchScheduler(),
                 new WatchDigestExecutor(Memory, WatchStore, Time,
-                    new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => catchUp!), EmbedDrainPump),
+                    new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => catchUp!), EmbedDrainPump,
+                    new SqliteProjectIdsMigrationGate(_factory)),
                 new WatchRetryPolicy(),
                 ScanGuard, Memory, Time, new FakeLogger<WatchPipeline>(_logs));
             EventSource = new WatchEventSource(evt =>

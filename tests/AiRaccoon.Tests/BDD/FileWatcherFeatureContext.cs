@@ -202,7 +202,8 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
         WatchCatchUp? catchUp = null;
         Pipeline = new WatchPipeline(new WatchScheduler(),
             new WatchDigestExecutor(Store, WatchStore, TimeProvider,
-                new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => catchUp!), EmbedDrainPump),
+                new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => catchUp!), EmbedDrainPump,
+                new SqliteProjectIdsMigrationGate(Factory)),
             new WatchRetryPolicy(), scanGuard, Store, TimeProvider,
             NullLogger<WatchPipeline>.Instance);
         EventSource = new WatchEventSource(Pipeline.Enqueue, Errors.Add, NullLogger<WatchEventSource>.Instance);

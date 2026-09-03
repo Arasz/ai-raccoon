@@ -432,7 +432,8 @@ public sealed class WatchDigestConcurrencyTests
                 NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(Factory), Gate, time, TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
             WatchStore = new WatchStore(Factory);
             Executor = new WatchDigestExecutor(Memory, WatchStore, time, new IgnoreRulesProvider(),
-                new Lazy<IWatchScanInitiator>(() => new NoOpWatchScanInitiator()), TestData.NewEmbedDrainPump());
+                new Lazy<IWatchScanInitiator>(() => new NoOpWatchScanInitiator()), TestData.NewEmbedDrainPump(),
+                new SqliteProjectIdsMigrationGate(Factory));
         }
 
         public SqliteConnectionFactory Factory { get; }
