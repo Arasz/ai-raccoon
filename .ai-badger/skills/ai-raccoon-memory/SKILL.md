@@ -41,9 +41,7 @@ all (older tool build on another machine), update the tool: `dotnet tool update 
 
 ## 2. Search-first workflow
 
-Always pass `projectId`. Before web search, code search, or asking the user, run
-`memory_search(projectId, scope=all)` with 2-3 formulations: exact phrase → keywords →
-plain-English restatement. Entries carry source paths — cite them as evidence.
+Always pass `projectId` and `sessionId`. Pass your session id on every search. The server rejects a blank one and stores the value verbatim on the search row. Before web search, code search, or asking the user, run `memory_search(projectId, sessionId, scope=all)` with 2-3 formulations. Try the exact phrase first, then keywords, then a plain restatement. Entries carry source paths. Cite them as evidence. Every reply carries `meta.correlationId`. Keep that id. You need it to grade the search or to record that you opened one of its files.
 
 ## 3. Escalation by result
 
@@ -60,9 +58,9 @@ memory (`project:<id>`). For in-progress notes use workspace isolation:
 cross-project facts with `memory_share` — never automatically. `memory_sweep` removes old
 low-rated entries; shared entries are exempt.
 
-## 5. Scopes
+## 5. Scopes and kinds
 
-`scope=all` (default: shared + project), `scope=project`, `scope=shared` (the promotion tier only).
+`scope=all` (default: shared + project), `scope=project`, `scope=shared` (the promotion tier only). Kind defaults to `both`. It runs the memory and code hybrids separately and returns both sections. `kind=memory` searches memory only. `kind=code` searches code only. Recording follows the request. Memory and both store the memory leg count and files. Code stores the code count with an empty file list. Code paths never enter the table.
 
 ## 6. Gotchas
 
@@ -71,6 +69,7 @@ low-rated entries; shared entries are exempt.
   `scope='custom'`, invisible to project-scoped search.
 - `memory_embed_pending`: omit `limit` to process all pending entries.
 - `memory_delete_context` requires full access mode.
+- When you open a file the search returned, call `memory_record_followthrough` with the same `correlationId`, the file path, and `servedRank` when you saw one. Rank is 1-based. Under `kind=both` a bare rank cannot name its section. That ambiguity is intentional, so send no section qualifier. Grade with `memory_record_grade` (1-5) on the same id when you have a judgment.
 - A `memory_search` result (`kind=code` or `kind=both`) carrying a warning starting
   `code engine not configured` means its code section is FTS5 keyword matches only — semantic
   code hits are missing, not absent; don't read it as a complete answer. Tell the user, once
@@ -87,5 +86,5 @@ size; `memory_sync` exchanges snapshots with cloud storage when configured.
 ## 8. Verification Checklist
 
 - [ ] `memory_watch_status` shows the docs dir `healthy`
-- [ ] `memory_search(projectId, scope=all)` returns docs-derived hits
+- [ ] `memory_search(projectId, sessionId, scope=all)` returns docs-derived hits
 - [ ] A durable finding was written back with `memory_write`, source path included

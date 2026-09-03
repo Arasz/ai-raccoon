@@ -102,7 +102,10 @@ public sealed partial class MemoryTools(
         "Hybrid semantic search over the bank. scope=all (default) searches shared + project (+ workspace when named); "
         + "scope=project searches the project only; scope=shared searches the shared promotion tier only. A project scope "
         + "covers every context in the project unless contextLabel narrows it to one. sessionId is required: every agent "
-        + "has a session, and the id is stored verbatim on the search_quality row. A result warning of '"
+        + "has a session, and the id is stored verbatim on the search_quality row. Kind defaults to both, with each "
+        + "section ranked by its own hybrid. Every search records a search_quality row and returns meta.correlationId "
+        + "for grade and follow-through. Memory and both store the memory leg count and files. Code stores the code "
+        + "count with an empty file list. Code paths never enter the table. A result warning of '"
         + CodeSearchWarnings.EngineNotConfiguredPrefix + "' means the code section is keyword-only because the code "
         + "embedding engine is not installed: relay '" + CodeEngineSetup.DefaultModelCommand + "' to the user once and "
         + "treat the code hits as incomplete; re-running the search changes nothing until that command runs.")]
