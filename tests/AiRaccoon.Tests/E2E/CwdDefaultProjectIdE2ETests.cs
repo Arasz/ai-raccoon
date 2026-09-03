@@ -60,7 +60,7 @@ public sealed class CwdDefaultProjectIdE2ETests : IAsyncLifetime
         Text(write).ShouldContain("\"hash\"");
 
         // No projectId argument at all — the server resolves laneA from the cwd's scope row.
-        var search = await CallAsync("memory_search", ("query", "cwd default resolution fact xyzzy"));
+        var search = await CallAsync("memory_search", ("query", "cwd default resolution fact xyzzy"), ("sessionId", "sess-e2e"));
         Text(search).ShouldContain("cwd default resolution fact xyzzy");
 
         // The resolved id is laneA on a second tool too — stats is scoped to the resolved project.
