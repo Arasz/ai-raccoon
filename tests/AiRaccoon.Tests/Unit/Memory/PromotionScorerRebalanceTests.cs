@@ -90,8 +90,8 @@ public sealed class PromotionScorerRebalanceTests
         var planCapped = PromotionContentEvidence.Evaluate(
             Neutral with { RuleDensity = 5.0 }, ProvenanceArchetype.Plan);
 
-        workNoteCapped.Adjustment.ShouldBeLessThan(1.2, "headroom: the cap must bind before the clamp");
-        planCapped.Adjustment.ShouldBeLessThan(1.0, "headroom: the cap must bind before the clamp");
+        workNoteCapped.Adjustment.ShouldBeLessThan(1.60, "headroom: the 0.95 cap must bind before the 1.60 clamp");
+        planCapped.Adjustment.ShouldBeLessThan(1.60, "headroom: the 0.60 cap must bind before the 1.60 clamp");
         workNoteCapped.Adjustment.ShouldBe(workNoteBase.Adjustment + 0.95, 0.0001);
         planCapped.Adjustment.ShouldBe(planBase.Adjustment + 0.60, 0.0001);
     }
@@ -114,9 +114,11 @@ public sealed class PromotionScorerRebalanceTests
     [Fact]
     public void OneItemChecklist_StaysSilent()
     {
+        var without = EvaluateFeatures(Neutral);
         var one = EvaluateFeatures(Neutral with { Imperatives = 1 });
 
         one.Reasons.ShouldNotContain("imperative-checklist");
+        one.Adjustment.ShouldBe(without.Adjustment, 0.0001);
     }
 
     /// <summary>Combined effect, off-clamp: rule phrasing plus checklist shape on one chunk —
@@ -135,18 +137,20 @@ public sealed class PromotionScorerRebalanceTests
         combined.Adjustment.ShouldBe(ruleOnly.Adjustment - 0.45, 0.0001);
     }
 
-    /// <summary>The verified-contract gate loosens to 0.6: rule phrasing at 0.6-0.79 density
-    /// with a measurement behind it already fires, while below 0.6 it stays silent.
+    /// <summary>The verified-contract gate loosens to exactly 0.6: rule phrasing at 0.6 density
+    /// with a measurement behind it already fires, while 0.59 stays silent.
     /// Red direction: the old gate needs 0.8, so the in-band assertion fails before the fix.</summary>
     [Fact]
     public void VerifiedContract_FiresAtSixTenthsDensity_SilentBelow()
     {
-        var firing = EvaluateFeatures(Neutral with { RuleDensity = 0.7, MeasureWords = 1 });
-        var silent = EvaluateFeatures(Neutral with { RuleDensity = 0.5, MeasureWords = 1 });
+        var firing = EvaluateFeatures(Neutral with { RuleDensity = 0.6, MeasureWords = 1 });
+        var silent = EvaluateFeatures(Neutral with { RuleDensity = 0.59, MeasureWords = 1 });
+        var ruleOnlyAtEdge = EvaluateFeatures(Neutral with { RuleDensity = 0.59 });
 
         firing.Adjustment.ShouldBeLessThan(1.0, "headroom: the bonus must not be clamp-masked");
         firing.Reasons.ShouldContain("verified-contract");
         silent.Reasons.ShouldNotContain("verified-contract");
+        silent.Adjustment.ShouldBe(ruleOnlyAtEdge.Adjustment, 0.0001);
     }
 
     /// <summary>Exact diff of the verified-contract bonus: toggling the measure word (with no
