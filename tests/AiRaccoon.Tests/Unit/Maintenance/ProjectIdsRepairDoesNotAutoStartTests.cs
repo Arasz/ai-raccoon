@@ -25,11 +25,13 @@ public sealed class ProjectIdsRepairDoesNotAutoStartTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
+    // Ledger — repair-implements-job : --filter ProjectIdsRepair_DoesNotImplementIMaintenanceJob : type check, no fixture.
     [Fact]
     public void ProjectIdsRepair_DoesNotImplementIMaintenanceJob() =>
         typeof(ProjectIdsRepair).GetInterfaces().ShouldNotContain(typeof(IMaintenanceJob),
             "a type wired into the auto-run job list must be an IMaintenanceJob — this one structurally cannot be added to it by accident; ProjectIdsRepairJob wraps it instead");
 
+    // Ledger — project-ids-gains-clock-interval : --filter RegisterMemoryServices_TheBankOpenJobList_HasNoClockIntervalForProjectIdsRepair : DI job list.
     [Fact]
     public void RegisterMemoryServices_TheBankOpenJobList_HasNoClockIntervalForProjectIdsRepair()
     {

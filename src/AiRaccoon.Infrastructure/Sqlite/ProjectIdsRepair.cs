@@ -62,11 +62,15 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
         var vecInvalidated = await InvalidateVecAsync(connection, plan, cancellationToken).ConfigureAwait(false);
         var codeVecInvalidated = await InvalidateCodeVecAsync(connection, plan, cancellationToken).ConfigureAwait(false);
+        // Queue BEFORE entries (review MUST-1): the entries-dedup DELETE below fires
+        // promotion_queue_entries_ad, which eats queue rows still keyed by the loser id — the
+        // normal production shape is a queue hash that IS an entries hash, so folding entries
+        // first silently drops candidates the queue fold would have merged.
+        var (queueMerged, queueMoved, queueRemoved) =
+            await FoldQueueAsync(connection, plan, cancellationToken).ConfigureAwait(false);
         var (entriesMoved, entriesDeduped, entriesTombstoned) =
             await FoldEntriesAsync(connection, plan, now, cancellationToken).ConfigureAwait(false);
         var (codeMoved, codeDeduped) = await FoldCodeAsync(connection, plan, cancellationToken).ConfigureAwait(false);
-        var (queueMerged, queueMoved, queueRemoved) =
-            await FoldQueueAsync(connection, plan, cancellationToken).ConfigureAwait(false);
         var discardsMoved = await FoldDiscardsAsync(connection, plan, cancellationToken).ConfigureAwait(false);
         var qualityMoved = await FoldQualityAsync(connection, plan, cancellationToken).ConfigureAwait(false);
         var watchesMoved = await FoldWatchesAsync(connection, plan, cancellationToken).ConfigureAwait(false);
@@ -143,11 +147,14 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
             var step = await InWriteTransactionAsync(connection, async () =>
             {
                 // Content-addressed fold: a row whose (path, hash, label) already lives under the
-                // winner is the same content — the winner's row survives, the loser's is tombstoned
-                // (rewritten to the winner id by the tombstone step, which is what the pull-side
-                // folded compare suppresses an unrepaired replica's push against) and deleted.
-                // promotion_queue_entries_ad only sees OLD.project_id = loser rows whose
-                // queue legs already folded to the winner, so it never touches the winner's rows.
+                // winner is the same content — the winner's row survives and the loser's deletes
+                // with NO tombstone. Tombstones are created only for genuinely removed content
+                // (the dropped path below): a dedup tombstone is redundant for suppression (the
+                // unique committed bucket already dedups the content) and purely destructive on
+                // pull, where the apply-tombstones site deletes live winner rows other replicas
+                // still serve (review MUST-2). The queue fold already ran ahead of this step, so
+                // the queue legs are winner-keyed and promotion_queue_entries_ad (which matches
+                // OLD.project_id = loser) never touches the merged candidates.
                 var stepMoved = await connection.ExecuteAsync(new CommandDefinition(
                         """
                         UPDATE entries SET project_id = @winner
@@ -160,23 +167,14 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
                         """,
                         new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken))
                     .ConfigureAwait(false);
-                var stepTombstoned = await connection.ExecuteAsync(new CommandDefinition(
-                        """
-                        INSERT OR IGNORE INTO sync_tombstones (project_id, hash, scope, deleted_at)
-                        SELECT project_id, hash, scope, @now FROM entries
-                        WHERE scope = 'project' AND context_label IS NOT NULL AND project_id = @loser
-                        """,
-                        new { loser = fold.Loser, now }, cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
                 var stepDeleted = await connection.ExecuteAsync(new CommandDefinition(
                         "DELETE FROM entries WHERE scope = 'project' AND context_label IS NOT NULL AND project_id = @loser",
                         new { loser = fold.Loser }, cancellationToken: cancellationToken))
                     .ConfigureAwait(false);
-                return (Moved: stepMoved, Deduped: stepDeleted, Tombstoned: stepTombstoned);
+                return (Moved: stepMoved, Deleted: stepDeleted);
             }, cancellationToken).ConfigureAwait(false);
             moved += step.Moved;
-            deduped += step.Deduped;
-            tombstoned += step.Tombstoned;
+            deduped += step.Deleted;
         }
 
         foreach (var dropped in plan.Dropped)
@@ -535,10 +533,11 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
     }
 
     /// <summary>
-    ///     Tombstone PK rewrite plus creation (review M4a): surviving tombstones follow the fold so
-    ///     a pull from an unrepaired replica keeps suppressing the loser push (the merge compares
-    ///     the folded id — SyncService folds loser ids on pull), and every deleted hash gains one
-    ///     under its own id. On a same-(hash, scope) collision the later delete wins.
+    ///     Tombstone PK rewrite (review M4a): surviving tombstones follow the fold so a pull from
+    ///     an unrepaired replica keeps suppressing the loser push (the merge compares the folded
+    ///     id — SyncService folds loser ids on pull). Creation lives next to the rows it describes
+    ///     in <see cref="FoldEntriesAsync" />'s dropped path only — never for dedup-collapsed
+    ///     duplicates (review MUST-2). On a same-(hash, scope) collision the later delete wins.
     /// </summary>
     private static async Task<int> FoldTombstonesAsync(SqliteConnection connection,
         ProjectIdsFoldPlan plan, CancellationToken cancellationToken)
@@ -579,8 +578,8 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
             }, cancellationToken).ConfigureAwait(false);
         }
 
-        // Created counts ride on the entries step (fold leftovers + dropped deletes tombstone
-        // inline, next to the rows they describe) — this step rewrites only.
+        // Created counts ride on the entries step (dropped deletes tombstone inline, next to the
+        // rows they describe) — this step rewrites only.
         return rewritten;
     }
 

@@ -22,8 +22,10 @@ namespace AiRaccoon.Tests.Integration.Sync;
 ///     <para>
 ///         Honesty ledger (mutation : filter : fixture): skip-tombstone-PK-rewrite :
 ///         TombstonePkRewritten_NoResurrectionOnRealPull : loser tombstone + live loser row on the
-///         unrepaired side; skip-pull-fold : either test : same fixtures — a hand-SQL replay of the
-///         merge is a fake-store green, so both drive the real MergeRemoteAsync through
+///         unrepaired side; skip-pull-fold : PullFoldsLiveLoserRows_IntoTheWinner (2 live loser rows),
+///         PullFoldsGuidLoserRows_IntoTheWinner (guid + name row + guid tombstone),
+///         PullDedupContent_SurvivorPersistsUnderWinner (same hash both sides) — a hand-SQL replay of
+///         the merge is a fake-store green, so all four drive the real MergeRemoteAsync through
 ///         MemorySyncAsync. Code never syncs (P1 trace (b)), so the fold covers entries +
 ///         tombstones only.
 ///     </para>
@@ -48,6 +50,10 @@ public sealed class ProjectIdsPullFoldTests : IDisposable
     /// <summary>
     ///     Seed a loser-id delete + tombstone, repair (PK rewrites to the winner), then pull from
     ///     an unrepaired replica still holding the live loser row: the delete stays deleted.
+    ///     Scoped to the tombstone leg (review MUST-5): single-surface fixture (1 id × 1 row) —
+    ///     multi-surface cover is Repair_FirstRunMovesRows_SecondRunNoOp, cited not duplicated.
+    ///     Ledger — skip-tombstone-PK-rewrite : --filter TombstonePkRewritten_NoResurrectionOnRealPull :
+    ///     loser tombstone + live loser row on the unrepaired side; skip-pull-fold : same : same fixture.
     /// </summary>
     [RetryFact]
     public async Task TombstonePkRewritten_NoResurrectionOnRealPull()
@@ -95,8 +101,11 @@ public sealed class ProjectIdsPullFoldTests : IDisposable
     }
 
     /// <summary>
-    ///     A live loser row pulled from an unrepaired replica lands folded under the winner —
-    ///     the loser id never reappears as canonical.
+    ///     Live loser rows pulled from an unrepaired replica land folded under the winner —
+    ///     the loser id never reappears as canonical. Pull-fold-only (review MUST-6): reddens on
+    ///     skip-pull-fold, never on skip-repair — the repair is setup here, not the subject.
+    ///     Ledger — skip-pull-fold : --filter PullFoldsLiveLoserRows_IntoTheWinner : 2 live loser rows;
+    ///     single-row fixture would pass while dropping a side, hence two.
     /// </summary>
     [RetryFact]
     public async Task PullFoldsLiveLoserRows_IntoTheWinner()
@@ -114,8 +123,9 @@ public sealed class ProjectIdsPullFoldTests : IDisposable
         await using (var remote = await remoteFactory.OpenBankAsync(ct))
         {
             await remote.ExecuteAsync(
-                "INSERT INTO entries (hash, path, value, source_file, scope, project_id, context_label, created_at, updated_at, embed_state) " +
-                "VALUES ('h-live', 'h-live', 'live content', 'seed.md', 'project', @loser, 'ctx-a', 1, 1, 'pending')",
+                "INSERT INTO entries (hash, path, value, source_file, scope, project_id, context_label, created_at, updated_at, embed_state) VALUES " +
+                "('h-live-1', 'h-live-1', 'live content one', 'seed.md', 'project', @loser, 'ctx-a', 1, 1, 'pending')," +
+                "('h-live-2', 'h-live-2', 'live content two', 'seed.md', 'project', @loser, 'ctx-a', 2, 2, 'pending')",
                 new { loser = Loser });
         }
 
@@ -124,12 +134,114 @@ public sealed class ProjectIdsPullFoldTests : IDisposable
         await NewSyncService(cloud, localFactory).MemorySyncAsync(Winner, "test-object", ct);
 
         await using var verify = await localFactory.OpenBankAsync(ct);
-        (await verify.ExecuteScalarAsync<long>("SELECT count(*) FROM entries WHERE hash = 'h-live'"))
-            .ShouldBe(1);
-        (await verify.ExecuteScalarAsync<string>("SELECT project_id FROM entries WHERE hash = 'h-live'"))
+        (await verify.ExecuteScalarAsync<long>("SELECT count(*) FROM entries WHERE hash IN ('h-live-1', 'h-live-2')"))
+            .ShouldBe(2);
+        (await verify.ExecuteScalarAsync<string>("SELECT DISTINCT project_id FROM entries WHERE hash IN ('h-live-1', 'h-live-2')"))
             .ShouldBe(Winner);
         (await verify.ExecuteScalarAsync<long>("SELECT count(*) FROM entries WHERE project_id = @loser", new { loser = Loser }))
             .ShouldBe(0, "the loser id never reappears as canonical after a pull");
+    }
+
+    /// <summary>
+    ///     Guid loser rows pulled from an unrepaired replica fold through the REMOTE projects-row
+    ///     name (review MUST-3): the live 01a062f4 guid is registered under its pre-guid name, which
+    ///     the static verbatim CASE alone can never match — without the name lookup the guid leaks
+    ///     back as canonical. The guid tombstone leg folds symmetrically at the tombstone sites.
+    ///     Ledger — static-verbatim-only-fold : --filter PullFoldsGuidLoserRows_IntoTheWinner : guid
+    ///     entries + projects name row + guid tombstone on the unrepaired side (raw guid reappears → red).
+    /// </summary>
+    [RetryFact]
+    public async Task PullFoldsGuidLoserRows_IntoTheWinner()
+    {
+        const string guidLoser = "01a062f4-0000-7000-8000-000000000001";
+        var ct = TestContext.Current.CancellationToken;
+        var localFactory = Factory(_localRoot);
+        await using (var local = await localFactory.OpenBankAsync(ct))
+        {
+            await local.ExecuteAsync(MemorySql.RequestRepair,
+                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds() });
+            await RepairJob().RunAsync(local, ct);
+        }
+
+        var remoteFactory = Factory(_remoteRoot);
+        await using (var remote = await remoteFactory.OpenBankAsync(ct))
+        {
+            await remote.ExecuteAsync(
+                "INSERT INTO entries (hash, path, value, source_file, scope, project_id, context_label, created_at, updated_at, embed_state) " +
+                "VALUES ('h-guid-live', 'h-guid-live', 'guid content', 'seed.md', 'project', @guid, 'ctx-a', 1, 1, 'pending')",
+                new { guid = guidLoser });
+            await remote.ExecuteAsync(
+                "INSERT INTO projects (id, name, created_at) VALUES (@guid, @loser, 1)",
+                new { guid = guidLoser, loser = Loser });
+            await remote.ExecuteAsync(
+                "INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at) VALUES (@guid, 'h-guid-gone', 'project', 2)",
+                new { guid = guidLoser });
+        }
+
+        var cloud = new FakeCloudStore();
+        cloud.Set("test-object", await SnapshotBytesAsync(_remoteRoot, ct));
+        await NewSyncService(cloud, localFactory).MemorySyncAsync(Winner, "test-object", ct);
+
+        await using var verify = await localFactory.OpenBankAsync(ct);
+        (await verify.ExecuteScalarAsync<string>("SELECT project_id FROM entries WHERE hash = 'h-guid-live'"))
+            .ShouldBe(Winner, "the guid row folds through its projects-row name into the winner");
+        (await verify.ExecuteScalarAsync<long>("SELECT count(*) FROM entries WHERE project_id = @guid", new { guid = guidLoser }))
+            .ShouldBe(0, "the guid never reappears as canonical after a pull");
+        (await verify.ExecuteScalarAsync<string>("SELECT project_id FROM sync_tombstones WHERE hash = 'h-guid-gone'"))
+            .ShouldBe(Winner, "the guid tombstone folds symmetrically to the winner key");
+        (await verify.ExecuteScalarAsync<long>("SELECT count(*) FROM sync_tombstones WHERE project_id = @guid", new { guid = guidLoser }))
+            .ShouldBe(0);
+    }
+
+    /// <summary>
+    ///     Dedup-shaped content converging from an unrepaired replica: the same hash lives under the
+    ///     winner locally and under the loser remotely. The pull folds and content-dedups to a single
+    ///     survivor — and nothing suppresses it, because the fixed repair creates no tombstone for
+    ///     dedup-collapsed duplicates (review MUST-2; the absence itself is pinned by
+    ///     Repair_FirstRunMovesRows_SecondRunNoOp's dup-hash-1/qdup-1 asserts).
+    ///     Ledger — skip-pull-fold : --filter PullDedupContent_SurvivorPersistsUnderWinner : same hash on
+    ///     both sides (raw loser insert → count 2 / loser present → red).
+    /// </summary>
+    [RetryFact]
+    public async Task PullDedupContent_SurvivorPersistsUnderWinner()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var localFactory = Factory(_localRoot);
+        await using (var local = await localFactory.OpenBankAsync(ct))
+        {
+            await local.ExecuteAsync(
+                "INSERT INTO entries (hash, path, value, source_file, scope, project_id, context_label, created_at, updated_at, embed_state) " +
+                "VALUES ('h-dup', 'h-dup', 'shared content', 'seed.md', 'project', @winner, 'ctx-a', 1, 1, 'pending')",
+                new { winner = Winner });
+            await local.ExecuteAsync(MemorySql.RequestRepair,
+                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds() });
+            await RepairJob().RunAsync(local, ct);
+        }
+
+        await using (var prePull = await localFactory.OpenBankAsync(ct))
+        {
+            (await prePull.ExecuteScalarAsync<long>("SELECT count(*) FROM sync_tombstones WHERE hash = 'h-dup'"))
+                .ShouldBe(0, "the repair suppresses nothing for content that survives");
+        }
+
+        var remoteFactory = Factory(_remoteRoot);
+        await using (var remote = await remoteFactory.OpenBankAsync(ct))
+        {
+            await remote.ExecuteAsync(
+                "INSERT INTO entries (hash, path, value, source_file, scope, project_id, context_label, created_at, updated_at, embed_state) " +
+                "VALUES ('h-dup', 'h-dup', 'shared content', 'seed.md', 'project', @loser, 'ctx-a', 1, 1, 'pending')",
+                new { loser = Loser });
+        }
+
+        var cloud = new FakeCloudStore();
+        cloud.Set("test-object", await SnapshotBytesAsync(_remoteRoot, ct));
+        await NewSyncService(cloud, localFactory).MemorySyncAsync(Winner, "test-object", ct);
+
+        await using var verify = await localFactory.OpenBankAsync(ct);
+        (await verify.ExecuteScalarAsync<long>("SELECT count(*) FROM entries WHERE hash = 'h-dup'"))
+            .ShouldBe(1, "the duplicate converges to a single survivor");
+        (await verify.ExecuteScalarAsync<string>("SELECT project_id FROM entries WHERE hash = 'h-dup'"))
+            .ShouldBe(Winner);
     }
 
     private static SqliteConnectionFactory Factory(string dataRoot)

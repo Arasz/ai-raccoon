@@ -16,7 +16,7 @@ public sealed class RepairKindsTests
     [Theory]
     [InlineData(RepairKind.Reingest, "reingest")]
     [InlineData(RepairKind.ChunkIndex, "chunk-index")]
-    [InlineData(RepairKind.ProjectIds, "project-ids")]
+    [InlineData(RepairKind.ProjectIds, "project-ids")] // Ledger — kind-key-drifts : --filter RepairKindsTests : enum, no fixture.
     public void ToKey_MatchesTheCliVerbName(RepairKind kind, string expected) =>
         kind.ToKey().ShouldBe(expected);
 

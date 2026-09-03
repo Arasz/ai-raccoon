@@ -59,6 +59,7 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
         new(new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]),
             TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow));
 
+    /// <summary>Outbox probe: no request row, no work. Ledger — drop-HasWork-check : --filter HasWorkAsync_WithNoOpenRequest_IsFalse : empty bank.</summary>
     [RetryFact]
     public async Task HasWorkAsync_WithNoOpenRequest_IsFalse()
     {
@@ -67,6 +68,7 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
         (await NewJob().HasWorkAsync(connection, TestContext.Current.CancellationToken)).ShouldBeFalse();
     }
 
+    /// <summary>Outbox probe: a committed request row is work. Ledger — wrong-kind-check : --filter HasWorkAsync_AfterARequest_IsTrue : requested bank.</summary>
     [RetryFact]
     public async Task HasWorkAsync_AfterARequest_IsTrue()
     {
@@ -76,18 +78,66 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
         (await NewJob().HasWorkAsync(connection, TestContext.Current.CancellationToken)).ShouldBeTrue();
     }
 
+    /// <summary>
+    ///     Gating decision (review SHOULD-1, gate-on-open-request): the runner also invokes RunAsync on
+    ///     the IsDue first pass (missing ledger row), and that pass must not fold — the dropped path
+    ///     permanently deletes rows, so folding without a human --apply would contradict the CLI contract.
+    ///     Mutation ledger — no-request-run-folds : --filter RunAsync_WithoutAnOpenRequest_LeavesTheBankUntouched :
+    ///     seeded cluster with no request row (any fold, delete, or tombstone fails the untouched asserts).
+    /// </summary>
     [RetryFact]
-    public async Task RunAsync_WithNoOpenRequest_IsANoOp() =>
-        await Should.NotThrowAsync(async () =>
-        {
-            await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
-            await NewJob().RunAsync(connection, TestContext.Current.CancellationToken);
-        });
+    public async Task RunAsync_WithoutAnOpenRequest_LeavesTheBankUntouched()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var connection = await _factory.OpenBankAsync(ct);
+        await SeedClusterAsync(connection, ct);
+
+        var changed = await NewJob().RunAsync(connection, ct);
+
+        changed.ShouldBeFalse("with no open request there is nothing the job may do");
+        (await CountAsync(connection, "entries", Loser, "scope = 'project' AND context_label IS NOT NULL", ct))
+            .ShouldBe(4, "loser rows stay put — l1, l2 and the two dup-collision rows");
+        (await CountAsync(connection, "entries", DroppedQa, "1 = 1", ct))
+            .ShouldBe(1, "dropped rows especially must never delete without a human --apply");
+        (await ScalarAsync(connection, "SELECT count(*) FROM sync_tombstones", ct))
+            .ShouldBe(4, "no tombstone is created or rewritten either");
+        (await ScalarAsync(connection, "SELECT count(*) FROM repair_requests WHERE kind = 'project-ids'", ct))
+            .ShouldBe(0, "the gated run finishes nothing and requests nothing");
+    }
+
+    /// <summary>
+    ///     The P3 enforcement gate's migration marker: a requested run stamps the repair_requests finished
+    ///     row (never the maintenance_jobs ledger stamp, which the runner writes after every RunAsync call
+    ///     including gated no-ops). Mutation ledger — skip-FinishRepairRequest :
+    ///     --filter RequestedRun_StampsTheFinishedRequestMarker : empty bank + open request.
+    /// </summary>
+    [RetryFact]
+    public async Task RequestedRun_StampsTheFinishedRequestMarker()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var connection = await _factory.OpenBankAsync(ct);
+        await RequestRepairAsync(connection);
+
+        await NewJob().RunAsync(connection, ct);
+
+        (await ScalarAsync(connection,
+                "SELECT finished_at FROM repair_requests WHERE kind = 'project-ids'", ct))
+            .ShouldNotBeNull("a completed requested run leaves the finished marker P3 gates on");
+        (await NewJob().HasWorkAsync(connection, ct)).ShouldBeFalse();
+    }
 
     /// <summary>
     ///     First run folds every moveable surface and reports it; the immediate second run changes
     ///     nothing. Fixture: ≥2 ids × ≥2 rows, both queue fragments populated, plus the
     ///     tombstone/code/quality/watch/settings legs so an entries-only rewrite still fails.
+    ///     Mutation ledger — mutation : narrowest filter : fixture row: skip-entries-rewrite :
+    ///     --filter Repair_FirstRunMovesRows_SecondRunNoOp : loser-labeled-rows (assertion 1);
+    ///     entries-before-queue : same : qdup-1 queue+entries pair (candidate eaten by the trigger);
+    ///     reintroduce-dedup-tombstone : same : dup-hash-1/qdup-1 absence asserts; skip-queue-merge :
+    ///     same : split queue (merged score/created/updated); skip-tombstone-rewrite : same :
+    ///     t-loser-gone; skip-tombstone-max-merge : same : t-collide pair; skip-discards-follow :
+    ///     same : d-l/d-share; skip-dropped-quality-delete : same : q-n; skip-dropped-watch-delete :
+    ///     same : sweep /repo watch; skip-settings-prefix : same : watch.scope/watch.concurrency keys.
     /// </summary>
     [RetryFact]
     public async Task Repair_FirstRunMovesRows_SecondRunNoOp()
@@ -103,24 +153,36 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
         (await CountAsync(connection, "entries", Loser, "scope = 'project' AND context_label IS NOT NULL", ct))
             .ShouldBe(0, "every labeled loser project row folds into the winner");
         (await CountAsync(connection, "entries", Winner, "scope = 'project' AND context_label IS NOT NULL", ct))
-            .ShouldBe(6, "w1, w2, w-dup, l1, l2 and g1 meet under the winner");
+            .ShouldBe(7, "w1, w2, w-dup, qdup-1, l1, l2 and g1 meet under the winner");
         (await CountAsync(connection, "promotion_queue", Loser, "1 = 1", ct)).ShouldBe(0);
-        (await CountAsync(connection, "promotion_queue", Winner, "1 = 1", ct)).ShouldBe(3);
+        (await CountAsync(connection, "promotion_queue", Winner, "1 = 1", ct)).ShouldBe(4);
+        (await ScalarAsync(connection,
+                "SELECT count(*) FROM promotion_queue WHERE project_id = 'jsaa' AND hash = 'qdup-1'", ct))
+            .ShouldBe(1, "the same-hash candidate survives: the queue fold runs before the entries-dedup " +
+                "DELETE whose promotion_queue_entries_ad trigger would otherwise eat it");
         var merged = await connection.QuerySingleAsync<(double Score, long Created, long Updated)>(
             "SELECT score AS Score, created_at AS Created, updated_at AS Updated FROM promotion_queue " +
             "WHERE project_id = @winner AND hash = 'q-share'", new { winner = Winner });
         merged.Score.ShouldBe(0.8, "the queue conflict keeps the max score");
         merged.Created.ShouldBe(8, "the queue conflict keeps the min created_at");
         merged.Updated.ShouldBe(14, "the queue conflict keeps the max updated_at");
-        (await CountAsync(connection, "promotion_discards", Winner, "1 = 1", ct)).ShouldBe(2);
+        (await CountAsync(connection, "promotion_discards", Winner, "1 = 1", ct)).ShouldBe(3);
+        (await ScalarAsync(connection,
+                "SELECT discarded_at FROM promotion_discards WHERE project_id = 'jsaa' AND hash = 'd-share'", ct))
+            .ShouldBe(FixedNow.ToUnixTimeSeconds(), "on a same-hash discards collision the winner's row stands");
         (await CountAsync(connection, "search_quality", Winner, "1 = 1", ct)).ShouldBe(2);
         (await CountAsync(connection, "code_entries", Loser, "1 = 1", ct)).ShouldBe(0);
         (await CountAsync(connection, "code_entries", Winner, "1 = 1", ct)).ShouldBe(2);
         (await CountAsync(connection, "sync_tombstones", Loser, "1 = 1", ct)).ShouldBe(0,
-            "every surviving loser tombstone rewrites to the winner — including the dedup-created one, " +
-            "which is what the pull-side folded compare suppresses the unrepaired replica's push against");
+            "every surviving loser tombstone rewrites to the winner");
         (await CountAsync(connection, "sync_tombstones", Winner, "1 = 1", ct)).ShouldBe(3,
-            "t-gone, the rewritten t-loser-gone, and the dedup-created dup-hash-1 meet under the winner");
+            "t-gone, the rewritten t-loser-gone, and the merged t-collide meet under the winner");
+        (await ScalarAsync(connection,
+                "SELECT deleted_at FROM sync_tombstones WHERE project_id = 'jsaa' AND hash = 't-collide'", ct))
+            .ShouldBe(FixedNow.ToUnixTimeSeconds(), "on a same-(hash, scope) tombstone collision the later delete wins");
+        (await ScalarAsync(connection,
+                "SELECT count(*) FROM sync_tombstones WHERE project_id = 'jsaa' AND hash IN ('dup-hash-1', 'qdup-1')", ct))
+            .ShouldBe(0, "dedup-collapsed duplicates create no tombstone — only genuinely removed content does");
         (await CountAsync(connection, "sync_tombstones", DroppedQa, "1 = 1", ct)).ShouldBe(1);
         (await CountAsync(connection, "sync_tombstones", DroppedSweep, "1 = 1", ct)).ShouldBe(1);
         (await ScalarAsync(connection, "SELECT value FROM settings WHERE key = 'ingest.scope.jsaa'", ct))
@@ -129,8 +191,20 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
             .ShouldBe(0);
         (await ScalarAsync(connection, "SELECT value FROM settings WHERE key = 'watch.enabled.jsaa'", ct))
             .ShouldBe("true");
+        (await ScalarAsync(connection, "SELECT value FROM settings WHERE key = 'watch.scope.jsaa'", ct))
+            .ShouldBe("[\"/y\"]");
+        (await ScalarAsync(connection, "SELECT value FROM settings WHERE key = 'watch.concurrency.jsaa'", ct))
+            .ShouldBe("4");
+        (await ScalarAsync(connection,
+                "SELECT count(*) FROM settings WHERE key LIKE '%job-search-ai-assistant'", ct))
+            .ShouldBe(0, "every id-embedding loser key renames across all five prefixes");
         (await ScalarAsync(connection, "SELECT value FROM settings WHERE key = 'access.mode.project:jsaa'", ct))
             .ShouldBe("full");
+        (await CountAsync(connection, "search_quality", DroppedQa, "1 = 1", ct)).ShouldBe(0,
+            "dropped-id quality rows delete with their id rather than floating unattributed");
+        (await CountAsync(connection, "promotion_queue", DroppedQa, "1 = 1", ct)).ShouldBe(0);
+        (await CountAsync(connection, "watches", DroppedSweep, "1 = 1", ct)).ShouldBe(0,
+            "dropped-id watches delete with their id");
         (await ScalarAsync(connection, "SELECT name FROM projects WHERE id = 'jsaa'", ct))
             .ShouldBe("jsaa", "the unregistered winner canonical gains its registry row");
         (await ScalarAsync(connection, "SELECT count(*) FROM projects WHERE id IN ('" + GuidLoser + "','" + RetiredGuid + "','" + DroppedSweep + "')", ct))
@@ -152,14 +226,16 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
         second.ShouldBeFalse("a converged bank schedules no further work");
         (await NewJob().HasWorkAsync(connection, ct)).ShouldBeFalse();
         (await CountAsync(connection, "entries", Winner, "scope = 'project' AND context_label IS NOT NULL", ct))
-            .ShouldBe(6, "the second run moves nothing further");
-        (await CountAsync(connection, "promotion_queue", Winner, "1 = 1", ct)).ShouldBe(3);
+            .ShouldBe(7, "the second run moves nothing further");
+        (await CountAsync(connection, "promotion_queue", Winner, "1 = 1", ct)).ShouldBe(4);
     }
 
     /// <summary>
     ///     MUST-2: renamed rows invalidate (pending + NULLs, stale vec legs gone) while the winner's
     ///     own embedded rows stay embedded; FTS still finds the moved content without any resync;
     ///     and a re-embed lands under the winner ctx the KNN filters on.
+    ///     Ledger — skip-vec-invalidation : --filter FtsVecResync_AfterRename : embedded loser row l1;
+    ///     add-an-FTS-resync-step is the over-budgeted inverse (trigger no-op assertion pins its absence).
     /// </summary>
     [RetryFact]
     public async Task FtsVecResync_AfterRename()
@@ -209,6 +285,7 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
     ///     The fold merges two chunk groups into one; the ordered ChunkIndexRepair job step
     ///     re-derives positions from the document, so no duplicate or gapped positions survive.
     ///     Mutation "skip the chunk step" leaves both rows at 5.
+    ///     Ledger — skip-chunk-step : --filter ChunkRenumber_Contiguous : duplicate positions.
     /// </summary>
     [RetryFact]
     public async Task ChunkRenumber_Contiguous()
@@ -304,12 +381,15 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
         await Entry("w1", "project", Winner, "ctx-a", "winner one alpha");
         await Entry("w2", "project", Winner, "ctx-a", "winner two beta");
         await Entry("dup-hash-1", "project", Winner, "ctx-a", "dup content");
+        // Same-hash queue+entries production shape (review MUST-1): the content dedups under the
+        // winner while the queue candidate must survive — only because the queue fold runs first.
+        await Entry("qdup-1", "project", Winner, "ctx-a", "shared candidate content");
         await Entry("w-bulk", "project", Winner, null, "winner bulk");
         await EmbedEntry("w1");
         await Queue(Winner, "q-w1", 0.9, 10, 12);
         await Queue(Winner, "q-share", 0.6, 10, 10);
         await connection.ExecuteAsync(new CommandDefinition(
-                "INSERT INTO promotion_discards (project_id, hash, discarded_at) VALUES ('jsaa', 'd-w', @now)",
+                "INSERT INTO promotion_discards (project_id, hash, discarded_at) VALUES ('jsaa', 'd-w', @now), ('jsaa', 'd-share', @now)",
                 new { now }, cancellationToken: ct));
         await connection.ExecuteAsync(new CommandDefinition(
                 "INSERT INTO search_quality (correlation_id, query, project_id, created_at) VALUES ('q-w', 'q', 'jsaa', @now)",
@@ -327,7 +407,8 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
         await connection.ExecuteAsync(new CommandDefinition(
                 "INSERT INTO settings (key, value) VALUES ('ingest.scope.jsaa', '[\"/x\"]')", cancellationToken: ct));
         await connection.ExecuteAsync(new CommandDefinition(
-                "INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at) VALUES ('jsaa', 't-gone', 'project', @now)",
+                "INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at) VALUES ('jsaa', 't-gone', 'project', @now), " +
+                "('jsaa', 't-collide', 'project', @now)",
                 new { now }, cancellationToken: ct));
         await Code(Winner, "c-w", true);
 
@@ -336,15 +417,17 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
         await Entry("l1", "project", Loser, "ctx-a", "loser one gamma");
         await Entry("l2", "project", Loser, "ctx-a", "loser two delta");
         await Entry("dup-hash-1", "project", Loser, "ctx-a", "dup content");
+        await Entry("qdup-1", "project", Loser, "ctx-a", "shared candidate content");
         await Entry("l-bulk", "project", Loser, null, "loser bulk");
         await Entry("l-custom", "custom", Loser, "ctx-a", "loser custom");
         await Entry("l-shared", "shared", Loser, "ctx-a", "loser shared");
         await EmbedEntry("l1");
         await Queue(Loser, "q-l1", 0.7, 9, 11);
         await Queue(Loser, "q-share", 0.8, 8, 14);
+        await Queue(Loser, "qdup-1", 0.5, 7, 7);
         await connection.ExecuteAsync(new CommandDefinition(
-                "INSERT INTO promotion_discards (project_id, hash, discarded_at) VALUES (@loser, 'd-l', @now)",
-                new { loser = Loser, now }, cancellationToken: ct));
+                "INSERT INTO promotion_discards (project_id, hash, discarded_at) VALUES (@loser, 'd-l', @now), (@loser, 'd-share', @earlier)",
+                new { loser = Loser, now, earlier = now - 50 }, cancellationToken: ct));
         await connection.ExecuteAsync(new CommandDefinition(
                 "INSERT INTO search_quality (correlation_id, query, project_id, created_at) VALUES ('q-l', 'q', @loser, @now)",
                 new { loser = Loser, now }, cancellationToken: ct));
@@ -360,10 +443,12 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
         await connection.ExecuteAsync(new CommandDefinition(
                 "INSERT INTO settings (key, value) VALUES " +
                 "('ingest.scope.job-search-ai-assistant', '[\"/y\"]'), ('watch.enabled.job-search-ai-assistant', 'true'), " +
-                "('access.mode.project:job-search-ai-assistant', 'full')", cancellationToken: ct));
+                "('access.mode.project:job-search-ai-assistant', 'full'), " +
+                "('watch.scope.job-search-ai-assistant', '[\"/y\"]'), ('watch.concurrency.job-search-ai-assistant', '4')", cancellationToken: ct));
         await connection.ExecuteAsync(new CommandDefinition(
-                "INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at) VALUES (@loser, 't-loser-gone', 'project', @now)",
-                new { loser = Loser, now }, cancellationToken: ct));
+                "INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at) VALUES (@loser, 't-loser-gone', 'project', @now), " +
+                "(@loser, 't-collide', 'project', @earlier)",
+                new { loser = Loser, now, earlier = now - 50 }, cancellationToken: ct));
         await Code(Loser, "c-l", true);
         await connection.ExecuteAsync(new CommandDefinition(
                 "INSERT INTO metrics (name, kind, value, unit, project_id, recorded_at) VALUES ('m', 'k', 1, 'u', @loser, @now)",
@@ -385,6 +470,10 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
         // Drop candidates and a retired zero-row guid.
         await Entry("n1", "project", DroppedQa, "ctx-a", "noise residue");
         await Queue(DroppedQa, "nq", 0.5, 1, 1);
+        // Dropped-id quality disposition (review SHOULD-2): the delete below must take this row.
+        await connection.ExecuteAsync(new CommandDefinition(
+                "INSERT INTO search_quality (correlation_id, query, project_id, created_at) VALUES ('q-n', 'q', @dropped, @now)",
+                new { dropped = DroppedQa, now }, cancellationToken: ct));
         await Entry("s1", "project", DroppedSweep, "ctx-a", "sweep residue");
         await connection.ExecuteAsync(new CommandDefinition(
                 "INSERT INTO watches (project_id, path, created_at, last_change_ts) VALUES (@sweep, '/repo', @now, @now)",

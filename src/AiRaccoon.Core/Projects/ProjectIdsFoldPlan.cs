@@ -42,7 +42,7 @@ public sealed class ProjectIdsFoldPlan(
         {
             if (map.IsDropped(row.ProjectId))
             {
-                if (row.EntryTotal > 0 || row.AttachmentCount > 0 || row.Registered)
+                if (OwnsDeletableContent(row) || row.Registered)
                 {
                     dropped.Add(row.ProjectId);
                 }
@@ -85,6 +85,28 @@ public sealed class ProjectIdsFoldPlan(
         }
 
         return new ProjectIdsFoldPlan(folds, dropped, retired, unresolved);
+    }
+
+    /// <summary>
+    ///     True when the row owns a surface the dropped path actually deletes: committed entries
+    ///     (project/custom/shared, including null-context bulk rows — the dropped delete has no
+    ///     context predicate), code, queue, discards, quality, watches, or id-embedding settings
+    ///     keys. Metrics, noise, workspaces and workspace scratch are never touched, so owning only
+    ///     those must not schedule a delete that re-plans forever as a no-op (review SHOULD-3).
+    ///     Tombstones alone don't schedule either: no dropped step deletes them — repair-created
+    ///     tombstones for dropped hashes are load-bearing suppression and must linger.
+    /// </summary>
+    private static bool OwnsDeletableContent(ProjectIdCensusRow row)
+    {
+        return row.EntryTotal > 0
+            || row.CodeEntries > 0
+            || row.Queued > 0
+            || row.Discards > 0
+            || row.QualityRows > 0
+            || row.Watches > 0
+            || row.WatchFiles > 0
+            || row.DigestClaims > 0
+            || row.SettingsKeys.Count > 0;
     }
 
     /// <summary>
