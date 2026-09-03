@@ -45,8 +45,8 @@ public sealed class SearchDispatcher(IMemoryStore store, ICodeSearchService code
         // designed the quality signal away from the default path the day PR #580 flipped the
         // default kind to both (rows stop Aug 24; hermes-default ran 307 searches with 0 rows).
         // Privacy shape: the row describes the memory leg for memory/both (code paths are never
-        // stored -- code_entries never leaves the machine per ADR-0085, and search_quality rides
-        // the whole-file sync snapshot in StripNonSyncableAsync which does not strip it); a code
+        // stored -- code_entries never leaves the machine per ADR-0085, and search_quality never
+        // leaves it either -- StripNonSyncableAsync DROPs it from every pushed snapshot per ADR-0095); a code
         // search records its code result count with an empty file list, so grades stay
         // interpretable without storing code paths. The shared query text is stored as-is: a
         // memory query can already carry identifiers, so a code-adjacent query is the same leak

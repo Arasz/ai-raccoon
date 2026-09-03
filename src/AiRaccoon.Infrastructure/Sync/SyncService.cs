@@ -458,9 +458,12 @@ public partial class SyncService(
 
     /// <summary>Deletes workspace-scoped entries and all settings rows, DROPs the code corpus
     /// (code_entries/code_fts/vec_code — table absence, not row-deletion, so their shadow tables
-    /// and triggers drop with them, docs/adr/0014), then VACUUMs the snapshot. Every path that
-    /// pushes a snapshot must call this — settings hold the cloud credentials the push itself
-    /// authenticates with, and the code corpus never leaves the machine.</summary>
+    /// and triggers drop with them, docs/adr/0014) and DROPs the telemetry tables
+    /// (search_quality/metrics — table absence sheds their indexes too and lets a restored
+    /// snapshot's EnsureAsync recreate them via the digest-DDL path, docs/adr/0095), then VACUUMs
+    /// the snapshot. Every path that pushes a snapshot must call this — settings hold the cloud
+    /// credentials the push itself authenticates with, and the code corpus and telemetry never
+    /// leave the machine.</summary>
     private async Task StripNonSyncableAsync(string snapshotPath, CancellationToken cancellationToken)
     {
         // The snapshot of an encrypted bank is itself encrypted, so the strip opens through
@@ -493,6 +496,18 @@ public partial class SyncService(
         await using var dropVecCode = snap.CreateCommand();
         dropVecCode.CommandText = "DROP TABLE IF EXISTS vec_code";
         await dropVecCode.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+        // ADR-0095: telemetry never syncs — the merge reads entries + sync_tombstones only, so
+        // nothing consumes synced telemetry. DROP (not DELETE): telemetry has no FTS/shadow
+        // tables or triggers, so DROP buys table-absence + index shed + restore-via-digest-DDL.
+        // IF EXISTS: a pre-telemetry snapshot has neither table — a bare DROP would throw and
+        // abort the push, same H6 shape as the code corpus above.
+        await using var dropSearchQuality = snap.CreateCommand();
+        dropSearchQuality.CommandText = "DROP TABLE IF EXISTS search_quality";
+        await dropSearchQuality.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await using var dropMetrics = snap.CreateCommand();
+        dropMetrics.CommandText = "DROP TABLE IF EXISTS metrics";
+        await dropMetrics.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
 
         // The stamped application_id is a digest of the Ddl block that still declares the code
         // corpus (MemorySchema.SchemaDigest) — leaving it in place would make a hand-restored

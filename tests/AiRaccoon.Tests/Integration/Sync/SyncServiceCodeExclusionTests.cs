@@ -532,6 +532,306 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
         AssertNoCodeTables(tables);
     }
 
+    // --- P2: telemetry (search_quality/metrics) never syncs (ADR-0095) -------------------------
+
+    /// <summary>Seeds populated telemetry rows so the strip's DROP must tear down real content,
+    /// not just empty tables — row counts cannot distinguish DROP from DELETE, so the oracle
+    /// below asserts table/index absence from sqlite_master (mutation: DROP→DELETE fails).</summary>
+    private static async Task SeedTelemetryAsync(SqliteConnection conn, CancellationToken ct)
+    {
+        await using var quality = conn.CreateCommand();
+        quality.CommandText = """
+                                INSERT INTO search_quality (correlation_id, query, scope, project_id, result_count, top_source_files, created_at)
+                                VALUES ('corr-1', 'how to test sync strip', 'project', 'acme', 2, '["a.md","b.md"]', 1),
+                                       ('corr-2', 'code query SELECT *', 'project', 'acme', 5, '[]', 2)
+                                """;
+        await quality.ExecuteNonQueryAsync(ct);
+
+        await using var metrics = conn.CreateCommand();
+        metrics.CommandText = """
+                                INSERT INTO metrics (name, kind, value, unit, project_id, query_hash, correlation_id, recorded_at)
+                                VALUES ('search.total', 'Histogram', 12.5, 'ms', 'acme', 'hash1', 'corr-1', 1),
+                                       ('search.fts', 'Histogram', 3.2, 'ms', 'acme', NULL, 'corr-1', 2),
+                                       ('search.vector', 'Histogram', 5.1, 'ms', 'acme', 'hash2', 'corr-2', 3)
+                                """;
+        await metrics.ExecuteNonQueryAsync(ct);
+
+        await using var qualityCount = conn.CreateCommand();
+        qualityCount.CommandText = "SELECT COUNT(*) FROM search_quality";
+        var qCount = (long)(await qualityCount.ExecuteScalarAsync(ct))!;
+        qCount.ShouldBe(2L, "search_quality must hold populated rows before the push runs, " +
+                             "or this test proves nothing about a populated telemetry table.");
+
+        await using var metricsCount = conn.CreateCommand();
+        metricsCount.CommandText = "SELECT COUNT(*) FROM metrics";
+        var mCount = (long)(await metricsCount.ExecuteScalarAsync(ct))!;
+        mCount.ShouldBe(3L, "metrics must hold populated rows before the push runs, " +
+                             "or this test proves nothing about a populated telemetry table.");
+    }
+
+    private static async Task<List<string>> MasterNamesAsync(string dbPath, CancellationToken ct)
+    {
+        await using var conn = new SqliteConnection($"Data Source={dbPath};Mode=ReadOnly");
+        await conn.OpenAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT name FROM sqlite_master";
+        var names = new List<string>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            names.Add(reader.GetString(0));
+        }
+
+        return names;
+    }
+
+    private static void AssertNoTelemetryTables(List<string> names)
+    {
+        names.ShouldNotContain("search_quality", "telemetry must never leave the machine via sync (ADR-0095).");
+        names.ShouldNotContain("metrics");
+        names.ShouldNotContain("idx_sq_project_time", "DROP must shed the telemetry indexes too — DELETE would leave them.");
+        names.ShouldNotContain("idx_metrics_name_time");
+        names.ShouldNotContain("idx_metrics_project_time");
+        names.ShouldNotContain("idx_metrics_recorded_at");
+        names.Any(n => n.Contains("search_quality", StringComparison.Ordinal) || n.Contains("metrics", StringComparison.Ordinal)).ShouldBeFalse(
+            "no telemetry table, index, or autoindex remnant may survive the strip.");
+    }
+
+    private static async Task<List<string>> ReadSearchQualityRowsAsync(SqliteConnection conn, CancellationToken ct)
+    {
+        var rows = new List<string>();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT correlation_id, query, scope, project_id, result_count, top_source_files, " +
+                          "follow_through_count, follow_through_files, usefulness_grade, grade_note, created_at " +
+                          "FROM search_quality ORDER BY correlation_id";
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var parts = new List<string>();
+            for (var i = 0; i < reader.FieldCount; i++)
+            {
+                if (await reader.IsDBNullAsync(i, ct))
+                {
+                    parts.Add("<null>");
+                }
+                else
+                {
+                    parts.Add(reader.GetValue(i).ToString() ?? "<null>");
+                }
+            }
+
+            rows.Add(string.Join("|", parts));
+        }
+
+        return rows;
+    }
+
+    private static async Task<List<string>> ReadMetricsRowsAsync(SqliteConnection conn, CancellationToken ct)
+    {
+        var rows = new List<string>();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT name, kind, value, unit, project_id, query_hash, correlation_id, tags, recorded_at " +
+                          "FROM metrics ORDER BY name, recorded_at, correlation_id";
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var parts = new List<string>();
+            for (var i = 0; i < reader.FieldCount; i++)
+            {
+                if (await reader.IsDBNullAsync(i, ct))
+                {
+                    parts.Add("<null>");
+                }
+                else
+                {
+                    parts.Add(reader.GetValue(i).ToString() ?? "<null>");
+                }
+            }
+
+            rows.Add(string.Join("|", parts));
+        }
+
+        return rows;
+    }
+
+    [RetryFact]
+    public async Task Sync_LocalPush_DropsTelemetryTablesFromSnapshot()
+    {
+        var cloud = new FakeCloudStore();
+        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        {
+            await SeedTelemetryAsync(conn, TestContext.Current.CancellationToken);
+        }
+
+        var service = new SyncService(cloud, ct => CreateAndOpenAsync(BankPath, ct), OpenSnapshot(), OpenReadOnly(),
+            TimeProvider.System, NullLogger<SyncService>.Instance);
+        await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+
+        var pulled = await cloud.PullAsync("test-object", TestContext.Current.CancellationToken);
+        pulled.ShouldNotBeNull();
+        var pulledPath = Path.Combine(_dataRoot, "pulled-local-telemetry.db");
+        await File.WriteAllBytesAsync(pulledPath, pulled.Data, TestContext.Current.CancellationToken);
+
+        AssertNoTelemetryTables(await MasterNamesAsync(pulledPath, TestContext.Current.CancellationToken));
+    }
+
+    [RetryFact]
+    public async Task Sync_MergedPush_DropsTelemetryTablesFromSnapshot()
+    {
+        var cloud = new FakeCloudStore();
+        var remoteSeedPath = Path.Combine(_dataRoot, "remote-seed-telemetry.db");
+        await SeedRemoteEntryAsync(remoteSeedPath, TestContext.Current.CancellationToken);
+        cloud.Set("test-object", await File.ReadAllBytesAsync(remoteSeedPath, TestContext.Current.CancellationToken));
+
+        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        {
+            await SeedTelemetryAsync(conn, TestContext.Current.CancellationToken);
+        }
+
+        var service = new SyncService(cloud, ct => CreateAndOpenAsync(BankPath, ct), OpenSnapshot(), OpenReadOnly(),
+            TimeProvider.System, NullLogger<SyncService>.Instance);
+        var result = await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+        result.Received.ShouldBe(1, "the merge branch must actually run for this test to exercise the merged-push strip.");
+
+        var pulled = await cloud.PullAsync("test-object", TestContext.Current.CancellationToken);
+        pulled.ShouldNotBeNull();
+        var pulledPath = Path.Combine(_dataRoot, "pulled-merged-telemetry.db");
+        await File.WriteAllBytesAsync(pulledPath, pulled.Data, TestContext.Current.CancellationToken);
+
+        AssertNoTelemetryTables(await MasterNamesAsync(pulledPath, TestContext.Current.CancellationToken));
+    }
+
+    [RetryFact]
+    public async Task Sync_RetryMergedPush_DropsTelemetryTablesFromSnapshot()
+    {
+        var inner = new FakeCloudStore();
+        var cloud = new ConflictOnceCloudStore(inner);
+
+        var remoteSeedPath = Path.Combine(_dataRoot, "remote-seed-retry-telemetry.db");
+        await SeedRemoteEntryAsync(remoteSeedPath, TestContext.Current.CancellationToken);
+        inner.Set("test-object", await File.ReadAllBytesAsync(remoteSeedPath, TestContext.Current.CancellationToken));
+
+        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        {
+            await SeedTelemetryAsync(conn, TestContext.Current.CancellationToken);
+        }
+
+        var service = new SyncService(cloud, ct => CreateAndOpenAsync(BankPath, ct), OpenSnapshot(), OpenReadOnly(),
+            TimeProvider.System, NullLogger<SyncService>.Instance);
+        await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+
+        cloud.ConflictWasRaised.ShouldBeTrue("the test must actually exercise the conflict-retry (third) push path.");
+
+        var pulled = await inner.PullAsync("test-object", TestContext.Current.CancellationToken);
+        pulled.ShouldNotBeNull();
+        var pulledPath = Path.Combine(_dataRoot, "pulled-retry-telemetry.db");
+        await File.WriteAllBytesAsync(pulledPath, pulled.Data, TestContext.Current.CancellationToken);
+
+        AssertNoTelemetryTables(await MasterNamesAsync(pulledPath, TestContext.Current.CancellationToken));
+    }
+
+    [RetryFact]
+    public async Task Sync_Pull_LeavesLocalTelemetryUntouched()
+    {
+        var cloud = new FakeCloudStore();
+        var remoteSeedPath = Path.Combine(_dataRoot, "remote-seed-pull-telemetry.db");
+        await SeedRemoteEntryAsync(remoteSeedPath, TestContext.Current.CancellationToken);
+        cloud.Set("test-object", await File.ReadAllBytesAsync(remoteSeedPath, TestContext.Current.CancellationToken));
+
+        List<string> beforeQuality;
+        List<string> beforeMetrics;
+        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        {
+            await SeedTelemetryAsync(conn, TestContext.Current.CancellationToken);
+            beforeQuality = await ReadSearchQualityRowsAsync(conn, TestContext.Current.CancellationToken);
+            beforeMetrics = await ReadMetricsRowsAsync(conn, TestContext.Current.CancellationToken);
+        }
+
+        var service = new SyncService(cloud, ct => CreateAndOpenAsync(BankPath, ct), OpenSnapshot(), OpenReadOnly(),
+            TimeProvider.System, NullLogger<SyncService>.Instance);
+        await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+
+        List<string> afterQuality;
+        List<string> afterMetrics;
+        await using (var check = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        {
+            afterQuality = await ReadSearchQualityRowsAsync(check, TestContext.Current.CancellationToken);
+            afterMetrics = await ReadMetricsRowsAsync(check, TestContext.Current.CancellationToken);
+        }
+
+        afterQuality.ShouldBe(beforeQuality, "a pull/merge must never touch local telemetry — content equality, not just counts.");
+        afterMetrics.ShouldBe(beforeMetrics, "a pull/merge must never touch local telemetry — content equality, not just counts.");
+
+        var pulled = await cloud.PullAsync("test-object", TestContext.Current.CancellationToken);
+        pulled.ShouldNotBeNull();
+        var pulledPath = Path.Combine(_dataRoot, "pulled-pull-telemetry.db");
+        await File.WriteAllBytesAsync(pulledPath, pulled.Data, TestContext.Current.CancellationToken);
+        AssertNoTelemetryTables(await MasterNamesAsync(pulledPath, TestContext.Current.CancellationToken));
+    }
+
+    [RetryFact]
+    public async Task Sync_PreTelemetrySnapshot_StripsWithoutError()
+    {
+        var cloud = new FakeCloudStore();
+
+        await using (var conn = await CreateLegacyBankAsync(BankPath, TestContext.Current.CancellationToken))
+        {
+            await using var insert = conn.CreateCommand();
+            insert.CommandText = """
+                                 INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
+                                 VALUES ('h1', 'p1.md', 'v1', 'project', 'acme', 1, 1)
+                                 """;
+            await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var service = new SyncService(cloud, ct => CreateLegacyBankAsync(BankPath, ct), OpenSnapshot(), OpenReadOnly(),
+            TimeProvider.System, NullLogger<SyncService>.Instance);
+
+        var result = await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+
+        result.Sent.ShouldBe(1,
+            "a pre-telemetry bank must still sync successfully — DROP TABLE IF EXISTS must not throw when the telemetry tables never existed.");
+    }
+
+    [RetryFact]
+    public async Task Sync_LocalPush_EncryptedBank_WithPopulatedTelemetry_DropsTelemetryTablesFromSnapshot()
+    {
+        var cloud = new FakeCloudStore();
+        await using (var conn = await CreateAndOpenEncryptedAsync(BankPath, TestContext.Current.CancellationToken))
+        {
+            await SeedTelemetryAsync(conn, TestContext.Current.CancellationToken);
+        }
+
+        var service = new SyncService(cloud, ct => CreateAndOpenEncryptedAsync(BankPath, ct), OpenSnapshotEncrypted(),
+            OpenReadOnlyEncrypted(), TimeProvider.System, NullLogger<SyncService>.Instance);
+        var result = await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+        result.Sent.ShouldBe(1);
+
+        var pulled = await cloud.PullAsync("test-object", TestContext.Current.CancellationToken);
+        pulled.ShouldNotBeNull();
+
+        new SyncBlobAuthenticator().TryUnwrap(pulled.Data, out _, out var innerBytes).ShouldBeTrue(
+            "a push against an encrypted bank must publish a wrapped blob carrying the embedded authenticity header");
+
+        var pulledPath = Path.Combine(_dataRoot, "pulled-encrypted-telemetry.db");
+        await File.WriteAllBytesAsync(pulledPath, innerBytes, TestContext.Current.CancellationToken);
+
+        var names = new List<string>();
+        await using (var check = new SqliteConnection($"Data Source={pulledPath};Password={EncryptedKey};Mode=ReadOnly"))
+        {
+            await check.OpenAsync(TestContext.Current.CancellationToken);
+            await using var cmd = check.CreateCommand();
+            cmd.CommandText = "SELECT name FROM sqlite_master";
+            await using var reader = await cmd.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+            while (await reader.ReadAsync(TestContext.Current.CancellationToken))
+            {
+                names.Add(reader.GetString(0));
+            }
+        }
+
+        AssertNoTelemetryTables(names);
+    }
+
     /// <summary>Forces exactly one SyncConflictException on the first push, then delegates (mirrors
     /// SyncServiceTests.ConflictOnceCloudStore — duplicated locally to keep this file self-contained).</summary>
     private sealed class ConflictOnceCloudStore(FakeCloudStore inner) : ICloudStore

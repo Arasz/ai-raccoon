@@ -196,8 +196,9 @@ public sealed partial class MemoryTools(
 
         if (dispatch.MemorySearchResults is not null)
         {
-            // The metrics table syncs off-machine like search_quality, so the query-content hash
-            // stays excluded for a code-adjacent kind -- only the hash, not the whole recording
+            // The metrics table never leaves the machine (stripped from every pushed snapshot per ADR-0095,
+            // like search_quality), so the query-content hash stays excluded for a code-adjacent kind
+            // as defense-in-depth -- only the hash, not the whole recording
             // (integration review S6, unchanged by ADR-0094). search_quality itself now records
             // every kind (ADR-0094), with code paths never stored.
             var queryHash = parsedKind == SearchKind.Memory ? ContentHash.OfValue(query) : null;
