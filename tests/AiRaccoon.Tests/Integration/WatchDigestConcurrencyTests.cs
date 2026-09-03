@@ -1,10 +1,12 @@
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Watch;
+using AiRaccoon.Projects;
 using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -86,6 +88,146 @@ public sealed class WatchDigestConcurrencyTests
             .ShouldNotBeEmpty("a digest that failed after the delete left the file with no chunks at all");
     }
 
+    /// <summary>
+    ///     A digest parked mid-write while the rename runs: the cross-store window (watches moved,
+    ///     scope still loser-keyed) resolves blank ids as Ambiguous — fail-closed, never guessed —
+    ///     the scan lease rides the UPDATE to the winner row, the stale completion lands raw under
+    ///     its pre-rename id without corrupting anything, and a redriven repair folds every
+    ///     moveable remainder while the NULL-context file mirrors stay byte-identical (review S2).
+    ///     Ledger — delete-insert-instead-of-update : --filter RenameDuringInflightScan_FailsClosed :
+    ///     parked v2 digest across a stepped rename (rowid/lease asserts); skip-watches-step : same :
+    ///     mid-rename Ambiguous assert; skip-redrive : same : post-redrive loser-zero asserts.
+    /// </summary>
+    [RetryFact]
+    public async Task RenameDuringInflightScan_FailsClosed_ThenConvergesOnRedrive()
+    {
+        const string loser = "job-search-ai-assistant";
+        const string winner = "jsaa";
+        var token = TestContext.Current.CancellationToken;
+        using var bank = new Bank("rename-race");
+        var one = bank.TestProcess();
+        var watchDir = Path.GetDirectoryName(bank.FilePath)!;
+
+        await one.Memory.SetSettingAsync(IngestScopeKeys.ScopeGlobal,
+            IngestScopeKeys.Serialize([watchDir]), token);
+        // Raw loser key on purpose: the factory folds at construction now, so only a pre-repair
+        // bank still holds this spelling — half of the transient window below.
+        await one.Memory.SetSettingAsync("ingest.scope." + loser,
+            IngestScopeKeys.Serialize([watchDir]), token);
+        await one.WatchStore.AddWatchAsync(loser, watchDir, 0, 0, token);
+        bank.Write($"{Sentinel} v1body");
+        await bank.DigestAsync(one, token, loser);
+        (await bank.CountEntriesAsync(one, "v1body", token, loser))
+            .ShouldBeGreaterThan(0, "arrange: v1 searchable under the loser");
+
+        long rowid;
+        await using (var connection = await one.Factory.OpenBankAsync(token))
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                "UPDATE watches SET scan_owner = 'scanner-1', scan_lease_expires_at = 1700003600 WHERE project_id = @l",
+                new { l = loser }, cancellationToken: token));
+            rowid = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT rowid FROM watches WHERE project_id = @l", new { l = loser },
+                cancellationToken: token));
+        }
+
+        // Park a v2 digest inside its write window, then run the repair's watches step alone.
+        bank.Write($"{Sentinel} v2body");
+        one.Gate.Arm();
+        var stale = Task.Run(() => bank.DigestAsync(one, token, loser), token);
+        await one.Gate.Entered.WaitAsync(Patience, token);
+        await using (var connection = await one.Factory.OpenBankAsync(token))
+        {
+            // The repair's watches UPDATE in isolation (FoldWatchesAsync's statement shape).
+            await connection.ExecuteAsync(new CommandDefinition(
+                "UPDATE watches SET project_id = @w WHERE project_id = @l " +
+                "AND NOT EXISTS (SELECT 1 FROM watches w WHERE w.project_id = @w AND w.path = watches.path)",
+                new { w = winner, l = loser }, cancellationToken: token));
+        }
+
+        // The transient blank-id Ambiguous window, NAMED: scopes still name the loser while
+        // watches already moved — fail-closed by design, never resolved across fragments.
+        var resolution = await new CwdProjectIdResolver(
+                new SqliteSettingsStore(one.Factory), new WatchStore(one.Factory),
+                new PinnedProbe(watchDir))
+            .ResolveAsync(token);
+        var ambiguous = resolution.ShouldBeOfType<ProjectIdResolution.Ambiguous>();
+        ambiguous.SortedIds.ShouldBe([loser, winner]);
+
+        // The stale digest completes under its pre-rename id: no crash, no corruption — it lands raw.
+        one.Gate.Release();
+        await stale.WaitAsync(Patience, token);
+        (await bank.CountEntriesAsync(one, "v2body", token, loser))
+            .ShouldBeGreaterThan(0, "stale completion lands under its pre-rename id");
+
+        // The full repair folds every remaining surface: the lease rides the UPDATE (same rowid),
+        // moveable loser surfaces go to zero, NULL-context mirrors stay byte-identical.
+        await using (var connection = await one.Factory.OpenBankAsync(token))
+        {
+            var plan = ProjectIdsFoldPlan.FromCensus(
+                await ProjectIdCensus.CollectAsync(connection, token), ProjectIdAliasMap.Default);
+            await new ProjectIdsRepair(TimeProvider.System).ApplyAsync(connection, plan, token);
+        }
+
+        await using (var after = await one.Factory.OpenBankAsync(token))
+        {
+            var kept = await after.QueryFirstOrDefaultAsync<(string? Owner, long Lease, long RowId)>(
+                new CommandDefinition(
+                    "SELECT scan_owner AS Owner, scan_lease_expires_at AS Lease, rowid AS RowId " +
+                    "FROM watches WHERE project_id = @w",
+                    new { w = winner }, cancellationToken: token));
+            kept.Owner.ShouldBe("scanner-1");
+            kept.Lease.ShouldBe(1700003600);
+            kept.RowId.ShouldBe(rowid, "the rename is an UPDATE preserving the row");
+            foreach (var table in new[] { "watches", "watch_files", "watch_digest_claims" })
+            {
+                (await after.ExecuteScalarAsync<long>(new CommandDefinition(
+                        $"SELECT count(*) FROM {table} WHERE project_id = @l",
+                        new { l = loser }, cancellationToken: token)))
+                    .ShouldBe(0, $"moveable loser surface survived in {table}");
+            }
+        }
+
+        // Fresh work under the winner is clean: v3 lands under jsaa, the stale loser rows unchanged.
+        var nullBefore = await NullContextCountAsync(one, loser, token);
+        bank.Write($"{Sentinel} v3body");
+        await bank.DigestAsync(one, token, winner);
+        (await bank.CountEntriesAsync(one, "v3body", token, winner))
+            .ShouldBeGreaterThan(0, "fresh winner digest lands under the winner");
+        (await NullContextCountAsync(one, loser, token)).ShouldBe(nullBefore,
+            "fresh work resurrects nothing under the loser");
+        one.Gate.Calls.ShouldBe(2, "both parked digests ran through the chunker");
+
+        // A redriven repair folds the stale file row back and changes nothing else.
+        await using (var redrive = await one.Factory.OpenBankAsync(token))
+        {
+            var plan = ProjectIdsFoldPlan.FromCensus(
+                await ProjectIdCensus.CollectAsync(connection: redrive, cancellationToken: token),
+                ProjectIdAliasMap.Default);
+            await new ProjectIdsRepair(TimeProvider.System).ApplyAsync(redrive, plan, token);
+            (await redrive.ExecuteScalarAsync<long>(new CommandDefinition(
+                    "SELECT count(*) FROM watch_files WHERE project_id = @l",
+                    new { l = loser }, cancellationToken: token)))
+                .ShouldBe(0, "the stale file row folds back on redrive");
+            (await NullContextCountAsync(one, loser, token)).ShouldBe(nullBefore,
+                "NULL-context mirrors stay byte-identical across the redrive (review S2)");
+        }
+    }
+
+    private static async Task<long> NullContextCountAsync(Process process, string projectId,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await process.Factory.OpenBankAsync(cancellationToken);
+        return await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT count(*) FROM entries WHERE project_id = @p AND scope = 'project' AND context_label IS NULL",
+            new { p = projectId }, cancellationToken: cancellationToken));
+    }
+
+    private sealed class PinnedProbe(string cwd) : AiRaccoon.Projects.ICwdProbe
+    {
+        public string CurrentDirectory => cwd;
+    }
+
     /// <summary>One bank + watched dir; every <see cref="Process"/> is an independent connection stack over it.</summary>
     private sealed class Bank : IDisposable
     {
@@ -139,8 +281,9 @@ public sealed class WatchDigestConcurrencyTests
             }
         }
 
-        public Task DigestAsync(Process process, CancellationToken cancellationToken) =>
-            process.Executor.DigestAsync(Project, WatchDir, FilePath, WatchEventKind.Changed, null,
+        public Task DigestAsync(Process process, CancellationToken cancellationToken,
+            string projectId = Project) =>
+            process.Executor.DigestAsync(projectId, WatchDir, FilePath, WatchEventKind.Changed, null,
                 cancellationToken);
 
         public async Task<IReadOnlyList<MemorySearchResult>> SearchAsync(Process process, string query,
@@ -157,12 +300,12 @@ public sealed class WatchDigestConcurrencyTests
             CountEntriesAsync(process, valueContains, cancellationToken);
 
         public async Task<int> CountEntriesAsync(Process process, string valueContains,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken, string projectId = Project)
         {
             await using var connection = await process.Factory.OpenBankAsync(cancellationToken);
             return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
                 "SELECT count(*) FROM entries WHERE project_id = @p AND source_file = @path AND value LIKE @value",
-                new { p = Project, path = FilePath, value = $"%{valueContains}%" },
+                new { p = projectId, path = FilePath, value = $"%{valueContains}%" },
                 cancellationToken: cancellationToken));
         }
     }

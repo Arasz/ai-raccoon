@@ -524,6 +524,13 @@ internal static class MemorySql
     public const string HasOpenRepairRequest =
         "SELECT count(*) FROM repair_requests WHERE kind = @kind AND finished_at IS NULL";
 
+    /// <summary>
+    ///     The P3 enforcement gate's migration marker (review M1): a finished row for the kind —
+    ///     stamped only when a requested run completes, never the maintenance_jobs ledger stamp.
+    /// </summary>
+    public const string HasFinishedRepairRequest =
+        "SELECT count(*) FROM repair_requests WHERE kind = @kind AND finished_at IS NOT NULL";
+
     public const string FinishRepairRequest =
         "UPDATE repair_requests SET finished_at = @finishedAt WHERE kind = @kind AND finished_at IS NULL";
 

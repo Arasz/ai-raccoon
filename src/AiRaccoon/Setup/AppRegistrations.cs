@@ -152,6 +152,9 @@ public static partial class AppRegistrations
         {
             services.AddRequiredSingleton<IMemoryAccessGuard, MemoryAccessGuard>();
             services.AddRequiredSingleton<IForgettingPolicyService, ForgettingPolicyService>();
+            // P3's mechanical gate (review M1): the marker ToolGate and the registration guard
+            // both consult before any fold-or-refuse. Registered beside its consumers, never null.
+            services.AddRequiredSingleton<IProjectIdsMigrationGate, SqliteProjectIdsMigrationGate>();
             services.AddRequiredSingleton<IProjectRegistrationGuard, ProjectRegistrationGuard>();
             services.AddRequiredSingleton<ICwdProbe, CurrentDirectoryCwdProbe>();
             services.AddRequiredSingleton<IProjectIdResolver, CwdProjectIdResolver>();

@@ -64,7 +64,10 @@ public sealed class ShareTools(
                 .ConfigureAwait(false));
         }
 
-        request = request with { ProjectIds = [.. canonicalIds] };
+        // Fragments of one project meet here (jsaa + job-search-ai-assistant both fold to jsaa):
+        // without the dedup the runner would propose the same project twice and the meta would
+        // read bank-wide instead of scoped to the single project the call actually named.
+        request = request with { ProjectIds = [.. canonicalIds.Distinct(StringComparer.Ordinal)] };
         var result = await shareExtract.RunAsync(request, cancellationToken).ConfigureAwait(false);
         return await gate.WrapAsync(request.MetaProjectId, result, cancellationToken);
     }

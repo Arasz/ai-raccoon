@@ -19,7 +19,8 @@ public sealed class ToolGate(
     IPromotionQueue queue,
     IModelMigrationStore migrations,
     IProjectRegistrationGuard registration,
-    IProjectIdResolver? resolver = null) : IToolGate
+    IProjectIdResolver? resolver = null,
+    IProjectIdsMigrationGate? migrationGate = null) : IToolGate
 {
     /// <summary>Refuses while a migration is open. Nothing else — the check a tool with no project yet can still make.</summary>
     public async Task RequireBankAvailableAsync(string toolName, CancellationToken cancellationToken)
@@ -35,7 +36,9 @@ public sealed class ToolGate(
     ///     Refuses while a migration is open, then rejects a blank project id — a blank id is
     ///     resolved from the working directory when a resolver is wired (Resolved flows through the
     ///     single canonicalization; Ambiguous/None refuse with the probed cwd in the message) —
-    ///     canonicalizes it (ADR-0089 decision 2), throws access-denied when the mode is too low,
+    ///     canonicalizes it (ADR-0089 decision 2), folds a known loser to its winner once the P2
+    ///     finished marker exists (air-merge P3, review M1 — no fold until migrated, so an
+    ///     unmigrated bank behaves exactly as before), throws access-denied when the mode is too low,
     ///     and only then refuses an unregistered id on a write (decision 3 — reads pass through
     ///     untouched). Registration is checked last so an unauthorized caller cannot learn whether
     ///     an id is registered from the refusal shape. Returns the canonical id for the caller to
@@ -52,6 +55,11 @@ public sealed class ToolGate(
         }
 
         var canonical = ProjectId.Canonicalize(projectId);
+        if (migrationGate is not null
+            && await migrationGate.IsMigratedAsync(cancellationToken).ConfigureAwait(false))
+        {
+            canonical = ProjectIdAliasMap.Default.Fold(canonical);
+        }
 
         await access.EnsureAsync(canonical, requirement, toolName, cancellationToken).ConfigureAwait(false);
         await registration.EnsureAsync(canonical, requirement, cancellationToken).ConfigureAwait(false);

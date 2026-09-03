@@ -78,4 +78,46 @@ public sealed class ProjectIdAliasMapTests
         reloaded.IsDropped("manual-sweep").ShouldBeTrue();
         reloaded.TryResolve("jsaaa", out _).ShouldBeFalse();
     }
+
+    /// <summary>
+    ///     P3/P4 choke helper: guid D-form first, then the alias winner — everything else
+    ///     (canonicals, true typos, drop-candidates) comes back untouched. The guard refuses typos
+    ///     and Fold never invents a mapping, so a typo must survive Fold verbatim.
+    ///     Ledger — skip-alias-leg : --filter Fold_MapsKnownLosers_AndLeavesEverythingElseAlone :
+    ///     jsaa/AI-RACCOON/typo/drop InlineData legs.
+    /// </summary>
+    [Theory]
+    [InlineData("job-search-ai-assistant", "jsaa")]
+    [InlineData("AI-RACCOON", "ai-raccoon")]
+    [InlineData("jsaa", "jsaa")]
+    [InlineData("jsaaa", "jsaaa")]
+    [InlineData("qa-noise-project", "qa-noise-project")]
+    public void Fold_MapsKnownLosers_AndLeavesEverythingElseAlone(string input, string expected)
+    {
+        ProjectIdAliasMap.Default.Fold(input).ShouldBe(expected);
+    }
+
+    /// <summary>
+    ///     A guid spelling folds to the D-form even when the map knows nothing about it — same
+    ///     single spelling the gate has always canonicalized to (ADR-0089 decision 2).
+    ///     Ledger — skip-guid-leg : --filter Fold_OfAGuidSpelling_ReturnsTheDForm : braced-upper guid.
+    /// </summary>
+    [Fact]
+    public void Fold_OfAGuidSpelling_ReturnsTheDForm()
+    {
+        var canonical = Guid.CreateVersion7().ToString("D");
+
+        ProjectIdAliasMap.Default.Fold($"{{{canonical.ToUpperInvariant()}}}").ShouldBe(canonical);
+    }
+
+    /// <summary>
+    ///     The key factories derive prefixes from <c>ScopeProject(string.Empty)</c> — Fold must pass
+    ///     the empty derivation input through instead of throwing.
+    ///     Ledger — throw-on-blank : --filter Fold_OfABlankInput_ReturnsItUnchanged : empty string.
+    /// </summary>
+    [Fact]
+    public void Fold_OfABlankInput_ReturnsItUnchanged()
+    {
+        ProjectIdAliasMap.Default.Fold(string.Empty).ShouldBe(string.Empty);
+    }
 }

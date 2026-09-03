@@ -165,6 +165,29 @@ public sealed class CwdProjectIdResolverTests : IDisposable
         resolution.ShouldBe(new ProjectIdResolution.Resolved("p1"));
     }
 
+    /// <summary>
+    ///     P4 resolver coherence: an alias pair across the two surfaces (loser scope row, winner
+    ///     watch row) stays Ambiguous — the resolver never folds or guesses, even for a known
+    ///     fold. Fail-closed by design; the repair removes the pair.
+    ///     Ledger — dedup-on-alias : --filter AliasPair_StaysAmbiguous_NeverFolds : loser scope +
+    ///     winner watch over one cwd.
+    /// </summary>
+    [Fact]
+    public async Task AliasPair_StaysAmbiguous_NeverFolds()
+    {
+        var cwd = Dir("renaming");
+        // Raw loser key on purpose: the factory folds at construction now, so only a pre-repair
+        // bank still holds this spelling — exactly the mid-rename window this pins.
+        _settings.Values["ingest.scope.job-search-ai-assistant"] =
+            IngestScopeKeys.Serialize([cwd]);
+        _settings.Watches = [new WatchRegistration("jsaa", cwd, 0, 0)];
+
+        var resolution = await NewResolver(cwd).ResolveAsync(TestContext.Current.CancellationToken);
+
+        var ambiguous = resolution.ShouldBeOfType<ProjectIdResolution.Ambiguous>();
+        ambiguous.SortedIds.ShouldBe(["job-search-ai-assistant", "jsaa"]);
+    }
+
     [Fact]
     public async Task MixedSpellings_SameGuid_DedupToResolved()
     {
@@ -175,7 +198,10 @@ public sealed class CwdProjectIdResolverTests : IDisposable
         var guid = Guid.NewGuid();
         var bracedUpper = $"{{{guid.ToString("D").ToUpperInvariant()}}}";
         var cwd = Dir("mixed-spellings");
-        _settings.Values[IngestScopeKeys.ScopeProject(bracedUpper)] = IngestScopeKeys.Serialize([cwd]);
+        // Raw key on purpose: the factory folds at construction now (P4), so seeding through
+        // it would store the D-form twice and stop exercising the resolver's cross-spelling
+        // dedup — exactly the pre-repair bank shape this pins (cf. AliasPair_StaysAmbiguous_NeverFolds).
+        _settings.Values[$"ingest.scope.{bracedUpper}"] = IngestScopeKeys.Serialize([cwd]);
         _settings.Watches = [new WatchRegistration(guid.ToString("D"), cwd, 0, 0)];
 
         var resolution = await NewResolver(cwd).ResolveAsync(TestContext.Current.CancellationToken);
