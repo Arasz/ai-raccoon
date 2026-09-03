@@ -196,7 +196,7 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
                 "FROM metrics WHERE correlation_id = @Id",
                 new { Id = correlationId }, cancellationToken: ct))).ToList();
         var expectedNames = SearchTimings.SeriesNames
-            .Concat(["search.fusion.top_strength", "search.fusion.top_margin", "search.fusion.legs_fired"])
+            .Concat(FusionStats.MetricNames)
             .ToList();
         metrics.Select(m => m.Name).ShouldBe(expectedNames, ignoreOrder: true,
             "one search accrues the ten phase series plus the three Stage-1 shape series");
