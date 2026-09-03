@@ -532,10 +532,56 @@ public sealed partial class MemoryTools(
                 measurements.Record(new Measurement(name, MeasurementKind.Gauge, value,
                     unit, recordedAt, projectId, queryHash, correlationId));
             }
+
+            foreach (var (name, value, unit) in FusionSignalMeasurements(results))
+            {
+                measurements.Record(new Measurement(name, MeasurementKind.Gauge, value,
+                    unit, recordedAt, projectId, queryHash, correlationId));
+            }
         }
         catch (Exception ex)
         {
             Log.PhaseMeasurementRecordingFailed(logger, ex, correlationId);
+        }
+    }
+
+    /// <summary>
+    ///     Stage-1 response-shape series (plan §5, P6b): top_strength is the max fusion strength
+    ///     over the served rows that carry evidence — reorder-invariant, equal to rank-1 strength
+    ///     when nothing reordered — while top_margin and legs_fired come from Stats. Skip-null:
+    ///     a missing margin or leg set emits no series at all (M8 — a 0.0 sentinel would poison
+    ///     Stage-2 distributions). Carries the caller's queryHash unchanged, so the
+    ///     code-adjacent null rule applies to these series exactly as to the phase series.
+    /// </summary>
+    private static IEnumerable<(string Name, double Value, string Unit)> FusionSignalMeasurements(SearchResults results)
+    {
+        double? topStrength = null;
+        if (results.EvidenceByHash is { } byHash)
+        {
+            foreach (var row in results.Results)
+            {
+                if (byHash.TryGetValue(row.Hash, out var evidence))
+                {
+                    topStrength = topStrength is null
+                        ? evidence.FusionStrength
+                        : Math.Max(topStrength.Value, evidence.FusionStrength);
+                }
+            }
+        }
+
+        if (topStrength is { } strength)
+        {
+            yield return ("search.fusion.top_strength", strength, "ratio");
+        }
+
+        if (results.Stats is { } stats)
+        {
+            if (stats.TopMargin is { } margin)
+            {
+                yield return ("search.fusion.top_margin", margin, "ratio");
+            }
+
+            yield return ("search.fusion.legs_fired", stats.ParticipatingLegs.Count, "legs");
         }
     }
 
