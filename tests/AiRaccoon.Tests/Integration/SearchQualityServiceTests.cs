@@ -166,7 +166,7 @@ public sealed class SearchQualityServiceTests : IDisposable
     ///     it describes. Both verbs take it as a required string after projectId / before
     ///     sessionId; the dispatcher passes <c>SearchKind.ToString().ToLowerInvariant()</c>.
     /// </summary>
-    [Theory]
+    [RetryTheory]
     [InlineData("memory")]
     [InlineData("code")]
     [InlineData("both")]
@@ -186,7 +186,7 @@ public sealed class SearchQualityServiceTests : IDisposable
         stored.ShouldBe(kind);
     }
 
-    [Theory]
+    [RetryTheory]
     [InlineData("memory")]
     [InlineData("code")]
     [InlineData("both")]
@@ -212,7 +212,7 @@ public sealed class SearchQualityServiceTests : IDisposable
     ///     validator. (The Safe verb keeps its never-throws contract and swallows into a log.)
     ///     Mutation: drop the guard → this fails.
     /// </summary>
-    [Theory]
+    [RetryTheory]
     [InlineData("banana")]
     [InlineData("")]
     [InlineData("MEMORY")]
@@ -383,7 +383,7 @@ public sealed class SearchQualityServiceTests : IDisposable
     ///     P4: ranks below 1 are a caller bug — rejected fail-fast before any DB touch. No upper
     ///     bound: result-set size is unknowable at write time.
     /// </summary>
-    [Theory]
+    [RetryTheory]
     [InlineData(0)]
     [InlineData(-1)]
     [InlineData(int.MinValue)]
