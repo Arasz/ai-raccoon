@@ -496,7 +496,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
     ];
 
     /// <summary>
-    ///     Projects rows never sync (P1 trace (a)), so every replica folds its own registry: the
+    ///     Projects rows never sync (docs/work/2026-09-03-air-merge-p1-trace-answers.md §(a)), so every replica folds its own registry: the
     ///     winner row is ensured (first-write-wins name = the id itself, matching auto-register),
     ///     then loser, dropped and retired rows delete.
     /// </summary>
