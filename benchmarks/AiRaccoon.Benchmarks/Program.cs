@@ -40,9 +40,7 @@ public static class Program
             IEmbedder? embedder = null;
             try
             {
-                embedder = name.StartsWith("local:", StringComparison.Ordinal)
-                    ? new LocalGgufEmbedder()
-                    : new LmStudioEmbedder(name["lmstudio:".Length..]);
+                embedder = EmbedderCatalog.Create(name);
 
                 embedder.IndexAsync(BenchmarkCorpus.Documents).GetAwaiter().GetResult();
                 var metrics = RetrievalMetricsEvaluator.Compute(embedder, BenchmarkCorpus.Queries, 10);
