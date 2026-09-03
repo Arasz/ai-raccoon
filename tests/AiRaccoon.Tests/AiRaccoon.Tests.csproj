@@ -57,6 +57,9 @@
         <ReqnrollFeatureFiles Include="..\..\docs\features\code-corpus\code-corpus.feature">
             <Link>BDD\features-code-corpus\code-corpus.feature</Link>
         </ReqnrollFeatureFiles>
+        <ReqnrollFeatureFiles Include="..\..\docs\work\features-single-project-id\single-project-id.feature">
+            <Link>BDD\features-single-project-id\single-project-id.feature</Link>
+        </ReqnrollFeatureFiles>
     </ItemGroup>
 
     <ItemGroup>
