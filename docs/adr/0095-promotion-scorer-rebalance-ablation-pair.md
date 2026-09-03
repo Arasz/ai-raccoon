@@ -14,12 +14,12 @@ there because `rule-language` tags on any single match (743/1000 rows) while its
 `imperative-checklist`, triggers late (3+ items, −0.30). The catalog's After half proposes a
 broad rebalance plus queue plumbing, and recommends running the rule-language gate and the
 verified-contract bump as an ablation pair first. Review M5 cut the scope to exactly that pair
-— three constant changes, no plumbing — and this lane enacts them with TDD. Everything else in
+— three term-groups (eight constants), no plumbing — and this lane enacts them with TDD. Everything else in
 the After half is deferred, not rejected (see Deferred below).
 
 ## Decision
 
-Three constant changes in `src/AiRaccoon.Core/Memory/PromotionContentEvidence.cs`, each
+Three term-groups (eight constants) in `src/AiRaccoon.Core/Memory/PromotionContentEvidence.cs`, each
 preceded by a failing test run against unmodified code
 (`tests/AiRaccoon.Tests/Unit/Memory/PromotionScorerRebalanceTests.cs`, 9 tests, each red
 witnessed before its production edit). The `Clamp` structure is unchanged; only constants move.
@@ -78,5 +78,5 @@ for (`score_round.py` over train/validation/holdout plus the parity check agains
 was NOT run in this lane: the split fixtures are absent from disk (the eval tree carries only
 `reference-labels.json` and the round2/round3 agent scorers, no train/validation/holdout
 splits), and running it is outside this lane's allowed files. Merging without that ablation —
-or supplying the fixtures first — is the owner's explicit call. This section must not be
+or supplying the fixtures first — is the owner's explicit call. Granting this waiver also acknowledges the staleness window: with no scorer-version bump in this change, already-queued rows keep their old scores until natural churn replaces them. This section must not be
 marked granted by anyone but the owner.

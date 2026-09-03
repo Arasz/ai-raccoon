@@ -4,7 +4,7 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Memory;
 
-/// <summary>Ablation-pair rebalance (ADR-0094): sparse rule phrasing no longer tags or pays like
+/// <summary>Ablation-pair rebalance (ADR-0095): sparse rule phrasing no longer tags or pays like
 /// sustained rule prose, and the rule bonus follows the rebalanced coefficients.</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
