@@ -18,7 +18,8 @@ Sources (paths relative to the task worktree unless absolute):
 
 ## Join rulings (1–6 original, 7–13 added by the review fold; all attackable)
 
-1. **ADR numbers:** P2 takes `0095` (telemetry never syncs), P3 takes `0096` (kind column).
+1. **ADR numbers (AMENDED 2026-09-03 — 0096 taken by another lane's #600 search-defaults
+   record):** P2 takes `0095` (telemetry never syncs), P3 takes `0097` (kind column).
    Each with README row in the same commit. P1 decision-note only, no ADR.
 2. **Signatures (AMENDED twice — contradiction fix + owner gate D1):** `sessionId` is
    **required at every layer** (owner-gate 2026-09-03, D1 CHANGE: "if optional, removable;
@@ -170,7 +171,7 @@ otherwise. Framework catalog sync is report-only.
   backfill-both-sides, rerun, CHECK-rejection. BDD kind scenario restored
   (ruling 8). Literals: **no pin-number updates** — 58 stays, digest
   self-consistent, ahead-version self-updating (d-393 MUST-9).
-- **Docs:** `docs/adr/0096-*.md` (backfill rule, nullable choice, no-index
+- **Docs:** `docs/adr/0097-*.md` (backfill rule, nullable choice, no-index
   rationale) + README row same commit; rung doc comment. Merge-order rule with
   P2 (ruling 9 mechanics: P2's 0095 commit merges first or both land atomically
   at P7 — d-394 M4).
@@ -225,7 +226,9 @@ description for contract tests to pass); this package owns cross-surface consist
   the new surface; update each hit or record it explicitly accepted.
   c. `docs/reference/agent-memory-server.md` — params, recording rules,
   correlationId, grade/follow-through semantics verified against the shipped tools.
-  d. MCP tool descriptions (`MemoryTools.cs` incl. the new sessionId text,
+  d. MCP tool descriptions (`MemoryTools.cs` incl. the new sessionId text AND the
+  `:454-458` second leak witness — d-396 left it saying "syncs off-machine" while
+  `:199-201` says stripped; consolidate both,
   `QualityTools.cs` incl. servedRank, kind/correlationId behavior text): accuracy
   pass — every new/changed param described truthfully; pre-existing text corrected
   where the behavior moved. Descriptions only: no logic, no signatures.
@@ -256,7 +259,10 @@ description for contract tests to pass); this package owns cross-surface consist
   lists with the MUST-6/9/12/13 deltas; no-double-pin scope incl.); BDD green;
   `AdrIndexTests` + DDL-count + version + **`McpToolContractTests`
   final-contract** green (d-392 S10); P7 entry re-greps the three inventories
-  (d-392 S7); rest to CI, no local re-runs.
+  (d-392 S7); rest to CI, no local re-runs. P7 rebases onto current main FIRST — main
+  moved under the lanes (#600 changed search defaults: new `SearchDefaults.cs`,
+  `SearchQuery.cs`/`MemoryTools.cs` defaults, floor contract tests; #599 docs;
+  framework refresh): contract + floor + BDD corpus re-run after the final rebase.
 - **Docs:** MoE note closed with PR links; ADR consequences updated if found
   anything.
 
@@ -266,7 +272,7 @@ description for contract tests to pass); this package owns cross-surface consist
   d-394 M6). Signatures per ruling 2; named-args rule for all test callers.
 - **Lane-S parallel: P2 + P5-audit** (disjoint; contracts checked at P7).
 - **P5-write (if any) sequenced; P6-surface after P1+P4 merge; P7 strictly last.**
-- **ADR merge order** (d-394 M4): P2's 0095 commit before P3's 0096 commit, or
+- **ADR merge order** (d-394 M4, renumbered 2026-09-03): P2's 0095 commit before P3's 0097 commit, or
   both atomically at P7.
 - Flake traits per precedent (d-393 SHOULD-6); exact lane filters named per
   package (Fast exclusion vs Slow sync — d-394 S2).
