@@ -356,7 +356,7 @@ public sealed class ProjectIdsPullFoldTests : IDisposable
             ct => localFactory.OpenBankAsync(ct),
             OpenSnapshotWithVectorAsync,
             OpenSnapshotWithVectorAsync,
-            TimeProvider.System, NullLogger<SyncService>.Instance);
+            new FakeTimeProvider(FixedNow), NullLogger<SyncService>.Instance); // QA F2: SyncService shares the repair FakeTimeProvider — merge watermark and tombstone GC stay deterministic.
 
     /// <summary>
     ///     Mirrors production snapshot opens (AppRegistrations): the strip DELETEs entries rows,

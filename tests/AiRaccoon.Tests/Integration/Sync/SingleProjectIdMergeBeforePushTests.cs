@@ -209,7 +209,7 @@ public sealed class SingleProjectIdMergeBeforePushTests : IDisposable
             ct => localFactory.OpenBankAsync(ct),
             OpenSnapshotWithVectorAsync,
             OpenSnapshotWithVectorAsync,
-            TimeProvider.System, NullLogger<SyncService>.Instance);
+            new FakeTimeProvider(FixedNow), NullLogger<SyncService>.Instance); // QA F2: SyncService shares the repair FakeTimeProvider — merge watermark and tombstone GC stay deterministic.
 
     private static async Task<SqliteConnection> OpenSnapshotWithVectorAsync(string path, CancellationToken ct)
     {
