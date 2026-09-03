@@ -69,6 +69,7 @@ public interface ISearchQualityService
     /// <summary>
     ///     Records a human usefulness grade (1-5) for the search.
     ///     Updates the existing row by <paramref name="correlationId" />.
+    ///     <paramref name="projectId" /> is accepted-but-unused, not a predicate — keying is correlationId-only.
     /// </summary>
     Task RecordGradeAsync(
         string projectId,
