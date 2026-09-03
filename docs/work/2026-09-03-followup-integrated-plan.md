@@ -274,7 +274,11 @@ description for contract tests to pass); this package owns cross-surface consist
   d-394 M6). Signatures per ruling 2; named-args rule for all test callers.
 - **Lane-S parallel: P2 + P5-audit** (disjoint; contracts checked at P7).
 - **P5-write (if any) sequenced; P6-surface after P1+P4 merge; P7 strictly last.**
-- **ADR merge order** (d-394 M4, renumbered 2026-09-03): P2's 0095 commit before P3's 0097 commit, or
+- **ADR merge order** (d-394 M4, renumbered 2026-09-03, AMENDED 2026-09-03 — main merged
+  an unrelated `0095-promotion-scorer-rebalance-ablation-pair`, so our strip record's number
+  collides): at P7, rename our strip record to next-free (verify with `ls docs/adr`;
+  unmerged moves, merged wins), update its README row in the same edit, THEN P2-before-P3
+  order holds (P3's 0097 stands unless main takes it first — re-verify at P7 the same way).
   both atomically at P7.
 - Flake traits per precedent (d-393 SHOULD-6); exact lane filters named per
   package (Fast exclusion vs Slow sync — d-394 S2).
