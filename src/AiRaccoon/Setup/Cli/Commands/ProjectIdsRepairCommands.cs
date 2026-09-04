@@ -22,8 +22,8 @@ public sealed class ProjectIdsRepairCommands(IRepairStore repair)
         var verb = apply ? "queued for the server to fold" : "would fold (dry run; pass --apply to queue it)";
         var orphans = report.Rows.Count(row => row.Orphan);
         await streams.WriteOutputLineAsync(
-            $"project-ids repair: {report.Rows.Count} id(s) hold rows, {orphans} orphan(s), " +
-            $"{report.ZeroEntryRows.Count} zero-entry row(s) {verb}");
+            $"project-ids repair: census found {report.Rows.Count} id(s) " +
+            $"({orphans} orphan(s), {report.ZeroEntryRows.Count} with no entries) — {verb}");
         foreach (var fold in plan.Folds)
         {
             var loser = report.Rows.SingleOrDefault(row => row.ProjectId == fold.Loser);
@@ -33,15 +33,16 @@ public sealed class ProjectIdsRepairCommands(IRepairStore repair)
             // count here is the operator's verify-zero-or-broaden instrument before --apply: a
             // nonzero count stays loser-keyed by design, never a surprise orphan afterwards.
             await streams.WriteOutputLineAsync(
-                $"project-ids repair: '{fold.Loser}' owns {loser?.EntryTotal ?? 0} entries " +
-                $"({loser?.NullContextEntries ?? 0} NULL-context, stay), " +
-                $"{loser?.Queued ?? 0} queued — folds to '{fold.Winner}'");
+                $"project-ids repair: '{fold.Loser}' folds to '{fold.Winner}' — " +
+                $"{loser?.EntryTotal ?? 0} committed entries " +
+                $"({loser?.NullContextEntries ?? 0} NULL-context, stays under the loser), " +
+                $"{loser?.Queued ?? 0} queued share-candidate(s)");
         }
 
         foreach (var dropped in plan.Dropped)
         {
             await streams.WriteOutputLineAsync(
-                $"project-ids repair: '{dropped}' is test residue — deletes with a tombstone per removed hash");
+                $"project-ids repair: '{dropped}' is on the drop list — its rows are deleted, one tombstone per removed hash");
         }
 
         foreach (var unresolved in plan.Unresolved)
