@@ -1,20 +1,37 @@
+using System.Text.Json;
 using AiRaccoon.Core.Projects;
 using Shouldly;
 using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Projects;
 
-/// <summary>Air-merge P1: the durable loser-to-winner map from the plan's canonical-wins table — jsaa and casing folds resolve, drop-candidates never fold, true typos stay unknown.</summary>
+/// <summary>ADR-0099: the public binary ships no machine-local ids — Default is empty by design. Machine ids live on only as explicit test-fixture data, never as production content.</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ProjectIdAliasMapTests
 {
+    // Explicit fixture: machine ids as TEST DATA (allowed). Production Default must never contain them (AC1).
+    private static ProjectIdAliasMap FixtureMap() => new(
+        [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"), new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon")],
+        ["jsaa", "ai-badger", "ai-raccoon", "hermes-default", "deepseek-harness", "arasz-home-page", "vue-kanban", "dotnet-ignore", "interview-tasks"],
+        ["qa-noise-project", "manual-sweep"]);
+
+    [Fact]
+    public void Default_IsEmpty_ByDesign()
+    {
+        ProjectIdAliasMap.Default.IsEmpty.ShouldBeTrue();
+        ProjectIdAliasMap.Default.Aliases.ShouldBeEmpty();
+        ProjectIdAliasMap.Default.Canonicals.ShouldBeEmpty();
+        ProjectIdAliasMap.Default.Dropped.ShouldBeEmpty();
+        ProjectIdAliasMap.Empty.IsEmpty.ShouldBeTrue();
+    }
+
     [Theory]
     [InlineData("job-search-ai-assistant", "jsaa")]
     [InlineData("AI-RACCOON", "ai-raccoon")]
     public void TryResolve_OfAKnownLoser_ReturnsTheCanonicalWinner(string alias, string canonical)
     {
-        ProjectIdAliasMap.Default.TryResolve(alias, out var winner).ShouldBeTrue();
+        FixtureMap().TryResolve(alias, out var winner).ShouldBeTrue();
 
         winner.ShouldBe(canonical);
     }
@@ -31,7 +48,7 @@ public sealed class ProjectIdAliasMapTests
     [InlineData("interview-tasks")]
     public void TryResolve_OfACanonicalWinner_ResolvesToItself(string canonical)
     {
-        ProjectIdAliasMap.Default.TryResolve(canonical, out var winner).ShouldBeTrue();
+        FixtureMap().TryResolve(canonical, out var winner).ShouldBeTrue();
 
         winner.ShouldBe(canonical);
     }
@@ -39,7 +56,7 @@ public sealed class ProjectIdAliasMapTests
     [Fact]
     public void TryResolve_OfATrueTypo_ReturnsFalse()
     {
-        ProjectIdAliasMap.Default.TryResolve("jsaaa", out var winner).ShouldBeFalse();
+        FixtureMap().TryResolve("jsaaa", out var winner).ShouldBeFalse();
 
         winner.ShouldBeNull();
     }
@@ -49,10 +66,19 @@ public sealed class ProjectIdAliasMapTests
     [InlineData("manual-sweep")]
     public void TryResolve_OfADropCandidate_ReturnsFalse_ItIsDeletedNeverFolded(string dropped)
     {
-        ProjectIdAliasMap.Default.TryResolve(dropped, out var winner).ShouldBeFalse();
+        FixtureMap().TryResolve(dropped, out var winner).ShouldBeFalse();
 
         winner.ShouldBeNull();
-        ProjectIdAliasMap.Default.IsDropped(dropped).ShouldBeTrue();
+        FixtureMap().IsDropped(dropped).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Default_TryResolve_KnownLoserStrings_PassThrough()
+    {
+        // Steady-state pass-through pin (MUST-1): with Empty default, former loser strings are unknown.
+        ProjectIdAliasMap.Default.TryResolve("job-search-ai-assistant", out var winner).ShouldBeFalse();
+        winner.ShouldBeNull();
+        ProjectIdAliasMap.Default.IsDropped("qa-noise-project").ShouldBeFalse();
     }
 
     [Fact]
@@ -69,7 +95,7 @@ public sealed class ProjectIdAliasMapTests
     [Fact]
     public void JsonRoundTrip_PreservesAliasesCanonicalsAndDrops()
     {
-        var json = ProjectIdAliasMap.Default.ToJson();
+        var json = FixtureMap().ToJson();
 
         var reloaded = ProjectIdAliasMap.FromJson(json);
 
@@ -77,6 +103,70 @@ public sealed class ProjectIdAliasMapTests
         winner.ShouldBe("jsaa");
         reloaded.IsDropped("manual-sweep").ShouldBeTrue();
         reloaded.TryResolve("jsaaa", out _).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void EmptyTemplateJson_ParsesToEmpty()
+    {
+        var template = ProjectIdAliasMap.Empty.ToJson(indented: true);
+
+        var reloaded = ProjectIdAliasMap.FromJson(template);
+
+        reloaded.IsEmpty.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void LoadFromFile_RoundTrips_AFileWrittenByToJson()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"alias-map-{Guid.CreateVersion7():N}.json");
+        try
+        {
+            File.WriteAllText(path, FixtureMap().ToJson(indented: true));
+
+            var reloaded = ProjectIdAliasMap.LoadFromFile(path);
+
+            reloaded.TryResolve("job-search-ai-assistant", out var winner).ShouldBeTrue();
+            winner.ShouldBe("jsaa");
+            reloaded.IsDropped("manual-sweep").ShouldBeTrue();
+        }
+        finally
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+    }
+
+    [Fact]
+    public void LoadFromFile_OfAMissingFile_ThrowsFileNotFound_NamingThePath()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"alias-map-missing-{Guid.CreateVersion7():N}.json");
+
+        var ex = Should.Throw<FileNotFoundException>(() => ProjectIdAliasMap.LoadFromFile(path));
+
+        ex.Message.ShouldContain(path);
+    }
+
+    [Fact]
+    public void LoadFromFile_OfBadJson_ThrowsJsonException_NamingThePath()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"alias-map-bad-{Guid.CreateVersion7():N}.json");
+        try
+        {
+            File.WriteAllText(path, "{ not json");
+
+            var ex = Should.Throw<JsonException>(() => ProjectIdAliasMap.LoadFromFile(path));
+
+            ex.Message.ShouldContain(path);
+        }
+        finally
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
     }
 
     /// <summary>
@@ -96,6 +186,15 @@ public sealed class ProjectIdAliasMapTests
     [InlineData("JSAA", "JSAA")]
     [InlineData("Job-Search-Ai-Assistant", "Job-Search-Ai-Assistant")]
     public void Fold_MapsKnownLosers_AndLeavesEverythingElseAlone(string input, string expected)
+    {
+        FixtureMap().Fold(input).ShouldBe(expected);
+    }
+
+    [Theory]
+    [InlineData("job-search-ai-assistant", "job-search-ai-assistant")]
+    [InlineData("AI-RACCOON", "AI-RACCOON")]
+    [InlineData("qa-noise-project", "qa-noise-project")]
+    public void DefaultFold_PassesThrough_FormerLoserStrings(string input, string expected)
     {
         ProjectIdAliasMap.Default.Fold(input).ShouldBe(expected);
     }

@@ -7,7 +7,7 @@ namespace AiRaccoon.Tests.Unit.Projects;
 
 /// <summary>
 ///     Air-merge P2: the repair folds loser ids into their canonical winners (and deletes drop
-///     candidates) from a durable plan derived from the P1 census plus the P1 alias map — never
+///     candidates) from a plan derived from the census plus an explicit alias map — never
 ///     from hand-written id lists at the repair site, so pull-time fold and the ToolGate fold keep
 ///     consuming the same table.
 /// </summary>
@@ -32,7 +32,7 @@ public sealed class ProjectIdsFoldPlanTests
             Row("jsaa", projectEntries: 2, queued: 2),
             Row("job-search-ai-assistant", projectEntries: 1, queued: 1));
 
-        var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Default);
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
 
         plan.Folds.ShouldBe([new ProjectIdFold("job-search-ai-assistant", "jsaa")]);
         plan.Dropped.ShouldBeEmpty();
@@ -49,7 +49,7 @@ public sealed class ProjectIdsFoldPlanTests
         var guid = "01a062f4-0000-7000-8000-000000000001";
         var report = Report(Row(guid, projectEntries: 2, registered: true, registeredName: "job-search-ai-assistant"));
 
-        var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Default);
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
 
         plan.Folds.ShouldBe([new ProjectIdFold(guid, "jsaa")]);
     }
@@ -62,7 +62,7 @@ public sealed class ProjectIdsFoldPlanTests
             Row("ai-raccoon", projectEntries: 1),
             Row("AI-RACCOON", projectEntries: 1, settingsKeys: ["ingest.scope.AI-RACCOON"]));
 
-        var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Default);
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
 
         plan.Folds.ShouldBe([new ProjectIdFold("AI-RACCOON", "ai-raccoon")]);
     }
@@ -75,7 +75,7 @@ public sealed class ProjectIdsFoldPlanTests
             Row("qa-noise-project", projectEntries: 1),
             Row("manual-sweep", projectEntries: 1, watches: 1));
 
-        var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Default);
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
 
         plan.Folds.ShouldBeEmpty();
         plan.Dropped.ShouldBe(["qa-noise-project", "manual-sweep"], "the plan preserves census order");
@@ -88,7 +88,7 @@ public sealed class ProjectIdsFoldPlanTests
         var guid = "01a03024-0000-7000-8000-000000000001";
         var report = Report(Row(guid, registered: true, registeredName: "ai-badger"));
 
-        var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Default);
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
 
         plan.Folds.ShouldBeEmpty();
         plan.Dropped.ShouldBeEmpty();
@@ -104,7 +104,7 @@ public sealed class ProjectIdsFoldPlanTests
         // not move or delete rows it cannot attribute.
         var report = Report(Row("jsaaa", projectEntries: 1));
 
-        var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Default);
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
 
         plan.Folds.ShouldBeEmpty();
         plan.Dropped.ShouldBeEmpty();
@@ -118,7 +118,7 @@ public sealed class ProjectIdsFoldPlanTests
     {
         var report = Report(Row("jsaa", projectEntries: 2, queued: 2));
 
-        var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Default);
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
 
         plan.IsEmpty.ShouldBeTrue();
     }
@@ -128,7 +128,7 @@ public sealed class ProjectIdsFoldPlanTests
     public void FromCensus_OnACleanBank_IsEmpty()
     {
         var plan = ProjectIdsFoldPlan.FromCensus(
-            new ProjectIdCensusReport([], 0, 0, 0, 0, []), ProjectIdAliasMap.Default);
+            new ProjectIdCensusReport([], 0, 0, 0, 0, []), FixtureMap());
 
         plan.IsEmpty.ShouldBeTrue();
         plan.Unresolved.ShouldBeEmpty();
@@ -140,7 +140,7 @@ public sealed class ProjectIdsFoldPlanTests
     {
         var report = Report(Row("qa-noise-project", metricsRows: 1));
 
-        var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Default);
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
 
         plan.Dropped.ShouldBeEmpty("metrics are never touched — scheduling this re-plans forever as a no-op");
         plan.Unresolved.ShouldBeEmpty();
@@ -152,7 +152,7 @@ public sealed class ProjectIdsFoldPlanTests
     {
         var report = Report(Row("manual-sweep", qualityRows: 1));
 
-        var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Default);
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
 
         plan.Dropped.ShouldBe(["manual-sweep"]);
     }
@@ -163,7 +163,7 @@ public sealed class ProjectIdsFoldPlanTests
     {
         var report = Report(Row("qa-noise-project", noiseRows: 1));
 
-        var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Default);
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
 
         plan.Dropped.ShouldBeEmpty("noise rows are never touched — same no-op re-plan as metrics");
         plan.Unresolved.ShouldBeEmpty();
@@ -175,9 +175,28 @@ public sealed class ProjectIdsFoldPlanTests
     {
         var report = Report(Row("manual-sweep", discards: 1));
 
-        var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Default);
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
 
         plan.Dropped.ShouldBe(["manual-sweep"], "discards follow the fold — the gate must not over-exclude");
+    }
+
+    // Explicit fixture: machine ids as TEST DATA (allowed). Production Default is empty (ADR-0099).
+    private static ProjectIdAliasMap FixtureMap() => new(
+        [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"), new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon")],
+        ["jsaa", "ai-badger", "ai-raccoon", "hermes-default", "deepseek-harness", "arasz-home-page", "vue-kanban", "dotnet-ignore", "interview-tasks"],
+        ["qa-noise-project", "manual-sweep"]);
+
+    [Fact]
+    public void FromCensus_WithTheEmptyDefault_PlansNoFolds()
+    {
+        var report = Report(
+            Row("jsaa", projectEntries: 2, queued: 2),
+            Row("job-search-ai-assistant", projectEntries: 1, queued: 1));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Default);
+
+        plan.Folds.ShouldBeEmpty();
+        plan.Dropped.ShouldBeEmpty();
     }
 
     private static ProjectIdCensusReport Report(params ProjectIdCensusRow[] rows) =>
