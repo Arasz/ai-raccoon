@@ -15,10 +15,12 @@ public partial class SyncService(
     Func<string, CancellationToken, Task<SqliteConnection>> openReadOnly,
     TimeProvider timeProvider,
     ILogger<SyncService> logger,
-    ISyncBlobAuthenticator? blobAuthenticator = null) : ISyncService
+    ISyncBlobAuthenticator? blobAuthenticator = null,
+    ProjectIdAliasMap? aliasMap = null) : ISyncService
 {
     private const int MaxPushRetries = 3;
     private readonly ISyncBlobAuthenticator _authenticator = blobAuthenticator ?? new SyncBlobAuthenticator();
+    private readonly ProjectIdAliasMap _aliasMap = aliasMap ?? ProjectIdAliasMap.Default;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     /// <summary>Tables that never leave the machine via sync — DROPped from every pushed snapshot
@@ -78,8 +80,8 @@ public partial class SyncService(
     public SyncService(ICloudStore cloud, Func<CancellationToken, Task<SqliteConnection>> openBank,
         Func<string, CancellationToken, Task<SqliteConnection>> openSnapshot,
         Func<string, CancellationToken, Task<SqliteConnection>> openReadOnly,
-        TimeProvider timeProvider, ILogger<SyncService> logger)
-        : this(_ => Task.FromResult(cloud), openBank, openSnapshot, openReadOnly, timeProvider, logger)
+        TimeProvider timeProvider, ILogger<SyncService> logger, ProjectIdAliasMap? aliasMap = null)
+        : this(_ => Task.FromResult(cloud), openBank, openSnapshot, openReadOnly, timeProvider, logger, null, aliasMap)
     {
     }
 
@@ -354,7 +356,7 @@ public partial class SyncService(
                 // loser pushes stay suppressed by the repair's rewritten (winner-keyed) tombstones.
                 await using (var mergeEntries = conn.CreateCommand())
                 {
-                    var foldedRemoteProject = FoldRemoteProjectId("r.project_id");
+                    var foldedRemoteProject = FoldRemoteProjectId("r.project_id", _aliasMap);
                     // d-426 SHOULD-4: the pull fold matches the repair's domain (project-scope rows
                     // only) — custom/shared rows merge verbatim, exactly as the repair leaves them.
                     // The tombstone-suppression check below stays folded: identity compares in
@@ -428,7 +430,7 @@ public partial class SyncService(
                 // loser tombstone meets the repair's rewritten winner-keyed one (OR IGNORE dedups).
                 await using (var mergeTombstones = conn.CreateCommand())
                 {
-                    var foldedTombstoneProject = FoldRemoteProjectId("project_id");
+                    var foldedTombstoneProject = FoldRemoteProjectId("project_id", _aliasMap);
                     mergeTombstones.CommandText = $"""
                                                   INSERT OR IGNORE INTO sync_tombstones (project_id, hash, scope, deleted_at)
                                                   SELECT {foldedTombstoneProject}, hash, scope, deleted_at FROM remote.sync_tombstones
@@ -441,7 +443,7 @@ public partial class SyncService(
                 // folded winner row.
                 await using (var applyTombstones = conn.CreateCommand())
                 {
-                    var foldedApplyProject = FoldRemoteProjectId("project_id");
+                    var foldedApplyProject = FoldRemoteProjectId("project_id", _aliasMap);
                     applyTombstones.CommandText = $"""
                                                   DELETE FROM entries
                                                   WHERE (hash, COALESCE(scope, 'workspace'), project_id)

@@ -69,6 +69,13 @@ public sealed class SingleProjectIdE2E : IAsyncLifetime
     ///     Ledger — restore-auto-register-branch : --filter "FullyQualifiedName~SingleProjectIdE2E.TypoRefusedOnWire" :
     ///     repaired jsaa bank (winner + folded loser rows), jsaaa write.
     /// </summary>
+
+    private static string FixtureMapJson() =>
+        new ProjectIdAliasMap(
+            [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"), new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon")],
+            ["jsaa", "ai-badger", "ai-raccoon", "hermes-default", "deepseek-harness", "arasz-home-page", "vue-kanban", "dotnet-ignore", "interview-tasks"],
+            ["qa-noise-project", "manual-sweep"]).ToJson();
+
     [RetryFact]
     public async Task TypoRefusedOnWire()
     {
@@ -91,10 +98,9 @@ public sealed class SingleProjectIdE2E : IAsyncLifetime
     ///     Content written under both spellings before the repair is searchable under the single
     ///     winner afterwards — with the S2 boundary pinned at the wire: labeled loser rows fold and
     ///     read under the winner, while NULL-context bulk rows stay loser-keyed in storage. Reads
-    ///     never refuse but scopes fold: post-migration even the loser scope resolves to the winner,
-    ///     so the leftover bulk row is stored yet served by neither scope (the S2 + gate-fold
-    ///     interaction, pinned — not hidden). Property intersection: labeled × unlabeled storage
-    ///     against winner-scoped × loser-scoped reads.
+    ///     never refuse and scopes pass through (ADR-0099): post-repair the leftover bulk row is
+    ///     stored loser-keyed and served by the loser scope again — no silent cross-wiring.
+    ///     Property intersection: labeled × unlabeled storage against winner-scoped × loser-scoped reads.
     ///     Ledger — revert-jsaa-fold : --filter "FullyQualifiedName~SingleProjectIdE2E.MergedClusterSearch" :
     ///     labeled loser wombat row (SQL) + NULL-ctx loser quokka row (wire) + winner capybara row,
     ///     real repair, embed drain of BOTH partitions (d-427 SHOULD-4: the neither-served asserts run
@@ -114,7 +120,7 @@ public sealed class SingleProjectIdE2E : IAsyncLifetime
                 "VALUES ('labeled-1', 'labeled-1', 'loser wombat platonov', 'seed.md', 's', 'project', @loser, 'ctx-a', 1, 1, 'pending')",
                 new { loser = Loser }, cancellationToken: ct));
             await seed.ExecuteAsync(new CommandDefinition(MemorySql.RequestRepair,
-                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds() },
+                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds(), mapJson = FixtureMapJson() },
                 cancellationToken: ct));
             (await NewRepairJob().RunAsync(seed, ct)).ShouldBeTrue("the labeled loser row must fold");
         }
@@ -135,9 +141,8 @@ public sealed class SingleProjectIdE2E : IAsyncLifetime
             "the winner's own content stays searchable");
         bulkUnderWinner.Data!.Results.ShouldNotContain(r => r.Hash == bulkWritten.Data!.Hash,
             "NULL-context bulk rows never fold — the winner scope must not serve the loser-keyed row");
-        bulkUnderLoser.Data!.Results.ShouldNotContain(r => r.Hash == bulkWritten.Data!.Hash,
-            "scopes fold post-migration: even the loser scope resolves to the winner, so the leftover" +
-            " bulk row is stored yet served by neither scope");
+        bulkUnderLoser.Data!.Results.ShouldContain(r => r.Hash == bulkWritten.Data!.Hash,
+            "ADR-0099: scopes pass through — the loser-keyed bulk row is served by the loser scope");
         await using var connection = await _factory.OpenBankAsync(ct);
         (await connection.ExecuteScalarAsync<long>(
                 new CommandDefinition("SELECT count(*) FROM entries WHERE project_id = @loser AND context_label IS NOT NULL",
@@ -150,8 +155,9 @@ public sealed class SingleProjectIdE2E : IAsyncLifetime
     }
 
     /// <summary>
-    ///     The split queue meets under the winner and the wire routes both spellings there: the
-    ///     P4 boundary fold observed through the MCP list tool on a repaired bank.
+    ///     The split queue meets under the winner in storage; the wire passes ids through
+    ///     (ADR-0099): each spelling lists its own queue at the gate. The P4 boundary fold
+    ///     observed through the MCP list tool on a repaired bank.
     ///     Ledger — revert-jsaa-fold : --filter "FullyQualifiedName~SingleProjectIdE2E.QueueMeetsOnWire" :
     ///     winner + loser queue rows (2 × 2), real repair, wire List under both spellings.
     /// </summary>
@@ -168,7 +174,7 @@ public sealed class SingleProjectIdE2E : IAsyncLifetime
                 "('job-search-ai-assistant', 'q-l1', 'q-l1', 0.7, 9, 11), ('job-search-ai-assistant', 'q-l2', 'q-l2', 0.6, 9, 11)",
                 cancellationToken: ct));
             await connection.ExecuteAsync(new CommandDefinition(MemorySql.RequestRepair,
-                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds() },
+                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds(), mapJson = FixtureMapJson() },
                 cancellationToken: ct));
             await NewRepairJob().RunAsync(connection, ct);
         }
@@ -179,7 +185,7 @@ public sealed class SingleProjectIdE2E : IAsyncLifetime
         queue.LastListProject.ShouldBe(Winner);
         await promotion.List(Loser, cancellationToken: ct);
 
-        queue.LastListProject.ShouldBe(Winner, "the loser spelling routes to the winner's queue at the gate");
+        queue.LastListProject.ShouldBe(Loser, "ADR-0099: the gate passes ids through — each spelling lists its own queue");
         await using var verify = await _factory.OpenBankAsync(ct);
         (await verify.ExecuteScalarAsync<long>(
                 new CommandDefinition("SELECT count(*) FROM promotion_queue WHERE project_id = @winner",
@@ -204,7 +210,7 @@ public sealed class SingleProjectIdE2E : IAsyncLifetime
         await using (var connection = await _factory.OpenBankAsync(ct))
         {
             await connection.ExecuteAsync(new CommandDefinition(MemorySql.RequestRepair,
-                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds() },
+                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds(), mapJson = FixtureMapJson() },
                 cancellationToken: ct));
             (await NewRepairJob().RunAsync(connection, ct)).ShouldBeTrue("the seeded split bank must fold");
         }

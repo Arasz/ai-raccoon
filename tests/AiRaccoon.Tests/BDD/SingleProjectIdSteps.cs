@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Maintenance;
@@ -26,7 +27,15 @@ public sealed class SingleProjectIdSteps(ScenarioContext scenarioContext)
     private readonly MemoryFeatureContext _ctx = scenarioContext.ScenarioContainer.Resolve<MemoryFeatureContext>();
     private readonly FileWatcherFeatureContext _watch = scenarioContext.ScenarioContainer.Resolve<FileWatcherFeatureContext>();
 
+    private static string FixtureMapJson() =>
+        new ProjectIdAliasMap(
+            [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"), new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon")],
+            ["jsaa", "ai-badger", "ai-raccoon", "hermes-default", "deepseek-harness", "arasz-home-page", "vue-kanban", "dotnet-ignore", "interview-tasks"],
+            ["qa-noise-project", "manual-sweep"]).ToJson();
+
     [Given("^a bank with the jsaa split cluster and the AI-RACCOON casing split$")]
+
+
     public async Task GivenSplitClusterBank()
     {
         var ct = TestContext.Current.CancellationToken; // QA F3: fail the step, not the run timeout.
@@ -69,7 +78,7 @@ public sealed class SingleProjectIdSteps(ScenarioContext scenarioContext)
         var ct = TestContext.Current.CancellationToken; // QA F3: fail the step, not the run timeout.
         await using var connection = await _ctx.OpenBankAsync(ct);
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.RequestRepair,
-            new { kind = RepairKinds.ProjectIds, requestedAt = MemoryFeatureContext.FixedNow.ToUnixTimeSeconds() },
+            new { kind = RepairKinds.ProjectIds, requestedAt = MemoryFeatureContext.FixedNow.ToUnixTimeSeconds(), mapJson = FixtureMapJson() },
             cancellationToken: ct));
         var job = new ProjectIdsRepairJob(
             new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]),

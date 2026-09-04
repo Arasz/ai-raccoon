@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Maintenance;
@@ -36,6 +37,13 @@ public sealed class ProjectIdsPullFoldTests : IDisposable
 {
     private const string Winner = "jsaa";
     private const string Loser = "job-search-ai-assistant";
+    private static string FixtureMapJson() => FixtureMap().ToJson();
+
+    private static ProjectIdAliasMap FixtureMap() => new(
+        [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"), new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon")],
+        ["jsaa", "ai-badger", "ai-raccoon", "hermes-default", "deepseek-harness", "arasz-home-page", "vue-kanban", "dotnet-ignore", "interview-tasks"],
+        ["qa-noise-project", "manual-sweep"]);
+
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
     private readonly string _localRoot = TestData.CreateTempRoot("project-ids-pull-local");
@@ -71,7 +79,7 @@ public sealed class ProjectIdsPullFoldTests : IDisposable
                 "INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at) VALUES (@loser, 'h-del', 'project', 2)",
                 new { loser = Loser });
             await local.ExecuteAsync(MemorySql.RequestRepair,
-                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds() });
+                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds(), mapJson = FixtureMapJson() });
             await RepairJob().RunAsync(local, ct);
         }
 
@@ -115,7 +123,7 @@ public sealed class ProjectIdsPullFoldTests : IDisposable
         await using (var local = await localFactory.OpenBankAsync(ct))
         {
             await local.ExecuteAsync(MemorySql.RequestRepair,
-                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds() });
+                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds(), mapJson = FixtureMapJson() });
             await RepairJob().RunAsync(local, ct);
         }
 
@@ -159,7 +167,7 @@ public sealed class ProjectIdsPullFoldTests : IDisposable
         await using (var local = await localFactory.OpenBankAsync(ct))
         {
             await local.ExecuteAsync(MemorySql.RequestRepair,
-                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds() });
+                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds(), mapJson = FixtureMapJson() });
             await RepairJob().RunAsync(local, ct);
         }
 
@@ -214,7 +222,7 @@ public sealed class ProjectIdsPullFoldTests : IDisposable
                 "VALUES ('h-dup', 'h-dup', 'shared content', 'seed.md', 'project', @winner, 'ctx-a', 1, 1, 'pending')",
                 new { winner = Winner });
             await local.ExecuteAsync(MemorySql.RequestRepair,
-                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds() });
+                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds(), mapJson = FixtureMapJson() });
             await RepairJob().RunAsync(local, ct);
         }
 
@@ -260,7 +268,7 @@ public sealed class ProjectIdsPullFoldTests : IDisposable
         await using (var local = await localFactory.OpenBankAsync(ct))
         {
             await local.ExecuteAsync(MemorySql.RequestRepair,
-                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds() });
+                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds(), mapJson = FixtureMapJson() });
             await RepairJob().RunAsync(local, ct);
         }
 
@@ -301,7 +309,7 @@ public sealed class ProjectIdsPullFoldTests : IDisposable
         await using (var local = await localFactory.OpenBankAsync(ct))
         {
             await local.ExecuteAsync(MemorySql.RequestRepair,
-                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds() });
+                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds(), mapJson = FixtureMapJson() });
             await RepairJob().RunAsync(local, ct);
         }
 
@@ -356,7 +364,8 @@ public sealed class ProjectIdsPullFoldTests : IDisposable
             ct => localFactory.OpenBankAsync(ct),
             OpenSnapshotWithVectorAsync,
             OpenSnapshotWithVectorAsync,
-            new FakeTimeProvider(FixedNow), NullLogger<SyncService>.Instance); // QA F2: SyncService shares the repair FakeTimeProvider — merge watermark and tombstone GC stay deterministic.
+            new FakeTimeProvider(FixedNow), NullLogger<SyncService>.Instance,
+            aliasMap: FixtureMap()); // QA F2: SyncService shares the repair FakeTimeProvider — merge watermark and tombstone GC stay deterministic.
 
     /// <summary>
     ///     Mirrors production snapshot opens (AppRegistrations): the strip DELETEs entries rows,
