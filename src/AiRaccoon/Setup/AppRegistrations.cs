@@ -37,6 +37,7 @@ using AiRaccoon.Projects;
 using AiRaccoon.Setup.Models;
 using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Setup;
@@ -200,7 +201,8 @@ public static partial class AppRegistrations
                 // Air-merge P2: the project-ids fold leaves renamed rows pending too, so it sits
                 // with the other two repair relays, ahead of PendingEmbedJob.
                 new ProjectIdsRepairJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IEmbeddingService>(),
-                    sp.GetRequiredService<TimeProvider>()),
+                    sp.GetRequiredService<TimeProvider>(),
+                    sp.GetRequiredService<ILogger<ProjectIdsRepairJob>>()),
                 // ADR-0075 amendment: on-demand, same shape as the two repair jobs above —
                 // HasWorkAsync reads the promotion_queue_prune_requests row `extract prune --apply`
                 // submitted through the server. Pure DELETE — never leaves anything pending for

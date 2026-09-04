@@ -6,6 +6,7 @@ using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Infrastructure.Maintenance;
 
@@ -28,12 +29,16 @@ namespace AiRaccoon.Infrastructure.Maintenance;
 ///     on the repair_requests finished row for this kind, stamped below only when a requested run
 ///     completes.
 /// </summary>
-public sealed class ProjectIdsRepairJob(
+public sealed partial class ProjectIdsRepairJob(
     IFileTypeMatcher fileTypeMatcher,
     IEmbeddingService embeddingService,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    ILogger<ProjectIdsRepairJob>? logger = null)
     : IMaintenanceJob
 {
+    private readonly ILogger<ProjectIdsRepairJob> _logger =
+        logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ProjectIdsRepairJob>.Instance;
+
     public const string JobName = "repair-project-ids";
 
     public string Name => JobName;
@@ -62,7 +67,19 @@ public sealed class ProjectIdsRepairJob(
         var mapJson = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(MemorySql.SelectOpenRepairMapJson,
                     new { kind = RepairKinds.ProjectIds }, cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
-        var map = ResolveMap(mapJson);
+        ProjectIdAliasMap map;
+        try
+        {
+            map = ResolveMap(mapJson);
+        }
+        catch (Exception ex) when (ex is ArgumentException or System.Text.Json.JsonException)
+        {
+            // Direct-SQL rows bypass the endpoint's validation: refuse to fold rather than crash
+            // the poll. The request stays open (no stamp), so a corrected --apply re-runs it.
+            Log.InvalidStoredMap(_logger, ex.Message);
+            return false;
+        }
+
         var plan = ProjectIdsFoldPlan.FromCensus(
             await ProjectIdCensus.CollectAsync(connection, cancellationToken).ConfigureAwait(false),
             map);
@@ -94,5 +111,12 @@ public sealed class ProjectIdsRepairJob(
         }
 
         return ProjectIdAliasMap.FromJson(mapJson);
+    }
+
+    internal static partial class Log
+    {
+        [LoggerMessage(EventId = 710, Level = LogLevel.Warning,
+            Message = "ai-raccoon: project-ids repair request carries an invalid stored map; leaving the request open ({Reason})")]
+        public static partial void InvalidStoredMap(ILogger logger, string reason);
     }
 }

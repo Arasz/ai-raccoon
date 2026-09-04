@@ -127,29 +127,60 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
     }
 
     /// <summary>
-    ///     ADR-0099: a request row with a null map behaves as the empty map — the run plans no
-    ///     folds but still stamps the finished marker (an --apply without --map on a clean bank
-    ///     is a legal no-op, never a crash).
+    ///     ADR-0099: a request row with a null map behaves as the empty map — entries and drops
+    ///     stay put, but the content-free registry retire still fires (the only mutation an empty
+    ///     map can schedule) and the run still stamps the finished marker (an --apply without
+    ///     --map on a clean bank is a legal no-op, never a crash).
     /// </summary>
     [RetryFact]
     public async Task RequestedRun_WithNullMapJson_PlansEmptyButStampsFinished()
     {
         var ct = TestContext.Current.CancellationToken;
+        var retiredGuid = "01a03024-0000-7000-8000-000000000099";
         await using var connection = await _factory.OpenBankAsync(ct);
         await SeedClusterAsync(connection, ct);
+        await connection.ExecuteAsync(
+            "INSERT INTO projects (id, name, created_at) VALUES (@id, 'retired-zero-row', @now)",
+            new { id = retiredGuid, now = FixedNow.ToUnixTimeSeconds() });
         await connection.ExecuteAsync(MemorySql.RequestRepair,
             new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds(), mapJson = (string?)null });
 
         var changed = await NewJob().RunAsync(connection, ct);
 
-        _ = changed; // chunk re-derivation may still report work; the map assertion is below.
+        _ = changed; // chunk re-derivation may still report work; the map assertions are below.
         (await CountAsync(connection, "entries", Loser, "scope = 'project' AND context_label IS NOT NULL", ct))
             .ShouldBeGreaterThan(0, "loser rows stay put without a map");
         (await CountAsync(connection, "entries", DroppedQa, "1 = 1", ct))
             .ShouldBeGreaterThan(0, "dropped rows especially must never delete without a map");
+        (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM projects WHERE id = @id", new { id = retiredGuid }, cancellationToken: ct)))
+            .ShouldBe(0, "the content-free registry row still retires under the empty map");
         (await ScalarAsync(connection,
                 "SELECT finished_at FROM repair_requests WHERE kind = 'project-ids'", ct))
             .ShouldNotBeNull();
+    }
+
+    /// <summary>
+    ///     A stored map that bypassed endpoint validation (direct SQL) must not crash the poll:
+    ///     the run refuses to fold, leaves the request open (a corrected --apply re-runs it),
+    ///     and stamps nothing.
+    /// </summary>
+    [RetryFact]
+    public async Task RequestedRun_WithGarbageMapJson_RefusesWithoutStamping()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var connection = await _factory.OpenBankAsync(ct);
+        await SeedClusterAsync(connection, ct);
+        await connection.ExecuteAsync(MemorySql.RequestRepair,
+            new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds(), mapJson = "{ not json" });
+
+        (await NewJob().RunAsync(connection, ct)).ShouldBeFalse();
+        (await CountAsync(connection, "entries", Loser, "scope = 'project' AND context_label IS NOT NULL", ct))
+            .ShouldBeGreaterThan(0, "loser rows stay put when the map is garbage");
+        (await ScalarAsync(connection,
+                "SELECT finished_at FROM repair_requests WHERE kind = 'project-ids'", ct))
+            .ShouldBeNull("no stamp — the corrected request must still be owed");
+        (await NewJob().HasWorkAsync(connection, ct)).ShouldBeTrue();
     }
 
     /// <summary>

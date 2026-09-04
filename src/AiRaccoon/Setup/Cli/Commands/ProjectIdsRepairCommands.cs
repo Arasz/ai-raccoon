@@ -35,10 +35,12 @@ public sealed class ProjectIdsRepairCommands(IRepairStore repair)
         {
             try
             {
-                map = ProjectIdAliasMap.LoadFromFile(mapPath);
+                // Single read: the plan parses these exact bytes and the apply forwards them,
+                // so the CLI dry-run and the server job see identical content (AC3 identity).
                 mapJson = File.ReadAllText(mapPath);
+                map = ProjectIdAliasMap.FromJson(mapJson);
             }
-            catch (Exception ex) when (ex is FileNotFoundException or JsonException or ArgumentException or IOException or UnauthorizedAccessException)
+            catch (Exception ex) when (ex is FileNotFoundException or JsonException or ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
             {
                 await streams.WriteErrorLineAsync(
                     $"project-ids repair: cannot load --map '{mapPath}': {ex.Message}");
@@ -89,13 +91,16 @@ public sealed class ProjectIdsRepairCommands(IRepairStore repair)
         if (mapPath is null && !apply)
         {
             var templatePath = TemplatePathFor(dataRoot);
-            var written = TryWriteTemplate(templatePath);
+            var template = TryWriteTemplate(templatePath);
             await streams.WriteOutputLineAsync(
-                written
+                template.Wrote
                     ? $"project-ids repair: no --map supplied — planned with the empty map (no folds). " +
                       $"Wrote an editable alias-map template to '{templatePath}'; fill in your folds and re-run with --map."
-                    : $"project-ids repair: no --map supplied — planned with the empty map (no folds). " +
-                      $"Edit the existing template at '{templatePath}' and re-run with --map.");
+                    : template.Failure is not null
+                        ? $"project-ids repair: no --map supplied — planned with the empty map (no folds). " +
+                          $"Could not write the alias-map template to '{templatePath}': {template.Failure}; create it by hand or pass --map."
+                        : $"project-ids repair: no --map supplied — planned with the empty map (no folds). " +
+                          $"Edit the existing template at '{templatePath}' and re-run with --map.");
         }
 
         if (apply)
@@ -114,8 +119,11 @@ public sealed class ProjectIdsRepairCommands(IRepairStore repair)
         return 0;
     }
 
-    /// <summary>Writes the empty-map template unless the file already exists (never overwrites operator edits). Returns true when this call created it.</summary>
-    internal static bool TryWriteTemplate(string templatePath)
+    /// <summary>The outcome of attempting the template write: created, already present, or failed.</summary>
+    internal sealed record TemplateWrite(bool Wrote, string? Failure);
+
+    /// <summary>Writes the empty-map template unless the file already exists (never overwrites operator edits).</summary>
+    internal static TemplateWrite TryWriteTemplate(string templatePath)
     {
         var dir = Path.GetDirectoryName(templatePath);
         if (dir is not null)
@@ -128,12 +136,17 @@ public sealed class ProjectIdsRepairCommands(IRepairStore repair)
             using var stream = new FileStream(templatePath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
             using var writer = new StreamWriter(stream);
             writer.Write(ProjectIdAliasMap.Empty.ToJson(indented: true));
-            return true;
+            return new TemplateWrite(Wrote: true, Failure: null);
         }
-        catch (IOException) when (File.Exists(templatePath))
+        catch (IOException ex) when (ex.HResult == unchecked((int)0x80070050))
         {
-            // FileMode.CreateNew throws IOException when the file exists — the never-overwrite rule.
-            return false;
+            // FileMode.CreateNew collides with an existing file (EEXIST on every platform) —
+            // the never-overwrite rule. Any other IOException (disk full, access) is reported.
+            return new TemplateWrite(Wrote: false, Failure: null);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return new TemplateWrite(Wrote: false, Failure: ex.Message);
         }
     }
 }
