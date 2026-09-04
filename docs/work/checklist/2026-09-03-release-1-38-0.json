@@ -1,0 +1,139 @@
+{
+  "_note": "Copy to docs/work/checklist/<yyyy-mm-dd>-<subject>.json. Never fill this file in place. status is pass|fail|skipped|substituted; substituted means checked by a different instrument than the item names, and its reason must say which. accepted stays null until a human answers it, so an unfinished run is visibly unfinished. Delete any item whose feature no longer exists rather than skipping it.",
+  "run": {
+    "date": "2026-09-04",
+    "branch": "main",
+    "commit": "1dccc9f5f756b7d9049c64bdc403674351daf6a2",
+    "data-root": "/tmp/ai-raccoon-checklist-1-38-0",
+    "note": "Scratch --data-root, never ~/.ai-raccoon. Release commit (PR #604 merge)."
+  },
+  "derived": {
+    "version": "1.38.0",
+    "mcp-tool-count": "29",
+    "mcp-prompt-count": "2",
+    "note": "scripts/derive-facts.py . at run time on release commit."
+  },
+  "findings-against-prior-runs": [],
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
+      "command": "dotnet pack src/AiRaccoon/AiRaccoon.csproj -c Release; dotnet tool uninstall -g ai-raccoon; dotnet tool install -g ai-raccoon --add-source /Users/arasz/RiderProjects/ai-raccoon/.nupkg --version 1.38.0; ai-raccoon --version",
+      "evidence": "1.38.0+1dccc9f5f756b7d9049c64bdc403674351daf6a2 (prior install was 1.38.0+2e97fb39 \u2014 same version number, stale commit; update-without-uninstall kept it, version-suffix comparison caught it)",
+      "observed-result": "Release pack green (0 warn/0 err); reinstalled tool reports 1.38.0 with release-commit suffix 1dccc9f5, matching derived.version and HEAD.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Binary matches tree (version + commit suffix)."
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+      "command": "ai-raccoon --data-root /tmp/ai-raccoon-checklist-1-38-0 serve --port 0 (bg); curl /observability; ai-raccoon --data-root ... --port 49786 serve --restart (bg); curl /observability; curl 127.0.0.1:7721/observability",
+      "evidence": "Now listening on: http://127.0.0.1:49786; observability pid 8450 v1.38.0+1dccc9f5; restart log: 'server on port 49786 (pid 8450) stopped and the port is free' then 'Now listening on: http://127.0.0.1:49786'; observability pid 8511 same port+version; 7721 still serves 1.37.0 pid 74534 (user server, untouched)",
+      "observed-result": "Ephemeral port bound+reported; restart cycled (pid changed, port kept); default port never touched.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Lifecycle matches contract on scratch root; live user server undisturbed."
+    },
+    {
+      "item": "memory-write-stores-and-reports-truthfully",
+      "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
+      "command": "tools/call memory_write {content, sourceFile, section} + refused-shape probe via tools/call on scratch :49786 (SSE)",
+      "evidence": "stored write: hash=4d1d9e01..82bef stored=true context=project:01a06b05..; refused probe: hash='' stored=false reason=\"rejected by noise policy 'HermesBackgroundProcessLog'\" (ADR-0032 shape: no fabricated hash)",
+      "observed-result": "Stored write returns hash; rejected write returns Stored=false with reason and empty hash.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both halves of the ADR-0032 contract observed live."
+    },
+    {
+      "item": "memory-search-hybrid-retrieval",
+      "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking",
+      "command": "tools/call memory_search kind=memory, no-overlap query 'an antique navigation instrument reflecting evening light in a stargazing room' vs stored 'astrolabe/lamplight/observatory' (engine: bundled local, embed drain processed=1 pending=0)",
+      "evidence": "rank1 hash d06f67ae snippet '...lamplight glinting off the brass astrolabe...'; evidenceByHash: fts rank1 + vector rank1, cosine 0.2879; fusionStats topMargin 0.508, participatingLegs [fts,vector]. NOTE: sourceless rows report chunkIndex -1/totalChunks 0, doc claims 0/0 (architecture.md) \u2014 follow-up, retrieval unaffected.",
+      "observed-result": "No-overlap query served rank 1 with both legs firing and ranks; RRF+evidence+stats present.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Hybrid proven on the half keyword alone cannot carry; -1/0 vs 0/0 noted as docs follow-up."
+    },
+    {
+      "item": "memory-get-returns-content-by-hash",
+      "expected-result": "memory_get returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
+      "command": "tools/call memory_get {hash 4d1d9e01..} + unknown-hash probe (zeros)",
+      "evidence": "known: full value 'Checklist verification entry for release 1.38.0: defect-fix validation marker zephyr-quasar.'; unknown: isError 'unknown-hash: No entry with hash ...' (ADR-0035 refusal, not empty)",
+      "observed-result": "Get returns content; unknown hash refused.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "ADR-0035 contract observed live."
+    },
+    {
+      "item": "source-path-anchor-resolves-its-chunk",
+      "expected-result": "a `file#section` query returns that exact chunk within the production result window",
+      "command": "tools/call memory_search query 'docs/checklist-probe.md#verification' kind=memory limit=3",
+      "evidence": "rank1 hash 4d1d9e01 sourceFile docs/checklist-probe.md chunkIndex 0 totalChunks 1 \u2014 exact chunk in production window",
+      "observed-result": "Anchor resolves its exact chunk.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Exact-chunk resolution observed live."
+    },
+    {
+      "item": "write-path-noise-filtering",
+      "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
+      "command": "tools/call memory_write hermes-notification shape + clean control; sqlite3 scratch memory.db noise_entries",
+      "evidence": "refused: stored=false reason HermesBackgroundProcessLog; control stored=true hash 0a2ffe6e; noise_entries row: detected_by_policy=HermesBackgroundProcessLog + full request_content. Single registered policy (HermesProcessNoisePolicy); negative control proves it does not reject everything.",
+      "observed-result": "Policy rejects its claimed shape with reason; rejected content retrievable from noise store; clean content unaffected.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Rejection + negative control + noise-store read-back all live."
+    },
+    {
+      "item": "read-path-query-guard",
+      "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
+      "command": "refuse probe (hermes notification paste) + annotate probe (exact RealStackTracePaste fixture from QueryGuardPolicyTests) + 'settings queryguard show' on scratch",
+      "evidence": "refuse: isError 'invalid-params: This looks like tool output rather than a question... Refused query: ...'; annotate: warning='This query contains what looks like log or stack-trace output...' with 3 results served; structural detector: 'structural: False' (off until armed). First annotate attempt with hand-made paste did NOT warn (warning null) \u2014 detector keys on log-level prefix lines; exact fixture warns.",
+      "observed-result": "Refuse fails fast with guidance; annotate warns yet serves; structural stays off.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both tiers + disabled-by-default structural observed live; fixture sensitivity recorded."
+    },
+    {
+      "item": "file-watch-status",
+      "expected-result": "memory_watch_status lists live registrations and their sync state",
+      "command": "CLI settings ingest scope add + watch enable (scratch, port 49786) + tools/call memory_watch_add/memory_watch_status",
+      "evidence": "watch_add accepted path (pruned []); watch_status: [{projectId, path /tmp/.../watched, state Healthy, lastSync 2026-09-04T06:08:04Z}]. Earlier attempt without scope correctly refused path-outside-scope.",
+      "observed-result": "Live registration listed with sync state.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Registration + live Healthy status observed."
+    },
+    {
+      "item": "promotion-queue-state",
+      "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately",
+      "command": "tools/call memory_share_extract {mode propose, limit 5} then memory_promotion_list",
+      "evidence": "propose: candidates with hash/path/valuePreview/score 1.07/rating/accessCount/createdAt/reasons [organic-note, very-short-penalty]; promotion_list rows carry full value + score + reasons + timestamps (not an empty-list weak check \u2014 real queued content asserted).",
+      "observed-result": "Propose persists scored candidates; list reports them accurately.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Non-empty queue content, scores and reasons verified."
+    },
+    {
+      "item": "full-mcp-surface",
+      "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+      "command": "tools/list + prompts/list over SSE on scratch :49786 with token auth",
+      "evidence": "29 tools live (code_get..project_id_token_get full list) == derived 29; 2 prompts (workspace-consolidation-guide, memory-usage-guide) == derived 2. Live memory_search description already carries the #606 evidenceByHash-map correction.",
+      "observed-result": "Running binary matches tree surface exactly.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Counts and reachability match derived facts; release includes the description fix."
+    },
+    {
+      "item": "observability-event-ids",
+      "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+      "command": "grep -rhoE '\\[[0-9]{3}\\]' scratch serve logs; resolve each against docs/reference/logging-event-ids.md; locate emitters in src/",
+      "evidence": "emitted: 428,510,525,610,650,651,660,672,673,674,899,910,911 \u2014 all resolve EXCEPT 651 (ServerRestart.cs:183) and 911 (ToolRefusals.cs:185), zero hits in the reference. Doc claims full measurement (174 methods, zero duplicates); uniqueness unaffected, but the table is stale for these two.",
+      "observed-result": "Two live ids unresolvable in the reference (docs drift).",
+      "status": "fail",
+      "accepted": false,
+      "acceptance-reason": "Docs drift must be fixed (regen table) before acceptance; non-shipping, file as follow-up. Publish decision stays human-gated."
+    }
+  ]
+}
