@@ -61,7 +61,10 @@ public sealed class QueueRenameTests : IDisposable
 
         var plan = ProjectIdsFoldPlan.FromCensus(
             await ProjectIdCensus.CollectAsync(connection, ct).ConfigureAwait(false),
-            ProjectIdAliasMap.Default);
+            new ProjectIdAliasMap(
+                [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"), new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon")],
+                ["jsaa", "ai-badger", "ai-raccoon", "hermes-default", "deepseek-harness", "arasz-home-page", "vue-kanban", "dotnet-ignore", "interview-tasks"],
+                ["qa-noise-project", "manual-sweep"]));
         await new ProjectIdsRepair(new FakeTimeProvider(FixedNow)).ApplyAsync(connection, plan, ct);
 
         (await CountAsync(connection, Winner, ct)).ShouldBe(157 + 89 + 1,
