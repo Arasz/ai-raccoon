@@ -63,14 +63,13 @@ public sealed class WatchDigestExecutorTests
         queued.Corpus.ShouldBe(EmbedCorpus.Code);
     }
 
-    /// <summary>In-flight scans outlive the repair rename holding the loser id: with the marker
-    /// set, the digest boundary folds to the winner so a post-repair scan cannot resurrect the
-    /// loser key in watch_files (CI BDD failure 2026-09-03: 1 loser row post-tick).</summary>
+    /// <summary>ADR-0099: the digest boundary passes ids through even when migrated — the
+    /// fingerprint lands under the id the scan ran as. Folding needs a one-shot --map repair.</summary>
     [Fact]
     public async Task Digest_FoldsLoserToWinnerWhenMigrated()
     {
         // Ledger — remove-the-fold : --filter Digest_FoldsLoserToWinnerWhenMigrated : migrated
-        // stack, loser-id digest; fingerprint must land winner-keyed.
+        // stack, loser-id digest; fingerprint stays loser-keyed.
         using var dir = TempDir.New("digest-fold");
         var file = dir.File("a.md");
         await File.WriteAllTextAsync(file, "fold me", TestContext.Current.CancellationToken);
@@ -81,10 +80,9 @@ public sealed class WatchDigestExecutorTests
         await Executor(stack).DigestAsync("job-search-ai-assistant", dir.Path, file,
             WatchEventKind.Created, null, TestContext.Current.CancellationToken);
 
-        (await stack.Store.GetFileHashAsync("jsaa", file, TestContext.Current.CancellationToken))
-            .ShouldBe(WatchDigestExecutor.ComputeHash(file, "fold me"));
         (await stack.Store.GetFileHashAsync("job-search-ai-assistant", file,
-            TestContext.Current.CancellationToken)).ShouldBeNull();
+            TestContext.Current.CancellationToken))
+            .ShouldBe(WatchDigestExecutor.ComputeHash(file, "fold me"));
     }
 
     /// <summary>Pre-migration the boundary passes ids through verbatim (marker-gated fold).</summary>

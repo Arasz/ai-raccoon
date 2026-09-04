@@ -73,23 +73,16 @@ public sealed class WatchServiceTests
     public async Task AddAsync_WhenMigrated_FoldsAKnownLoserToTheWinner()
     {
         // Ledger — raw-loser-watch-create : --filter AddAsync_WhenMigrated_FoldsAKnownLoserToTheWinner : loser create on a migrated bank.
-        // d-425 MUST-1: the watch-create boundary folds through the same alias table as the
-        // gate — a loser create lands winner-keyed, so post-repair scans ingest under the winner
-        // instead of resurrecting the loser. Config already lives under the winner (the P4 key
-        // helpers fold at construction).
+        // ADR-0099: the empty default passes ids through even when migrated — a loser create
+        // lands loser-keyed. Folding needs a one-shot --map repair, never the boundary.
         using var dir = TempDir.New("service-fold");
         var stack = new WatchTestStack(migrationGate: new MigratedGate());
-        stack.Enable(Winner);
-        stack.AllowScope(dir.Path, Winner);
+        stack.Enable(Loser);
+        stack.AllowScope(dir.Path, Loser);
 
         await stack.Service.AddAsync(Loser, dir.Path, TestContext.Current.CancellationToken);
 
-        stack.Store.Watches.ShouldContainKey((Winner, dir.Path));
-        stack.Store.Watches.Keys.ShouldAllBe(k => k.ProjectId != Loser,
-            "no loser-keyed row survives a migrated create");
-        (await stack.Service.StatusAsync(Loser, TestContext.Current.CancellationToken)).ShouldHaveSingleItem();
-        await stack.Service.RemoveAsync(Loser, dir.Path, TestContext.Current.CancellationToken);
-        stack.Store.Watches.ShouldBeEmpty("identity agrees on both sides of the marker");
+        stack.Store.Watches.ShouldContainKey((Loser, dir.Path));
     }
 
     [Fact]
@@ -100,8 +93,8 @@ public sealed class WatchServiceTests
         // rename scenarios seed loser watches through this method, then the repair renames them).
         using var dir = TempDir.New("service-unmigrated");
         var stack = new WatchTestStack();
-        stack.Enable(Winner);
-        stack.AllowScope(dir.Path, Winner);
+        stack.Enable(Loser);
+        stack.AllowScope(dir.Path, Loser);
 
         await stack.Service.AddAsync(Loser, dir.Path, TestContext.Current.CancellationToken);
 

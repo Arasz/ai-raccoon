@@ -48,23 +48,23 @@ public sealed class ShareToolsTests
         await tools.ShareExtract(["jsaa", "job-search-ai-assistant"],
             cancellationToken: TestContext.Current.CancellationToken);
 
-        service.LastRequest!.ProjectIds.ShouldBe(["jsaa"]);
-        service.LastRequest.MetaProjectId.ShouldBe("jsaa",
-            "a deduped single project scopes the queue meta instead of reading bank-wide");
+        service.LastRequest!.ProjectIds.ShouldBe(["jsaa", "job-search-ai-assistant"],
+            "ADR-0099: with the empty default two spellings are two projects — no dedup");
+        service.LastRequest.MetaProjectId.ShouldBeNull("two projects read bank-wide meta");
     }
 
     [Fact]
     public async Task ShareExtract_SingleLoser_ThreadsTheWinner()
     {
         // Ledger — reads-do-not-fold : --filter ShareExtract_SingleLoser_ThreadsTheWinner : loser in propose mode, migrated.
-        // Propose mode is a READ — this pins that reads fold too once migrated (the continuity
-        // half of activation: a cached loser id keeps finding its rows after the repair).
+        // ADR-0099: the gate passes ids through even when migrated — the caller-named id
+        // threads to the runner unchanged.
         var (service, tools) = NewStack(migrated: true);
 
         await tools.ShareExtract(["job-search-ai-assistant"],
             cancellationToken: TestContext.Current.CancellationToken);
 
-        service.LastRequest!.ProjectIds.ShouldBe(["jsaa"]);
+        service.LastRequest!.ProjectIds.ShouldBe(["job-search-ai-assistant"]);
     }
 
     [Theory]

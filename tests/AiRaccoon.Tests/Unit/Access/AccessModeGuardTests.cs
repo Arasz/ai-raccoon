@@ -83,8 +83,8 @@ public sealed class AccessModeGuardTests
     }
 
     /// <summary>
-    ///     When both spellings exist the canonical (folded) key wins — it is the repair-blessed
-    ///     form; the raw key is a legacy fallback, never an override.
+    ///     ADR-0099: with the empty default the folded key and the raw key are the same string —
+    ///     there are no longer two spellings to arbitrate. The last write wins like any single key.
     ///     Ledger — raw-overrides-canonical : --filter Resolve_BothSpellingsPresent_CanonicalWins : folded rw + raw ro.
     /// </summary>
     [Fact]
@@ -94,7 +94,7 @@ public sealed class AccessModeGuardTests
         _store.Settings["access.mode.project:job-search-ai-assistant"] = "ro";
 
         (await _guard.ResolveAsync("job-search-ai-assistant", TestContext.Current.CancellationToken))
-            .ShouldBe(AccessMode.Rw);
+            .ShouldBe(AccessMode.Ro, "folded and raw are one key now — last write wins");
     }
 
     [Fact]
