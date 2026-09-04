@@ -110,7 +110,7 @@ public sealed partial class MemoryTools(
         + CodeSearchWarnings.EngineNotConfiguredPrefix + "' means the code section is keyword-only because the code "
         + "embedding engine is not installed: relay '" + CodeEngineSetup.DefaultModelCommand + "' to the user once and "
         + "treat the code hits as incomplete; re-running the search changes nothing until that command runs. "
-        + "Each memory hit may carry retrieval evidence: fusionStrength (0-1, the fraction of the strongest leg "
+        + "The response may carry an evidenceByHash map (hash → retrieval evidence): fusionStrength (0-1, the fraction of the strongest leg "
         + "agreement this query could have produced — ~0.95 means every firing leg ranked it first, ~0.2 is thin), "
         + "legs (which legs agreed and at which ranks; a single-leg entry is itself a thin-response tell), and cosine "
         + "(the fused vector similarity when a vector leg participated). The response may carry fusionStats "
@@ -243,9 +243,9 @@ public sealed partial class MemoryTools(
     private static SearchKind ParseKind(string kind) =>
         kind.ToLowerInvariant() switch
         {
-            "memory" => SearchKind.Memory,
-            "code" => SearchKind.Code,
-            "both" => SearchKind.Both,
+            SearchKindWireNames.Memory => SearchKind.Memory,
+            SearchKindWireNames.Code => SearchKind.Code,
+            SearchKindWireNames.Both => SearchKind.Both,
             _ => throw new McpException($"invalid-params: Invalid kind '{kind}': expected memory, code, or both.")
         };
 

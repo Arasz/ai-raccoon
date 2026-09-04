@@ -270,6 +270,34 @@ public sealed class MetricsReportServiceTests : IDisposable
         heldMs.Max.ShouldBe(5.0);
     }
 
+    /// <summary>
+    ///     #601 fusion signals are recorded under the searching project's own id (MemoryTools.RecordSearchMeasurements
+    ///     already has it), so they must surface through the SAME prefix-discovery mechanism scoped to
+    ///     an ORDINARY project. Seeds the actual FusionStats.MetricNames, not stand-in names — a
+    ///     rename must fail this test, not just the prefix mechanism in the abstract. Red-proof:
+    ///     without "search.fusion." in InternalSeriesPrefixes the fusion rows stay write-only.
+    /// </summary>
+    [RetryFact]
+    public async Task GetReportAsync_OrdinaryProject_SurfacesFusionSignalSeries()
+    {
+        await SeedAsync("search.fusion.top_strength", 0.95, FixedNow - TimeSpan.FromMinutes(1), "acme");
+        await SeedAsync("search.fusion.top_margin", 0.2, FixedNow - TimeSpan.FromMinutes(1), "acme");
+        await SeedAsync("search.fusion.legs_fired", 3, FixedNow - TimeSpan.FromMinutes(1), "acme");
+
+        var report = await _service.GetReportAsync("acme", [],
+            TimeSpan.FromHours(1), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
+
+        var strength = report.Series.Single(s => s.Tool == "search.fusion.top_strength");
+        strength.Count.ShouldBe(1);
+        strength.Max.ShouldBe(0.95);
+        var margin = report.Series.Single(s => s.Tool == "search.fusion.top_margin");
+        margin.Count.ShouldBe(1);
+        margin.Max.ShouldBe(0.2);
+        var legs = report.Series.Single(s => s.Tool == "search.fusion.legs_fired");
+        legs.Count.ShouldBe(1);
+        legs.Max.ShouldBe(3.0);
+    }
+
     /// <summary>WP11: search.query.truncated_tokens is bank-wide (the embedding engine's query-trim path has no project id), so it discovers the same way job./drain. do.</summary>
     [RetryFact]
     public async Task GetReportAsync_TheSelfMetricsProjectId_SurfacesQueryTruncationSeries()
