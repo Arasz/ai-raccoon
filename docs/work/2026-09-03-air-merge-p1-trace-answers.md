@@ -1,25 +1,26 @@
 # P1 tracing answers — air-merge-enforce-single-project-id
 
-Authoritative inputs: `plan.md` + `research-record.md` in `.ai-badger/worktrees/air-merge-enforce-single-project-id/`.
-All file:line references are against this worktree at lane `lane/air-merge-p1`.
+Authoritative inputs: `plan.md` + `research-record.md` in `.ai-badger/worktrees/air-merge-enforce-single-project-id/` (worktree removed on completion).
+All file:line references re-verified against `main` at `bbcb9f3a` (post-#601/#602/#603); original lane `lane/air-merge-p1` no longer exists.
+> Completed P1 trace for task `air-merge-enforce-single-project-id`, preserved for audit — not a live design doc.
 Zero bank writes were performed: the census (`src/AiRaccoon.Infrastructure/Sqlite/ProjectIdCensus.cs`)
 runs SELECT-only (proven by `Collect_RunsUnderQueryOnly_ProvingZeroBankWrites`, which sets
 `PRAGMA query_only = ON` before collecting) against seeded `:memory:` banks only.
 
 ## (a) Do `projects` rows sync at all? — NO
 
-`SyncService.MergeRemoteAsync` (`src/AiRaccoon.Infrastructure/Sync/SyncService.cs:215`) merges
+`SyncService.MergeRemoteAsync` (`src/AiRaccoon.Infrastructure/Sync/SyncService.cs:250`) merges
 exactly two remote tables and derives one local table:
 
-- `remote.entries` → near-union `INSERT OR IGNORE` (`:294-318`, tombstone-checked);
-- local `memory_source` populate + `entries.source_id` backfill, derived from local rows, never read from remote (`:321-356`);
-- `remote.sync_tombstones` → union (`:362-370`), then apply (`:372-381`), then watermark GC (`:383-396`).
+- `remote.entries` → near-union `INSERT OR IGNORE` (`:347-365`, tombstone-checked);
+- local `memory_source` populate + `entries.source_id` backfill, derived from local rows, never read from remote (`:372-403`);
+- `remote.sync_tombstones` → union (`:414-418`), then apply (`:424-433`), then watermark GC (`:437-453`).
 
-The only other `remote.*` reference in the file is the `PRAGMA remote.user_version` gate (`:283`).
+The only other `remote.*` reference in the file is the `PRAGMA remote.user_version` gate (`:318`).
 There is no `remote.projects` read anywhere in the merge body — neither union nor
 last-writer-win. The plan's suspicion is confirmed: the merge tail covers entries +
 memory_source/source_id backfill + tombstone union and never touches `remote.projects`
-(the settings exclusion is even called out explicitly at `:358-360`).
+(the settings exclusion is even called out explicitly at `:403-406`).
 
 **Binding consequence (fleet rule):** each replica's `projects` table is local-only, so an
 unmerged replica's pull can re-insert loser-id entries its own never-synced `projects` table
@@ -28,24 +29,25 @@ not just merge-before-push.
 
 ## (b) Full sync-inclusion trace
 
-Push strips in `StripNonSyncableAsync` (`SyncService.cs:464-...`); pull merges in
-`MergeRemoteAsync` (`:215-...`). A surface syncs only if it survives the strip AND is read
+Push strips in `StripNonSyncableAsync` (`SyncService.cs:518-...`); pull merges in
+`MergeRemoteAsync` (`:250-...`). A surface syncs only if it survives the strip AND is read
 by the merge.
 
 | Surface | Push (strip) | Pull (merge) | Net |
 |---|---|---|---|
-| `entries`, non-workspace | survives | union `:294-318` | SYNCED |
-| `entries`, workspace (`workspace_id NOT NULL`) | DELETED `:471` | excluded (`WHERE r.workspace_id IS NULL`) | never syncs |
-| `memory_source` / `source_id` | survives (untouched) | locally re-derived `:321-356`, never read from remote | local-only |
-| `sync_tombstones` | survives (untouched) | union `:362-370` | SYNCED |
-| `projects` | survives (untouched) | never read — answer (a) | NEVER syncs |
-| `settings` | DELETED `:474` | never read (`:358-360`) | never syncs |
-| `promotion_queue` | DROPPED `:480` (+ `workspaces`, `promotion_queue_prune_requests`) | never read | never syncs |
+| `entries`, non-workspace | survives | union `:347-365` | SYNCED |
+| `entries`, workspace (`workspace_id NOT NULL`) | DELETED `:525` | excluded (`WHERE r.workspace_id IS NULL`) | never syncs |
+| `memory_source` / `source_id` | survives (untouched) | locally re-derived `:372-403`, never read from remote | local-only |
+| `sync_tombstones` | survives (untouched) | union `:414-418` | SYNCED |
+| `projects` | survives (untouched) | never read — answer (a) | NEVER syncs [back] |
+| `settings` | DELETED `:528` | never read (`:403-406`) | never syncs |
+| `promotion_queue` | DROPPED `:531-535` (+ `workspaces`, `promotion_queue_prune_requests`) | never read | never syncs |
 | `promotion_discards` | survives (NOT dropped — dead bytes in the snapshot) | never read | never syncs |
-| `search_quality` | survives (untouched) | never read | never syncs |
-| `code_entries` / `code_fts` / `vec_code` | DROPPED `:488-494` | never read | never syncs |
+| `search_quality` | DROPPED `:557` (ADR-0098) | never read | never syncs |
+| `code_entries` / `code_fts` / `vec_code` | DROPPED `:542-548` | never read | never syncs |
 | `watches` / `watch_files` / `watch_digest_claims` | survive (untouched) | never read | never syncs |
-| `metrics` / `noise_entries` / `sync_meta` | survive (untouched) | never read | never syncs |
+| `metrics` | DROPPED `:560` (ADR-0098) | never read | never syncs |
+| `noise_entries` / `sync_meta` | survive (untouched) | never read | never syncs |
 
 Net: the ONLY id-keyed surfaces that cross the sync boundary are `entries` and
 `sync_tombstones`. Quality/queue/code/settings/watches/projects all stay per-replica —
@@ -85,9 +87,9 @@ row set P2 must invalidate and which resyncs it can skip:
 - Still required as a P2 job step (not resync): chunk renumber. Chunk groups partition by the
   ctx expression + `source_file`, so renamed rows change groups — reuse `ChunkIndexRepair` as
   an ordered job step after the rewrite (sync's own post-merge precedent re-derives bank-wide
-  from id order, `SyncService.cs:428-...` via `MemorySql.RecomputeChunkColumnsBankWideFromIdOrder`).
+  from id order, `SyncService.cs:479-489` via `MemorySql.RecomputeChunkColumnsBankWideFromIdOrder`).
 - Shape precedent for the invalidation UPDATE is sync's merge-reindex
-  (`SyncService.cs:407-427`: sets `pending` + NULLs content/structure columns, with the comment
+  (`SyncService.cs:460-477`: sets `pending` + NULLs content/structure columns, with the comment
   explaining why the structure columns must be nulled alongside). Never cite
   `VecDimensionReconciler` as the mechanism (dimension-reconcile-only, never repopulates).
 

@@ -496,7 +496,10 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
     ];
 
     /// <summary>
-    ///     Projects rows never sync (P1 trace (a)), so every replica folds its own registry: the
+    ///     Projects rows never sync back — the pushed snapshot carries the projects table
+    ///     off-machine untouched but the merge never reads remote.projects
+    ///     (docs/work/2026-09-03-air-merge-p1-trace-answers.md §(a): survives (untouched) / NEVER syncs [back]),
+    ///     so every replica folds its own registry: the
     ///     winner row is ensured (first-write-wins name = the id itself, matching auto-register),
     ///     then loser, dropped and retired rows delete.
     /// </summary>

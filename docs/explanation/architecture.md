@@ -87,6 +87,24 @@ erDiagram
         INTEGER recorded_at
     }
 
+    search_quality {
+        INTEGER id PK
+        TEXT correlation_id
+        TEXT query
+        TEXT scope
+        TEXT project_id
+        TEXT session_id
+        TEXT kind
+        INTEGER result_count
+        TEXT top_source_files
+        TEXT result_features
+        INTEGER follow_through_count
+        TEXT follow_through_files
+        INTEGER usefulness_grade
+        TEXT grade_note
+        INTEGER created_at
+    }
+
     code_entries {
         INTEGER id PK
         TEXT hash
@@ -431,8 +449,7 @@ searches the project's `scope='custom'` rows under that label (plan C §3 Wave 2
 
 ## Performance metrics
 
-AiRaccoon measures itself: every tool call and every `memory_search` phase (`fts`, `vector`,
-`fusion`, `affinity`, `snippets`, `bump`) is recorded off the hot path into the `metrics` table
+AiRaccoon measures itself: every tool call and every `memory_search` phase (`search.open`, `search.embed`, `search.fts`, `search.vector`, `search.fusion`, `search.affinity`, `search.adjustment`, `search.snippets`, `search.bump`) plus measured `search.total` is recorded off the hot path into the `metrics` table
 above, and read back through the `memory_performance` tool — without an OTLP collector. See
 [Monitor and export server telemetry](../how-to/monitor-and-export-telemetry.md) for the
 unchanged Meter/OTLP path and
@@ -442,7 +459,7 @@ unchanged Meter/OTLP path and
 flowchart LR
     subgraph HotPath["Hot path — never blocks, never writes to the bank"]
         Tool["MCP tool call"] --> Activity["ToolExecutionActivity<br/>(one row per call)"]
-        Search["SqliteMemoryStore.SearchAsync<br/>(SearchTimings: fts/vector/fusion/<br/>affinity/snippets/bump)"] --> MT["MemoryTools<br/>(tags correlation id)"]
+        Search["SqliteMemoryStore.SearchAsync<br/>(SearchTimings: open/embed/fts/vector/fusion/<br/>affinity/adjustment/snippets/bump + total)"] --> MT["MemoryTools<br/>(tags correlation id)"]
     end
     Activity --> Recorder["MetricsRecorder"]
     MT --> Recorder
@@ -575,6 +592,15 @@ through `openSnapshot`, which never runs `MemorySchema.EnsureAsync`, so a snapsh
 from a bank that predates the code corpus has none of these tables — a bare `DROP TABLE`
 would abort the push. Pull/merge never names the code tables at all, so a pull leaves the
 local code corpus untouched (ADR 0014 amendment).
+
+**Telemetry never syncs either (ADR-0098):** `StripNonSyncableAsync` DROPs `search_quality`
+and `metrics` (table absence, not row-deletion — their indexes shed with them, and a restored
+snapshot's `EnsureAsync` recreates them via the digest-DDL path) from every pushed snapshot, on all three
+push paths. `DROP TABLE IF EXISTS`: a pre-telemetry snapshot has neither table, so a bare `DROP`
+would abort the push. Pull/merge reads `entries` + `sync_tombstones` only, so nothing ever
+consumes synced telemetry — both tables stay per-machine.
+
+> **Evidence:** `src/AiRaccoon.Infrastructure/Sync/SyncService.cs:557-560` (`StripNonSyncableAsync` telemetry strip)
 
 **Tombstone GC:** tombstones older than `last_pull_at` are deleted after each
 merge — they've done their job and the cloud copy has the deletion record.
