@@ -149,6 +149,21 @@ public sealed class LazyServerSettingsStoreTests
         inner.LastRepairRequest.ShouldBe(RepairKind.Reingest);
     }
 
+    /// <summary>ADR-0099: the one-shot project-ids map forwards through the lazy store untouched.</summary>
+    [Fact]
+    public async Task RequestRepairAsync_ForwardsTheProjectIdsMapJson()
+    {
+        var inner = new InMemorySettings();
+        var store = new LazyServerSettingsStore(_ => Task.FromResult<ISettingsStore>(inner));
+        var mapJson = new AiRaccoon.Core.Projects.ProjectIdAliasMap(
+            [new AiRaccoon.Core.Projects.ProjectIdAliasEntry("old-id", "new-id")], ["new-id"], []).ToJson();
+
+        await store.RequestRepairAsync(RepairKind.ProjectIds, TestContext.Current.CancellationToken, mapJson);
+
+        inner.LastRepairRequest.ShouldBe(RepairKind.ProjectIds);
+        inner.LastRepairMapJson.ShouldBe(mapJson);
+    }
+
     [Fact]
     public async Task ReportReingestAsync_DelegatesToTheAcquiredStore()
     {

@@ -149,6 +149,39 @@ public sealed class RepairEndpointTests : IAsyncLifetime
         (await RequestCountAsync("project-ids")).ShouldBe(1);
     }
 
+    /// <summary>ADR-0099: a valid one-shot map rides the request row; a malformed one is refused before anything is stored.</summary>
+    [RetryFact]
+    public async Task PostProjectIds_WithAMapJson_StashesItOnTheRow()
+    {
+        var mapJson = new ProjectIdAliasMap(
+            [new ProjectIdAliasEntry("old-id", "new-id")], ["new-id"], []).ToJson();
+        var response = await _client.PostAsJsonAsync("/repair", new RepairRequest("project-ids", mapJson),
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await MapJsonAsync("project-ids")).ShouldBe(mapJson);
+    }
+
+    [RetryFact]
+    public async Task PostProjectIds_WithMalformedMapJson_IsABadRequest()
+    {
+        var before = await RequestCountAsync("project-ids");
+        var response = await _client.PostAsJsonAsync("/repair", new RepairRequest("project-ids", "{ not json"),
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await RequestCountAsync("project-ids")).ShouldBe(before);
+    }
+
+    private async Task<string?> MapJsonAsync(string kind)
+    {
+        var options = new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User };
+        var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+        await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.ExecuteScalarAsync<string?>(
+            "SELECT map_json FROM repair_requests WHERE kind = @kind", new { kind });
+    }
+
     private async Task SeedProjectIdsAsync()
     {
         var options = new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User };

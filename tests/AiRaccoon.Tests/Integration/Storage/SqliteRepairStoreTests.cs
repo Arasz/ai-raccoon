@@ -129,4 +129,29 @@ public sealed class SqliteRepairStoreTests : IDisposable
         return await connection.ExecuteScalarAsync<long>(
             "SELECT count(*) FROM repair_requests WHERE kind = @kind AND finished_at IS NULL", new { kind });
     }
+
+    /// <summary>ADR-0099: the one-shot project-ids map rides the request row and reads back verbatim; other kinds store null.</summary>
+    [RetryFact]
+    public async Task RequestRepairAsync_WithProjectIdsMapJson_RoundTrips()
+    {
+        var mapJson = new AiRaccoon.Core.Projects.ProjectIdAliasMap(
+            [new AiRaccoon.Core.Projects.ProjectIdAliasEntry("old-id", "new-id")], ["new-id"], []).ToJson();
+        await _store.RequestRepairAsync(RepairKind.ProjectIds, TestContext.Current.CancellationToken, mapJson);
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        (await connection.ExecuteScalarAsync<string?>(
+            "SELECT map_json FROM repair_requests WHERE kind = 'project-ids'"))
+            .ShouldBe(mapJson);
+    }
+
+    [RetryFact]
+    public async Task RequestRepairAsync_WithoutMapJson_StoresNull()
+    {
+        await _store.RequestRepairAsync(RepairKind.Reingest, TestContext.Current.CancellationToken);
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        (await connection.ExecuteScalarAsync<string?>(
+            "SELECT map_json FROM repair_requests WHERE kind = 'reingest'"))
+            .ShouldBeNull();
+    }
 }
