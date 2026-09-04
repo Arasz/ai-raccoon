@@ -75,7 +75,7 @@ public sealed class SearchDispatcher(IMemoryStore store, ICodeSearchService code
         }
 
         await qualityService.RecordSearchSafeAsync(correlationId: correlationId, query: searchQuery.Query,
-            scope: rawScope, projectId: searchQuery.ProjectId, kind: kind.ToString().ToLowerInvariant(),
+            scope: rawScope, projectId: searchQuery.ProjectId, kind: kind.ToWireString(),
             sessionId: sessionId, resultCount: qualityCount, topSourceFiles: qualityFiles,
             ct: cancellationToken, evidence: evidence);
 

@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Fusion;
 using Shouldly;
 using Xunit;
 
@@ -85,14 +86,24 @@ public sealed class MetricsConfigKeysTests
     }
 
     /// <summary>
-    ///     WP11 (log-values-as-metrics): one constant set both MetricsReportService's discovery and
-    ///     every internal recorder's naming consume, so a fifth family cannot be added on one side
+    ///     WP11 (log-values-as-metrics) + #601 fusion signals: one constant set both MetricsReportService's discovery and
+    ///     every internal recorder's naming consume, so a sixth family cannot be added on one side
     ///     only (derive-or-delete).
     /// </summary>
     [Fact]
-    public void InternalSeriesPrefixes_CoversJobDrainWriteAndSearchQuery()
+    public void InternalSeriesPrefixes_CoversJobDrainWriteAndSearchQueryAndSearchFusion()
     {
-        MetricsConfigKeys.InternalSeriesPrefixes.ShouldBe(["job.", "drain.", "write.", "search.query."]);
+        MetricsConfigKeys.InternalSeriesPrefixes.ShouldBe(["job.", "drain.", "write.", "search.query.", "search.fusion."]);
+    }
+
+    [Fact]
+    public void FusionMetricNames_AreSearchFusionPrefixed()
+    {
+        FusionStats.MetricNames.ShouldNotBeEmpty();
+        foreach (var name in FusionStats.MetricNames)
+        {
+            name.StartsWith(MetricsConfigKeys.SearchFusionMetricPrefix, StringComparison.Ordinal).ShouldBeTrue($"{name} must live under {MetricsConfigKeys.SearchFusionMetricPrefix} so prefix-discovery surfaces it");
+        }
     }
 
     [Fact]

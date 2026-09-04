@@ -65,13 +65,16 @@ public static class MetricsConfigKeys
     /// <summary>Prefix for query-time series (WP11): today just <c>search.query.truncated_tokens</c>.</summary>
     public const string SearchQueryMetricPrefix = "search.query.";
 
+    /// <summary>Prefix for Stage-1 fusion-signal series (#601): <c>search.fusion.top_strength</c>, <c>search.fusion.top_margin</c>, <c>search.fusion.legs_fired</c> (FusionStats.MetricNames).</summary>
+    public const string SearchFusionMetricPrefix = "search.fusion.";
+
     /// <summary>
     ///     Every internal-series prefix MetricsReportService's discovery and the internal recorders'
-    ///     own naming both consume — one constant set, so a fifth family cannot be added on one side
+    ///     own naming both consume — one constant set, so a sixth family cannot be added on one side
     ///     only (derive-or-delete).
     /// </summary>
     public static readonly IReadOnlyList<string> InternalSeriesPrefixes =
-        [JobMetricPrefix, DrainMetricPrefix, WriteMetricPrefix, SearchQueryMetricPrefix];
+        [JobMetricPrefix, DrainMetricPrefix, WriteMetricPrefix, SearchQueryMetricPrefix, SearchFusionMetricPrefix];
 
     /// <summary>The <c>drain.&lt;corpus&gt;.rows</c> series name for one embed-drain pass.</summary>
     public static string DrainRowsMetricName(string corpus) => $"{DrainMetricPrefix}{corpus}.rows";

@@ -112,6 +112,8 @@ public sealed class SearchQualityKindMigrationTests
         var columns = await connection.QueryAsync<string>(
             "SELECT name FROM pragma_table_info('search_quality')");
         columns.ShouldContain("kind");
+        columns.ShouldContain("result_features",
+            "the digest-DDL recreate must restore the full current shape (P6b), not just the v12 column");
         (await ReadVersionAsync(connection)).ShouldBe(12);
     }
 
