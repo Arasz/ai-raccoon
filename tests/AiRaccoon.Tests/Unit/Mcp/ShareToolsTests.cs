@@ -19,12 +19,12 @@ namespace AiRaccoon.Tests.Unit.Mcp;
 ///     still fails the validator.
 ///     <para>
 ///         Honesty ledger (mutation : filter : fixture): skip-dedup :
-///         --filter ShareExtract_MultiFragment_FoldsToOneCanonicalId : jsaa+loser pair;
+///         --filter ShareExtract_MultiFragment_StaysTwoProjects : jsaa+loser pair;
 ///         cwd-guess-on-blank-element : --filter ShareExtract_BlankElement_RefusesBeforeTheGate : [""]/whitespace element;
 ///         null-coalesces-to-empty : --filter ShareExtract_NullProjectIds_FailsTheValidator_NotTheGate : null array;
 ///         drop-NotEmpty-rule : --filter ShareExtract_EmptyArray_FailsTheValidator : empty array;
 ///         drop-blank-element-rule : --filter ShareExtract_BlankElement_FailsTheValidator : blank element at the validator;
-///         reads-do-not-fold : --filter ShareExtract_SingleLoser_ThreadsTheWinner : loser in propose mode.
+///         reads-do-not-fold : --filter ShareExtract_SingleLoser_ThreadsTheNamedId : loser in propose mode.
 ///     </para>
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
@@ -40,9 +40,9 @@ public sealed class ShareToolsTests
     }
 
     [Fact]
-    public async Task ShareExtract_MultiFragment_FoldsToOneCanonicalId()
+    public async Task ShareExtract_MultiFragment_StaysTwoProjects()
     {
-        // Ledger — skip-dedup : --filter ShareExtract_MultiFragment_FoldsToOneCanonicalId : jsaa+loser pair, migrated.
+        // Ledger — skip-dedup : --filter ShareExtract_MultiFragment_StaysTwoProjects : jsaa+loser pair, migrated.
         var (service, tools) = NewStack(migrated: true);
 
         await tools.ShareExtract(["jsaa", "job-search-ai-assistant"],
@@ -54,9 +54,9 @@ public sealed class ShareToolsTests
     }
 
     [Fact]
-    public async Task ShareExtract_SingleLoser_ThreadsTheWinner()
+    public async Task ShareExtract_SingleLoser_ThreadsTheNamedId()
     {
-        // Ledger — reads-do-not-fold : --filter ShareExtract_SingleLoser_ThreadsTheWinner : loser in propose mode, migrated.
+        // Ledger — reads-do-not-fold : --filter ShareExtract_SingleLoser_ThreadsTheNamedId : loser in propose mode, migrated.
         // ADR-0099: the gate passes ids through even when migrated — the caller-named id
         // threads to the runner unchanged.
         var (service, tools) = NewStack(migrated: true);

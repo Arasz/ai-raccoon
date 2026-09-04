@@ -25,7 +25,7 @@ namespace AiRaccoon.Tests.Integration.Projects;
 ///     finished marker — plus the canonical-only storage assert and the read-passthrough row.
 ///     <para>
 ///         Honesty ledger (mutation : filter : fixture): skip-gate-fold :
-///         --filter AliasFold_ToCanonical : migrated bank, registered jsaa + loser, loser write;
+///         --filter AliasWrite_ThreadsTheVerbatimPartition : migrated bank, registered jsaa + loser, loser write;
 ///         always-legacy-guard : --filter TrueTypo_Refused : same bank, jsaaa write;
 ///         drop-write-assert : --filter CanonicalOnlyWrite_ReachesStorage : respelled-guid direct
 ///         store write bypassing the gate; refuse-reads : --filter OrphanRead_Passthrough :
@@ -99,13 +99,13 @@ public sealed class OrphanVerbatimRefusalTests : IAsyncLifetime
     }
 
     [RetryFact]
-    public async Task AliasFold_ToCanonical()
+    public async Task AliasWrite_ThreadsTheVerbatimPartition()
     {
         var ct = TestContext.Current.CancellationToken;
         await SeedMigratedWinnerAsync();
         var tools = BuildEnforcingTools();
 
-        // Ledger — skip-gate-fold : --filter AliasFold_ToCanonical : migrated bank, registered jsaa, loser write (ADR-0099: passes through).
+        // Ledger — skip-gate-fold : --filter AliasWrite_ThreadsTheVerbatimPartition : migrated bank, registered jsaa, loser write (ADR-0099: passes through).
         var written = await tools.Write(Loser, "fold this orphan to its winner",
             cancellationToken: ct);
 

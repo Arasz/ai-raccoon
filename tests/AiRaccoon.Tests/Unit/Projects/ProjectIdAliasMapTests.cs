@@ -139,6 +139,23 @@ public sealed class ProjectIdAliasMapTests
     }
 
     [Fact]
+    public void FromJson_WithNullAliasEntry_ThrowsArgumentException()
+    {
+        Should.Throw<ArgumentException>(() =>
+            ProjectIdAliasMap.FromJson("{\"Aliases\":[null],\"Canonicals\":[],\"Dropped\":[]}"));
+    }
+
+    [Theory]
+    [InlineData("{\"Aliases\":[{\"Alias\":null,\"Canonical\":\"b\"}],\"Canonicals\":[],\"Dropped\":[]}")]
+    [InlineData("{\"Aliases\":[{\"Alias\":\"a\",\"Canonical\":null}],\"Canonicals\":[],\"Dropped\":[]}")]
+    [InlineData("{\"Aliases\":null,\"Canonicals\":[],\"Dropped\":[]}")]
+    [InlineData("{\"Aliases\":[],\"Canonicals\":null,\"Dropped\":[]}")]
+    public void FromJson_WithNullSpellingsOrSections_ThrowsArgumentException(string json)
+    {
+        Should.Throw<ArgumentException>(() => ProjectIdAliasMap.FromJson(json));
+    }
+
+    [Fact]
     public void LoadFromFile_OfAMissingFile_ThrowsFileNotFound_NamingThePath()
     {
         var path = Path.Combine(Path.GetTempPath(), $"alias-map-missing-{Guid.CreateVersion7():N}.json");

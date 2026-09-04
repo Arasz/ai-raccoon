@@ -111,13 +111,26 @@ public sealed class ProjectIdAliasMap
         return JsonSerializer.Serialize(payload, indented ? IndentedJsonOptions : JsonOptions);
     }
 
-    /// <summary>Deserializes a map written by <see cref="ToJson" />.</summary>
+    /// <summary>Deserializes a map written by <see cref="ToJson" />. Null alias entries and null alias/canonical spellings are refused — a null winner would otherwise fold an id to null downstream.</summary>
     public static ProjectIdAliasMap FromJson(string json)
     {
         Guard.IsNotNullOrWhiteSpace(json);
         var payload = JsonSerializer.Deserialize<AliasMapPayload>(json, JsonOptions);
         Guard.IsNotNull(payload);
-        return new ProjectIdAliasMap(payload.Aliases, payload.Canonicals, payload.Dropped);
+        if (payload.Aliases is null || payload.Canonicals is null || payload.Dropped is null)
+        {
+            throw new ArgumentException("ai-raccoon: project-ids alias map holds a null aliases, canonicals, or dropped section.");
+        }
+
+        foreach (var entry in payload.Aliases)
+        {
+            if (entry is null || entry.Alias is null || entry.Canonical is null)
+            {
+                throw new ArgumentException("ai-raccoon: project-ids alias map holds a null alias entry or null alias/canonical spelling.");
+            }
+        }
+
+        return new ProjectIdAliasMap(payload.Aliases!, payload.Canonicals, payload.Dropped);
     }
 
     /// <summary>Loads a map written by <see cref="ToJson" /> (or the dry-run template) from disk. Missing files throw <see cref="FileNotFoundException" /> naming the path; malformed JSON throws <see cref="JsonException" /> naming the path.</summary>

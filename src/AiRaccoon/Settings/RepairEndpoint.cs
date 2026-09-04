@@ -56,7 +56,7 @@ internal static partial class RepairEndpoint
                         {
                             ProjectIdAliasMap.FromJson(request.MapJson);
                         }
-                        catch (Exception ex) when (ex is ArgumentException or System.Text.Json.JsonException)
+                        catch (Exception ex) when (ex is ArgumentException or System.Text.Json.JsonException or NotSupportedException)
                         {
                             return Results.BadRequest(
                                 $"ai-raccoon: project-ids map_json is not a valid alias map: {ex.Message}");

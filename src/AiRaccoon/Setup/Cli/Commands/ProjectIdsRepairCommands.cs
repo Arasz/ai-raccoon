@@ -157,14 +157,14 @@ public sealed class ProjectIdsRepairCommands(IRepairStore repair)
     /// <summary>Writes the empty-map template unless the file already exists (never overwrites operator edits).</summary>
     internal static TemplateWrite TryWriteTemplate(string templatePath)
     {
-        var dir = Path.GetDirectoryName(templatePath);
-        if (dir is not null)
-        {
-            Directory.CreateDirectory(dir);
-        }
-
         try
         {
+            var dir = Path.GetDirectoryName(templatePath);
+            if (dir is not null)
+            {
+                Directory.CreateDirectory(dir);
+            }
+
             using var stream = new FileStream(templatePath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
             using var writer = new StreamWriter(stream);
             writer.Write(ProjectIdAliasMap.Empty.ToJson(indented: true));

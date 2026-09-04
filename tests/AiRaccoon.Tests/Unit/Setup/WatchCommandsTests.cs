@@ -63,10 +63,10 @@ public class WatchCommandsTests
     /// <summary>
     ///     ADR-0099: the --project-id filter passes through (empty default) — a filter lists
     ///     the registrations stored under exactly the id it names.
-    ///     Ledger — unfold-filter : --filter Registered_FilterFoldsAliasToWinner : loser filter.
+    ///     Ledger — unfold-filter : --filter Registered_FilterPassesThroughVerbatim : loser filter.
     /// </summary>
     [Fact]
-    public async Task Registered_FilterFoldsAliasToWinner()
+    public async Task Registered_FilterPassesThroughVerbatim()
     {
         var store = new FakeWatchStore();
         store.Watches[("job-search-ai-assistant", "/a/b.md")] = (CreatedAt: 1_700_000_000, LastChangeTs: 0);

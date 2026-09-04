@@ -70,9 +70,9 @@ public sealed class WatchServiceTests
     }
 
     [Fact]
-    public async Task AddAsync_WhenMigrated_FoldsAKnownLoserToTheWinner()
+    public async Task AddAsync_WhenMigrated_PassesTheLoserThrough()
     {
-        // Ledger — raw-loser-watch-create : --filter AddAsync_WhenMigrated_FoldsAKnownLoserToTheWinner : loser create on a migrated bank.
+        // Ledger — raw-loser-watch-create : --filter AddAsync_WhenMigrated_PassesTheLoserThrough : loser create on a migrated bank.
         // ADR-0099: the empty default passes ids through even when migrated — a loser create
         // lands loser-keyed. Folding needs a one-shot --map repair, never the boundary.
         using var dir = TempDir.New("service-fold");

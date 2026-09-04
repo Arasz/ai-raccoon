@@ -66,9 +66,9 @@ public sealed class WatchDigestExecutorTests
     /// <summary>ADR-0099: the digest boundary passes ids through even when migrated — the
     /// fingerprint lands under the id the scan ran as. Folding needs a one-shot --map repair.</summary>
     [Fact]
-    public async Task Digest_FoldsLoserToWinnerWhenMigrated()
+    public async Task Digest_PassesLoserThroughWhenMigrated()
     {
-        // Ledger — remove-the-fold : --filter Digest_FoldsLoserToWinnerWhenMigrated : migrated
+        // Ledger — remove-the-fold : --filter Digest_PassesLoserThroughWhenMigrated : migrated
         // stack, loser-id digest; fingerprint stays loser-keyed.
         using var dir = TempDir.New("digest-fold");
         var file = dir.File("a.md");

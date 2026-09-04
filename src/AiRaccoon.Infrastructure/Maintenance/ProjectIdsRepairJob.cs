@@ -72,7 +72,7 @@ public sealed partial class ProjectIdsRepairJob(
         {
             map = ResolveMap(mapJson);
         }
-        catch (Exception ex) when (ex is ArgumentException or System.Text.Json.JsonException)
+        catch (Exception ex) when (ex is ArgumentException or System.Text.Json.JsonException or NotSupportedException)
         {
             // Direct-SQL rows bypass the endpoint's validation: refuse to fold rather than crash
             // the poll. The request stays open (no stamp), so a corrected --apply re-runs it.
