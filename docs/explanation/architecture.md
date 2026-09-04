@@ -433,8 +433,11 @@ Every result carries `SourceFile` (the original relative path, e.g.
 source), and `TotalChunks` — persisted columns on `entries`, recomputed at the write
 paths that can change a source-file group's membership (ingest, write, share/promote,
 delete, sync merge) rather than per query
-(docs/plans/2026-08-08-search-knn-perf.md §3.3). Rows without a source report `0`/`0`
-(ADR 0003, plan C §3 Wave 2b).
+(docs/plans/2026-08-08-search-knn-perf.md §3.3). Rows without a source report `-1`/`0`
+— `-1` is the "document position unknown" sentinel, never a guess
+(`ChunkIndexRepair`, GH #371; `SourceAffinityRanker` guards `ChunkIndex < 0` so an
+unknown-position row never reads as adjacent to chunk 0). This supersedes ADR-0003's
+`0`/`0`, which held when chunk identity was a per-query window function.
 
 `memory_search` also accepts `contextLabel`: when set, the project scope additionally
 searches the project's `scope='custom'` rows under that label (plan C §3 Wave 2e).
