@@ -44,8 +44,10 @@ public sealed class ProjectIdsFoldPlanTests
     [Fact]
     public void FromCensus_FoldsAGuidLoser_ByItsProjectsRowName()
     {
-        // The live 01a062f4 guid is registered under its pre-guid name; the alias map never
-        // hardcodes the guid itself (P1 decision), so the plan resolves it through that name.
+        // A guid loser the map cannot attribute by alias folds through its projects-row name
+        // (the attribution channel that needs no hardcoded guid — P1 decision). The 2026-09-04
+        // owner repair pass later aliased the live 01a062f4 guid to jsaa directly by entry
+        // content, so this test pins the name channel with a synthetic guid.
         var guid = "01a062f4-0000-7000-8000-000000000001";
         var report = Report(Row(guid, projectEntries: 2, registered: true, registeredName: "job-search-ai-assistant"));
 

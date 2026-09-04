@@ -19,11 +19,52 @@ public sealed class ProjectIdAliasMap
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = false };
 
-    /// <summary>The plan's canonical-wins table: jsaa and ai-raccoon casing folds; single-fragment verbatims register as their own canonicals; qa-noise-project and manual-sweep delete (never fold).</summary>
+    /// <summary>
+    ///     The plan's canonical-wins table (2026-09-04 owner repair pass). Folds: the jsaa long name,
+    ///     the ai-raccoon casing split, the pbi-badger-integration typo, the aib abbreviation, and
+    ///     four minted guids — cfe47dab/024ef989/b0e32c16 read from their repo's
+    ///     .ai-badger/project-id token file, 01a062f4 and 01a06ba4 attributed by entry content
+    ///     (jsaa session notes and a JobSearchAiAssistant ingest entry; their tokens were never
+    ///     written to any project dir). Canonicals: the single-fragment
+    ///     verbatims plus ai-sheepdog, pi-badger-integration, and the server's own
+    ///     __self_metrics__ instrumentation pseudo-project. Dropped: the QA/manual-sweep residue
+    ///     plus the census residue the owner ruled noise — seven unattributed guids (early
+    ///     implementation-test mints) and sixteen manual-probe ids — deleted with tombstones,
+    ///     never folded.
+    /// </summary>
     public static ProjectIdAliasMap Default { get; } = new(
-        [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"), new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon")],
-        ["jsaa", "ai-badger", "ai-raccoon", "hermes-default", "deepseek-harness", "arasz-home-page", "vue-kanban", "dotnet-ignore", "interview-tasks"],
-        ["qa-noise-project", "manual-sweep"]);
+        [
+            new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"),
+            new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon"),
+            new ProjectIdAliasEntry("pbi-badger-integration", "pi-badger-integration"),
+            new ProjectIdAliasEntry("aib", "ai-badger"),
+            new ProjectIdAliasEntry("cfe47dab-5dfc-4749-9551-6a81f51c7beb", "ai-raccoon"),
+            new ProjectIdAliasEntry("024ef989-26cc-4076-a8c2-e70712b0633d", "ai-badger"),
+            new ProjectIdAliasEntry("b0e32c16-f502-4896-9b97-0bbee0fb321d", "jsaa"),
+            new ProjectIdAliasEntry("01a062f4-fb77-767d-997d-924c90b68e32", "jsaa"),
+            new ProjectIdAliasEntry("01a06ba4-7120-7a79-b581-ebf48cbb88f9", "jsaa"),
+        ],
+        [
+            "jsaa", "ai-badger", "ai-raccoon", "hermes-default", "deepseek-harness",
+            "arasz-home-page", "vue-kanban", "dotnet-ignore", "interview-tasks",
+            "ai-sheepdog", "pi-badger-integration", "__self_metrics__",
+        ],
+        [
+            "qa-noise-project", "manual-sweep",
+            // 2026-09-04 owner repair pass: test guids and manual-probe residue, purged on apply.
+            "00000000-0000-7000-8000-000000000000",
+            "0197f3e0-7c8e-7f57-a1f5-3a6b9c2d4e01",
+            "01a03024-f800-71a1-be87-92dd7cfee216",
+            "01a0302f-b316-71ff-8e16-57b0c33c7907",
+            "01a030af-6444-775d-9495-35908180320c",
+            "01a04d9d-9417-75f2-a2ba-730fcfba8411", // 'memory-roundtrip-test' — PI-MEMORY-ROUNDTRIP-MARKER
+            "01a04d9e-f272-74c1-8a8d-f2eaff21e6f4", // early mint named 'ai-badger' during ADR-0089 testing; not the repo's token
+            "acme", "installed-140-verify", "manual-13x-probe", "manual-150-check",
+            "manual-160-check", "manual-d1d2d3-verify", "manualtest-tar2", "memtest-x",
+            "multi", "none", "pi-post-smoke", "refused",
+            "release-check-120", "release-check-130", "release-check-131",
+            "verify-fixes-probe", "wsprobe-2",
+        ]);
 
     private readonly Dictionary<string, string> _aliases;
     private readonly HashSet<string> _canonicals;
