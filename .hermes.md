@@ -6,7 +6,7 @@ C# .NET 10 MCP server exposing agent memory management over sqlite-memory: proje
 
 > Domain: Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory.
 > Stacks: dotnet, mcp, python, github, ai-raccoon
-> Scaffolded by ai-badger 0.161.1. Source of truth for this file: `.ai-badger/HERMES.md`.
+> Scaffolded by ai-badger 0.162.1. Source of truth for this file: `.ai-badger/HERMES.md`.
 
 ## Commands
 
@@ -141,6 +141,9 @@ Each tool's own description covers the rest.
 
 
 ## Non-negotiable invariants
+
+- **Announce parallel work** — When another agent session shares the project, announce started work, opened PRs, review requests and merges on the project bus — read `multi-agent-communication` when parallel work is active.
+  → `.ai-badger/invariants/announce-parallel-work.md`
 
 - **Ask if a simpler shape would do** — Before calling any design or change finished, ask whether it is over-engineered and what the simpler version would look like.
   → `.ai-badger/invariants/ask-if-simpler.md`

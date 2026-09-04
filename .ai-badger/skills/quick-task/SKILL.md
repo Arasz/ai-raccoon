@@ -13,7 +13,7 @@ scope: default
 metadata:
   hermes:
     tags: [workflow, fast-path, single-commit, tests, review]
-    related_skills: [task, test-economy, code-review-checklist, status-report]
+    related_skills: [task, test-economy, code-review-checklist, status-report, multi-agent-communication]
 ---
 
 # quick-task
@@ -44,7 +44,9 @@ shape above holds.
 
 1. **Scope check.** State the one sentence and the touched surface. Run the five shape
    questions; any "no" means stop and escalate to `task`. Say out loud that you are in
-   quick-task mode so the reduced ceremony is a decision, not an accident.
+   quick-task mode so the reduced ceremony is a decision, not an accident. When other
+   sessions share the project, announce the start on the bus — read
+   `multi-agent-communication` when parallel work is active.
 
 2. **Minimal plan.** Three to six bullets in the working notes — what changes, which files,
    which tests cover it, which docs need updating. No plan file, no ledger record, no
@@ -81,7 +83,8 @@ shape above holds.
    regenerated artifacts together. Conventional message (`fix:`, `feat:`, `chore:`,
    `docs:` + scope); subject says what changed, body says why when it is not obvious.
    Amend before pushing if you find a gap; never stack fixup commits on main. Push, then
-   verify the remote ref moved.
+   verify the remote ref moved. When other sessions are active, announce the push and the
+   merge on the bus per `multi-agent-communication` (start, PR, review, merge; ack once).
 
 7. **Close the loop.** Report: what changed, what was tested and what was NOT (say the
    untested surfaces out loud), which gates ran, and — when CI is alive — the CI run that

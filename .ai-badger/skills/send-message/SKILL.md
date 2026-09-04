@@ -13,7 +13,7 @@ scope: default
 metadata:
   hermes:
     tags: [message-bus, coordination, agent-messaging]
-    related_skills: [task, status-report]
+    related_skills: [task, status-report, multi-agent-communication]
 ---
 
 # send-message
@@ -97,6 +97,12 @@ budget (deeper tree, another volume) is invisible and its id false-refuses. The 
 hatch is the minted-id contract above, not a bypass flag. Dual-flag sends
 (`--session-id` + `--project-id`) skip validation: the session wins and the project
 half is dropped at write, so there is nothing stored to validate.
+
+## Coordinating with other agents
+
+This script is the transport; the protocol lives in `multi-agent-communication` — read it
+when two or more sessions share the project (what to announce, the message shape, and the
+ack-without-reply rule).
 
 ## Gotchas
 

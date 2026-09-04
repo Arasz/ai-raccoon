@@ -16,7 +16,7 @@ scope: default
 metadata:
   hermes:
     tags: [task, orchestration, delegation, worktree]
-    related_skills: [create-task-spec, commit-reminder, test-economy]
+    related_skills: [create-task-spec, commit-reminder, test-economy, multi-agent-communication]
 ---
 
 # task orchestration skill
@@ -178,13 +178,10 @@ research record gathered, taskId derived.
    `.ai-badger/worktrees/<taskId>` on the branch you passed to `--branch`. Every command for
    the rest of the task runs there, not in the main checkout.
 
-   This step used to read "create/switch to the task branch". `start` records the branch name
-   without creating anything — on 2026-08-01 that put two commits on `main`. `--no-worktree`
-   reverts to the old behaviour.
-
-   A worktree is also what makes concurrent sessions safe. Sessions sharing one checkout let
-   a second agent switch branches mid-run — the same day: a push failed because the tree moved
-   to `main` while its tests ran.
+   `start` records the branch name without creating anything (`--no-worktree` reverts to the
+   old in-place behaviour). Work in the worktree: sharing one checkout lets another session
+   switch branches mid-run. When more than one session shares the project, announce
+   milestones on the bus — read `multi-agent-communication` when parallel work is active.
 5. **Research before you plan, and plan the review first** (`evidence-first-research`
    formalises the method for non-trivial tasks; dispatch it rather than re-describing it).
    Write down what has to be checked to answer the task — every point in the request, and

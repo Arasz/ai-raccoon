@@ -9,7 +9,7 @@ scope: optIn
 metadata:
   hermes:
     tags: [worktrees, parallel, agents, isolation]
-    related_skills: [task]
+    related_skills: [task, multi-agent-communication]
 ---
 
 # Worktree Agent Isolation
@@ -68,6 +68,10 @@ delegate_task(tasks=[
 
 Key: pass the **absolute worktree path** as `Project`. Each agent's working
 directory is isolated — they never see each other's files.
+
+Announce every lane on the project bus — read `multi-agent-communication` when two or
+more sessions share the project (starting, PR opened, review request, merged; ack once,
+never reply to an ack).
 
 **For full-stack projects**, include BOTH backend and frontend build/test commands
 in the agent context. Backend-focused orchestrators default to `dotnet build` and
