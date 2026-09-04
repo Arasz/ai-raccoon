@@ -19,11 +19,26 @@ public sealed class ProjectIdsRepairCommands(IRepairStore repair)
         var report = await repair.ReportProjectIdsAsync(cancellationToken);
         var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Default);
 
-        var verb = apply ? "queued for the server to fold" : "would fold (dry run; pass --apply to queue it)";
-        var orphans = report.Rows.Count(row => row.Orphan);
+        // Every censused id lands in exactly one bucket: FromCensus's `continue`s are exhaustive
+        // (fold, drop, retire) or the id needs nothing further (already canonical under the map,
+        // or genuinely empty and unregistered) — `needsAttention` is the one bucket the operator
+        // must act on; the rest either changes on its own or was never a problem.
+        var needsAttention = plan.Unresolved.Count;
+        var needsNothing = report.Rows.Count - plan.Folds.Count - plan.Dropped.Count -
+            plan.RetiredProjects.Count - needsAttention;
+        var verb = apply ? "Request will be queued for the server." : "Dry run — pass --apply to run this.";
         await streams.WriteOutputLineAsync(
-            $"project-ids repair: {report.Rows.Count} id(s) hold rows, {orphans} orphan(s), " +
-            $"{report.ZeroEntryRows.Count} zero-entry row(s) {verb}");
+            $"project-ids repair: {report.Rows.Count} id(s) censused — {plan.Folds.Count} fold, " +
+            $"{plan.Dropped.Count} drop (test residue), {plan.RetiredProjects.Count} retire (registered, empty), " +
+            $"{needsAttention} need a human to attribute, {needsNothing} need nothing (already correct or empty). {verb}");
+
+        var orphans = report.Rows.Count(row => row.Orphan);
+        if (orphans > 0)
+        {
+            await streams.WriteOutputLineAsync(
+                $"project-ids repair: {orphans} id(s) own entries with no projects-table registration.");
+        }
+
         foreach (var fold in plan.Folds)
         {
             var loser = report.Rows.SingleOrDefault(row => row.ProjectId == fold.Loser);
@@ -38,6 +53,12 @@ public sealed class ProjectIdsRepairCommands(IRepairStore repair)
                 $"{loser?.Queued ?? 0} queued — folds to '{fold.Winner}'");
         }
 
+        foreach (var retired in plan.RetiredProjects)
+        {
+            await streams.WriteOutputLineAsync(
+                $"project-ids repair: '{retired}' is registered with nothing left on it — retires (registry row removed)");
+        }
+
         foreach (var dropped in plan.Dropped)
         {
             await streams.WriteOutputLineAsync(
@@ -48,6 +69,17 @@ public sealed class ProjectIdsRepairCommands(IRepairStore repair)
         {
             await streams.WriteOutputLineAsync(
                 $"project-ids repair: '{unresolved}' matches no known id — left alone for a human to attribute");
+        }
+
+        if (needsAttention > 0)
+        {
+            // The only other re-run guidance (below, apply-only) is about a concurrent-write
+            // hazard racing a single apply pass — a completely different reason to re-run than
+            // "the map still can't place this id." Without this line, an operator watching the
+            // same needsAttention count across repeated runs has no way to tell those two apart.
+            await streams.WriteOutputLineAsync(
+                $"project-ids repair: re-running will not clear the {needsAttention} id(s) above that need a " +
+                "human — attribute them, or wait for an alias-map update.");
         }
 
         if (apply)
