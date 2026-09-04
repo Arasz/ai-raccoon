@@ -19,14 +19,13 @@ using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemorySto
 namespace AiRaccoon.Tests.Integration.Projects;
 
 /// <summary>
-///     Air-merge P3 enforcement, split in two as the plan demands (disjunctive oracles pass
-///     everything): a known-alias orphan FOLDS to its winner at the choke, while a TRUE typo is
-///     REFUSED with zero new projects rows. Both halves are mechanically gated on the P2
-///     repair_requests finished marker — plus the canonical-only storage assert and the
-///     read-passthrough regression row.
+///     ADR-0099 steady state: the gate passes ids through even when migrated — a write under a
+///     former alias spelling lands verbatim (registered ids only), while a TRUE typo is REFUSED
+///     with zero new projects rows. Both halves are mechanically gated on the P2 repair_requests
+///     finished marker — plus the canonical-only storage assert and the read-passthrough row.
 ///     <para>
 ///         Honesty ledger (mutation : filter : fixture): skip-gate-fold :
-///         --filter AliasFold_ToCanonical : migrated bank, registered jsaa, loser write;
+///         --filter AliasFold_ToCanonical : migrated bank, registered jsaa + loser, loser write;
 ///         always-legacy-guard : --filter TrueTypo_Refused : same bank, jsaaa write;
 ///         drop-write-assert : --filter CanonicalOnlyWrite_ReachesStorage : respelled-guid direct
 ///         store write bypassing the gate; refuse-reads : --filter OrphanRead_Passthrough :
@@ -88,9 +87,11 @@ public sealed class OrphanVerbatimRefusalTests : IAsyncLifetime
     {
         var ct = TestContext.Current.CancellationToken;
         await ((IProjectRegistry)_store).RegisterAsync(Winner, null, ct);
+        // ADR-0099: the loser is its own registered project now — pass-through writes need it.
+        await ((IProjectRegistry)_store).RegisterAsync(Loser, null, ct);
         await using var connection = await _factory.OpenBankAsync(ct);
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.RequestRepair,
-            new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds() },
+            new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds(), mapJson = (string?)null },
             cancellationToken: ct));
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.FinishRepairRequest,
             new { kind = RepairKinds.ProjectIds, finishedAt = FixedNow.ToUnixTimeSeconds() },
@@ -104,18 +105,18 @@ public sealed class OrphanVerbatimRefusalTests : IAsyncLifetime
         await SeedMigratedWinnerAsync();
         var tools = BuildEnforcingTools();
 
-        // Ledger — skip-gate-fold : --filter AliasFold_ToCanonical : migrated bank, registered jsaa, loser write.
+        // Ledger — skip-gate-fold : --filter AliasFold_ToCanonical : migrated bank, registered jsaa, loser write (ADR-0099: passes through).
         var written = await tools.Write(Loser, "fold this orphan to its winner",
             cancellationToken: ct);
 
-        // The wire answers in the winner's context AND the row lands in the winner's partition —
-        // a local-canonical assertion alone could not fix the call sites Canonical tests name.
-        written.Data!.Context.ShouldBe($"project:{Winner}");
+        // ADR-0099: the wire answers in the named context AND the row lands in the verbatim
+        // partition — folding needs a one-shot --map repair, never the gate.
+        written.Data!.Context.ShouldBe($"project:{Loser}");
         await using var connection = await _factory.OpenBankAsync(ct);
         var stored = await connection.QueryFirstOrDefaultAsync<(string ProjectId, string? ContextLabel)>(
             new CommandDefinition("SELECT project_id AS ProjectId, context_label AS ContextLabel FROM entries WHERE hash = @hash",
                 new { hash = written.Data.Hash }, cancellationToken: ct));
-        stored.ProjectId.ShouldBe(Winner);
+        stored.ProjectId.ShouldBe(Loser);
     }
 
     [RetryFact]
@@ -134,7 +135,7 @@ public sealed class OrphanVerbatimRefusalTests : IAsyncLifetime
         var projects = (await connection.QueryAsync<string>(
                 new CommandDefinition("SELECT id FROM projects", cancellationToken: ct)))
             .ToList();
-        projects.ShouldBe([Winner], "a refused typo must not create a projects row");
+        projects.OrderBy(id => id).ToList().ShouldBe(new List<string> { Loser, Winner }.OrderBy(id => id).ToList(), "a refused typo must not create a projects row");
     }
 
     [RetryFact]
