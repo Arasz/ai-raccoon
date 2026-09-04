@@ -48,7 +48,7 @@ public sealed class ProjectIdsRepairJob(
                 new { kind = RepairKinds.ProjectIds }, cancellationToken: cancellationToken))
             .ConfigureAwait(false) > 0;
 
-    /// <summary>Folds, re-derives chunk positions, then marks the request finished. No open request means no work: returns false without touching the bank.</summary>
+    /// <summary>Folds with the request's stored one-shot map (null/empty means the empty map), re-derives chunk positions, then marks the request finished. No open request means no work: returns false without touching the bank. The plan is derived from a live census at apply time — never a replay of the CLI's dry-run plan (concurrent writes between diagnose and apply re-plan).</summary>
     public async ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var open = await connection.ExecuteScalarAsync<long>(new CommandDefinition(MemorySql.HasOpenRepairRequest,
@@ -59,9 +59,13 @@ public sealed class ProjectIdsRepairJob(
             return false;
         }
 
+        var mapJson = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(MemorySql.SelectOpenRepairMapJson,
+                    new { kind = RepairKinds.ProjectIds }, cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        var map = ResolveMap(mapJson);
         var plan = ProjectIdsFoldPlan.FromCensus(
             await ProjectIdCensus.CollectAsync(connection, cancellationToken).ConfigureAwait(false),
-            ProjectIdAliasMap.Default);
+            map);
         var createdWork = false;
         if (!plan.IsEmpty)
         {
@@ -80,5 +84,15 @@ public sealed class ProjectIdsRepairJob(
             .ConfigureAwait(false);
 
         return createdWork;
+    }
+
+    internal static ProjectIdAliasMap ResolveMap(string? mapJson)
+    {
+        if (string.IsNullOrWhiteSpace(mapJson))
+        {
+            return ProjectIdAliasMap.Empty;
+        }
+
+        return ProjectIdAliasMap.FromJson(mapJson);
     }
 }

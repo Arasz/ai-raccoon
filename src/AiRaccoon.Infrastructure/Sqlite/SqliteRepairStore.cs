@@ -44,11 +44,11 @@ public sealed class SqliteRepairStore(
         return await ProjectIdCensus.CollectAsync(connection, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task RequestRepairAsync(RepairKind kind, CancellationToken cancellationToken = default)
+    public async Task RequestRepairAsync(RepairKind kind, CancellationToken cancellationToken = default, string? projectIdsMapJson = null)
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.RequestRepair,
-                new { kind = kind.ToKey(), requestedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
+                new { kind = kind.ToKey(), requestedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds(), mapJson = projectIdsMapJson },
                 cancellationToken: cancellationToken))
             .ConfigureAwait(false);
     }

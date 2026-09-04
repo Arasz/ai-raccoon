@@ -158,10 +158,10 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     }
 
     /// <inheritdoc />
-    public async Task RequestRepairAsync(RepairKind kind, CancellationToken cancellationToken = default)
+    public async Task RequestRepairAsync(RepairKind kind, CancellationToken cancellationToken = default, string? projectIdsMapJson = null)
     {
         var response = await SendAsync(() =>
-            _client.PostAsJsonAsync(RepairProtocol.Path, new RepairRequest(kind.ToKey()), cancellationToken));
+            _client.PostAsJsonAsync(RepairProtocol.Path, new RepairRequest(kind.ToKey(), projectIdsMapJson), cancellationToken));
         Ensure(response);
     }
 

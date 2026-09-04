@@ -66,8 +66,8 @@ internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationS
         await AsRepairStore(await InnerAsync(cancellationToken)).ReportProjectIdsAsync(cancellationToken);
 
     /// <inheritdoc />
-    public async Task RequestRepairAsync(RepairKind kind, CancellationToken cancellationToken = default) =>
-        await AsRepairStore(await InnerAsync(cancellationToken)).RequestRepairAsync(kind, cancellationToken);
+    public async Task RequestRepairAsync(RepairKind kind, CancellationToken cancellationToken = default, string? projectIdsMapJson = null) =>
+        await AsRepairStore(await InnerAsync(cancellationToken)).RequestRepairAsync(kind, cancellationToken, projectIdsMapJson);
 
     /// <inheritdoc />
     public async Task<PromotionQueueOrphanReport> ReportPruneOrphansAsync(CancellationToken cancellationToken = default) =>

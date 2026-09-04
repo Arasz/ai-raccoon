@@ -23,6 +23,9 @@ public sealed class InMemorySettings : ISettingsStore, IModelMigrationStore, IRe
     /// <summary>Every kind this was last asked to request, for a test to assert routing without a real bank (ADR-0075 amendment).</summary>
     public RepairKind? LastRepairRequest { get; private set; }
 
+    /// <summary>The one-shot project-ids map content last forwarded with a request (ADR-0099) — null when none was supplied.</summary>
+    public string? LastRepairMapJson { get; private set; }
+
     public ReingestRepairReport ReingestReport { get; set; } = new(0, 0, 0);
 
     public ChunkIndexRepairReport ChunkIndexReport { get; set; } = new(0, 0, 0);
@@ -49,9 +52,10 @@ public sealed class InMemorySettings : ISettingsStore, IModelMigrationStore, IRe
     public Task<ProjectIdCensusReport> ReportProjectIdsAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(ProjectIdsReport);
 
-    public Task RequestRepairAsync(RepairKind kind, CancellationToken cancellationToken = default)
+    public Task RequestRepairAsync(RepairKind kind, CancellationToken cancellationToken = default, string? projectIdsMapJson = null)
     {
         LastRepairRequest = kind;
+        LastRepairMapJson = projectIdsMapJson;
         return Task.CompletedTask;
     }
 

@@ -514,12 +514,17 @@ internal static class MemorySql
     // ON CONFLICT resets finished_at to NULL unconditionally: a second request for a kind whose
     // first request already finished must reopen it; a second request while one is still open just
     // refreshes requested_at, which is harmless (the job re-derives its own report from a live scan).
+    // map_json carries the one-shot project-ids alias map (ADR-0099) — null for every other kind.
     public const string RequestRepair =
         """
-        INSERT INTO repair_requests (kind, requested_at, finished_at)
-        VALUES (@kind, @requestedAt, NULL)
-        ON CONFLICT(kind) DO UPDATE SET requested_at = @requestedAt, finished_at = NULL
+        INSERT INTO repair_requests (kind, requested_at, finished_at, map_json)
+        VALUES (@kind, @requestedAt, NULL, @mapJson)
+        ON CONFLICT(kind) DO UPDATE SET requested_at = @requestedAt, finished_at = NULL, map_json = @mapJson
         """;
+
+    /// <summary>The stored one-shot project-ids map for an open request (null/empty means the empty map).</summary>
+    public const string SelectOpenRepairMapJson =
+        "SELECT map_json FROM repair_requests WHERE kind = @kind AND finished_at IS NULL";
 
     public const string HasOpenRepairRequest =
         "SELECT count(*) FROM repair_requests WHERE kind = @kind AND finished_at IS NULL";

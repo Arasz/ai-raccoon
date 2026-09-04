@@ -45,12 +45,13 @@ internal static class MemorySchema
     ///     <see cref="MigrateToV9Async" />/
     ///     <see cref="MigrateToV10Async" /> (ADR-0011),
     ///     <see cref="MigrateToV11Async" />,
-    ///     <see cref="MigrateToV12Async" /> (ADR-0097). Not every schema change needs a ladder
+    ///     <see cref="MigrateToV12Async" /> (ADR-0097),
+    ///     <see cref="MigrateToV13Async" /> (ADR-0099). Not every schema change needs a ladder
     ///     step: a trigger body replacement that is safely re-runnable on every open belongs in the
     ///     unconditional <see cref="Ddl" /> instead (ADR-0023 amendment) — the ladder is for changes
     ///     that need guarded, one-time work.
     /// </summary>
-    internal const int CurrentVersion = 12;
+    internal const int CurrentVersion = 13;
 
     private const int DefaultEmbeddingDimension = 384;
 
@@ -440,10 +441,14 @@ internal static class MemorySchema
                                           -- and reingest repairs are independent and either can have its own open request.
                                           -- finished_at is null for exactly as long as the corresponding maintenance job
                                           -- (ReingestRepairJob/ChunkIndexRepairJob) owes the apply.
+                                          -- map_json (ADR-0099) carries the one-shot project-ids alias map — null
+                                          -- for every other kind and for requests predating the v13 migration
+                                          -- (null/empty means the empty map).
                                           CREATE TABLE IF NOT EXISTS repair_requests (
                                               kind         TEXT PRIMARY KEY,
                                               requested_at INTEGER NOT NULL,
-                                              finished_at  INTEGER NULL
+                                              finished_at  INTEGER NULL,
+                                              map_json     TEXT NULL
                                           );
 
                                           -- Promotion-queue-prune outbox (ADR-0075 amendment): `extract prune --apply`
@@ -635,6 +640,7 @@ internal static class MemorySchema
             // EnsureCodeEmbedAttemptsColumnAsync).
             await EnsureCodeEmbedAttemptsColumnAsync(connection, cancellationToken).ConfigureAwait(false);
             await EnsureSearchQualityResultFeaturesColumnAsync(connection, cancellationToken).ConfigureAwait(false);
+            await EnsureRepairRequestsMapJsonColumnAsync(connection, cancellationToken).ConfigureAwait(false);
 
             var testHook = TestOnlyAfterDdlHookAsync.Value;
             if (testHook is not null)
@@ -764,6 +770,11 @@ internal static class MemorySchema
         if (healthy && storedVersion < 12)
         {
             await MigrateToV12Async(connection, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (healthy && storedVersion < 13)
+        {
+            await MigrateToV13Async(connection, cancellationToken).ConfigureAwait(false);
         }
 
         // Both stamps land together, only once the ladder actually finished (healthy): stamping the
@@ -1160,6 +1171,57 @@ internal static class MemorySchema
         }
     }
 
+    /// <summary>
+    ///     v12→v13 (ADR-0099): adds <c>repair_requests.map_json</c> (nullable, one-shot project-ids
+    ///     alias map). Existing rows keep working with no backfill — null/empty means the empty map.
+    ///     Same tolerant shape as the v12 step: re-probed under the write lock, COMMIT/ROLLBACK paired.
+    /// </summary>
+    private static async Task MigrateToV13Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        try
+        {
+            var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                    "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'repair_requests'",
+                    cancellationToken: cancellationToken))
+                .ConfigureAwait(false) > 0;
+            if (!hasTable)
+            {
+                await connection.ExecuteAsync(
+                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            var columns = (await connection.QueryAsync<string>(
+                    new CommandDefinition(
+                        "SELECT name FROM pragma_table_info('repair_requests')",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false)).ToList();
+            if (!columns.Contains("map_json", StringComparer.Ordinal))
+            {
+                await connection.ExecuteAsync(
+                        new CommandDefinition(
+                            "ALTER TABLE repair_requests ADD COLUMN map_json TEXT NULL",
+                            cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+            }
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
+        }
+    }
+
     /// <summary>The exact Ddl shape of <c>sync_tombstones</c>: declared types, NOT NULL, and the pk position of every composite-key member.</summary>
     private static bool ShapeMatchesDdl(IReadOnlyList<PragmaColumnRow> columnRows)
     {
@@ -1339,6 +1401,44 @@ internal static class MemorySchema
         {
             await connection.ExecuteAsync(new CommandDefinition(
                     "ALTER TABLE search_quality ADD COLUMN result_features TEXT",
+                    cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
+        {
+        }
+    }
+
+    /// <summary>
+    ///     Adds <c>repair_requests.map_json</c> if it is missing — same tolerant shape as
+    ///     <see cref="EnsureCodeEmbedAttemptsColumnAsync" /> (pragma probe + duplicate-column catch
+    ///     for two connections racing the same digest mismatch). Called only from inside the Ddl
+    ///     block's own digest-mismatch branch: the v13 ladder step covers version-gated banks.
+    ///     Old rows stay valid with no backfill: null means the empty map.
+    /// </summary>
+    private static async Task EnsureRepairRequestsMapJsonColumnAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'repair_requests'",
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false) > 0;
+        if (!hasTable)
+        {
+            return; // the Ddl block just above creates repair_requests; nothing to alter yet
+        }
+
+        var hasColumn = (await connection.QueryAsync<string>(new CommandDefinition(
+                "SELECT name FROM pragma_table_info('repair_requests')", cancellationToken: cancellationToken))
+            .ConfigureAwait(false)).Contains("map_json", StringComparer.Ordinal);
+        if (hasColumn)
+        {
+            return;
+        }
+
+        try
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                    "ALTER TABLE repair_requests ADD COLUMN map_json TEXT NULL",
                     cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
         }
