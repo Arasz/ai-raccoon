@@ -202,6 +202,85 @@ public sealed class RepairCommandsTests
             new ProjectIdCensusRow("job-search-ai-assistant", false, null, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, [])
         ], 0, 0, 0, 0, []);
 
+    /// <summary>
+    ///     One row of each of the five real outcomes FromCensus produces: a fold (job-search-ai-assistant
+    ///     -&gt; jsaa), a drop (qa-noise-project, owns deletable content), a retire (registered, owns
+    ///     nothing), an id needing human attribution (unknown id, owns content), and an id already
+    ///     canonical under the map (ai-badger — needs nothing).
+    /// </summary>
+    private static ProjectIdCensusReport MixedOutcomeReport() => new(
+        [
+            Row("job-search-ai-assistant", entries: 1),
+            Row("qa-noise-project", entries: 1),
+            Row("empty-registered-project", registered: true),
+            Row("mystery-guid-0001", entries: 1),
+            Row("ai-badger", entries: 1)
+        ], 0, 0, 0, 0, []);
+
+    /// <summary>A census row with every non-id-bearing surface at zero, named arguments only for the fields a fixture needs.</summary>
+    private static ProjectIdCensusRow Row(string projectId, bool registered = false, string? registeredName = null,
+        long entries = 0) => new(projectId, registered, registeredName, entries, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, []);
+
+    /// <summary>
+    ///     Ledger — scoreboard-sums-to-total : the five real outcomes (fold/drop/retire/attention/
+    ///     nothing) are counted separately and sum to the censused total, replacing the old single
+    ///     "would fold" verb that covered all of them regardless of what actually happens.
+    /// </summary>
+    [Fact]
+    public async Task ProjectIds_DryRun_ScoreboardCountsEveryOutcomeSeparately()
+    {
+        var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, MixedOutcomeReport());
+
+        stdout.ShouldContain("5 id(s) censused");
+        stdout.ShouldContain("1 fold,");
+        stdout.ShouldContain("1 drop (test residue)");
+        stdout.ShouldContain("1 retire (registered, empty)");
+        stdout.ShouldContain("1 need a human to attribute");
+        stdout.ShouldContain("1 need nothing (already correct or empty)");
+    }
+
+    /// <summary>
+    ///     Ledger — retired-projects-invisible : the server's FoldProjectsAsync deletes every
+    ///     RetiredProjects row (ProjectIdsRepair.cs), but the CLI never printed anything about them —
+    ///     an operator watching only stdout had no way to know those ids were touched at all.
+    /// </summary>
+    [Fact]
+    public async Task ProjectIds_DryRun_NamesEachRetiredProject()
+    {
+        var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, MixedOutcomeReport());
+
+        stdout.ShouldContain("empty-registered-project");
+        stdout.ShouldContain("retires");
+    }
+
+    /// <summary>
+    ///     Ledger — leftovers-look-fixable : the only existing re-run guidance (quiesce-or-rerun)
+    ///     is about a concurrent-write hazard during --apply, not about ids the alias map cannot
+    ///     place. Without this line, repeatedly running 'repair project-ids' looks like it should
+    ///     eventually converge on ids that in fact never will until a human or the map changes.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ProjectIds_IdNeedingAttention_StatesRerunningWontClearIt(bool apply)
+    {
+        var stdout = await RunProjectIdsAsync(apply, diagnose: false, MixedOutcomeReport());
+
+        stdout.ShouldContain("re-running will not clear");
+    }
+
+    /// <summary>
+    ///     Ledger — leftovers-look-fixable (negative) : the clarifier must not appear when nothing
+    ///     needs a human — otherwise it is noise on every converged run instead of a real signal.
+    /// </summary>
+    [Fact]
+    public async Task ProjectIds_Converged_OmitsTheRerunClarifier()
+    {
+        var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, ClusterReport());
+
+        stdout.ShouldNotContain("re-running will not clear");
+    }
+
     private static Task<string> RunProjectIdsAsync(bool apply, bool diagnose, ProjectIdCensusReport report) =>
         RunProjectIdsAsync(apply, diagnose, new InMemorySettings { ProjectIdsReport = report });
 
