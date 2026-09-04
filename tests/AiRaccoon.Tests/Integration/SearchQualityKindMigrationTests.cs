@@ -91,7 +91,7 @@ public sealed class SearchQualityKindMigrationTests
 
         (await ReadKindAsync(connection, "corr-old-a")).ShouldBe("memory");
         (await ReadKindAsync(connection, "corr-old-b")).ShouldBe("memory");
-        (await ReadVersionAsync(connection)).ShouldBe(12);
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion); // v13 is current (ADR-0099)
     }
 
     /// <summary>
@@ -114,7 +114,7 @@ public sealed class SearchQualityKindMigrationTests
         columns.ShouldContain("kind");
         columns.ShouldContain("result_features",
             "the digest-DDL recreate must restore the full current shape (P6b), not just the v12 column");
-        (await ReadVersionAsync(connection)).ShouldBe(12);
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion); // v13 is current (ADR-0099)
     }
 
     /// <summary>
@@ -129,7 +129,7 @@ public sealed class SearchQualityKindMigrationTests
 
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
 
-        (await ReadVersionAsync(connection)).ShouldBe(12);
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion); // v13 is current (ADR-0099)
         var columns = await connection.QueryAsync<string>(
             "SELECT name FROM pragma_table_info('search_quality')");
         columns.ShouldContain("kind");
