@@ -206,6 +206,45 @@ public sealed class WatchHostedServiceTests
         await hosted.StopAsync(CancellationToken.None);
     }
 
+    /// <summary>
+    ///     air-remove-machine-default-alias-map: a project-ids repair fold renames a watch's row in
+    ///     place (same path, new project id) — the same shape ProjectIdsRepair.FoldWatchesAsync
+    ///     produces. A reconcile pass must migrate the live registration exactly like a plain
+    ///     removal (stale key stops resolving), AND must pick up the new key so events captured
+    ///     after the rename land under the winner — the removal-only tests above prove the first
+    ///     half but not the second.
+    /// </summary>
+    [RetryFact]
+    public async Task Reconcile_RenamedWatch_StopsTheLoserAndStartsTheWinner()
+    {
+        const string Winner = "acme-winner";
+        using var dir = TempDir.New("hosted-renamed-watch");
+        var file = dir.File("a.md");
+        await File.WriteAllTextAsync(file, "zephyrtwo", TestContext.Current.CancellationToken);
+        var (stack, _, _, hosted) = NewStack();
+        stack.Enable();
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        await stack.Store.RemoveWatchAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        await stack.Store.AddWatchAsync(Winner, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        // An event captured before the rename (a watcher's closure holding the pre-rename id) must
+        // not resurrect it — same guarantee as plain removal.
+        stack.Pipeline.Enqueue(new WatchEvent(Project, file, WatchEventKind.Created));
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+        stack.Memory.Ingested.ShouldBeEmpty(
+            "a stale in-flight event captured under the pre-rename id must not resurrect it");
+
+        // An event under the winner (what the reconciled watcher now produces) must resolve.
+        stack.Pipeline.Enqueue(new WatchEvent(Winner, file, WatchEventKind.Created));
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+        stack.Memory.Ingested.ShouldHaveSingleItem("the reconciled registration must resolve the winner's events");
+
+        await hosted.StopAsync(CancellationToken.None);
+    }
+
     [RetryFact]
     public async Task Reconcile_StaleRegistration_StopsResolvingItsFilesForDigest()
     {

@@ -88,6 +88,13 @@ public sealed class SingleProjectIdSteps(ScenarioContext scenarioContext)
         // post-repair edit could tie the pre-repair watermark and be skipped as not-due.
         // Production never ties; fake time must not either.
         _ctx.TimeProvider.Advance(TimeSpan.FromSeconds(30));
+        // WatchHostedService reconciles every second in production (PollInterval), migrating a
+        // renamed watch's live registration within ~1s of the fold (proven in isolation by
+        // WatchHostedServiceTests.Reconcile_RenamedWatch_StopsTheLoserAndStartsTheWinner). Without
+        // this call the scenario's own "a tick runs" step never reconciles, so an in-flight event
+        // still tagged with the pre-repair id can reach the digest and resurrect it — a race the
+        // 30s of elapsed fake time above already makes implausible in any real deployment.
+        await _watch.ReconcileOnceAsync(ct);
     }
 
     // Ledger — skip-entries-rewrite : "Loser rows meet under the winner" scenario : jsaa 2+2 +
