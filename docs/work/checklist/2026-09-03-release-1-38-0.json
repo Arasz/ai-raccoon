@@ -129,11 +129,11 @@
       "item": "observability-event-ids",
       "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
       "command": "grep -rhoE '\\[[0-9]{3}\\]' scratch serve logs; resolve each against docs/reference/logging-event-ids.md; locate emitters in src/",
-      "evidence": "emitted: 428,510,525,610,650,651,660,672,673,674,899,910,911 \u2014 all resolve EXCEPT 651 (ServerRestart.cs:183) and 911 (ToolRefusals.cs:185), zero hits in the reference. Doc claims full measurement (174 methods, zero duplicates); uniqueness unaffected, but the table is stale for these two.",
-      "observed-result": "Two live ids unresolvable in the reference (docs drift).",
-      "status": "fail",
-      "accepted": false,
-      "acceptance-reason": "Docs drift must be fixed (regen table) before acceptance; non-shipping, file as follow-up. Publish decision stays human-gated."
+      "evidence": "emitted: 428,510,525,610,650,651,660,672,673,674,899,910,911. CORRECTION to first write-up (which grepped bare ids and wrongly reported zero hits): the reference lists ranges \u2014 651 resolves under '650-656 src/AiRaccoon/Hosting/Node/ServerRestart.cs' and 911 under '910-912 src/AiRaccoon/Tools/ToolRefusals.cs', both matching the actual emitters (ServerRestart.cs:183, ToolRefusals.cs:185). All 13 live ids resolve.",
+      "observed-result": "Every emitted id resolves against the reference once ranges are read as ranges; the earlier FAIL was a measurement error in the checklist run itself, not docs drift.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Full coverage confirmed; correction recorded transparently rather than rewriting history."
     }
   ]
 }
