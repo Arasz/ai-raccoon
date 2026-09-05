@@ -25,8 +25,8 @@
 
 ## 1. Decisions D1–D6 (positions taken; autonomous session — calls logged, moving on)
 
-**D1 — custom/shared committed entries on the fold path: FOLD them to the winner.**
-Broaden the applier from `LabeledProjectScope` (project-scope + non-NULL label) to *all committed scopes* (`project`+`custom`+`shared`, any label incl. NULL), with the existing winner-dedup (`COALESCE(context_label,'')`, no tombstone on dedup-collapse) and vec invalidation extended to the same predicate. *Reasoning*: narrowing the planner to match the applier would converge the loop but leave loser-owned committed content searchable under retired ids — redefinition, not repair, and it contradicts P3's purpose. The d-426 NULL-keep was air-merge caution (don't move unattributed bulk rows mid-merge), not a semantic invariant: no consumer keys on `(project_id, NULL-label)` stability, and the dedup subquery is already NULL-safe. Shared rows fold too: a loser id is deleted from `projects` anyway, so loser-keyed shared rows are orphaned provenance either way; dedup absorbs true cross-project duplicates. *Rejected*: keep-and-pin committed rows (leaves the bank visibly unfixed); force-onto-dropped (destroys preservable content + mints tombstones against the create-only-for-dropped rule's intent).
+**D1 — committed entries (project+custom, any label) on the fold path: FOLD them to the winner.**
+Broaden the applier from `LabeledProjectScope` (project-scope + non-NULL label) to the *committed* predicate (`scope IN ('project','custom')`, any label incl. NULL), with the existing winner-dedup (`COALESCE(context_label,'')`, no tombstone on dedup-collapse) and vec invalidation extended to the same predicate. The fold gets its own named predicate in `ProjectRows` (single home) — do NOT extend `ProjectRows.Scopes`: that literal is the search/visibility definition guarded by `ProjectRowsSingleDefinitionTests`. `shared` rows are cross-project by design (`uq_entries_shared_bucket` is `(path,hash)` global, no project key; `ProjectRows` doc) and are NOT folded; shared-keyed loser rows land in a pinned bucket with a reason (pending H9) rather than scheduling phantom folds. Queue re-keying is explicit under the broadened predicate: the `promotion_queue_entries_ad` trigger (`MemorySchema.cs:73`, loser-queue-row delete on last-committed-row-deleted, keyed on `ProjectRows.Scope`) makes delete-loser/insert-winner txn order load-bearing — B proves the queue-before-entries ordering still suffices and names the order. *Reasoning*: narrowing the planner to match the applier would converge the loop but leave loser-owned committed content searchable under retired ids — redefinition, not repair, and it contradicts P3's purpose. The d-426 NULL-keep was air-merge caution (don't move unattributed bulk rows mid-merge), not a semantic invariant: no consumer keys on `(project_id, NULL-label)` stability, and the dedup subquery is already NULL-safe. *Rejected*: keep-and-pin committed rows (leaves the bank visibly unfixed); force-onto-dropped (destroys preservable content + mints tombstones against the create-only-for-dropped rule's intent); folding `shared` (steals cross-project content; structurally suspect per H9).
 
 **D2 — planner honesty: never schedule a fold with zero executable moves.**
 `OwnsMoveableContent` is redefined as *exactly the applier's executable predicate* (single shared predicate helper or mirrored truth table; no drift). Any map-attributed id with zero executable rows lands in a new **pinned bucket with a reason line** (`pinned-shared-only` disappears under D1; remaining pins: open-workspace blockers, telemetry-only, unresolvable-with-attachments). The CLI summary gains a first-class line distinguishing **converged** (zero actionable, zero pins) vs **pinned-only** (zero actionable, N pins with reasons) vs **actionable remaining**. *Rejected*: silent `continue`-drop of attributed-but-unmovable ids (today's invisible bucket — the exact dishonesty that hid this bug).
@@ -47,15 +47,15 @@ Broaden the applier from `LabeledProjectScope` (project-scope + non-NULL label) 
 ## 2. Packages (each: ACs + proving test/run)
 
 ### Package A — planner honesty + pinned buckets (Core; D2 foundation, unblocks all)
-- A1: `OwnsMoveableContent` ≡ applier executable predicate (post-D1: committed-scopes-owned); add `Pinned` list with reason lines to `ProjectIdsFoldPlan`; attributed-but-unmovable ids never silently `continue`.
+- A1: `OwnsMoveableContent` ≡ applier executable predicate (post-D1: owns committed rows, project+custom); shared-keyed-only ids pin with a reason (pending H9), never fold; add `Pinned` list with reason lines to `ProjectIdsFoldPlan`; attributed-but-unmovable ids never silently `continue`.
 - A2: CLI scoreboard distinguishes converged / pinned-only / actionable; per-pin reason lines printed.
-- **ACs**: (1) NULL-only + custom/shared fixture ids from the research record produce folds that the applier fully drains (no zero-move step); (2) open-workspace / telemetry-only fixtures produce pins with reasons, never folds; (3) summary line matches D6 vocabulary.
+- **ACs**: (1) NULL-only + custom-labeled fixture ids from the research record produce folds plannable with zero-move-impossible (truth-table); full-drain proof deferred to G (broadened applier is B, lands after A); (2) open-workspace / telemetry-only / shared-keyed-only fixtures produce pins with reasons, never folds; (3) summary line matches D6 vocabulary.
 - **Tests** (fail first): `FromCensus` truth-table tests over synthetic `ProjectIdCensusReport`s (zero-move fold impossible by construction); CLI scoreboard golden-output tests. **Run**: `dotnet test --filter ProjectIdsFoldPlan`.
 
 ### Package B — fold applier broadening (Sqlite; D1)
-- B1: `FoldEntriesAsync` + `InvalidateVecAsync` move off `LabeledProjectScope` to committed-scopes-owned (project+custom+shared, any label); winner-dedup + no-tombstone-on-dedup unchanged; per-step txn discipline unchanged.
-- B2: update/extend d-426 keep-predicate tests (P-INT asserts) to the new contract; `ProjectRows` keeps the single literal home.
-- **ACs**: (1) scratch bank with project-NULL + custom-labeled + shared-NULL loser rows folds to zero loser rows in one apply; (2) dedup collisions still tombstone-free; (3) vec/FTS shadows consistent, `ChunkIndexRepair`+embed-drain ordering intact.
+- B1: `FoldEntriesAsync` + `InvalidateVecAsync` move off `LabeledProjectScope` to the committed predicate (project+custom, any label) via the new named `ProjectRows` predicate; winner-dedup + no-tombstone-on-dedup unchanged; queue re-keying order proven against `promotion_queue_entries_ad`; per-step txn discipline unchanged.
+- B2: update/extend d-426 keep-predicate tests (P-INT asserts) to the new contract; `ProjectRows` keeps the single literal home (`Scopes` untouched).
+- **ACs**: (1) scratch bank with project-NULL + custom-labeled loser rows folds to zero loser rows in one apply (shared-NULL fixture replaced: H9 decides shared disposition; until then a proof-of-existence/absence test pins the behavior); (2) dedup collisions still tombstone-free (winner-dedup subquery mirrors `uq_entries_committed_bucket` exactly: `(path, hash, project_id, scope, COALESCE(context_label,''))` WHERE project+custom); (3) vec/FTS shadows consistent, `ChunkIndexRepair`+embed-drain ordering intact.
 - **Tests**: apply-level SQLite tests per surface (moved/deduped/vec-invalidated counts); second-run-no-op (`TotalChanges==0`). **Run**: `dotnet test --filter ProjectIdsRepair`.
 
 ### Package C — telemetry/workspace ownership (Core census+plan; D3, after A)
@@ -77,12 +77,12 @@ Broaden the applier from `LabeledProjectScope` (project-scope + non-NULL label) 
 
 ### Package F — run-until-fixed loop + closing summary (CLI/job; D5+D6; after A+B+C)
 - F1: `--apply` loop with bounded passes, per-pass receipts, stuck vs writers-active distinction from moved-counts/census totals, `--queue-only` escape.
-- F2: D6 verdict + closing-summary line (converged|pinned-only…P3 armed); quiesce guidance text.
+- F2: D6 verdict + closing-summary line (converged|pinned-only…P3 armed); quiesce guidance text. #613 already ships a closing-summary line + 4 `RepairCommandsTests` asserting exact strings — F2 deliberately supersedes them and updates those 4 tests to D6 vocabulary in the same PR.
 - **ACs**: (1) single invocation converges a quiesced multi-pass fixture; (2) live-writer fixture ends writers-active with quiesce guidance, not a false converged; (3) ADR-0075 holds (CLI issues requests+reads only — assert no bank open for write in CLI process).
 - **Tests**: loop-state-machine tests with fake `IRepairStore`/census sequences; CLI golden-output tests. **Run**: `dotnet test --filter "RepairLoop|ProjectIdsRepairCommands"`.
 
 ### Package G — INTEGRATION (last; cross-package; D6 end-to-end)
-- G1: scratch-bank E2E: NULL-only + custom/shared + metrics-only + live-writer conditions → **one invocation converges to the D6 verdict**.
+- G1: scratch-bank E2E: NULL-only + custom + shared-keyed (disposition per H9) + metrics-only + live-writer conditions → **one invocation converges to the D6 verdict**.
 - G2: post-fix probe: write under retired loser id refused-or-folded-through per D4; re-derive stability (two identical derives, zero moves).
 - **ACs (= top-level AC)**: every package AC checked and met, plus the E2E proof above.
 - **Tests**: full-stack test driving CLI→server→job→drain on a scratch bank; red-proofed (each assertion first shown failing against pre-fix behavior). **Run**: `dotnet test --filter Integration.ProjectIdsConvergence` + manual live-bank smoke per the manual-checklist skill (notes, not edits).
@@ -90,13 +90,13 @@ Broaden the applier from `LabeledProjectScope` (project-scope + non-NULL label) 
 ---
 
 ## 3. ADRs to file (`docs/adr/`, Nygard shape: Context / Decision / Consequences +/−/0 / Alternatives)
-1. **Fold all committed scopes incl. NULL-context** (D1) — overturns d-426 keep; consequence (−): bulk-row `project_id` churn on first post-fix repair.
+1. **Fold committed scopes (project+custom, any label) incl. NULL-context** (D1) — overturns d-426 keep; consequence (−): bulk-row `project_id` churn on first post-fix repair.
 2. **Telemetry excluded from verdicts; workspaces immovable blockers** (D3).
 3. **Durable alias-map table + refuse/fold-through P3** (D4) — incl. sync conflict rule.
 4. **Bounded run-until-fixed loop with measured stuck-vs-writers distinction** (D5) + **D6 fully-fixed predicate** (may fold into one ADR).
 
 ## 4. Parallelism
-- **Parallel**: B ∥ D (disjoint files: `ProjectIdsRepair.cs` vs new table/migration + job-persist section — coordinate the one shared section in `ProjectIdsRepairJob.cs`: serialise that hunk).
+- **Parallel**: B ∥ D (disjoint files: `ProjectIdsRepair.cs` vs new table/migration + job-persist section — coordinate the one shared section in `ProjectIdsRepairJob.cs`: serialise that hunk). H9 closes before B's shared-disposition code, but B's committed-path work needs no H9 result.
 - **Serial**: A → C (both reshape plan buckets); A → F (verdict vocabulary); D → E (storage before chokes); everything → G.
 - Shared-file serialisation points: `ProjectIdsFoldPlan.cs` (A then C), `ProjectIdsRepairJob.cs` (D-persist hunk vs F-receipt hunk — merge order D,F), `ProjectIdsRepairCommands.cs` (F only after A2's vocabulary lands).
 
@@ -104,8 +104,9 @@ Broaden the applier from `LabeledProjectScope` (project-scope + non-NULL label) 
 - **H1**: exact names/locations of d-426 P-INT keep-predicate tests asserting NULL-keep (A/B must re-discover; I did not enumerate `tests/`).
 - **H2**: `SyncService` merge shape for a new table (row-merge vs snapshot) — D's conflict rule assumes row-merge; if snapshot, map rides free and E2 simplifies.
 - **H3**: live-bank per-id counts quoted in the brief were taken as evidence, not re-queried (bank may have drifted; G re-establishes ground truth on a scratch bank).
-- **H4**: `metrics`/`noise` tables carry no vec/FTS shadow triggers (C's trivial re-key depends on it).
-- **H5**: `promotion_queue_entries_ad` trigger interplay under the broadened entries predicate (B must prove queue-before-entries ordering still suffices for custom/shared/NULL rows).
-- **H6**: `uq_entries_committed_bucket` exact columns (B's dedup-covers-all-scopes claim assumes the winner-dedup subquery spans the folded scopes).
+- **H4 CLOSED** (reviewer-verified): no triggers on `metrics`/`noise_entries`/`workspaces`/`workspace_entries`, indexes only — C's trivial telemetry re-key stands.
+- **H6 CLOSED**: committed bucket = `(path, hash, project_id, scope, COALESCE(context_label,''))` WHERE project+custom — B's winner-dedup subquery must mirror exactly; shared bucket `(path,hash)` only.
+- **H8 CLOSED**: `SqliteProjectIdsMigrationGate` is a `repair_requests` finished-row read (ToolGate precondition), not an alias stub — arm D4 alongside it.
+- **H9** (new, B must close before coding the shared disposition): prove whether `scope='shared'` AND `project_id IS NOT NULL` rows can exist on a fresh-schema bank. Live-bank counter-evidence: 9 such rows exist today (`job-search-ai-assistant` shared-NULL ×8, `aib` shared-NULL ×1) — legacy writes or genuine shape still open. If impossible, shared-keyed-only ids are unreachable and B carries a proof-of-absence test; if possible, their disposition (pin-with-reason, current default) is confirmed and documented.
+- **H5**: `promotion_queue_entries_ad` trigger interplay under the broadened entries predicate (B must prove queue-before-entries ordering still suffices for custom/NULL rows; delete-loser/insert-winner txn order is load-bearing).
 - **H7**: maintenance poll interval ≈15s and `repair_requests` open-row retry semantics under rapid re-apply (F's poll/timeout constants).
-- **H8**: `IProjectIdsMigrationGate` (seen in `Core/Projects/`) isn't already a P3 gate stub that D4 must extend rather than replace.
