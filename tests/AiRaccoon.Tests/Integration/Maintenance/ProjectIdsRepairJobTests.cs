@@ -271,8 +271,9 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
         (await CountAsync(connection, "watches", Winner, "1 = 1", ct)).ShouldBe(2);
         (await ScalarAsync(connection, "SELECT scan_owner FROM watches WHERE project_id = 'jsaa' AND path = '/repo/a'", ct))
             .ShouldBe("owner-w", "watch renames preserve the scan lease columns");
-        // Folded vs untouched partitions (D1 committed predicate): NULL-context bulk and custom
-        // rows fold with the labeled rows; shared rows (cross-project, H9), metrics and typo rows
+        // Folded vs untouched partitions (D1 committed predicate + D3 telemetry ownership):
+        // NULL-context bulk and custom rows fold with the labeled rows; the loser metrics row
+        // re-keys to the winner with the fold (C1); shared rows (cross-project, H9) and typo rows
         // stay byte-identical. The open-workspace id below pins wholesale (D3, review #614).
         (await CountAsync(connection, "entries", Loser, "context_label IS NULL AND workspace_id IS NULL", ct)).ShouldBe(0,
             "D1: the loser bulk row folds to the winner");
@@ -289,7 +290,10 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
         (await CountAsync(connection, "workspaces", PinnedWs, "1 = 1", ct)).ShouldBe(1);
         (await CountAsync(connection, "entries", Winner, "workspace_id IS NOT NULL", ct)).ShouldBe(0);
         (await CountAsync(connection, "entries", Typo, "1 = 1", ct)).ShouldBe(1);
-        (await CountAsync(connection, "metrics", Loser, "1 = 1", ct)).ShouldBe(1);
+        (await CountAsync(connection, "metrics", Loser, "1 = 1", ct)).ShouldBe(0,
+            "C1: the loser metrics row re-keys to the winner with the fold");
+        (await CountAsync(connection, "metrics", Winner, "1 = 1", ct)).ShouldBe(1,
+            "C1: telemetry follows the fold — regenerable, never verdict-blocking, never stranded");
 
         var second = await NewJob().RunAsync(connection, ct);
 
