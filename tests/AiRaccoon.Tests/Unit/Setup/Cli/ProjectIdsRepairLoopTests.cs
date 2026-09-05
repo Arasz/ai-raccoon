@@ -15,6 +15,15 @@ namespace AiRaccoon.Tests.Unit.Setup.Cli;
 ///     never opens the bank itself — ADR-0075. All runs use zero-delay loop options so no test
 ///     ever sleeps for the ~15s production poll interval.
 /// </summary>
+/// <para>
+///     RED-proof ledger (Package F lane): the file was written test-first against missing
+///     production APIs — the initial build failed on P3PendingNote/RepairLoopOptions/
+///     PassReceiptEventId and the commands' 2-arg constructor (all 8 tests demanded
+///     nonexistent surface); two test-code slips were fixed without weakening assertions.
+///     Per-test behavior mutations were not recorded by the lane — each test pins its behavior
+///     through the scripted census sequence it serves (converge / live-writer / pinned-only /
+///     stuck / reads-only / queue-only x2 / bounds).
+/// </para>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ProjectIdsRepairLoopTests

@@ -25,6 +25,11 @@ namespace AiRaccoon.Tests.Integration.Maintenance;
 ///     cache (a restart must not silently disarm P3 enforcement). Both join the Default
 ///     collection — the process-static map is the shared state under test.
 /// </summary>
+/// <para>
+///     RED-proof ledger (Package E lane): both tests were written test-first against the
+///     missing reload legs — the initial build failed on the nonexistent job-reload call
+///     and warm-service wiring. Per-test behavior mutations were not recorded by the lane.
+/// </para>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 [Collection(ProjectIdAliasDefaultCollection.Name)]

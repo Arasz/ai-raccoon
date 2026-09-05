@@ -24,7 +24,9 @@ namespace AiRaccoon.Tests.Integration.Projects;
 [Collection(AiRaccoon.Tests.Unit.Projects.ProjectIdAliasDefaultCollection.Name)]
 public sealed class ProjectIdAliasesDurableTests
 {
-    /// <summary>D-AC(3): a fresh bank gains the table with the contracted columns and the current stamp.</summary>
+    /// <summary>D-AC(3): a fresh bank gains the table with the contracted columns and the current stamp.
+    /// Ledger — initial compile-RED: the file was written test-first against the missing
+    /// <c>ProjectIdAliases</c> API (CS0103 pre-implementation).</summary>
     [RetryFact]
     public async Task EnsureAsync_OnAFreshBank_CreatesProjectIdAliasesTable()
     {
@@ -38,7 +40,9 @@ public sealed class ProjectIdAliasesDurableTests
         (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
     }
 
-    /// <summary>D-AC(3): the migration is idempotent — a second open keeps inserted rows byte-identical.</summary>
+    /// <summary>D-AC(3): the migration is idempotent — a second open keeps inserted rows byte-identical.
+    /// Ledger — initial compile-RED with the file (missing API); idempotency itself was not
+    /// mutation-proven by the lane.</summary>
     [RetryFact]
     public async Task EnsureAsync_Twice_PreservesInsertedRows()
     {
@@ -63,6 +67,8 @@ public sealed class ProjectIdAliasesDurableTests
     ///     D-AC(3): a bank stamped at v13 (every bank predating this change) gains the table through
     ///     the ladder step — not just the digest-gated Ddl. The digest still matches here (nothing
     ///     else changed on disk), so only the version ladder can create the table.
+    ///     Ledger — sabotage/restore (Package D lane): ladder arm disabled → table missing,
+    ///     version unstamped (FAILED); GREEN on restore.
     /// </summary>
     [RetryFact]
     public async Task EnsureAsync_OnAV13Bank_CreatesTableViaLadder_AndStampsCurrent()
@@ -83,6 +89,8 @@ public sealed class ProjectIdAliasesDurableTests
     /// <summary>
     ///     D-AC(1): the persisted map round-trips the applied entries, and alias lookup is
     ///     case-SENSITIVE (Ordinal): <c>OLD-ID</c> and <c>old-id</c> coexist as distinct rows.
+    ///     Ledger — initial compile-RED with the file (missing API); case-sensitivity itself
+    ///     was not mutation-proven by the lane.
     /// </summary>
     [RetryFact]
     public async Task PersistedMap_RoundTrips_WithOrdinalCaseSensitivity()
@@ -106,6 +114,9 @@ public sealed class ProjectIdAliasesDurableTests
     /// <summary>
     ///     D-AC(1): rows are immutable — persisting a map whose alias already has a winner keeps
     ///     the first writer (alias-PK first-writer-wins) while appending genuinely new entries.
+    ///     Ledger — sabotage/restore (Package D lane: persist hunk disabled → table stays empty,
+    ///     FAILED; GREEN on restore) and review mutation (#619: INSERT OR IGNORE → INSERT fails
+    ///     this test, reverted clean).
     /// </summary>
     [RetryFact]
     public async Task PersistApplied_IsAppendOnly_FirstWriterWins()
