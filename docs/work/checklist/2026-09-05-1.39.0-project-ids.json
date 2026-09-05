@@ -1,0 +1,97 @@
+{
+  "_note": "Copy to docs/work/checklist/<yyyy-mm-dd>-<subject>.json. Never fill this file in place. status is pass|fail|skipped|substituted; substituted means checked by a different instrument than the item names, and its reason must say which. accepted stays null until a human answers it, so an unfinished run is visibly unfinished. Delete any item whose feature no longer exists rather than skipping it.",
+  "run": {
+    "date": "2026-09-05",
+    "branch": "main",
+    "commit": "21afe5ce357b4d3330628543521e77e256348e17",
+    "data-root": "/private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/1cba53bb-004f-4fc3-8c6f-ad94788116ab/scratchpad/checklist-1.39.0-small",
+    "note": "Scratch data root, never ~/.ai-raccoon. Seeded with rows mirroring the live bank's own real fragmentation (job-search-ai-assistant, pbi-badger-integration, aib, two minted guids, __self_metrics__ pseudo-project) copied by shape from a VACUUM INTO snapshot of ~/.ai-raccoon/memory.db (a full-scale copy of the live bank hit embed-drain lock contention unrelated to the feature under test, so testing moved to a small seeded bank instead)."
+  },
+  "derived": {
+    "version": "1.39.0",
+    "mcp-tool-count": "29",
+    "mcp-prompt-count": "2",
+    "note": "Produced by scripts/derive-facts.py at run time, never typed from memory or a previous run."
+  },
+  "findings-against-prior-runs": [],
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "the global ai-raccoon tool updates to this build and `ai-raccoon --version` matches derived.version",
+      "command": "dotnet tool uninstall -g ai-raccoon; dotnet tool install -g ai-raccoon --version 1.39.0 --source https://api.nuget.org/v3/index.json; ai-raccoon --version; shasum -a 256 on the installed .store nupkg vs. a fresh download from https://api.nuget.org/v3-flatcontainer/ai-raccoon/1.39.0/ai-raccoon.1.39.0.nupkg",
+      "evidence": "plain `dotnet tool update -g ai-raccoon` silently no-op'd against a stale local pack (reported '1.38.2 already installed', a version that does not exist anywhere in nuget.org's own index -- the documented prerelease-pack gotcha). uninstall+reinstall pinned to --version 1.39.0 --source nuget.org: `ai-raccoon --version` -> 1.39.0+21afe5ce357b4d3330628543521e77e256348e17; installed nupkg sha256 454f5676960acf21bc7df78ca83c64e0fefc736b132d23787e1220dbd75a9175 == the sha256 of a fresh download of the same URL; the embedded commit 21afe5ce is confirmed (`git merge-base --is-ancestor`) an ancestor of origin/main, being PR #610's own merge commit.",
+      "observed-result": "the installed binary is genuinely 1.39.0 built from main, proven by nupkg hash and embedded commit, not just a version string",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "SHA + commit-ancestry proof, not a trusted version string"
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+      "command": "ai-raccoon --data-root <scratch> serve --port 0 --idle-timeout 0 (background); read bound port from stdout; ai-raccoon --data-root <scratch> serve --port <bound> --restart",
+      "evidence": "first launch: 'Now listening on: http://127.0.0.1:59186'. restart: 'asking the server on port 59186 to stop (pid 963, 1.39.0+21afe...)' then 'the server on port 59186 (pid 963) stopped and the port is free' then a fresh listen on the same port; `lsof -iTCP:7721` before and after showed the production server's port untouched by this scratch-port restart.",
+      "observed-result": "restart cycles only the named port; the production server was independently restarted around the same time by something else (also confirmed still on 1.39.0 via /observability) -- not caused by this scratch-port command, which the log confirms targeted 59186 only",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "log lines name the exact port and pid stopped; production port verified untouched before and after"
+    },
+    {
+      "item": "adr-0099-empty-default-no-auto-fold",
+      "expected-result": "BREAKING per ADR-0099: `repair project-ids` with no --map performs zero folds even when a canonical winner (jsaa) and a foldable loser (job-search-ai-assistant, real content) both exist -- the pre-1.39.0 hardcoded Default map is gone",
+      "command": "seed entries under job-search-ai-assistant (2 rows), aib, pbi-badger-integration, two minted guids, mystery-guid-1234, plus a registered jsaa project with 1 entry and a registered-but-empty project; `ai-raccoon --data-root <scratch> --port <p> repair project-ids` (no --apply, no --map)",
+      "evidence": "\"project-ids repair: 9 id(s) censused -- 0 fold, 0 drop (test residue), 1 retire (registered, empty), 8 need a human to attribute, 0 need nothing\" -- job-search-ai-assistant listed under 'matches no known id -- left alone for a human to attribute', not folded",
+      "observed-result": "confirmed: zero automatic folding without an explicit --map, matching the documented BREAKING change",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "matches ADR-0099's decision section verbatim"
+    },
+    {
+      "item": "repair-output-scoreboard-and-retired-line",
+      "expected-result": "PR #608: the header sums fold+drop+retire+need-attention+need-nothing to the censused total; a registered-but-empty project gets its own printed line (previously silently omitted) and the server-side registry row is actually removed",
+      "command": "same dry run above, then `ai-raccoon --data-root <scratch> --port <p> repair project-ids --map <map-with-1-fold> --apply`; wait ~20s for the async maintenance poll; re-query `SELECT id FROM projects`",
+      "evidence": "dry run: '1 fold, 0 drop, 1 retire, 6 need a human, 1 need nothing' summing to 9; per-id line 'empty-registered-project is registered with nothing left on it -- retires (registry row removed)'. Post-apply (after the ~15s poll the receipt itself names): `SELECT id FROM projects` returned only 'jsaa' -- empty-registered-project's row is gone.",
+      "observed-result": "scoreboard arithmetic and the retired-project line both hold against a real apply, not just a dry-run projection",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "verified the registry row was actually deleted server-side, not just printed"
+    },
+    {
+      "item": "map-flag-folds-and-apply-converges",
+      "expected-result": "`--map <file>` shows and then performs the named fold; `--apply` is asynchronous (server-side maintenance poll) per its own receipt text; a second dry run after apply shows the folded/retired ids gone and remaining ids unchanged (converged, not still 'pending')",
+      "command": "map file aliasing job-search-ai-assistant->jsaa, canonicals=[jsaa]; dry run with --map; apply with --map; sleep 20; `SELECT project_id, count(*) FROM entries GROUP BY project_id`; `SELECT id FROM projects`; `SELECT finished_at FROM repair_requests`; re-run dry run with no --map",
+      "evidence": "dry run showed 'job-search-ai-assistant owns 2 entries ... folds to jsaa'. Immediately after --apply (3s wait) the DB was UNCHANGED (job-search-ai-assistant still had 2 rows) -- the receipt's own '~15s' claim is real, not instant. After 20s: entries grouped by project_id showed job-search-ai-assistant gone, jsaa at 3 (1 original + 2 folded); repair_requests.finished_at populated. Re-run with no --map: 9 -> 7 ids censused, 0 fold/0 retire/7 need-attention -- job-search-ai-assistant and empty-registered-project no longer appear anywhere.",
+      "observed-result": "the full CLI -> server -> async-apply -> convergence loop works end to end against real data shapes",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "checked the DATA (row counts, registry membership), not just command output, per the checklist's own 'writes nothing must be checked on the data' rule"
+    },
+    {
+      "item": "template-writer-never-overwrites",
+      "expected-result": "a map-less dry run writes a non-overwriting, valid-JSON, Empty-shaped template at <data-root>/project-id-map.template.json; a second map-less run never clobbers an existing template",
+      "command": "first map-less dry run; cat the template; second map-less dry run",
+      "evidence": "first run: 'Wrote an editable alias-map template to .../project-id-map.template.json' -- content `{\"Aliases\": [], \"Canonicals\": [], \"Dropped\": []}` (valid JSON, parses to Empty). Second run: 'Could not write the alias-map template ... The file ... already exists.; create it by hand or pass --map.'",
+      "observed-result": "non-overwrite guarantee holds on a real second invocation, not just by code inspection",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "second run's own stderr line proves the guard fired"
+    },
+    {
+      "item": "rerun-clarifier-and-orphan-line",
+      "expected-result": "PR #608: when ids need human attribution, the CLI states plainly that re-running will not clear them; ids with content but no projects-table registration are counted separately as orphans",
+      "command": "all three project-ids runs above",
+      "evidence": "every run with a nonzero need-attention count printed 'project-ids repair: re-running will not clear the N id(s) above that need a human -- attribute them, or wait for an alias-map update.' N tracked the live count each time (8 -> 6 -> 7). Orphan line: '6 id(s) own entries with no projects-table registration' (first run) -> '5' after the fold removed one orphan (job-search-ai-assistant, which was itself unregistered).",
+      "observed-result": "both new lines from PR #608 are live and their counts move correctly across repair runs",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "counts cross-checked against the actual seeded/folded rows each time, not just presence of the line"
+    }
+  ],
+  "findings-not-fitting-a-single-item": [
+    {
+      "finding": "Every registered project -- including the canonical winner itself (jsaa, already correct, nothing to fold) -- shows up under 'need a human to attribute' on any dry run that omits --map, because ADR-0099 made Default fully empty (no hardcoded canonicals at all, not even well-known ones). The scoreboard's 'need nothing (already correct or empty)' bucket only credits an id if the operator's own --map explicitly lists it as a canonical.",
+      "evidence": "first dry run (no --map): 'jsaa matches no known id (registered as jsaa) -- left alone for a human to attribute', 0 need-nothing out of 9. Second dry run (--map listing jsaa as a canonical): 1 need-nothing (jsaa), 6 need-attention.",
+      "so-what": "an operator with many registered, healthy projects will see ALL of them counted as 'need a human' on every map-less run, forever -- not a defect against ADR-0099's stated design (which explicitly rejected a persistent map), but a real UX rough edge worth a follow-up decision: either accept it as the documented cost of the one-shot --map model, or consider a way to let an operator's own canonicals persist across runs without reintroducing the rejected persistent-map alternative.",
+      "recommendation": "flag for the project owner; not a blocker for this release"
+    }
+  ]
+}
