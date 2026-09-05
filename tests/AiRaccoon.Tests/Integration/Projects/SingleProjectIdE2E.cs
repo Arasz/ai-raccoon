@@ -96,10 +96,9 @@ public sealed class SingleProjectIdE2E : IAsyncLifetime
 
     /// <summary>
     ///     Content written under both spellings before the repair is searchable under the single
-    ///     winner afterwards — with the S2 boundary pinned at the wire: labeled loser rows fold and
-    ///     read under the winner, while NULL-context bulk rows stay loser-keyed in storage. Reads
-    ///     never refuse and scopes pass through (ADR-0099): post-repair the leftover bulk row is
-    ///     stored loser-keyed and served by the loser scope again — no silent cross-wiring.
+    ///     winner afterwards — with the D1 boundary pinned at the wire: labeled AND NULL-context bulk
+    ///     loser rows fold and read under the winner (the d-426 keep is overturned: no consumer keys on
+    ///     (project_id, NULL-label) stability). Reads never refuse and scopes pass through (ADR-0099).
     ///     Property intersection: labeled × unlabeled storage against winner-scoped × loser-scoped reads.
     ///     Ledger — revert-jsaa-fold : --filter "FullyQualifiedName~SingleProjectIdE2E.MergedClusterSearch" :
     ///     labeled loser wombat row (SQL) + NULL-ctx loser quokka row (wire) + winner capybara row,
@@ -139,10 +138,10 @@ public sealed class SingleProjectIdE2E : IAsyncLifetime
             "the labeled loser content folded under the winner");
         winnerHits.Data!.Results.ShouldContain(r => r.Hash == winnerWritten.Data!.Hash,
             "the winner's own content stays searchable");
-        bulkUnderWinner.Data!.Results.ShouldNotContain(r => r.Hash == bulkWritten.Data!.Hash,
-            "NULL-context bulk rows never fold — the winner scope must not serve the loser-keyed row");
-        bulkUnderLoser.Data!.Results.ShouldContain(r => r.Hash == bulkWritten.Data!.Hash,
-            "ADR-0099: scopes pass through — the loser-keyed bulk row is served by the loser scope");
+        bulkUnderWinner.Data!.Results.ShouldContain(r => r.Hash == bulkWritten.Data!.Hash,
+            "D1: NULL-context bulk rows fold — the winner scope serves the folded row");
+        bulkUnderLoser.Data!.Results.ShouldBeEmpty(
+            "the loser key owns nothing after the fold, so its scope serves nothing");
         await using var connection = await _factory.OpenBankAsync(ct);
         (await connection.ExecuteScalarAsync<long>(
                 new CommandDefinition("SELECT count(*) FROM entries WHERE project_id = @loser AND context_label IS NOT NULL",
@@ -151,7 +150,7 @@ public sealed class SingleProjectIdE2E : IAsyncLifetime
         (await connection.ExecuteScalarAsync<long>(
                 new CommandDefinition("SELECT count(*) FROM entries WHERE project_id = @loser",
                     new { loser = Loser }, cancellationToken: ct)))
-            .ShouldBe(1, "exactly the NULL-context bulk row stays under the loser key");
+            .ShouldBe(0, "the bulk row folds with the labeled rows — zero loser rows remain");
     }
 
     /// <summary>

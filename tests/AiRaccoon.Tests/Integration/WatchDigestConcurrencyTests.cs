@@ -102,7 +102,8 @@ public sealed class WatchDigestConcurrencyTests
     ///     scope still loser-keyed) resolves blank ids as Ambiguous — fail-closed, never guessed —
     ///     the scan lease rides the UPDATE to the winner row, the stale completion lands raw under
     ///     its pre-rename id without corrupting anything, and a redriven repair folds every
-    ///     moveable remainder while the NULL-context file mirrors stay byte-identical (review S2).
+    ///     moveable remainder — including the NULL-context bulk rows the stale digest landed (D1
+    ///     overturns the d-426 keep: bulk folds with labeled).
     ///     Ledger — delete-insert-instead-of-update : --filter RenameDuringInflightScan_FailsClosed :
     ///     parked v2 digest across a stepped rename (rowid/lease asserts); skip-watches-step : same :
     ///     mid-rename Ambiguous assert; skip-redrive : same : post-redrive loser-zero asserts.
@@ -171,8 +172,12 @@ public sealed class WatchDigestConcurrencyTests
         (await bank.CountEntriesAsync(one, "v2body", token, loser))
             .ShouldBeGreaterThan(0, "stale completion lands under its pre-rename id");
 
+        (await NullContextCountAsync(one, loser, token)).ShouldBeGreaterThan(0,
+            "arrange: the stale completion left bulk rows under the loser key");
+        var winnerBulkBefore = await NullContextCountAsync(one, winner, token);
         // The full repair folds every remaining surface: the lease rides the UPDATE (same rowid),
-        // moveable loser surfaces go to zero, NULL-context mirrors stay byte-identical.
+        // moveable loser surfaces go to zero — under D1 that includes the NULL-context bulk rows
+        // the stale digest landed (the d-426 keep is overturned).
         await using (var connection = await one.Factory.OpenBankAsync(token))
         {
             var plan = ProjectIdsFoldPlan.FromCensus(
@@ -193,6 +198,8 @@ public sealed class WatchDigestConcurrencyTests
             kept.Owner.ShouldBe("scanner-1");
             kept.Lease.ShouldBe(1700003600);
             kept.RowId.ShouldBe(rowid, "the rename is an UPDATE preserving the row");
+            (await NullContextCountAsync(one, winner, token)).ShouldBeGreaterThan(winnerBulkBefore,
+                "D1: the folded loser bulk rows land under the winner");
             foreach (var table in new[] { "watches", "watch_files", "watch_digest_claims" })
             {
                 (await after.ExecuteScalarAsync<long>(new CommandDefinition(
@@ -202,8 +209,10 @@ public sealed class WatchDigestConcurrencyTests
             }
         }
 
-        // Fresh work under the winner is clean: v3 lands under jsaa, the stale loser rows unchanged.
+        // Fresh work under the winner is clean: v3 lands under jsaa. The stale bulk rows folded
+        // above, so the loser NULL count is zero from here on — v3 and the redrive must keep it there.
         var nullBefore = await NullContextCountAsync(one, loser, token);
+        nullBefore.ShouldBe(0, "D1 arrange: the full repair folded every loser bulk row");
         bank.Write($"{Sentinel} v3body");
         await bank.DigestAsync(one, token, winner);
         (await bank.CountEntriesAsync(one, "v3body", token, winner))
@@ -227,7 +236,7 @@ public sealed class WatchDigestConcurrencyTests
                     new { l = loser }, cancellationToken: token)))
                 .ShouldBe(0, "the stale file row folds back on redrive");
             (await NullContextCountAsync(one, loser, token)).ShouldBe(nullBefore,
-                "NULL-context mirrors stay byte-identical across the redrive (review S2)");
+                "D1: the redrive folds any loser bulk row and resurrects nothing — the count stays zero");
         }
     }
 

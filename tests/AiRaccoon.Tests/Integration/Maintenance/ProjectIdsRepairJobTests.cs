@@ -269,10 +269,17 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
         (await CountAsync(connection, "watches", Winner, "1 = 1", ct)).ShouldBe(2);
         (await ScalarAsync(connection, "SELECT scan_owner FROM watches WHERE project_id = 'jsaa' AND path = '/repo/a'", ct))
             .ShouldBe("owner-w", "watch renames preserve the scan lease columns");
-        // Untouched partitions: R1 leaves NULL-context bulk rows, custom/shared rows, workspace
-        // scratch, metrics and typo rows byte-identical.
-        (await CountAsync(connection, "entries", Loser, "context_label IS NULL AND workspace_id IS NULL", ct)).ShouldBe(1);
-        (await CountAsync(connection, "entries", Loser, "scope = 'custom'", ct)).ShouldBe(1);
+        // Folded vs untouched partitions (D1 committed predicate): NULL-context bulk and custom
+        // rows fold with the labeled rows; shared rows (cross-project, H9), workspace scratch,
+        // metrics and typo rows stay byte-identical.
+        (await CountAsync(connection, "entries", Loser, "context_label IS NULL AND workspace_id IS NULL", ct)).ShouldBe(0,
+            "D1: the loser bulk row folds to the winner");
+        (await CountAsync(connection, "entries", Loser, "scope = 'custom'", ct)).ShouldBe(0,
+            "D1: the loser custom row folds to the winner");
+        (await CountAsync(connection, "entries", Winner, "scope = 'project' AND context_label IS NULL", ct)).ShouldBe(2,
+            "winner bulk plus the folded loser bulk meet under the winner");
+        (await CountAsync(connection, "entries", Winner, "scope = 'custom'", ct)).ShouldBe(1,
+            "the folded loser custom row lands under the winner with its scope intact");
         (await CountAsync(connection, "entries", Loser, "scope = 'shared'", ct)).ShouldBe(1);
         (await CountAsync(connection, "entries", Loser, "workspace_id IS NOT NULL", ct)).ShouldBe(1);
         (await CountAsync(connection, "entries", Typo, "1 = 1", ct)).ShouldBe(1);
@@ -475,8 +482,8 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
                 new { now }, cancellationToken: ct));
         await Code(Winner, "c-w", true);
 
-        // Loser: labeled rows (one embedded), a dup colliding with the winner, bulk/custom/shared
-        // rows the S2 predicate deliberately leaves, queue + split-hash queue, pending code.
+        // Loser: labeled rows (one embedded), a dup colliding with the winner, bulk + custom rows
+        // the D1 predicate folds, a shared row it never touches (H9), queue + split-hash queue, pending code.
         await Entry("l1", "project", Loser, "ctx-a", "loser one gamma");
         await Entry("l2", "project", Loser, "ctx-a", "loser two delta");
         await Entry("dup-hash-1", "project", Loser, "ctx-a", "dup content");

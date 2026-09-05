@@ -38,8 +38,18 @@ internal static class ProjectRows
     public static string ScopeIsProject(string alias = "") => $"{alias}scope = 'project'";
 
     /// <summary>
-    ///     Foldable project rows: <see cref="ProjectScope" /> plus a context label. Repair folds
-    ///     move only labelled rows — bulk-ingested NULL-context rows stay byte-identical.
+    ///     Committed rows of one id (<c>{alias}scope IN ('project', 'custom') AND {alias}project_id =
+    ///     @param</c>, any label including NULL). The repair fold's executable predicate (D1): the
+    ///     planner's <c>OwnsMoveableContent</c> is defined as owning rows in exactly this set, so a
+    ///     planned fold can never execute as zero moves. Shared rows are cross-project and never fold.
+    /// </summary>
+    public static string CommittedScope(string alias = "", string param = "projectId") =>
+        $"{Scope(alias)} AND {alias}project_id = @{param}";
+
+    /// <summary>
+    ///     Foldable project rows: <see cref="ProjectScope" /> plus a context label. The pre-D1 repair
+    ///     fold moved only labelled rows (d-426 keep); the fold now works <see cref="CommittedScope" />
+    ///     and this helper remains for callers that genuinely need the labeled-only shape.
     /// </summary>
     public static string LabeledProjectScope(string alias = "", string param = "projectId") =>
         $"{ProjectScope(alias, param)} AND {alias}context_label IS NOT NULL";
