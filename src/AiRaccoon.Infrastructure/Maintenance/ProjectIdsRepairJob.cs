@@ -99,6 +99,10 @@ public sealed partial class ProjectIdsRepairJob(
         var chunks = await new ChunkIndexRepair(fileTypeMatcher, embeddingService)
             .RunAsync(connection, true, cancellationToken).ConfigureAwait(false);
         createdWork = createdWork || chunks.RowsRepositioned > 0 || chunks.RowsSetToUnknown > 0;
+        // Package D (D4 storage): persist the applied one-shot map on success — append-only,
+        // alias-PK first-writer-wins, rows immutable thereafter (see ProjectIdAliases).
+        await ProjectIdAliases.PersistAppliedAsync(connection, map,
+                timeProvider.GetUtcNow().ToUnixTimeSeconds(), cancellationToken).ConfigureAwait(false);
         Log.PassApplied(_logger, plan.Folds.Count, plan.Dropped.Count, plan.RetiredProjects.Count,
             moved, chunks.RowsRepositioned + chunks.RowsSetToUnknown);
 
