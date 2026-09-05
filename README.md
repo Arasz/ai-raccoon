@@ -30,6 +30,7 @@ flowchart LR
 
 ## What's new
 
+- **BREAKING: the public binary no longer folds any project id automatically.** `repair project-ids` folds are now a one-shot `--map <path>` file, transported to the server on `--apply`; a map-less dry run writes an editable, non-overwriting template at `<data-root>/project-id-map.template.json` with per-id attribution hints. Operators who relied on 1.38.0's automatic `job-search-ai-assistant`/`AI-RACCOON` folding must run one mapped repair. (1.39.0) [ADR-0099](docs/adr/0099-empty-default-alias-map.md)
 - **BREAKING: `memory_search` requires `sessionId`, and each project resolves to exactly one project id.** Every search
   attributes itself to a calling session, and fragmented ids collapse onto one canonical id per project. Results also carry
   `fusionStrength`, `legs` and `cosine` per hit with `topMargin`/`topVsMedian` on the response, and `search_quality` records
