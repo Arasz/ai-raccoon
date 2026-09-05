@@ -30,26 +30,17 @@ flowchart LR
 
 ## What's new
 
-- **Pre-filled project-ids repair template (1.40.0).** [ADR-0099](docs/adr/0099-empty-default-alias-map.md)
+- **Pre-filled project-ids repair template.** (1.40.0) [ADR-0099](docs/adr/0099-empty-default-alias-map.md)
 - **BREAKING: the public binary no longer folds any project id automatically.** `repair project-ids` folds are now a one-shot `--map <path>` file, transported to the server on `--apply`; a map-less dry run writes an editable, non-overwriting template at `<data-root>/project-id-map.template.json` with per-id attribution hints. Operators who relied on 1.38.0's automatic `job-search-ai-assistant`/`AI-RACCOON` folding must run one mapped repair. (1.39.0) [ADR-0099](docs/adr/0099-empty-default-alias-map.md)
-- **BREAKING: `memory_search` requires `sessionId`, and each project resolves to exactly one project id.** Every search
-  attributes itself to a calling session, and fragmented ids collapse onto one canonical id per project. Results also carry
-  `fusionStrength`, `legs` and `cosine` per hit with `topMargin`/`topVsMedian` on the response, and `search_quality` records
-  the search `kind`. (1.38.0) [ADR-0097](docs/adr/0097-search-quality-kind-column.md) · [ADR-0098](docs/adr/0098-telemetry-never-syncs.md)
+- **BREAKING: `memory_search` requires `sessionId`, and each project resolves to exactly one project id.** Fragmented ids collapse onto one canonical id per project; results also carry `fusionStrength`/`legs`/`cosine` and `search_quality` records the search `kind`. (1.38.0) [ADR-0097](docs/adr/0097-search-quality-kind-column.md) · [ADR-0098](docs/adr/0098-telemetry-never-syncs.md)
 - **Memory and code engines are now configured separately.** `model embedding set local|openai` selects the memory bank's engine; `model code set default|local` the code corpus's; `model download` stays fetch-only (it never activates). Configuration reads back under `settings model embedding show|reset` and `settings model code show|reset`. (1.35.0)
 - **The code corpus accepts any embedding dimension.** `model code set local` no longer refuses non-768 manifests — activation reconciles `vec_code` to the manifest's dimension in the same transaction (the memory bank's D3 reconcile, shared), records it as `embedding.codeDimensions`, and the server-open + fingerprint paths reconcile too. Fresh banks still start at 768; existing banks are untouched until a different-dimension engine activates. (1.35.0) [ADR-0093](docs/adr/0093-vec-code-is-dimension-agnostic-through-the-shared-d3-reconciler.md) · [How-to](docs/how-to/configure-embedding-engines.md)
-- **`memory_search` defaults to `kind=both`.** A default search now hits the memory bank and the code corpus, each ranked by its own hybrid (no cross-corpus fusion); pass `kind=memory` explicitly for the pre-1.34 legacy envelope. With no
-  code engine configured, a default search degrades to keyword-only code results with a warning — it never refuses.
-  (1.34.0) [ADR-0088](docs/adr/0088-code-search-surface-kind-envelope-no-fusion.md) · [How-to](docs/how-to/search-the-code-corpus.md)
+- **`memory_search` defaults to `kind=both`.** Hits the memory bank and code corpus, each ranked by its own hybrid (no cross-corpus fusion, `kind=memory` for the pre-1.34 envelope); with no code engine configured it degrades to keyword-only code results rather than refusing. (1.34.0) [ADR-0088](docs/adr/0088-code-search-surface-kind-envelope-no-fusion.md) · [How-to](docs/how-to/search-the-code-corpus.md)
 - **`project_id_token_get` mints and registers a project id.** (1.33.2) [ADR-0089](docs/adr/0089-the-project-id-is-a-guidv7-and-that-is-not-access-control.md)
 - **`memory_performance` now reports the maintenance-job, embed-drain, replace-lock and query-truncation series.** (1.33.2) [ADR-0091](docs/adr/0091-the-event-pump-never-blocks-a-producer.md)
 - **Two knobs bound the embedding engine.** `settings model threads <n>` caps ORT intra-op threads; `settings maintenance embed-rows-per-run <n>` sets the per-tick drain. `doctor` shows the effective thread count. (1.33.0) [ADR-0091](docs/adr/0091-the-event-pump-never-blocks-a-producer.md)
-- **The default code model installs with one command.** `ai-raccoon model code set default` downloads and activates `faxenoff/code-daemon-embed-v1` (187 MB, 768-dim) into `<data-root>/models/`. Re-running against an already-downloaded directory only re-activates. (1.32.0) [How-to](docs/how-to/configure-embedding-engines.md#recipe-5-activate-the-code-corpuss-embedding-engine)
-- **Cloud snapshots are authenticity-checked (HMAC) before attach, and model activation verifies sha256 pins.** (1.31.0)
-- **A second corpus indexes your code, searchable via `memory_search kind=code`.** Never synced, never mixed with memory. Watches and file ingest feed it automatically; `code_get` reads a chunk's full source by hash. (1.30.0) [Feature](docs/features/code-corpus/) · [ADR-0085](docs/adr/0085-a-second-code-only-corpus-in-the-same-bank.md)
-- **Bring your own embedding model.** Manifest-driven engines, `ai-raccoon model download` with SHA-256 pin verification, sentencepiece tokenizer support. (1.29.0) [ADR-0084](docs/adr/0084-arbitrary-embedding-models-are-manifest-described.md) · [How-to](docs/how-to/configure-embedding-engines.md)
 
-> 📜 **Older releases:** See [What's new history](docs/reference/whats-new-history.md) for highlights from 1.6.0 through 1.28.0.
+> 📜 **Older releases:** See [What's new history](docs/reference/whats-new-history.md) for highlights from 1.6.0 through 1.32.0.
 
 ---
 
