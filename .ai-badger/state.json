@@ -1,8 +1,32 @@
 {
-  "lastUpdated": "2026-09-04T00:00:00+02:00",
+  "lastUpdated": "2026-09-05T22:45:00+02:00",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "air-run-once-repair-fully-converges",
+      "title": "Run-once project-ids repair converges fully with no new deviations (P2 scope fix + P3 enforcement)",
+      "pr": 621,
+      "merged": true,
+      "date": "2026-09-05",
+      "summary": "Root cause (traced before hypothesizing): planner/applier predicate mismatch — OwnsMoveableContent scheduled folds FoldEntriesAsync could not execute (project-scope+non-NULL-only applier vs project+custom+shared planner), so applies drained yet re-planned identical folds forever. Fix in 7 packages + integration + ledgers across PRs #614 (A planner honesty+pins, B committed-scope applier, D2 verdict), #616 (C telemetry/workspaces), #617 (F bounded loop + D6 verdict), #618 (D durable project_id_aliases v14), #619 (E P3 chokes + sync arm + 3 reload legs), #620 (G convergence E2E, P3 ARMED), #622 (integration: shared fold domain unity, honest P3-armed derivation, warm fail-open 714), #623 (red-proof ledgers), #621 (release 1.41.0 + ADRs 0100-0103). Pipeline: implementer lanes built partial PRs, session 01a070f9 reviewed + fixed each, session 8575f1fb did full integration review. Reviews caught real defects (workspace-strand, BDD S2 contract, EventId collisions, warm skip-ensure race, Default teardown leaks). Next: 1.41.0 tag/publish + manual checklist on published build, then prove the original GOAL on the live bank with 1.41.0."
+    },
+    {
+      "id": "air-repair-census-write-lock-timeout",
+      "title": "Repair project-ids census times out against a busy/large bank",
+      "pr": 611,
+      "merged": true,
+      "date": "2026-09-05",
+      "summary": "Two fixes: materialized-CTE vec0 join plan pin (VecEntriesCountSql/VecStructureCountSql) so an ANALYZEd bank keeps the cheap plan, and read-only repair reports open via OpenBankSkippingEnsureAsync + EnsureCheapAsync so they never wait on another connection's write lock. E2E regression coverage, review-findings refactor, manual checklist docs/work/checklist/2026-09-05-1.40.1-repair-census.json, released as 1.40.1 (VERSION-only bump per fix-not-feature convention)."
+    },
+    {
+      "id": "air-remove-machine-default-alias-map",
+      "title": "Remove machine-specific Default alias map from public lib (ADR-0099)",
+      "pr": 609,
+      "merged": true,
+      "date": "2026-09-05",
+      "summary": "Started by a parallel pi-harness session (13 commits: empty Default alias map, map_json transport CLI->server with v13 migration, --map CLI + template UX, steady-state test migration, ADR-0099). Reviewed by this session (opus code-reviewer dispatch against an isolated snapshot): critical finding was a data-loss risk in the retire path that turned out to already be fixed and deliberately documented by the time of review. Took over per owner request to fix the one remaining red CI check (build-bdd, 'Scan after repair keeps the winner key'): root-caused to WatchEventSource's FileSystemWatcher closures holding a pre-repair project id until WatchHostedService's existing reconcile loop (every 1s in production) tears the watcher down and restarts it under the winner -- proven already-correct via a new deterministic unit test (Reconcile_RenamedWatch_StopsTheLoserAndStartsTheWinner); the BDD scenario's own WhenRepairRuns step just never triggered that reconcile. Test-only fix, admin-merged on green CI (owner authorized, branch protection has no requestable reviewer for a single-account repo). Companion work: PR #608 (repair project-ids' CLI output clarity, same session) and PR #610 (VERSION 1.38.1 -> 1.39.0, BREAKING readme line). Manual checklist docs/work/checklist/2026-09-05-1.39.0-project-ids.json: 7/7 pass against a real-shaped scratch bank (job-search-ai-assistant, pbi-badger-integration, aib, minted guids), confirming zero auto-fold without --map, the --map fold+apply+converge cycle over a real ~15s async poll, the non-overwriting template, and PR #608's scoreboard/retired-line/rerun-clarifier text. One non-blocking finding recorded: every registered project (even an already-correct canonical) now shows as needing human attribution on a map-less dry run, since Default carries zero hardcoded canonicals -- flagged for a follow-up decision, not fixed."
+    },
     {
       "id": "air-promotion-scorer-rebalance-tdd-adr",
       "title": "Promotion scorer rebalance (ablation pair) with ADR-0095, TDD",
@@ -90,7 +114,7 @@
       "summary": "Waited for 1.33.0 on nuget.org (publish run 32607919528, listed 05:42Z), `dotnet tool update -g ai-raccoon` 1.32.3→1.33.0 proven by SHA (1.33.0+0d43ef56 = v1.33.0; nupkg sha256 d9da823c… = flatcontainer). Owner's live servers (pid 48190 on 7721 + stdio) deliberately NOT restarted — still 1.32.3 binaries. Template: four 1.33.0 items (threads effect via EventId 428 + doctor, embed-rows-per-run, drain proof, watch code-corpus signal) + `source-path-anchor-resolves-its-chunk` rewritten so it can fail (vectorWeight 0, no-such-section control). Run: 32 items via four sonnet test-engineer lanes on scratch roots (~13 min wall-clock), orchestrator seam review, opus code-reviewer confirmed every claim + 5 template fixes (exit 15 not 1, threads anchor, 1003 observable, anchor item as lookup), ox-alpha rounds 1–3 → approve. Findings: (a) file#section IS query syntax (ADR-0003 SourcePathQuery) — five runs substituted it believing otherwise; driving it exposed #538 (a chunk that swallows the next heading + a few body lines is labelled with the later section; #489 residual); (b) exit 23 is drivable live with a fake jsonrpc-answering server — two runs said it could not be; #539 (ServerProbe doc claims a {400,401,405,406} gate the code lacks). Incident: 703ee3d4 (5-line template edit) pushed directly to main — shell cwd had reset to the main checkout; not reverted, merged back, memory written (always git -C <worktree>)."
     }
   ],
-  "next": "Publish 1.36.1 (publish.yml workflow_dispatch), then run the 12-row manual checklist (docs/work/checklist/2026-08-26-1.36.0-doctor-memory-engine.json): both reset verbs EXIT=25 + frozen message, close-row -> EXIT=0, 1012 once / 526 zero, exit-24 surface rows.",
+  "next": "1.41.0 release flow (owner): tag v1.41.0 via release.yml, publish.yml dispatch + approval gate (1.40.x tools refuse v14 banks until it publishes), then the full manual checklist on the published build; then prove the task GOAL on the live bank with 1.41.0 (one --apply converges the 6 stuck folds). Still open from 1.39.0: map-less dry-run attribution UX call for the owner (non-defect).",
   "filedNotStarted": [
     "#477 no job-level metrics (feature gap)",
     "#479 unattributed force-pushes on task branches (post-delta-3 investigation)",
