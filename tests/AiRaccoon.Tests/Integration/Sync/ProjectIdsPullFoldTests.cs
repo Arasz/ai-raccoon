@@ -301,13 +301,18 @@ public sealed class ProjectIdsPullFoldTests : IDisposable
     }
 
     /// <summary>
-    ///     d-426 SHOULD-4: the pull fold matches the repair's domain (project-scope rows only) —
-    ///     custom/shared loser rows merge verbatim, exactly as the repair leaves them.
-    ///     Ledger — custom-shared-pull-fold : --filter PullLeavesCustomAndSharedLoserRows_Verbatim :
-    ///     custom + shared loser rows (folded to the winner → red).
+    ///     The pull fold matches the repair's executable domain, which D1 broadened past d-426
+    ///     SHOULD-4's project-scope-only shape: custom-scope loser rows fold to the winner like
+    ///     every other committed row, shared rows stay verbatim (cross-project, never folded).
+    ///     A pull that left custom rows under the loser id would re-seed on every sync from an
+    ///     unrepaired peer the very rows the repair had just folded — a repaired bank could never
+    ///     hold the D6 (iii) stability verdict.
+    ///     Ledger — custom-shared-pull-fold : --filter PullFoldsCustomLoserRows_AndLeavesSharedVerbatim :
+    ///     narrow the pull fold back to scope = 'project' → the custom assert goes red; fold shared
+    ///     too (drop the scope predicate) → the shared assert goes red.
     /// </summary>
     [RetryFact]
-    public async Task PullLeavesCustomAndSharedLoserRows_Verbatim()
+    public async Task PullFoldsCustomLoserRows_AndLeavesSharedVerbatim()
     {
         var ct = TestContext.Current.CancellationToken;
         var localFactory = Factory(_localRoot);
@@ -334,7 +339,7 @@ public sealed class ProjectIdsPullFoldTests : IDisposable
 
         await using var verify = await localFactory.OpenBankAsync(ct);
         (await verify.ExecuteScalarAsync<string>("SELECT project_id FROM entries WHERE hash = 'h-custom'"))
-            .ShouldBe(Loser, "custom-scope rows merge verbatim — the repair never folds them");
+            .ShouldBe(Winner, "custom-scope rows are committed rows — D1 folds them with the rest");
         (await verify.ExecuteScalarAsync<string>("SELECT project_id FROM entries WHERE hash = 'h-shared'"))
             .ShouldBe(Loser, "shared-scope rows merge verbatim — the repair never folds them");
     }

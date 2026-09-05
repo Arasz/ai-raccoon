@@ -214,7 +214,7 @@ public sealed class RepairCommandsTests
         stdout.ShouldContain(
             "summary — pinned-only: 0 fold, 0 drop, 0 retire, 0 unresolved, 2 pinned " +
             "(pinned-shared-only: 'job-search-ai-assistant', pinned-telemetry-only: 'AI-RACCOON'), " +
-            ProjectIdsRepairCommands.P3ArmedNote + ".");
+            "P3 inert (durable alias map empty — no id folds through, none is refused).");
         LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary");
     }
 
@@ -261,7 +261,7 @@ public sealed class RepairCommandsTests
         stdout.ShouldContain(
             "summary — pinned-only: 0 fold, 0 drop, 0 retire, 0 unresolved, 2 pinned " +
             "(pinned-shared-only: 'job-search-ai-assistant', pinned-telemetry-only: 'AI-RACCOON'), " +
-            ProjectIdsRepairCommands.P3ArmedNote + ".");
+            "P3 inert (durable alias map empty — no id folds through, none is refused).");
         LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary");
     }
 
@@ -615,8 +615,28 @@ public sealed class RepairCommandsTests
 
         stdout.ShouldContain(
             "summary — converged: 0 fold, 0 drop, 0 retire, 0 unresolved, 0 pinned, " +
-            ProjectIdsRepairCommands.P3ArmedNote + ".");
+            "P3 inert (durable alias map empty — no id folds through, none is refused).");
+        stdout.ShouldNotContain("P3 armed");
         LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary");
+    }
+
+    /// <summary>
+    ///     The other half of the same claim: once the durable map holds rules, the verdict names
+    ///     how many — the count is the evidence a reader can check against the bank.
+    ///     Ledger — p3-armed-unconditional : --filter ProjectIds_Converged_WithDurableMap :
+    ///     drop the counts back to a constant → red (no way to tell one armed bank from another).
+    /// </summary>
+    [Fact]
+    public async Task ProjectIds_Converged_WithDurableMap_ReportsP3ArmedWithCounts()
+    {
+        using var scope = new TempScope();
+        var report = new ProjectIdCensusReport([Row("jsaa", entries: 1)], 0, 0, 0, 0, [],
+            [new ProjectIdAliasEntry("old-slug", "jsaa")], ["qa-noise"]);
+
+        var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, report, scope.DataRoot, scope.WriteFixtureMap());
+
+        stdout.ShouldContain("summary — converged: 0 fold, 0 drop, 0 retire, 0 unresolved, 0 pinned, " +
+            "P3 armed (1 alias, 1 dropped).");
     }
 
     /// <summary>

@@ -30,14 +30,6 @@ internal static class ProjectRows
         $"{alias}scope = 'project' AND {alias}project_id = @{param}";
 
     /// <summary>
-    ///     The project-scope test without the id (<c>{alias}scope = 'project'</c>): the pull fold's
-    ///     domain (d-426 SHOULD-4) — the repair folds project-scope rows, so pulled rows fold on
-    ///     the same scope and merge verbatim otherwise. Kept here so the literal has one home
-    ///     beside <see cref="ProjectScope" /> (the single-definition gate flags copies).
-    /// </summary>
-    public static string ScopeIsProject(string alias = "") => $"{alias}scope = 'project'";
-
-    /// <summary>
     ///     Committed rows of one id (<c>{alias}scope IN ('project', 'custom') AND {alias}project_id =
     ///     @param</c>, any label including NULL). The repair fold's executable predicate (D1): the
     ///     planner's <c>OwnsMoveableContent</c> is defined as owning rows in exactly this set, so a

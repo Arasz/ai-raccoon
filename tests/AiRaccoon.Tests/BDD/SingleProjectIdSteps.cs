@@ -194,4 +194,13 @@ public sealed class SingleProjectIdSteps(ScenarioContext scenarioContext)
                     new { path = realPath }, cancellationToken: CancellationToken.None)))
             .ShouldBe(0, "no loser-keyed row for the new file");
     }
+
+    /// <summary>
+    ///     Running the real job reloads the process-wide alias cache (Package E1's job leg), so the
+    ///     scenario must put it back: xUnit classes serialize on ProjectIdAliasDefaultCollection,
+    ///     but a Reqnroll binding cannot join a collection — leaving the fixture map installed would
+    ///     hand it to whatever runs next in this process.
+    /// </summary>
+    [AfterScenario]
+    public static void ResetTheProcessWideAliasCache() => ProjectIdAliasMap.ResetDefault();
 }

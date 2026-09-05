@@ -31,17 +31,23 @@ public sealed partial class ProjectIdAliasCacheHostedService(
         using var pass = telemetry.Begin(OperationName);
         try
         {
-            await using var connection = await connectionFactory.OpenBankSkippingEnsureAsync(cancellationToken)
+            // Full ensure path, not the cheap open: BothTransports-style startups race two
+            // hosts + this warm on one fresh bank, and a skip-ensure opener can read a
+            // partially-written header (SQLite Error 26) ahead of the creator. Joining the
+            // guarded ladder the transports use makes the warm just another open.
+            await using var connection = await connectionFactory.OpenBankAsync(cancellationToken)
                 .ConfigureAwait(false);
-            await MemorySchema.EnsureCheapAsync(connection, cancellationToken).ConfigureAwait(false);
             await ProjectIdAliases.LoadAndCacheAsync(connection, logger, cancellationToken).ConfigureAwait(false);
             // Startup-only pass: it either loaded rows worth a span or correctly found none.
             pass.NoteWork();
             pass.Succeeded();
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
-            throw;
+            // Fail-open ALL the way: a shutdown racing the warm must not fail host startup —
+            // a cancelled warm leaves the empty map (pre-E behavior), never a broken server.
+            pass.Failed(ex);
+            Log.WarmCancelled(logger);
         }
         catch (Exception ex)
         {
@@ -57,5 +63,9 @@ public sealed partial class ProjectIdAliasCacheHostedService(
         [LoggerMessage(EventId = 713, Level = LogLevel.Warning,
             Message = "ai-raccoon: warming the project-ids alias cache failed; P3 enforcement stays disarmed until the next reload ({Reason})")]
         public static partial void WarmFailed(ILogger logger, string reason);
+
+        [LoggerMessage(EventId = 714, Level = LogLevel.Information,
+            Message = "ai-raccoon: project-ids alias cache warm cancelled by shutdown; P3 enforcement warms on the next reload")]
+        public static partial void WarmCancelled(ILogger logger);
     }
 }

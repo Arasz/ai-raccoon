@@ -138,12 +138,23 @@ public static class ProjectIdCensus
             .OrderBy(r => r.ProjectId, StringComparer.Ordinal)
             .ToList();
 
+        // The durable map rides along so the CLI's D6 (iv) verdict can read what this bank
+        // enforces instead of asserting it. SELECT-only like the rest of the census, and skipped
+        // outright on a bank that predates the v14 table.
+        var durable = await ScalarAsync(connection,
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'project_id_aliases'",
+            cancellationToken).ConfigureAwait(false) > 0
+            ? await ProjectIdAliases.LoadAsync(connection, cancellationToken).ConfigureAwait(false)
+            : ProjectIdAliasMap.Empty;
+
         return new ProjectIdCensusReport(rows,
             await ScalarAsync(connection, "SELECT COUNT(*) FROM entries WHERE scope IS NULL", cancellationToken).ConfigureAwait(false),
             await ScalarAsync(connection, "SELECT COUNT(*) FROM entries WHERE context_label IS NULL", cancellationToken).ConfigureAwait(false),
             await ScalarAsync(connection, "SELECT COUNT(*) FROM entries WHERE project_id IS NULL", cancellationToken).ConfigureAwait(false),
             await ScalarAsync(connection, "SELECT COUNT(*) FROM search_quality WHERE project_id IS NULL", cancellationToken).ConfigureAwait(false),
-            unattributed);
+            unattributed,
+            durable.Aliases,
+            durable.Dropped);
 
         async Task CountByIdAsync(SqliteConnection conn, string sql, Action<RowBuilder, long> add, CancellationToken ct)
         {

@@ -9,7 +9,7 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **178** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **179** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
@@ -72,6 +72,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 700, 702-704, 707-709 | `src/AiRaccoon.Infrastructure/Promotion/PromotionQueueService.cs` (701/705/706 removed 2026-08-11: per-element eviction/failure logs de-noised; 708 = prune summary; 709 added 2026-08-14 = stale promotion claims reclaimed, ADR-0037) |
 | 710-711 | `src/AiRaccoon.Infrastructure/Maintenance/ProjectIdsRepairJob.cs` (ADR-0099: a stored `repair_requests.map_json` that bypassed endpoint validation — the poll refuses to fold and leaves the request open for a corrected `--apply`; 711 added 2026-09-05, Package F of docs/work/air-run-once-repair-fully-converges-plan.md: the per-pass result receipt — one Information line per requested run stamping folds/drops/retires applied, rows moved, and chunk rows repositioned) |
 | 713 | `src/AiRaccoon.Infrastructure/Maintenance/ProjectIdAliasCacheHostedService.cs` (Package E1: the startup warm of the choke-point alias cache failed — P3 enforcement stays disarmed until the next reload; fail-open, never blocks startup) |
+| 714 | `src/AiRaccoon.Infrastructure/Maintenance/ProjectIdAliasCacheHostedService.cs` (added 2026-09-05: the startup warm was cancelled by shutdown — Information, one line per occurrence, enforcement warms on the next reload) |
 | 712 | `src/AiRaccoon.Infrastructure/Sqlite/ProjectIdAliases.cs` (added 2026-09-05, Package E of docs/work/air-run-once-repair-fully-converges-plan.md: the cache reload skips direct-SQL `alias` rows with a NULL winner and says so — a null winner would fold an id to null downstream) |
 | 800-807 | `src/AiRaccoon/Setup/Cli/Commands/EncryptionCommands.cs` |
 | 898-900 | `src/AiRaccoon.Infrastructure/Sqlite/Memory/SqliteMemoryStore.cs` and `SqliteMemoryStore.Replace.cs` (path corrected 2026-08-22, same commit that added 899: the doc named `Sqlite/SqliteMemoryStore.cs`, but the file has lived at `Sqlite/Memory/SqliteMemoryStore.cs` since the class was split into partials — 899 is WP11 Finding (b)'s `ReplaceCoreAsync` transaction-span log, in `Replace.cs`, sharing the `Log` class nested in the outer `SqliteMemoryStore` partial (WP12 split its single "held the write lock" message into separate wait/held numbers once the chunker moved outside the lock); 898 added WP12 review round 3: the watch-digest chunk claim's best-effort release failing in the catch path (a rare BUSY/LOCKED on that DELETE), placed just below 899 rather than after 900 to leave `SqliteMemoryStore.cs`'s own 900 undisturbed; placed immediately below 900 rather than after 903, since `SqliteConnectionFactory` already owns 901-903) |
