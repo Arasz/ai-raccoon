@@ -31,6 +31,9 @@ mismatch made convergence unreachable no matter how often the repair ran
   with no project key, so shared content is cross-project by design (H9 verified
   the write path keeps the writer's `project_id` on fresh schema — shared-keyed
   loser rows are genuine, not legacy). Shared-only losers pin with a reason.
+  The sync pull and push arms share this fold domain (integration review #622:
+  pull is project+custom like the applier, push re-attributes nothing shared) —
+  one domain in plan, applier, pull, and push.
 - `OwnsMoveableContent` is redefined as exactly the applier's executable
   predicate — a planned fold can never execute as zero moves (D2 honesty rule).
 
