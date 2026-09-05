@@ -228,6 +228,57 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
     }
 
     /// <summary>
+    ///     Package D AC(1): the job persists the applied one-shot map on success — alias entries
+    ///     and drops land in <c>project_id_aliases</c> with the run timestamp, Ordinal spellings
+    ///     verbatim (the <c>AI-RACCOON</c> alias keeps its case). Ledger — skip-persist-hunk :
+    ///     --filter RequestedRun_PersistsAppliedAliasEntries : seeded cluster + fixture map.
+    /// </summary>
+    [RetryFact]
+    public async Task RequestedRun_PersistsAppliedAliasEntries()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var connection = await _factory.OpenBankAsync(ct);
+        await SeedClusterAsync(connection, ct);
+        await RequestRepairAsync(connection);
+
+        await NewJob().RunAsync(connection, ct);
+
+        var rows = (await connection.QueryAsync<(string Alias, string? Winner, string Kind, long AppliedAt)>(
+                "SELECT alias AS Alias, winner AS Winner, kind AS Kind, applied_at AS AppliedAt " +
+                "FROM project_id_aliases ORDER BY alias")).ToList();
+        rows.ShouldContain(("job-search-ai-assistant", "jsaa", "alias", FixedNow.ToUnixTimeSeconds()));
+        rows.ShouldContain(("AI-RACCOON", "ai-raccoon", "alias", FixedNow.ToUnixTimeSeconds()),
+            "Ordinal spellings persist verbatim — case is significant");
+        rows.ShouldContain(("pinned-workspace-id", "jsaa", "alias", FixedNow.ToUnixTimeSeconds()));
+        rows.ShouldContain(("qa-noise-project", null, "drop", FixedNow.ToUnixTimeSeconds()));
+        rows.ShouldContain(("manual-sweep", null, "drop", FixedNow.ToUnixTimeSeconds()));
+    }
+
+    /// <summary>
+    ///     Package D AC(2) keep-guard: a stored map that is valid JSON but semantically invalid
+    ///     (a null winner would fold an id to null downstream) refuses exactly like garbage JSON —
+    ///     the existing <see cref="ProjectIdsRepairJob.ResolveMap" /> guard stays wired, the bank
+    ///     is untouched, and the request stays open for a corrected --apply.
+    /// </summary>
+    [RetryFact]
+    public async Task RequestedRun_WithNullWinnerMapJson_RefusesWithoutStamping()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var connection = await _factory.OpenBankAsync(ct);
+        await SeedClusterAsync(connection, ct);
+        await connection.ExecuteAsync(MemorySql.RequestRepair,
+            new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds(), mapJson = "{\"aliases\":[{\"alias\":\"x\",\"canonical\":null}],\"canonicals\":[],\"dropped\":[]}" });
+
+        (await NewJob().RunAsync(connection, ct)).ShouldBeFalse();
+        (await CountAsync(connection, "entries", Loser, "scope = 'project' AND context_label IS NOT NULL", ct))
+            .ShouldBeGreaterThan(0, "loser rows stay put when the stored map is semantically invalid");
+        (await ScalarAsync(connection,
+                "SELECT finished_at FROM repair_requests WHERE kind = 'project-ids'", ct))
+            .ShouldBeNull("no stamp — the corrected request must still be owed");
+        (await NewJob().HasWorkAsync(connection, ct)).ShouldBeTrue();
+    }
+
+    /// <summary>
     ///     First run folds every moveable surface and reports it; the immediate second run changes
     ///     nothing. Fixture: ≥2 ids × ≥2 rows, both queue fragments populated, plus the
     ///     tombstone/code/quality/watch/settings legs so an entries-only rewrite still fails.

@@ -37,7 +37,8 @@ public sealed class MemorySchemaDdlStatementCountTests
     /// <summary>
     ///     58 = the pre-code-corpus 42 plus the corpus's Ddl (code_entries/code_fts/vec_code,
     ///     trigger families, indexes, and the idx_code_entries_path DROP), plus 1 for the
-    ///     ADR-0089 <c>projects</c> table, plus 1 for the WP12 <c>watch_digest_claims</c> table.
+    ///     ADR-0089 <c>projects</c> table, plus 1 for the WP12 <c>watch_digest_claims</c> table,
+    ///     plus 1 for the Package-D <c>project_id_aliases</c> table.
     ///     The project-scoped tombstone repair moved to the v11 ladder step (MigrateToV11Async)
     ///     and no longer runs in the digest-gated Ddl block.
     /// </summary>
@@ -61,9 +62,10 @@ public sealed class MemorySchemaDdlStatementCountTests
         // search_quality.result_features ensure (P6b — fires only when the column is absent;
         // its probes are excluded from the count above), +3 the v13 repair_requests.map_json
         // ensure (ADR-0099: sqlite_master probe + pragma_table_info probe + ALTER TABLE when
-        // the column is absent). The project-scoped
+        // the column is absent), +1 the Package-D project_id_aliases table (a single
+        // CREATE TABLE IF NOT EXISTS — no column ensure needed). The project-scoped
         // tombstone repair (5 statements) moved to MigrateToV11Async in the version ladder.
-        CountDdl(statements).ShouldBe(62, Report(statements));
+        CountDdl(statements).ShouldBe(63, Report(statements));
     }
 
     private static async Task<List<string>> TraceAsync(SqliteConnection connection)

@@ -539,6 +539,17 @@ internal static class MemorySql
     public const string FinishRepairRequest =
         "UPDATE repair_requests SET finished_at = @finishedAt WHERE kind = @kind AND finished_at IS NULL";
 
+    // ---- project_id_aliases (Package D, D4 storage) ----
+
+    // INSERT OR IGNORE is the immutability mechanism: rows are append-only, alias-PK
+    // first-writer-wins — a re-apply never overwrites the first winner (see ProjectIdAliases).
+    public const string InsertProjectIdAlias =
+        "INSERT OR IGNORE INTO project_id_aliases (alias, winner, kind, applied_at) " +
+        "VALUES (@alias, @winner, @kind, @appliedAt)";
+
+    public const string SelectProjectIdAliases =
+        "SELECT alias AS Alias, winner AS Winner, kind AS Kind FROM project_id_aliases ORDER BY alias";
+
     // ---- promotion_queue_prune_requests (ADR-0075 amendment) ----
 
     // Same ON CONFLICT reasoning as RequestRepair: a second request after the first finished must

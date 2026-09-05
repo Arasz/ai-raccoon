@@ -46,12 +46,13 @@ internal static class MemorySchema
     ///     <see cref="MigrateToV10Async" /> (ADR-0011),
     ///     <see cref="MigrateToV11Async" />,
     ///     <see cref="MigrateToV12Async" /> (ADR-0097),
-    ///     <see cref="MigrateToV13Async" /> (ADR-0099). Not every schema change needs a ladder
+    ///     <see cref="MigrateToV13Async" /> (ADR-0099),
+    ///     <see cref="MigrateToV14Async" /> (Package D, durable alias-map table). Not every schema change needs a ladder
     ///     step: a trigger body replacement that is safely re-runnable on every open belongs in the
     ///     unconditional <see cref="Ddl" /> instead (ADR-0023 amendment) — the ladder is for changes
     ///     that need guarded, one-time work.
     /// </summary>
-    internal const int CurrentVersion = 13;
+    internal const int CurrentVersion = 14;
 
     private const int DefaultEmbeddingDimension = 384;
 
@@ -451,6 +452,12 @@ internal static class MemorySchema
                                               map_json     TEXT NULL
                                           );
 
+                                          -- Durable alias map (Package D, D4 storage): the repair job appends
+                                          -- the applied one-shot map here on success — shape declared once in
+                                          -- ProjectIdAliases.TableDdl, executed here for fresh banks and in
+                                          -- MigrateToV14Async for v13-stamped banks.
+                                          {ProjectIdAliases.TableDdl};
+
                                           -- Promotion-queue-prune outbox (ADR-0075 amendment): `extract prune --apply`
                                           -- commits a request row through the server instead of deleting the orphaned
                                           -- rows itself. A single id=1 row, like model_migration — there is only ever
@@ -775,6 +782,11 @@ internal static class MemorySchema
         if (healthy && storedVersion < 13)
         {
             await MigrateToV13Async(connection, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (healthy && storedVersion < 14)
+        {
+            await MigrateToV14Async(connection, cancellationToken).ConfigureAwait(false);
         }
 
         // Both stamps land together, only once the ladder actually finished (healthy): stamping the
@@ -1208,6 +1220,42 @@ internal static class MemorySchema
                             cancellationToken: cancellationToken))
                     .ConfigureAwait(false);
             }
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    /// <summary>
+    ///     v13→v14 (Package D, D4 storage): creates <c>project_id_aliases</c> (shape declared once
+    ///     in <see cref="ProjectIdAliases.TableDdl" />) for banks stamped before this change. Fresh
+    ///     banks get it from the digest-gated <see cref="Ddl" /> block instead; this step is the
+    ///     ladder path for legacy banks. Same tolerant shape as the v13 step: re-probed under the
+    ///     write lock, COMMIT/ROLLBACK paired, re-runnable (CREATE TABLE IF NOT EXISTS + no data
+    ///     copy, so a second run is a no-op and pre-existing rows survive byte-identical).
+    ///     Downgrade-safe by additivity: no FK, no change to any existing table — and an older
+    ///     binary opening a v14-stamped bank refuses loudly through the forward-version guard
+    ///     (witnessed by <c>EnsureAsync_WhenStoredVersionIsAheadOfCurrent_ThrowsNamingBothVersions</c>),
+    ///     never by silently misreading the bank.
+    /// </summary>
+    private static async Task MigrateToV14Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        try
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(ProjectIdAliases.TableDdl, cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
 
             await connection.ExecuteAsync(
                     new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
