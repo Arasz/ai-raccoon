@@ -42,6 +42,8 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
     private const string DroppedQa = "qa-noise-project";
     private const string DroppedSweep = "manual-sweep";
     private const string Typo = "jsaaa";
+    // Open-workspace pin control (D3, review #614): attributed to the winner but never folded.
+    private const string PinnedWs = "pinned-workspace-id";
 
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
     private readonly string _dataRoot = TestData.CreateTempRoot("project-ids-repair-job");
@@ -270,8 +272,8 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
         (await ScalarAsync(connection, "SELECT scan_owner FROM watches WHERE project_id = 'jsaa' AND path = '/repo/a'", ct))
             .ShouldBe("owner-w", "watch renames preserve the scan lease columns");
         // Folded vs untouched partitions (D1 committed predicate): NULL-context bulk and custom
-        // rows fold with the labeled rows; shared rows (cross-project, H9), workspace scratch,
-        // metrics and typo rows stay byte-identical.
+        // rows fold with the labeled rows; shared rows (cross-project, H9), metrics and typo rows
+        // stay byte-identical. The open-workspace id below pins wholesale (D3, review #614).
         (await CountAsync(connection, "entries", Loser, "context_label IS NULL AND workspace_id IS NULL", ct)).ShouldBe(0,
             "D1: the loser bulk row folds to the winner");
         (await CountAsync(connection, "entries", Loser, "scope = 'custom'", ct)).ShouldBe(0,
@@ -281,7 +283,11 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
         (await CountAsync(connection, "entries", Winner, "scope = 'custom'", ct)).ShouldBe(1,
             "the folded loser custom row lands under the winner with its scope intact");
         (await CountAsync(connection, "entries", Loser, "scope = 'shared'", ct)).ShouldBe(1);
-        (await CountAsync(connection, "entries", Loser, "workspace_id IS NOT NULL", ct)).ShouldBe(1);
+        // D3 workspace block (review #614): the attributed open-workspace id pins wholesale — its
+        // scratch stays byte-identical and nothing lands under the winner, even with a valid map.
+        (await CountAsync(connection, "entries", PinnedWs, "workspace_id IS NOT NULL", ct)).ShouldBe(1);
+        (await CountAsync(connection, "workspaces", PinnedWs, "1 = 1", ct)).ShouldBe(1);
+        (await CountAsync(connection, "entries", Winner, "workspace_id IS NOT NULL", ct)).ShouldBe(0);
         (await CountAsync(connection, "entries", Typo, "1 = 1", ct)).ShouldBe(1);
         (await CountAsync(connection, "metrics", Loser, "1 = 1", ct)).ShouldBe(1);
 
@@ -382,7 +388,7 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
 
     private static string FixtureMapJson() =>
         new ProjectIdAliasMap(
-                [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"), new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon")],
+                [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"), new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon"), new ProjectIdAliasEntry("pinned-workspace-id", "jsaa")],
                 ["jsaa", "ai-badger", "ai-raccoon", "hermes-default", "deepseek-harness", "arasz-home-page", "vue-kanban", "dotnet-ignore", "interview-tasks"],
                 ["qa-noise-project", "manual-sweep"]).ToJson();
 
@@ -525,11 +531,11 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
                 new { loser = Loser, now }, cancellationToken: ct));
         await connection.ExecuteAsync(new CommandDefinition(
                 "INSERT INTO workspaces (id, project_id, status, created_at) VALUES ('ws-1', @loser, 'open', @now)",
-                new { loser = Loser, now }, cancellationToken: ct));
+                new { loser = PinnedWs, now }, cancellationToken: ct));
         await connection.ExecuteAsync(new CommandDefinition(
                 "INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, context_label, workspace_id, created_at, updated_at, embed_state) " +
                 "VALUES ('ws-1', 'ws-1', 'ws-1', 'seed.md', 's', NULL, @loser, NULL, 'ws-1', @now, @now, 'pending')",
-                new { loser = Loser, now }, cancellationToken: ct));
+                new { loser = PinnedWs, now }, cancellationToken: ct));
 
         // Guid loser registered under its pre-guid name: folds via the name, like live 01a062f4.
         await connection.ExecuteAsync(new CommandDefinition(
