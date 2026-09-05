@@ -210,6 +210,145 @@ public sealed class ProjectIdsFoldPlanTests
         plan.Dropped.ShouldBe(["manual-sweep"], "discards follow the fold — the gate must not over-exclude");
     }
 
+    // Ledger — committed-folds-null-only : --filter FromCensus_NullOnlyProjectLoser_PlansFold : alias loser, project rows all NULL-context.
+    [Fact]
+    public void FromCensus_NullOnlyProjectLoser_PlansFold()
+    {
+        // D1 overturns the d-426 keep: NULL-context project rows ARE committed rows
+        // (ProjectRows.Scopes), so a loser owning only them still plans a fold — the
+        // broadened applier (Package B) moves them; zero-move is impossible by construction.
+        var report = Report(Row("job-search-ai-assistant", projectEntries: 2, nullContextEntries: 2));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
+
+        plan.Folds.ShouldBe([new ProjectIdFold("job-search-ai-assistant", "jsaa")]);
+    }
+
+    // Ledger — committed-folds-custom : --filter FromCensus_CustomLabeledLoser_PlansFold : alias loser, custom-scope rows.
+    [Fact]
+    public void FromCensus_CustomLabeledLoser_PlansFold()
+    {
+        var report = Report(Row("job-search-ai-assistant", customEntries: 2));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
+
+        plan.Folds.ShouldBe([new ProjectIdFold("job-search-ai-assistant", "jsaa")]);
+    }
+
+    // Ledger — shared-never-folds : --filter FromCensus_SharedOnlyLoser_NeverFolds : alias loser, shared-scope rows only.
+    [Fact]
+    public void FromCensus_SharedOnlyLoser_NeverFolds()
+    {
+        // Corrected D1: shared rows are cross-project by design (global (path,hash) bucket)
+        // and are NEVER folded — a shared-keyed-only loser plans no fold (Package A pins it
+        // with a reason; asserting the no-fold half here on the existing API).
+        var report = Report(Row("job-search-ai-assistant", sharedEntries: 2));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
+
+        plan.Folds.ShouldBeEmpty();
+    }
+
+    // Ledger — shared-pinned : --filter FromCensus_SharedOnlyLoser_PinsSharedOnlyWithReason : alias loser, shared rows only.
+    [Fact]
+    public void FromCensus_SharedOnlyLoser_PinsSharedOnlyWithReason()
+    {
+        var report = Report(Row("job-search-ai-assistant", sharedEntries: 2));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
+
+        var pin = plan.Pinned.ShouldHaveSingleItem();
+        pin.ProjectId.ShouldBe("job-search-ai-assistant");
+        pin.Bucket.ShouldBe(ProjectIdsFoldPlan.PinnedSharedOnly);
+        pin.Reason.ShouldContain("2 shared-scope");
+        plan.Unresolved.ShouldBeEmpty();
+    }
+
+    // Ledger — telemetry-pinned : --filter FromCensus_TelemetryOnlyLoser_PinsTelemetryOnlyWithReason : alias loser, metrics only.
+    [Fact]
+    public void FromCensus_TelemetryOnlyLoser_PinsTelemetryOnlyWithReason()
+    {
+        // Telemetry is regenerable derived data the repair never touches: an attributed id
+        // owning only it waits with a reason instead of vanishing into a silent continue.
+        var report = Report(Row("job-search-ai-assistant", metricsRows: 2));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
+
+        plan.Folds.ShouldBeEmpty();
+        var pin = plan.Pinned.ShouldHaveSingleItem();
+        pin.ProjectId.ShouldBe("job-search-ai-assistant");
+        pin.Bucket.ShouldBe(ProjectIdsFoldPlan.PinnedTelemetryOnly);
+        pin.Reason.ShouldContain("telemetry");
+        plan.Unresolved.ShouldBeEmpty();
+    }
+
+    // Ledger — workspaces-pinned : --filter FromCensus_WorkspaceOnlyLoser_PinsOpenWorkspacesWithReason : alias loser, workspaces only.
+    [Fact]
+    public void FromCensus_WorkspaceOnlyLoser_PinsOpenWorkspacesWithReason()
+    {
+        // Workspaces never move across projects (isolation invariant): an otherwise-foldable
+        // loser with open workspaces pins with a reason instead of folding or vanishing.
+        var report = Report(Row("AI-RACCOON", workspaces: 1, workspaceEntries: 2));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
+
+        plan.Folds.ShouldBeEmpty();
+        var pin = plan.Pinned.ShouldHaveSingleItem();
+        pin.ProjectId.ShouldBe("AI-RACCOON");
+        pin.Bucket.ShouldBe(ProjectIdsFoldPlan.PinnedOpenWorkspaces);
+        pin.Reason.ShouldContain("workspace");
+        plan.Unresolved.ShouldBeEmpty();
+    }
+
+    // Ledger — attributed-never-silent : --filter FromCensus_EmptyAliasLoser_PinsGenericInsteadOfSilentlyContinuing : alias loser, zero everywhere.
+    [Fact]
+    public void FromCensus_EmptyAliasLoser_PinsGenericInsteadOfSilentlyContinuing()
+    {
+        // D2's core honesty rule: a map-attributed id with zero executable rows lands in a
+        // pinned bucket with a reason line — never a silent continue that hides it.
+        var report = Report(Row("job-search-ai-assistant"));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
+
+        plan.Folds.ShouldBeEmpty();
+        var pin = plan.Pinned.ShouldHaveSingleItem();
+        pin.ProjectId.ShouldBe("job-search-ai-assistant");
+        pin.Bucket.ShouldBe(ProjectIdsFoldPlan.PinnedNoMoveableContent);
+        plan.Unresolved.ShouldBeEmpty();
+    }
+
+    // Ledger — attributed-never-silent : --filter FromCensus_GuidLoserByName_WithOnlyTelemetry_PinsInsteadOfSilentlyContinuing : guid via registered name.
+    [Fact]
+    public void FromCensus_GuidLoserByName_WithOnlyTelemetry_PinsInsteadOfSilentlyContinuing()
+    {
+        // The registered-name fold branch pins by the same rule: attribution without
+        // executable rows is waiting work with a reason, not an invisible skip.
+        var guid = "01a062f4-0000-7000-8000-000000000001";
+        var report = Report(Row(guid, registered: true, registeredName: "job-search-ai-assistant", metricsRows: 1));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
+
+        plan.Folds.ShouldBeEmpty();
+        var pin = plan.Pinned.ShouldHaveSingleItem();
+        pin.ProjectId.ShouldBe(guid);
+        pin.Bucket.ShouldBe(ProjectIdsFoldPlan.PinnedTelemetryOnly);
+    }
+
+    // Ledger — canonical-self-silent : --filter FromCensus_CanonicalSelf_WithEntries_PlansNeitherFoldNorPin : winner-only bank.
+    [Fact]
+    public void FromCensus_CanonicalSelf_WithEntries_PlansNeitherFoldNorPin()
+    {
+        // A canonical id resolving to itself is already placed — pinning it would turn every
+        // converged bank into a pinned-only report, so the self-branch stays silent by design.
+        var report = Report(Row("jsaa", projectEntries: 2, queued: 2));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
+
+        plan.Folds.ShouldBeEmpty();
+        plan.Pinned.ShouldBeEmpty();
+        plan.IsEmpty.ShouldBeTrue();
+    }
+
     // Explicit fixture: machine ids as TEST DATA (allowed). Production Default is empty (ADR-0099).
     private static ProjectIdAliasMap FixtureMap() => new(
         [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"), new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon")],
@@ -243,7 +382,12 @@ public sealed class ProjectIdsFoldPlanTests
         long qualityRows = 0,
         long metricsRows = 0,
         long noiseRows = 0,
+        long customEntries = 0,
+        long sharedEntries = 0,
+        long nullContextEntries = 0,
+        long workspaces = 0,
+        long workspaceEntries = 0,
         params string[] settingsKeys) =>
-        new(projectId, registered, registeredName, projectEntries, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            queued, discards, qualityRows, watches, 0, 0, 0, 0, metricsRows, noiseRows, settingsKeys);
+        new(projectId, registered, registeredName, projectEntries, customEntries, sharedEntries, workspaceEntries, nullContextEntries, 0, 0, 0, 0, 0, 0,
+            queued, discards, qualityRows, watches, 0, 0, 0, workspaces, metricsRows, noiseRows, settingsKeys);
 }

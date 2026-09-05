@@ -169,10 +169,11 @@ public sealed class RepairCommandsTests
     }
 
     /// <summary>
-    ///     d-426 SHOULD-2: the diagnose names each loser's NULL-context rows — the keep predicate
-    ///     deliberately leaves them behind, so the operator must see (and verify) them before
-    ///     --apply instead of discovering permanent orphans afterwards.
-    ///     Ledger — hide-null-context-counts : --filter ProjectIds_DryRun_PrintsPerLoserNullContextCounts : loser with a NULL-ctx row.
+    ///     D1 overturns the d-426 keep predicate: NULL-context rows are committed rows
+    ///     (project scope, any label) and now fold to the winner with every other committed
+    ///     row — so the per-loser line frames the count as moving, never as staying behind.
+    ///     The count itself stays visible pre-apply as the verify-they-move instrument.
+    ///     Ledger — hide-null-context-counts (overturned by D1) : --filter ProjectIds_DryRun_PrintsPerLoserNullContextCounts : loser with a NULL-ctx row.
     /// </summary>
     [Fact]
     public async Task ProjectIds_DryRun_PrintsPerLoserNullContextCounts()
@@ -188,6 +189,72 @@ public sealed class RepairCommandsTests
         var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, report, scope.DataRoot, mapPath);
 
         stdout.ShouldContain("1 NULL-context");
+        stdout.ShouldContain("fold");
+        stdout.ShouldNotContain("stay");
+    }
+
+    /// <summary>
+    ///     Package A golden test (D2/D6): a pinned-only dry run prints the pinned count on the
+    ///     scoreboard, one reason line per pin, and a pinned-only closing summary — never the
+    ///     converged "nothing to do" line, which would hide the waiting pins.
+    ///     Ledger — pinned-only-scoreboard : --filter ProjectIds_DryRun_PinnedOnly_PrintsReasonsAndPinnedOnlySummary : shared-only + telemetry-only losers.
+    /// </summary>
+    [Fact]
+    public async Task ProjectIds_DryRun_PinnedOnly_PrintsReasonsAndPinnedOnlySummary()
+    {
+        using var scope = new TempScope();
+        var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, PinnedOnlyReport(), scope.DataRoot, scope.WriteFixtureMap());
+
+        stdout.ShouldContain("3 id(s) censused");
+        stdout.ShouldContain("0 fold,");
+        stdout.ShouldContain("1 need nothing (already correct or empty)");
+        stdout.ShouldContain("2 pinned (waiting with reasons below)");
+        stdout.ShouldContain("pinned-shared-only: 'job-search-ai-assistant'");
+        stdout.ShouldContain("pinned-telemetry-only: 'AI-RACCOON'");
+        stdout.ShouldContain("summary — pinned-only (0 change(s) waiting on --apply; 2 pinned with reasons above).");
+        LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary");
+    }
+
+    /// <summary>
+    ///     Package A: an actionable run with pins extends the repair-needed summary instead of
+    ///     hiding the pins behind the fold count — the scoreboard still sums to the censused total.
+    ///     Ledger — actionable-with-pins : --filter ProjectIds_DryRun_ActionableWithPins_ExtendsRepairNeededSummary : fold + telemetry pin.
+    /// </summary>
+    [Fact]
+    public async Task ProjectIds_DryRun_ActionableWithPins_ExtendsRepairNeededSummary()
+    {
+        using var scope = new TempScope();
+        var report = new ProjectIdCensusReport(
+        [
+            Row("job-search-ai-assistant", entries: 1),
+            Row("AI-RACCOON", metricsRows: 1)
+        ], 0, 0, 0, 0, []);
+        var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, report, scope.DataRoot, scope.WriteFixtureMap());
+
+        stdout.ShouldContain("2 id(s) censused");
+        stdout.ShouldContain("1 fold,");
+        stdout.ShouldContain("1 pinned (waiting with reasons below)");
+        stdout.ShouldContain("0 need nothing (already correct or empty)");
+        stdout.ShouldContain("pinned-telemetry-only: 'AI-RACCOON'");
+        stdout.ShouldContain("summary — repair needed (1 change(s) waiting on --apply; 1 pinned with reasons above).");
+        LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary");
+    }
+
+    /// <summary>
+    ///     Package A: --apply on a pinned-only plan still commits the (empty) request, and the
+    ///     in-progress summary carries the pinned count instead of reading as fully done.
+    ///     Ledger — apply-with-pins : --filter ProjectIds_Apply_WithPins_ExtendsInProgressSummary : pinned-only report, --apply.
+    /// </summary>
+    [Fact]
+    public async Task ProjectIds_Apply_WithPins_ExtendsInProgressSummary()
+    {
+        using var scope = new TempScope();
+        var inner = new InMemorySettings { ProjectIdsReport = PinnedOnlyReport() };
+        var stdout = await RunProjectIdsAsync(apply: true, inner, scope.DataRoot, scope.WriteFixtureMap());
+
+        inner.LastRepairRequest.ShouldBe(RepairKind.ProjectIds);
+        stdout.ShouldContain("summary — repair in progress (0 change(s) queued for the server; 2 pinned with reasons above).");
+        LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary");
     }
 
     /// <summary>
@@ -396,9 +463,21 @@ public sealed class RepairCommandsTests
             Row("ai-badger", entries: 1)
         ], 0, 0, 0, 0, []);
 
+    /// <summary>
+    ///     Pinned-only fixture under the fixture map: jsaa is already canonical (needs nothing),
+    ///     job-search-ai-assistant owns only shared-scope entries (pinned-shared-only),
+    ///     AI-RACCOON owns only telemetry (pinned-telemetry-only) — zero folds, zero actionable, two pins.
+    /// </summary>
+    private static ProjectIdCensusReport PinnedOnlyReport() => new(
+        [
+            Row("jsaa", entries: 1),
+            Row("job-search-ai-assistant", sharedEntries: 2),
+            Row("AI-RACCOON", metricsRows: 2)
+        ], 0, 0, 0, 0, []);
+
     /// <summary>A census row with every non-id-bearing surface at zero, named arguments only for the fields a fixture needs.</summary>
     private static ProjectIdCensusRow Row(string projectId, bool registered = false, string? registeredName = null,
-        long entries = 0) => new(projectId, registered, registeredName, entries, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, []);
+        long entries = 0, long sharedEntries = 0, long metricsRows = 0, long noiseRows = 0) => new(projectId, registered, registeredName, entries, 0, sharedEntries, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, metricsRows, noiseRows, []);
 
     /// <summary>
     ///     Ledger — scoreboard-sums-to-total : the five real outcomes (fold/drop/retire/attention/
