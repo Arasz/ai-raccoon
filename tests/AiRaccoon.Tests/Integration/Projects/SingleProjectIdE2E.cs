@@ -15,6 +15,7 @@ using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
+using AiRaccoon.Tests.Unit.Projects;
 using Xunit;
 using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
@@ -30,6 +31,7 @@ namespace AiRaccoon.Tests.Integration.Projects;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
+[Collection(ProjectIdAliasDefaultCollection.Name)]
 public sealed class SingleProjectIdE2E : IAsyncLifetime
 {
     private const string Winner = "jsaa";

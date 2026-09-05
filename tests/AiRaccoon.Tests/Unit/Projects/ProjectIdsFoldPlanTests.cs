@@ -13,6 +13,7 @@ namespace AiRaccoon.Tests.Unit.Projects;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
+[Collection(ProjectIdAliasDefaultCollection.Name)]
 public sealed class ProjectIdsFoldPlanTests
 {
     // Key-mapping row, not a fold row: pins the outbox kind string the CLI and the job agree on.
