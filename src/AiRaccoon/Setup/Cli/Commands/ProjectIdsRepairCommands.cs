@@ -103,15 +103,16 @@ public sealed class ProjectIdsRepairCommands(IRepairStore repair)
 
         if (plan.Unresolved.Count > 0)
         {
-            // One line, not one line per id: the scoreboard above already carries the count,
-            // so repeating the prefix per id is noise. Registered-name hints stay inline per id.
-            var listed = plan.Unresolved.Select(id =>
+            // Header plus one id per line: a 40-id comma-joined line wraps unreadably.
+            // The scoreboard above already carries the count; registered-name hints stay inline per id.
+            await streams.WriteOutputLineAsync(
+                $"project-ids repair: {plan.Unresolved.Count} id(s) match no known id — left alone for a human to attribute:");
+            foreach (var id in plan.Unresolved)
             {
                 var row = report.Rows.SingleOrDefault(r => r.ProjectId == id);
-                return row?.RegisteredName is not null ? $"'{id}' (registered as '{row.RegisteredName}')" : $"'{id}'";
-            });
-            await streams.WriteOutputLineAsync(
-                $"project-ids repair: {plan.Unresolved.Count} id(s) match no known id — left alone for a human to attribute: {string.Join(", ", listed)}");
+                var hint = row?.RegisteredName is not null ? $" (registered as '{row.RegisteredName}')" : string.Empty;
+                await streams.WriteOutputLineAsync($"  '{id}'{hint}");
+            }
         }
 
         if (mapPath is null && !apply)
@@ -133,7 +134,7 @@ public sealed class ProjectIdsRepairCommands(IRepairStore repair)
                       $"pre-filled in Dropped for review); edit Aliases/Dropped and re-run with --map."
                     : template.Failure is not null
                         ? $"project-ids repair: no --map supplied — planned with the empty map (no folds). " +
-                          $"Could not write the alias-map template to '{templatePath}': {template.Failure}; create it by hand or pass --map."
+                          $"Could not write the alias-map template to '{templatePath}': {template.Failure.TrimEnd('.', ' ')}; create it by hand or pass --map."
                         : $"project-ids repair: no --map supplied — planned with the empty map (no folds). " +
                           $"Edit the existing template at '{templatePath}' and re-run with --map.");
         }
@@ -203,6 +204,14 @@ public sealed class ProjectIdsRepairCommands(IRepairStore repair)
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            // Portable never-overwrite rule: the EEXIST HResult above does not fire on every
+            // platform (observed live: the collision surfaces here with "already exists" text),
+            // so an existing file means operator edits, whatever the IOException says.
+            if (File.Exists(templatePath))
+            {
+                return new TemplateWrite(Wrote: false, Failure: null);
+            }
+
             return new TemplateWrite(Wrote: false, Failure: ex.Message);
         }
     }

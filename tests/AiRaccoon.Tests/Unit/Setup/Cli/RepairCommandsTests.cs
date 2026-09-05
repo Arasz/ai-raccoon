@@ -232,17 +232,19 @@ public sealed class RepairCommandsTests
     }
 
     /// <summary>
-    ///     Unattributed ids print as one comma-separated line, not one prefixed line per id —
-    ///     the scoreboard already carries the count, so per-id prefixes are noise.
+    ///     Unattributed ids print as a header plus one id per line — a 40-id comma-joined
+    ///     line wraps unreadably. The scoreboard already carries the count.
     /// </summary>
     [Fact]
-    public async Task ProjectIds_DryRun_PrintsUnresolvedAsASingleLine()
+    public async Task ProjectIds_DryRun_PrintsUnresolvedOnePerLine()
     {
         using var scope = new TempScope();
         var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, MixedOutcomeReport(), scope.DataRoot, scope.WriteFixtureMap());
 
-        stdout.ShouldContain("'mystery-guid-0001'");
-        stdout.Split("match no known id").Length.ShouldBe(2);
+        stdout.ShouldContain("1 id(s) match no known id — left alone for a human to attribute:");
+        var lines = stdout.Split('\n').Select(line => line.TrimEnd('\r')).Where(line => line.Length > 0).ToList();
+        lines.ShouldContain("  'mystery-guid-0001'");
+        lines.Count(line => line.Contains("match no known id")).ShouldBe(1);
     }
 
     /// <summary>
@@ -279,9 +281,14 @@ public sealed class RepairCommandsTests
         File.WriteAllText(templatePath, "sentinel-operator-edits");
         var inner = new InMemorySettings { ProjectIdsReport = ClusterReport() };
 
-        await RunProjectIdsAsync(apply: false, inner, scope.DataRoot);
+        var stdout = await RunProjectIdsAsync(apply: false, inner, scope.DataRoot);
 
         File.ReadAllText(templatePath).ShouldBe("sentinel-operator-edits");
+        // Portable never-overwrite rule: the pre-existing file routes to the edit-it
+        // guidance, never to a "Could not write ... already exists.;" failure line.
+        stdout.ShouldContain("Edit the existing template");
+        stdout.ShouldNotContain("Could not write the alias-map template");
+        stdout.ShouldNotContain(".;");
     }
 
     [Fact]
